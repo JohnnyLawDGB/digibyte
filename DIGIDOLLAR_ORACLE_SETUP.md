@@ -237,6 +237,53 @@ The command tries key sources in this order:
 
 ---
 
+## Upgrading Your Oracle to a New Release
+
+When a new RC is released, follow these steps. Your oracle key is stored in your wallet and persists across upgrades — you do NOT need to generate a new key.
+
+```bash
+# Step 1: Stop your node
+./src/digibyte-cli -testnet stop
+
+# Step 2: Replace binaries with the new release
+#   - Download new release from GitHub, OR
+#   - Build from source: git pull && make -j$(nproc)
+
+# Step 3: Start your node
+./src/digibyted -testnet -daemon
+
+# Step 4: Wait for sync (check progress)
+./src/digibyte-cli -testnet getblockchaininfo
+
+# Step 5: Load your wallet
+./src/digibyte-cli -testnet loadwallet "oracle"
+
+# Step 6: Start your oracle
+./src/digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
+
+# Step 7: Verify it's running
+./src/digibyte-cli -testnet getoracles true
+```
+
+**Qt wallet users:** Start DigiByte Qt → **File → Open Wallet → oracle** → **Help → Debug Window → Console** → type `startoracle <your_oracle_id>`
+
+> **⚠️ Steps 5 and 6 are required after EVERY restart.** The wallet does not auto-load and the oracle thread does not auto-start. Your key is safe in the wallet — you just need to load it and tell the oracle to start.
+
+---
+
+## Restarting Your Oracle (After a Reboot or Crash)
+
+Same as upgrading, but skip Step 2 (no new binaries needed):
+
+```bash
+./src/digibyted -testnet -daemon
+# Wait for sync...
+./src/digibyte-cli -testnet loadwallet "oracle"
+./src/digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
+```
+
+---
+
 ## What Your Oracle Does
 
 Once running, the oracle automatically:

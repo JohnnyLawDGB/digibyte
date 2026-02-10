@@ -11,7 +11,7 @@ define $(package)_set_vars
   $(package)_config_opts+=no-md2 no-rc5 no-rdrand no-rfc3779 no-sctp no-shared
   $(package)_config_opts+=no-ssl-trace no-ssl2 no-ssl3 no-tests no-unit-test no-weak-ssl-ciphers
   $(package)_config_opts+=no-zlib no-zlib-dynamic no-static-engine no-comp no-afalgeng
-  $(package)_config_opts+=no-engine no-hw no-stdio no-asm $($(package)_cflags) $($(package)_cppflags)
+  $(package)_config_opts+=no-engine no-hw no-asm $($(package)_cflags) $($(package)_cppflags)
   $(package)_config_opts_linux=-fPIC -D_GNU_SOURCE
   $(package)_config_opts_freebsd=-fPIC
   $(package)_config_opts_x86_64_linux=linux-x86_64
@@ -37,11 +37,11 @@ define $(package)_config_cmds
 endef
 
 define $(package)_build_cmds
-  $(MAKE)
+  $(MAKE) build_libs
 endef
 
 define $(package)_stage_cmds
-  $(MAKE) DESTDIR=$($(package)_staging_dir) install_sw
+  $(MAKE) DESTDIR=$($(package)_staging_dir) install_dev
 endef
 
 define $(package)_postprocess_cmds

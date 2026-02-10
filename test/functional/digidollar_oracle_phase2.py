@@ -304,4 +304,4 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
 
 
 if __name__ == '__main__':
-    DigiDollarOraclePhase2Test(__file__).main()
+    DigiDollarOraclePhase2Test().main()

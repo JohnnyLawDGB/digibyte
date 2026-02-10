@@ -62,7 +62,7 @@ class DigiDollarRPCOracleTest(DigiByteTestFramework):
         
         assert isinstance(result['price_micro_usd'], int), "price_micro_usd should be int"
         assert isinstance(result['price_cents'], int), "price_cents should be int"
-        assert isinstance(result['price_usd'], (int, float)), "price_usd should be numeric"
+        assert isinstance(result["price_usd"], (int, float, Decimal)), "price_usd should be numeric"
         assert isinstance(result['last_update_height'], int), "last_update_height should be int"
         assert isinstance(result['last_update_time'], int), "last_update_time should be int"
         assert isinstance(result['validity_blocks'], int), "validity_blocks should be int"

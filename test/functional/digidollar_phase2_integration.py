@@ -243,4 +243,4 @@ class DigiDollarPhase2IntegrationTest(DigiByteTestFramework):
 
 
 if __name__ == '__main__':
-    DigiDollarPhase2IntegrationTest(__file__).main()
+    DigiDollarPhase2IntegrationTest().main()

@@ -705,6 +705,13 @@ RPCHelpMan mintdigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // Check DigiDollar activation
+            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+            const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+            if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+            }
+
             // Get wallet
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded");
@@ -982,6 +989,15 @@ RPCHelpMan senddigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // Check DigiDollar activation
+            {
+                const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+                }
+            }
+
             // PHASE 7.7: Integration with backend TransferDigiDollar() from Phase 2.1
             LogPrintf("DigiDollar RPC: senddigidollar called\n");
 
@@ -1097,6 +1113,15 @@ RPCHelpMan redeemdigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // Check DigiDollar activation
+            {
+                const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+                }
+            }
+
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
             CAmount ddAmount = request.params[1].getInt<int64_t>(); // DD amount in cents (not BTC format)
@@ -3228,6 +3253,15 @@ RPCHelpMan startoracle()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // Check DigiDollar activation
+            {
+                const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+                }
+            }
+
             int oracle_id = request.params[0].getInt<int>();
             std::string private_key_hex = request.params.size() > 1 ? request.params[1].get_str() : "";
 

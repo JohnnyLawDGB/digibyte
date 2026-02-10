@@ -161,6 +161,34 @@ digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
 
 > **⚠️ After restarting `digibyted`, you must run `startoracle` again.** The key persists in the wallet, but the oracle thread does not auto-start.
 
+### Loading Your Wallet After Restart
+
+After restarting your node, you need to load your wallet before starting the oracle:
+
+```bash
+# Load the oracle wallet (required after every restart)
+digibyte-cli -testnet loadwallet "oracle"
+
+# Then start the oracle
+digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
+```
+
+If using the **Qt wallet**, go to **File → Open Wallet → oracle** to load it.
+
+> **⚠️ IMPORTANT: Use just the wallet NAME, not the full file path!**
+>
+> ✅ Correct: `createwallet "oracle"` / `loadwallet "oracle"`
+> ❌ Wrong: `createwallet "/home/user/.digibyte/testnet13/wallets/oracle/"`
+>
+> Using the full path causes the wallet name to display as the entire path instead of just "oracle". If you already created your wallet with the full path, fix it by running:
+> ```bash
+> # Unload using the full path name it was created with
+> digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet13/wallets/oracle/"
+> # Reload using just the short name
+> digibyte-cli -testnet loadwallet "oracle"
+> ```
+> Verify with `getwalletinfo` — the `walletname` field should show just `oracle`.
+
 For the complete guide, see **`DIGIDOLLAR_ORACLE_SETUP.md`**.
 
 ### Current Oracle Operators (Testnet)

@@ -33,6 +33,7 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <clientversion.h>
+#include <consensus/params.h>
 #include <common/system.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
@@ -284,6 +285,13 @@ void DigiByteGUI::createActions()
     digiDollarAction->setStatusTip(tr("Browse and manage DigiDollar positions"));
     digiDollarAction->setToolTip(digiDollarAction->statusTip());
     digiDollarAction->setCheckable(true);
+
+    // Only show DigiDollar tab if the deployment is ALWAYS_ACTIVE (testnet/regtest/signet).
+    // On mainnet, DD requires BIP9 activation which hasn't happened yet.
+    const auto& ddDeployment = Params().GetConsensus().vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    const bool ddAlwaysActive = (ddDeployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    digiDollarAction->setVisible(ddAlwaysActive);
+
     tabGroup->addAction(digiDollarAction);
 
     // Commenting out Mint and Redeem tabs as they are not functional yet
@@ -627,10 +635,11 @@ void DigiByteGUI::createToolBars()
         toolbar->addAction(receiveCoinsAction);
         toolbar->addAction(historyAction);
         
-        // Add separator after Transactions to section off DigiDollar group
-        toolbar->addSeparator();
-        
-        toolbar->addAction(digiDollarAction);
+        // Add separator and DigiDollar action only when visible
+        if (digiDollarAction->isVisible()) {
+            toolbar->addSeparator();
+            toolbar->addAction(digiDollarAction);
+        }
         // Commenting out Mint and Redeem tabs from toolbar
         // toolbar->addAction(mintAction);
         // toolbar->addAction(redeemAction);

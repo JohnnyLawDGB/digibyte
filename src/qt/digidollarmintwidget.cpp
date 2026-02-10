@@ -690,6 +690,13 @@ void DigiDollarMintWidget::onMintClicked()
             return;
         }
 
+        // Unlock wallet if encrypted (shows passphrase dialog)
+        WalletModel::UnlockContext ctx(m_walletModel->requestUnlock());
+        if (!ctx.isValid()) {
+            // User cancelled the unlock dialog
+            return;
+        }
+
         // Convert amount from double to CAmount (cents)
         CAmount ddAmountCents = static_cast<CAmount>(m_mintAmount * 100);
 

@@ -574,6 +574,13 @@ void DigiDollarRedeemWidget::onRedeemClicked()
             return;
         }
 
+        // Unlock wallet if encrypted (shows passphrase dialog)
+        WalletModel::UnlockContext ctx(m_walletModel->requestUnlock());
+        if (!ctx.isValid()) {
+            // User cancelled the unlock dialog
+            return;
+        }
+
         // Convert amount from double to CAmount (cents)
         CAmount amountCents = static_cast<CAmount>(amount * 100);
 

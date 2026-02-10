@@ -990,6 +990,10 @@ RPCHelpMan senddigidollar()
             if (!pwallet) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
             }
+
+            // Ensure wallet is unlocked
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
             LogPrintf("DigiDollar RPC: Got wallet\n");
 
             // Get DigiDollar wallet
@@ -1110,6 +1114,9 @@ RPCHelpMan redeemdigidollar()
             // Get wallet
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet not found");
+
+            // Ensure wallet is unlocked
+            wallet::EnsureWalletIsUnlocked(*pwallet);
 
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
@@ -3282,6 +3289,8 @@ RPCHelpMan startoracle()
                             try {
                                 std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
                                 if (pwallet) {
+                                    // Ensure wallet is unlocked before reading keys
+                                    wallet::EnsureWalletIsUnlocked(*pwallet);
                                     CKey wallet_key;
                                     if (pwallet->GetOracleKey(oracle_id, wallet_key)) {
                                         std::string wallet_key_hex = HexStr(Span<const unsigned char>(wallet_key.begin(), wallet_key.end()));

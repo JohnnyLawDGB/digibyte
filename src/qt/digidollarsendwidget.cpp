@@ -620,6 +620,13 @@ void DigiDollarSendWidget::onSendClicked()
         return; // User cancelled
     }
 
+    // Unlock wallet if encrypted — UnlockContext MUST stay in scope through executeTransfer()
+    WalletModel::UnlockContext ctx(m_walletModel->requestUnlock());
+    if (!ctx.isValid()) {
+        // User cancelled the unlock dialog
+        return;
+    }
+
     // PHASE 7.3: Execute transfer with progress indicator
     executeTransfer(address, amount);
 }
@@ -789,19 +796,9 @@ bool DigiDollarSendWidget::checkWalletState()
         return false;
     }
 
-    // Check if wallet is locked
-    WalletModel::EncryptionStatus encStatus = m_walletModel->getEncryptionStatus();
-    if (encStatus == WalletModel::Locked) {
-        // Prompt for unlock
-        WalletModel::UnlockContext ctx(m_walletModel->requestUnlock());
-        if (!ctx.isValid()) {
-            showWarning(tr("Wallet Locked"),
-                       tr("Your wallet is locked.\n\n"
-                          "Please unlock your wallet to send DigiDollar.\n\n"
-                          "Go to Settings > Unlock Wallet to unlock."));
-            return false;
-        }
-    }
+    // NOTE: Wallet unlock is handled in onSendClicked() where the UnlockContext
+    // stays in scope through executeTransfer(). Do NOT unlock here — the context
+    // would die when checkWalletState() returns, re-locking before the transaction.
 
     // Check if DigiDollar wallet initialized (balance check serves as proxy)
     if (m_availableBalance < 0) {

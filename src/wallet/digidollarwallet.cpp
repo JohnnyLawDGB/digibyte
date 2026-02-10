@@ -993,20 +993,20 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // DO NOT mark positions inactive. DO NOT create new collateral positions.
         LogPrintf("DigiDollar: Updating DD UTXO set after transfer (FIX #2)\n");
 
-        // Remove spent DD UTXOs from tracking
-        wallet::WalletBatch batch(m_wallet->GetDatabase());
+        // FIX: Do NOT erase spent DD UTXOs at TX creation time!
+        // The core DGB wallet never deletes UTXO data at TX creation — it uses IsSpent()
+        // which already returns true for pending spends and false for abandoned TXs.
+        // GetTotalDDBalance() and GetDDUTXOs() already call IsSpent() to skip spent UTXOs.
+        // Erasing here would permanently lose DD tracking data if the TX is abandoned.
+        // The UTXOs will be properly erased when the TX confirms in a block
+        // (via ProcessTransactionForDD called from blockConnected).
         for (const auto& spent_utxo : params.ddUtxos) {
-            dd_utxos.erase(spent_utxo);
-
-            // Also erase from database
-            if (!batch.EraseDDUTXO(spent_utxo)) {
-                LogPrintf("DigiDollar: WARNING - Failed to erase DD UTXO %s:%d from database\n",
-                         spent_utxo.hash.ToString(), spent_utxo.n);
-            }
-
-            LogPrintf("DigiDollar: Marked DD UTXO %s:%d as spent\n",
+            LogPrintf("DigiDollar: DD UTXO %s:%d pending spend (will be erased on block confirm)\n",
                       spent_utxo.hash.ToString(), spent_utxo.n);
         }
+
+        // Batch for writing new DD UTXOs (change outputs)
+        wallet::WalletBatch batch(m_wallet->GetDatabase());
 
         // Add new DD UTXOs from transaction outputs (for change and potentially recipient if to ourselves)
         // Extract DD amounts from OP_RETURN (same logic as DetectIncomingDDOutputs)
@@ -2420,31 +2420,19 @@ bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& b
         }
     }
 
-    // Step 4: Remove from dd_utxos tracking map
+    // FIX: Do NOT erase DD UTXOs at TX creation time!
+    // Steps 4 & 5 previously erased from dd_utxos map and database immediately.
+    // This caused permanent DD balance loss if the burn TX was later abandoned.
+    // Instead, the UTXOs stay in the map and are hidden from balance via IsSpent().
+    // They will be properly erased when the TX confirms in a block
+    // (via ProcessTransactionForDD called from blockConnected).
     for (const auto& utxo : selected_utxos) {
-        RemoveDDUTXO(utxo);
-        LogPrintf("DigiDollar: BurnDigiDollars - Removed UTXO from tracking: %s:%d\n",
+        LogPrintf("DigiDollar: BurnDigiDollars - UTXO %s:%d pending burn (will be erased on block confirm)\n",
                   utxo.hash.ToString(), utxo.n);
     }
 
-    // Step 5: Erase from database
-    if (m_wallet) {
-        wallet::WalletBatch batch(m_wallet->GetDatabase());
-        for (const auto& utxo : selected_utxos) {
-            if (!batch.EraseDDUTXO(utxo)) {
-                LogPrintf("DigiDollar: BurnDigiDollars - Warning: Failed to erase UTXO from DB: %s:%d\n",
-                          utxo.hash.ToString(), utxo.n);
-                // Continue burning other UTXOs even if one fails
-            }
-        }
-    }
-
-    // Step 6: Update total DD balance (recalculate from remaining UTXOs)
-    CAmount new_balance = 0;
-    for (const auto& [outpoint, dd_amt] : dd_utxos) {
-        new_balance += dd_amt;
-    }
-    total_dd_balance = new_balance;
+    // Step 6: Balance will be automatically correct via IsSpent() filtering
+    // in GetTotalDDBalance() — no need to manually recalculate here.
 
     // Step 7: Return burned UTXOs
     burnedUtxos = selected_utxos;
@@ -2706,13 +2694,15 @@ bool DigiDollarWallet::UpdatePositionStatus(const uint256& dd_timelock_id, bool 
     // Update status in memory
     it->second.is_active = active;
 
-    // FIX: When deactivating a position, remove its DD UTXO from tracking map
-    // DD output from mint is always at vout 1
+    // FIX: Do NOT erase DD UTXOs from tracking map when deactivating a position
+    // at TX creation time. The DD UTXO stays in the map and is hidden from balance
+    // via IsSpent(). It will be properly erased when the TX confirms in a block
+    // (via ProcessTransactionForDD called from blockConnected) or during rescan
+    // (via ProcessDDTxForRescan). This prevents permanent DD balance loss if the
+    // TX is later abandoned.
     COutPoint dd_outpoint(dd_timelock_id, 1);
     if (!active) {
-        // Position being spent/redeemed - remove DD UTXO
-        dd_utxos.erase(dd_outpoint);
-        LogPrintf("DigiDollar: Removed DD UTXO %s:%d from tracking (position deactivated)\n",
+        LogPrintf("DigiDollar: DD UTXO %s:%d pending spend (position deactivated, will be erased on block confirm)\n",
                   dd_outpoint.hash.ToString(), dd_outpoint.n);
     }
 
@@ -3256,15 +3246,25 @@ bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uin
 
     try {
         // Step 1: Check if this transaction SPENDS any of our DD UTXOs
+        // This is the ONLY spend-path erase for dd_utxos during normal operation.
+        // Called from CWallet::blockConnected — TX has 1 confirmation (in a block).
+        // Matches mainnet DGB behavior: UTXOs only pruned when spending TX confirms.
         for (const CTxIn& txin : tx.vin) {
             auto it = dd_utxos.find(txin.prevout);
             if (it != dd_utxos.end()) {
-                // This TX spends one of our DD UTXOs - remove it
+                // This TX spends one of our DD UTXOs - remove it (confirmed in block)
                 CAmount spent_amount = it->second;
                 total_dd_balance -= spent_amount;
                 dd_utxos.erase(it);
                 changed = true;
-                LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessTxForDD - Spent DD UTXO %s:%d (%lld cents)\n",
+
+                // Persist erasure to database so it survives wallet restart
+                if (m_wallet) {
+                    wallet::WalletBatch batch(m_wallet->GetDatabase());
+                    batch.EraseDDUTXO(txin.prevout);
+                }
+
+                LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessTxForDD - Erased confirmed-spent DD UTXO %s:%d (%lld cents)\n",
                          txin.prevout.hash.ToString(), txin.prevout.n, static_cast<long long>(spent_amount));
             }
         }
@@ -3376,6 +3376,13 @@ bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uin
                     dd_utxos[outpoint] = dd_amount;
                     total_dd_balance += dd_amount;
                     changed = true;
+
+                    // Persist new DD UTXO to database so it survives wallet restart
+                    if (m_wallet) {
+                        wallet::WalletBatch batch(m_wallet->GetDatabase());
+                        batch.WriteDDUTXO(outpoint, dd_amount);
+                    }
+
                     LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessTxForDD - Added DD UTXO %s:%zu (%lld cents)\n",
                              txid.ToString(), n, static_cast<long long>(dd_amount));
                 }
@@ -4014,12 +4021,11 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
             }
         }
 
-        // Remove spent DD UTXOs from tracking
+        // FIX: Do NOT erase spent DD UTXOs at TX creation time!
+        // They stay in dd_utxos and are hidden from balance via IsSpent().
+        // Erasure happens when the TX confirms in a block (ProcessTransactionForDD).
         for (const auto& spentUtxo : params.ddUtxos) {
-            dd_utxos.erase(spentUtxo);
-            wallet::WalletBatch batch(m_wallet->GetDatabase());
-            batch.EraseDDUTXO(spentUtxo);
-            LogPrintf("DigiDollar: Removed spent DD UTXO %s:%d\n",
+            LogPrintf("DigiDollar: DD UTXO %s:%d pending spend (redeem, will be erased on block confirm)\n",
                       spentUtxo.hash.ToString(), spentUtxo.n);
         }
 
@@ -5682,18 +5688,18 @@ bool DigiDollarWallet::MarkDDUTXOsSpent(const std::vector<COutPoint>& spent_utxo
 
     // Mark each UTXO as spent
     for (const auto& utxo : spent_utxos) {
-        // FIX #1: Remove UTXO from dd_utxos tracking map
+        // FIX: Do NOT erase DD UTXOs from dd_utxos at TX creation time!
+        // The UTXO stays in the map and is hidden from balance/UTXO queries
+        // via IsSpent(). It will be properly erased when the TX confirms in a
+        // block (ProcessTransactionForDD from blockConnected) or during rescan.
+        // This prevents permanent DD balance loss if the TX is later abandoned.
         auto utxo_it = dd_utxos.find(utxo);
         if (utxo_it == dd_utxos.end()) {
             LogPrintf("DigiDollar: MarkDDUTXOsSpent - Warning: UTXO not found in tracking map: %s:%d\n",
                       utxo.hash.ToString(), utxo.n);
-            // Continue - may be collateral position
         } else {
-            // Remove from tracking map
-            CAmount dd_amount = utxo_it->second;
-            dd_utxos.erase(utxo_it);
-            LogPrintf("DigiDollar: Removed DD UTXO from tracking map: %s:%d (%d DD)\n",
-                      utxo.hash.ToString(), utxo.n, dd_amount);
+            LogPrintf("DigiDollar: DD UTXO %s:%d (%lld DD) pending spend (will be erased on block confirm)\n",
+                      utxo.hash.ToString(), utxo.n, static_cast<long long>(utxo_it->second));
         }
 
         // Check if this is a DDTimeLock position (only at vout[1])

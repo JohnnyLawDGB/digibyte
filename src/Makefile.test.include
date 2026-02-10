@@ -103,6 +103,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_validation_tests.cpp \
   test/digidollar_volatility_tests.cpp \
   test/digidollar_wallet_tests.cpp \
+  test/digidollar_utxo_lifecycle_tests.cpp \
   test/digidollar_mint_tests.cpp \
   test/digidollar_persistence_serialization_tests.cpp \
   test/digidollar_persistence_keys_tests.cpp \

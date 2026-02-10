@@ -359,6 +359,16 @@ public:
     }
 
     /**
+     * Check if a DD UTXO exists in the tracking map (regardless of IsSpent status).
+     * Used to verify UTXO persistence across TX lifecycle.
+     * @param outpoint UTXO outpoint to check
+     * @return true if the UTXO is tracked in dd_utxos map
+     */
+    bool HasDDUTXO(const COutPoint& outpoint) const {
+        return dd_utxos.find(outpoint) != dd_utxos.end();
+    }
+
+    /**
      * Check if DD token UTXO for a position is still unspent
      * Used to determine if a vault can still be redeemed
      * @param dd_timelock_id Position ID (mint tx hash)

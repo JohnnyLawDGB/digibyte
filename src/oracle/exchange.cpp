@@ -47,36 +47,51 @@ BaseExchangeFetcher::BaseExchangeFetcher(const std::string& name, const std::str
     }();
     (void)curl_initialized;
 
+#ifdef WIN32
+    // Windows: persistent handle to avoid TIME_WAIT socket exhaustion.
+    // 7 exchanges @ 15s = 40,320 socket cycles/day, exhausting ~16K ephemeral ports.
     m_curl_handle = curl_easy_init();
     if (!m_curl_handle) {
         LogPrintf("BaseExchangeFetcher: Failed to create persistent CURL handle for %s\n", name);
     }
+#endif
 #endif
 }
 
 BaseExchangeFetcher::~BaseExchangeFetcher()
 {
 #ifdef HAVE_LIBCURL
+#ifdef WIN32
     if (m_curl_handle) {
         curl_easy_cleanup(static_cast<CURL*>(m_curl_handle));
         m_curl_handle = nullptr;
     }
+#endif
 #endif
 }
 
 std::string BaseExchangeFetcher::HttpGet(const std::string& url)
 {
 #ifdef HAVE_LIBCURL
-    CURL* curl = static_cast<CURL*>(m_curl_handle);
+    CURL* curl;
+#ifdef WIN32
+    // Windows: reuse persistent handle — curl_easy_reset() preserves connection
+    // cache and avoids TIME_WAIT socket buildup.
+    curl = static_cast<CURL*>(m_curl_handle);
     if (!curl) {
         LogPrint(BCLog::DIGIDOLLAR, "HttpGet: No CURL handle available\n");
         return "";
     }
-
-    // Reset all options to defaults while keeping the handle (and its connection
-    // cache / DNS cache / SSL session cache). This avoids creating a new socket
-    // per request — the fix for Windows TIME_WAIT port exhaustion.
     curl_easy_reset(curl);
+#else
+    // Linux/macOS: per-request handle — curl_easy_reset() breaks SSL context
+    // with Guix statically-linked OpenSSL (SSL session state not reinitialized).
+    curl = curl_easy_init();
+    if (!curl) {
+        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Failed to initialize CURL\n");
+        return "";
+    }
+#endif
 
     std::string response;
     CURLcode res;
@@ -131,6 +146,10 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     };
 
     bool ca_set = false;
+#ifdef WIN32
+    // Windows native cert store handles CA — skip Linux file search
+    ca_set = true;
+#endif
     // Try CA bundle files first
     for (int i = 0; ca_bundle_paths[i] != nullptr; ++i) {
         struct stat st;
@@ -153,7 +172,10 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     }
     if (!ca_set) {
         LogPrintf("HttpGet: SECURITY - No CA bundle found, refusing to make unverified request to %s\n", url);
-        return "";  // Fail safe — don't fetch without TLS (handle stays alive for next call)
+#ifndef WIN32
+        curl_easy_cleanup(curl);
+#endif
+        return "";  // Fail safe — don't fetch without TLS
     }
 
     // Perform request
@@ -161,10 +183,16 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
 
     if (res != CURLE_OK) {
         LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Request failed for %s: %s (code=%d)\n", url, curl_easy_strerror(res), (int)res);
-        return "";  // Handle stays alive for next call
+#ifndef WIN32
+        curl_easy_cleanup(curl);
+#endif
+        return "";
     }
 
     LogPrint(BCLog::DIGIDOLLAR, "HttpGet: Successfully fetched %d bytes from %s\n", response.size(), url);
+#ifndef WIN32
+    curl_easy_cleanup(curl);
+#endif
     return response;
 #else
     // libcurl not available — cannot make HTTP requests

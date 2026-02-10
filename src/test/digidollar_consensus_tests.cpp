@@ -161,9 +161,9 @@ BOOST_AUTO_TEST_CASE(digidollar_activation_test)
     // Test mainnet parameters
     auto mainParams = CChainParams::Main();
     BOOST_CHECK(!DigiDollar::IsDigiDollarActive(0, mainParams->GetConsensus())); // Genesis
-    BOOST_CHECK(!DigiDollar::IsDigiDollarActive(21999999, mainParams->GetConsensus())); // Before activation
-    BOOST_CHECK(DigiDollar::IsDigiDollarActive(22000000, mainParams->GetConsensus())); // At activation
-    BOOST_CHECK(DigiDollar::IsDigiDollarActive(22000001, mainParams->GetConsensus())); // After activation
+    BOOST_CHECK(!DigiDollar::IsDigiDollarActive(22014719, mainParams->GetConsensus())); // Before activation
+    BOOST_CHECK(DigiDollar::IsDigiDollarActive(22014720, mainParams->GetConsensus())); // At activation
+    BOOST_CHECK(DigiDollar::IsDigiDollarActive(22014721, mainParams->GetConsensus())); // After activation
 
     // Test regtest parameters - DigiDollar activates at height 650 (after Odocrypt at 600)
     auto regTestParams = CChainParams::RegTest({});
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK_EQUAL(regTestDD.oracleThreshold, 1); // Regtest: 1-of-1 (Phase One)
 
     // Test activation heights
-    BOOST_CHECK_EQUAL(mainParams->GetConsensus().nDDActivationHeight, 22000000); // Future block
+    BOOST_CHECK_EQUAL(mainParams->GetConsensus().nDDActivationHeight, 22014720); // Aligned with BIP9 min_activation_height
     BOOST_CHECK_EQUAL(testParams->GetConsensus().nDDActivationHeight, 600);      // Testnet: active from block 600 (BIP9 DEFINED→STARTED→LOCKED_IN→ACTIVE)
     BOOST_CHECK_EQUAL(regTestParams->GetConsensus().nDDActivationHeight, 650);   // After Odocrypt at 600
 }

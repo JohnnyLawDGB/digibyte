@@ -302,7 +302,7 @@ public:
         // Mainnet-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 100;      // Rotate oracles every 100 blocks (~25 minutes)
         consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)
-        consensus.nDDActivationHeight = 22000000;   // DigiDollar activation height (future block)
+        consensus.nDDActivationHeight = 22014720;   // DigiDollar activation height — aligned with BIP9 min_activation_height
 
         // Oracle system (Phase One: DISABLED on mainnet)
         consensus.nOracleActivationHeight = std::numeric_limits<int>::max();  // Never activates

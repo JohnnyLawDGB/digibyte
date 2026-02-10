@@ -198,8 +198,11 @@ public:
     // Redeem DigiDollar position
     DigiDollarRedeemResult redeemDigiDollar(const QString& positionId, CAmount amount, const QString& redeemAddress = "");
 
-    // Get DigiDollar balance
+    // Get DigiDollar balance (confirmed only)
     CAmount getDigiDollarBalance() const;
+
+    // Get pending (unconfirmed but trusted) DigiDollar balance
+    CAmount getPendingDigiDollarBalance() const;
 
     // Get locked collateral amount
     CAmount getLockedCollateral() const;

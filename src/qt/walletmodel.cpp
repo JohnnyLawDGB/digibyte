@@ -1121,6 +1121,24 @@ CAmount WalletModel::getDigiDollarBalance() const
     }
 }
 
+CAmount WalletModel::getPendingDigiDollarBalance() const
+{
+    try {
+        DigiDollarWallet* ddWallet = m_wallet->getDigiDollarWallet();
+        if (!ddWallet) {
+            return 0;
+        }
+
+        CAmount pending = ddWallet->GetPendingDDBalance();
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar Qt: getPendingDigiDollarBalance returning %d cents\n", pending);
+        return pending;
+
+    } catch (const std::exception& e) {
+        LogPrintf("DigiDollar Qt: getPendingDigiDollarBalance exception - %s\n", e.what());
+        return 0;
+    }
+}
+
 CAmount WalletModel::getLockedCollateral() const
 {
     try {

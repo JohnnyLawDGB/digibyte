@@ -51,6 +51,8 @@ DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
     m_balanceLayout(nullptr),
     m_ddBalanceLabel(nullptr),
     m_ddBalanceValue(nullptr),
+    m_ddPendingLabel(nullptr),
+    m_ddPendingValue(nullptr),
     m_dgbCollateralLabel(nullptr),
     m_dgbCollateralValue(nullptr),
     m_usdValueLabel(nullptr),
@@ -163,19 +165,31 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceLayout->setSpacing(6);
     m_balanceLayout->setObjectName("balanceGridLayout");
 
-    // DD Balance (Available)
-    m_ddBalanceLabel = new QLabel(tr("DigiDollar Balance"), this);
+    // DD Balance (Available / Confirmed)
+    m_ddBalanceLabel = new QLabel(tr("Available"), this);
     m_ddBalanceLabel->setObjectName("ddBalanceLabel");
     m_ddBalanceValue = new QLabel("0.00000000 DD", this);
     m_ddBalanceValue->setObjectName("ddBalanceValue");
     m_ddBalanceValue->setCursor(QCursor(Qt::IBeamCursor));
     m_ddBalanceValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_ddBalanceValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
-    m_ddBalanceValue->setToolTip(tr("Your current spendable DigiDollar balance"));
+    m_ddBalanceValue->setToolTip(tr("Your confirmed, spendable DigiDollar balance"));
     m_balanceLayout->addWidget(m_ddBalanceLabel, 1, 0);
     m_balanceLayout->addWidget(m_ddBalanceValue, 1, 1);
 
-    // DGB Collateral (Pending/Locked)
+    // DD Pending (Unconfirmed)
+    m_ddPendingLabel = new QLabel(tr("Pending"), this);
+    m_ddPendingLabel->setObjectName("ddPendingLabel");
+    m_ddPendingValue = new QLabel("0.00000000 DD", this);
+    m_ddPendingValue->setObjectName("ddPendingValue");
+    m_ddPendingValue->setCursor(QCursor(Qt::IBeamCursor));
+    m_ddPendingValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
+    m_ddPendingValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
+    m_ddPendingValue->setToolTip(tr("DigiDollar balance from unconfirmed transactions (awaiting block confirmation)"));
+    m_balanceLayout->addWidget(m_ddPendingLabel, 2, 0);
+    m_balanceLayout->addWidget(m_ddPendingValue, 2, 1);
+
+    // DGB Collateral (Locked)
     m_dgbCollateralLabel = new QLabel(tr("Locked Collateral"), this);
     m_dgbCollateralLabel->setObjectName("dgbCollateralLabel");
     m_dgbCollateralValue = new QLabel("0.00000000 DGB", this);
@@ -184,17 +198,17 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_dgbCollateralValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_dgbCollateralValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
     m_dgbCollateralValue->setToolTip(tr("Your DGB locked as collateral for DigiDollars in your wallet"));
-    m_balanceLayout->addWidget(m_dgbCollateralLabel, 2, 0);
-    m_balanceLayout->addWidget(m_dgbCollateralValue, 2, 1);
+    m_balanceLayout->addWidget(m_dgbCollateralLabel, 3, 0);
+    m_balanceLayout->addWidget(m_dgbCollateralValue, 3, 1);
 
     // Add separator line
     QFrame* line = new QFrame(m_balanceFrame);
     line->setObjectName("line");
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Sunken);
-    m_balanceLayout->addWidget(line, 3, 0, 1, 2);
+    m_balanceLayout->addWidget(line, 4, 0, 1, 2);
 
-    // USD Value (Total)
+    // USD Value (Total — confirmed only)
     m_usdValueLabel = new QLabel(tr("Total:"), this);
     m_usdValueLabel->setObjectName("usdValueLabel");
     m_usdValueValue = new QLabel("$0.00", this);
@@ -202,13 +216,13 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_usdValueValue->setCursor(QCursor(Qt::IBeamCursor));
     m_usdValueValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_usdValueValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
-    m_usdValueValue->setToolTip(tr("Your total DigiDollar value in USD"));
-    m_balanceLayout->addWidget(m_usdValueLabel, 4, 0);
-    m_balanceLayout->addWidget(m_usdValueValue, 4, 1);
+    m_usdValueValue->setToolTip(tr("Your confirmed DigiDollar value in USD (excludes pending)"));
+    m_balanceLayout->addWidget(m_usdValueLabel, 5, 0);
+    m_balanceLayout->addWidget(m_usdValueValue, 5, 1);
 
     // Add horizontal spacer
     QSpacerItem* horizontalSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
-    m_balanceLayout->addItem(horizontalSpacer, 2, 2, 1, 1);
+    m_balanceLayout->addItem(horizontalSpacer, 3, 2, 1, 1);
 
     frameVLayout->addLayout(m_balanceLayout);
 
@@ -558,10 +572,15 @@ void DigiDollarOverviewWidget::updateBalance()
     m_lastBalanceUpdateTime = now;
 
     // Get actual DigiDollar balance from wallet
+    double ddPending = 0.0;
     if (m_walletModel) {
-        // Get DD balance from wallet (in cents)
+        // Get DD confirmed balance from wallet (in cents)
         CAmount balanceCents = m_walletModel->getDigiDollarBalance();
         m_ddBalance = balanceCents / 100.0; // Convert cents to DD
+
+        // Get DD pending balance from wallet (in cents)
+        CAmount pendingCents = m_walletModel->getPendingDigiDollarBalance();
+        ddPending = pendingCents / 100.0; // Convert cents to DD
 
         // Get locked collateral from wallet positions (in satoshis)
         CAmount collateralSats = m_walletModel->getLockedCollateral();
@@ -572,11 +591,18 @@ void DigiDollarOverviewWidget::updateBalance()
         m_dgbCollateral = 0.0;
     }
 
-    // Update display
+    // Update display — Available (confirmed only)
     m_ddBalanceValue->setText(formatDDAmount(m_ddBalance));
+
+    // Pending (unconfirmed but trusted) — hide row when zero for clean UI
+    m_ddPendingValue->setText(formatDDAmount(ddPending));
+    bool hasPending = (ddPending > 0.0);
+    m_ddPendingLabel->setVisible(hasPending);
+    m_ddPendingValue->setVisible(hasPending);
+
     m_dgbCollateralValue->setText(formatDGBAmount(m_dgbCollateral));
 
-    // Calculate USD value (DD should be pegged to $1)
+    // Calculate USD value from CONFIRMED balance only (DD pegged to $1)
     double usdValue = m_ddBalance * 1.0;
     m_usdValueValue->setText(formatUSDAmount(usdValue));
 }
@@ -902,6 +928,7 @@ void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)
 
     // Apply to all value labels
     m_ddBalanceValue->setFont(f);
+    m_ddPendingValue->setFont(f);
     m_dgbCollateralValue->setFont(f);
     m_usdValueValue->setFont(f);
     m_oraclePriceValue->setFont(f);

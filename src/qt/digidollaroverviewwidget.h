@@ -81,6 +81,8 @@ private:
     QGridLayout* m_balanceLayout;
     QLabel* m_ddBalanceLabel;
     QLabel* m_ddBalanceValue;
+    QLabel* m_ddPendingLabel;
+    QLabel* m_ddPendingValue;
     QLabel* m_dgbCollateralLabel;
     QLabel* m_dgbCollateralValue;
     QLabel* m_usdValueLabel;

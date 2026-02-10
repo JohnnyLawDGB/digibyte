@@ -293,10 +293,20 @@ public:
     CAmount GetDDBalance(const CDigiDollarAddress& addr = CDigiDollarAddress()) const;
 
     /**
-     * Get total DD balance across all addresses
-     * @return Total DD balance in cents
+     * Get total DD balance across all addresses (confirmed only).
+     * Unconfirmed trusted UTXOs are excluded — use GetPendingDDBalance() for those.
+     * @return Confirmed DD balance in cents
      */
     CAmount GetTotalDDBalance() const;
+
+    /**
+     * Get pending (unconfirmed but trusted) DD balance.
+     * These are DD UTXOs from our own transactions that have 0 confirmations
+     * but are trusted (e.g. fresh mints, change outputs). Mirrors how the
+     * main DGB overview separates "Available" from "Pending".
+     * @return Pending DD balance in cents
+     */
+    CAmount GetPendingDDBalance() const;
 
     /**
      * Scan wallet UTXOs for DigiDollar outputs and populate dd_balances map

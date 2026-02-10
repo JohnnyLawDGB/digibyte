@@ -100,7 +100,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
     seen_message_hashes.insert(msg_hash);
 
     // Cap seen_message_hashes to prevent unbounded growth.
-    // Each oracle re-broadcasts every ~15 seconds with a new nonce, adding a
+    // Each oracle re-broadcasts every ~60 seconds with a new timestamp, adding a
     // new hash each time.  With 8 oracles broadcasting for hours, the set can
     // grow very large.  Keep only the most recent hashes; old hashes are no
     // longer needed because the corresponding messages have already expired

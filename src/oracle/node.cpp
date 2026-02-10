@@ -46,19 +46,22 @@ std::unique_ptr<OracleManager> g_oracle_manager;
 OracleNode::OracleNode()
     : oracle_id(0), running(false), enabled(false)
 {
-    // Phase One: Update every DigiByte block (15 seconds)
-    price_update_interval = 15;
-    // Broadcast every block
-    broadcast_interval = 15;
+    // Fetch exchange prices every 60 seconds (exchanges don't update faster)
+    price_update_interval = 60;
+    // Broadcast every 60 seconds: 1 msg/min gives 12x redundancy per testnet
+    // epoch (50 blocks ~12.5 min) and 25x per mainnet epoch (100 blocks ~25 min).
+    // Previous 15s interval caused 7200 novel P2P msgs/hr with 30 mainnet oracles,
+    // overwhelming the rate limiter and causing cascading peer disconnections.
+    broadcast_interval = 60;
 }
 
 OracleNode::OracleNode(uint32_t oracle_id_in, const CKey& private_key_in)
     : oracle_id(oracle_id_in), private_key(private_key_in), running(false), enabled(false)
 {
     public_key = private_key.GetPubKey();
-    // Phase One: Update every DigiByte block (15 seconds)
-    price_update_interval = 15;
-    broadcast_interval = 15;
+    // 60-second intervals — see default constructor comment for rationale
+    price_update_interval = 60;
+    broadcast_interval = 60;
 }
 
 OracleNode::~OracleNode()

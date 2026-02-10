@@ -45,7 +45,7 @@ private:
 
     // Configuration
     int price_update_interval{30};  // seconds
-    int broadcast_interval{300};    // 5 minutes
+    int broadcast_interval{60};     // 60 seconds: 1 broadcast/min gives 12x-25x redundancy per epoch
 
 public:
     //! Constructor
@@ -62,6 +62,7 @@ public:
     void SetExchangeEndpoints(const std::vector<std::string>& endpoints);
     void SetUpdateInterval(int seconds) { price_update_interval = seconds; }
     void SetBroadcastInterval(int seconds) { broadcast_interval = seconds; }
+    int GetBroadcastInterval() const { return broadcast_interval; }
 
     //! Control functions
     void Start();

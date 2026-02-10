@@ -5415,8 +5415,23 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── Step 4: Rate limiting (novel, signature-verified messages only) ──
-        // With 8 oracles updating every ~2 min = ~30 novel messages/peer/hour.
-        // Limit of 50 provides safe headroom without enabling flood attacks.
+        //
+        // Math: 30 mainnet oracles × 60 broadcasts/hr (1 per minute) = 1800 novel
+        // messages/peer/hour. Limit of 3600 provides 2x headroom for bursts,
+        // network jitter, and epoch transitions where oracles may broadcast more
+        // frequently.
+        //
+        // CRITICAL: Do NOT call Misbehaving() here. Oracle relay is legitimate
+        // P2P gossip behavior — a peer forwarding 30 oracles' messages is doing
+        // its job correctly. Penalizing it causes cascading peer disconnections,
+        // loss of oracle data, and consensus failure. Silently drop excess.
+        //
+        // Previous bug (RC15): limit was 50 with Misbehaving(+5) per excess msg.
+        // 8 testnet oracles at 15s intervals = 1920 msgs/hr, hitting the limit in
+        // ~12 minutes. Each subsequent message added +5 misbehavior → peers banned
+        // within minutes → oracle count dropped below 5 → no consensus → no DD TX
+        // confirmations.
+        static constexpr int ORACLE_MSG_RATE_LIMIT_PER_HOUR = 3600;
         static std::map<NodeId, std::pair<int64_t, int>> oracle_rate_limit;
         int64_t now = GetTime();
 
@@ -5438,12 +5453,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             count = 0;
         }
 
-        if (++count > 50) {
-            // Throttle log: only every 10th violation to prevent log flooding
-            if (count % 10 == 1) {
-                LogPrint(BCLog::NET, "Oracle message rate limit exceeded from peer=%d (count=%d novel msgs/hr)\n", pfrom.GetId(), count);
+        if (++count > ORACLE_MSG_RATE_LIMIT_PER_HOUR) {
+            // Silently drop — no Misbehaving penalty
+            if (count % 100 == 1) {
+                LogPrint(BCLog::NET, "Oracle message rate limit reached from peer=%d (count=%d/%d novel msgs/hr), dropping\n",
+                         pfrom.GetId(), count, ORACLE_MSG_RATE_LIMIT_PER_HOUR);
             }
-            Misbehaving(*peer, 5, "oracle message rate limit exceeded");
             return;
         }
 

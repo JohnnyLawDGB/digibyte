@@ -6492,8 +6492,11 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         tx_relay->m_next_inv_send_time = GetExponentialRand(current_time, OUTBOUND_INVENTORY_BROADCAST_INTERVAL);
                     }
 
-                    // Seed mempool TXs for new peers on their first inventory cycle
-                    if (first_inv_cycle) {
+                    // Seed mempool TXs for new peers on their first inventory cycle.
+                    // Only when Dandelion is enabled — Dandelion's stempool/embargo path
+                    // doesn't call RelayTransaction() for new peers, so they miss TXs.
+                    // With Dandelion disabled, standard RelayTransaction() handles this.
+                    if (first_inv_cycle && gArgs.GetBoolArg("-dandelion", DEFAULT_DANDELION)) {
                         auto vtxinfo = m_mempool.infoAll();
                         for (const auto& txinfo : vtxinfo) {
                             const uint256& hash = peer->m_wtxid_relay ? txinfo.tx->GetWitnessHash() : txinfo.tx->GetHash();

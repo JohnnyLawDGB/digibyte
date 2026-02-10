@@ -1,5 +1,5 @@
 # DigiDollar Oracle Setup Guide
-*The single source of truth for oracle operator setup — RC12, Phase 2 Multi-Oracle*
+*The single source of truth for oracle operator setup — Phase 2 Multi-Oracle*
 
 ---
 
@@ -7,19 +7,19 @@
 
 DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `src/kernel/chainparams.cpp`**. Each operator:
 
-1. Runs DigiByte Core RC12 with a descriptor wallet
+1. Runs DigiByte Core with a descriptor wallet
 2. Generates an oracle keypair via `createoraclekey`
 3. Sends their **public key only** to the DigiByte Core maintainer
 4. The maintainer adds the key to `chainparams.cpp` and ships a new release
-5. The operator runs `startoracle` — the wallet provides the private key automatically
+5. The operator runs `loadwallet` then `startoracle` — the wallet provides the private key automatically
 
 ### Phase 2 Consensus Parameters
 
 | Network | Total Slots | Active Oracles | Consensus Required | Phase 2 Activation |
 |---------|-------------|----------------|--------------------|--------------------|
 | **Mainnet** | 30 (IDs 0–29) | 15 | 8-of-15 | Disabled (`INT_MAX`) |
-| **Testnet** | 10 (IDs 0–9) | 5 (IDs 0–4) | 3-of-5 | Block 100 |
-| **Regtest** | 5 (IDs 0–4) | 5 | 3-of-5 | Block 100 |
+| **Testnet** | 8 (IDs 0–7) | 8 | 5-of-8 | Block 600 |
+| **Regtest** | 7 (IDs 0–6) | 7 | 4-of-7 | Block 650 |
 
 > **Note:** `ORACLE_TOTAL_COUNT = 30` is defined in `src/primitives/oracle.h`. Oracle IDs are always 0–29.
 
@@ -57,9 +57,6 @@ port=12030
 rpcport=14025
 rpcallowip=127.0.0.1
 rpcbind=127.0.0.1
-
-# Optional: CoinMarketCap API key for additional price source
-# coinmarketcap-api-key=YOUR_CMC_API_KEY
 ```
 
 > **Important:** Put testnet settings under the `[test]` section header, not globally.
@@ -287,7 +284,7 @@ Same as upgrading, but skip Step 2 (no new binaries needed):
 ## What Your Oracle Does
 
 Once running, the oracle automatically:
-- Fetches DGB/USD prices from multiple exchanges every 15 seconds
+- Fetches DGB/USD prices from multiple exchanges every 60 seconds
 - Calculates median price with percentage-threshold outlier filtering
 - Signs the price with BIP-340 Schnorr using your wallet-stored private key
 - Broadcasts the signed message to the P2P network
@@ -311,7 +308,6 @@ Once running, the oracle automatically:
 | Crypto.com | No |
 | Gate.io | No |
 | HTX | No |
-| CoinMarketCap | **Yes** (optional, add `coinmarketcap-api-key` to config) |
 
 Minimum 2 valid sources required for a price to be accepted.
 
@@ -319,20 +315,20 @@ Minimum 2 valid sources required for a price to be accepted.
 
 ## Multi-Oracle Setup (Phase 2)
 
-Phase 2 enables multi-oracle consensus. On testnet, this means **3-of-5 oracles must agree** on a price before it's accepted.
+Phase 2 enables multi-oracle consensus. On testnet, this means **5-of-8 oracles must agree** on a price before it's accepted.
 
 ### Key Consensus Parameters (from `chainparams.cpp`)
 
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| `nOracleActivationHeight` | 1 | 1 | Disabled (`INT_MAX`) |
-| `nDigiDollarPhase2Height` | 100 | 100 | Disabled (`INT_MAX`) |
-| `nOracleRequiredMessages` | 3 | 3 | 8 |
-| `nOracleTotalOracles` | 5 | 5 | 15 |
+| `nOracleActivationHeight` | 600 | 650 | Disabled (`INT_MAX`) |
+| `nDigiDollarPhase2Height` | 600 | 650 | Disabled (`INT_MAX`) |
+| `nOracleRequiredMessages` | 5 | 4 | 8 |
+| `nOracleTotalOracles` | 8 | 7 | 15 |
 | `nOracleEpochLength` | 1440 blocks | 144 blocks | 1440 blocks |
 | `nDDOracleEpochBlocks` | 50 | 10 | 100 |
 | `nDDOracleUpdateInterval` | 2 blocks | 1 block | 4 blocks |
-| `nDDActivationHeight` | 550 | 650 | 22,000,000 |
+| `nDDActivationHeight` | 600 | 650 | 22,014,720 |
 
 ### Running Multiple Oracles (Testing)
 

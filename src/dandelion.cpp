@@ -286,6 +286,17 @@ void CConnman::CloseDandelionConnections(const CNode* const pnode)
         CNode* oldDestination = localDandelionDestination;
         localDandelionDestination = newPto;
         
+        // Clear stem-routed tracking so embargoed TXs get re-sent to the new destination.
+        // This is safe: if the old destination disconnected, pending TXs need re-routing.
+        {
+            LOCK(m_dandelion_embargo_mutex);
+            if (!m_dandelion_stem_routed.empty()) {
+                LogPrint(BCLog::DANDELION, "CloseDandelionConnections: Clearing %d stem-routed entries for re-routing\n",
+                         m_dandelion_stem_routed.size());
+                m_dandelion_stem_routed.clear();
+            }
+        }
+        
         // Log the change
         if (oldDestination && !newPto) {
             LogPrintf("CloseDandelionConnections: Lost local Dandelion destination (peer=%d), no replacement available\n", 
@@ -337,9 +348,14 @@ void CConnman::DandelionShuffle()
         for (auto iter = mDandelionRoutes.begin(); iter != mDandelionRoutes.end();) {
             iter = mDandelionRoutes.erase(iter);
         }
-        // Set localDandelionDestination to nulltpr and perform bookkeeping
+        // Set localDandelionDestination to nullptr and perform bookkeeping
         if (localDandelionDestination != nullptr) {
             localDandelionDestination = nullptr;
+        }
+        // Clear stem-routed tracking since all routes are being reshuffled
+        {
+            LOCK(m_dandelion_embargo_mutex);
+            m_dandelion_stem_routed.clear();
         }
         // Clear vDandelionDestination
         //  (bookkeeping already done while iterating through mDandelionRoutes)

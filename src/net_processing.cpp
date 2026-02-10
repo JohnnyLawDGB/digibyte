@@ -1629,10 +1629,10 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
     LOCK(m_connman.m_dandelion_embargo_mutex);
     auto current_time = GetTime<std::chrono::milliseconds>();
     
-    // Log every time we check embargoes
+    // Log embargo checks (debug level only — this fires every second)
     if (!m_connman.mDandelionEmbargo.empty()) {
-        LogPrintf("CheckDandelionEmbargoes: Checking %d embargoed transactions\n", m_connman.mDandelionEmbargo.size());
-        LogPrintf("CheckDandelionEmbargoes: Stempool size=%d, Mempool size=%d\n", m_stempool.size(), m_mempool.size());
+        LogPrint(BCLog::DANDELION, "CheckDandelionEmbargoes: Checking %d embargoed transactions (stempool=%d, mempool=%d)\n",
+                 m_connman.mDandelionEmbargo.size(), m_stempool.size(), m_mempool.size());
     }
     
     // Check if we now have Dandelion destinations available for stuck transactions
@@ -1641,6 +1641,7 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
     for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
         if (m_mempool.exists(iter->first)) {
             LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
+            m_connman.m_dandelion_stem_routed.erase(iter->first);
             iter = m_connman.mDandelionEmbargo.erase(iter);
         } else if (iter->second < current_time) {
             LogPrintf("CheckDandelionEmbargoes: dandeliontx %s embargo expired\n", iter->first.ToString());
@@ -1663,18 +1664,24 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
             } else {
                 LogPrintf("CheckDandelionEmbargoes: Transaction %s not found in stempool!\n", iter->first.ToString());
             }
+            m_connman.m_dandelion_stem_routed.erase(iter->first);
             iter = m_connman.mDandelionEmbargo.erase(iter);
         } else {
-            // Check if this is a transaction waiting for Dandelion peers
-            if (hasDandelionDestinations) {
+            // Embargo not yet expired — attempt Dandelion stem routing only if:
+            // 1. We have Dandelion destinations available
+            // 2. This TX has NOT already been successfully routed
+            //    (prevents the spam bug where we re-send every second)
+            // 3. OR the previous Dandelion destination disconnected (destination changed)
+            if (hasDandelionDestinations && m_connman.m_dandelion_stem_routed.count(iter->first) == 0) {
                 CTransactionRef ptx = m_stempool.get(iter->first);
                 if (ptx) {
-                    // Try to route through Dandelion again
                     CInv inv(MSG_DANDELION_TX, iter->first);
                     bool pushed = m_connman.localDandelionDestinationPushInventory(inv);
                     if (pushed) {
-                        LogPrintf("CheckDandelionEmbargoes: Retrying Dandelion routing for transaction %s\n", iter->first.ToString());
+                        LogPrint(BCLog::DANDELION, "CheckDandelionEmbargoes: Routed Dandelion transaction %s via stem\n", iter->first.ToString());
                         PushDandelionTransaction(iter->first);
+                        // Mark as routed so we don't re-send every second
+                        m_connman.m_dandelion_stem_routed.insert(iter->first);
                     }
                 }
             }
@@ -6456,11 +6463,33 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 // Check whether periodic sends should happen
                 bool fSendTrickle = pto->HasPermission(NetPermissionFlags::NoBan);
                 if (tx_relay->m_next_inv_send_time < current_time) {
+                    // If m_next_inv_send_time was 0 (never initialized), this is a newly
+                    // connected peer completing its first send cycle. Seed its inventory
+                    // from the mempool so it learns about existing transactions.
+                    // Without this, TXs that were RelayTransaction()'d before this peer
+                    // connected would be invisible until the wallet's 12-36h rebroadcast.
+                    const bool first_inv_cycle = (tx_relay->m_next_inv_send_time == 0s);
+
                     fSendTrickle = true;
                     if (pto->IsInboundConn()) {
                         tx_relay->m_next_inv_send_time = NextInvToInbounds(current_time, INBOUND_INVENTORY_BROADCAST_INTERVAL);
                     } else {
                         tx_relay->m_next_inv_send_time = GetExponentialRand(current_time, OUTBOUND_INVENTORY_BROADCAST_INTERVAL);
+                    }
+
+                    // Seed mempool TXs for new peers on their first inventory cycle
+                    if (first_inv_cycle) {
+                        auto vtxinfo = m_mempool.infoAll();
+                        for (const auto& txinfo : vtxinfo) {
+                            const uint256& hash = peer->m_wtxid_relay ? txinfo.tx->GetWitnessHash() : txinfo.tx->GetHash();
+                            if (!tx_relay->m_tx_inventory_known_filter.contains(hash)) {
+                                tx_relay->m_tx_inventory_to_send.insert(hash);
+                            }
+                        }
+                        if (!vtxinfo.empty()) {
+                            LogPrint(BCLog::NET, "Seeded %d mempool transactions for new peer=%d\n",
+                                     vtxinfo.size(), pto->GetId());
+                        }
                     }
                 }
 

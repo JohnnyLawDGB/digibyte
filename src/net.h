@@ -37,6 +37,7 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <set>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -1664,6 +1665,9 @@ public:
     // Dandelion++ functions
     mutable Mutex m_dandelion_embargo_mutex;
     std::map<uint256, std::chrono::microseconds> mDandelionEmbargo GUARDED_BY(m_dandelion_embargo_mutex);
+    /** Track which embargoed transactions have already been routed via Dandelion stem.
+     *  Prevents re-sending the same TX every second during the embargo period. */
+    std::set<uint256> m_dandelion_stem_routed GUARDED_BY(m_dandelion_embargo_mutex);
     bool insertDandelionEmbargo(const uint256& hash, std::chrono::microseconds& embargo);
     bool isDandelionInbound(const CNode* const pnode) const;
     bool isLocalDandelionDestinationSet() const;

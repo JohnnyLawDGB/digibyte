@@ -6,7 +6,7 @@
 #include <consensus/amount.h>
 #include <primitives/transaction.h>
 #include <consensus/validation.h>
-#include <consensus/digidollar.h>
+// DigiDollar validation deferred to ConnectBlock (requires activation context)
 
 bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
 {
@@ -55,31 +55,10 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-prevout-null");
     }
 
-    // DigiDollar basic transaction validation
-    // Note: Full validation with blockchain context happens later in consensus
-    if (DigiDollar::HasDigiDollarMarker(tx)) {
-        // Basic DigiDollar transaction checks that don't require blockchain state
-        try {
-            DigiDollar::DigiDollarTxType txType = DigiDollar::GetDigiDollarTxType(tx);
-
-            // Validate transaction structure based on type
-            switch (txType) {
-                case DigiDollar::DD_TX_MINT:
-                case DigiDollar::DD_TX_TRANSFER:
-                case DigiDollar::DD_TX_REDEEM:
-                    // Basic structure validation - detailed validation happens in context
-                    break;
-                default:
-                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-type");
-            }
-
-            // Note: DD amount validation (IsDDTokenScript, ExtractDDAmount) is performed
-            // in digidollar/validation.cpp which has access to the Phase 1 metadata registry.
-            // This consensus-level check only validates transaction structure.
-        } catch (const std::exception&) {
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-format");
-        }
-    }
+    // DigiDollar transaction validation is deferred to ConnectBlock where
+    // activation status can be checked via BIP9. CheckTransaction is context-free
+    // and cannot determine whether DigiDollar is active, so enforcing DD rules
+    // here would incorrectly reject transactions pre-activation.
 
     return true;
 }

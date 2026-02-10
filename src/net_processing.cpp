@@ -5354,6 +5354,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEPRICE) {
+        // Gate: ignore oracle messages before activation height
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
         // ── Step 1: Deserialize (cheap, needed for hash) ──
         OraclePriceMsg oracle_msg;
         vRecv >> oracle_msg;
@@ -5495,6 +5500,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEBUNDLE) {
+        // Gate: ignore oracle messages before activation height
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
         // ── Step 1: Deserialize ──
         OracleBundleMsg bundle_msg;
         vRecv >> bundle_msg;
@@ -5609,6 +5619,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::GETORACLES) {
+        // Gate: ignore oracle messages before activation height
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
         GetOracleDataMsg request;
         vRecv >> request;
 

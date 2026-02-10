@@ -3261,12 +3261,19 @@ RPCHelpMan startoracle()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
+            // Check DigiDollar activation via wallet's chain interface
+            // (startoracle is registered in wallet RPC table, so request.context is WalletContext)
             {
-                const ChainstateManager& chainman = EnsureAnyChainman(request.context);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+                std::shared_ptr<wallet::CWallet> pwallet_check = wallet::GetWalletForJSONRPCRequest(request);
+                if (pwallet_check) {
+                    node::NodeContext* node_ctx = pwallet_check->chain().context();
+                    if (node_ctx) {
+                        ChainstateManager& chainman = *node_ctx->chainman;
+                        const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                        if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                            throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet activated on this network");
+                        }
+                    }
                 }
             }
 

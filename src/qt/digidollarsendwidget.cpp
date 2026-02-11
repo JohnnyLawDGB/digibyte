@@ -495,6 +495,11 @@ void DigiDollarSendWidget::updateBalance()
     // Update button state - enable if user has any DD balance
     // Fees are paid in DGB, not DD, so no need to check for fee deduction
     m_useAvailableBalanceButton->setEnabled(m_availableBalance > 0);
+
+    // Re-validate amount against updated balance so the border color
+    // refreshes when pending DD confirms (fixes stale yellow warning).
+    updateAmountValidation();
+    updateSendButton();
 }
 
 void DigiDollarSendWidget::updateOraclePrice()

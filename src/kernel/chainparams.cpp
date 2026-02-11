@@ -382,7 +382,7 @@ public:
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
 
-        // SHA256D: no explicit initialTarget — defaults to powLimit via InitialDifficulty()
+        consensus.initialTarget[ALGO_SHA256D] = ArithToUint256(~arith_uint256(0) >> 31); // SHA256D needs higher starting difficulty (2048x powLimit) — fastest algo on CPUs
 
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4;

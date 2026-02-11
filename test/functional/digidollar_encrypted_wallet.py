@@ -99,6 +99,8 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.unlock()
         result = self.nodes[1].mintdigidollar(10000, 0)
         assert 'txid' in result
+        # Wait for TX to relay to node 0 before mining
+        self.sync_mempools()
         self.mine_and_sync()
         self.lock()
 

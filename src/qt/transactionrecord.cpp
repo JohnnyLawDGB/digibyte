@@ -93,6 +93,79 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
         return parts;
     }
 
+    // Special handling for DigiDollar TRANSFER transactions
+    // DD token inputs (0-value P2TR) may not be recognized as ISMINE_SPENDABLE,
+    // causing fAllFromMe to be false while any_from_me is true (from the DGB fee inputs).
+    // Without this, the TX falls to the "mixed debit" path and shows as "(n/a)".
+    if (isDDTransaction && ddTxType == DigiDollar::DD_TX_TRANSFER && any_from_me && !fAllFromMe) {
+        for (const isminetype mine : wtx.txout_is_mine) {
+            if (mine & ISMINE_WATCH_ONLY) involvesWatchAddress = true;
+        }
+
+        CAmount nTxFee = nDebit - wtx.tx->GetValueOut();
+        bool feeRecordAdded = false;
+
+        for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
+            const CTxOut& txout = wtx.tx->vout[i];
+
+            // Skip OP_RETURN outputs
+            if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN)
+                continue;
+
+            // Skip change outputs
+            if (wtx.txout_is_change[i])
+                continue;
+
+            // Check if this is a DD token output (0-value P2TR)
+            bool isDDTokenOutput = txout.nValue == 0 &&
+                txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == 0x51;
+
+            if (isDDTokenOutput) {
+                // DD send record
+                TransactionRecord sub(hash, nTime);
+                sub.idx = i;
+                sub.involvesWatchAddress = involvesWatchAddress;
+                sub.type = TransactionRecord::DDSend;
+                sub.address = EncodeDestination(wtx.txout_address[i]);
+                sub.debit = 0;
+                parts.append(sub);
+            }
+        }
+
+        // Create a single DDSendFee record for the DGB fee portion
+        if (nTxFee > 0 || nDebit > 0) {
+            TransactionRecord sub(hash, nTime);
+            sub.idx = parts.size();
+            sub.involvesWatchAddress = involvesWatchAddress;
+            sub.type = TransactionRecord::DDSendFee;
+            sub.debit = -nDebit; // Total DGB spent (fee + any non-change DGB outputs)
+            sub.credit = nCredit; // DGB change returned
+            parts.append(sub);
+        }
+
+        // Also add credit records for received DD tokens in this TX
+        for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
+            const CTxOut& txout = wtx.tx->vout[i];
+            isminetype mine = wtx.txout_is_mine[i];
+            if (!mine) continue;
+
+            bool isDDTokenOutput = txout.nValue == 0 &&
+                txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == 0x51;
+
+            if (isDDTokenOutput) {
+                TransactionRecord sub(hash, nTime);
+                sub.idx = i;
+                sub.credit = 0;
+                sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
+                sub.type = TransactionRecord::DDRecv;
+                sub.address = EncodeDestination(wtx.txout_address[i]);
+                parts.append(sub);
+            }
+        }
+
+        return parts;
+    }
+
     if (fAllFromMe || !any_from_me) {
         for (const isminetype mine : wtx.txout_is_mine)
         {

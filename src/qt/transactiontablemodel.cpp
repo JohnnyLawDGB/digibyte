@@ -387,6 +387,8 @@ QString TransactionTableModel::formatTxType(const TransactionRecord *wtx) const
         return tr("DigiDollar Transfer (Out)");
     case TransactionRecord::DDRecv:
         return tr("DigiDollar Transfer (In)");
+    case TransactionRecord::DDSendFee:
+        return tr("DigiDollar Transfer Fee");
     default:
         return QString();
     }
@@ -406,6 +408,7 @@ QVariant TransactionTableModel::txAddressDecoration(const TransactionRecord *wtx
         return QIcon(":/icons/tx_output");
     case TransactionRecord::DDTimeLockCollateral:
     case TransactionRecord::DDSend:
+    case TransactionRecord::DDSendFee:
         return QIcon(":/icons/tx_output");  // Use output icon for DD sends
     case TransactionRecord::DDCollateralReturn:
     case TransactionRecord::DDRecv:
@@ -441,6 +444,8 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
         return tr("DigiDollar Transfer (Out)") + watchAddress;
     case TransactionRecord::DDRecv:
         return tr("DigiDollar Transfer (In)") + watchAddress;
+    case TransactionRecord::DDSendFee:
+        return tr("DigiDollar Transfer Fee") + watchAddress;
     default:
         return tr("(n/a)") + watchAddress;
     }
@@ -470,6 +475,7 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
     case TransactionRecord::DDCollateralReturn:
     case TransactionRecord::DDSend:
     case TransactionRecord::DDRecv:
+    case TransactionRecord::DDSendFee:
         {
         // DigiDollar transactions - use a distinctive color
         // Gold/amber for DD related transactions

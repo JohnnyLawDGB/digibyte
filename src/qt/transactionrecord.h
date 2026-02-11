@@ -73,6 +73,7 @@ public:
         DDCollateralReturn,     // DigiDollar collateral returned from redemption
         DDSend,                 // DigiDollar sent (0-value P2TR output)
         DDRecv,                 // DigiDollar received (0-value P2TR output)
+        DDSendFee,              // DGB fee accompanying a DigiDollar transfer
     };
 
     /** Number of confirmation recommended for accepting a transaction */

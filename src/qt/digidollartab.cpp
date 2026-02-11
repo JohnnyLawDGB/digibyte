@@ -19,6 +19,16 @@
 #include <QTabBar>
 #include <QVBoxLayout>
 #include <QTimer>
+#include <QLabel>
+#include <QStackedWidget>
+#include <QFont>
+
+#include <chainparams.h>
+#include <consensus/params.h>
+#include <digidollar/digidollar.h>
+#include <interfaces/node.h>
+#include <node/context.h>
+#include <validation.h>
 
 DigiDollarTab::DigiDollarTab(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
@@ -33,7 +43,11 @@ DigiDollarTab::DigiDollarTab(const PlatformStyle *platformStyle, QWidget *parent
     m_transactionsWidget(nullptr),
     m_walletModel(nullptr),
     m_clientModel(nullptr),
-    m_platformStyle(platformStyle)
+    m_platformStyle(platformStyle),
+    m_stackedWidget(nullptr),
+    m_activationLabel(nullptr),
+    m_activationTimer(nullptr),
+    m_activated(false)
 {
     setupUI();
     connectSignals();
@@ -87,10 +101,33 @@ void DigiDollarTab::setupUI()
     m_tabWidget->addTab(m_positionsWidget, tr("DD Vault"));
     m_tabWidget->addTab(m_transactionsWidget, tr("DD Transactions"));
 
-    // Add tab widget to main layout
-    m_mainLayout->addWidget(m_tabWidget);
+    // Create activation status overlay
+    m_activationLabel = new QLabel(this);
+    m_activationLabel->setAlignment(Qt::AlignCenter);
+    m_activationLabel->setWordWrap(true);
+    m_activationLabel->setTextFormat(Qt::RichText);
+    QFont labelFont = m_activationLabel->font();
+    labelFont.setPointSize(14);
+    m_activationLabel->setFont(labelFont);
+    m_activationLabel->setStyleSheet("QLabel { color: #CCCCCC; padding: 40px; }");
+
+    // Use stacked widget to switch between activation message and DD tabs
+    m_stackedWidget = new QStackedWidget(this);
+    m_stackedWidget->addWidget(m_activationLabel);  // index 0: activation message
+    m_stackedWidget->addWidget(m_tabWidget);         // index 1: DD functionality
+
+    // Add stacked widget to main layout
+    m_mainLayout->addWidget(m_stackedWidget);
 
     setLayout(m_mainLayout);
+
+    // Start activation check timer (every 5 seconds)
+    m_activationTimer = new QTimer(this);
+    connect(m_activationTimer, &QTimer::timeout, this, &DigiDollarTab::checkActivationStatus);
+    m_activationTimer->start(5000);
+
+    // Check immediately
+    checkActivationStatus();
 }
 
 void DigiDollarTab::connectSignals()
@@ -292,5 +329,88 @@ void DigiDollarTab::onRedeemRequested(const QString &positionId)
     if (m_redeemWidget) {
         m_redeemWidget->setPosition(positionId);
         m_tabWidget->setCurrentIndex(4); // Redeem tab
+    }
+}
+void DigiDollarTab::checkActivationStatus()
+{
+    if (m_activated) {
+        // Already activated, stop checking
+        if (m_activationTimer) m_activationTimer->stop();
+        return;
+    }
+
+    QString status = getDeploymentStatus();
+    bool active = isDigiDollarActive();
+
+    if (active) {
+        m_activated = true;
+        m_stackedWidget->setCurrentIndex(1); // Show DD tabs
+        if (m_activationTimer) m_activationTimer->stop();
+        // Trigger initial data load
+        updateBalance();
+        updateOraclePrice();
+        updatePositions();
+        return;
+    }
+
+    // Build activation status message
+    QString msg = QString(
+        "<div style='text-align: center;'>"
+        "<h2 style='color: #0066CC;'>💎 DigiDollar</h2>"
+        "<p style='font-size: 16px; margin: 20px 0;'>"
+        "DigiDollar is not yet active on this blockchain.</p>"
+        "<p style='font-size: 13px; color: #999999;'>"
+        "BIP9 Deployment Status: <b>%1</b></p>"
+        "<p style='font-size: 12px; color: #777777; margin-top: 20px;'>"
+        "DigiDollar will activate after miners signal support.<br>"
+        "Use <code>getdigidollardeploymentinfo</code> for details.</p>"
+        "</div>"
+    ).arg(status.toUpper());
+
+    m_activationLabel->setText(msg);
+    m_stackedWidget->setCurrentIndex(0); // Show activation message
+}
+
+QString DigiDollarTab::getDeploymentStatus() const
+{
+    if (!m_clientModel) return "unknown";
+
+    // Get status via the client model's node interface
+    interfaces::Node& node = m_clientModel->node();
+    int height = node.getNumBlocks();
+
+    // Map height to BIP9 window status
+    const auto& params = Params().GetConsensus();
+    int window = params.nMinerConfirmationWindow;
+    int minHeight = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height;
+
+    if (height < window) {
+        return "defined";
+    } else if (height < window * 2) {
+        return "started";
+    } else if (height < minHeight) {
+        return "locked_in";
+    }
+
+    return "checking...";
+}
+
+bool DigiDollarTab::isDigiDollarActive() const
+{
+    if (!m_clientModel) return false;
+
+    try {
+        interfaces::Node& node = m_clientModel->node();
+        // Use the node's context to check actual BIP9 status
+        node::NodeContext* ctx = node.context();
+        if (!ctx || !ctx->chainman) return false;
+
+        ChainstateManager& chainman = *ctx->chainman;
+        const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+        if (!tip) return false;
+
+        return DigiDollar::IsDigiDollarEnabled(tip, chainman);
+    } catch (...) {
+        return false;
     }
 }

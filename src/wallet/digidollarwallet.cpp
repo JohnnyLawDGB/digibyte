@@ -2772,10 +2772,11 @@ CAmount DigiDollarWallet::GetDDBalance(const CDigiDollarAddress& addr) const {
 
 CAmount DigiDollarWallet::GetTotalDDBalance() const {
     try {
-        // Calculate CONFIRMED-ONLY balance from dd_utxos map.
-        // Unconfirmed trusted UTXOs (fresh mints, change) are excluded here and
-        // reported separately by GetPendingDDBalance(), matching how the main
-        // DGB overview separates "Available" from "Pending".
+        // Calculate SPENDABLE balance from dd_utxos map.
+        // Includes confirmed UTXOs AND trusted unconfirmed ones (our own
+        // change/mint outputs). This mirrors how DGB treats trusted
+        // unconfirmed change as spendable, allowing consecutive DD sends
+        // without waiting for a block confirmation between each one.
         CAmount balance = 0;
         for (const auto& [outpoint, dd_amount] : dd_utxos) {
             if (!m_wallet) {
@@ -2785,17 +2786,20 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
                 LOCK(m_wallet->cs_wallet);
                 const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
                 if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
-                    // Unconfirmed — skip entirely (goes to pending balance)
-                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetTotalDDBalance skipping unconfirmed DD UTXO %s:%u (%lld cents)\n",
+                    // Unconfirmed — only count if trusted (our own change/mints)
+                    if (!wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
+                        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetTotalDDBalance skipping untrusted unconfirmed DD UTXO %s:%u (%lld cents)\n",
+                                 outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
+                        continue;
+                    }
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetTotalDDBalance counting trusted unconfirmed DD UTXO %s:%u (%lld cents)\n",
                              outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
-                    continue;
                 }
-                // Count: confirmed or not-in-wallet UTXOs only
                 balance += dd_amount;
             }
         }
 
-        LogPrintf("DigiDollar: GetTotalDDBalance calculated %lld confirmed cents from %zu UTXOs\n",
+        LogPrintf("DigiDollar: GetTotalDDBalance calculated %lld spendable cents from %zu UTXOs\n",
                   static_cast<long long>(balance), dd_utxos.size());
         return balance;
 
@@ -2807,9 +2811,9 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
 
 CAmount DigiDollarWallet::GetPendingDDBalance() const {
     try {
-        // Calculate PENDING balance: unconfirmed but trusted DD UTXOs.
-        // These are our own fresh mints and change outputs that haven't
-        // confirmed yet. Mirrors m_mine_untrusted_pending in DGB GetBalance().
+        // Pending balance: untrusted unconfirmed DD UTXOs only.
+        // Trusted unconfirmed (our own change/mints) are now included in
+        // GetTotalDDBalance() as spendable, so we don't double-count them here.
         CAmount pending = 0;
         if (!m_wallet) {
             return 0; // No pending in test scenarios
@@ -2823,13 +2827,12 @@ CAmount DigiDollarWallet::GetPendingDDBalance() const {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
             if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
-                // Unconfirmed — count trusted ones as pending
-                if (wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
+                // Unconfirmed — only count UNtrusted as pending (trusted is in main balance)
+                if (!wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
                     pending += dd_amount;
-                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetPendingDDBalance counting trusted unconfirmed UTXO %s:%u (%lld cents)\n",
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetPendingDDBalance counting untrusted unconfirmed UTXO %s:%u (%lld cents)\n",
                              outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
                 }
-                // Untrusted unconfirmed UTXOs are not counted anywhere (not available, not pending)
             }
         }
 
@@ -2895,17 +2898,22 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
             continue; // Skip spent
         }
 
-        // Only return CONFIRMED UTXOs for spending. Unconfirmed DD (even
-        // trusted self-created mints/change) must wait for at least 1
-        // confirmation before they can be selected for transfers.
-        // This matches GetTotalDDBalance() which now only counts confirmed.
+        // Include confirmed UTXOs AND trusted unconfirmed ones (our own
+        // change/mint outputs) for spending. This allows consecutive DD
+        // sends without waiting for block confirmation between each one,
+        // matching how DGB handles trusted unconfirmed change.
         if (m_wallet) {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
             if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed DD UTXO %s:%u in coin selection\n",
+                // Unconfirmed — only allow trusted (our own change/mints)
+                if (!wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping untrusted unconfirmed DD UTXO %s:%u in coin selection\n",
+                             outpoint.hash.ToString(), outpoint.n);
+                    continue;  // Skip untrusted unconfirmed UTXOs
+                }
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Including trusted unconfirmed DD UTXO %s:%u in coin selection\n",
                          outpoint.hash.ToString(), outpoint.n);
-                continue;  // Skip ALL unconfirmed UTXOs
             }
         }
 

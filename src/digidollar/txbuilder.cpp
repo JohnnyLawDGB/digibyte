@@ -170,15 +170,17 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     // collateral requirement and allowing massively under-collateralized positions.
     __int128 numerator = static_cast<__int128>(usdValue) * static_cast<__int128>(COIN) *
                          static_cast<__int128>(static_cast<uint64_t>(adjustedRatio)) * 100;
-    uint64_t requiredCollateral = static_cast<uint64_t>(numerator / static_cast<__int128>(oraclePrice));
+    __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+
+    // Overflow guard: cap at MAX_MONEY before casting to uint64_t.
+    // Without this, extreme values could silently truncate to near-zero.
+    if (result128 > static_cast<__int128>(MAX_MONEY)) {
+        return 0; // Amount too large
+    }
+    uint64_t requiredCollateral = static_cast<uint64_t>(result128);
 
     LogPrintf("DigiDollar TxBuilder: - Required collateral: %llu sats (%.8f DGB)\n",
               requiredCollateral, requiredCollateral / 100000000.0);
-
-    // Check for overflow
-    if (requiredCollateral > static_cast<uint64_t>(MAX_MONEY)) {
-        return 0; // Amount too large
-    }
 
     return static_cast<CAmount>(requiredCollateral);
 }

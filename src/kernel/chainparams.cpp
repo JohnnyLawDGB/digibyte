@@ -448,11 +448,15 @@ public:
 
         // Deployment of DigiDollar stablecoin features (testnet - real BIP9 signaling)
         // Miners signal bit 23, 70% threshold (140/200 blocks)
-        // DEFINED until median time past reaches nStartTime, then STARTED, LOCKED_IN, ACTIVE
+        // BIP9 activation sequence with nMinerConfirmationWindow=200:
+        //   Window 0 (blocks 0-199):   DEFINED
+        //   Window 1 (blocks 200-399): STARTED  — miners begin signaling bit 23
+        //   Window 2 (blocks 400-599): LOCKED_IN — if 140/200 blocks signaled
+        //   Window 3 (blocks 600+):    ACTIVE   — min_activation_height=600 satisfied
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // No activation delay for ALWAYS_ACTIVE
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1763932527; // Genesis timestamp (already past, signaling starts at first window boundary)
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1830297600; // Jan 1, 2028
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 600; // Activation delayed until block 600
 
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274

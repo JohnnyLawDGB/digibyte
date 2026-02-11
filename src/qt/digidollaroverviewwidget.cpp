@@ -509,6 +509,8 @@ void DigiDollarOverviewWidget::setClientModel(ClientModel* model)
 
 void DigiDollarOverviewWidget::updateView()
 {
+    // Don't poll RPCs if widget is hidden (DD not yet active)
+    if (!isVisible()) return;
     updateBalance();
     updateOraclePrice();
     updateSystemHealth();

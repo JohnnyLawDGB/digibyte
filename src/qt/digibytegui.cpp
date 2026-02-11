@@ -286,11 +286,8 @@ void DigiByteGUI::createActions()
     digiDollarAction->setToolTip(digiDollarAction->statusTip());
     digiDollarAction->setCheckable(true);
 
-    // Only show DigiDollar tab if the deployment is ALWAYS_ACTIVE (testnet/regtest/signet).
-    // On mainnet, DD requires BIP9 activation which hasn't happened yet.
-    const auto& ddDeployment = Params().GetConsensus().vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    const bool ddAlwaysActive = (ddDeployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE);
-    digiDollarAction->setVisible(ddAlwaysActive);
+    // DigiDollar tab is always visible — page content shows activation status when not yet active
+    digiDollarAction->setVisible(true);
 
     tabGroup->addAction(digiDollarAction);
 

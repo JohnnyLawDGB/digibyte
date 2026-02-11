@@ -242,6 +242,7 @@ void DigiDollarPositionsWidget::setClientModel(ClientModel* model)
 
 void DigiDollarPositionsWidget::updateView()
 {
+    if (!isVisible()) return;
     updatePositions();
 }
 

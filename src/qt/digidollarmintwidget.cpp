@@ -455,6 +455,7 @@ void DigiDollarMintWidget::updateBalance()
 
 void DigiDollarMintWidget::updateOraclePrice()
 {
+    if (!isVisible()) return;
     LogPrintf("DigiDollar Mint: updateOraclePrice() called\n");
 
     // Get oracle price from RPC for testnet/mainnet, MockOracleManager for regtest

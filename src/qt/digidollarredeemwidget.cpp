@@ -428,6 +428,7 @@ void DigiDollarRedeemWidget::updateBalance()
 
 void DigiDollarRedeemWidget::updatePositions()
 {
+    if (!isVisible()) return;
     // In a real implementation, this would refresh position data
     if (m_walletModel && !m_selectedPositionId.isEmpty()) {
         loadPositionDetails();

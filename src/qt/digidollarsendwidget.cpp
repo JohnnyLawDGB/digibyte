@@ -495,6 +495,7 @@ void DigiDollarSendWidget::updateBalance()
 
 void DigiDollarSendWidget::updateOraclePrice()
 {
+    if (!isVisible()) return;
     // Get oracle price from RPC for testnet/mainnet, MockOracleManager for regtest
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         // BUG #6 FIX: GetCurrentPrice() returns micro-USD, not cents

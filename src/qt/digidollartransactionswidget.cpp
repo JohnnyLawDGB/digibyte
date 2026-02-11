@@ -190,6 +190,7 @@ void DigiDollarTransactionsWidget::updateView()
 
 void DigiDollarTransactionsWidget::updateTransactions()
 {
+    if (!isVisible()) return;
     if (!m_walletModel) {
         m_statusLabel->setText(tr("No wallet loaded"));
         return;

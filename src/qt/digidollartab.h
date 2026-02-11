@@ -21,6 +21,9 @@ class PlatformStyle;
 QT_BEGIN_NAMESPACE
 class QTabWidget;
 class QVBoxLayout;
+class QLabel;
+class QTimer;
+class QStackedWidget;
 QT_END_NAMESPACE
 
 /**
@@ -63,14 +66,24 @@ private Q_SLOTS:
     void onTabChanged(int index);
     /** Handle redeem request from Vault tab */
     void onRedeemRequested(const QString &positionId);
+    /** Check DigiDollar activation status and update UI */
+    void checkActivationStatus();
 
 private:
     void setupUI();
     void connectSignals();
+    /** Query the current BIP9 deployment status string */
+    QString getDeploymentStatus() const;
+    /** Check if DigiDollar is active via the node */
+    bool isDigiDollarActive() const;
 
     // UI components
     QTabWidget* m_tabWidget;
     QVBoxLayout* m_mainLayout;
+    QStackedWidget* m_stackedWidget;
+    QLabel* m_activationLabel;
+    QTimer* m_activationTimer;
+    bool m_activated;
 
     // Sub-widgets
     DigiDollarOverviewWidget* m_overviewWidget;

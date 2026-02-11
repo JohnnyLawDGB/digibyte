@@ -75,8 +75,8 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         except Exception as e:
             error_msg = str(e)
             self.log.info(f"  RPC correctly rejected: {error_msg}")
-            assert "not yet activated" in error_msg.lower(), \
-                f"Expected 'not yet activated' error, got: {error_msg}"
+            assert "not yet active" in error_msg.lower(), \
+                f"Expected 'not yet active' error, got: {error_msg}"
 
         # ── Phase 4: Verify block version bit 23 signaling ──
         self.log.info("Phase 4: Verifying block version bit signaling...")

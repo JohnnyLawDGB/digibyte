@@ -635,15 +635,10 @@ static RPCHelpMan getdigidollardeploymentinfo()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
-            {
-                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
-                ChainstateManager& chainman = EnsureChainman(node);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
-                }
-            }
+            // NOTE: getdigidollardeploymentinfo is intentionally NOT gated behind
+            // activation. Users need this RPC to monitor BIP9 deployment progress
+            // (DEFINED → STARTED → LOCKED_IN → ACTIVE). Gating it would make it
+            // impossible to check when DigiDollar will activate.
             const ChainstateManager& chainman = EnsureAnyChainman(request.context);
             LOCK(cs_main);
             const Chainstate& active_chainstate = chainman.ActiveChainstate();

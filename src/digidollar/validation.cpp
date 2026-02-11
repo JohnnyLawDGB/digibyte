@@ -346,7 +346,14 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
     // Use __int128 to avoid uint64 overflow for large DD amounts (overflows at ~$18K@1000%)
     __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
                          static_cast<__int128>(effectiveRatio) * 100;
-    uint64_t requiredDGB = static_cast<uint64_t>(numerator / static_cast<__int128>(ctx.oraclePriceMicroUSD));
+    __int128 result = numerator / static_cast<__int128>(ctx.oraclePriceMicroUSD);
+    // Overflow guard: if result exceeds MAX_MONEY, cap at MAX_MONEY.
+    // This prevents silent uint64_t truncation that could wrap required
+    // collateral to near-zero, allowing mints with almost no collateral.
+    if (result > static_cast<__int128>(MAX_MONEY)) {
+        result = static_cast<__int128>(MAX_MONEY);
+    }
+    uint64_t requiredDGB = static_cast<uint64_t>(result);
 
     LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * %lld * %d * 100 / %lld micro-USD = %llu sat (~%llu DGB)\n",
              ddAmount, COIN, effectiveRatio, ctx.oraclePriceMicroUSD, requiredDGB, requiredDGB / COIN);
@@ -953,11 +960,15 @@ bool ValidateTransferTransaction(const CTransaction& tx,
         }
 
         if (ddInputCount == 0) {
-            // Could not determine input DD amounts — fall back to conservation assumption.
-            // This can happen in unit tests or when all lookup methods fail.
-            // The full conservation check was performed by the miner during mempool acceptance.
-            LogPrintf("DigiDollar: WARNING - Could not determine input DD amounts, using conservation fallback\n");
-            inputDD = outputDD;
+            // Could not determine input DD amounts from any source (metadata registry,
+            // coins view, or block-db lookup). This should not happen during normal
+            // mempool acceptance or block validation since both provide coins + txLookup.
+            // Reject instead of silently assuming conservation — a consensus rule must
+            // never be soft-bypassed. If this triggers in testing, the validation context
+            // is missing required data sources.
+            LogPrintf("DigiDollar: REJECT - Could not determine input DD amounts for conservation check\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-amounts-unknown",
+                               "Cannot verify DD conservation: input DD amounts undetermined");
         }
     }
 
@@ -1352,8 +1363,11 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
         // Full redemption
         allowedRelease = lockedCollateral;
     } else {
-        // Partial redemption: proportional release
-        allowedRelease = (int64_t)((double)ddBurned / (double)originalDDMinted * (double)lockedCollateral);
+        // Partial redemption: proportional release using integer math
+        // Use __int128 to prevent overflow: ddBurned * lockedCollateral can exceed int64
+        allowedRelease = static_cast<int64_t>(
+            static_cast<__int128>(ddBurned) * static_cast<__int128>(lockedCollateral) /
+            static_cast<__int128>(originalDDMinted));
     }
 
     // Small fee tolerance (0.1% or 1000 satoshis, whichever is larger)

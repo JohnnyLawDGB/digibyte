@@ -2993,8 +2993,11 @@ BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_nullptr_fallback, DigiDollarV
 
     bool result = DigiDollar::ValidateTransferTransaction(tx, ctxNoCoins, state);
 
-    // Should PASS with fallback (inputDD = outputDD assumed)
-    BOOST_CHECK_MESSAGE(result, "Nullptr coins fallback should pass, got error: " + state.GetRejectReason());
+    // Should REJECT — conservation cannot be verified without coins view.
+    // A consensus rule must never be soft-bypassed. Previously this fell back
+    // to inputDD = outputDD, silently passing conservation. Now we reject.
+    BOOST_CHECK_MESSAGE(!result, "Should reject when DD input amounts cannot be determined");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "dd-input-amounts-unknown");
 }
 
 // ============================================================================

@@ -359,7 +359,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
             # Transaction may still be in stempool - mine a block to force fluff
             self.log.info("Transaction still in stempool, mining block to force fluff...")
             self.nodes[3].generate(1)
-            self.sync_all()
+            self.sync_blocks([self.nodes[3], self.nodes[4]])
 
             # Verify transaction is now confirmed
             tx_info = self.nodes[3].gettransaction(txid)

@@ -304,7 +304,7 @@ def random_bytes(n):
 # The maximum number of nodes a single test can spawn
 MAX_NODES = 12
 # Don't assign rpc or p2p ports lower than this
-PORT_MIN = int(os.getenv('TEST_RUNNER_PORT_MIN', default=11000))
+PORT_MIN = int(os.getenv('TEST_RUNNER_PORT_MIN', default=15000))
 # The number of ports to "reserve" for p2p and rpc, each
 PORT_RANGE = 5000
 

@@ -543,7 +543,7 @@ void DigiDollarWidgetTests::privacyOverviewMaskTests()
     // Check that recent transactions list is hidden
     QListWidget* transactionsList = overviewWidget.findChild<QListWidget*>("transactionsList");
     QVERIFY(transactionsList != nullptr);
-    QVERIFY2(!transactionsList->isVisible(), "Transactions list should be hidden when privacy is enabled");
+    QVERIFY2(transactionsList->isHidden(), "Transactions list should be hidden when privacy is enabled");
 
     // Disable privacy mode
     overviewWidget.setPrivacy(false);
@@ -726,13 +726,13 @@ void DigiDollarWidgetTests::privacyPositionsMaskTests()
     // The positions table should be hidden when privacy is enabled
     QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
     QVERIFY(table != nullptr);
-    QVERIFY2(!table->isVisible(), "Positions table should be hidden when privacy is enabled");
+    QVERIFY2(table->isHidden(), "Positions table should be hidden when privacy is enabled");
 
     // Disable privacy mode
     positionsWidget.setPrivacy(false);
 
-    // The positions table should be visible again
-    QVERIFY2(table->isVisible(), "Positions table should be visible when privacy is disabled");
+    // The positions table should be visible again (not explicitly hidden)
+    QVERIFY2(!table->isHidden(), "Positions table should not be hidden when privacy is disabled");
 }
 
 void DigiDollarWidgetTests::privacyTransactionsMaskTests()
@@ -767,13 +767,13 @@ void DigiDollarWidgetTests::privacyTransactionsMaskTests()
     // The transactions table should be hidden when privacy is enabled
     QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
     QVERIFY(table != nullptr);
-    QVERIFY2(!table->isVisible(), "Transactions table should be hidden when privacy is enabled");
+    QVERIFY2(table->isHidden(), "Transactions table should be hidden when privacy is enabled");
 
     // Disable privacy mode
     transactionsWidget.setPrivacy(false);
 
-    // The transactions table should be visible again
-    QVERIFY2(table->isVisible(), "Transactions table should be visible when privacy is disabled");
+    // The transactions table should be visible again (not explicitly hidden)
+    QVERIFY2(!table->isHidden(), "Transactions table should not be hidden when privacy is disabled");
 }
 
 void DigiDollarWidgetTests::privacySignalPropagationTests()
@@ -819,7 +819,7 @@ void DigiDollarWidgetTests::privacySignalPropagationTests()
 
     QTableWidget* txTable = transactionsWidget->findChild<QTableWidget*>();
     QVERIFY(txTable != nullptr);
-    QVERIFY2(!txTable->isVisible(), "Privacy should propagate from tab to transactions widget");
+    QVERIFY2(txTable->isHidden(), "Privacy should propagate from tab to transactions widget");
 
     // Disable privacy
     tab.setPrivacy(false);
@@ -827,6 +827,6 @@ void DigiDollarWidgetTests::privacySignalPropagationTests()
     // Verify overview is unmasked
     QVERIFY2(!ddBalanceValue->text().contains('#'), "Disabling privacy should propagate from tab to overview widget");
 
-    // Verify transactions table is visible again
-    QVERIFY2(txTable->isVisible(), "Disabling privacy should propagate from tab to transactions widget");
+    // Verify transactions table is not hidden
+    QVERIFY2(!txTable->isHidden(), "Disabling privacy should propagate from tab to transactions widget");
 }

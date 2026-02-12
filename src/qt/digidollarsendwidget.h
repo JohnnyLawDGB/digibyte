@@ -64,6 +64,8 @@ public Q_SLOTS:
     void updateBalance();
     /** Update oracle price for USD equivalent calculation */
     void updateOraclePrice();
+    /** Set privacy mode — masks balance displays */
+    void setPrivacy(bool privacy);
 
 private Q_SLOTS:
     /** Address field changed */
@@ -105,6 +107,8 @@ private:
 
     QString formatDDAmount(double amount) const;
     QString formatUSDAmount(double amount) const;
+    /** Mask a formatted string by replacing digits with '#' */
+    QString maskValue(const QString& value) const;
 
     // Phase 7.2-7.3: Helper methods for improved UX
     void showError(const QString& title, const QString& message);
@@ -179,6 +183,9 @@ private:
     double m_availableBalance;
     double m_oraclePrice;
     double m_estimatedFee;
+
+    // Privacy
+    bool m_privacy{false};
 
     // Coin control
     std::unique_ptr<wallet::DDCoinControl> m_coinControl;

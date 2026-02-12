@@ -43,6 +43,7 @@
 #include <QApplication>
 #include <QPalette>
 #include <QLocale>
+#include <QStatusTipEvent>
 
 DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
     QWidget(parent),
@@ -594,19 +595,28 @@ void DigiDollarOverviewWidget::updateBalance()
     }
 
     // Update display — Available (confirmed only)
-    m_ddBalanceValue->setText(formatDDAmount(m_ddBalance));
+    if (m_privacy) {
+        m_ddBalanceValue->setText(maskValue(formatDDAmount(0)));
+        m_ddPendingValue->setText(maskValue(formatDDAmount(0)));
+        m_ddPendingLabel->setVisible(false);
+        m_ddPendingValue->setVisible(false);
+        m_dgbCollateralValue->setText(maskValue(formatDGBAmount(0)));
+        m_usdValueValue->setText(maskValue(formatUSDAmount(0)));
+    } else {
+        m_ddBalanceValue->setText(formatDDAmount(m_ddBalance));
 
-    // Pending (unconfirmed but trusted) — hide row when zero for clean UI
-    m_ddPendingValue->setText(formatDDAmount(ddPending));
-    bool hasPending = (ddPending > 0.0);
-    m_ddPendingLabel->setVisible(hasPending);
-    m_ddPendingValue->setVisible(hasPending);
+        // Pending (unconfirmed but trusted) — hide row when zero for clean UI
+        m_ddPendingValue->setText(formatDDAmount(ddPending));
+        bool hasPending = (ddPending > 0.0);
+        m_ddPendingLabel->setVisible(hasPending);
+        m_ddPendingValue->setVisible(hasPending);
 
-    m_dgbCollateralValue->setText(formatDGBAmount(m_dgbCollateral));
+        m_dgbCollateralValue->setText(formatDGBAmount(m_dgbCollateral));
 
-    // Calculate USD value from CONFIRMED balance only (DD pegged to $1)
-    double usdValue = m_ddBalance * 1.0;
-    m_usdValueValue->setText(formatUSDAmount(usdValue));
+        // Calculate USD value from CONFIRMED balance only (DD pegged to $1)
+        double usdValue = m_ddBalance * 1.0;
+        m_usdValueValue->setText(formatUSDAmount(usdValue));
+    }
 }
 
 void DigiDollarOverviewWidget::updateOraclePrice()
@@ -941,6 +951,55 @@ void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)
 // REMOVED: updateTheme() and applyTheme() methods
 // All theming is now handled by light.css and dark.css files
 // This allows the DigiByte blue theme to work properly
+
+void DigiDollarOverviewWidget::setPrivacy(bool privacy)
+{
+    m_privacy = privacy;
+
+    if (m_privacy) {
+        // Directly mask all balance labels (bypass updateBalance's IBD/throttle checks)
+        m_ddBalanceValue->setText(maskValue(formatDDAmount(0)));
+        m_ddPendingValue->setText(maskValue(formatDDAmount(0)));
+        m_ddPendingLabel->setVisible(false);
+        m_ddPendingValue->setVisible(false);
+        m_dgbCollateralValue->setText(maskValue(formatDGBAmount(0)));
+        m_usdValueValue->setText(maskValue(formatUSDAmount(0)));
+
+        // Mask network status values
+        m_networkTotalDDValue->setTextFormat(Qt::PlainText);
+        m_networkTotalDDValue->setText(maskValue(formatDDAmount(0)));
+        m_networkTotalCollateralValue->setTextFormat(Qt::PlainText);
+        m_networkTotalCollateralValue->setText(maskValue(formatDGBAmount(0)));
+    } else {
+        // Directly set real values (bypass updateBalance's IBD/throttle checks)
+        m_ddBalanceValue->setText(formatDDAmount(m_ddBalance));
+        m_dgbCollateralValue->setText(formatDGBAmount(m_dgbCollateral));
+        double usdValue = m_ddBalance * 1.0;
+        m_usdValueValue->setText(formatUSDAmount(usdValue));
+        // Refresh network stats
+        updateSystemHealth();
+    }
+
+    // Hide recent transactions list when masked
+    m_transactionsList->setVisible(!m_privacy);
+    m_transactionsFrame->setVisible(!m_privacy);
+
+    const QString status_tip = m_privacy ? tr("Privacy mode activated for the DigiDollar Overview tab. To unmask the values, uncheck Settings->Mask values.") : "";
+    setStatusTip(status_tip);
+    QStatusTipEvent event(status_tip);
+    QApplication::sendEvent(this, &event);
+}
+
+QString DigiDollarOverviewWidget::maskValue(const QString& value) const
+{
+    QString masked = value;
+    for (int i = 0; i < masked.size(); ++i) {
+        if (masked[i].isDigit()) {
+            masked[i] = '#';
+        }
+    }
+    return masked;
+}
 
 void DigiDollarOverviewWidget::addDemoTransactions()
 {

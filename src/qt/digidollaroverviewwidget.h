@@ -55,6 +55,8 @@ public Q_SLOTS:
     void updateSystemHealth();
     /** Set monospaced font for balance labels */
     void setMonospacedFont(bool use_embedded_font);
+    /** Set privacy mode — masks all values and hides transaction list */
+    void setPrivacy(bool privacy);
     // REMOVED: updateTheme() and applyTheme() - CSS handles all theming now
 
 private Q_SLOTS:
@@ -72,6 +74,8 @@ private:
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;
     QString formatUSDAmount(double amount) const;
+    /** Mask a formatted string by replacing digits with '#' */
+    QString maskValue(const QString& value) const;
 
     // UI components
     QVBoxLayout* m_mainLayout;
@@ -123,6 +127,9 @@ private:
     QString m_systemHealthStatus;
     int m_dcaLevel;
     int m_errLevel;
+
+    // Privacy
+    bool m_privacy{false};
 
     // Throttling - minimum 5 seconds between updates during sync
     qint64 m_lastBalanceUpdateTime{0};

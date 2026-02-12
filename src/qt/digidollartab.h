@@ -60,6 +60,8 @@ public Q_SLOTS:
     void updateSystemHealth();
     /** Update positions table */
     void updatePositions();
+    /** Set privacy mode — relays to all sub-widgets */
+    void setPrivacy(bool privacy);
 
 private Q_SLOTS:
     /** Handle tab change to update the active widget */
@@ -93,6 +95,9 @@ private:
     DigiDollarRedeemWidget* m_redeemWidget;
     DigiDollarPositionsWidget* m_positionsWidget;
     DigiDollarTransactionsWidget* m_transactionsWidget;
+
+    // Privacy
+    bool m_privacy{false};
 
     // Models
     WalletModel* m_walletModel;

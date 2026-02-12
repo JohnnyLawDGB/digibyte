@@ -49,6 +49,8 @@ public Q_SLOTS:
     void updateBalance();
     /** Update oracle price for collateral calculation */
     void updateOraclePrice();
+    /** Set privacy mode — masks balance and collateral displays */
+    void setPrivacy(bool privacy);
 
 private Q_SLOTS:
     /** Amount field changed */
@@ -81,6 +83,8 @@ private:
     QString formatDGBAmount(double amount) const;
     QString formatUSDAmount(double amount) const;
     QString formatRatio(double ratio) const;
+    /** Mask a formatted string by replacing digits with '#' */
+    QString maskValue(const QString& value) const;
 
     double getCollateralRatioForTier(int tier) const;
     QString getLockTierDisplayName(int tier) const;
@@ -140,6 +144,9 @@ private:
     int m_selectedTier;
     double m_requiredCollateral;
     double m_collateralRatio;
+
+    // Privacy
+    bool m_privacy{false};
 
     // Tracks collateral shown to user so we can detect oracle price drift
     double m_lastDisplayedCollateral;

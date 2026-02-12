@@ -724,12 +724,21 @@ void DigiDollarRedeemWidget::updateRedeemButtons()
 void DigiDollarRedeemWidget::updatePositionInfo()
 {
     if (m_positionFound) {
-        m_ddMintedValue->setText(formatDDAmount(m_positionDDMinted));
-        m_dgbCollateralValue->setText(formatDGBAmount(m_positionDGBCollateral));
-        m_lockTierValue->setText(QString("Tier %1").arg(m_positionLockTier));
-        m_timeRemainingValue->setText(formatBlockTime(m_positionBlocksRemaining));
-        m_healthStatusValue->setText(QString("%1%").arg(QString::number(m_positionHealth, 'f', 1)));
-        m_redeemableValue->setText(formatDDAmount(m_redeemableAmount));
+        if (m_privacy) {
+            m_ddMintedValue->setText(maskValue(formatDDAmount(0)));
+            m_dgbCollateralValue->setText(maskValue(formatDGBAmount(0)));
+            m_lockTierValue->setText(QString("Tier %1").arg(m_positionLockTier)); // Tier is not sensitive
+            m_timeRemainingValue->setText(formatBlockTime(m_positionBlocksRemaining)); // Time is not sensitive
+            m_healthStatusValue->setText(QString("%1%").arg(QString::number(m_positionHealth, 'f', 1))); // Health is not sensitive
+            m_redeemableValue->setText(maskValue(formatDDAmount(0)));
+        } else {
+            m_ddMintedValue->setText(formatDDAmount(m_positionDDMinted));
+            m_dgbCollateralValue->setText(formatDGBAmount(m_positionDGBCollateral));
+            m_lockTierValue->setText(QString("Tier %1").arg(m_positionLockTier));
+            m_timeRemainingValue->setText(formatBlockTime(m_positionBlocksRemaining));
+            m_healthStatusValue->setText(QString("%1%").arg(QString::number(m_positionHealth, 'f', 1)));
+            m_redeemableValue->setText(formatDDAmount(m_redeemableAmount));
+        }
 
         // Update health bar
         m_healthBar->setValue(static_cast<int>(m_positionHealth));
@@ -737,12 +746,18 @@ void DigiDollarRedeemWidget::updatePositionInfo()
         // REMOVED: All health bar and status color coding - Let CSS handle theming
     } else {
         // Reset to default values
-        m_ddMintedValue->setText("0.00000000 DD");
-        m_dgbCollateralValue->setText("0.00000000 DGB");
+        if (m_privacy) {
+            m_ddMintedValue->setText(maskValue(formatDDAmount(0)));
+            m_dgbCollateralValue->setText(maskValue(formatDGBAmount(0)));
+            m_redeemableValue->setText(maskValue(formatDDAmount(0)));
+        } else {
+            m_ddMintedValue->setText("0.00000000 DD");
+            m_dgbCollateralValue->setText("0.00000000 DGB");
+            m_redeemableValue->setText("0.00000000 DD");
+        }
         m_lockTierValue->setText("N/A");
         m_timeRemainingValue->setText("N/A");
         m_healthStatusValue->setText("N/A");
-        m_redeemableValue->setText("0.00000000 DD");
         m_healthBar->setValue(0);
     }
 }
@@ -936,6 +951,23 @@ QString DigiDollarRedeemWidget::formatBlockTime(int blocks) const
     } else {
         return QString("%1m").arg(minutes);
     }
+}
+
+void DigiDollarRedeemWidget::setPrivacy(bool privacy)
+{
+    m_privacy = privacy;
+    updatePositionInfo();
+}
+
+QString DigiDollarRedeemWidget::maskValue(const QString& value) const
+{
+    QString masked = value;
+    for (int i = 0; i < masked.size(); ++i) {
+        if (masked[i].isDigit()) {
+            masked[i] = '#';
+        }
+    }
+    return masked;
 }
 
 // REMOVED: applyTheme() - All styling now handled by CSS files (light.css/dark.css)

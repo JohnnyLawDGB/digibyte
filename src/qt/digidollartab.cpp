@@ -323,6 +323,25 @@ void DigiDollarTab::onTabChanged(int index)
     }
 }
 
+void DigiDollarTab::setPrivacy(bool privacy)
+{
+    m_privacy = privacy;
+
+    // Relay privacy setting to all sub-widgets
+    if (m_overviewWidget)
+        m_overviewWidget->setPrivacy(privacy);
+    if (m_sendWidget)
+        m_sendWidget->setPrivacy(privacy);
+    if (m_mintWidget)
+        m_mintWidget->setPrivacy(privacy);
+    if (m_redeemWidget)
+        m_redeemWidget->setPrivacy(privacy);
+    if (m_positionsWidget)
+        m_positionsWidget->setPrivacy(privacy);
+    if (m_transactionsWidget)
+        m_transactionsWidget->setPrivacy(privacy);
+}
+
 void DigiDollarTab::onRedeemRequested(const QString &positionId)
 {
     // Switch to Redeem tab (index 4) and populate the position ID

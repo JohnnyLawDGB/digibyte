@@ -450,7 +450,11 @@ void DigiDollarMintWidget::updateBalance()
         m_availableDGBBalance = 0.0;
     }
 
-    m_availableDGBValue->setText(formatDGBAmount(m_availableDGBBalance));
+    if (m_privacy) {
+        m_availableDGBValue->setText(maskValue(formatDGBAmount(0)));
+    } else {
+        m_availableDGBValue->setText(formatDGBAmount(m_availableDGBBalance));
+    }
 }
 
 void DigiDollarMintWidget::updateOraclePrice()
@@ -833,9 +837,15 @@ void DigiDollarMintWidget::updateCollateralCalculation()
     calculateRequiredCollateral();
 
     // Update displays
-    m_collateralValue->setText(formatDGBAmount(m_requiredCollateral));
-    m_ratioValue->setText(formatRatio(m_collateralRatio));
-    m_ratioBar->setValue(static_cast<int>(m_collateralRatio));
+    if (m_privacy) {
+        m_collateralValue->setText(maskValue(formatDGBAmount(0)));
+        m_ratioValue->setText(formatRatio(m_collateralRatio)); // Ratio is not sensitive
+        m_ratioBar->setValue(static_cast<int>(m_collateralRatio));
+    } else {
+        m_collateralValue->setText(formatDGBAmount(m_requiredCollateral));
+        m_ratioValue->setText(formatRatio(m_collateralRatio));
+        m_ratioBar->setValue(static_cast<int>(m_collateralRatio));
+    }
 
     // Track what the user is currently seeing so we can detect drift at mint time
     m_lastDisplayedCollateral = m_requiredCollateral;
@@ -1023,6 +1033,30 @@ void DigiDollarMintWidget::updateAmountValidation()
         m_amountEdit->setStyleSheet("");
         m_amountWarningLabel->setVisible(false);
     }
+}
+
+void DigiDollarMintWidget::setPrivacy(bool privacy)
+{
+    m_privacy = privacy;
+    updateBalance();
+    updateCollateralCalculation();
+    if (m_privacy) {
+        m_usdValueValue->setText(maskValue(formatUSDAmount(0)));
+        m_oraclePriceValue->setText(maskValue(formatUSDAmount(0) + " USD/DGB"));
+    } else {
+        updateOraclePrice();
+    }
+}
+
+QString DigiDollarMintWidget::maskValue(const QString& value) const
+{
+    QString masked = value;
+    for (int i = 0; i < masked.size(); ++i) {
+        if (masked[i].isDigit()) {
+            masked[i] = '#';
+        }
+    }
+    return masked;
 }
 
 void DigiDollarMintWidget::updateUSDEquivalent()

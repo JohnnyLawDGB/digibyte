@@ -490,7 +490,11 @@ void DigiDollarSendWidget::updateBalance()
         m_availableBalance = 0.0;
     }
 
-    m_availableBalanceValue->setText(formatDDAmount(m_availableBalance));
+    if (m_privacy) {
+        m_availableBalanceValue->setText(maskValue(formatDDAmount(0)));
+    } else {
+        m_availableBalanceValue->setText(formatDDAmount(m_availableBalance));
+    }
 
     // Update button state - enable if user has any DD balance
     // Fees are paid in DGB, not DD, so no need to check for fee deduction
@@ -1278,6 +1282,31 @@ void DigiDollarSendWidget::updateCoinControlLabels()
         m_coinControlAmountLabel->setText(tr("(manual selection active)"));
         m_coinControlAmountLabel->setVisible(true);
     }
+}
+
+void DigiDollarSendWidget::setPrivacy(bool privacy)
+{
+    m_privacy = privacy;
+    updateBalance();
+    if (m_privacy) {
+        m_usdEquivalentValue->setText(maskValue(formatUSDAmount(0)));
+        m_feeValue->setText(maskValue(QString("~0.1 DGB")));
+        m_totalValue->setText(maskValue(formatDDAmount(0)));
+    } else {
+        updateUSDEquivalent();
+        updateFeeDisplay();
+    }
+}
+
+QString DigiDollarSendWidget::maskValue(const QString& value) const
+{
+    QString masked = value;
+    for (int i = 0; i < masked.size(); ++i) {
+        if (masked[i].isDigit()) {
+            masked[i] = '#';
+        }
+    }
+    return masked;
 }
 
 // AmountValidator implementation

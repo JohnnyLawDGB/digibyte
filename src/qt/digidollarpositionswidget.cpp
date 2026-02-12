@@ -971,6 +971,18 @@ QString DigiDollarPositionsWidget::formatHealthStatus(double health) const
     return QString("%1%").arg(QString::number(health, 'f', 1));
 }
 
+void DigiDollarPositionsWidget::setPrivacy(bool privacy)
+{
+    m_privacy = privacy;
+    m_positionsTable->setVisible(!m_privacy);
+    if (m_privacy) {
+        m_statusLabel->setText(tr("Privacy mode activated for the DD Vault tab. To unmask the values, uncheck Settings->Mask values."));
+        m_statusLabel->show();
+    } else {
+        updatePositions();
+    }
+}
+
 // REMOVED: applyTheme() - All styling now handled by CSS files (light.css/dark.css)
 // This method was overriding the CSS theme with programmatic styling
 void DigiDollarPositionsWidget::applyTheme()

@@ -188,9 +188,22 @@ void DigiDollarTransactionsWidget::updateView()
     updateTransactions();
 }
 
+void DigiDollarTransactionsWidget::setPrivacy(bool privacy)
+{
+    m_privacy = privacy;
+    m_table->setVisible(!m_privacy);
+    if (m_privacy) {
+        m_statusLabel->setText(tr("Privacy mode activated for the DD Transactions tab. To unmask the values, uncheck Settings->Mask values."));
+        m_statusLabel->setVisible(true);
+    } else {
+        updateTransactions();
+    }
+}
+
 void DigiDollarTransactionsWidget::updateTransactions()
 {
     if (!isVisible()) return;
+    if (m_privacy) return;
     if (!m_walletModel) {
         m_statusLabel->setText(tr("No wallet loaded"));
         return;

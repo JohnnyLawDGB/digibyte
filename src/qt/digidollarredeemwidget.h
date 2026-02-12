@@ -60,6 +60,8 @@ public Q_SLOTS:
     void updateBalance();
     /** Update positions information */
     void updatePositions();
+    /** Set privacy mode — masks position values */
+    void setPrivacy(bool privacy);
 
 private Q_SLOTS:
     /** Position ID field changed */
@@ -100,6 +102,8 @@ private:
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;
     QString formatBlockTime(int blocks) const;
+    /** Mask a formatted string by replacing digits with '#' */
+    QString maskValue(const QString& value) const;
 
     // UI components
     QVBoxLayout* m_mainLayout;
@@ -166,6 +170,9 @@ private:
     double m_positionHealth;
     double m_redeemableAmount;
     bool m_positionFound;
+
+    // Privacy
+    bool m_privacy{false};
 
     // Coin control
     std::unique_ptr<wallet::DDCoinControl> m_coinControl;

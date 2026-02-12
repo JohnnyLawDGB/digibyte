@@ -62,6 +62,8 @@ Q_SIGNALS:
 public Q_SLOTS:
     /** Update positions table */
     void updatePositions();
+    /** Set privacy mode — hides positions table */
+    void setPrivacy(bool privacy);
 
 private Q_SLOTS:
     /** Position table cell clicked */
@@ -108,6 +110,9 @@ private:
 
     // Data
     QList<DigiDollarPosition> m_positions;
+
+    // Privacy
+    bool m_privacy{false};
 
     // Table columns
     enum PositionColumn {

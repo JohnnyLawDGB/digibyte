@@ -39,6 +39,10 @@ public:
     void setClientModel(ClientModel* model);
     void updateView();
 
+public Q_SLOTS:
+    /** Set privacy mode — hides transactions table */
+    void setPrivacy(bool privacy);
+
 Q_SIGNALS:
     void message(const QString& title, const QString& message, unsigned int style);
 
@@ -76,6 +80,9 @@ private:
     QTableWidget* m_table;
     QLabel* m_statusLabel;
     QMenu* m_contextMenu;
+
+    // Privacy
+    bool m_privacy{false};
 
     // Models
     WalletModel* m_walletModel;

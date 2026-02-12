@@ -67,27 +67,44 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
             if (mine & ISMINE_WATCH_ONLY) involvesWatchAddress = true;
         }
 
-        // For REDEEM transactions, only show the main collateral return (vout[0])
-        // Additional outputs are change and don't need separate display
+        // For REDEEM transactions, show collateral return and fee change as SEPARATE entries.
+        // vout[0] is always the collateral return (the locked DGB coming back).
+        // Any additional DGB outputs that belong to us are fee change.
+        // Previously these were summed into one total, making it look like the user
+        // got more DGB back than they locked (the "extra" was just fee change).
         if (wtx.tx->vout.size() > 0) {
             const CTxOut& txout = wtx.tx->vout[0];
             isminetype mine = wtx.txout_is_mine[0];
 
+            // Record 1: Collateral return (vout[0] only — exact locked amount)
             if (mine && txout.nValue > 0) {
                 TransactionRecord sub(hash, nTime);
                 sub.idx = 0;
-                // Include change in the total credit shown
-                CAmount totalCredit = 0;
-                for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
-                    if (wtx.txout_is_mine[i]) {
-                        totalCredit += wtx.tx->vout[i].nValue;
-                    }
-                }
-                sub.credit = totalCredit;
+                sub.credit = txout.nValue;
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
                 sub.type = TransactionRecord::DDCollateralReturn;
                 sub.address = EncodeDestination(wtx.txout_address[0]);
                 parts.append(sub);
+            }
+
+            // Record 2: Fee change (any other DGB outputs belonging to us)
+            // These are leftover DGB from the input used to pay the transaction fee.
+            CAmount feeChange = 0;
+            int feeChangeIdx = -1;
+            for (unsigned int i = 1; i < wtx.tx->vout.size(); i++) {
+                if (wtx.txout_is_mine[i] && wtx.tx->vout[i].nValue > 0) {
+                    feeChange += wtx.tx->vout[i].nValue;
+                    if (feeChangeIdx < 0) feeChangeIdx = i;
+                }
+            }
+            if (feeChange > 0 && feeChangeIdx >= 0) {
+                TransactionRecord changeSub(hash, nTime);
+                changeSub.idx = feeChangeIdx;
+                changeSub.credit = feeChange;
+                changeSub.involvesWatchAddress = involvesWatchAddress;
+                changeSub.type = TransactionRecord::RecvWithAddress;
+                changeSub.address = EncodeDestination(wtx.txout_address[feeChangeIdx]);
+                parts.append(changeSub);
             }
         }
         return parts;

@@ -127,9 +127,13 @@ digibyte-cli getoracleprice
 
 **Step 2: Estimate collateral needed**
 ```bash
-digibyte-cli calculatecollateralrequirement 10000 3
-# 10000 cents ($100), tier 3 (180 days, 350%)
+digibyte-cli calculatecollateralrequirement 10000 180
+# 10000 cents ($100), 180 days lock (350% ratio)
 # Returns: required DGB amount
+
+# Or use estimatecollateral with tier number:
+digibyte-cli estimatecollateral 10000 3
+# 10000 cents ($100), tier 3 (180 days)
 ```
 
 **Step 3: Mint**
@@ -256,7 +260,7 @@ When you mint DD, you create a collateral position. You can view and manage thes
 digibyte-cli listdigidollarpositions
 
 # Check if a position can be redeemed
-digibyte-cli getredemptioninfo "txid:vout"
+digibyte-cli getredemptioninfo "position_id"
 
 # List positions ready for redemption
 digibyte-cli listredeemablepositions
@@ -275,11 +279,10 @@ Each position tracks:
 Redeeming burns DD tokens and unlocks your DGB collateral. The timelock must have expired.
 
 ```bash
-# Redeem a full position
-digibyte-cli redeemdigidollar "txid:vout"
-
-# Partial redemption
-digibyte-cli redeemdigidollar "txid:vout" 5000
+# Redeem a position (must redeem full vault amount)
+digibyte-cli redeemdigidollar "position_id" 10000
+# position_id = the mint transaction hash
+# amount = DD cents to redeem (must match full vault amount)
 ```
 
 ### Two Redemption Paths
@@ -358,8 +361,8 @@ Non-DD-aware wallets can safely ignore these — they fall through as NOPs.
 | `listdigidollartxs [count] [skip] [addr] [category]` | List DD transaction history |
 | `listdigidollarpositions` | List all collateral positions |
 | `listredeemablepositions` | List positions ready to redeem |
-| `getredemptioninfo <outpoint>` | Check redemption status of a position |
-| `redeemdigidollar <outpoint> [amount]` | Redeem DD → unlock DGB collateral |
+| `getredemptioninfo <position_id>` | Check redemption status of a position |
+| `redeemdigidollar <position_id> <cents>` | Redeem DD → unlock DGB collateral |
 
 ### Information RPCs (no wallet needed)
 
@@ -368,8 +371,8 @@ Non-DD-aware wallets can safely ignore these — they fall through as NOPs.
 | `getdigidollardeploymentinfo` | BIP9 activation status |
 | `getdigidollarstats` | Network-wide DD supply and health |
 | `getoracleprice` | Current DGB/USD oracle price |
-| `calculatecollateralrequirement <cents> [tier]` | Calculate needed collateral |
-| `estimatecollateral <cents>` | Estimate collateral at current price |
+| `calculatecollateralrequirement <cents> <lock_days>` | Calculate needed collateral |
+| `estimatecollateral <cents> <tier>` | Estimate collateral at current price |
 | `getdigidollarinfo` | General DD system info |
 
 ---

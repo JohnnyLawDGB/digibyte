@@ -19,6 +19,7 @@
 #include <qt/digidollarredeemwidget.h>
 #include <qt/digidollarpositionswidget.h>
 #include <qt/digidollartransactionswidget.h>
+#include <qt/digidollartab.h>
 #include <qt/ddaddressbookpage.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
@@ -459,4 +460,373 @@ void DigiDollarWidgetTests::addressBookTests()
     QTableWidget* table = addressBook.findChild<QTableWidget*>();
     QVERIFY(table != nullptr);
     QCOMPARE(table->columnCount(), 2);
+}
+
+// ============================================================================
+// Privacy / Mask Values Tests
+// ============================================================================
+
+void DigiDollarWidgetTests::privacyTabSetPrivacySlotTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarTab tab(mini_gui.platformStyle.get());
+    tab.setWalletModel(mini_gui.walletModel.get());
+    tab.setClientModel(mini_gui.clientModel.get());
+
+    // Verify DigiDollarTab has setPrivacy slot and it can be called
+    tab.setPrivacy(true);
+    tab.setPrivacy(false);
+    // If we get here without crash, the slot exists and works
+    QVERIFY(true);
+}
+
+void DigiDollarWidgetTests::privacyOverviewMaskTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarOverviewWidget overviewWidget;
+    overviewWidget.setWalletModel(mini_gui.walletModel.get());
+    overviewWidget.setClientModel(mini_gui.clientModel.get());
+    overviewWidget.show();
+
+    // Enable privacy mode
+    overviewWidget.setPrivacy(true);
+
+    // Check that balance labels contain '#' (masked)
+    QLabel* ddBalanceValue = overviewWidget.findChild<QLabel*>("ddBalanceValue");
+    QVERIFY(ddBalanceValue != nullptr);
+    QVERIFY2(ddBalanceValue->text().contains('#'), "DD balance should be masked with # when privacy is enabled");
+
+    QLabel* dgbCollateralValue = overviewWidget.findChild<QLabel*>("dgbCollateralValue");
+    QVERIFY(dgbCollateralValue != nullptr);
+    QVERIFY2(dgbCollateralValue->text().contains('#'), "DGB collateral should be masked with # when privacy is enabled");
+
+    QLabel* usdValueValue = overviewWidget.findChild<QLabel*>("usdValueValue");
+    QVERIFY(usdValueValue != nullptr);
+    QVERIFY2(usdValueValue->text().contains('#'), "USD value should be masked with # when privacy is enabled");
+
+    // Check that recent transactions list is hidden
+    QListWidget* transactionsList = overviewWidget.findChild<QListWidget*>("transactionsList");
+    QVERIFY(transactionsList != nullptr);
+    QVERIFY2(!transactionsList->isVisible(), "Transactions list should be hidden when privacy is enabled");
+
+    // Disable privacy mode
+    overviewWidget.setPrivacy(false);
+
+    // Check that balance labels no longer contain '#'
+    QVERIFY2(!ddBalanceValue->text().contains('#'), "DD balance should NOT be masked when privacy is disabled");
+    QVERIFY2(!dgbCollateralValue->text().contains('#'), "DGB collateral should NOT be masked when privacy is disabled");
+    QVERIFY2(!usdValueValue->text().contains('#'), "USD value should NOT be masked when privacy is disabled");
+}
+
+void DigiDollarWidgetTests::privacySendMaskTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarSendWidget sendWidget(mini_gui.platformStyle.get());
+    sendWidget.setWalletModel(mini_gui.walletModel.get());
+    sendWidget.setClientModel(mini_gui.clientModel.get());
+    sendWidget.show();
+
+    // Enable privacy mode
+    sendWidget.setPrivacy(true);
+
+    // Check that available balance is masked
+    QLabel* availableBalanceValue = sendWidget.findChild<QLabel*>("availableBalanceValue");
+    QVERIFY(availableBalanceValue != nullptr);
+    QVERIFY2(availableBalanceValue->text().contains('#'), "Available balance should be masked when privacy is enabled");
+
+    // Disable privacy mode
+    sendWidget.setPrivacy(false);
+
+    // Check that available balance is no longer masked
+    QVERIFY2(!availableBalanceValue->text().contains('#'), "Available balance should NOT be masked when privacy is disabled");
+}
+
+void DigiDollarWidgetTests::privacyMintMaskTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarMintWidget mintWidget;
+    mintWidget.setWalletModel(mini_gui.walletModel.get());
+    mintWidget.setClientModel(mini_gui.clientModel.get());
+    mintWidget.show();
+
+    // Enable privacy mode
+    mintWidget.setPrivacy(true);
+
+    // Check that available DGB balance is masked
+    QLabel* availableDGBValue = mintWidget.findChild<QLabel*>("availableDGBValue");
+    QVERIFY(availableDGBValue != nullptr);
+    QVERIFY2(availableDGBValue->text().contains('#'), "Available DGB balance should be masked when privacy is enabled");
+
+    // Check that collateral value is masked
+    QLabel* collateralValue = mintWidget.findChild<QLabel*>("collateralValue");
+    QVERIFY(collateralValue != nullptr);
+    QVERIFY2(collateralValue->text().contains('#'), "Collateral value should be masked when privacy is enabled");
+
+    // Disable privacy mode
+    mintWidget.setPrivacy(false);
+
+    // Check that available DGB balance is no longer masked
+    QVERIFY2(!availableDGBValue->text().contains('#'), "Available DGB balance should NOT be masked when privacy is disabled");
+}
+
+void DigiDollarWidgetTests::privacyRedeemMaskTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.show();
+
+    // Enable privacy mode
+    redeemWidget.setPrivacy(true);
+
+    // Check that position values are masked
+    QLabel* ddMintedValue = redeemWidget.findChild<QLabel*>("ddMintedValue");
+    if (ddMintedValue) {
+        QVERIFY2(ddMintedValue->text().contains('#'), "DD minted value should be masked when privacy is enabled");
+    }
+
+    QLabel* dgbCollateralValue = redeemWidget.findChild<QLabel*>("dgbCollateralValue");
+    if (dgbCollateralValue) {
+        QVERIFY2(dgbCollateralValue->text().contains('#'), "DGB collateral value should be masked when privacy is enabled");
+    }
+
+    QLabel* redeemableValue = redeemWidget.findChild<QLabel*>("redeemableValue");
+    if (redeemableValue) {
+        QVERIFY2(redeemableValue->text().contains('#'), "Redeemable value should be masked when privacy is enabled");
+    }
+
+    // Disable privacy mode
+    redeemWidget.setPrivacy(false);
+
+    if (ddMintedValue) {
+        QVERIFY2(!ddMintedValue->text().contains('#'), "DD minted value should NOT be masked when privacy is disabled");
+    }
+}
+
+void DigiDollarWidgetTests::privacyPositionsMaskTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarPositionsWidget positionsWidget;
+    positionsWidget.setWalletModel(mini_gui.walletModel.get());
+    positionsWidget.setClientModel(mini_gui.clientModel.get());
+    positionsWidget.show();
+
+    // Enable privacy mode
+    positionsWidget.setPrivacy(true);
+
+    // The positions table should be hidden when privacy is enabled
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+    QVERIFY2(!table->isVisible(), "Positions table should be hidden when privacy is enabled");
+
+    // Disable privacy mode
+    positionsWidget.setPrivacy(false);
+
+    // The positions table should be visible again
+    QVERIFY2(table->isVisible(), "Positions table should be visible when privacy is disabled");
+}
+
+void DigiDollarWidgetTests::privacyTransactionsMaskTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
+    transactionsWidget.setClientModel(mini_gui.clientModel.get());
+    transactionsWidget.show();
+
+    // Enable privacy mode
+    transactionsWidget.setPrivacy(true);
+
+    // The transactions table should be hidden when privacy is enabled
+    QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    QVERIFY2(!table->isVisible(), "Transactions table should be hidden when privacy is enabled");
+
+    // Disable privacy mode
+    transactionsWidget.setPrivacy(false);
+
+    // The transactions table should be visible again
+    QVERIFY2(table->isVisible(), "Transactions table should be visible when privacy is disabled");
+}
+
+void DigiDollarWidgetTests::privacySignalPropagationTests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarTab tab(mini_gui.platformStyle.get());
+    tab.setWalletModel(mini_gui.walletModel.get());
+    tab.setClientModel(mini_gui.clientModel.get());
+    tab.show();
+
+    // Enable privacy on the tab — it should propagate to all sub-widgets
+    tab.setPrivacy(true);
+
+    // Verify overview widget has privacy enabled (check for masked balances)
+    DigiDollarOverviewWidget* overviewWidget = tab.findChild<DigiDollarOverviewWidget*>("overviewWidget");
+    QVERIFY(overviewWidget != nullptr);
+
+    QLabel* ddBalanceValue = overviewWidget->findChild<QLabel*>("ddBalanceValue");
+    QVERIFY(ddBalanceValue != nullptr);
+    QVERIFY2(ddBalanceValue->text().contains('#'), "Privacy should propagate from tab to overview widget");
+
+    // Verify transactions widget has privacy enabled
+    DigiDollarTransactionsWidget* transactionsWidget = tab.findChild<DigiDollarTransactionsWidget*>("transactionsWidget");
+    QVERIFY(transactionsWidget != nullptr);
+
+    QTableWidget* txTable = transactionsWidget->findChild<QTableWidget*>();
+    QVERIFY(txTable != nullptr);
+    QVERIFY2(!txTable->isVisible(), "Privacy should propagate from tab to transactions widget");
+
+    // Disable privacy
+    tab.setPrivacy(false);
+
+    // Verify overview is unmasked
+    QVERIFY2(!ddBalanceValue->text().contains('#'), "Disabling privacy should propagate from tab to overview widget");
+
+    // Verify transactions table is visible again
+    QVERIFY2(txTable->isVisible(), "Disabling privacy should propagate from tab to transactions widget");
 }

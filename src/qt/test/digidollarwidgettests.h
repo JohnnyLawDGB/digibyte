@@ -31,6 +31,14 @@ private Q_SLOTS:
     void addressBookTests();
     void transactionsWidgetTests();
     void transactionsWidgetExportTests();
+    void privacyTabSetPrivacySlotTests();
+    void privacyOverviewMaskTests();
+    void privacySendMaskTests();
+    void privacyMintMaskTests();
+    void privacyRedeemMaskTests();
+    void privacyPositionsMaskTests();
+    void privacyTransactionsMaskTests();
+    void privacySignalPropagationTests();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

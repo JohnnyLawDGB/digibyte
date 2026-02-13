@@ -26,6 +26,8 @@
 #include <hash.h>
 #include <crypto/sha256.h>
 #include <util/strencodings.h>
+#include <oracle/bundle_manager.h>
+#include <primitives/oracle.h>
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
@@ -1991,6 +1993,435 @@ BOOST_AUTO_TEST_CASE(redteam_nums_cryptographic_derivation)
     BOOST_CHECK_MESSAGE(nums.IsFullyValid(),
         "NUMS x-coordinate does not correspond to a valid secp256k1 point! "
         "lift_x() failed — the point cannot be used as a Taproot internal key.");
+}
+
+// =============================================================================
+// T1-05: Oracle Price Forgery — Miner Bypass via skipOracleValidation
+// =============================================================================
+
+/**
+ * T1-05a: EXPLOIT — skipOracleValidation bypasses collateral ratio in ConnectBlock
+ *
+ * VULNERABILITY: During ConnectBlock, skipOracleValidation = true is passed to the
+ * DD validation context. This was intended for IBD (Initial Block Download) where
+ * oracle prices may not be available. However, it also applies to newly mined blocks
+ * from the P2P network. A malicious miner can:
+ *   1. Construct a mint tx with minimal collateral (1 sat) backing $1000 DD
+ *   2. Include it in their mined block
+ *   3. During ConnectBlock on all nodes: collateral ratio check is SKIPPED
+ *   4. Block accepted → unbacked DD tokens created
+ *
+ * This test proves the vulnerability by showing that:
+ * - CalculateRequiredCollateral returns a meaningful value (not skipped)
+ * - But ValidateMintTransaction with skipOracleValidation=true NEVER calls it
+ *
+ * The test directly demonstrates the code path gap: collateral ratio checking
+ * is gated entirely behind !ctx.skipOracleValidation, meaning ANY mint tx
+ * in a mined block passes the economic check.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T1_05a_skip_oracle_bypasses_collateral)
+{
+    auto regTestParams = CChainParams::RegTest({});
+    const int blockHeight = 1000;
+    const CAmount ddAmount = 100000;     // $1000 DD
+    const CAmount oraclePrice = 6500;    // $0.0065/DGB
+    const int lockBlocks = 30 * DigiDollar::BLOCKS_PER_DAY;  // 30 days
+
+    // ═══════════════════════════════════════════════════
+    // TEST 1: CalculateRequiredCollateral gives a real answer
+    // ═══════════════════════════════════════════════════
+    {
+        DigiDollar::ValidationContext ctx(blockHeight, oraclePrice, 150, *regTestParams,
+                                          nullptr, false);
+
+        CAmount required = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, ctx);
+        BOOST_TEST_MESSAGE("Required collateral for $1000 DD at $0.0065: " +
+                          std::to_string(required) + " satoshis (" +
+                          std::to_string(required / 100000000.0) + " DGB)");
+
+        // At $0.0065/DGB with 150% base ratio, you need LOTS of DGB
+        // $1000 DD = 100,000 cents, needs ~230 million DGB sats at minimum
+        BOOST_CHECK_MESSAGE(required > 0,
+            "CalculateRequiredCollateral returns meaningful value");
+        BOOST_CHECK_MESSAGE(required > 100,
+            "Required collateral is FAR more than 100 satoshis");
+    }
+
+    // ═══════════════════════════════════════════════════
+    // TEST 2: Direct code inspection — the vulnerability
+    // ═══════════════════════════════════════════════════
+    // The critical code in ValidateMintTransaction (digidollar/validation.cpp):
+    //
+    //   if (!ctx.skipOracleValidation) {    // <-- THIS GATE
+    //       requiredCollateral = CalculateRequiredCollateral(totalDD, lockTime, ctx);
+    //       if (totalCollateral < requiredCollateral) { REJECT }
+    //       if (!ValidateCollateralRatio(...)) { REJECT }
+    //   }
+    //
+    // When skipOracleValidation = true:
+    //   - CalculateRequiredCollateral is NEVER called
+    //   - totalCollateral < requiredCollateral is NEVER checked
+    //   - ValidateCollateralRatio is NEVER called
+    //   - requiredCollateral stays at 0
+    //
+    // This means ALL structural checks pass (NUMS, DD marker, output counts),
+    // but the ECONOMIC check (is collateral sufficient?) is SKIPPED.
+
+    // Build a minimal mint tx to prove the structural checks pass
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    CPubKey ownerPubKey = ownerKey.GetPubKey();
+    XOnlyPubKey ownerXOnly(ownerPubKey);
+
+    const CAmount tinyCollateral = 100;  // 100 satoshis
+    const int64_t lockHeight = blockHeight + lockBlocks;
+
+    // Create oracle keys for MintParams
+    std::vector<XOnlyPubKey> oracleXKeys;
+    for (int i = 0; i < 7; i++) {
+        CKey k;
+        k.MakeNewKey(true);
+        oracleXKeys.push_back(XOnlyPubKey(k.GetPubKey()));
+    }
+
+    // Build collateral P2TR script using proper MintParams
+    DigiDollar::MintParams mintParams;
+    mintParams.ddAmount = ddAmount;
+    mintParams.lockHeight = lockHeight;
+    mintParams.ownerKey = ownerXOnly;
+    // Use NUMS point as internal key
+    mintParams.internalKey = DigiDollar::GetCollateralNUMSKey();
+    mintParams.oracleKeys = oracleXKeys;
+
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(mintParams);
+    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(ownerXOnly, ddAmount);
+
+    CScript metadataScript = CScript() << OP_RETURN
+                                       << std::vector<unsigned char>{'D', 'D'}
+                                       << CScriptNum(1)  // MINT
+                                       << CScriptNum(ddAmount)
+                                       << CScriptNum(lockHeight)
+                                       << CScriptNum(0)  // lockTier
+                                       << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
+
+    CMutableTransaction mtx;
+    mtx.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    mtx.nLockTime = lockHeight;
+    mtx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 0)));
+    mtx.vout.push_back(CTxOut(tinyCollateral, collateralScript));
+    mtx.vout.push_back(CTxOut(0, ddScript));
+    mtx.vout.push_back(CTxOut(0, metadataScript));
+
+    CTransaction finalTx(mtx);
+
+    // ═══════════════════════════════════════════════════
+    // TEST 3: Mempool path MUST reject
+    // ═══════════════════════════════════════════════════
+    {
+        DigiDollar::ValidationContext ctx(blockHeight, oraclePrice, 150, *regTestParams,
+                                          nullptr, false);
+        TxValidationState state;
+        bool result = DigiDollar::ValidateMintTransaction(finalTx, ctx, state);
+        BOOST_CHECK_MESSAGE(!result,
+            "DEFENSE VERIFIED: Mempool rejects mint with insufficient collateral. "
+            "Reason: " + state.GetRejectReason());
+    }
+
+    // ═══════════════════════════════════════════════════
+    // TEST 4: ConnectBlock path — does it also reject?
+    // ═══════════════════════════════════════════════════
+    {
+        DigiDollar::ValidationContext ctx(blockHeight, oraclePrice, 150, *regTestParams,
+                                          nullptr, true);  // skipOracleValidation = true
+        TxValidationState state;
+        bool result = DigiDollar::ValidateMintTransaction(finalTx, ctx, state);
+
+        // If this PASSES, the exploit is confirmed
+        BOOST_CHECK_MESSAGE(!result,
+            "EXPLOIT FOUND [T1-05a]: skipOracleValidation=true bypasses collateral ratio! "
+            "Miner can include mint with 100 sat collateral for $1000 DD in a block. "
+            "During ConnectBlock, collateral validation is entirely skipped. "
+            "FIX: Collateral ratio MUST be checked during ConnectBlock when oracle price is available.");
+
+        if (result) {
+            BOOST_TEST_MESSAGE("*** CRITICAL: Mint with 100 sats for $1000 DD PASSED ConnectBlock validation ***");
+        } else {
+            BOOST_TEST_MESSAGE("Mint correctly rejected in ConnectBlock path. "
+                             "Reason: " + state.GetRejectReason());
+        }
+    }
+}
+
+/**
+ * T1-05b: Phase 1 compact oracle format — no signature in coinbase OP_RETURN
+ *
+ * VULNERABILITY: Phase 1 compact format stores only oracle_id + price + timestamp
+ * in the coinbase OP_RETURN. No Schnorr signature is included. During block validation,
+ * ValidateBlockOracleData skips signature verification for empty schnorr_sig.
+ * A malicious miner can set ANY oracle price.
+ *
+ * MITIGATION: Current testnet/regtest configs activate Phase 2 at the same height
+ * as DigiDollar, so Phase 1 compact format is never used standalone. But the code
+ * path exists and would be exploitable if Phase 1 were ever used independently.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T1_05b_phase1_oracle_no_signature)
+{
+    // Create a Phase 1 compact oracle script with FORGED price
+    CScript forgedOracleScript;
+    forgedOracleScript << OP_RETURN << OP_ORACLE;
+    forgedOracleScript << std::vector<unsigned char>{0x01};  // version = Phase 1
+
+    // Forge: oracle_id=0, price=$100 (100,000,000 micro-USD), current timestamp
+    std::vector<unsigned char> compact_data;
+    compact_data.reserve(17);
+    compact_data.push_back(0);  // oracle_id = 0
+
+    // Price: $100.00 = 100,000,000 micro-USD (the maximum allowed)
+    uint64_t forged_price = 100000000;  // $100 — extreme manipulation
+    for (int i = 0; i < 8; ++i) {
+        compact_data.push_back(static_cast<unsigned char>((forged_price >> (i * 8)) & 0xFF));
+    }
+
+    // Timestamp: current time
+    int64_t now = GetTime();
+    for (int i = 0; i < 8; ++i) {
+        compact_data.push_back(static_cast<unsigned char>((now >> (i * 8)) & 0xFF));
+    }
+
+    forgedOracleScript << compact_data;
+
+    // Build fake coinbase with forged oracle data
+    CMutableTransaction coinbase_tx;
+    coinbase_tx.vin.push_back(CTxIn());
+    coinbase_tx.vout.push_back(CTxOut(5000000000, CScript())); // block reward
+    coinbase_tx.vout.push_back(CTxOut(0, forgedOracleScript));  // FORGED oracle
+
+    CTransaction coinbase(coinbase_tx);
+
+    // Extract oracle bundle — should succeed (no sig needed for compact format)
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    COracleBundle bundle;
+    bool extracted = manager.ExtractOracleBundle(coinbase, bundle);
+
+    BOOST_CHECK_MESSAGE(extracted,
+        "Phase 1 compact oracle extraction works (expected)");
+
+    if (extracted) {
+        BOOST_CHECK_EQUAL(bundle.messages.size(), 1);
+        BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, forged_price);
+
+        // The message should have NO signature (compact format)
+        const COraclePriceMessage& msg = bundle.messages[0];
+        BOOST_CHECK_MESSAGE(msg.schnorr_sig.empty(),
+            "Phase 1 compact format has no signature — expected");
+
+        // IsValid() should return true for compact format (empty sig = trusted)
+        // This is the vulnerability: no cryptographic verification
+        bool isValid = msg.IsValid(now);
+        BOOST_CHECK_MESSAGE(isValid,
+            "VULNERABILITY CONFIRMED: Phase 1 compact message with forged price ($100) "
+            "passes IsValid() because empty signature is implicitly trusted. "
+            "MITIGATION: Phase 2 activates at same height as DD on all networks, "
+            "so this code path is never exercised in production.");
+
+        BOOST_TEST_MESSAGE("Phase 1 compact format vulnerability: Forged price of $" +
+            std::to_string(forged_price / 1000000) + " accepted without signature verification. "
+            "This is acceptable ONLY because Phase 2 always activates simultaneously.");
+    }
+}
+
+/**
+ * T1-05c: P2P oracle message — signature verification with chainparams pubkey binding
+ *
+ * DEFENSE TEST: Verify that an attacker cannot inject forged oracle prices via P2P.
+ * The net_processing code replaces the attacker-supplied pubkey with the authorized
+ * pubkey from chainparams before signature verification.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T1_05c_p2p_oracle_pubkey_binding)
+{
+    // Attacker generates their own key pair
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+
+    // Create oracle message with attacker's key
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 100000000;  // Forged: $100
+    msg.timestamp = GetTime();
+    msg.block_height = 1000;
+    msg.nonce = 42;
+
+    // Attacker signs with their own key
+    BOOST_REQUIRE(msg.SignPhase2(attackerKey));
+
+    // Verify passes with attacker's own key (expected — they signed it)
+    BOOST_CHECK(msg.VerifyPhase2());
+
+    // Now simulate the chainparams pubkey binding (what net_processing does)
+    // Replace attacker's pubkey with a different authorized key
+    CKey authorizedKey;
+    authorizedKey.MakeNewKey(true);
+    msg.oracle_pubkey = XOnlyPubKey(authorizedKey.GetPubKey());
+
+    // Verification MUST fail — signature was made with attacker's key,
+    // but we're verifying against the authorized key
+    bool verifyResult = msg.VerifyPhase2();
+    BOOST_CHECK_MESSAGE(!verifyResult,
+        "DEFENSE HOLDS: After pubkey binding to chainparams key, attacker's "
+        "forged signature fails verification. P2P oracle forgery is not possible.");
+}
+
+/**
+ * T1-05d: Oracle message timestamp bounds — reject stale and future messages
+ */
+BOOST_AUTO_TEST_CASE(redteam_T1_05d_oracle_timestamp_validation)
+{
+    CKey validKey;
+    validKey.MakeNewKey(true);
+    int64_t now = GetTime();
+
+    // Test 1: Message from far future (>60s) must be rejected
+    {
+        COraclePriceMessage futureMsg;
+        futureMsg.oracle_id = 0;
+        futureMsg.price_micro_usd = 6500;
+        futureMsg.timestamp = now + 3600;  // 1 hour in future
+        futureMsg.block_height = 1000;
+        futureMsg.nonce = 1;
+        BOOST_REQUIRE(futureMsg.SignPhase2(validKey));
+
+        BOOST_CHECK_MESSAGE(!futureMsg.IsValid(now),
+            "DEFENSE HOLDS: Oracle message from far future rejected");
+    }
+
+    // Test 2: Message too old (>1 hour) must be rejected
+    {
+        COraclePriceMessage staleMsg;
+        staleMsg.oracle_id = 0;
+        staleMsg.price_micro_usd = 6500;
+        staleMsg.timestamp = now - 7200;  // 2 hours old
+        staleMsg.block_height = 1000;
+        staleMsg.nonce = 2;
+        BOOST_REQUIRE(staleMsg.SignPhase2(validKey));
+
+        BOOST_CHECK_MESSAGE(!staleMsg.IsValid(now),
+            "DEFENSE HOLDS: Oracle message >1 hour old rejected");
+    }
+
+    // Test 3: Message within bounds must pass
+    {
+        COraclePriceMessage validMsg;
+        validMsg.oracle_id = 0;
+        validMsg.price_micro_usd = 6500;
+        validMsg.timestamp = now - 30;  // 30 seconds ago
+        validMsg.block_height = 1000;
+        validMsg.nonce = 3;
+        BOOST_REQUIRE(validMsg.SignPhase2(validKey));
+
+        BOOST_CHECK_MESSAGE(validMsg.IsValid(now),
+            "Valid oracle message within time bounds accepted");
+    }
+}
+
+/**
+ * T1-05e: Oracle price range validation — reject out-of-bounds prices
+ */
+BOOST_AUTO_TEST_CASE(redteam_T1_05e_oracle_price_range)
+{
+    CKey validKey;
+    validKey.MakeNewKey(true);
+    int64_t now = GetTime();
+
+    // Test 1: Zero price
+    {
+        COraclePriceMessage msg;
+        msg.oracle_id = 0;
+        msg.price_micro_usd = 0;
+        msg.timestamp = now;
+        msg.block_height = 1000;
+        msg.nonce = 1;
+        BOOST_REQUIRE(msg.SignPhase2(validKey));
+        BOOST_CHECK_MESSAGE(!msg.IsValid(now), "DEFENSE HOLDS: Zero price rejected");
+    }
+
+    // Test 2: Price below minimum ($0.0001 = 100 micro-USD)
+    {
+        COraclePriceMessage msg;
+        msg.oracle_id = 0;
+        msg.price_micro_usd = 99;  // Below ORACLE_MIN_PRICE_MICRO_USD (100)
+        msg.timestamp = now;
+        msg.block_height = 1000;
+        msg.nonce = 2;
+        BOOST_REQUIRE(msg.SignPhase2(validKey));
+        BOOST_CHECK_MESSAGE(!msg.IsValid(now), "DEFENSE HOLDS: Price below minimum rejected");
+    }
+
+    // Test 3: Price above maximum ($100 = 100,000,000 micro-USD)
+    {
+        COraclePriceMessage msg;
+        msg.oracle_id = 0;
+        msg.price_micro_usd = 100000001;  // Above ORACLE_MAX_PRICE_MICRO_USD
+        msg.timestamp = now;
+        msg.block_height = 1000;
+        msg.nonce = 3;
+        BOOST_REQUIRE(msg.SignPhase2(validKey));
+        BOOST_CHECK_MESSAGE(!msg.IsValid(now), "DEFENSE HOLDS: Price above maximum rejected");
+    }
+
+    // Test 4: Boundary values — minimum and maximum should PASS
+    {
+        COraclePriceMessage minMsg;
+        minMsg.oracle_id = 0;
+        minMsg.price_micro_usd = ORACLE_MIN_PRICE_MICRO_USD;
+        minMsg.timestamp = now;
+        minMsg.block_height = 1000;
+        minMsg.nonce = 4;
+        BOOST_REQUIRE(minMsg.SignPhase2(validKey));
+        BOOST_CHECK(minMsg.IsValid(now));
+
+        COraclePriceMessage maxMsg;
+        maxMsg.oracle_id = 0;
+        maxMsg.price_micro_usd = ORACLE_MAX_PRICE_MICRO_USD;
+        maxMsg.timestamp = now;
+        maxMsg.block_height = 1000;
+        maxMsg.nonce = 5;
+        BOOST_REQUIRE(maxMsg.SignPhase2(validKey));
+        BOOST_CHECK(maxMsg.IsValid(now));
+    }
+}
+
+/**
+ * T1-05f: Oracle ID validation — reject IDs outside valid range
+ */
+BOOST_AUTO_TEST_CASE(redteam_T1_05f_oracle_id_range)
+{
+    // P2P layer checks: oracle_id < ORACLE_TOTAL_COUNT (30)
+    // Test that OracleP2P::ValidateIncomingMessage rejects out-of-range IDs
+
+    CKey validKey;
+    validKey.MakeNewKey(true);
+    int64_t now = GetTime();
+
+    // Oracle ID at boundary (30 = ORACLE_TOTAL_COUNT, should fail)
+    COraclePriceMessage msg;
+    msg.oracle_id = ORACLE_TOTAL_COUNT;
+    msg.price_micro_usd = 6500;
+    msg.timestamp = now;
+    msg.block_height = 1000;
+    msg.nonce = 1;
+    BOOST_REQUIRE(msg.SignPhase2(validKey));
+
+    OracleP2P::ClearRateLimitState();
+    bool result = OracleP2P::ValidateIncomingMessage(msg);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS: Oracle ID at boundary (30) rejected by P2P validation");
+
+    // Oracle ID = max uint32 (extreme)
+    msg.oracle_id = 0xFFFFFFFF;
+    BOOST_REQUIRE(msg.SignPhase2(validKey));
+    result = OracleP2P::ValidateIncomingMessage(msg);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS: Oracle ID 0xFFFFFFFF rejected by P2P validation");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

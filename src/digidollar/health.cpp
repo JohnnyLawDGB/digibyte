@@ -685,13 +685,18 @@ int SystemHealthMonitor::CalculateSystemHealth(CAmount ddSupply, CAmount collate
         return 300; // Perfect health if no DD issued
     }
 
+    // Guard against invalid price (same pattern as DCA::CalculateSystemHealth)
+    if (price <= 0) {
+        return 0; // Cannot calculate without valid price
+    }
+
     // Calculate collateral value in cents
     // price is in cents (100 = $1.00 DGB price)
     // collateral is in satoshis
     // Formula: (satoshis * price_cents) / COIN = cents
     // Guard against overflow: divide first when collateral is large
     CAmount collateralValue;
-    const CAmount maxSafe = std::numeric_limits<CAmount>::max() / (price > 0 ? price : 1);
+    const CAmount maxSafe = std::numeric_limits<CAmount>::max() / price;
     if (collateral > maxSafe) {
         collateralValue = (collateral / COIN) * price;
     } else {
@@ -703,7 +708,13 @@ int SystemHealthMonitor::CalculateSystemHealth(CAmount ddSupply, CAmount collate
     int health;
     const CAmount maxSafeMul = std::numeric_limits<CAmount>::max() / 100;
     if (collateralValue > maxSafeMul) {
-        health = static_cast<int>(collateralValue / (ddSupply / 100 > 0 ? ddSupply / 100 : 1));
+        // When ddSupply is 1-99, ddSupply/100 is 0 due to integer division.
+        // Return max health since collateral dwarfs the tiny supply.
+        CAmount scaledSupply = ddSupply / 100;
+        if (scaledSupply == 0) {
+            return 300;
+        }
+        health = static_cast<int>(collateralValue / scaledSupply);
     } else {
         health = static_cast<int>((collateralValue * 100) / ddSupply);
     }

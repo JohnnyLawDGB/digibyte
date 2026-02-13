@@ -89,7 +89,7 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
         // causes division by zero when totalDD is between 1 and 999.
         CAmount scaledDD = totalDD / 1000;
         if (scaledDD == 0) {
-            // totalDD is tiny (< 1000 cents = $10) — collateral dwarfs it,
+            // totalDD is between 1 and 999 cents (< $10) — collateral dwarfs it,
             // so health is at maximum.
             healthCalculation = 30000;
         } else {

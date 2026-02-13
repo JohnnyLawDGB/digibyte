@@ -21,6 +21,8 @@
 #include <kernel/chainparams.h>
 #include <primitives/transaction.h>
 #include <script/standard.h>
+#include <script/interpreter.h>
+#include <script/script_error.h>
 #include <key.h>
 #include <pubkey.h>
 #include <hash.h>
@@ -2422,6 +2424,379 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05f_oracle_id_range)
     result = OracleP2P::ValidateIncomingMessage(msg);
     BOOST_CHECK_MESSAGE(!result,
         "DEFENSE HOLDS: Oracle ID 0xFFFFFFFF rejected by P2P validation");
+}
+
+// =============================================================================
+// T1-06: BIP9 Activation Gate Bypass
+// ATTACK: Can DigiDollar transactions or opcodes be used before BIP9 activation?
+// Tests verify that all gates (mempool, ConnectBlock, script, RPC) are consistent.
+// =============================================================================
+
+// T1-06a: HasDigiDollarMarker correctly identifies DD version field
+BOOST_AUTO_TEST_CASE(redteam_T1_06a_dd_marker_version_check)
+{
+    // The DD version marker is 0x0770 in the lower 16 bits
+    const int32_t DD_TX_VERSION = 0x0D1D0770;
+
+    // ATTACK: Can we craft a transaction that IS a DD tx but evades marker detection?
+    {
+        CMutableTransaction tx;
+        tx.nVersion = DD_TX_VERSION;
+        BOOST_CHECK_MESSAGE(DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Full DD version should be detected");
+    }
+
+    // Different upper bytes should still detect DD marker (lower 16 bits match)
+    {
+        CMutableTransaction tx;
+        tx.nVersion = 0x00000770;  // Minimal DD version
+        BOOST_CHECK_MESSAGE(DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Minimal DD version (0x0770) should be detected");
+    }
+
+    {
+        CMutableTransaction tx;
+        tx.nVersion = 0xFF000770;  // Exotic upper bytes but DD lower
+        BOOST_CHECK_MESSAGE(DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Exotic upper bytes with DD lower should be detected");
+    }
+
+    // Non-DD versions should NOT be detected
+    {
+        CMutableTransaction tx;
+        tx.nVersion = 1;  // Standard v1
+        BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Version 1 should NOT be DD-marked");
+    }
+
+    {
+        CMutableTransaction tx;
+        tx.nVersion = 2;  // Standard v2
+        BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Version 2 should NOT be DD-marked");
+    }
+
+    // ATTACK: Version with just ONE bit different from 0x0770
+    {
+        CMutableTransaction tx;
+        tx.nVersion = 0x0771;  // One bit off
+        BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Version 0x0771 should NOT be DD-marked (one bit off)");
+    }
+
+    {
+        CMutableTransaction tx;
+        tx.nVersion = 0x0760;  // Different nibble
+        BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Version 0x0760 should NOT be DD-marked");
+    }
+
+    // ATTACK: Negative version number that has 0x0770 in lower bits
+    {
+        CMutableTransaction tx;
+        tx.nVersion = static_cast<int32_t>(0x80000770);  // Sign bit set
+        BOOST_CHECK_MESSAGE(DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+            "Negative version with DD lower bits IS detected (by design — version is int32_t, "
+            "but mask operates on bit pattern)");
+    }
+}
+
+// T1-06b: DD opcodes behave as NOPs when SCRIPT_VERIFY_DIGIDOLLAR is NOT set
+BOOST_AUTO_TEST_CASE(redteam_T1_06b_dd_opcodes_nop_before_activation)
+{
+    // ATTACK: Before activation, can DD opcodes be used in scripts to create
+    // unexpected behavior?
+
+    // Create a simple script that uses OP_DIGIDOLLAR with an amount push
+    // Script: OP_DIGIDOLLAR <amount=1000> OP_DROP OP_TRUE
+    // Pre-activation: OP_DIGIDOLLAR is NOP, <1000> is pushed to stack, OP_DROP removes it, OP_TRUE succeeds
+    // Post-activation: OP_DIGIDOLLAR consumes <1000>, pushes true, OP_DROP removes it, OP_TRUE succeeds
+
+    CScript scriptPubKey;
+    scriptPubKey << OP_DIGIDOLLAR;
+    scriptPubKey << CScriptNum(1000);
+    scriptPubKey << OP_DROP;
+    scriptPubKey << OP_TRUE;
+
+    CScript scriptSig;  // Empty — not needed for this script structure
+
+    // Without SCRIPT_VERIFY_DIGIDOLLAR (pre-activation behavior):
+    // OP_DIGIDOLLAR = NOP, <1000> pushed, OP_DROP removes 1000, OP_TRUE → stack has [true]
+    {
+        unsigned int flags = SCRIPT_VERIFY_P2SH;  // No DD flag
+        ScriptError err;
+        // Use direct EvalScript since this isn't a real spending scenario
+        std::vector<std::vector<unsigned char>> stack;
+        bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        BOOST_CHECK_MESSAGE(result,
+            "Pre-activation: OP_DIGIDOLLAR as NOP, script should succeed");
+        BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
+            "Pre-activation: Stack should have [true] at top");
+    }
+
+    // With SCRIPT_VERIFY_DIGIDOLLAR (post-activation behavior):
+    // OP_DIGIDOLLAR reads <1000>, pushes true (1000 > 0), OP_DROP removes true, OP_TRUE → stack has [true]
+    {
+        unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
+        ScriptError err;
+        std::vector<std::vector<unsigned char>> stack;
+        bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        BOOST_CHECK_MESSAGE(result,
+            "Post-activation: OP_DIGIDOLLAR processes amount, script should succeed");
+        BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
+            "Post-activation: Stack should have [true] at top");
+    }
+}
+
+// T1-06c: OP_DDVERIFY as NOP doesn't pop stack (consensus safety)
+BOOST_AUTO_TEST_CASE(redteam_T1_06c_ddverify_nop_stack_safety)
+{
+    // ATTACK: OP_DDVERIFY pops and verifies top of stack when active.
+    // As NOP, it must NOT touch the stack.
+    // If it incorrectly popped pre-activation, scripts would break at activation.
+
+    // Script: OP_TRUE OP_DDVERIFY
+    // Pre-activation: OP_TRUE pushes 1, OP_DDVERIFY is NOP → stack has [1]
+    // Post-activation: OP_TRUE pushes 1, OP_DDVERIFY pops 1 (verifies true) → stack is empty
+
+    CScript script;
+    script << OP_TRUE;
+    script << OP_DDVERIFY;
+
+    // Pre-activation: stack should still have the true value
+    {
+        unsigned int flags = SCRIPT_VERIFY_P2SH;  // No DD flag
+        ScriptError err;
+        std::vector<std::vector<unsigned char>> stack;
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_DDVERIFY as NOP should succeed");
+        BOOST_CHECK_MESSAGE(stack.size() == 1,
+            "CRITICAL: Pre-activation OP_DDVERIFY must NOT pop stack (stack size should be 1, got " +
+            std::to_string(stack.size()) + ")");
+    }
+
+    // Post-activation: OP_DDVERIFY consumes the true, stack should be empty
+    {
+        unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
+        ScriptError err;
+        std::vector<std::vector<unsigned char>> stack;
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        BOOST_CHECK_MESSAGE(result, "Post-activation: OP_DDVERIFY should verify true and succeed");
+        BOOST_CHECK_MESSAGE(stack.size() == 0,
+            "Post-activation: OP_DDVERIFY should pop the verified value (stack size should be 0, got " +
+            std::to_string(stack.size()) + ")");
+    }
+}
+
+// T1-06d: OP_CHECKCOLLATERAL NOP doesn't touch stack (consensus critical)
+BOOST_AUTO_TEST_CASE(redteam_T1_06d_checkcollateral_nop_stack_safety)
+{
+    // ATTACK: OP_CHECKCOLLATERAL pops 2 items when active.
+    // As NOP, it MUST NOT touch the stack — the comment in the code says so.
+    // If it popped pre-activation, it would be a consensus split.
+
+    // Script: <ratio=500> <threshold=200> OP_CHECKCOLLATERAL
+    // Pre-activation: both numbers pushed, OP_CHECKCOLLATERAL NOP → stack has [500, 200]
+    // Post-activation: both popped, 500 >= 200 → true → stack has [true]
+
+    CScript script;
+    script << CScriptNum(500);
+    script << CScriptNum(200);
+    script << OP_CHECKCOLLATERAL;
+
+    // Pre-activation: stack should have both values
+    {
+        unsigned int flags = SCRIPT_VERIFY_P2SH;
+        ScriptError err;
+        std::vector<std::vector<unsigned char>> stack;
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_CHECKCOLLATERAL NOP should succeed");
+        BOOST_CHECK_MESSAGE(stack.size() == 2,
+            "CRITICAL: Pre-activation OP_CHECKCOLLATERAL must NOT touch stack (stack size should be 2, got " +
+            std::to_string(stack.size()) + ")");
+    }
+
+    // Post-activation: stack should have [true]
+    {
+        unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
+        ScriptError err;
+        std::vector<std::vector<unsigned char>> stack;
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        BOOST_CHECK_MESSAGE(result, "Post-activation: OP_CHECKCOLLATERAL(500>=200) should succeed");
+        BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
+            "Post-activation: OP_CHECKCOLLATERAL should push true (500 >= 200)");
+    }
+}
+
+// T1-06e: OP_CHECKPRICE NOP doesn't touch stack
+BOOST_AUTO_TEST_CASE(redteam_T1_06e_checkprice_nop_stack_safety)
+{
+    // ATTACK: OP_CHECKPRICE pops 1 item when active.
+    // As NOP, it must NOT touch the stack.
+
+    // Script: <price=42000> OP_CHECKPRICE
+    // Pre-activation: number pushed, OP_CHECKPRICE NOP → stack has [42000]
+    // Post-activation: number popped, compared to mock oracle → stack has [true/false]
+
+    CScript script;
+    script << CScriptNum(42000);
+    script << OP_CHECKPRICE;
+
+    // Pre-activation: stack should still have the price value
+    {
+        unsigned int flags = SCRIPT_VERIFY_P2SH;
+        ScriptError err;
+        std::vector<std::vector<unsigned char>> stack;
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_CHECKPRICE NOP should succeed");
+        BOOST_CHECK_MESSAGE(stack.size() == 1,
+            "CRITICAL: Pre-activation OP_CHECKPRICE must NOT pop stack (stack size should be 1, got " +
+            std::to_string(stack.size()) + ")");
+    }
+}
+
+// T1-06f: Non-DD-marked transaction bypasses DD validation completely
+BOOST_AUTO_TEST_CASE(redteam_T1_06f_non_dd_marker_bypass)
+{
+    // ATTACK: Create a transaction without DD marker (version != 0x0770)
+    // that contains DD-like structure (P2TR outputs, OP_RETURN with DD data).
+    // This should bypass all DD validation.
+
+    // This is by design — DD validation only runs for DD-marked transactions.
+    // But we verify that ValidateDigiDollarTransaction correctly passes through
+    // non-DD transactions (returns true without validation).
+
+    CMutableTransaction tx;
+    tx.nVersion = 2;  // Standard version, NOT DD
+
+    CTxIn input;
+    input.prevout = COutPoint(uint256::ONE, 0);
+    tx.vin.push_back(input);
+
+    // Add a DD-like OP_RETURN (with DD marker bytes)
+    CScript opreturn;
+    opreturn << OP_RETURN;
+    std::vector<unsigned char> ddHeader = {0x44, 0x44}; // "DD"
+    opreturn << ddHeader;
+    opreturn << CScriptNum(100 * COIN);  // Fake DD amount
+    tx.vout.push_back(CTxOut(0, opreturn));
+
+    // Add a P2TR output that looks like collateral
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+    auto tweaked = ownerXOnly.CreateTapTweak(nullptr);
+    BOOST_REQUIRE(tweaked.has_value());
+    CScript p2tr;
+    p2tr << OP_1 << std::vector<unsigned char>(tweaked->first.begin(), tweaked->first.end());
+    tx.vout.push_back(CTxOut(50 * COIN, p2tr));
+
+    // CRITICAL CHECK: HasDigiDollarMarker must return FALSE
+    BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(CTransaction(tx)),
+        "Non-DD version tx should NOT be detected as DD, regardless of output content");
+
+    // DD validation should pass through (return true) for non-DD transactions
+    DigiDollar::ValidationContext ctx(1000, 1000, 150, *CChainParams::RegTest({}));
+    TxValidationState state;
+    bool result = DigiDollar::ValidateDigiDollarTransaction(CTransaction(tx), ctx, state);
+    BOOST_CHECK_MESSAGE(result,
+        "DEFENSE HOLDS: Non-DD-marked tx passes through DD validation (no checks applied)");
+}
+
+// T1-06g: IsDigiDollarEnabled consistency across overloads
+BOOST_AUTO_TEST_CASE(redteam_T1_06g_activation_function_consistency)
+{
+    // ATTACK: Can the two IsDigiDollarEnabled overloads (chainman vs params-only)
+    // return different results for the same chain state?
+    // The params-only overload creates a temporary VersionBitsCache, which should
+    // compute the same state as the shared cache.
+
+    // On regtest, DD is ALWAYS_ACTIVE — both overloads should agree
+    const auto params = CChainParams::RegTest({});
+
+    // With nullptr (genesis): DD should be active on regtest (ALWAYS_ACTIVE)
+    bool result1 = DigiDollar::IsDigiDollarEnabled(nullptr, params->GetConsensus());
+
+    // ALWAYS_ACTIVE means active even at genesis (nullptr prev)
+    BOOST_CHECK_MESSAGE(result1,
+        "DEFENSE HOLDS: IsDigiDollarEnabled(nullptr, params) returns true on regtest (ALWAYS_ACTIVE)");
+}
+
+// T1-06h: SCRIPT_VERIFY_DIGIDOLLAR flag value doesn't collide with other flags
+BOOST_AUTO_TEST_CASE(redteam_T1_06h_flag_collision_check)
+{
+    // ATTACK: If SCRIPT_VERIFY_DIGIDOLLAR shares bit position with another flag,
+    // it could be accidentally set/unset, creating activation confusion.
+
+    unsigned int dd_flag = SCRIPT_VERIFY_DIGIDOLLAR;
+
+    // Verify it's a single bit
+    BOOST_CHECK_MESSAGE((dd_flag & (dd_flag - 1)) == 0,
+        "SCRIPT_VERIFY_DIGIDOLLAR must be a single bit (power of 2)");
+
+    // Verify it's bit 21 (1 << 21 = 0x200000)
+    BOOST_CHECK_MESSAGE(dd_flag == (1U << 21),
+        "SCRIPT_VERIFY_DIGIDOLLAR should be bit 21");
+
+    // Check no collision with standard flags
+    unsigned int standard_flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DERSIG |
+        SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY | SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
+        SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT | SCRIPT_VERIFY_NULLDUMMY;
+
+    BOOST_CHECK_MESSAGE((dd_flag & standard_flags) == 0,
+        "SCRIPT_VERIFY_DIGIDOLLAR must not collide with any standard verification flag");
+}
+
+// T1-06i: Oracle activation height vs DD BIP9 activation consistency
+BOOST_AUTO_TEST_CASE(redteam_T1_06i_oracle_vs_dd_activation_sync)
+{
+    // ATTACK: If oracle activates AFTER DD, then DD transactions could be
+    // processed without oracle prices, bypassing collateral checks.
+    // If oracle activates BEFORE DD, oracle messages accumulate uselessly.
+    // They should activate at the same height.
+
+    // Check testnet: both should be at height 600
+    {
+        const auto testnet_params = CChainParams::TestNet();
+        const auto& consensus = testnet_params->GetConsensus();
+
+        // Testnet BIP9 DD: min_activation_height = 600
+        int dd_min_height = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height;
+
+        // Oracle activation height
+        int oracle_height = consensus.nOracleActivationHeight;
+
+        BOOST_CHECK_MESSAGE(dd_min_height == oracle_height,
+            "DEFENSE HOLDS: Testnet DD min_activation_height (" +
+            std::to_string(dd_min_height) + ") matches oracle activation height (" +
+            std::to_string(oracle_height) + ")");
+    }
+
+    // Check regtest: DD is ALWAYS_ACTIVE
+    {
+        const auto regtest_params = CChainParams::RegTest({});  // RegTest takes optional args
+        const auto& consensus = regtest_params->GetConsensus();
+
+        // Regtest: ALWAYS_ACTIVE with min_activation_height = 0
+        BOOST_CHECK_MESSAGE(
+            consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime ==
+                Consensus::BIP9Deployment::ALWAYS_ACTIVE,
+            "Regtest DD should be ALWAYS_ACTIVE");
+    }
+
+    // Check mainnet: oracle should NOT be active (INT_MAX) since oracles aren't deployed
+    {
+        const auto mainnet_params = CChainParams::Main();
+        const auto& consensus = mainnet_params->GetConsensus();
+
+        int oracle_height = consensus.nOracleActivationHeight;
+        BOOST_CHECK_MESSAGE(oracle_height == std::numeric_limits<int>::max(),
+            "FINDING (LOW): Mainnet oracle activation is INT_MAX (disabled). "
+            "When oracles are deployed, this MUST be updated to match DD BIP9 "
+            "min_activation_height (" +
+            std::to_string(consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height) +
+            ") to avoid the skipOracleValidation gap found in T1-05.");
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

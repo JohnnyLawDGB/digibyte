@@ -15,6 +15,7 @@ define $(package)_set_vars
   $(package)_config_opts += --disable-tftp --without-brotli --without-zstd --without-libidn2
   $(package)_config_opts += --without-libpsl --without-nghttp2 --disable-dependency-tracking
   $(package)_config_opts_linux=--with-pic
+  $(package)_cflags_linux=-Wno-error=implicit-function-declaration
   $(package)_config_env_linux=LIBS="-ldl -lpthread"
   $(package)_config_opts_mingw32=--with-pic
   $(package)_config_env_mingw32=LIBS="-lws2_32 -lcrypt32"

@@ -4135,9 +4135,8 @@ BOOST_AUTO_TEST_CASE(redteam_t2_02g_mixed_dd_and_regular_inputs)
     CMutableTransaction feeTx;
     feeTx.nVersion = 2;  // Regular Bitcoin version
     feeTx.vin.push_back(CTxIn(COutPoint(uint256S("ccdd020200000000000000000000000000000000000000000000000000000001"), 0)));
-    feeTx.vout.push_back(CTxOut(1 * COIN, CScript() << OP_1 << std::vector<unsigned char>(feeKey.GetPubKey().IsCompressed() ?
-        std::vector<unsigned char>(XOnlyPubKey(feeKey.GetPubKey()).begin(), XOnlyPubKey(feeKey.GetPubKey()).end()) :
-        std::vector<unsigned char>(32, 0))));
+    XOnlyPubKey feeXOnly(feeKey.GetPubKey());
+    feeTx.vout.push_back(CTxOut(1 * COIN, MakeP2TR(feeXOnly)));
     CTransactionRef feeTxRef = MakeTransactionRef(feeTx);
     uint256 feeTxHash = feeTxRef->GetHash();
 
@@ -7698,7 +7697,7 @@ BOOST_AUTO_TEST_CASE(redteam_T4_01c_dd_address_injection)
 
     // Test 3: Null bytes in address
     {
-        std::string nullStr = "DD\x00\x00\x00\x00AAAA";
+        std::string nullStr = std::string("DD\x00\x00\x00\x00", 6) + "AAAA";
         CDigiDollarAddress addr(nullStr);
         BOOST_CHECK(!addr.IsValid());
     }

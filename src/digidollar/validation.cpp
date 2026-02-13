@@ -647,7 +647,12 @@ bool ValidateMintTransaction(const CTransaction& tx,
     bool hasCollateralOutput = false;
     bool hasDDOutput = false;
     int ddOutputCount = 0;  // Security: count DD outputs to prevent inflation attack
+    int collateralOutputCount = 0;  // Security [T1-04c]: count collateral outputs to prevent NUMS bypass
+    int ddOpReturnCount = 0;  // Security [T1-04f]: count DD OP_RETURN outputs to prevent owner key overwrite
     int64_t lockTime = 0;
+    std::vector<unsigned char> ownerXOnlyPubKeyData;  // Owner pubkey for NUMS verification
+    bool hasOwnerPubKey = false;
+    CScript actualCollateralScript;  // Store the actual collateral P2TR script for NUMS verification
 
     for (size_t i = 0; i < tx.vout.size(); i++) {
         const CTxOut& output = tx.vout[i];
@@ -683,8 +688,25 @@ bool ValidateMintTransaction(const CTransaction& tx,
             if (!ValidateCollateralOutput(output, tx, state)) {
                 return false;
             }
+            collateralOutputCount++;
+
+            // Security [T1-04c]: Mint transactions MUST have exactly 1 collateral output.
+            // Without this, an attacker can include a large FAKE collateral output (with their
+            // own key as P2TR internal key, enabling key-path spend) plus a small LEGITIMATE
+            // output (with NUMS key). The NUMS verification only checks the last P2TR value
+            // output, so the large fake collateral passes unverified. The attacker key-path
+            // spends the fake output immediately, leaving DD backed by only the tiny amount.
+            if (collateralOutputCount > 1) {
+                LogPrintf("DigiDollar: SECURITY [T1-04c] - Mint tx has %d collateral outputs (max 1 allowed). "
+                         "Rejecting to prevent NUMS verification bypass via multiple collateral outputs.\n",
+                         collateralOutputCount);
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-multiple-collateral-outputs",
+                                   "Mint transactions must have exactly 1 collateral output to prevent NUMS bypass");
+            }
+
             totalCollateral += output.nValue;
             hasCollateralOutput = true;
+            actualCollateralScript = output.scriptPubKey;  // Store for NUMS verification
         }
 
         // Check for OP_RETURN metadata: <"DD"> <txType> <ddAmount> <lockHeight>
@@ -696,6 +718,20 @@ bool ValidateMintTransaction(const CTransaction& tx,
             // Check for DD marker
             if (output.scriptPubKey.GetOp(pc, opcode, data) && data.size() == 2 &&
                 data[0] == 'D' && data[1] == 'D') {
+
+                // Security [T1-04f]: Mint transactions MUST have exactly 1 DD OP_RETURN.
+                // Without this, an attacker can include multiple DD OP_RETURNs with different
+                // owner keys. The validation loop overwrites ownerXOnlyPubKeyData with each
+                // OP_RETURN, so the last one's owner key is used for NUMS reconstruction.
+                // This creates ambiguity about which owner key is authoritative.
+                ddOpReturnCount++;
+                if (ddOpReturnCount > 1) {
+                    LogPrintf("DigiDollar: SECURITY [T1-04f] - Mint tx has %d DD OP_RETURN outputs (max 1 allowed). "
+                             "Rejecting to prevent owner key overwrite via multiple DD OP_RETURNs.\n",
+                             ddOpReturnCount);
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-multiple-dd-opreturn",
+                                       "Mint transactions must have exactly 1 DD OP_RETURN to prevent owner key confusion");
+                }
 
                 // Extract tx type (1 = MINT, 2 = TRANSFER, etc.)
                 int64_t txType = 0;
@@ -771,6 +807,27 @@ bool ValidateMintTransaction(const CTransaction& tx,
                         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-tier-parse");
                     }
                 }
+
+                // Extract owner x-only pubkey (32 bytes) for NUMS verification
+                // SECURITY [T1-04]: Without this, an attacker could use their own key as
+                // the P2TR internal key instead of the NUMS point, enabling key-path
+                // spending that bypasses CLTV timelocks and creates unbacked DD tokens.
+                if (output.scriptPubKey.GetOp(pc, opcode, data)) {
+                    if (data.size() == 32) {
+                        ownerXOnlyPubKeyData = data;
+                        hasOwnerPubKey = true;
+                        LogPrintf("DigiDollar: Extracted owner x-only pubkey from OP_RETURN (%d bytes)\n", data.size());
+                    } else {
+                        LogPrintf("DigiDollar: SECURITY - Invalid owner pubkey size in OP_RETURN: %d (expected 32)\n", data.size());
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-owner-pubkey",
+                                           "Owner x-only pubkey must be 32 bytes");
+                    }
+                } else {
+                    // Owner pubkey is REQUIRED for NUMS verification
+                    LogPrintf("DigiDollar: SECURITY - Missing owner pubkey in mint OP_RETURN\n");
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-missing-owner-pubkey",
+                                       "Mint OP_RETURN must include owner x-only pubkey for NUMS verification");
+                }
             }
         }
 
@@ -845,6 +902,59 @@ bool ValidateMintTransaction(const CTransaction& tx,
         // Phase 1 workaround: Use default 30-day lock for testing if no OP_RETURN
         lockTime = 30 * 24 * 60 * 4; // 30 days default
         LogPrintf("DigiDollar: No lock time in OP_RETURN, using default 30 days for testing\n");
+    }
+
+    // 5b. SECURITY [T1-04b]: Require DD OP_RETURN with owner pubkey for ALL mint transactions.
+    // Without this, an attacker can omit OP_RETURN to bypass NUMS verification entirely,
+    // since hasOwnerPubKey stays false and the NUMS check guard skips verification.
+    // The attacker uses their own key as P2TR internal key, enabling key-path spend
+    // that bypasses CLTV timelocks, stealing collateral and creating unbacked DD tokens.
+    if (hasCollateralOutput && !hasOwnerPubKey) {
+        LogPrintf("DigiDollar: SECURITY [T1-04b] - Mint tx has collateral but missing DD OP_RETURN with owner pubkey!\n");
+        LogPrintf("  Without owner pubkey, NUMS verification cannot be performed.\n");
+        LogPrintf("  This could allow key-path spending that bypasses CLTV timelocks.\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-missing-dd-opreturn",
+                           "Mint transaction must include DD OP_RETURN with owner pubkey for NUMS verification");
+    }
+
+    // SECURITY [T1-04]: Verify collateral P2TR output was constructed with NUMS internal key.
+    // Without this check, an attacker can use their own key as internal key, enabling
+    // key-path spending that bypasses CLTV timelocks and creates unbacked DD tokens.
+    if (hasOwnerPubKey && hasCollateralOutput && lockTime > 0 && totalDD > 0) {
+        XOnlyPubKey ownerXOnly{Span<const unsigned char>(ownerXOnlyPubKeyData.data(), 32)};
+        if (!ownerXOnly.IsFullyValid()) {
+            LogPrintf("DigiDollar: SECURITY - Invalid owner x-only pubkey in OP_RETURN\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-owner-pubkey-invalid",
+                               "Owner x-only pubkey is not a valid curve point");
+        }
+
+        // Reconstruct the expected P2TR collateral output using NUMS internal key
+        DigiDollar::MintParams expectedParams;
+        expectedParams.ddAmount = totalDD;
+        expectedParams.lockHeight = lockTime;
+        expectedParams.ownerKey = ownerXOnly;
+        expectedParams.internalKey = DigiDollar::GetCollateralNUMSKey();
+        expectedParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+        CScript expectedCollateral = DigiDollar::CreateCollateralP2TR(expectedParams);
+        if (expectedCollateral.empty()) {
+            LogPrintf("DigiDollar: SECURITY - Failed to reconstruct expected P2TR collateral\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-reconstruction",
+                               "Failed to reconstruct expected P2TR collateral output");
+        }
+
+        if (actualCollateralScript != expectedCollateral) {
+            LogPrintf("DigiDollar: SECURITY [T1-04] - Collateral P2TR output does NOT match expected NUMS reconstruction!\n");
+            LogPrintf("  Actual:   %s\n", HexStr(actualCollateralScript));
+            LogPrintf("  Expected: %s\n", HexStr(expectedCollateral));
+            LogPrintf("  This means the collateral was constructed with a non-NUMS internal key,\n");
+            LogPrintf("  allowing key-path spending that bypasses CLTV timelocks.\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-nums-mismatch",
+                               "Collateral P2TR output does not match NUMS-key reconstruction. "
+                               "Internal key must be the NUMS point to prevent key-path spending.");
+        }
+
+        LogPrintf("DigiDollar: NUMS verification passed - collateral P2TR matches expected output\n");
     }
 
     // 6. Validate total DD amount against mint limits

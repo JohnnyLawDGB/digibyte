@@ -24,6 +24,7 @@
 #include <key.h>
 #include <pubkey.h>
 #include <hash.h>
+#include <crypto/sha256.h>
 #include <util/strencodings.h>
 #include <test/util/setup_common.h>
 
@@ -922,13 +923,14 @@ BOOST_AUTO_TEST_CASE(redteam_nums_key_bypass_fake_collateral)
     input.nSequence = 0xFFFFFFFE;
     mintTx.vin.push_back(input);
 
-    // Output 0: OP_RETURN with DD mint metadata
+    // Output 0: OP_RETURN with DD mint metadata (including owner pubkey for NUMS check)
     CScript opReturn = CScript() << OP_RETURN
                                  << std::vector<unsigned char>{'D', 'D'}
                                  << CScriptNum(1)           // MINT type
                                  << CScriptNum(ddAmount)
                                  << CScriptNum(lockHeight)
-                                 << CScriptNum(1);          // lockTier 1 = 30 days
+                                 << CScriptNum(1)           // lockTier 1 = 30 days
+                                 << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());  // 32-byte owner pubkey
     mintTx.vout.push_back(CTxOut(0, opReturn));
 
     // Output 1: FAKE collateral (attacker's key as internal key, 100 DGB)
@@ -981,9 +983,10 @@ BOOST_AUTO_TEST_CASE(redteam_nums_key_legitimate_collateral_accepted)
     ownerKey.MakeNewKey(true);
     XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
 
+    const int nHeight = 1000;
     const CAmount ddAmount = 10000;  // $100
     // Use tier 1 = 30 days lock, consistent lockHeight and tier
-    const int64_t lockHeight = 1000 + 30 * DigiDollar::BLOCKS_PER_DAY;
+    const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
 
     // Create LEGITIMATE collateral with NUMS key
     DigiDollar::MintParams params;
@@ -1004,19 +1007,21 @@ BOOST_AUTO_TEST_CASE(redteam_nums_key_legitimate_collateral_accepted)
     mintTx.vin.push_back(input);
 
     // lockTier 1 = 30 days, matching the lockHeight above
+    // Include owner pubkey for NUMS verification
     CScript opReturn = CScript() << OP_RETURN
                                  << std::vector<unsigned char>{'D', 'D'}
                                  << CScriptNum(1)
                                  << CScriptNum(ddAmount)
                                  << CScriptNum(lockHeight)
-                                 << CScriptNum(1);
+                                 << CScriptNum(1)
+                                 << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
     mintTx.vout.push_back(CTxOut(0, opReturn));
     mintTx.vout.push_back(CTxOut(100 * COIN, collateral));
 
     CScript ddToken = DigiDollar::CreateDigiDollarP2TR(ownerXOnly, ddAmount);
     mintTx.vout.push_back(CTxOut(0, ddToken));
 
-    DigiDollar::ValidationContext ctx(1000, 1000, 150, *regTestParams);
+    DigiDollar::ValidationContext ctx(nHeight, 1000, 150, *regTestParams);
     ctx.skipOracleValidation = true;
     TxValidationState state;
 
@@ -1193,6 +1198,799 @@ BOOST_AUTO_TEST_CASE(redteam_invalid_lock_tier_range)
     BOOST_CHECK(!((5 < 0 || 5 > 9)));  // 5 is valid
     BOOST_CHECK(!((0 < 0 || 0 > 9)));  // 0 is valid
     BOOST_CHECK(!((9 < 0 || 9 > 9)));  // 9 is valid
+}
+
+// =============================================================================
+// T1-04b: NUMS Key Bypass via Missing OP_RETURN
+// VULNERABILITY: If a mint transaction has NO OP_RETURN, hasOwnerPubKey stays
+// false and the NUMS verification guard (hasOwnerPubKey && ...) evaluates to
+// false — the entire NUMS check is SKIPPED. Attacker uses their own key as
+// P2TR internal key, enabling key-path spend that bypasses CLTV timelocks.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_bypass_no_opreturn)
+{
+    // ATTACK: Craft a mint transaction WITHOUT OP_RETURN.
+    // Without OP_RETURN, hasOwnerPubKey stays false, and the NUMS check guard
+    // evaluates to false — NUMS verification is entirely SKIPPED.
+    //
+    // The attacker uses their own key as the P2TR internal key instead of NUMS.
+    // After minting, they key-path spend the collateral (bypassing CLTV),
+    // keeping both DD tokens AND original DGB — unbacked DD from nothing.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Step 1: Attacker's key pair
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+    XOnlyPubKey attackerXOnly(attackerKey.GetPubKey());
+
+    const int nHeight = 1000;
+    const CAmount ddAmount = 1000;  // $10 in cents
+    const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    // Step 2: Create FAKE collateral with ATTACKER'S key as internal key
+    DigiDollar::MintParams fakeParams;
+    fakeParams.ddAmount = ddAmount;
+    fakeParams.lockHeight = lockHeight;
+    fakeParams.ownerKey = attackerXOnly;
+    fakeParams.internalKey = attackerXOnly;  // ATTACK: own key, not NUMS
+    fakeParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript fakeCollateral = DigiDollar::CreateCollateralP2TR(fakeParams);
+    BOOST_REQUIRE_MESSAGE(!fakeCollateral.empty(),
+        "Failed to create fake collateral P2TR with attacker's key");
+
+    // Step 3: Create DD token output (registers Phase 1 metadata)
+    CScript ddToken = DigiDollar::CreateDigiDollarP2TR(attackerXOnly, ddAmount);
+    BOOST_REQUIRE(!ddToken.empty());
+
+    // Step 4: Craft the mint transaction WITHOUT OP_RETURN
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 2;
+
+    CTxIn input;
+    input.prevout = COutPoint(uint256::ONE, 0);
+    input.nSequence = 0xFFFFFFFE;
+    mintTx.vin.push_back(input);
+
+    // Output 0: FAKE collateral (attacker's key as internal key)
+    mintTx.vout.push_back(CTxOut(100 * COIN, fakeCollateral));
+    // Output 1: DD token output (P2TR, zero value)
+    mintTx.vout.push_back(CTxOut(0, ddToken));
+    // NO OP_RETURN — this is the bypass vector
+
+    // Step 5: Validate
+    DigiDollar::ValidationContext ctx(nHeight, 5000000, 150, *regTestParams);
+    ctx.skipOracleValidation = true;
+    TxValidationState state;
+
+    bool accepted = DigiDollar::ValidateMintTransaction(
+        CTransaction(mintTx), ctx, state);
+
+    // This SHOULD be rejected. If accepted, NUMS bypass confirmed.
+    BOOST_CHECK_MESSAGE(!accepted,
+        "VULNERABILITY [T1-04b]: Mint tx WITHOUT OP_RETURN accepted! "
+        "NUMS verification skipped because hasOwnerPubKey=false. "
+        "Attacker can key-path spend collateral, creating unbacked DD.");
+
+    if (accepted) {
+        BOOST_TEST_MESSAGE("EXPLOIT CONFIRMED: No OP_RETURN -> no NUMS check -> "
+                          "attacker controls internal key -> key-path bypasses CLTV");
+    } else {
+        // If rejected, verify it's for the RIGHT reason (not incidental)
+        std::string reason = state.GetRejectReason();
+        BOOST_TEST_MESSAGE("Rejected with reason: " + reason);
+        bool correctRejection =
+            reason.find("opreturn") != std::string::npos ||
+            reason.find("owner-pubkey") != std::string::npos ||
+            reason.find("nums") != std::string::npos ||
+            reason.find("dd-opreturn") != std::string::npos;
+        BOOST_CHECK_MESSAGE(correctRejection,
+            "Rejection '" + reason + "' is incidental — defense is fragile");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_nums_bypass_non_dd_opreturn)
+{
+    // VARIANT: Include an OP_RETURN but NOT with "DD" marker.
+    // The DD-specific parsing (including owner pubkey extraction) only triggers
+    // when OP_RETURN starts with "DD". A non-DD OP_RETURN still leaves
+    // hasOwnerPubKey=false, bypassing NUMS check.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+    XOnlyPubKey attackerXOnly(attackerKey.GetPubKey());
+
+    const int nHeight = 1000;
+    const CAmount ddAmount = 1000;
+    const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    // Fake collateral with attacker's key
+    DigiDollar::MintParams fakeParams;
+    fakeParams.ddAmount = ddAmount;
+    fakeParams.lockHeight = lockHeight;
+    fakeParams.ownerKey = attackerXOnly;
+    fakeParams.internalKey = attackerXOnly;  // ATTACK
+    fakeParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript fakeCollateral = DigiDollar::CreateCollateralP2TR(fakeParams);
+    BOOST_REQUIRE(!fakeCollateral.empty());
+
+    CScript ddToken = DigiDollar::CreateDigiDollarP2TR(attackerXOnly, ddAmount);
+    BOOST_REQUIRE(!ddToken.empty());
+
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 2;
+
+    CTxIn input;
+    input.prevout = COutPoint(uint256::ONE, 0);
+    input.nSequence = 0xFFFFFFFE;
+    mintTx.vin.push_back(input);
+
+    // Non-DD OP_RETURN (random metadata, not "DD" prefix)
+    CScript opReturn = CScript() << OP_RETURN
+                                 << std::vector<unsigned char>{'X', 'Y'}  // NOT "DD"
+                                 << CScriptNum(42);
+    mintTx.vout.push_back(CTxOut(0, opReturn));
+    mintTx.vout.push_back(CTxOut(100 * COIN, fakeCollateral));
+    mintTx.vout.push_back(CTxOut(0, ddToken));
+
+    DigiDollar::ValidationContext ctx(nHeight, 5000000, 150, *regTestParams);
+    ctx.skipOracleValidation = true;
+    TxValidationState state;
+
+    bool accepted = DigiDollar::ValidateMintTransaction(
+        CTransaction(mintTx), ctx, state);
+
+    BOOST_CHECK_MESSAGE(!accepted,
+        "VULNERABILITY [T1-04b]: Mint tx with non-DD OP_RETURN accepted! "
+        "NUMS verification bypassed by using 'XY' instead of 'DD' prefix.");
+}
+
+// =============================================================================
+// T1-04c: NUMS Key Bypass via Multiple Collateral Outputs
+// VULNERABILITY: actualCollateralScript only stores the LAST P2TR value output,
+// but totalCollateral sums ALL P2TR value outputs. An attacker can include
+// a large FAKE collateral (own key as internal key) + small LEGIT collateral
+// (NUMS key). NUMS check only verifies the last one. Attacker key-path spends
+// the large fake collateral, leaving DD backed by only the small amount.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_bypass_multiple_collateral_outputs)
+{
+    // ATTACK: Craft a mint transaction with TWO P2TR collateral outputs:
+    //   Output A: 99 DGB with ATTACKER's key as internal key (key-path spendable!)
+    //   Output B: 1 DGB with NUMS key as internal key (legitimate, CLTV enforced)
+    //
+    // The NUMS verification checks actualCollateralScript which is the LAST P2TR
+    // value output (Output B) — reconstruction matches → PASSES!
+    //
+    // But totalCollateral = 100 DGB (99 + 1). Only 1 DGB is ACTUALLY locked.
+    // Attacker key-path spends Output A immediately, recovering 99 DGB.
+    // Result: $100 DD tokens backed by $0.01 worth of collateral.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Attacker's key (known private key for key-path spend)
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+    XOnlyPubKey attackerXOnly(attackerKey.GetPubKey());
+
+    // Owner key for MAST scripts
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    const int nHeight = 1000;
+    const CAmount ddAmount = 10000;  // $100 in cents
+    const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    // Step 1: Create FAKE collateral with ATTACKER's key as internal key
+    DigiDollar::MintParams fakeParams;
+    fakeParams.ddAmount = ddAmount;
+    fakeParams.lockHeight = lockHeight;
+    fakeParams.ownerKey = ownerXOnly;
+    fakeParams.internalKey = attackerXOnly;  // <-- ATTACKER'S KEY, NOT NUMS!
+    fakeParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript fakeCollateral = DigiDollar::CreateCollateralP2TR(fakeParams);
+    BOOST_REQUIRE(!fakeCollateral.empty());
+
+    // Step 2: Create LEGITIMATE collateral with NUMS key (tiny amount)
+    DigiDollar::MintParams legitParams;
+    legitParams.ddAmount = ddAmount;
+    legitParams.lockHeight = lockHeight;
+    legitParams.ownerKey = ownerXOnly;
+    legitParams.internalKey = DigiDollar::GetCollateralNUMSKey();
+    legitParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript legitCollateral = DigiDollar::CreateCollateralP2TR(legitParams);
+    BOOST_REQUIRE(!legitCollateral.empty());
+
+    // Sanity: they're different scripts (different internal keys)
+    BOOST_CHECK(fakeCollateral != legitCollateral);
+
+    // Step 3: Create DD token output
+    CScript ddToken = DigiDollar::CreateDigiDollarP2TR(ownerXOnly, ddAmount);
+    BOOST_REQUIRE(!ddToken.empty());
+
+    // Step 4: Craft the mint transaction
+    // Output order is critical: FAKE first, LEGIT second (so LEGIT overwrites
+    // actualCollateralScript and passes the NUMS check)
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 2;
+
+    CTxIn input;
+    input.prevout = COutPoint(uint256::ONE, 0);
+    input.nSequence = 0xFFFFFFFE;
+    mintTx.vin.push_back(input);
+
+    // OP_RETURN with valid DD metadata including owner pubkey
+    CScript opReturn = CScript() << OP_RETURN
+                                 << std::vector<unsigned char>{'D', 'D'}
+                                 << CScriptNum(1)           // MINT type
+                                 << CScriptNum(ddAmount)    // DD amount
+                                 << CScriptNum(lockHeight)  // Lock height
+                                 << CScriptNum(1)           // lockTier 1 = 30 days
+                                 << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
+    mintTx.vout.push_back(CTxOut(0, opReturn));
+
+    // FAKE collateral: 99 DGB, attacker's key as internal key
+    mintTx.vout.push_back(CTxOut(99 * COIN, fakeCollateral));
+
+    // LEGIT collateral: 1 DGB, NUMS key as internal key
+    // This is LAST in the output list, so actualCollateralScript = this one
+    mintTx.vout.push_back(CTxOut(1 * COIN, legitCollateral));
+
+    // DD token output
+    mintTx.vout.push_back(CTxOut(0, ddToken));
+
+    // Step 5: Validate
+    DigiDollar::ValidationContext ctx(nHeight, 1000, 150, *regTestParams);
+    ctx.skipOracleValidation = true;
+    TxValidationState state;
+
+    bool accepted = DigiDollar::ValidateMintTransaction(
+        CTransaction(mintTx), ctx, state);
+
+    // VULNERABILITY CHECK: If accepted, attacker can:
+    // 1. Mint $100 DD with totalCollateral=100 DGB (99+1)
+    // 2. Key-path spend the 99 DGB fake collateral (no CLTV enforcement)
+    // 3. Only 1 DGB remains locked — $100 DD backed by $0.01
+    BOOST_CHECK_MESSAGE(!accepted,
+        "VULNERABILITY [T1-04c]: Mint tx with MULTIPLE collateral outputs accepted! "
+        "NUMS check only verifies the LAST P2TR output. Attacker includes 99 DGB "
+        "with own key + 1 DGB with NUMS key. 99% of collateral is key-path spendable!");
+
+    if (!accepted) {
+        BOOST_TEST_MESSAGE("Multiple collateral rejected with reason: " + state.GetRejectReason());
+        // Verify it's rejected for the right reason
+        bool correctRejection =
+            state.GetRejectReason().find("multiple") != std::string::npos ||
+            state.GetRejectReason().find("collateral") != std::string::npos ||
+            state.GetRejectReason().find("nums") != std::string::npos;
+        BOOST_CHECK_MESSAGE(correctRejection,
+            "Rejected for wrong reason: " + state.GetRejectReason());
+    } else {
+        BOOST_TEST_MESSAGE("EXPLOIT CONFIRMED: Multiple collateral outputs bypass NUMS check. "
+                          "Only last P2TR value output is verified against NUMS reconstruction. "
+                          "FIX: Enforce exactly 1 collateral output per mint, or verify ALL.");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_nums_point_is_valid_curve_point)
+{
+    // Verify the NUMS point is actually a valid secp256k1 curve point.
+    // If IsFullyValid() fails, the NUMS key is not on the curve and
+    // CreateCollateralP2TR would return empty script.
+    XOnlyPubKey nums = DigiDollar::GetCollateralNUMSKey();
+    BOOST_CHECK_MESSAGE(nums.IsFullyValid(),
+        "CRITICAL: NUMS point is NOT a valid secp256k1 curve point! "
+        "CreateCollateralP2TR will silently fail or produce invalid outputs.");
+
+    // Verify it's exactly 32 bytes
+    BOOST_CHECK_EQUAL(nums.size(), 32u);
+
+    // Verify it matches the BIP-341 standard NUMS point
+    std::string hex = HexStr(Span<const unsigned char>(nums.data(), nums.size()));
+    BOOST_CHECK_EQUAL(hex, "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0");
+}
+
+// =============================================================================
+// T1-04d: NUMS Key Bypass via Owner Key Mismatch (OP_RETURN vs MAST)
+// ATTACK: Provide owner_key_A in OP_RETURN but construct collateral MAST with
+// owner_key_B. The NUMS reconstruction uses owner_key_A, producing a different
+// MAST tree → different P2TR output → mismatch detected.
+// This verifies the NUMS reconstruction is a COMPLETE binding of all parameters.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_owner_key_mismatch)
+{
+    // ATTACK: The attacker controls two keys (A and B).
+    // They construct collateral with owner B in the MAST scripts (so B can sign
+    // to redeem), but claim owner A in the OP_RETURN. If validation only checks
+    // the NUMS internal key but not the owner key binding, the attacker could
+    // claim to be "A" while having "B" in the actual spending paths.
+    //
+    // Impact if bypassed: ownership confusion — an attacker could claim DD tokens
+    // belong to one address while collateral is controlled by another.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Two different keys
+    CKey keyA, keyB;
+    keyA.MakeNewKey(true);
+    keyB.MakeNewKey(true);
+    XOnlyPubKey xOnlyA(keyA.GetPubKey());
+    XOnlyPubKey xOnlyB(keyB.GetPubKey());
+
+    // Sanity: they're different keys
+    BOOST_REQUIRE(xOnlyA != xOnlyB);
+
+    const int nHeight = 1000;
+    const CAmount ddAmount = 10000;
+    const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    // Construct collateral with owner B in MAST, but NUMS internal key (legitimate looking)
+    DigiDollar::MintParams mismatchParams;
+    mismatchParams.ddAmount = ddAmount;
+    mismatchParams.lockHeight = lockHeight;
+    mismatchParams.ownerKey = xOnlyB;  // <-- MAST scripts use key B
+    mismatchParams.internalKey = DigiDollar::GetCollateralNUMSKey();
+    mismatchParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript mismatchCollateral = DigiDollar::CreateCollateralP2TR(mismatchParams);
+    BOOST_REQUIRE(!mismatchCollateral.empty());
+
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 2;
+
+    CTxIn input;
+    input.prevout = COutPoint(uint256::ONE, 0);
+    input.nSequence = 0xFFFFFFFE;
+    mintTx.vin.push_back(input);
+
+    // OP_RETURN claims owner A, but MAST uses owner B
+    CScript opReturn = CScript() << OP_RETURN
+                                 << std::vector<unsigned char>{'D', 'D'}
+                                 << CScriptNum(1)
+                                 << CScriptNum(ddAmount)
+                                 << CScriptNum(lockHeight)
+                                 << CScriptNum(1)
+                                 << std::vector<unsigned char>(xOnlyA.begin(), xOnlyA.end());  // Claims key A
+    mintTx.vout.push_back(CTxOut(0, opReturn));
+
+    // Collateral built with key B in MAST (but NUMS internal key)
+    mintTx.vout.push_back(CTxOut(100 * COIN, mismatchCollateral));
+
+    CScript ddToken = DigiDollar::CreateDigiDollarP2TR(xOnlyA, ddAmount);
+    mintTx.vout.push_back(CTxOut(0, ddToken));
+
+    DigiDollar::ValidationContext ctx(nHeight, 1000, 150, *regTestParams);
+    ctx.skipOracleValidation = true;
+    TxValidationState state;
+
+    bool accepted = DigiDollar::ValidateMintTransaction(
+        CTransaction(mintTx), ctx, state);
+
+    // MUST be rejected: reconstruction with owner A + NUMS produces different P2TR
+    // than actual collateral built with owner B + NUMS
+    BOOST_CHECK_MESSAGE(!accepted,
+        "VULNERABILITY [T1-04d]: Owner key mismatch not detected! "
+        "OP_RETURN claims owner A but MAST scripts use owner B. "
+        "NUMS reconstruction binding is incomplete.");
+
+    if (!accepted) {
+        std::string reason = state.GetRejectReason();
+        BOOST_TEST_MESSAGE("Owner key mismatch rejected: " + reason);
+        // Should be caught by NUMS reconstruction mismatch
+        BOOST_CHECK_MESSAGE(
+            reason.find("nums-mismatch") != std::string::npos ||
+            reason.find("reconstruction") != std::string::npos,
+            "Expected NUMS mismatch rejection, got: " + reason);
+    }
+}
+
+// =============================================================================
+// T1-04e: NUMS documentation accuracy test
+// The comment claims lift_x(SHA256("DigiDollar/CollateralNUMS")) but the actual
+// bytes are lift_x(SHA256(serialize_uncompressed(G))) — the BIP-341 NUMS point.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_is_bip341_standard)
+{
+    // Verify the NUMS point is the standard BIP-341 unspendable key:
+    // lift_x(SHA256(04 || Gx || Gy)) where G is the secp256k1 generator
+    //
+    // secp256k1 generator uncompressed:
+    // 04 79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798
+    //    483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
+
+    XOnlyPubKey nums = DigiDollar::GetCollateralNUMSKey();
+    std::string hex = HexStr(Span<const unsigned char>(nums.data(), nums.size()));
+
+    // This IS the SHA256 of the uncompressed generator point
+    BOOST_CHECK_EQUAL(hex, "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0");
+
+    // Verify it's NOT SHA256("DigiDollar/CollateralNUMS") (old incorrect comment)
+    // SHA256("DigiDollar/CollateralNUMS") = 552a6b77728fa8f7...
+    BOOST_CHECK_MESSAGE(hex != "552a6b77728fa8f73762edadabc2c5ccaa4cb1eaeb145efe887b5407300b607b",
+        "NUMS point should NOT be SHA256('DigiDollar/CollateralNUMS') — "
+        "it should be the BIP-341 standard lift_x(SHA256(uncompressed_G))");
+
+    // The point must be valid on secp256k1
+    BOOST_CHECK(nums.IsFullyValid());
+}
+
+// =============================================================================
+// T1-04f: Multiple DD OP_RETURN Attack — Owner Key Overwrite
+// ATTACK: Include two DD-marked OP_RETURN outputs with different owner keys.
+// The validation loop processes outputs sequentially, overwriting owner key
+// variables. The second OP_RETURN's owner key is used for NUMS reconstruction.
+// An attacker could build collateral with owner B in MAST but put owner A in
+// the first OP_RETURN and owner B in the second, hoping reconstruction matches.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_multiple_opreturn_owner_overwrite)
+{
+    // ATTACK SCENARIO:
+    // 1. Attacker creates collateral P2TR with NUMS key + owner B in MAST
+    // 2. First OP_RETURN has owner A (decoy)
+    // 3. Second OP_RETURN has owner B (real owner matching MAST)
+    // 4. Validation overwrites owner key, NUMS reconstruction uses owner B
+    // 5. Reconstruction matches actual collateral → PASSES
+    //
+    // This tests whether multiple DD OP_RETURN outputs are allowed.
+    // If they are, the attacker controls which owner key is used for
+    // NUMS verification, which could enable owner key substitution attacks.
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int nHeight = 1000;
+    const CAmount ddAmount = 10000;  // $100
+    const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    // Create two different owner keys
+    CKey keyA, keyB;
+    keyA.MakeNewKey(true);
+    keyB.MakeNewKey(true);
+    XOnlyPubKey xOnlyA(keyA.GetPubKey());
+    XOnlyPubKey xOnlyB(keyB.GetPubKey());
+
+    // Build collateral with NUMS key + owner B (legitimate construction)
+    DigiDollar::MintParams params;
+    params.ddAmount = ddAmount;
+    params.lockHeight = lockHeight;
+    params.ownerKey = xOnlyB;  // Owner B in MAST scripts
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript collateral = DigiDollar::CreateCollateralP2TR(params);
+    BOOST_REQUIRE(!collateral.empty());
+
+    // Build DD token output with owner A
+    CScript ddToken = DigiDollar::CreateDigiDollarP2TR(xOnlyA, ddAmount);
+    BOOST_REQUIRE(!ddToken.empty());
+
+    // Build mint tx with DD version marker
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 0x0D1D0770 | (0x01 << 24);  // DD MINT version
+
+    CTxIn input;
+    input.prevout = COutPoint(uint256::ONE, 0);
+    input.nSequence = 0xFFFFFFFE;
+    mintTx.vin.push_back(input);
+
+    // FIRST OP_RETURN: owner A (decoy)
+    CScript opReturn1 = CScript() << OP_RETURN
+                                  << std::vector<unsigned char>{'D', 'D'}
+                                  << CScriptNum(1)  // MINT type
+                                  << CScriptNum(ddAmount)
+                                  << CScriptNum(lockHeight)
+                                  << CScriptNum(1)  // tier 1 (30 days)
+                                  << std::vector<unsigned char>(xOnlyA.begin(), xOnlyA.end());
+    mintTx.vout.push_back(CTxOut(0, opReturn1));
+
+    // SECOND OP_RETURN: owner B (matches MAST construction)
+    CScript opReturn2 = CScript() << OP_RETURN
+                                  << std::vector<unsigned char>{'D', 'D'}
+                                  << CScriptNum(1)  // MINT type
+                                  << CScriptNum(ddAmount)
+                                  << CScriptNum(lockHeight)
+                                  << CScriptNum(1)  // tier 1 (30 days)
+                                  << std::vector<unsigned char>(xOnlyB.begin(), xOnlyB.end());
+    mintTx.vout.push_back(CTxOut(0, opReturn2));
+
+    // Collateral (NUMS + owner B)
+    mintTx.vout.push_back(CTxOut(100 * COIN, collateral));
+
+    // DD token output
+    mintTx.vout.push_back(CTxOut(0, ddToken));
+
+    DigiDollar::ValidationContext ctx(nHeight, 1000, 150, *regTestParams);
+    ctx.skipOracleValidation = true;
+    TxValidationState state;
+
+    bool accepted = DigiDollar::ValidateMintTransaction(
+        CTransaction(mintTx), ctx, state);
+
+    // MUST be rejected — multiple DD OP_RETURNs are now blocked (T1-04f fix)
+    BOOST_CHECK_MESSAGE(!accepted,
+        "VULNERABILITY [T1-04f]: Multiple DD OP_RETURN outputs should be rejected! "
+        "The second OP_RETURN's owner key overwrites the first, creating ambiguity.");
+
+    if (!accepted) {
+        std::string reason = state.GetRejectReason();
+        BOOST_TEST_MESSAGE("Multiple DD OP_RETURN rejected: " + reason);
+        BOOST_CHECK_MESSAGE(
+            reason.find("multiple-dd-opreturn") != std::string::npos,
+            "Expected rejection for multiple DD OP_RETURN, got: " + reason);
+    }
+}
+
+// =============================================================================
+// T1-04g: Malformed DD Amount → totalDD=0 → NUMS Check Bypass Attempt
+// ATTACK: Craft OP_RETURN with an amount field that causes CScriptNum exception.
+// If totalDD stays 0, the NUMS verification guard condition evaluates to false
+// and the check is skipped entirely.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_malformed_amount_bypass)
+{
+    // ATTACK SCENARIO:
+    // 1. Craft OP_RETURN with valid DD marker but malformed amount (non-minimal encoding)
+    // 2. CScriptNum constructor throws, catch block lets it continue
+    // 3. totalDD stays at 0
+    // 4. NUMS verification guard: hasOwnerPubKey && hasCollateralOutput && lockTime > 0 && totalDD > 0
+    //    → totalDD==0 → guard FALSE → NUMS check SKIPPED
+    // 5. Remaining checks: ValidateMintAmount(0) should reject (0 < minMintAmount)
+    //
+    // Expected defense: ValidateMintAmount(0) rejects, OR the DD amount calculation
+    // from collateral fills in totalDD > 0 enabling the NUMS check.
+    // This test verifies that totalDD=0 CANNOT bypass all checks.
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int nHeight = 1000;
+    const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    // Build collateral with ATTACKER'S key (NOT NUMS) — this is the exploit
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+    XOnlyPubKey attackerXOnly(attackerKey.GetPubKey());
+
+    // Use attacker's key as internal key — key-path spendable!
+    DigiDollar::MintParams attackParams;
+    attackParams.ddAmount = 10000;
+    attackParams.lockHeight = lockHeight;
+    attackParams.ownerKey = ownerXOnly;
+    attackParams.internalKey = attackerXOnly;  // NOT NUMS — attacker's key!
+    attackParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript attackCollateral = DigiDollar::CreateCollateralP2TR(attackParams);
+    BOOST_REQUIRE(!attackCollateral.empty());
+
+    CScript ddToken = DigiDollar::CreateDigiDollarP2TR(ownerXOnly, 10000);
+
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 0x0D1D0770 | (0x01 << 24);
+
+    CTxIn input;
+    input.prevout = COutPoint(uint256::ONE, 0);
+    input.nSequence = 0xFFFFFFFE;
+    mintTx.vin.push_back(input);
+
+    // Craft OP_RETURN with MALFORMED DD amount (non-minimal CScriptNum encoding)
+    // A valid amount "10000" in script is {10 27} (2 bytes).
+    // Non-minimal encoding: {10 27 00} (3 bytes with unnecessary zero padding)
+    // CScriptNum(data, true) throws scriptnum_error for non-minimal encoding
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    opReturn << std::vector<unsigned char>{'D', 'D'};  // DD marker
+    opReturn << CScriptNum(1);  // MINT type
+
+    // MALFORMED AMOUNT: non-minimal encoding of 10000 (0x2710)
+    // Minimal encoding: {0x10, 0x27} — but we add a trailing 0x00
+    std::vector<unsigned char> malformedAmount = {0x10, 0x27, 0x00};
+    opReturn << malformedAmount;  // This WILL cause CScriptNum exception
+
+    opReturn << CScriptNum(lockHeight);
+    opReturn << CScriptNum(1);  // tier 1
+    opReturn << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
+
+    mintTx.vout.push_back(CTxOut(0, opReturn));
+    mintTx.vout.push_back(CTxOut(100 * COIN, attackCollateral));  // Non-NUMS collateral!
+    mintTx.vout.push_back(CTxOut(0, ddToken));
+
+    DigiDollar::ValidationContext ctx(nHeight, 1000, 150, *regTestParams);
+    ctx.skipOracleValidation = true;  // Simulate historical block — no DD amount recalculation
+    TxValidationState state;
+
+    bool accepted = DigiDollar::ValidateMintTransaction(
+        CTransaction(mintTx), ctx, state);
+
+    // MUST be rejected. If accepted, NUMS check was bypassed via malformed amount.
+    BOOST_CHECK_MESSAGE(!accepted,
+        "CRITICAL VULNERABILITY [T1-04g]: Malformed DD amount caused NUMS check bypass! "
+        "Non-NUMS collateral accepted. Attacker can key-path spend collateral, "
+        "creating unbacked DD tokens. totalDD=0 skips NUMS guard condition.");
+
+    if (!accepted) {
+        std::string reason = state.GetRejectReason();
+        BOOST_TEST_MESSAGE("Malformed amount attack rejected: " + reason);
+        // Could be rejected by ValidateMintAmount(0), or by NUMS check, or by other check
+        // Any rejection is acceptable — the key thing is it was NOT accepted
+    }
+}
+
+// =============================================================================
+// T1-04h: TaprootBuilder Determinism Verification
+// Verify that CreateCollateralP2TR is fully deterministic — same inputs always
+// produce identical P2TR outputs. Non-determinism would break NUMS reconstruction.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_taprootbuilder_determinism)
+{
+    // If TaprootBuilder has any non-determinism (threading, hash map ordering, etc.),
+    // the NUMS reconstruction during validation could produce a different P2TR output
+    // than what was used during minting, causing false positive rejections or
+    // (worse) false negative acceptances.
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    DigiDollar::MintParams params;
+    params.ddAmount = 10000;
+    params.lockHeight = 200000;
+    params.ownerKey = ownerXOnly;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    // Build the same P2TR 100 times and verify all are identical
+    CScript reference = DigiDollar::CreateCollateralP2TR(params);
+    BOOST_REQUIRE(!reference.empty());
+
+    for (int i = 0; i < 100; i++) {
+        CScript result = DigiDollar::CreateCollateralP2TR(params);
+        BOOST_CHECK_MESSAGE(result == reference,
+            "NON-DETERMINISM DETECTED in CreateCollateralP2TR at iteration " +
+            std::to_string(i) + "! This would break NUMS reconstruction verification. "
+            "Expected: " + HexStr(reference) + " Got: " + HexStr(result));
+    }
+
+    // Verify different lock heights produce different P2TR outputs
+    // (lockHeight IS embedded in script paths via CLTV)
+    DigiDollar::MintParams params2 = params;
+    params2.lockHeight = 300000;
+    CScript result2 = DigiDollar::CreateCollateralP2TR(params2);
+    BOOST_CHECK_MESSAGE(result2 != reference,
+        "Different lock heights should produce different P2TR outputs");
+
+    // Verify different owner keys produce different P2TR outputs
+    CKey ownerKey2;
+    ownerKey2.MakeNewKey(true);
+    DigiDollar::MintParams params3 = params;
+    params3.ownerKey = XOnlyPubKey(ownerKey2.GetPubKey());
+    CScript result3 = DigiDollar::CreateCollateralP2TR(params3);
+    BOOST_CHECK_MESSAGE(result3 != reference,
+        "Different owner keys should produce different P2TR outputs");
+
+    // NOTE: Different DD amounts produce the SAME P2TR output because
+    // ddAmount is NOT embedded in the CLTV script paths — it's only in
+    // the OP_RETURN metadata. This is by design: the collateral ratio
+    // check validates amounts, not the script itself.
+    DigiDollar::MintParams params4 = params;
+    params4.ddAmount = 50000;
+    CScript result4 = DigiDollar::CreateCollateralP2TR(params4);
+    BOOST_CHECK_MESSAGE(result4 == reference,
+        "DD amounts should NOT affect P2TR output (amount is in OP_RETURN, not script)");
+
+    BOOST_TEST_MESSAGE("TaprootBuilder determinism verified over 100 iterations + parameter variation");
+}
+
+// =============================================================================
+// T1-04i: Oracle Keys Don't Affect P2TR Output
+// Verify that oracle keys (passed in MintParams) don't change the collateral
+// P2TR output. This is critical for reconstruction — the validator uses
+// GetOracleKeys(15) which must produce the same output regardless of actual
+// oracle key set.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_oracle_keys_irrelevant)
+{
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    // Build with 15 oracle keys (standard)
+    DigiDollar::MintParams params15;
+    params15.ddAmount = 10000;
+    params15.lockHeight = 200000;
+    params15.ownerKey = ownerXOnly;
+    params15.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params15.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript script15 = DigiDollar::CreateCollateralP2TR(params15);
+
+    // Build with 7 oracle keys
+    DigiDollar::MintParams params7 = params15;
+    params7.oracleKeys = DigiDollar::GetOracleKeys(7);
+    CScript script7 = DigiDollar::CreateCollateralP2TR(params7);
+
+    // Build with 0 oracle keys
+    DigiDollar::MintParams params0 = params15;
+    params0.oracleKeys.clear();
+    CScript script0 = DigiDollar::CreateCollateralP2TR(params0);
+
+    // Build with completely different random oracle keys
+    DigiDollar::MintParams paramsRandom = params15;
+    paramsRandom.oracleKeys.clear();
+    for (int i = 0; i < 15; i++) {
+        CKey k;
+        k.MakeNewKey(true);
+        paramsRandom.oracleKeys.push_back(XOnlyPubKey(k.GetPubKey()));
+    }
+    CScript scriptRandom = DigiDollar::CreateCollateralP2TR(paramsRandom);
+
+    // ALL should produce the same P2TR output, since oracle keys aren't
+    // used in CreateNormalRedemptionPath or CreateERRPath
+    BOOST_CHECK_MESSAGE(script15 == script7,
+        "Oracle key count (15 vs 7) should NOT affect P2TR output");
+    BOOST_CHECK_MESSAGE(script15 == script0,
+        "Oracle key count (15 vs 0) should NOT affect P2TR output");
+    BOOST_CHECK_MESSAGE(script15 == scriptRandom,
+        "Random oracle keys should NOT affect P2TR output");
+
+    BOOST_TEST_MESSAGE("Verified: Oracle keys are irrelevant to P2TR collateral construction");
+}
+
+// =============================================================================
+// T1-04j: Cryptographic NUMS Point Derivation Verification
+// Actually compute SHA256(uncompressed_generator_point) and verify it matches
+// the hardcoded COLLATERAL_NUMS_POINT_BYTES. This proves the point is the
+// standard BIP-341 NUMS point and not an arbitrary value with a known DL.
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_nums_cryptographic_derivation)
+{
+    // The secp256k1 generator point G (uncompressed, 65 bytes):
+    // 04 + Gx (32 bytes) + Gy (32 bytes)
+    const std::vector<unsigned char> generator_uncompressed = {
+        0x04,
+        0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC,
+        0x55, 0xA0, 0x62, 0x95, 0xCE, 0x87, 0x0B, 0x07,
+        0x02, 0x9B, 0xFC, 0xDB, 0x2D, 0xCE, 0x28, 0xD9,
+        0x59, 0xF2, 0x81, 0x5B, 0x16, 0xF8, 0x17, 0x98,
+        0x48, 0x3A, 0xDA, 0x77, 0x26, 0xA3, 0xC4, 0x65,
+        0x5D, 0xA4, 0xFB, 0xFC, 0x0E, 0x11, 0x08, 0xA8,
+        0xFD, 0x17, 0xB4, 0x48, 0xA6, 0x85, 0x54, 0x19,
+        0x9C, 0x47, 0xD0, 0x8F, 0xFB, 0x10, 0xD4, 0xB8
+    };
+
+    // Compute SHA256(generator_uncompressed) — this should be the NUMS x-coordinate
+    CSHA256 hasher;
+    unsigned char hash[32];
+    hasher.Write(generator_uncompressed.data(), generator_uncompressed.size());
+    hasher.Finalize(hash);
+
+    std::string computed_hex = HexStr(Span<const unsigned char>(hash, 32));
+
+    // Compare with hardcoded NUMS point
+    XOnlyPubKey nums = DigiDollar::GetCollateralNUMSKey();
+    std::string hardcoded_hex = HexStr(Span<const unsigned char>(nums.data(), nums.size()));
+
+    BOOST_CHECK_MESSAGE(computed_hex == hardcoded_hex,
+        "CRITICAL: NUMS point bytes do NOT match SHA256(uncompressed_G)! "
+        "Computed: " + computed_hex + " Hardcoded: " + hardcoded_hex + " "
+        "The hardcoded point may have a known discrete logarithm, "
+        "making ALL collateral key-path spendable!");
+
+    BOOST_TEST_MESSAGE("Cryptographic verification: SHA256(uncompressed_G) = " + computed_hex);
+    BOOST_TEST_MESSAGE("Hardcoded NUMS point:       " + hardcoded_hex);
+
+    // Double-check: the NUMS point must be a valid point on secp256k1
+    // (lift_x must succeed — not all x-coordinates correspond to valid curve points)
+    BOOST_CHECK_MESSAGE(nums.IsFullyValid(),
+        "NUMS x-coordinate does not correspond to a valid secp256k1 point! "
+        "lift_x() failed — the point cannot be used as a Taproot internal key.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

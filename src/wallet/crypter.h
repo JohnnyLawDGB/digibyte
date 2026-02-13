@@ -35,8 +35,9 @@ const unsigned int WALLET_CRYPTO_IV_SIZE = 16;
  * intentional design inherited from Bitcoin Core, not a weakness:
  *
  * 1. Uniqueness: Each private key has a unique public key, so each
- *    key gets a unique IV. AES-CBC only requires IVs to be unique
- *    per key+IV pair, not unpredictable.
+ *    key gets a unique IV. AES-CBC requires IVs to be unique for
+ *    each message encrypted with the same encryption key; they do
+ *    not need to be unpredictable.
  *
  * 2. Key binding: The IV cryptographically binds each ciphertext to
  *    its public key. Swapping ciphertexts between keys fails because
@@ -46,11 +47,15 @@ const unsigned int WALLET_CRYPTO_IV_SIZE = 16;
  *    ciphertext. This is acceptable — wallet keys are encrypted once
  *    with one master key, and determinism enables verification.
  *
- * 4. Trade-off: An attacker who knows a plaintext private key can
- *    verify their guess by re-encrypting with the deterministic IV
- *    and comparing to the stored ciphertext. This is moot in
- *    practice: if the attacker has the master key (needed to
- *    encrypt), they can already decrypt all keys.
+ * 4. Trade-off: Deterministic IVs slightly aid an offline attacker
+ *    who has the encrypted wallet and knows at least one plaintext
+ *    private key. They can test candidate master keys (derived from
+ *    the user's password) by encrypting the known private key with
+ *    Hash(pubkey) as IV and comparing against the stored ciphertext.
+ *    This is a known-plaintext verification shortcut, not a break of
+ *    AES itself, and is mitigated in practice by strong passwords and
+ *    robust key-derivation parameters. The design is retained for
+ *    compatibility and deterministic verification of key material.
  */
 
 /** Master key for wallet encryption */

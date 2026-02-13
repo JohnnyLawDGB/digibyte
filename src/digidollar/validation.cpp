@@ -1724,14 +1724,19 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
             // This input has DGB value — verify it's NOT from a DD mint (collateral)
             bool isCollateral = false;
 
-            // Helper: check if a transaction is a DD mint by inspecting OP_RETURN
-            auto isMintTx = [](const CTransactionRef& prev_tx) -> bool {
+            // Helper: check if a specific output of a transaction is DD collateral
+            // Only the collateral output (vout[0]) of a mint is locked — change outputs
+            // from mint transactions are regular DGB and safe to use as fee inputs.
+            auto isCollateralOutput = [&](const CTransactionRef& prev_tx, uint32_t outputIndex) -> bool {
                 if (!prev_tx) return false;
                 // Check version marker
                 if ((prev_tx->nVersion & 0xFFFF) != 0x0770) return false;
                 // Check type field = MINT (upper byte = 0x01)
                 if (((prev_tx->nVersion >> 24) & 0xFF) != 0x01) return false;
-                // Verify DD OP_RETURN exists with type 1 (MINT)
+                // Only vout[0] is the collateral output in a mint transaction.
+                // Other outputs (DD tokens, change) are not collateral.
+                if (outputIndex != 0) return false;
+                // Verify DD OP_RETURN exists (confirms this is really a mint)
                 for (const auto& vout : prev_tx->vout) {
                     if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
                     CScript::const_iterator pc = vout.scriptPubKey.begin();
@@ -1749,7 +1754,7 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
                 uint256 block_hash;
                 CTransactionRef prev_tx;
                 if (g_txindex->FindTx(tx.vin[i].prevout.hash, block_hash, prev_tx)) {
-                    isCollateral = isMintTx(prev_tx);
+                    isCollateral = isCollateralOutput(prev_tx, tx.vin[i].prevout.n);
                 }
             }
 
@@ -1757,7 +1762,7 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
             if (!isCollateral && ctx.txLookup) {
                 CTransactionRef prev_tx;
                 if (ctx.txLookup(tx.vin[i].prevout.hash, coin.nHeight, prev_tx)) {
-                    isCollateral = isMintTx(prev_tx);
+                    isCollateral = isCollateralOutput(prev_tx, tx.vin[i].prevout.n);
                 }
             }
 

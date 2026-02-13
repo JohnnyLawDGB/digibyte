@@ -194,7 +194,11 @@ int DynamicCollateralAdjustment::GetCurrentSystemHealth()
 
     // Calculate health from cached metrics if available
     if (metrics.lastOraclePrice > 0 && metrics.totalCollateral > 0 && metrics.totalDDSupply > 0) {
-        return CalculateSystemHealth(metrics.totalCollateral, metrics.totalDDSupply, metrics.lastOraclePrice);
+        // FIX [T2-05b]: lastOraclePrice is in cents (100 = $1.00)
+        // CalculateSystemHealth expects millicents (100,000 = $1.00)
+        // Convert: cents * 1000 = millicents
+        CAmount priceMillicents = metrics.lastOraclePrice * 1000;
+        return CalculateSystemHealth(metrics.totalCollateral, metrics.totalDDSupply, priceMillicents);
     }
 
     // Return max health as safe default when no data available

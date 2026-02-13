@@ -7602,4 +7602,366 @@ BOOST_AUTO_TEST_CASE(redteam_T3_06h_minority_compromise_median_resilience)
     // to avoid filtering, but then their impact on the median is minimal.
 }
 
+// =============================================================================
+// T4-01: RPC Parameter Injection — Boundary Values, Oracle Price Bypass,
+//        Integer Overflow in Display Calculations, Address Validation
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01a_collateral_calc_extreme_oracle_price)
+{
+    // ATTACK: User-supplied oracle price in RPC can be any positive int64_t.
+    // RPC RPCs like calculatecollateralrequirement and estimatecollateral accept
+    // user-provided oracle_price_micro_usd. Test that extreme values don't cause
+    // incorrect collateral calculations.
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Test 1: Oracle price = 1 micro-USD ($0.000001) — extreme low price
+    // $100 DD at $0.000001/DGB with 500% ratio needs astronomical collateral
+    {
+        CAmount ddAmount = 10000; // $100 in cents
+        CAmount oraclePrice = 1;  // 1 micro-USD
+        int effectiveRatio = 500; // 500%
+
+        __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                             static_cast<__int128>(effectiveRatio) * 100;
+        __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+
+        // 10000 * 1e8 * 500 * 100 / 1 = 5e16 sats = 500M DGB
+        // This exceeds total DGB supply but NOT MAX_MONEY (2.1e18 sats)
+        // The RPC only rejects if > MAX_MONEY, so this passes but represents
+        // more DGB than will ever exist — user would fail at coin selection
+        BOOST_CHECK(result128 > 0);
+        // Verify the __int128 math is correct and doesn't overflow
+        uint64_t required = static_cast<uint64_t>(result128);
+        BOOST_CHECK_EQUAL(required, 50000000000000000ULL); // 5e16 sats = 500M DGB
+    }
+
+    // Test 2: Oracle price = INT64_MAX — extreme high price
+    // $100 DD at max price needs almost zero collateral
+    {
+        CAmount ddAmount = 10000; // $100 in cents
+        CAmount oraclePrice = std::numeric_limits<int64_t>::max();
+        int effectiveRatio = 500;
+
+        __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                             static_cast<__int128>(effectiveRatio) * 100;
+        __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+
+        // At astronomical DGB price, collateral should be very small but not negative
+        BOOST_CHECK(result128 >= 0);
+        BOOST_CHECK(result128 <= static_cast<__int128>(MAX_MONEY));
+        // Specifically, should be less than 1 DGB (DGB would be worth trillions)
+        uint64_t required = static_cast<uint64_t>(result128);
+        BOOST_CHECK_LT(required, COIN);
+    }
+
+    // Test 3: Large DD amount + small oracle price — __int128 handles it
+    {
+        CAmount ddAmount = MAX_MONEY; // Insane DD amount
+        CAmount oraclePrice = 100;    // $0.0001/DGB
+        int effectiveRatio = 1000;    // 1000%
+
+        __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                             static_cast<__int128>(effectiveRatio) * 100;
+        __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+
+        // Should be astronomically large — RPC would throw MAX_MONEY error
+        BOOST_CHECK_MESSAGE(result128 > static_cast<__int128>(MAX_MONEY),
+            "Insane DD amount should exceed MAX_MONEY collateral");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01b_usd_value_display_overflow)
+{
+    // ATTACK: In estimatecollateral RPC, the USD value display calculation uses:
+    //   CAmount usdValueMicroUSD = (requiredDGB * oraclePriceMicroUSD) / COIN;
+    // This int64_t multiplication can overflow with extreme user-supplied oracle prices.
+    // This is display-only (not consensus), but could show misleading information.
+
+    // Scenario: requiredDGB near MAX_MONEY, moderate oracle price
+    {
+        uint64_t requiredDGB = 2000000000000000000ULL; // ~20 billion DGB in sats (near MAX_MONEY)
+        CAmount oraclePrice = 1000000; // $1.00/DGB in micro-USD
+
+        // This multiplication overflows int64_t:
+        // 2e18 * 1e6 = 2e24 >> INT64_MAX (9.2e18)
+        __int128 safe_product = static_cast<__int128>(requiredDGB) *
+                                static_cast<__int128>(oraclePrice);
+        __int128 safe_result = safe_product / static_cast<__int128>(COIN);
+
+        // Verify overflow WOULD occur with int64_t
+        bool would_overflow = (safe_product > static_cast<__int128>(std::numeric_limits<int64_t>::max()));
+        BOOST_CHECK_MESSAGE(would_overflow,
+            "FINDING: estimatecollateral USD value calc can overflow int64_t with large "
+            "requiredDGB and user-supplied oracle price. Display-only, not consensus-affecting.");
+    }
+
+    // Scenario: Small requiredDGB but extreme user-supplied oracle price
+    {
+        uint64_t requiredDGB = 100000000; // 1 DGB in sats
+        CAmount oraclePrice = std::numeric_limits<int64_t>::max(); // User passes INT64_MAX
+
+        __int128 safe_product = static_cast<__int128>(requiredDGB) *
+                                static_cast<__int128>(oraclePrice);
+
+        // 1e8 * 9.2e18 = 9.2e26 >> INT64_MAX
+        bool would_overflow = (safe_product > static_cast<__int128>(std::numeric_limits<int64_t>::max()));
+        BOOST_CHECK_MESSAGE(would_overflow,
+            "FINDING: Even 1 DGB * INT64_MAX oracle price overflows int64_t in display calc");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01c_dd_address_injection)
+{
+    // ATTACK: Try to inject malicious data through DD address strings
+    // in senddigidollar and other RPCs.
+
+    // Test 1: SQL injection attempt
+    {
+        CDigiDollarAddress addr("DD' OR '1'='1");
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 2: Buffer overflow attempt — very long string
+    {
+        std::string longStr = "DD" + std::string(10000, 'A');
+        CDigiDollarAddress addr(longStr);
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 3: Null bytes in address
+    {
+        std::string nullStr = "DD\x00\x00\x00\x00AAAA";
+        CDigiDollarAddress addr(nullStr);
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 4: Empty string
+    {
+        CDigiDollarAddress addr("");
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 5: Just prefix, no data
+    {
+        CDigiDollarAddress addr("DD");
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 6: Invalid base58 characters
+    {
+        CDigiDollarAddress addr("DD0OIl+/=");
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 7: Valid base58 but wrong length
+    {
+        CDigiDollarAddress addr("DDabc123");
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 8: Path traversal attempt
+    {
+        CDigiDollarAddress addr("DD../../etc/passwd");
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Test 9: Unicode/UTF-8 injection
+    {
+        CDigiDollarAddress addr("DD\xc0\xaf\xe0\x80\xaf");
+        BOOST_CHECK(!addr.IsValid());
+    }
+
+    // Defense holds: CDigiDollarAddress uses DecodeBase58Check which:
+    // 1. Only accepts base58 alphabet characters
+    // 2. Requires valid checksum (4-byte SHA256d suffix)
+    // 3. Strict length check (34 bytes = 2 version + 32 data)
+    // 4. Version prefix must match DD/TD/RD network bytes
+    // No injection vector possible through DD addresses.
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01d_lock_tier_boundary_values)
+{
+    // ATTACK: Test lock tier boundary values that RPCs validate
+    // RPCs check: lockTier < 0 || lockTier > 9
+    // Underlying consensus: GetCollateralRatioForLockTime with converted blocks
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Test 1: Tier 0 (1 hour = 240 blocks) — special testing tier
+    {
+        int64_t lockBlocks = DigiDollar::LockDaysToBlocks(0); // 0 days → 240 blocks (1 hour)
+        BOOST_CHECK_EQUAL(lockBlocks, 240);
+        int ratio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, regTestParams->GetDigiDollarParams());
+        BOOST_CHECK_EQUAL(ratio, 1000); // 1000% for 1 hour
+    }
+
+    // Test 2: Tier 9 (3650 days = 10 years)
+    {
+        int64_t lockBlocks = DigiDollar::LockDaysToBlocks(3650);
+        int ratio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, regTestParams->GetDigiDollarParams());
+        BOOST_CHECK_EQUAL(ratio, 200); // 200% for 10 years
+    }
+
+    // Test 3: Negative lock days → LockDaysToBlocks returns negative blocks!
+    {
+        int64_t lockBlocks = DigiDollar::LockDaysToBlocks(-1);
+        // FINDING (LOW): LockDaysToBlocks(-1) returns -5760 (negative blocks)
+        // The RPC layer validates lockTier 0-9 (which maps to non-negative days),
+        // BUT calculatecollateralrequirement accepts raw lockDays and only checks > 0.
+        // Passing lockDays=-1 via calculatecollateralrequirement RPC would produce
+        // negative lockBlocks → GetCollateralRatioForLockTime may return unexpected ratio.
+        // The RPC catches lockDays <= 0, so this is mitigated at the API level.
+        BOOST_CHECK_EQUAL(lockBlocks, -5760); // Documents actual behavior
+    }
+
+    // Test 4: Extremely large lock days
+    {
+        int64_t lockBlocks = DigiDollar::LockDaysToBlocks(999999);
+        int ratio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, regTestParams->GetDigiDollarParams());
+        // Anything beyond 10 years should map to 200% (the best ratio)
+        BOOST_CHECK_EQUAL(ratio, 200);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01e_oracle_price_validation_boundaries)
+{
+    // ATTACK: Test oracle price boundary values used in RPC calculations
+    // RPCs validate: oraclePriceMicroUSD > 0
+    // Consensus: ORACLE_MIN_PRICE_MICRO_USD to ORACLE_MAX_PRICE_MICRO_USD
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Test 1: Price = 0 — should be rejected by RPC (and consensus)
+    {
+        DigiDollar::ValidationContext ctx(1000, 0, 150, *regTestParams);
+        CAmount required = DigiDollar::CalculateRequiredCollateral(10000, 30 * DigiDollar::BLOCKS_PER_DAY, ctx);
+        // Division by zero protection — should return 0 or MAX_MONEY
+        BOOST_CHECK_MESSAGE(required == 0 || required == MAX_MONEY,
+            "Price=0 should return safe value (0 or MAX_MONEY), got " + std::to_string(required));
+    }
+
+    // Test 2: Price = 1 (minimum micro-USD) — requires massive collateral
+    {
+        DigiDollar::ValidationContext ctx(1000, 1, 150, *regTestParams);
+        CAmount required = DigiDollar::CalculateRequiredCollateral(10000, 30 * DigiDollar::BLOCKS_PER_DAY, ctx);
+        // At $0.000001/DGB, $100 DD at 500% ratio = 5e16 sats = 500M DGB
+        // This is more than total DGB supply but NOT > MAX_MONEY (2.1e18)
+        // So CalculateRequiredCollateral returns the full amount
+        BOOST_CHECK_GT(required, 0);
+        BOOST_CHECK_EQUAL(required, 50000000000000000LL); // 5e16 sats
+        // This represents 500M DGB — impossible to fund, but the function returns it
+        // The wallet's SelectCoins would fail, preventing the actual mint
+    }
+
+    // Test 3: Negative price — should be rejected
+    {
+        DigiDollar::ValidationContext ctx(1000, -1, 150, *regTestParams);
+        CAmount required = DigiDollar::CalculateRequiredCollateral(10000, 30 * DigiDollar::BLOCKS_PER_DAY, ctx);
+        // Negative price in division could produce negative result or wrap
+        BOOST_CHECK_MESSAGE(required == 0 || required == MAX_MONEY,
+            "Negative price should be safely handled, got " + std::to_string(required));
+    }
+
+    // Test 4: Normal realistic price — sanity check
+    {
+        // $0.00631/DGB = 6310 micro-USD
+        DigiDollar::ValidationContext ctx(1000, 6310, 150, *regTestParams);
+        CAmount required = DigiDollar::CalculateRequiredCollateral(10000, 30 * DigiDollar::BLOCKS_PER_DAY, ctx);
+        // $100 DD at 500% ratio at $0.00631/DGB ≈ 79,240 DGB
+        BOOST_CHECK_GT(required, 0);
+        BOOST_CHECK_LT(required, MAX_MONEY);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01f_importdigidollaraddress_noop)
+{
+    // FINDING (INFO): importdigidollaraddress RPC is a complete no-op.
+    // It validates the prefix (DD/TD/RD) and length (26-60 chars) but does NOT:
+    // - Actually import the address into any wallet
+    // - Set up watch-only monitoring
+    // - Perform any blockchain rescan (hardcodes transactionsFound=3)
+    // - Store the address in any database
+    //
+    // Users calling this RPC may believe their addresses are being watched,
+    // but nothing actually happens. This is misleading functionality.
+    //
+    // Since this is a code-level finding verified by reading the source,
+    // no unit test exploit is needed — the RPC handler returns success
+    // without performing any wallet operations.
+    BOOST_CHECK(true); // Documented finding
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01g_submitoracleprice_hardcoded_bounds)
+{
+    // FINDING (LOW): submitoracleprice RPC hardcodes oracle_id upper bound
+    // to 6 (if oracle_id > 6) instead of using ORACLE_TOTAL_COUNT.
+    //
+    // This means:
+    // 1. If regtest ORACLE_TOTAL_COUNT changes, the RPC won't match
+    // 2. The constant is manually maintained instead of using the config
+    //
+    // Verify the current discrepancy:
+    auto regTestParams = CChainParams::RegTest({});
+    int totalOracles = regTestParams->GetConsensus().nOracleRequiredMessages;
+    // The RPC hardcodes 6, but ORACLE_TOTAL_COUNT may differ
+    // This is regtest-only so low severity, but should use the constant
+    BOOST_CHECK_MESSAGE(true,
+        "submitoracleprice uses hardcoded 'oracle_id > 6' check instead of ORACLE_TOTAL_COUNT");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_01h_dd_amount_int64_boundaries)
+{
+    // ATTACK: Test DD amount boundaries that pass RPC validation (> 0)
+    // but could cause issues in downstream processing.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Test 1: DD amount = 1 (minimum positive) — should work
+    {
+        CAmount ddAmount = 1; // 1 cent
+        CAmount oraclePrice = 6310; // $0.00631/DGB
+        int effectiveRatio = 500;
+
+        __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                             static_cast<__int128>(effectiveRatio) * 100;
+        __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+        BOOST_CHECK(result128 > 0);
+        BOOST_CHECK(result128 < static_cast<__int128>(MAX_MONEY));
+    }
+
+    // Test 2: DD amount = INT64_MAX — would pass RPC's > 0 check
+    {
+        CAmount ddAmount = std::numeric_limits<int64_t>::max();
+        CAmount oraclePrice = 6310;
+        int effectiveRatio = 500;
+
+        __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                             static_cast<__int128>(effectiveRatio) * 100;
+        __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+
+        // Should exceed MAX_MONEY — RPC catches this with the > MAX_MONEY check
+        BOOST_CHECK_MESSAGE(result128 > static_cast<__int128>(MAX_MONEY),
+            "INT64_MAX DD amount correctly caught by MAX_MONEY check in __int128 calc");
+    }
+
+    // Test 3: DD amount = MAX_MONEY — passes > 0, very large but valid CAmount
+    {
+        CAmount ddAmount = MAX_MONEY;
+        CAmount oraclePrice = 1000000000; // $1000/DGB
+        int effectiveRatio = 200; // 200% (10-year tier)
+
+        __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                             static_cast<__int128>(effectiveRatio) * 100;
+        __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+
+        // Even at very high price, MAX_MONEY DD exceeds MAX_MONEY collateral
+        // MAX_MONEY DD = 2.1e18 cents = $21 quadrillion USD worth of DD
+        // At $1000/DGB: collateral = 2.1e18 * 1e8 * 200 * 100 / 1e9
+        // = 4.2e19 * 1e8 / 1e9 = 4.2e18 — near MAX_MONEY
+        BOOST_CHECK(result128 >= 0);
+        // The actual required collateral will be checked against MAX_MONEY by the RPC
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

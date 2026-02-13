@@ -32,6 +32,7 @@
 #include <crypto/sha256.h>
 #include <util/strencodings.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/exchange.h>
 #include <primitives/oracle.h>
 #include <protocol.h>
 #include <test/util/setup_common.h>
@@ -7271,6 +7272,334 @@ BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_hardcodes_epoch_zero)
         "on-chain validation once >15 oracles exist on mainnet.");
 
     manager.Clear();
+}
+
+// =============================================================================
+// T3-06: Exchange Price Source Manipulation
+// =============================================================================
+
+/**
+ * T3-06a: ATTACK — Exploit min_required_sources=2 default to bypass outlier filtering
+ *
+ * The header default for min_required_sources is 2, while node.cpp overrides to 3.
+ * If ANY code path creates MultiExchangeAggregator without SetMinRequiredSources(3),
+ * it runs with 2 sources. FilterOutliers() requires >= 3 data points, so with exactly
+ * 2 sources, NO outlier filtering occurs. An attacker controlling 1 of 2 remaining
+ * exchanges gets 50% influence on the "median" (which is the average of 2 values).
+ *
+ * This test verifies the header default and documents the foot-gun.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06a_min_sources_default_bypasses_outlier_filter)
+{
+    using namespace ExchangeAPI;
+    MultiExchangeAggregator aggregator;
+    // DO NOT call SetMinRequiredSources — use header default
+
+    // Simulate: attacker DDoS'd 4 of 6 exchanges, compromised 1 of remaining 2
+    // Real price: $0.006 (6000 μUSD), attacker price: $0.060 (60000 μUSD) — 10x
+    std::vector<MultiExchangeAggregator::ExchangePrice> two_prices = {
+        {"Legit", 6000, GetTime(), true, 1.0},     // Real: $0.006
+        {"Compromised", 60000, GetTime(), true, 1.0}, // Fake: $0.060 (10x)
+    };
+
+    // FilterOutliers with < 3 data points returns ALL prices unchanged (no filtering!)
+    auto filtered = aggregator.FilterOutliers(two_prices);
+    BOOST_CHECK_EQUAL(filtered.size(), 2); // Both kept — no outlier filtering!
+
+    // Median of 2 prices = average = (6000 + 60000) / 2 = 33000 ($0.033)
+    // That's 5.5x the real price — attacker gets massive under-collateralization
+    CAmount median = aggregator.CalculateMedianPrice(two_prices);
+    BOOST_CHECK_EQUAL(median, 33000); // 5.5x real price — EXPLOITABLE if min_required=2
+
+    // DEFENSE VERIFICATION: When SetMinRequiredSources(3) is used, 2 sources = reject
+    // The actual node.cpp code does call SetMinRequiredSources(3), so this attack
+    // fails in production. But the header default of 2 is a dangerous foot-gun.
+    // Any new call site that forgets SetMinRequiredSources(3) is vulnerable.
+}
+
+/**
+ * T3-06b: ATTACK — Weighted median is dead code (weights ignored)
+ *
+ * CalculateWeightedMedian() just calls CalculateMedianPrice(), completely ignoring
+ * the weight parameter. Binance (weight 1.5, highest volume exchange) has identical
+ * influence to Poloniex (weight 0.8, low volume). This means exchange weight
+ * assignments are security theater — they have zero effect on the final price.
+ *
+ * If a future developer enables use_weighted_median thinking it provides better
+ * protection against low-volume exchange manipulation, they'd be wrong.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06b_weighted_median_ignores_weights)
+{
+    using namespace ExchangeAPI;
+    MultiExchangeAggregator aggregator;
+
+    // Create prices where weights SHOULD matter but DON'T
+    // High-weight exchange (Binance) says $0.006, low-weight (Poloniex) says $0.010
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Binance", 6000, GetTime(), true, 10.0},    // Weight 10x
+        {"KuCoin", 6100, GetTime(), true, 1.0},       // Weight 1x
+        {"Poloniex", 10000, GetTime(), true, 0.1},    // Weight 0.1x (should barely count)
+    };
+
+    CAmount weighted = aggregator.CalculateWeightedMedian(prices);
+    CAmount unweighted = aggregator.CalculateMedianPrice(prices);
+
+    // BUG: Weighted median returns EXACTLY the same as unweighted median
+    // Poloniex with 0.1x weight has EQUAL influence to Binance with 10x weight
+    BOOST_CHECK_EQUAL(weighted, unweighted); // Dead code — weights completely ignored
+
+    // The median of [6000, 6100, 10000] sorted is 6100 regardless of weights
+    BOOST_CHECK_EQUAL(weighted, 6100);
+
+    // In a correct weighted median, Binance (10x weight) should pull result toward 6000
+    // But it doesn't. This is pure security theater.
+}
+
+/**
+ * T3-06c: ATTACK — ConvertToMicroUSD truncation creates cross-platform disagreement
+ *
+ * static_cast<CAmount>(price_usd * 1000000) truncates toward zero instead of rounding.
+ * For borderline values, different oracle nodes on different platforms (ARM vs x86)
+ * may compute slightly different intermediate doubles due to FPU/compiler differences,
+ * causing 1-μUSD disagreement that could affect oracle consensus.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06c_convert_truncation_bias)
+{
+    using namespace ExchangeAPI;
+    BinanceFetcher fetcher; // Just to access ConvertToMicroUSD
+
+    // Test: price that creates truncation loss
+    // $0.0062725 * 1000000 = 6272.5 → truncated to 6272 (loses 0.5 μUSD)
+    CAmount result1 = fetcher.ConvertToMicroUSD(0.0062725);
+    // Due to IEEE 754, 0.0062725 * 1000000 may be 6272.4999... or 6272.5000...
+    // static_cast truncates: floor for positive values
+    BOOST_CHECK(result1 == 6272 || result1 == 6273); // Platform-dependent!
+
+    // Test: exact representation
+    CAmount result2 = fetcher.ConvertToMicroUSD(0.006272);
+    BOOST_CHECK_EQUAL(result2, 6272); // Exact
+
+    // Test: systematic truncation — 0.9999999 should ideally round to 1000000 but truncates
+    CAmount result3 = fetcher.ConvertToMicroUSD(0.9999999);
+    // 0.9999999 * 1000000 = 999999.9 → truncated to 999999
+    // Should be 1000000 if properly rounded
+    BOOST_CHECK(result3 == 999999 || result3 == 1000000); // Truncation vs rounding
+
+    // FINDING (LOW): Boundary — exactly $100 passes the > 100 check
+    CAmount result4 = fetcher.ConvertToMicroUSD(100.0);
+    // if (price_usd <= 0 || price_usd > 100) return 0;
+    // 100.0 > 100 is FALSE, so 100.0 passes the check!
+    // This means $100/DGB is ACCEPTED — extremely unrealistic for DGB
+    BOOST_CHECK_EQUAL(result4, 100000000); // $100 exactly accepted (100M μUSD)
+}
+
+/**
+ * T3-06d: ATTACK — Inconsistent price range caps across fetchers
+ *
+ * ConvertToMicroUSD base function: max $100
+ * Per-fetcher validation (KuCoin, Gate.io, HTX, Crypto.com): max $10
+ * No per-fetcher validation (Binance, CoinGecko): no additional cap
+ *
+ * If DGB price reaches $15, Binance and CoinGecko report it but
+ * KuCoin/Gate.io/HTX/Crypto.com reject it → only 2 sources remain.
+ * With min_required=3 in node.cpp, oracle fails entirely.
+ * With min_required=2 (default header), no outlier filtering on 2 sources.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06d_inconsistent_price_range_caps)
+{
+    using namespace ExchangeAPI;
+
+    // Verify base ConvertToMicroUSD accepts up to $100
+    BinanceFetcher base_fetcher;
+    CAmount high_price = base_fetcher.ConvertToMicroUSD(15.0); // $15/DGB
+    BOOST_CHECK_EQUAL(high_price, 15000000); // Base accepts it
+
+    CAmount very_high = base_fetcher.ConvertToMicroUSD(99.99);
+    BOOST_CHECK(very_high > 0); // Base accepts $99.99
+
+    CAmount too_high = base_fetcher.ConvertToMicroUSD(100.01);
+    BOOST_CHECK_EQUAL(too_high, 0); // Base rejects > $100
+
+    // The per-fetcher range checks (in FetchPrice) use $0.0001 to $10 range
+    // for KuCoin, Gate.io, HTX, Crypto.com. If DGB reaches $15:
+    // - Binance: returns 15000000 (no per-fetcher check beyond ConvertToMicroUSD)
+    // - CoinGecko: returns 15000000 (no per-fetcher check)
+    // - KuCoin: returns 0 (per-fetcher rejects > $10 = 10000000 μUSD)
+    // - Gate.io: returns 0
+    // - HTX: returns 0
+    // - Crypto.com: returns 0
+    // Only 2 valid sources → fails min_required_sources=3 → oracle returns 0
+    // Result: Oracle completely breaks if DGB exceeds $10
+    // FINDING (LOW): 4 of 6 fetchers have $10 cap, 2 have $100 cap.
+    // All should use consistent range, or range should be configurable.
+}
+
+/**
+ * T3-06e: ATTACK — 3-of-6 exchange compromise with prices inside outlier threshold
+ *
+ * An attacker who compromises 3 of 6 exchanges and sets prices just inside the
+ * 10% outlier threshold can manipulate the median by ~5%.
+ * This is within designed tolerance — the test documents expected behavior.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06e_subtle_price_manipulation_within_threshold)
+{
+    using namespace ExchangeAPI;
+    MultiExchangeAggregator aggregator;
+
+    // Real price: $0.006 (6000 μUSD)
+    // Attacker controls 3 exchanges, sets prices to $0.0066 (6600 μUSD) — exactly 10% above
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Real1", 6000, GetTime(), true, 1.0},
+        {"Real2", 6010, GetTime(), true, 1.0},
+        {"Real3", 6020, GetTime(), true, 1.0},
+        {"Fake1", 6600, GetTime(), true, 1.0},  // +10% above real
+        {"Fake2", 6600, GetTime(), true, 1.0},
+        {"Fake3", 6600, GetTime(), true, 1.0},
+    };
+
+    auto filtered = aggregator.FilterOutliers(prices);
+
+    // Sorted: [6000, 6010, 6020, 6600, 6600, 6600]
+    // Median of 6: (6020 + 6600) / 2 = 6310
+    // Threshold: 6310 * 0.10 = 631
+    // All deviations from 6310 are < 631, so ALL pass filter
+    BOOST_CHECK_EQUAL(filtered.size(), 6); // All kept!
+
+    CAmount median = aggregator.CalculateMedianPrice(filtered);
+    BOOST_CHECK_EQUAL(median, 6310); // ~5% above real price
+
+    // With real price 6000 and oracle reporting 6310, collateral requirement is
+    // ~5% lower than it should be. Not catastrophic but allows slight under-collateralization.
+    // CONCLUSION: With 50% exchange compromise and prices within 10% band,
+    // attacker achieves ~5% price manipulation. This is expected — no statistical
+    // filter can protect against 50% compromise. Defense holds by design.
+}
+
+/**
+ * T3-06f: ATTACK — ConvertToMicroUSD special float values
+ *
+ * Test that special floating-point values (inf, nan, negative zero, subnormals)
+ * are handled correctly and don't produce unexpected μUSD values.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06f_special_float_values)
+{
+    using namespace ExchangeAPI;
+    BinanceFetcher fetcher;
+
+    // Infinity
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(std::numeric_limits<double>::infinity()), 0);
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(-std::numeric_limits<double>::infinity()), 0);
+
+    // NaN
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(std::numeric_limits<double>::quiet_NaN()), 0);
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(std::numeric_limits<double>::signaling_NaN()), 0);
+
+    // Negative zero — should be caught by <= 0 check
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(-0.0), 0);
+
+    // Negative price
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(-1.0), 0);
+
+    // Zero
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(0.0), 0);
+
+    // Subnormal (denormalized) — extremely small but nonzero
+    double subnormal = std::numeric_limits<double>::denorm_min();
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(subnormal), 0); // subnormal * 1e6 still ≈ 0
+
+    // String special values via stod
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD("inf"), 0);
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD("nan"), 0);
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD("-1.0"), 0);
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(""), 0);
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD("not_a_number"), 0);
+    BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD("1e308"), 0); // overflow to inf
+
+    // Defense holds: All special values correctly return 0
+}
+
+/**
+ * T3-06g: ATTACK — ExtractJsonValue homebrew parser injection
+ *
+ * ExtractJsonValue is a naive string search. Test if duplicate keys or
+ * nested objects can trick it into returning wrong values.
+ * Note: This function is dead code in production (all fetchers use UniValue)
+ * but could be accidentally used in future code.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06g_extract_json_value_injection)
+{
+    using namespace ExchangeAPI;
+    BinanceFetcher fetcher;
+
+    // Duplicate key — returns FIRST match
+    std::string dupeJson = R"({"price":"99.99","other":"data","price":"0.006"})";
+    std::string val = fetcher.ExtractJsonValue(dupeJson, "price");
+    BOOST_CHECK_EQUAL(val, "99.99"); // First match wins — could be wrong
+
+    // Key within a string value — backslash escapes prevent false match here
+    // But if a malformed JSON response lacks proper escaping, parser can be tricked
+    std::string nestedJson = R"({"data":"has \"price\":\"99.99\" inside","price":"0.006"})";
+    val = fetcher.ExtractJsonValue(nestedJson, "price");
+    // Backslash-escaped quotes break the byte pattern match, so correct key is found
+    BOOST_CHECK_EQUAL(val, "0.006"); // Happens to work due to escape characters
+
+    // However, with unescaped embedded key (malformed JSON from compromised exchange):
+    std::string malformedJson = "{\"junk\":\"x\",\"price\":\"99.99\",\"real\":\"data\",\"price\":\"0.006\"}";
+    val = fetcher.ExtractJsonValue(malformedJson, "price");
+    // Naive parser returns FIRST match — attacker-controlled value
+    BOOST_CHECK_EQUAL(val, "99.99"); // First match wins — could be attacker data
+
+    // Missing key
+    val = fetcher.ExtractJsonValue(R"({"other":"value"})", "price");
+    BOOST_CHECK_EQUAL(val, "");
+
+    // Empty JSON
+    val = fetcher.ExtractJsonValue("", "price");
+    BOOST_CHECK_EQUAL(val, "");
+
+    // CONCLUSION: ExtractJsonValue is a naive, exploitable parser.
+    // Defense holds in production: all fetchers use UniValue, not ExtractJsonValue.
+    // RECOMMENDATION: Remove dead ExtractJsonValue to reduce attack surface.
+}
+
+/**
+ * T3-06h: ATTACK — Outlier filter with adversarial price distribution
+ *
+ * Test that an attacker who controls fewer than 50% of exchanges
+ * cannot meaningfully shift the median even with optimal positioning.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_06h_minority_compromise_median_resilience)
+{
+    using namespace ExchangeAPI;
+    MultiExchangeAggregator aggregator;
+
+    // 2-of-6 compromise: attacker sets 2 prices to maximize impact
+    // Strategy: set both to just under 10% above median to avoid filtering
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Real1", 6000, GetTime(), true, 1.0},
+        {"Real2", 6010, GetTime(), true, 1.0},
+        {"Real3", 6020, GetTime(), true, 1.0},
+        {"Real4", 6030, GetTime(), true, 1.0},
+        {"Fake1", 6650, GetTime(), true, 1.0},  // ~10% above cluster
+        {"Fake2", 6650, GetTime(), true, 1.0},
+    };
+
+    auto filtered = aggregator.FilterOutliers(prices);
+
+    // Sorted: [6000, 6010, 6020, 6030, 6650, 6650]
+    // Median: (6020 + 6030) / 2 = 6025
+    // Threshold: 6025 * 0.10 = 602.5 → 602
+    // 6650 - 6025 = 625 > 602 → FILTERED!
+    // Both fakes get filtered
+    BOOST_CHECK_EQUAL(filtered.size(), 4);
+
+    CAmount median = aggregator.CalculateMedianPrice(filtered);
+    // Median of [6000, 6010, 6020, 6030]: (6010 + 6020) / 2 = 6015
+    BOOST_CHECK_EQUAL(median, 6015);
+
+    // With 2-of-6 compromise, price manipulation is ZERO — defense holds!
+    // Attacker would need to keep fake prices within ±10% of real median
+    // to avoid filtering, but then their impact on the median is minimal.
 }
 
 BOOST_AUTO_TEST_SUITE_END()

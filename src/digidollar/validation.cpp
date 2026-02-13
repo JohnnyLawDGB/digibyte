@@ -1695,10 +1695,68 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
     // Subtract fee input values to get NET collateral release
     // Fee inputs are non-collateral, non-DD inputs (inputs with nValue > 0 after input 0)
     // Input 0 = collateral, then DD inputs (nValue=0), then fee inputs (nValue>0)
+    //
+    // SECURITY [T2-06b]: Verify that "fee inputs" are NOT collateral UTXOs from other
+    // DD mint transactions. Without this check, an attacker can include a second
+    // collateral UTXO as a "fee input" — its value gets subtracted from totalDGBRelease,
+    // making the net release appear correct. But the second collateral's DGB is freed
+    // without burning its corresponding DD, leaving those DD tokens unbacked.
+    //
+    // Check: look up each non-zero-value input's creating transaction. If it's a DD mint,
+    // reject — each collateral must be redeemed separately with its own DD burn.
     CAmount totalFeeInputs = 0;
     for (size_t i = 1; i < tx.vin.size(); ++i) {
         Coin coin;
         if (ctx.coins->GetCoin(tx.vin[i].prevout, coin) && coin.out.nValue > 0) {
+            // This input has DGB value — verify it's NOT from a DD mint (collateral)
+            bool isCollateral = false;
+
+            // Helper: check if a transaction is a DD mint by inspecting OP_RETURN
+            auto isMintTx = [](const CTransactionRef& prev_tx) -> bool {
+                if (!prev_tx) return false;
+                // Check version marker
+                if ((prev_tx->nVersion & 0xFFFF) != 0x0770) return false;
+                // Check type field = MINT (upper byte = 0x01)
+                if (((prev_tx->nVersion >> 24) & 0xFF) != 0x01) return false;
+                // Verify DD OP_RETURN exists with type 1 (MINT)
+                for (const auto& vout : prev_tx->vout) {
+                    if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
+                    CScript::const_iterator pc = vout.scriptPubKey.begin();
+                    opcodetype opcode;
+                    std::vector<unsigned char> data;
+                    if (!vout.scriptPubKey.GetOp(pc, opcode)) continue;
+                    if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+                    if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') return true;
+                }
+                return false;
+            };
+
+            // Try txindex
+            if (g_txindex) {
+                uint256 block_hash;
+                CTransactionRef prev_tx;
+                if (g_txindex->FindTx(tx.vin[i].prevout.hash, block_hash, prev_tx)) {
+                    isCollateral = isMintTx(prev_tx);
+                }
+            }
+
+            // Try block-db lookup (universal fallback)
+            if (!isCollateral && ctx.txLookup) {
+                CTransactionRef prev_tx;
+                if (ctx.txLookup(tx.vin[i].prevout.hash, coin.nHeight, prev_tx)) {
+                    isCollateral = isMintTx(prev_tx);
+                }
+            }
+
+            if (isCollateral) {
+                LogPrintf("DigiDollar: SECURITY [T2-06b] - Input %d is collateral from another DD mint "
+                          "(txid: %s, value: %lld sats). Cannot include as fee input — "
+                          "each collateral must be redeemed separately with its own DD burn.\n",
+                          i, tx.vin[i].prevout.hash.ToString(), (long long)coin.out.nValue);
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-collateral-as-fee-input",
+                    strprintf("Input %d is collateral from another DD mint — must redeem separately", i));
+            }
+
             totalFeeInputs += coin.out.nValue;
         }
     }

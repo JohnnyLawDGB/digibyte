@@ -5,7 +5,10 @@ $(package)_file_name=$(package)-$($(package)_version).tar.gz
 $(package)_sha256_hash=cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8
 
 define $(package)_set_vars
-  $(package)_config_env=AR="$($(package)_ar)" ARFLAGS=$($(package)_arflags) RANLIB="$($(package)_ranlib)" CC="$($(package)_cc)"
+  # Do NOT export ARFLAGS: $(package)_arflags is undefined, so it expands to
+  # empty. OpenSSL's Configure reads env vars when CFLAGS are VAR=value; an
+  # empty ARFLAGS overrides the target default "r", causing ar failures.
+  $(package)_config_env=AR="$($(package)_ar)" RANLIB="$($(package)_ranlib)" CC="$($(package)_cc)"
   $(package)_config_env_android=ANDROID_NDK_ROOT=$(host_prefix)/native
   $(package)_config_opts=no-capieng no-dso no-dtls1 no-ec_nistp_64_gcc_128 no-gost
   $(package)_config_opts+=no-md2 no-rc5 no-rdrand no-rfc3779 no-sctp no-shared

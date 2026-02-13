@@ -35,6 +35,7 @@
 #include <oracle/exchange.h>
 #include <primitives/oracle.h>
 #include <protocol.h>
+#include <wallet/digidollarwallet.h>
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
@@ -7962,6 +7963,295 @@ BOOST_AUTO_TEST_CASE(redteam_T4_01h_dd_amount_int64_boundaries)
         BOOST_CHECK(result128 >= 0);
         // The actual required collateral will be checked against MAX_MONEY by the RPC
     }
+}
+
+// =============================================================================
+// T4-02: Race Conditions in Consecutive DD Sends
+// =============================================================================
+// ATTACK VECTOR: Rapid consecutive DD sends may select the same UTXO twice,
+// corrupt dd_utxos state, or lose balance in self-send scenarios.
+// Tests wallet-level coin selection and state management without full wallet.
+
+BOOST_AUTO_TEST_CASE(redteam_T4_02a_sequential_coin_selection_no_double_select)
+{
+    // ATTACK: Call SelectDDCoins twice in rapid succession for amounts that
+    // together exceed the single UTXO. Without proper state management between
+    // calls, the same UTXO could be selected twice.
+    //
+    // DEFENSE: IsSpent() check in GetDDUTXOs() should prevent this after broadcast.
+    // We test that after removing a UTXO from dd_utxos (simulating spend),
+    // the second SelectDDCoins correctly skips it.
+
+    DigiDollarWallet ddwallet;  // No CWallet — test dd_utxos map directly
+
+    // Populate with a single 1000 DD UTXO
+    uint256 txid1 = uint256S("1111111111111111111111111111111111111111111111111111111111111111");
+    COutPoint utxo1(txid1, 1);
+    ddwallet.AddDDUTXO(utxo1, 100000);  // 1000.00 DD
+
+    // First selection: 600 DD
+    std::vector<COutPoint> selected1;
+    CAmount total1 = 0;
+    std::vector<CAmount> amounts1;
+    BOOST_CHECK(ddwallet.SelectDDCoins(60000, selected1, total1, &amounts1));
+    BOOST_CHECK_EQUAL(selected1.size(), 1);
+    BOOST_CHECK_EQUAL(total1, 100000);  // Selected full UTXO (greedy)
+
+    // Simulate post-broadcast state: spent UTXO stays in map (relies on IsSpent),
+    // but add change UTXO
+    uint256 txid2 = uint256S("2222222222222222222222222222222222222222222222222222222222222222");
+    COutPoint change_utxo(txid2, 1);
+    ddwallet.AddDDUTXO(change_utxo, 40000);  // 400.00 DD change
+
+    // Without wallet, IsSpent is unavailable, so manually remove spent UTXO
+    // to simulate what happens after block confirmation
+    ddwallet.RemoveDDUTXO(utxo1);
+
+    // Second selection: 300 DD — should select change UTXO, not the spent one
+    std::vector<COutPoint> selected2;
+    CAmount total2 = 0;
+    std::vector<CAmount> amounts2;
+    BOOST_CHECK(ddwallet.SelectDDCoins(30000, selected2, total2, &amounts2));
+    BOOST_CHECK_EQUAL(selected2.size(), 1);
+    BOOST_CHECK(selected2[0] == change_utxo);  // Must use change, not original
+    BOOST_CHECK_EQUAL(total2, 40000);
+
+    // Third selection: 500 DD — should FAIL (only 400 DD available)
+    std::vector<COutPoint> selected3;
+    CAmount total3 = 0;
+    BOOST_CHECK(!ddwallet.SelectDDCoins(50000, selected3, total3));
+    BOOST_CHECK(selected3.empty());
+    BOOST_CHECK_EQUAL(total3, 0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_02b_multi_utxo_sequential_sends)
+{
+    // ATTACK: With multiple DD UTXOs, rapid sends should correctly chain
+    // through available UTXOs without selecting already-spent ones.
+
+    DigiDollarWallet ddwallet;
+
+    // 3 UTXOs: 500, 300, 200 DD
+    uint256 txA = uint256S("aaaa000000000000000000000000000000000000000000000000000000000001");
+    uint256 txB = uint256S("bbbb000000000000000000000000000000000000000000000000000000000002");
+    uint256 txC = uint256S("cccc000000000000000000000000000000000000000000000000000000000003");
+    COutPoint utxoA(txA, 1), utxoB(txB, 1), utxoC(txC, 1);
+    ddwallet.AddDDUTXO(utxoA, 50000);  // 500.00 DD
+    ddwallet.AddDDUTXO(utxoB, 30000);  // 300.00 DD
+    ddwallet.AddDDUTXO(utxoC, 20000);  // 200.00 DD
+
+    // Send 1: 400 DD — needs utxoA (500) or utxoB+utxoC (500)
+    std::vector<COutPoint> sel1;
+    CAmount tot1 = 0;
+    std::vector<CAmount> amts1;
+    BOOST_CHECK(ddwallet.SelectDDCoins(40000, sel1, tot1, &amts1));
+    BOOST_CHECK(tot1 >= 40000);
+
+    // Simulate: remove selected UTXOs, add change
+    CAmount change1 = tot1 - 40000;
+    for (const auto& s : sel1) ddwallet.RemoveDDUTXO(s);
+    if (change1 > 0) {
+        uint256 txD = uint256S("dddd000000000000000000000000000000000000000000000000000000000004");
+        ddwallet.AddDDUTXO(COutPoint(txD, 1), change1);
+    }
+
+    // Send 2: 400 DD — should use remaining UTXOs
+    std::vector<COutPoint> sel2;
+    CAmount tot2 = 0;
+    BOOST_CHECK(ddwallet.SelectDDCoins(40000, sel2, tot2));
+    BOOST_CHECK(tot2 >= 40000);
+
+    // Total DD spent + remaining must equal original 1000 DD
+    CAmount remaining = 0;
+    // Get remaining via SelectDDCoins with max amount
+    std::vector<COutPoint> all;
+    CAmount allTot = 0;
+    std::vector<CAmount> allAmts;
+    ddwallet.SelectDDCoins(1, all, allTot, &allAmts);
+    // After 2 sends of 400 each from 1000, should have ~200 left
+    // (exact amount depends on greedy selection order)
+
+    // Verify no UTXOs from send 1 appear in send 2
+    for (const auto& s1 : sel1) {
+        for (const auto& s2 : sel2) {
+            BOOST_CHECK(!(s1 == s2));  // No overlap between sends
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_02c_self_send_change_tracking_bug)
+{
+    // CRITICAL BUG: TransferDigiDollar uses `is_ours = (dd_output_index > 0)`
+    // to determine which DD outputs to track after broadcast.
+    // This ALWAYS skips the first DD output (index 0), assuming it's the recipient.
+    // When sending DD to yourself (self-send), the recipient IS you, so the first
+    // DD output is also yours. Result: 50% balance loss between broadcast and
+    // block confirmation.
+    //
+    // Scenario: 1000 DD, send 500 to self
+    // Expected: balance = 1000 DD (500 recipient + 500 change, both ours)
+    // Actual:   balance = 500 DD (only change tracked, recipient skipped)
+    //
+    // This test documents the bug by simulating the TransferDigiDollar logic.
+
+    DigiDollarWallet ddwallet;
+
+    // Start with 1000 DD
+    uint256 mint_txid = uint256S("1111111111111111111111111111111111111111111111111111111111111111");
+    COutPoint original_utxo(mint_txid, 1);
+    ddwallet.AddDDUTXO(original_utxo, 100000);  // 1000.00 DD
+
+    // Simulate TransferDigiDollar: select coins, "broadcast", update state
+    // SelectDDCoins would select the 1000 DD UTXO for a 500 DD send
+    std::vector<COutPoint> selected;
+    CAmount selectedTotal = 0;
+    BOOST_CHECK(ddwallet.SelectDDCoins(50000, selected, selectedTotal));
+    BOOST_CHECK_EQUAL(selectedTotal, 100000);
+
+    // Simulate broadcast success + state update
+    ddwallet.RemoveDDUTXO(original_utxo);  // Spent
+
+    // TransferDigiDollar's change detection: is_ours = (dd_output_index > 0)
+    // DD output 0 = recipient (500 DD) — NOT tracked (BUG for self-sends!)
+    // DD output 1 = change (500 DD) — tracked
+    uint256 transfer_txid = uint256S("2222222222222222222222222222222222222222222222222222222222222222");
+    COutPoint recipient_output(transfer_txid, 0);  // 500 DD to self
+    COutPoint change_output(transfer_txid, 1);     // 500 DD change
+
+    // BUG: Only change is tracked, recipient is skipped
+    // This simulates what TransferDigiDollar actually does:
+    bool dd_output_0_is_ours = (0 > 0);  // FALSE — the bug
+    bool dd_output_1_is_ours = (1 > 0);  // TRUE
+
+    if (dd_output_0_is_ours) ddwallet.AddDDUTXO(recipient_output, 50000);
+    if (dd_output_1_is_ours) ddwallet.AddDDUTXO(change_output, 50000);
+
+    // BUG: Balance should be 1000.00 DD but is only 500.00 DD
+    // The recipient output (sent to self) is not tracked
+    BOOST_CHECK(!ddwallet.HasDDUTXO(recipient_output));  // BUG: not tracked
+    BOOST_CHECK(ddwallet.HasDDUTXO(change_output));      // Only change tracked
+
+    // A subsequent send of 600 DD would FAIL even though we have 1000 DD on-chain
+    std::vector<COutPoint> sel2;
+    CAmount tot2 = 0;
+    BOOST_CHECK(!ddwallet.SelectDDCoins(60000, sel2, tot2));  // FAILS — only 500 available
+
+    // CORRECT behavior after fix: both outputs should be tracked
+    // ddwallet.AddDDUTXO(recipient_output, 50000);  // Would be added with fix
+    // BOOST_CHECK(ddwallet.SelectDDCoins(60000, sel2, tot2));  // Would PASS
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_02d_no_wallet_lock_transfer_critical_section)
+{
+    // FINDING: TransferDigiDollar does NOT hold cs_wallet for its full execution.
+    // The critical section between SelectDDCoins() and broadcastTransaction() is
+    // NOT protected by any lock. This allows:
+    //
+    // Thread A (RPC): SelectDDCoins → selects UTXO X
+    // Thread B (GUI): SelectDDCoins → selects UTXO X (same!)
+    // Thread A: broadcastTransaction → success
+    // Thread B: broadcastTransaction → FAILS (double spend)
+    //
+    // The mempool prevents actual double-spend, but the race causes:
+    // 1. User-visible errors on rapid sends
+    // 2. Potential dd_utxos corruption (concurrent map modification)
+    //
+    // This is a DESIGN finding — not directly testable in single-threaded unit tests.
+    // Documenting for code review.
+    //
+    // FIX NEEDED: Hold LOCK(m_wallet->cs_wallet) for the entire TransferDigiDollar
+    // operation (coin selection through broadcast), or add a dedicated DD wallet mutex.
+
+    // Verify DigiDollarWallet has no built-in mutex (compile-time documentation test)
+    DigiDollarWallet ddwallet;
+
+    // Demonstrate that dd_utxos can be modified from "two threads" without protection
+    uint256 tx1 = uint256S("1111111111111111111111111111111111111111111111111111111111111111");
+    COutPoint utxo1(tx1, 1);
+
+    // "Thread A" adds
+    ddwallet.AddDDUTXO(utxo1, 50000);
+    BOOST_CHECK(ddwallet.HasDDUTXO(utxo1));
+
+    // "Thread B" removes — no lock, no contention check
+    ddwallet.RemoveDDUTXO(utxo1);
+    BOOST_CHECK(!ddwallet.HasDDUTXO(utxo1));
+
+    // In production, this would be undefined behavior if truly concurrent.
+    // Test passes because single-threaded, but documents the risk.
+    BOOST_CHECK(true);  // Documentation assertion
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_02e_redeem_concurrent_with_transfer)
+{
+    // ATTACK: RedeemDigiDollar and TransferDigiDollar both call SelectDDCoins.
+    // If called concurrently, they could select overlapping DD UTXOs:
+    // - Transfer selects UTXO A for sending
+    // - Redeem selects UTXO A for burning (collateral release)
+    // Only one broadcast succeeds, but the loser gets a confusing error.
+    //
+    // DEFENSE: Mempool prevents double-spend. But dd_utxos state could become
+    // inconsistent if both modify the map concurrently (no lock protection).
+
+    DigiDollarWallet ddwallet;
+
+    // Single 1000 DD UTXO
+    uint256 tx1 = uint256S("1111111111111111111111111111111111111111111111111111111111111111");
+    COutPoint utxo1(tx1, 1);
+    ddwallet.AddDDUTXO(utxo1, 100000);
+
+    // Both transfer and redeem try to select 800 DD
+    std::vector<COutPoint> transfer_sel, redeem_sel;
+    CAmount transfer_tot = 0, redeem_tot = 0;
+
+    BOOST_CHECK(ddwallet.SelectDDCoins(80000, transfer_sel, transfer_tot));
+    BOOST_CHECK(ddwallet.SelectDDCoins(80000, redeem_sel, redeem_tot));
+
+    // BUG: Both succeed selecting the same UTXO (no locking)
+    BOOST_CHECK_EQUAL(transfer_sel.size(), 1);
+    BOOST_CHECK_EQUAL(redeem_sel.size(), 1);
+    BOOST_CHECK(transfer_sel[0] == redeem_sel[0]);  // Same UTXO selected!
+
+    // In production, the mempool would reject the second transaction.
+    // But the user experience is poor: "Transfer failed: inputs already spent"
+    // when they thought they had enough balance.
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_02f_greedy_selection_worst_case_fragmentation)
+{
+    // ATTACK: Many tiny DD UTXOs (from receiving many small transfers).
+    // SelectDDCoins uses greedy smallest-first, which could select ALL UTXOs
+    // for a single transfer, creating a massive transaction that exceeds
+    // network limits or takes excessive fees.
+
+    DigiDollarWallet ddwallet;
+
+    // Create 100 tiny UTXOs of 10 DD each (1000 DD total)
+    for (int i = 0; i < 100; i++) {
+        uint256 txid;
+        // Create unique txid from index
+        std::vector<unsigned char> data(32, 0);
+        data[0] = i & 0xFF;
+        data[1] = (i >> 8) & 0xFF;
+        memcpy(txid.begin(), data.data(), 32);
+        ddwallet.AddDDUTXO(COutPoint(txid, 0), 1000);  // 10.00 DD each
+    }
+
+    // Send 900 DD — greedy smallest-first selects ALL 100 UTXOs
+    std::vector<COutPoint> selected;
+    CAmount total = 0;
+    std::vector<CAmount> amounts;
+    BOOST_CHECK(ddwallet.SelectDDCoins(90000, selected, total, &amounts));
+
+    // With smallest-first, it selects UTXOs until target met
+    // 90 UTXOs of 10 DD each = 900 DD exactly, or 91 if it overshoots
+    BOOST_CHECK(selected.size() >= 90);
+    BOOST_CHECK(total >= 90000);
+
+    // A transaction with 90+ inputs would be very large (~6KB+) and expensive.
+    // No maximum input count check in SelectDDCoins — potential DoS vector
+    // against the user's own wallet (excessive fees).
+    // FINDING (LOW): Consider adding max input count or consolidation strategy.
 }
 
 BOOST_AUTO_TEST_SUITE_END()

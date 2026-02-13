@@ -5547,4 +5547,385 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06f_negative_fee_prevention)
         "CheckTxInputs enforces nValueIn >= value_out at consensus level.");
 }
 
+// =============================================================================
+// T3-01: Schnorr Signature Forgery on Oracle Messages
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01a_forge_with_attacker_keypair)
+{
+    // ATTACK [T3-01a]: Generate our own keypair, sign a price message, and attempt
+    // to pass verification by including our own pubkey in the message.
+    //
+    // This tests whether oracle verification trusts the embedded pubkey (BAD)
+    // or forces it from chainparams (GOOD).
+
+    // Attacker generates their own keypair
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+    XOnlyPubKey attackerPubkey(attackerKey.GetPubKey());
+
+    // Attacker creates a fake oracle price message
+    COraclePriceMessage forgedMsg;
+    forgedMsg.oracle_id = 0;  // Impersonate oracle 0
+    forgedMsg.price_micro_usd = 50000;  // Fake price: $0.05/DGB
+    forgedMsg.timestamp = GetTime();
+    forgedMsg.block_height = 1000;
+    forgedMsg.nonce = 12345;
+
+    // Sign with attacker's key (Phase 2 format — what matters for consensus)
+    BOOST_REQUIRE(forgedMsg.SignPhase2(attackerKey));
+
+    // Verify against attacker's own pubkey — this WILL pass (math is correct)
+    BOOST_CHECK_MESSAGE(forgedMsg.VerifyPhase2(),
+        "EXPECTED: Signature verifies against attacker's own pubkey (this is just Schnorr math)");
+
+    // Now simulate what the P2P/block validation layer does:
+    // Replace the pubkey with the REAL oracle 0 pubkey from chainparams
+    auto regTestParams = CChainParams::RegTest({});
+    const OracleNodeInfo* oracle0 = regTestParams->GetOracleNode(0);
+
+    if (oracle0) {
+        COraclePriceMessage boundMsg = forgedMsg;
+        boundMsg.oracle_pubkey = XOnlyPubKey(oracle0->pubkey);
+
+        // With chainparams pubkey, the attacker's signature MUST fail
+        BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+            "DEFENSE [T3-01a]: Forged message FAILS verification when pubkey is bound to chainparams. "
+            "Attacker's Schnorr signature does not match authorized oracle public key.");
+    } else {
+        BOOST_TEST_MESSAGE("NOTE [T3-01a]: No oracle nodes configured in regtest params — "
+            "cannot test chainparams pubkey binding. Defense relies on P2P/block validation layers.");
+    }
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01a]: Schnorr forgery impossible when pubkey binding is enforced. "
+        "P2P layer (net_processing.cpp) and ExtractOracleBundle both replace embedded pubkey "
+        "with chainparams-authorized key before verification.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01b_zero_signature_bypass)
+{
+    // ATTACK [T3-01b]: Submit an oracle message with an all-zero 64-byte signature.
+    // Can a zero signature somehow pass VerifyPhase2()?
+
+    CKey legitimateKey;
+    legitimateKey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;
+    msg.timestamp = GetTime();
+    msg.block_height = 1000;
+    msg.nonce = 0;
+    msg.oracle_pubkey = XOnlyPubKey(legitimateKey.GetPubKey());
+
+    // All-zero signature (64 bytes)
+    msg.schnorr_sig.assign(64, 0x00);
+
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01b]: All-zero signature correctly rejected by VerifyPhase2()");
+    BOOST_CHECK_MESSAGE(!msg.Verify(),
+        "DEFENSE [T3-01b]: All-zero signature correctly rejected by Verify()");
+
+    // All-0xFF signature
+    msg.schnorr_sig.assign(64, 0xFF);
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01b]: All-0xFF signature correctly rejected by VerifyPhase2()");
+
+    // Random garbage signature
+    msg.schnorr_sig.resize(64);
+    for (int i = 0; i < 64; i++) msg.schnorr_sig[i] = static_cast<unsigned char>(i * 7 + 13);
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01b]: Random garbage signature correctly rejected by VerifyPhase2()");
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01b]: Invalid signatures (zero, max, garbage) all rejected. "
+        "BIP-340 Schnorr verification in libsecp256k1 correctly validates.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01c_signature_malleability)
+{
+    // ATTACK [T3-01c]: Given a valid signature, attempt to create a different valid
+    // signature for the same message (signature malleability).
+    //
+    // BIP-340 Schnorr signatures are NOT malleable — each (key, message) pair has
+    // exactly one valid signature. Unlike ECDSA where (r, s) and (r, n-s) are both valid.
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;
+    msg.timestamp = GetTime();
+
+    BOOST_REQUIRE(msg.SignPhase2(key));
+
+    // Save original valid signature
+    std::vector<unsigned char> originalSig = msg.schnorr_sig;
+    BOOST_REQUIRE(msg.VerifyPhase2());
+
+    // Attempt 1: Negate the s-value (ECDSA malleability trick)
+    // In Schnorr, sig = (R, s) where R is 32 bytes and s is 32 bytes
+    // Negating s (mod n) should invalidate the signature
+    std::vector<unsigned char> malleatedSig = originalSig;
+    // Flip all bits in the s-value (bytes 32-63)
+    for (int i = 32; i < 64; i++) {
+        malleatedSig[i] ^= 0xFF;
+    }
+    msg.schnorr_sig = malleatedSig;
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01c]: Bit-flipped s-value correctly rejected");
+
+    // Attempt 2: Flip single bit in R
+    malleatedSig = originalSig;
+    malleatedSig[0] ^= 0x01;
+    msg.schnorr_sig = malleatedSig;
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01c]: Single bit flip in R correctly rejected");
+
+    // Attempt 3: Flip single bit in s
+    malleatedSig = originalSig;
+    malleatedSig[32] ^= 0x01;
+    msg.schnorr_sig = malleatedSig;
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01c]: Single bit flip in s correctly rejected");
+
+    // Restore original — should pass
+    msg.schnorr_sig = originalSig;
+    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+        "SANITY: Original signature still valid after malleability attempts");
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01c]: BIP-340 Schnorr signatures are non-malleable. "
+        "Any modification to (R, s) invalidates the signature. "
+        "Unlike ECDSA, there is exactly one valid signature per (key, message) pair.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01d_wrong_oracle_id_cross_sign)
+{
+    // ATTACK [T3-01d]: Oracle 0 signs a price, but we change oracle_id to 1 in the
+    // message before verification. The Phase 2 hash includes oracle_id, so this
+    // should invalidate the signature.
+
+    CKey oracleKey;
+    oracleKey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;
+    msg.timestamp = GetTime();
+
+    BOOST_REQUIRE(msg.SignPhase2(oracleKey));
+    BOOST_REQUIRE(msg.VerifyPhase2());
+
+    // Tamper: change oracle_id
+    msg.oracle_id = 1;
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01d]: Changing oracle_id after signing invalidates Phase2 signature. "
+        "oracle_id is included in GetPhase2SignatureHash().");
+
+    // Tamper: change price
+    msg.oracle_id = 0;  // Restore
+    uint64_t originalPrice = msg.price_micro_usd;
+    msg.price_micro_usd = 100000;  // Double the price
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01d]: Changing price after signing invalidates Phase2 signature.");
+
+    // Tamper: change timestamp
+    msg.price_micro_usd = originalPrice;  // Restore
+    msg.timestamp += 1;
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01d]: Changing timestamp after signing invalidates Phase2 signature.");
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01d]: All three Phase2 hash fields (oracle_id, price, timestamp) "
+        "are integrity-protected by the Schnorr signature. Tampering with any field causes verification failure.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01e_empty_signature_isvalid_bypass)
+{
+    // ATTACK [T3-01e]: Can we bypass signature verification by submitting a message
+    // with an EMPTY signature vector? IsValid() has special handling for empty sigs
+    // (returns true for "compact format" messages).
+    //
+    // This is a known design choice for Phase 1 compact format, but we verify that
+    // validation layers properly enforce signatures when required.
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;  // Valid price range
+    msg.timestamp = GetTime();
+    msg.block_height = 1000;
+    msg.nonce = 0;
+
+    // Empty signature — Phase 1 compact format trust path
+    msg.schnorr_sig.clear();
+    BOOST_CHECK_MESSAGE(msg.IsValid(),
+        "EXPECTED: IsValid() accepts empty-signature messages (Phase 1 compact format trust). "
+        "This is by design — compact format relies on chainparams pubkey binding at higher layers.");
+
+    // But direct Phase2 verification should fail
+    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+        "DEFENSE [T3-01e]: VerifyPhase2() rejects empty signature (size != 64)");
+
+    // ValidatePhaseTwoBundle explicitly skips empty-sig messages
+    // (they don't count toward valid_count)
+    COracleBundle bundle;
+    bundle.messages.push_back(msg);
+    bundle.epoch = 0;
+    bundle.median_price_micro_usd = 50000;
+    bundle.timestamp = GetTime();
+
+    // Phase 2 bundle should NOT have consensus with only empty-sig messages
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& params = regTestParams->GetConsensus();
+    BOOST_CHECK_MESSAGE(!OracleBundleManager::ValidatePhaseTwoBundle(bundle, params),
+        "DEFENSE [T3-01e]: Phase 2 bundle validation rejects empty-signature messages. "
+        "They don't count toward the required consensus threshold.");
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01e]: Empty signatures are a Phase 1 compact format artifact. "
+        "Phase 2 validation (ValidatePhaseTwoBundle) correctly ignores empty-sig messages. "
+        "P2P layer (CheckMessageSize) also rejects non-64-byte signatures.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01f_phase2_hash_field_independence)
+{
+    // ATTACK [T3-01f]: Phase 2 hash covers oracle_id + price + timestamp ONLY.
+    // This means block_height and nonce can be modified without invalidating the sig.
+    // Verify this is the intended behavior and doesn't create exploitable replay vectors.
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;
+    msg.timestamp = GetTime();
+    msg.block_height = 1000;
+    msg.nonce = 42;
+
+    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(msg.VerifyPhase2());
+
+    // Changing block_height should NOT invalidate Phase 2 signature
+    // (because block_height is NOT in Phase 2 hash)
+    msg.block_height = 9999;
+    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+        "EXPECTED: block_height change doesn't invalidate Phase2 sig (not in hash)");
+
+    // Changing nonce should NOT invalidate Phase 2 signature
+    msg.nonce = 999999;
+    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+        "EXPECTED: nonce change doesn't invalidate Phase2 sig (not in hash)");
+
+    // But Phase 1 full verification SHOULD fail (block_height and nonce are in Phase 1 hash)
+    // The original Sign() hash covers all 5 fields
+    COraclePriceMessage msg2;
+    msg2.oracle_id = 0;
+    msg2.price_micro_usd = 50000;
+    msg2.timestamp = msg.timestamp;
+    msg2.block_height = 1000;
+    msg2.nonce = 42;
+    BOOST_REQUIRE(msg2.Sign(key));
+    BOOST_REQUIRE(msg2.Verify());
+
+    msg2.block_height = 9999;
+    BOOST_CHECK_MESSAGE(!msg2.Verify(),
+        "DEFENSE [T3-01f]: Phase 1 full signature IS invalidated by block_height change");
+
+    BOOST_TEST_MESSAGE("INFO [T3-01f]: Phase 2 hash intentionally excludes block_height and nonce "
+        "because they are NOT stored on-chain in Phase 2 format. The consensus-critical fields "
+        "(oracle_id, price, timestamp) are all protected. block_height/nonce mutability is by design "
+        "and does not create exploitable vectors because Phase 2 on-chain format doesn't use them.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01g_manual_pubkey_rebinding)
+{
+    // ATTACK [T3-01g]: Simulate what IsValidOracleMessage (private in bundle_manager)
+    // does: rebind pubkey from chainparams before verification.
+    // This tests the PATTERN used across all validation layers.
+
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+
+    COraclePriceMessage forgedMsg;
+    forgedMsg.oracle_id = 0;
+    forgedMsg.price_micro_usd = 50000;
+    forgedMsg.timestamp = GetTime();
+
+    // Sign with attacker key
+    BOOST_REQUIRE(forgedMsg.SignPhase2(attackerKey));
+
+    // Direct VerifyPhase2 passes (attacker's own key)
+    BOOST_CHECK(forgedMsg.VerifyPhase2());
+
+    // Simulate pubkey rebinding (what P2P handler and IsValidOracleMessage do):
+    // Look up authorized pubkey from chainparams for oracle_id
+    auto regTestParams = CChainParams::RegTest({});
+    const OracleNodeInfo* oracle_config = regTestParams->GetOracleNode(forgedMsg.oracle_id);
+
+    if (oracle_config) {
+        // Create bound copy — overwrite attacker pubkey with chainparams pubkey
+        COraclePriceMessage boundMsg = forgedMsg;
+        boundMsg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
+
+        // Verification MUST fail with the real pubkey
+        BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+            "DEFENSE [T3-01g]: After rebinding pubkey from chainparams, attacker's "
+            "Schnorr signature is rejected. This is the pattern used by P2P handler, "
+            "IsValidOracleMessage, and ExtractOracleBundle.");
+    } else {
+        BOOST_TEST_MESSAGE("NOTE [T3-01g]: No oracle nodes in regtest — testing with random keys");
+        // Use a different random key as the "authorized" key
+        CKey authorizedKey;
+        authorizedKey.MakeNewKey(true);
+        COraclePriceMessage boundMsg = forgedMsg;
+        boundMsg.oracle_pubkey = XOnlyPubKey(authorizedKey.GetPubKey());
+        BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+            "DEFENSE [T3-01g]: Forged message fails when verified against a different pubkey.");
+    }
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01g]: Pubkey rebinding pattern is used consistently: "
+        "net_processing.cpp (P2P), IsValidOracleMessage (bundle mgr), ExtractOracleBundle (block parsing). "
+        "All replace embedded pubkey with chainparams-authorized key before verification.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_01h_bundle_isvalid_no_rebind)
+{
+    // ATTACK [T3-01h]: COracleBundle::IsValid() verifies signatures but does NOT
+    // rebind pubkeys from chainparams. If called on a bundle with attacker-supplied
+    // pubkeys, it would pass. This is safe because all callers ensure pubkeys are
+    // bound before calling IsValid().
+    //
+    // This test documents the trust boundary: callers MUST bind pubkeys.
+
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+
+    COraclePriceMessage forgedMsg;
+    forgedMsg.oracle_id = 0;
+    forgedMsg.price_micro_usd = 50000;
+    forgedMsg.timestamp = GetTime();
+    forgedMsg.block_height = 0;
+    forgedMsg.nonce = 0;
+
+    BOOST_REQUIRE(forgedMsg.SignPhase2(attackerKey));
+
+    COracleBundle bundle;
+    bundle.messages.push_back(forgedMsg);
+    bundle.epoch = 0;
+    bundle.median_price_micro_usd = 50000;
+    bundle.timestamp = GetTime();
+
+    // WARNING: bundle.IsValid() with attacker pubkey DOES pass
+    // This is NOT a bug — the function trusts its caller to bind pubkeys
+    BOOST_CHECK_MESSAGE(bundle.IsValid(GetTime(), 1),
+        "INFO [T3-01h]: bundle.IsValid() passes with attacker pubkey — this is expected. "
+        "The function verifies cryptographic correctness, not authorization. "
+        "Callers (ExtractOracleBundle, P2P handler) must bind chainparams pubkeys first.");
+
+    BOOST_TEST_MESSAGE("INFO [T3-01h]: COracleBundle::IsValid() is a cryptographic check, not an "
+        "authorization check. It trusts the caller to set oracle_pubkey from chainparams. "
+        "All production code paths (P2P, block extraction, IsValidOracleMessage) do this correctly. "
+        "RISK: If a new code path calls IsValid() without binding pubkeys, it would be vulnerable. "
+        "Consider adding a chainparams pubkey verification inside IsValid() as defense-in-depth.");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

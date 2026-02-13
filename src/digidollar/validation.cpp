@@ -1544,12 +1544,93 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-zero-collateral");
     }
 
-    // Extract original DD amount from collateral script metadata
+    // Extract original DD amount — first try metadata registry, then creating tx lookup.
+    //
+    // SECURITY [T1-08]: The collateral UTXO is a P2TR script (OP_1 + 32 bytes) which does
+    // NOT contain the DD amount. During cross-node block validation, the ephemeral metadata
+    // registry is empty. Without this fix, the function silently allowed ANY release amount,
+    // enabling an attacker to burn 1 cent of DD and steal all locked collateral.
+    //
+    // Strategy: 1) metadata registry, 2) txindex, 3) block-db lookup, 4) REJECT
     CAmount originalDDMinted = 0;
     if (!ExtractDDAmount(collateralCoin.out.scriptPubKey, originalDDMinted) || originalDDMinted <= 0) {
-        LogPrintf("DigiDollar: Could not extract original DD amount from collateral script\n");
-        // Fallback: allow if we can't determine original amount
-        return true;
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Could not extract original DD amount from collateral script, "
+                 "trying creating transaction lookup...\n");
+
+        // Helper: extract DD minted amount from a mint transaction's OP_RETURN
+        auto extractDDFromMintTx = [](const CTransactionRef& prev_tx, CAmount& ddOut) -> bool {
+            for (const auto& vout : prev_tx->vout) {
+                if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
+
+                CScript::const_iterator pc = vout.scriptPubKey.begin();
+                opcodetype opcode;
+                std::vector<unsigned char> data;
+
+                if (!vout.scriptPubKey.GetOp(pc, opcode)) continue; // Skip OP_RETURN
+                if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+                if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+                // Read tx type
+                if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+                int64_t txType = 0;
+                if (data.size() > 0) {
+                    try {
+                        CScriptNum txTypeNum(data, true);
+                        txType = txTypeNum.GetInt64();
+                    } catch (const scriptnum_error&) { continue; }
+                }
+
+                // Only process MINT (type 1) — that's the transaction that created collateral
+                if (txType != 1) continue;
+
+                // Read DD amount (first push after type for mint)
+                if (vout.scriptPubKey.GetOp(pc, opcode, data) && data.size() > 0) {
+                    try {
+                        CScriptNum scriptNum(data, true, 8);
+                        ddOut = scriptNum.GetInt64();
+                        return ddOut > 0;
+                    } catch (const scriptnum_error&) {}
+                }
+            }
+            return false;
+        };
+
+        bool found = false;
+
+        // Try txindex (authoritative — reads creating tx from indexed database)
+        if (!found && g_txindex) {
+            uint256 block_hash;
+            CTransactionRef prev_tx;
+            if (g_txindex->FindTx(tx.vin[0].prevout.hash, block_hash, prev_tx)) {
+                found = extractDDFromMintTx(prev_tx, originalDDMinted);
+                if (found) {
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Extracted original DD minted (%lld) from txindex\n",
+                             (long long)originalDDMinted);
+                }
+            }
+        }
+
+        // Try block-db lookup (universal fallback — every full node has every block)
+        if (!found && ctx.txLookup) {
+            CTransactionRef prev_tx;
+            if (ctx.txLookup(tx.vin[0].prevout.hash, collateralCoin.nHeight, prev_tx)) {
+                found = extractDDFromMintTx(prev_tx, originalDDMinted);
+                if (found) {
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Extracted original DD minted (%lld) from block db\n",
+                             (long long)originalDDMinted);
+                }
+            }
+        }
+
+        if (!found || originalDDMinted <= 0) {
+            // SECURITY: REJECT if we cannot determine original DD amount.
+            // A consensus rule must never be silently bypassed.
+            LogPrintf("DigiDollar: SECURITY [T1-08] - Cannot determine original DD minted amount "
+                      "for collateral at %s:%d. Rejecting to prevent collateral theft.\n",
+                      tx.vin[0].prevout.hash.ToString(), tx.vin[0].prevout.n);
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-unknown-dd-amount",
+                               "Cannot verify proportional collateral release: original DD amount undetermined");
+        }
     }
 
     // Calculate proportionally allowed collateral release

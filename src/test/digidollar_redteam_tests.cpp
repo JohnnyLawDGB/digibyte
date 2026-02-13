@@ -16,8 +16,10 @@
 #include <consensus/digidollar.h>
 #include <digidollar/txbuilder.h>
 #include <digidollar/validation.h>
+#include <digidollar/scripts.h>
 #include <consensus/dca.h>
 #include <kernel/chainparams.h>
+#include <primitives/transaction.h>
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
@@ -525,6 +527,319 @@ BOOST_AUTO_TEST_CASE(redteam_opreturn_360day_lock_inflation)
         fakeDD += dd_amounts[i];
     }
     BOOST_CHECK_EQUAL(fakeDD, 0);
+}
+
+// =============================================================================
+// T1-03: CLTV Timelock Bypass on Collateral
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_normal_path_enforces_lockheight)
+{
+    // ATTACK: Create a collateral script with a future lockHeight, then try to
+    // spend it at the current height. The CLTV check in the script should reject.
+    //
+    // Defense chain:
+    //   1. Script CLTV: script_lockHeight <= tx.nLockTime
+    //   2. IsFinalTx:   blockHeight > tx.nLockTime (when nSequence != FINAL)
+    //   3. Combined:    blockHeight > tx.nLockTime >= script_lockHeight
+
+    // Create a normal redemption script with lockHeight = 2000
+    DigiDollar::MintParams mintParams;
+    mintParams.ddAmount = 10000; // $100
+    mintParams.lockHeight = 2000; // 1000 blocks in the future
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    mintParams.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+
+    CScript normalPath = DigiDollar::CreateNormalRedemptionPath(mintParams);
+    BOOST_CHECK(!normalPath.empty());
+
+    // Verify the script starts with the lockHeight and CLTV opcode
+    CScript::const_iterator pc = normalPath.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    // First element should be the lockHeight (2000)
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    CScriptNum extractedLockHeight(data, true, 5);
+    BOOST_CHECK_EQUAL(extractedLockHeight.GetInt64(), 2000);
+
+    // Second element should be OP_CHECKLOCKTIMEVERIFY
+    BOOST_CHECK(normalPath.GetOp(pc, opcode));
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKLOCKTIMEVERIFY);
+
+    // Third element should be OP_DROP
+    BOOST_CHECK(normalPath.GetOp(pc, opcode));
+    BOOST_CHECK_EQUAL(opcode, OP_DROP);
+
+    // DEFENSE: Script correctly encodes lockHeight with CLTV enforcement
+    // An attacker cannot modify the script after it's committed to the MAST tree
+    // because the P2TR output key is derived from the MAST root hash.
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_err_path_also_enforces_lockheight)
+{
+    // ATTACK: Try to use ERR path to bypass CLTV (ERR might skip timelock).
+    // Defense: ERR path ALSO requires CLTV — both paths enforce the lock.
+
+    DigiDollar::MintParams mintParams;
+    mintParams.ddAmount = 10000;
+    mintParams.lockHeight = 5000;
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    mintParams.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+
+    CScript errPath = DigiDollar::CreateERRPath(mintParams);
+    BOOST_CHECK(!errPath.empty());
+
+    // Verify ERR path starts with the SAME lockHeight + CLTV
+    CScript::const_iterator pc = errPath.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    // First element should be the lockHeight (5000)
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    CScriptNum extractedLockHeight(data, true, 5);
+    BOOST_CHECK_EQUAL(extractedLockHeight.GetInt64(), 5000);
+
+    // Must have OP_CHECKLOCKTIMEVERIFY
+    BOOST_CHECK(errPath.GetOp(pc, opcode));
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKLOCKTIMEVERIFY);
+
+    // DEFENSE: ERR path has identical CLTV enforcement as normal path.
+    // There is NO redemption path without a timelock.
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_lockheight_zero_creates_trivial_lock)
+{
+    // ATTACK: Create a collateral script with lockHeight = 0.
+    // A CLTV of 0 is trivially satisfied (any nLockTime >= 0, which is always true).
+    // If an attacker can get a mint accepted with lockHeight=0, they can redeem immediately.
+
+    DigiDollar::MintParams mintParams;
+    mintParams.ddAmount = 10000;
+    mintParams.lockHeight = 0; // ATTACK: Zero lockHeight
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    mintParams.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+
+    // CreateNormalRedemptionPath checks lockHeight < 0 but NOT lockHeight == 0
+    CScript normalPath = DigiDollar::CreateNormalRedemptionPath(mintParams);
+
+    // FINDING: lockHeight=0 creates a valid script with trivial CLTV
+    // Script: 0 OP_CHECKLOCKTIMEVERIFY OP_DROP <key> OP_CHECKSIG
+    // This is immediately spendable because CLTV(0) passes when tx.nLockTime >= 0
+    // (nLockTime is uint32_t, always >= 0).
+    //
+    // DEFENSE ASSESSMENT: Not directly exploitable because:
+    // 1. The wallet's LockDaysToBlocks(0) returns 240 blocks (1-hour minimum), not 0
+    // 2. The consensus CalculateRequiredCollateral uses OP_RETURN lockTime for ratio
+    //    calculation, and GetCollateralRatioForLockTime maps short locks to 1000% ratio
+    // 3. An attacker crafting raw tx with lockHeight=0 in the script but a long lockTime
+    //    in the OP_RETURN could get a better ratio — but this is the metadata mismatch
+    //    issue documented separately.
+    //
+    // NOTE: For production (Phase 2), the collateral script's lockHeight should be
+    // verified against the OP_RETURN metadata to prevent lock period misrepresentation.
+    BOOST_CHECK(!normalPath.empty()); // Script IS created (no rejection of lockHeight=0)
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_negative_lockheight_rejected)
+{
+    // ATTACK: Create a script with negative lockHeight.
+    // Expected: Script creation should fail (return empty).
+
+    DigiDollar::MintParams mintParams;
+    mintParams.ddAmount = 10000;
+    mintParams.lockHeight = -1; // ATTACK: Negative lockHeight
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    mintParams.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+
+    CScript normalPath = DigiDollar::CreateNormalRedemptionPath(mintParams);
+
+    // DEFENSE: Negative lockHeight returns empty script
+    BOOST_CHECK(normalPath.empty());
+
+    CScript errPath = DigiDollar::CreateERRPath(mintParams);
+    BOOST_CHECK(errPath.empty());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_mast_commitment_prevents_script_tampering)
+{
+    // ATTACK: Create two collateral P2TR outputs with different lockHeights
+    // and verify they produce different P2TR output keys. This proves that
+    // an attacker cannot reuse a MAST proof from a shorter lock against a longer lock.
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+
+    DigiDollar::MintParams params1;
+    params1.ddAmount = 10000;
+    params1.lockHeight = 1000; // Short lock
+    params1.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+    params1.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params1.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    DigiDollar::MintParams params2;
+    params2.ddAmount = 10000;
+    params2.lockHeight = 100000; // Long lock
+    params2.ownerKey = XOnlyPubKey(ownerKey.GetPubKey());
+    params2.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params2.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CScript script1 = DigiDollar::CreateCollateralP2TR(params1);
+    CScript script2 = DigiDollar::CreateCollateralP2TR(params2);
+
+    // Both should produce valid scripts
+    BOOST_CHECK(!script1.empty());
+    BOOST_CHECK(!script2.empty());
+
+    // DEFENSE: Different lockHeights produce different P2TR output keys.
+    // This means an attacker CANNOT substitute a short-lock proof for a long-lock output.
+    // The MAST tree hash changes when any script leaf changes, which changes the output key.
+    BOOST_CHECK_MESSAGE(script1 != script2,
+        "EXPLOIT: Different lockHeights produced identical P2TR outputs! "
+        "An attacker could substitute MAST proofs between lock periods.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_validate_normal_redemption_timelock)
+{
+    // ATTACK: Try to redeem collateral at a block height before the timelock.
+    // ValidateNormalRedemptionConditions checks ctx.nHeight >= tx.nLockTime.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Scenario 1: Timelock NOT expired (should reject)
+    {
+        DigiDollar::ValidationContext ctx(500, 5000, 150, *regTestParams);
+        TxValidationState state;
+
+        CMutableTransaction tx;
+        tx.nLockTime = 1000; // Locked until height 1000
+        tx.vin.resize(2);
+        tx.vin[0].nSequence = 0xFFFFFFFE; // Enable CLTV
+        tx.vin[1].nSequence = 0xFFFFFFFE;
+        tx.vout.resize(1);
+        tx.vout[0].nValue = 100 * COIN;
+
+        bool result = DigiDollar::ValidateNormalRedemptionConditions(
+            CTransaction(tx), ctx, state);
+
+        // DEFENSE: Should reject — current height 500 < locktime 1000
+        BOOST_CHECK_MESSAGE(!result,
+            "EXPLOIT: Normal redemption accepted before timelock expiry!");
+    }
+
+    // Scenario 2: Timelock expired (should accept)
+    {
+        DigiDollar::ValidationContext ctx(1500, 5000, 150, *regTestParams);
+        TxValidationState state;
+
+        CMutableTransaction tx;
+        tx.nLockTime = 1000; // Locked until height 1000
+        tx.vin.resize(2);
+        tx.vin[0].nSequence = 0xFFFFFFFE;
+        tx.vin[1].nSequence = 0xFFFFFFFE;
+        tx.vout.resize(1);
+        tx.vout[0].nValue = 100 * COIN;
+
+        bool result = DigiDollar::ValidateNormalRedemptionConditions(
+            CTransaction(tx), ctx, state);
+
+        // DEFENSE: Should accept — current height 1500 >= locktime 1000
+        BOOST_CHECK_MESSAGE(result,
+            "False negative: Normal redemption rejected after timelock expiry");
+    }
+
+    // Scenario 3: nLockTime = 0 (trivially satisfied — immediately redeemable)
+    {
+        DigiDollar::ValidationContext ctx(100, 5000, 150, *regTestParams);
+        TxValidationState state;
+
+        CMutableTransaction tx;
+        tx.nLockTime = 0; // ATTACK: Zero locktime
+        tx.vin.resize(2);
+        tx.vin[0].nSequence = 0xFFFFFFFE;
+        tx.vin[1].nSequence = 0xFFFFFFFE;
+        tx.vout.resize(1);
+        tx.vout[0].nValue = 100 * COIN;
+
+        bool result = DigiDollar::ValidateNormalRedemptionConditions(
+            CTransaction(tx), ctx, state);
+
+        // NOTE: nLockTime=0 passes validation at any height.
+        // This is correct Bitcoin behavior. The protection against zero-locktime
+        // collateral must come from mint-time validation (ensuring proper lockHeight).
+        BOOST_CHECK(result);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_err_path_timelock_check)
+{
+    // ATTACK: Try ERR redemption before timelock expires.
+    // ERR path should also require timelock expiry.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // ERR with unexpired timelock (should reject)
+    {
+        DigiDollar::ValidationContext ctx(500, 5000, 50, *regTestParams); // system health 50%
+        TxValidationState state;
+
+        CMutableTransaction tx;
+        tx.nLockTime = 1000; // Locked until height 1000
+        tx.vin.resize(2);
+        tx.vin[0].nSequence = 0xFFFFFFFE;
+        tx.vin[1].nSequence = 0xFFFFFFFE;
+        tx.vout.resize(1);
+        tx.vout[0].nValue = 100 * COIN;
+
+        bool result = DigiDollar::ValidateEmergencyRedemptionConditions(
+            CTransaction(tx), ctx, state);
+
+        // DEFENSE: ERR path also rejects if timelock not expired
+        BOOST_CHECK_MESSAGE(!result,
+            "EXPLOIT: ERR redemption accepted before timelock expiry!");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_lockdays_zero_maps_to_240_blocks)
+{
+    // Verify that lockDays=0 (testing tier) maps to 240 blocks, not 0.
+    // This prevents accidentally creating zero-CLTV collateral through the wallet.
+
+    int64_t blocks = DigiDollar::LockDaysToBlocks(0);
+    BOOST_CHECK_EQUAL(blocks, 240); // 1 hour at 15-second blocks
+
+    // Also verify standard lock periods
+    BOOST_CHECK_EQUAL(DigiDollar::LockDaysToBlocks(30), 30 * DigiDollar::BLOCKS_PER_DAY);
+    BOOST_CHECK_EQUAL(DigiDollar::LockDaysToBlocks(365), 365 * DigiDollar::BLOCKS_PER_DAY);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_cltv_collateral_ratio_for_zero_lockblocks)
+{
+    // ATTACK: What ratio does lockBlocks=0 get?
+    // If it gets the best ratio (200%), that's an exploit.
+    // It should get the worst ratio (1000%) since it's shorter than any tier.
+
+    DigiDollar::ConsensusParams ddParams;
+    int ratio = DigiDollar::GetCollateralRatioForLockTime(0, ddParams);
+
+    // Defense: lockBlocks=0 should get the highest (worst for attacker) ratio
+    // The first tier is 240 blocks (1 hour) at 1000%
+    // lower_bound(0) finds the first element, which is 1000%
+    BOOST_CHECK_MESSAGE(ratio >= 1000,
+        "EXPLOIT: lockBlocks=0 got ratio " + std::to_string(ratio) +
+        "% (expected >= 1000%). Attacker could mint more DD with less collateral.");
+
+    // Also verify that lockBlocks=1 gets the same worst-case ratio
+    int ratio1 = DigiDollar::GetCollateralRatioForLockTime(1, ddParams);
+    BOOST_CHECK_GE(ratio1, 1000);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

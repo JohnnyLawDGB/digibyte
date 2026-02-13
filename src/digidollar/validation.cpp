@@ -727,6 +727,50 @@ bool ValidateMintTransaction(const CTransaction& tx,
                         LogPrintf("DigiDollar: Extracted lock height from OP_RETURN: %lld blocks\n", static_cast<long long>(lockTime));
                     } catch (const std::exception&) {}
                 }
+
+                // Extract lock tier and VERIFY consistency with lockHeight
+                // SECURITY: Without this check, an attacker could claim a long lock tier
+                // (e.g., tier 9 = 10 years, 200% ratio) in OP_RETURN but commit a short
+                // lock (e.g., 1 hour) in the MAST tree, getting a favorable collateral
+                // ratio without actually locking for the claimed period.
+                if (output.scriptPubKey.GetOp(pc, opcode, data)) {
+                    try {
+                        CScriptNum lockTierNum(data, true);
+                        int64_t lockTier = lockTierNum.getint();
+                        LogPrintf("DigiDollar: Extracted lock tier from OP_RETURN: %lld\n", static_cast<long long>(lockTier));
+
+                        // Validate tier is in range (0-9)
+                        if (lockTier < 0 || lockTier > 9) {
+                            LogPrintf("DigiDollar: SECURITY - Invalid lock tier %lld (must be 0-9)\n", static_cast<long long>(lockTier));
+                            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-tier",
+                                               "Lock tier must be 0-9");
+                        }
+
+                        // Verify lockHeight is consistent with the claimed tier
+                        // Tier lock days: {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650}
+                        static const int TIER_LOCK_DAYS[] = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650};
+                        int64_t expectedLockBlocks = DigiDollar::LockDaysToBlocks(TIER_LOCK_DAYS[lockTier]);
+                        int64_t actualLockBlocks = lockTime - ctx.nHeight;
+
+                        // Allow small tolerance (±10 blocks) for timing variance
+                        if (actualLockBlocks < expectedLockBlocks - 10) {
+                            LogPrintf("DigiDollar: SECURITY - Lock height mismatch! "
+                                     "Tier %lld claims %lld blocks but actual lock is only %lld blocks "
+                                     "(lockHeight=%lld, currentHeight=%d). "
+                                     "Possible collateral ratio manipulation attack.\n",
+                                     static_cast<long long>(lockTier),
+                                     static_cast<long long>(expectedLockBlocks),
+                                     static_cast<long long>(actualLockBlocks),
+                                     static_cast<long long>(lockTime), ctx.nHeight);
+                            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-height-mismatch",
+                                               "Lock height does not match claimed lock tier");
+                        }
+                    } catch (const std::exception&) {
+                        // If we can't parse lock tier, reject the mint
+                        LogPrintf("DigiDollar: Failed to parse lock tier from OP_RETURN\n");
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-tier-parse");
+                    }
+                }
             }
         }
 

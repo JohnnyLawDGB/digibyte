@@ -689,10 +689,24 @@ int SystemHealthMonitor::CalculateSystemHealth(CAmount ddSupply, CAmount collate
     // price is in cents (100 = $1.00 DGB price)
     // collateral is in satoshis
     // Formula: (satoshis * price_cents) / COIN = cents
-    CAmount collateralValue = (collateral * price) / COIN;
+    // Guard against overflow: divide first when collateral is large
+    CAmount collateralValue;
+    const CAmount maxSafe = std::numeric_limits<CAmount>::max() / (price > 0 ? price : 1);
+    if (collateral > maxSafe) {
+        collateralValue = (collateral / COIN) * price;
+    } else {
+        collateralValue = (collateral * price) / COIN;
+    }
 
     // Health = (Collateral Value / DD Value) * 100
-    int health = static_cast<int>((collateralValue * 100) / ddSupply);
+    // Guard against overflow in numerator
+    int health;
+    const CAmount maxSafeMul = std::numeric_limits<CAmount>::max() / 100;
+    if (collateralValue > maxSafeMul) {
+        health = static_cast<int>(collateralValue / (ddSupply / 100 > 0 ? ddSupply / 100 : 1));
+    } else {
+        health = static_cast<int>((collateralValue * 100) / ddSupply);
+    }
 
     // Cap at reasonable maximum
     return std::min(health, 300);

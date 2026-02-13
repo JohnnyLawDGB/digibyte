@@ -84,8 +84,17 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     CAmount healthCalculation;
     const CAmount maxSafeDividend = std::numeric_limits<CAmount>::max() / 100;
     if (collateralValueCents > maxSafeDividend) {
-        // Scale down both numerator and denominator to avoid overflow
-        healthCalculation = (collateralValueCents / 1000) * 100 / (totalDD / 1000);
+        // Scale down both numerator and denominator to avoid overflow.
+        // SECURITY FIX (DGB-SEC-003): Guard against totalDD/1000==0 which
+        // causes division by zero when totalDD is between 1 and 999.
+        CAmount scaledDD = totalDD / 1000;
+        if (scaledDD == 0) {
+            // totalDD is tiny (< 1000 cents = $10) — collateral dwarfs it,
+            // so health is at maximum.
+            healthCalculation = 30000;
+        } else {
+            healthCalculation = (collateralValueCents / 1000) * 100 / scaledDD;
+        }
     } else {
         healthCalculation = (collateralValueCents * 100) / totalDD;
     }

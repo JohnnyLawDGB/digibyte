@@ -740,7 +740,10 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_dca_multiplier_adjustment, DigiDollarVal
 
 BOOST_FIXTURE_TEST_CASE(mint_validation_multiple_dd_outputs, DigiDollarValidationTestSetup)
 {
-    // Test mint with multiple DD outputs (should handle correctly)
+    // Security fix: Mint transactions MUST have exactly 1 DD output.
+    // Multiple DD outputs would allow OP_RETURN inflation attack (T1-02):
+    // lockHeight/lockTier fields in mint OP_RETURN get misinterpreted as DD amounts
+    // for extra P2TR zero-value outputs, inflating the DD supply.
     CMutableTransaction mtx;
     mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
@@ -764,7 +767,7 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_multiple_dd_outputs, DigiDollarValidatio
     mtx.vout.resize(3);
     mtx.vout[0] = CTxOut(requiredCollateral, collateralScript);
 
-    // Two DD outputs
+    // Two DD outputs — should be REJECTED (only 1 allowed per mint)
     CScript ddScript1 = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount1);
     CScript ddScript2 = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount2);
     mtx.vout[1] = CTxOut(0, ddScript1);
@@ -773,8 +776,9 @@ BOOST_FIXTURE_TEST_CASE(mint_validation_multiple_dd_outputs, DigiDollarValidatio
     CTransaction tx(mtx);
     TxValidationState state;
 
-    BOOST_CHECK(DigiDollar::ValidateDigiDollarTransaction(tx, validationContext, state));
-    BOOST_CHECK(state.IsValid());
+    // Must be REJECTED: multiple DD outputs enable OP_RETURN inflation attack
+    BOOST_CHECK(!DigiDollar::ValidateDigiDollarTransaction(tx, validationContext, state));
+    BOOST_CHECK(!state.IsValid());
 }
 
 BOOST_FIXTURE_TEST_CASE(mint_validation_invalid_oracle_price, DigiDollarValidationTestSetup)

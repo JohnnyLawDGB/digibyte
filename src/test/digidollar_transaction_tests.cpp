@@ -948,20 +948,49 @@ BOOST_FIXTURE_TEST_CASE(test_collateral_ratio_overflow_protection, DigiDollarTra
     // Large collateral that would overflow without protection
     CAmount largeCollateral = 1000000LL * COIN; // 1 million DGB in satoshis
     // 10^14 * 10^6 = 10^20 — exceeds INT64_MAX without overflow protection
-    BOOST_CHECK_NO_THROW(ValidateCollateralRatio(1000, largeCollateral, MAX_PRICE, 200));
+    // 1M DGB at $10/DGB = $10M value, 200% of $10 = $20 — easily satisfied
+    BOOST_CHECK(ValidateCollateralRatio(1000, largeCollateral, MAX_PRICE, 200));
 
-    // MAX_MONEY collateral — must not crash
+    // MAX_MONEY collateral — must not crash and should satisfy the ratio
     CAmount maxCollateral = MAX_MONEY; // 21 billion DGB (21000000000 * COIN)
-    BOOST_CHECK_NO_THROW(ValidateCollateralRatio(1000, maxCollateral, MAX_PRICE, 200));
+    BOOST_CHECK(ValidateCollateralRatio(1000, maxCollateral, MAX_PRICE, 200));
 
-    // Large ddAmount that could overflow ddAmount * requiredRatio
+    // Large ddAmount that could overflow ddAmount * requiredRatio — should be rejected
+    // since 100 DGB at $50 = $5000 can't possibly collateralize near-max DD
     CAmount largeDDAmount = std::numeric_limits<CAmount>::max() / 100; // Near max
-    BOOST_CHECK_NO_THROW(ValidateCollateralRatio(largeDDAmount, 100 * COIN, 5000, 200));
+    BOOST_CHECK(!ValidateCollateralRatio(largeDDAmount, 100 * COIN, 5000, 200));
 
     // Edge case: negative and zero inputs still rejected
     BOOST_CHECK(!ValidateCollateralRatio(-1, 100 * COIN, 5000, 200));
     BOOST_CHECK(!ValidateCollateralRatio(1000, -1, 5000, 200));
     BOOST_CHECK(!ValidateCollateralRatio(1000, 100 * COIN, -1, 200));
+}
+
+BOOST_FIXTURE_TEST_CASE(test_collateral_ratio_overflow_precision, DigiDollarTransactionTestFixture)
+{
+    // Verify that the divide-first fallback path produces results consistent
+    // with the multiply-first path for values near the overflow threshold.
+    // The maxSafeCollateral boundary is INT64_MAX / oraclePrice.
+    const CAmount oraclePrice = 5000; // $50.00 per DGB
+    const CAmount maxSafeCollateral = std::numeric_limits<CAmount>::max() / oraclePrice;
+
+    // Just below threshold — uses multiply-first (precise) path
+    CAmount belowThreshold = maxSafeCollateral - 1;
+    bool resultBelow = ValidateCollateralRatio(1000, belowThreshold, oraclePrice, 200);
+
+    // Just above threshold — uses divide-first (approximate) path
+    CAmount aboveThreshold = maxSafeCollateral + 1;
+    bool resultAbove = ValidateCollateralRatio(1000, aboveThreshold, oraclePrice, 200);
+
+    // Both should pass since collateral is astronomically larger than required.
+    // This verifies the two paths agree for values that clearly satisfy the ratio.
+    BOOST_CHECK(resultBelow);
+    BOOST_CHECK(resultAbove);
+
+    // Verify consistency: a value that fails on the precise path should also
+    // fail (or be very close) on the approximate path. Use small collateral
+    // that cannot satisfy the ratio regardless of path.
+    BOOST_CHECK(!ValidateCollateralRatio(1000000, 1 * COIN, oraclePrice, 200));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

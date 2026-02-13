@@ -417,7 +417,16 @@ bool ValidateCollateralRatio(CAmount dgbLocked, CAmount ddMinted,
         dgbValueMicroUSD = (dgbLocked * ctx.oraclePriceMicroUSD) / COIN;
     }
     CAmount dgbValueInCents = dgbValueMicroUSD / 10000;  // Convert micro-USD to cents
-    int actualRatio = (ddMinted > 0) ? (dgbValueInCents * 100) / ddMinted : 0;
+    // Overflow protection: dgbValueInCents * 100 can overflow for large values
+    int actualRatio = 0;
+    if (ddMinted > 0) {
+        if (dgbValueInCents > std::numeric_limits<CAmount>::max() / 100) {
+            CAmount ddMintedDiv100 = ddMinted / 100;
+            actualRatio = (ddMintedDiv100 > 0) ? dgbValueInCents / ddMintedDiv100 : 0;
+        } else {
+            actualRatio = (dgbValueInCents * 100) / ddMinted;
+        }
+    }
 
     // Get expected ratio for comparison
     const auto& ddParams = ctx.params.GetDigiDollarParams();

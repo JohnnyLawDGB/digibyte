@@ -5,6 +5,7 @@
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
 #include <digidollar/digidollar.h>
+#include <digidollar/health.h>
 
 // Phase 1 metadata tracking support
 using DigiDollar::ScriptMetadata;
@@ -1985,17 +1986,49 @@ int64_t ExtractLockTime(const CScript& script) {
 }
 
 CAmount GetSystemCollateralRatio() {
-    // Get system-wide collateral ratio
-    // This would normally query the UTXO set to calculate total system health
-    // For Phase 1, return a mock value that can be adjusted for testing
+    // FIX [T2-05a]: Calculate REAL system health from UTXO data.
+    //
+    // Uses cached metrics from SystemHealthMonitor (populated by ScanUTXOSet
+    // during block processing and RPC calls). The UTXO set is identical on
+    // all nodes at the same block height, so the result is deterministic.
+    //
+    // Returns a percentage: 150 = 150% collateralized (healthy)
+    //
+    // Formula: health = (totalCollateral_sats * price_cents / COIN * 100) / dd_cents
 
-    // In full implementation, this would:
-    // 1. Sum all locked collateral values
-    // 2. Sum all minted DD amounts
-    // 3. Calculate ratio using current oracle price
-    // 4. Return percentage (e.g., 150 for 150%)
+    const DigiDollar::SystemMetrics& metrics =
+        DigiDollar::SystemHealthMonitor::GetCachedMetrics();
 
-    return 150; // Mock 150% system collateral ratio
+    // If no DD in circulation, system is maximally healthy (no liabilities)
+    if (metrics.totalDDSupply <= 0) {
+        return 300; // Capped at 300% (same as CalculateSystemHealth cap)
+    }
+
+    // If system health was already calculated and cached, use it
+    if (metrics.systemHealth > 0) {
+        return metrics.systemHealth;
+    }
+
+    // Calculate from available data
+    CAmount oraclePrice = metrics.lastOraclePrice; // cents (100 = $1.00)
+    if (oraclePrice <= 0 || metrics.totalCollateral <= 0) {
+        // No oracle or collateral data available — conservative default.
+        // 150% means DCA multiplier is 1.0x (no adjustment) and ERR is
+        // not triggered. T2-05c handles the minting block separately.
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "GetSystemCollateralRatio: insufficient data (price=%lld, "
+                 "collateral=%lld), using conservative default 150%%\n",
+                 static_cast<long long>(oraclePrice),
+                 static_cast<long long>(metrics.totalCollateral));
+        return 150;
+    }
+
+    // health = (collateral_sats * price_cents / COIN) * 100 / dd_cents
+    CAmount collateralValueCents = (metrics.totalCollateral * oraclePrice) / COIN;
+    int health = static_cast<int>((collateralValueCents * 100) / metrics.totalDDSupply);
+
+    // Cap at 300% to match SystemHealthMonitor::CalculateSystemHealth
+    return std::min(health, 300);
 }
 
 // ============================================================================

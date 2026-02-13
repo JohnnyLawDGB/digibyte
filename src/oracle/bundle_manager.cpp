@@ -1549,9 +1549,21 @@ bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle, co
 
 CAmount OracleBundleManager::CalculateConsensusPrice(const COracleBundle& bundle, const Consensus::Params& params)
 {
+    // SECURITY: Use price-range checks ONLY — NOT msg.IsValid().
+    // IsValid() calls GetTime() for timestamp checks, making the consensus
+    // price depend on wall-clock time. During IBD or delayed block relay,
+    // oracle timestamps become "stale" relative to GetTime(), causing
+    // messages to be excluded. This produces a DIFFERENT consensus price
+    // than the miner calculated, rejecting valid blocks and causing chain
+    // splits between timely and delayed nodes.
+    //
+    // Timestamp validation belongs in ValidateBlockOracleData (which uses
+    // block.nTime, not GetTime()). Here we only filter by price range.
     std::vector<CAmount> prices;
     for (const auto& msg : bundle.messages) {
-        if (msg.IsValid()) {
+        // Price-range filter only — deterministic, time-independent
+        if (msg.price_micro_usd >= ORACLE_MIN_PRICE_MICRO_USD &&
+            msg.price_micro_usd <= ORACLE_MAX_PRICE_MICRO_USD) {
             prices.push_back(static_cast<CAmount>(msg.price_micro_usd));
         }
     }

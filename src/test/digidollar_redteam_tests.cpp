@@ -6240,4 +6240,399 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02g_unconditional_bundle_relay)
     mgr.SetEnabled(false);
 }
 
+// =============================================================================
+// T3-03: Outlier Filtering Bypass
+// =============================================================================
+
+static COraclePriceMessage MakeSignedOracleMsg(uint32_t id, uint64_t price, int64_t ts, const CKey& key)
+{
+    COraclePriceMessage msg;
+    msg.oracle_id = id;
+    msg.price_micro_usd = price;
+    msg.timestamp = ts;
+    msg.block_height = 0;
+    msg.nonce = 0;
+    BOOST_REQUIRE(msg.SignPhase2(key));
+    return msg;
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03a_consensus_price_time_dependent)
+{
+    // ATTACK: CalculateConsensusPrice uses msg.IsValid() which calls GetTime().
+    // During IBD or delayed block relay, oracle timestamps become "stale"
+    // relative to wall-clock time. Messages get EXCLUDED from price calculation,
+    // causing the consensus price to CHANGE depending on when a node validates.
+    //
+    // EXPLOIT: Miner creates block at time T with oracle price X.
+    // Node receives block at time T + 7200 (2 hours later).
+    // CalculateConsensusPrice excludes all messages (stale) → returns 0.
+    // 0 != X → ValidatePhaseTwoBundle rejects the block.
+    // CHAIN SPLIT: timely nodes accept, delayed nodes reject.
+
+    BOOST_TEST_MESSAGE("=== T3-03a: Time-Dependent Consensus Price (CHAIN SPLIT RISK) ===");
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    // Create 5 oracle messages at baseTime
+    std::vector<CKey> keys(5);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    for (uint32_t i = 0; i < 5; ++i) {
+        bundle.messages.push_back(MakeSignedOracleMsg(i, 50000, baseTime - 30, keys[i]));
+    }
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    // At time T (shortly after messages), CalculateConsensusPrice should work
+    CAmount price_at_T = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    BOOST_TEST_MESSAGE("Price at creation time: " << price_at_T);
+    BOOST_CHECK_MESSAGE(price_at_T == 50000,
+        "Price at creation time should be 50000, got " + std::to_string(price_at_T));
+
+    // Now advance time by 2 hours (past ORACLE_MAX_AGE_SECONDS = 3600)
+    SetMockTime(baseTime + 7200);
+
+    CAmount price_at_T_plus_2h = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    BOOST_TEST_MESSAGE("Price 2 hours later: " << price_at_T_plus_2h);
+
+    // BUG: If price changes based on wall-clock time, we have a consensus bug.
+    // The miner set bundle.median_price_micro_usd = 50000 at time T.
+    // A validator at T+7200 recalculates and gets a DIFFERENT value.
+    // If price_at_T_plus_2h != price_at_T → CHAIN SPLIT
+    if (price_at_T_plus_2h != price_at_T) {
+        BOOST_TEST_MESSAGE("CRITICAL BUG CONFIRMED: Consensus price is TIME-DEPENDENT!");
+        BOOST_TEST_MESSAGE("  Price at T:      " << price_at_T);
+        BOOST_TEST_MESSAGE("  Price at T+2h:   " << price_at_T_plus_2h);
+        BOOST_TEST_MESSAGE("  A block mined at T with price " << price_at_T << " would be REJECTED");
+        BOOST_TEST_MESSAGE("  by a node validating at T+2h because it calculates price " << price_at_T_plus_2h);
+        BOOST_TEST_MESSAGE("  This causes a CHAIN SPLIT between timely and delayed nodes.");
+        BOOST_TEST_MESSAGE("  Also breaks IBD: all historical blocks with oracle data fail validation.");
+        BOOST_TEST_MESSAGE("  FIX: CalculateConsensusPrice must NOT call msg.IsValid() with GetTime().");
+        BOOST_TEST_MESSAGE("       Use only price-range checks, not timestamp checks.");
+        BOOST_CHECK_MESSAGE(false,
+            "CRITICAL: CalculateConsensusPrice is time-dependent. "
+            "Price at T=" + std::to_string(price_at_T) +
+            " but at T+2h=" + std::to_string(price_at_T_plus_2h) +
+            ". CHAIN SPLIT during IBD or delayed relay.");
+    } else {
+        BOOST_TEST_MESSAGE("Defense holds: consensus price is time-independent");
+    }
+
+    SetMockTime(0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03b_ibd_oracle_validation_failure)
+{
+    // ATTACK: During IBD (Initial Block Download), node validates blocks from hours/days ago.
+    // CalculateConsensusPrice → msg.IsValid() → timestamp > current - 3600?
+    // Historical blocks will ALWAYS fail because their oracle timestamps are old.
+    //
+    // This test simulates IBD: block from 24 hours ago being validated now.
+
+    BOOST_TEST_MESSAGE("=== T3-03b: IBD Oracle Block Rejection ===");
+
+    int64_t now = 1700086400;
+    int64_t block_time = now - 86400;  // Block from 24 hours ago
+    SetMockTime(now);
+
+    // Oracle messages from 24 hours ago
+    std::vector<CKey> keys(4);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    for (uint32_t i = 0; i < 4; ++i) {
+        bundle.messages.push_back(MakeSignedOracleMsg(i, 50000, block_time - 10, keys[i]));
+    }
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    CAmount price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    BOOST_TEST_MESSAGE("IBD price calculation for 24h-old block: " << price);
+
+    if (price == 0) {
+        BOOST_TEST_MESSAGE("BUG CONFIRMED: CalculateConsensusPrice returns 0 for historical blocks.");
+        BOOST_TEST_MESSAGE("  During IBD, ALL blocks with oracle data would fail validation.");
+        BOOST_TEST_MESSAGE("  New nodes cannot sync the chain past the first DD-activated block.");
+        BOOST_CHECK_MESSAGE(false,
+            "CRITICAL: IBD broken — historical oracle blocks return price=0");
+    } else if (price != 50000) {
+        BOOST_TEST_MESSAGE("BUG: Price should be 50000 but got " << price << " (partial message exclusion)");
+        BOOST_CHECK_MESSAGE(false,
+            "Partial message exclusion during IBD: expected 50000, got " + std::to_string(price));
+    } else {
+        BOOST_TEST_MESSAGE("Defense holds: historical blocks validate correctly");
+    }
+
+    SetMockTime(0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03c_iqr_colluding_oracles_equal_split)
+{
+    // ATTACK: With even split (e.g., 4 honest + 3 malicious out of 7),
+    // can malicious oracles manipulate the median via IQR?
+    // This tests that IQR + median protects against minority manipulation.
+
+    BOOST_TEST_MESSAGE("=== T3-03c: IQR Bypass via Colluding Oracle Minority ===");
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    std::vector<CKey> keys(7);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    // 4 honest oracles at $0.05, 3 malicious at $0.10 (2x manipulation attempt)
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    for (uint32_t i = 0; i < 4; ++i) {
+        bundle.messages.push_back(MakeSignedOracleMsg(i, 50000, baseTime - 10, keys[i]));
+    }
+    for (uint32_t i = 4; i < 7; ++i) {
+        bundle.messages.push_back(MakeSignedOracleMsg(i, 100000, baseTime - 10, keys[i]));
+    }
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    CAmount price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    BOOST_TEST_MESSAGE("Price with 4 honest (50000) + 3 malicious (100000): " << price);
+
+    // With 7 prices sorted: [50000, 50000, 50000, 50000, 100000, 100000, 100000]
+    // Median = prices[3] = 50000
+    // IQR: q1=prices[1]=50000, q3=prices[5]=100000, IQR=50000
+    // Bounds: [50000-75000, 100000+75000] = [-25000, 175000] → all pass
+    // Filtered median = same = 50000
+    BOOST_CHECK_MESSAGE(price == 50000,
+        "Defense should hold: median of 7 with 4 honest should be 50000, got " +
+        std::to_string(price));
+
+    SetMockTime(0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03d_iqr_half_compromised)
+{
+    // ATTACK: What if exactly half the oracles are compromised?
+    // With 4 messages (minimum Phase 2): 2 honest at $0.05, 2 malicious at $100
+    // Median of even count = average of middle two
+
+    BOOST_TEST_MESSAGE("=== T3-03d: 50% Compromised Oracles — Price Manipulation ===");
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    std::vector<CKey> keys(4);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    // 2 honest at $0.05, 2 malicious at $100
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    bundle.messages.push_back(MakeSignedOracleMsg(0, 50000, baseTime - 10, keys[0]));      // $0.05
+    bundle.messages.push_back(MakeSignedOracleMsg(1, 50000, baseTime - 10, keys[1]));      // $0.05
+    bundle.messages.push_back(MakeSignedOracleMsg(2, 100000000, baseTime - 10, keys[2]));  // $100
+    bundle.messages.push_back(MakeSignedOracleMsg(3, 100000000, baseTime - 10, keys[3]));  // $100
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    CAmount price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    BOOST_TEST_MESSAGE("Price with 2 honest (50000) + 2 malicious (100000000): " << price);
+
+    // Sorted: [50000, 50000, 100000000, 100000000]
+    // IQR: q1=prices[1]=50000, q3=prices[3]=100000000
+    // IQR = 99950000
+    // Bounds: [50000-149925000, 100000000+149925000] → all pass
+    // Median of 4: (prices[1]+prices[2])/2 = (50000+100000000)/2 = 50025000
+    // That's $50.025 instead of $0.05 — 1000x manipulation!
+    if (price > 100000) {  // More than $0.10 indicates manipulation succeeded
+        BOOST_TEST_MESSAGE("FINDING: 50% compromised oracles can manipulate price.");
+        BOOST_TEST_MESSAGE("  Honest price: $0.05 (50000 micro-USD)");
+        BOOST_TEST_MESSAGE("  Manipulated consensus: $" << price / 1000000.0 << " (" << price << " micro-USD)");
+        BOOST_TEST_MESSAGE("  This is expected — 50% compromise defeats any filter.");
+        BOOST_TEST_MESSAGE("  The defense is the 4-of-7 minimum threshold on testnet (8-of-15 mainnet).");
+        BOOST_TEST_MESSAGE("  Attacker needs to compromise 50%+ oracle private keys.");
+    }
+    // This is not a bug — it's expected behavior when majority is compromised
+    BOOST_CHECK_MESSAGE(price > 0, "Price calculation should not return 0");
+
+    SetMockTime(0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03e_no_filtering_under_4_messages)
+{
+    // ATTACK: With < 4 messages, CalculateConsensusPrice skips IQR filtering.
+    // With exactly 3 messages, a single extreme value might shift the median.
+    // But median of 3 is always the middle value — 1 outlier can't move it.
+
+    BOOST_TEST_MESSAGE("=== T3-03e: No IQR Filtering for < 4 Messages ===");
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    std::vector<CKey> keys(3);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    // 2 honest at $0.05, 1 extreme outlier at $100
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    bundle.messages.push_back(MakeSignedOracleMsg(0, 50000, baseTime - 10, keys[0]));
+    bundle.messages.push_back(MakeSignedOracleMsg(1, 50000, baseTime - 10, keys[1]));
+    bundle.messages.push_back(MakeSignedOracleMsg(2, 100000000, baseTime - 10, keys[2]));
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    CAmount price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    BOOST_TEST_MESSAGE("Price with 2 honest + 1 extreme (3 total, no IQR): " << price);
+
+    // Sorted: [50000, 50000, 100000000]
+    // No IQR (< 4), median of odd = prices[1] = 50000
+    BOOST_CHECK_MESSAGE(price == 50000,
+        "Median of 3 with 1 outlier should be 50000, got " + std::to_string(price));
+
+    SetMockTime(0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03f_filter_inconsistency_consensus_vs_cached)
+{
+    // ATTACK: CalculateConsensusPrice (IQR) and GetConsensusPrice (10% median)
+    // use DIFFERENT filtering algorithms. If both are used for consensus-critical
+    // decisions on the same data, they could produce different results.
+
+    BOOST_TEST_MESSAGE("=== T3-03f: Filter Algorithm Inconsistency ===");
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    std::vector<CKey> keys(5);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    // Prices chosen to trigger different behavior between IQR and 10% filters:
+    // [45000, 49000, 50000, 51000, 65000]
+    // Median = 50000
+    // 10% threshold: 50000 * 10/100 = 5000 → range [45000, 55000] → 65000 filtered
+    // IQR: q1=49000, q3=51000, IQR=2000 → bounds [46000, 54000] → 45000 AND 65000 filtered
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    bundle.messages.push_back(MakeSignedOracleMsg(0, 45000, baseTime - 10, keys[0]));
+    bundle.messages.push_back(MakeSignedOracleMsg(1, 49000, baseTime - 10, keys[1]));
+    bundle.messages.push_back(MakeSignedOracleMsg(2, 50000, baseTime - 10, keys[2]));
+    bundle.messages.push_back(MakeSignedOracleMsg(3, 51000, baseTime - 10, keys[3]));
+    bundle.messages.push_back(MakeSignedOracleMsg(4, 65000, baseTime - 10, keys[4]));
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    // CalculateConsensusPrice (static, IQR-based — used in ValidatePhaseTwoBundle)
+    CAmount price_iqr = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+
+    // GetConsensusPrice (member function, 10%-of-median — used in UpdateBundle/cached price)
+    uint64_t price_10pct = bundle.GetConsensusPrice(1);
+
+    BOOST_TEST_MESSAGE("CalculateConsensusPrice (IQR):     " << price_iqr);
+    BOOST_TEST_MESSAGE("GetConsensusPrice (10% median):    " << price_10pct);
+
+    if (price_iqr != static_cast<CAmount>(price_10pct)) {
+        BOOST_TEST_MESSAGE("FINDING: Two consensus price functions produce DIFFERENT results!");
+        BOOST_TEST_MESSAGE("  If both are used in consensus-critical paths, this causes chain splits.");
+        BOOST_TEST_MESSAGE("  Currently: CalculateConsensusPrice is used for block validation (correct),");
+        BOOST_TEST_MESSAGE("            GetConsensusPrice is used for cached price (advisory).");
+        BOOST_TEST_MESSAGE("  RISK: If code changes route consensus decisions through GetConsensusPrice,");
+        BOOST_TEST_MESSAGE("        the different filtering will cause validation disagreements.");
+    } else {
+        BOOST_TEST_MESSAGE("Both functions agree for this input set");
+    }
+
+    // The key check: CalculateConsensusPrice must be deterministic and not rely on GetTime()
+    // (This is the real T3-03 bug — covered by T3-03a above)
+    BOOST_CHECK_MESSAGE(price_iqr > 0, "IQR price should be positive");
+    BOOST_CHECK_MESSAGE(price_10pct > 0, "10% price should be positive");
+
+    SetMockTime(0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03g_iqr_all_same_price)
+{
+    // EDGE CASE: All oracles report identical price → IQR = 0
+    // Bounds become [q1, q3] = [price, price] → only exact matches pass
+
+    BOOST_TEST_MESSAGE("=== T3-03g: All Identical Prices (IQR = 0) ===");
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    std::vector<CKey> keys(5);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    for (uint32_t i = 0; i < 5; ++i) {
+        bundle.messages.push_back(MakeSignedOracleMsg(i, 50000, baseTime - 10, keys[i]));
+    }
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    CAmount price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    BOOST_CHECK_EQUAL(price, 50000);
+
+    SetMockTime(0);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T3_03h_iqr_boundary_price_range)
+{
+    // ATTACK: Oracle messages at the extreme limits of ORACLE_MIN/MAX_PRICE_MICRO_USD
+    // Can we get CalculateConsensusPrice to accept extreme prices?
+
+    BOOST_TEST_MESSAGE("=== T3-03h: Extreme Price Boundaries ===");
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    std::vector<CKey> keys(5);
+    for (auto& k : keys) k.MakeNewKey(true);
+
+    // All at minimum price: $0.0001 = 100 micro-USD
+    COracleBundle bundle_min;
+    bundle_min.epoch = 0;
+    for (uint32_t i = 0; i < 5; ++i) {
+        bundle_min.messages.push_back(MakeSignedOracleMsg(i, ORACLE_MIN_PRICE_MICRO_USD, baseTime - 10, keys[i]));
+    }
+
+    auto regTestParams = CChainParams::RegTest({});
+    const Consensus::Params& cparams = regTestParams->GetConsensus();
+
+    CAmount price_min = OracleBundleManager::CalculateConsensusPrice(bundle_min, cparams);
+    BOOST_CHECK_MESSAGE(price_min == static_cast<CAmount>(ORACLE_MIN_PRICE_MICRO_USD),
+        "Min price should be " + std::to_string(ORACLE_MIN_PRICE_MICRO_USD) + ", got " + std::to_string(price_min));
+
+    // All at maximum price: $100 = 100000000 micro-USD
+    COracleBundle bundle_max;
+    bundle_max.epoch = 0;
+    for (uint32_t i = 0; i < 5; ++i) {
+        bundle_max.messages.push_back(MakeSignedOracleMsg(i, ORACLE_MAX_PRICE_MICRO_USD, baseTime - 10, keys[i]));
+    }
+
+    CAmount price_max = OracleBundleManager::CalculateConsensusPrice(bundle_max, cparams);
+    BOOST_CHECK_MESSAGE(price_max == static_cast<CAmount>(ORACLE_MAX_PRICE_MICRO_USD),
+        "Max price should be " + std::to_string(ORACLE_MAX_PRICE_MICRO_USD) + ", got " + std::to_string(price_max));
+
+    // Messages BELOW minimum (should be excluded by IsValid)
+    COracleBundle bundle_under;
+    bundle_under.epoch = 0;
+    for (uint32_t i = 0; i < 5; ++i) {
+        bundle_under.messages.push_back(MakeSignedOracleMsg(i, 50, baseTime - 10, keys[i]));  // $0.00005
+    }
+
+    CAmount price_under = OracleBundleManager::CalculateConsensusPrice(bundle_under, cparams);
+    BOOST_CHECK_MESSAGE(price_under == 0,
+        "Below-minimum prices should result in 0 (all excluded), got " + std::to_string(price_under));
+
+    SetMockTime(0);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

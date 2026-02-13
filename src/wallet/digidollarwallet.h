@@ -180,7 +180,7 @@ private:
     std::map<std::array<unsigned char, 32>, std::pair<CPubKey, std::vector<unsigned char>>> dd_crypted_address_keys GUARDED_BY(cs_dd_wallet);
 
     // Pointer to wallet for UTXO access
-    wallet::CWallet* m_wallet;
+    wallet::CWallet* m_wallet{nullptr};
 
     /** Null-safe dual lock: acquires cs_wallet (if m_wallet != nullptr) then cs_dd_wallet. */
     [[nodiscard]] std::pair<std::unique_lock<RecursiveMutex>,

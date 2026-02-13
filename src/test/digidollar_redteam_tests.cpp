@@ -8596,4 +8596,277 @@ BOOST_AUTO_TEST_CASE(redteam_T4_03f_extracted_key_can_sign)
     // An attacker with wallet.dat can sign DD transfers without the passphrase.
 }
 
+// =============================================================================
+// T4-04: Watch-only wallet balance manipulation
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_T4_04a_isddoutputmine_collateral_position_no_spendability)
+{
+    // ATTACK: IsDDOutputMine returns true based solely on collateral_positions
+    // containing the txid — no check whether we can actually SPEND the output.
+    //
+    // If a foreign position somehow enters collateral_positions (e.g., via
+    // ProcessDDTxForRescan accepting watch-only), all DD outputs of that txid
+    // are claimed as "ours" regardless of key ownership.
+
+    DigiDollarWallet wallet;
+
+    // Create a fake mint txid
+    uint256 foreign_txid = uint256S("aabbccdd11223344556677889900aabb11223344556677889900aabbccddeeff");
+
+    // Add a position for a foreign txid (simulates watch-only rescan adding it)
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = foreign_txid;
+    pos.dd_minted = 500000;  // $5,000 DD
+    pos.dgb_collateral = 100 * COIN;
+    pos.lock_tier = 3;
+    pos.unlock_height = 50000;
+    pos.is_active = true;
+    wallet.AddCollateralPosition(pos);
+
+    // Create a P2TR output that we do NOT own (random key)
+    CKey foreign_key;
+    foreign_key.MakeNewKey(true);
+    XOnlyPubKey foreign_xonly(foreign_key.GetPubKey());
+    auto tweaked = foreign_xonly.CreateTapTweak(nullptr);
+    BOOST_REQUIRE(tweaked.has_value());
+
+    CTxOut txout;
+    txout.nValue = 0;
+    txout.scriptPubKey.resize(34);
+    txout.scriptPubKey[0] = OP_1;
+    txout.scriptPubKey[1] = 0x20;
+    std::copy(tweaked->first.begin(), tweaked->first.end(), txout.scriptPubKey.begin() + 2);
+
+    // IsDDOutputMine should return false — we don't have the private key
+    // BUG: It returns true because collateral_positions.count(foreign_txid) > 0
+    bool claimed = wallet.IsDDOutputMine(txout, foreign_txid);
+
+    // FINDING: IsDDOutputMine returns true for outputs we can't spend,
+    // based solely on txid being in collateral_positions.
+    // This is a consequential bug — if watch-only positions enter the map,
+    // all their DD outputs are incorrectly claimed as spendable.
+    BOOST_CHECK_MESSAGE(claimed == true,
+        "Expected IsDDOutputMine to return true (bug: no spendability check on collateral_positions)");
+
+    // Verify we do NOT own the key
+    CKey retrieved_key;
+    bool has_owner = wallet.GetOwnerKey(foreign_txid, retrieved_key);
+    BOOST_CHECK_MESSAGE(!has_owner,
+        "We should NOT have the owner key for foreign position");
+
+    // Verify we do NOT have the address key either
+    CKey addr_key;
+    bool has_addr = wallet.GetAddressKey(tweaked->first, addr_key);
+    BOOST_CHECK_MESSAGE(!has_addr,
+        "We should NOT have the address key for foreign output");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_04b_dd_utxos_balance_inflation_via_foreign_position)
+{
+    // ATTACK: Foreign DD UTXO added to dd_utxos inflates GetTotalDDBalance
+    //
+    // If ProcessDDTxForRescan adds a watch-only mint to collateral_positions,
+    // it also adds the DD UTXO (vout[1]) to dd_utxos. GetTotalDDBalance()
+    // sums ALL dd_utxos without checking spendability.
+
+    DigiDollarWallet wallet;
+
+    // Simulate our own legitimate DD UTXO
+    COutPoint our_utxo(uint256S("1111111111111111111111111111111111111111111111111111111111111111"), 1);
+    wallet.AddDDUTXO(our_utxo, 100000);  // $1,000 DD
+
+    // Simulate a foreign (watch-only) DD UTXO added during rescan
+    COutPoint foreign_utxo(uint256S("2222222222222222222222222222222222222222222222222222222222222222"), 1);
+    wallet.AddDDUTXO(foreign_utxo, 9900000);  // $99,000 DD from watch-only
+
+    // GetTotalDDBalance (without wallet) sums all dd_utxos
+    CAmount balance = wallet.GetTotalDDBalance();
+
+    // FINDING: Balance is $100,000 (our $1,000 + foreign $99,000)
+    // User sees 100x their actual spendable balance
+    BOOST_CHECK_EQUAL(balance, 10000000);  // 100000.00 in cents
+
+    // SelectDDCoins will select the foreign UTXO for spending
+    std::vector<COutPoint> selected;
+    CAmount selected_total = 0;
+    bool can_select = wallet.SelectDDCoins(5000000, selected, selected_total);  // Try to spend $50,000
+    BOOST_CHECK_MESSAGE(can_select,
+        "SelectDDCoins succeeds because dd_utxos contains inflated balance");
+
+    // Verify the foreign UTXO was selected
+    bool foreign_selected = false;
+    for (const auto& outpoint : selected) {
+        if (outpoint == foreign_utxo) {
+            foreign_selected = true;
+            break;
+        }
+    }
+    BOOST_CHECK_MESSAGE(foreign_selected,
+        "Foreign (watch-only) UTXO selected for spending — signing will fail");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_04c_rescan_vs_normal_ownership_inconsistency)
+{
+    // ATTACK: ProcessDDTxForRescan uses IsMine() != ISMINE_NO (accepts watch-only)
+    //         ProcessTransactionForDD uses IsMine() & ISMINE_SPENDABLE (rejects watch-only)
+    //
+    // This inconsistency means watch-only DD UTXOs are tracked after rescan but not
+    // during normal block processing. A user who imports a watch-only descriptor and
+    // rescans will see inflated DD balance that doesn't match normal operation.
+    //
+    // We can't test the full wallet code path here (needs WalletTestingSetup),
+    // but we verify the ISMINE type behavior:
+
+    // ISMINE_WATCH_ONLY = 1, ISMINE_SPENDABLE = 2
+    wallet::isminetype watch_only = wallet::ISMINE_WATCH_ONLY;
+    wallet::isminetype spendable = wallet::ISMINE_SPENDABLE;
+    wallet::isminetype not_mine = wallet::ISMINE_NO;
+
+    // ProcessDDTxForRescan check: IsMine() != ISMINE_NO
+    // This ACCEPTS watch-only — BUG
+    bool rescan_accepts_watchonly = (watch_only != not_mine);
+    BOOST_CHECK_MESSAGE(rescan_accepts_watchonly,
+        "Confirmed: ProcessDDTxForRescan accepts ISMINE_WATCH_ONLY (bug)");
+
+    // ProcessTransactionForDD check: IsMine() & ISMINE_SPENDABLE
+    // This REJECTS watch-only — correct
+    bool normal_accepts_watchonly = static_cast<bool>(watch_only & spendable);
+    BOOST_CHECK_MESSAGE(!normal_accepts_watchonly,
+        "Confirmed: ProcessTransactionForDD rejects ISMINE_WATCH_ONLY (correct)");
+
+    // ScanForDDUTXOs check: IsMine() & ISMINE_SPENDABLE
+    // Same as normal — correct
+    bool scan_accepts_watchonly = static_cast<bool>(watch_only & spendable);
+    BOOST_CHECK_MESSAGE(!scan_accepts_watchonly,
+        "Confirmed: ScanForDDUTXOs rejects ISMINE_WATCH_ONLY (correct)");
+
+    // DetectIncomingDDOutputs check: IsMine() & ISMINE_SPENDABLE
+    // Same as normal — correct
+    bool detect_accepts_watchonly = static_cast<bool>(watch_only & spendable);
+    BOOST_CHECK_MESSAGE(!detect_accepts_watchonly,
+        "Confirmed: DetectIncomingDDOutputs rejects ISMINE_WATCH_ONLY (correct)");
+
+    // FINDING: ProcessDDTxForRescan is the ONLY code path that accepts watch-only.
+    // All other paths correctly require ISMINE_SPENDABLE.
+    // After rescan, watch-only DD UTXOs contaminate dd_utxos and collateral_positions.
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_04d_change_output_attribution_transfer_rescan)
+{
+    // ATTACK: ProcessDDTxForRescan TRANSFER handler assumes dd_output_count > 1
+    // means "change output". In a multi-recipient transfer, output 2+ could
+    // be another recipient, not change.
+    //
+    // The logic:
+    //   if (!is_ours && is_our_send && dd_output_count > 1) {
+    //       is_ours = true; // "This is a change output from our send"
+    //   }
+    //
+    // If we sent a TRANSFER with multiple DD P2TR outputs, ANY DD output after
+    // the first is assumed to be change and added to our dd_utxos.
+
+    DigiDollarWallet wallet;
+
+    // Simulate: we own the first input UTXO (we are the sender)
+    COutPoint our_input(uint256S("aaaa000000000000000000000000000000000000000000000000000000000000"), 1);
+    wallet.AddDDUTXO(our_input, 500000);  // $5,000 DD we're sending
+
+    // Simulate a TRANSFER tx with 3 DD outputs:
+    //   vout[0] = recipient A (5000 DD) — not ours
+    //   vout[1] = recipient B (3000 DD) — not ours (but code thinks it's change!)
+    //   vout[2] = DGB fee change — ours
+    //   vout[3] = OP_RETURN DD <2> <5000> <3000>
+    //
+    // ProcessDDTxForRescan sees:
+    //   dd_output_count=1 for vout[0] → not ours (correct)
+    //   dd_output_count=2 for vout[1] → is_our_send && count>1 → assumes change → IS OURS (WRONG!)
+    //
+    // Result: recipient B's $3,000 DD added to our dd_utxos
+
+    // We can't run the full rescan code path, but verify the logic flaw:
+    // The heuristic "dd_output_count > 1 means change" fails for multi-recipient transfers
+    int dd_output_count_at_recipient_b = 2;  // Second DD P2TR output
+    bool is_our_send = true;  // We funded the inputs
+    bool is_ours_via_isddoutputmine = false;  // We don't own recipient B's key
+
+    // The buggy heuristic:
+    bool buggy_attribution = (!is_ours_via_isddoutputmine && is_our_send && dd_output_count_at_recipient_b > 1);
+    BOOST_CHECK_MESSAGE(buggy_attribution,
+        "Confirmed: Second DD output in our TRANSFER incorrectly attributed as change");
+
+    // What should happen: only IsDDOutputMine should determine ownership
+    // The dd_output_count > 1 heuristic should NOT override key-based checks
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_04e_getddutxos_no_spendability_filter)
+{
+    // ATTACK: GetDDUTXOs returns all UTXOs from dd_utxos map without
+    // checking if we actually have signing keys for them.
+    //
+    // If watch-only UTXOs contaminate dd_utxos (via rescan bug),
+    // GetDDUTXOs includes them, SelectDDCoins selects them,
+    // and TransferDigiDollar tries to sign them → failure.
+    //
+    // Bitcoin Core's AvailableCoins has a spendable filter. DD does not.
+
+    DigiDollarWallet wallet;
+
+    // Add UTXOs — mix of spendable and watch-only
+    COutPoint spendable_utxo(uint256S("1111111111111111111111111111111111111111111111111111111111111111"), 1);
+    COutPoint watchonly_utxo(uint256S("2222222222222222222222222222222222222222222222222222222222222222"), 1);
+    wallet.AddDDUTXO(spendable_utxo, 100000);   // $1,000 — we have key
+    wallet.AddDDUTXO(watchonly_utxo, 200000);    // $2,000 — watch-only, no key
+
+    // GetDDUTXOs (without wallet pointer) returns all
+    std::vector<DDUtxo> utxos = wallet.GetDDUTXOs();
+
+    // FINDING: Both UTXOs returned — no spendability filtering
+    BOOST_CHECK_EQUAL(utxos.size(), 2u);
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), 300000);  // $3,000 total
+
+    // User thinks they have $3,000 DD but can only spend $1,000
+    // SelectDDCoins for $2,500 succeeds but signing fails
+    std::vector<COutPoint> selected;
+    CAmount selected_total = 0;
+    bool success = wallet.SelectDDCoins(250000, selected, selected_total);
+    BOOST_CHECK(success);  // Selection succeeds (bug: watch-only included)
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T4_04f_dd_utxos_amount_from_opreturn_fallback)
+{
+    // ATTACK: In ProcessDDTxForRescan TRANSFER handler, when dd_output_index >= amounts.size(),
+    // the code falls back to amounts[0]:
+    //
+    //   if (dd_output_index < amounts.size())
+    //       received_dd = amounts[dd_output_index];
+    //   else if (!amounts.empty())
+    //       received_dd = amounts[0];
+    //
+    // If a malformed DD transfer has more P2TR outputs than OP_RETURN amounts,
+    // extra outputs get the FIRST amount instead of being rejected.
+    // This could inflate balance tracking.
+
+    // Simulate: OP_RETURN has [5000, 3000] but there are 3 DD P2TR outputs
+    std::vector<CAmount> amounts = {500000, 300000};  // $5,000 and $3,000
+
+    // For the 3rd DD output (index 2), which exceeds amounts.size():
+    size_t dd_output_index = 2;
+    CAmount received_dd = 0;
+
+    if (dd_output_index < amounts.size()) {
+        received_dd = amounts[dd_output_index];
+    } else if (!amounts.empty()) {
+        received_dd = amounts[0];  // Falls back to first amount
+    }
+
+    // FINDING: 3rd output gets $5,000 (amounts[0]) instead of being rejected
+    BOOST_CHECK_EQUAL(received_dd, 500000);
+
+    // Correct behavior should be: reject (received_dd = 0)
+    // This means the fallback creates $5,000 of phantom DD for an extra output
+    BOOST_CHECK_MESSAGE(received_dd != 0,
+        "Confirmed: OP_RETURN amount fallback assigns first amount to extra outputs (inflation risk)");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

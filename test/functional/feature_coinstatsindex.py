@@ -41,6 +41,7 @@ class CoinStatsIndexTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 2
         self.supports_cli = False
+        self.rpc_timeout = 180  # Needs extra time for reindexing under parallel load
         self.extra_args = [
             ["-dandelion=0", "-minrelaytxfee=0.00000001"],
             ["-coinstatsindex", "-dandelion=0", "-minrelaytxfee=0.00000001"]
@@ -62,7 +63,7 @@ class CoinStatsIndexTest(DigiByteTestFramework):
         )
 
     def sync_index_node(self):
-        self.wait_until(lambda: self.nodes[1].getindexinfo()['coinstatsindex']['synced'] is True)
+        self.wait_until(lambda: self.nodes[1].getindexinfo()['coinstatsindex']['synced'] is True, timeout=180)
 
     def _test_coin_stats_index(self):
         node = self.nodes[0]

@@ -968,7 +968,21 @@ bool ValidateMintTransaction(const CTransaction& tx,
     // 7. Calculate and verify collateral (skip for historical blocks - oracle price dependent)
     CAmount requiredCollateral = 0;
     if (!ctx.skipOracleValidation) {
-        requiredCollateral = CalculateRequiredCollateral(totalDD, lockTime, ctx);
+        // SECURITY [T2-01]: Convert absolute lock HEIGHT to relative lock PERIOD for
+        // collateral ratio calculation. The OP_RETURN stores an absolute lockHeight
+        // (currentHeight + lockPeriod), but GetCollateralRatioForLockTime expects a
+        // relative lock period in blocks. Without this conversion, on mainnet (height ~22M)
+        // the absolute height exceeds ALL tier thresholds (max is 10yr = 21M blocks),
+        // causing every lock tier to use the 200% (10-year) ratio instead of its correct
+        // higher ratio. A 1-hour lock would require only 200% instead of 1000% collateral.
+        int64_t lockPeriod = lockTime - ctx.nHeight;
+        if (lockPeriod <= 0) {
+            LogPrintf("DigiDollar: Invalid lock period: lockTime=%lld, height=%d, period=%lld\n",
+                      (long long)lockTime, ctx.nHeight, (long long)lockPeriod);
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-lock-period");
+        }
+
+        requiredCollateral = CalculateRequiredCollateral(totalDD, lockPeriod, ctx);
         if (requiredCollateral <= 0) {
             LogPrintf("DigiDollar: Failed to calculate required collateral\n");
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "collateral-calculation-failed");
@@ -982,7 +996,7 @@ bool ValidateMintTransaction(const CTransaction& tx,
         }
 
         // 8. Additional validation checks
-        if (!ValidateCollateralRatio(totalCollateral, totalDD, lockTime, ctx)) {
+        if (!ValidateCollateralRatio(totalCollateral, totalDD, lockPeriod, ctx)) {
             LogPrintf("DigiDollar: Collateral ratio validation failed\n");
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-ratio");
         }

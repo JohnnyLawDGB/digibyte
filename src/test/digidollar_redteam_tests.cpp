@@ -14,6 +14,7 @@
 
 #include <consensus/amount.h>
 #include <consensus/digidollar.h>
+#include <consensus/tx_check.h>
 #include <digidollar/txbuilder.h>
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
@@ -2797,6 +2798,367 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06i_oracle_vs_dd_activation_sync)
             std::to_string(consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height) +
             ") to avoid the skipOracleValidation gap found in T1-05.");
     }
+}
+
+// =============================================================================
+// T1-07: Double-Spend DD Token Exploits
+// =============================================================================
+
+// Helper: Build a valid DD transfer OP_RETURN
+static CScript MakeDDTransferOpReturn(const std::vector<CAmount>& amounts) {
+    CScript script;
+    script << OP_RETURN;
+    // DD marker
+    std::vector<unsigned char> dd_marker = {'D', 'D'};
+    script << dd_marker;
+    // Type = 2 (TRANSFER)
+    script << CScriptNum(2);
+    // Amounts
+    for (CAmount amt : amounts) {
+        script << CScriptNum::serialize(amt);
+    }
+    return script;
+}
+
+// Helper: Build a valid DD mint OP_RETURN
+static CScript MakeDDMintOpReturn(CAmount ddAmount, int64_t lockHeight, int lockTier, const XOnlyPubKey& ownerKey) {
+    CScript script;
+    script << OP_RETURN;
+    std::vector<unsigned char> dd_marker = {'D', 'D'};
+    script << dd_marker;
+    script << CScriptNum(1);  // Type = MINT
+    script << CScriptNum::serialize(ddAmount);
+    script << CScriptNum::serialize(lockHeight);
+    script << CScriptNum(lockTier);
+    // Owner x-only pubkey (32 bytes)
+    std::vector<unsigned char> keyData(ownerKey.begin(), ownerKey.end());
+    script << keyData;
+    return script;
+}
+
+// Helper: Build a simple P2TR output script
+static CScript MakeP2TR(const XOnlyPubKey& key) {
+    CScript script;
+    script << OP_1;
+    script << std::vector<unsigned char>(key.begin(), key.end());
+    return script;
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07a_duplicate_inputs_rejected)
+{
+    // ATTACK: Create a DD transfer with the same input listed twice.
+    // If accepted, the DD amount from one UTXO gets counted twice,
+    // allowing creation of more DD outputs than inputs.
+    //
+    // This is prevented by Bitcoin's CheckTransaction which rejects duplicate inputs
+    // (CVE-2018-17144 fix). This test verifies the protection holds for DD txs.
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    // Same outpoint used twice
+    COutPoint sharedInput(uint256S("aabb000000000000000000000000000000000000000000000000000000000001"), 1);
+    mtx.vin.resize(2);
+    mtx.vin[0].prevout = sharedInput;
+    mtx.vin[1].prevout = sharedInput;  // DUPLICATE!
+
+    // Generate a test key for outputs
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // DD output claiming 200 DD (twice the input's 100 DD)
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({200})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    // CheckTransaction should reject duplicate inputs
+    bool check_result = CheckTransaction(tx, state);
+    BOOST_CHECK_MESSAGE(!check_result,
+        "DEFENSE HOLDS [T1-07a]: CheckTransaction rejects duplicate inputs (bad-txns-inputs-duplicate). "
+        "DD tokens cannot be double-counted by repeating the same input outpoint.");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txns-inputs-duplicate");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07b_transfer_conservation_inflation)
+{
+    // ATTACK: Create a DD transfer where OP_RETURN claims more DD output than
+    // what the inputs actually contain. The conservation check (inputDD == outputDD)
+    // should catch this even if the OP_RETURN is crafted to inflate amounts.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    // Input pointing to a DD UTXO (100 DD, from a previous mint)
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("dddd000000000000000000000000000000000000000000000000000000000001"), 1);
+
+    // Generate a test key
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // OP_RETURN claims 200 DD output (inflated from 100 DD input)
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({200})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    // Validation without coins view — input amounts can't be looked up
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07b]: Transfer with inflated OP_RETURN amounts rejected. "
+        "Without coins view, input DD amounts can't be determined so tx is rejected. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07c_transfer_no_dd_inputs)
+{
+    // ATTACK: Create a DD transfer with only fee inputs (no DD UTXOs).
+    // The OP_RETURN claims DD output, but no DD inputs exist.
+    // This tests whether DD can be created from nothing via transfer.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    // Input: regular DGB UTXO (not DD)
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("eeee000000000000000000000000000000000000000000000000000000000001"), 0);
+
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // Claim DD output with no DD input
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({100})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07c]: Transfer with no DD inputs rejected. "
+        "DD cannot be created from nothing via a transfer transaction. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07d_transfer_wrong_tx_type)
+{
+    // ATTACK: Use MINT version (type 1) but construct a transfer-like tx.
+    // Could bypass transfer-specific conservation checks if type routing is wrong.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770;  // DD_TX_MINT (type=1) — NOT TRANSFER
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("ffff000000000000000000000000000000000000000000000000000000000001"), 1);
+
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // Transfer-style OP_RETURN but with MINT version
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({100})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+
+    // Should be routed to ValidateMintTransaction (type=1), which will fail
+    // because it expects collateral output (P2TR with value > 0)
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07d]: Wrong tx type doesn't bypass conservation. "
+        "Tx version type=1 routes to mint validation, which rejects transfer-style tx. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07e_transfer_zero_dd_amount_in_opreturn)
+{
+    // ATTACK: Create a DD transfer with zero amounts in OP_RETURN.
+    // This could bypass conservation if zero amounts are silently accepted.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("1111000000000000000000000000000000000000000000000000000000000001"), 1);
+
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // DD output with 0 amount
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({0})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07e]: Transfer with zero DD amount rejected. "
+        "Zero-amount DD outputs are invalid. Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07f_transfer_negative_dd_amount)
+{
+    // ATTACK: Create a DD transfer with negative amounts in OP_RETURN.
+    // Script numbers are signed — a negative amount could underflow conservation checks.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("2222000000000000000000000000000000000000000000000000000000000001"), 1);
+
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // Two outputs: 200 DD to recipient, -100 DD as "change" (negative!)
+    // If conservation check is inputDD == outputDD, and outputDD = 200 + (-100) = 100,
+    // this could pass with only 100 DD input but recipient gets 200 DD
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({200, -100})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07f]: Transfer with negative DD amount rejected. "
+        "Negative amounts cannot be used to bypass conservation. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07g_transfer_overflow_dd_amounts)
+{
+    // ATTACK: Create a DD transfer where output amounts overflow when summed.
+    // If two outputs have amounts near INT64_MAX, their sum could overflow to
+    // a small number, matching a small inputDD and creating DD from nothing.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("3333000000000000000000000000000000000000000000000000000000000001"), 1);
+
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // Two outputs near INT64_MAX that would overflow on addition
+    CAmount near_max = std::numeric_limits<int64_t>::max() / 2 + 1;
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({near_max, near_max})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07g]: Transfer with overflow DD amounts rejected. "
+        "Amounts near INT64_MAX cannot overflow conservation checks. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07h_transfer_extra_outputs_beyond_opreturn)
+{
+    // ATTACK: Create a DD transfer with more P2TR zero-value outputs than
+    // amounts listed in OP_RETURN. Extra outputs might get phantom DD values.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("4444000000000000000000000000000000000000000000000000000000000001"), 1);
+
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // OP_RETURN has 1 amount (100 DD), but we create 3 P2TR zero-value outputs
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));  // 100 DD (from OP_RETURN)
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));  // Extra — no OP_RETURN amount
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));  // Extra — no OP_RETURN amount
+    mtx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({100})));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07h]: Transfer with extra P2TR outputs beyond OP_RETURN rejected. "
+        "Extra zero-value outputs with no corresponding OP_RETURN amounts are rejected. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t1_07i_transfer_no_opreturn)
+{
+    // ATTACK: Create a DD transfer with no OP_RETURN.
+    // Without OP_RETURN, DD amounts can't be determined for outputs.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;  // DD_TX_TRANSFER
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("5555000000000000000000000000000000000000000000000000000000000001"), 1);
+
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+
+    // P2TR output but NO OP_RETURN
+    mtx.vout.push_back(CTxOut(0, MakeP2TR(xonly)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T1-07i]: Transfer with no OP_RETURN rejected. "
+        "DD transfers require OP_RETURN for output amount declaration. "
+        "Reason: " + state.GetRejectReason());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

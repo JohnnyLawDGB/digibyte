@@ -18,8 +18,9 @@ define $(package)_set_vars
   # as a target name, causing "target already defined" errors on ARM64 macOS.
   $(package)_config_opts+=CFLAGS="$($(package)_cflags)"
   $(package)_config_opts+=CPPFLAGS="$($(package)_cppflags)"
-  $(package)_config_opts_linux=-fPIC -D_GNU_SOURCE
-  $(package)_config_opts_freebsd=-fPIC
+  $(package)_cflags_linux=-fPIC
+  $(package)_cppflags_linux=-D_GNU_SOURCE
+  $(package)_cflags_freebsd=-fPIC
   $(package)_config_opts_x86_64_linux=linux-x86_64
   $(package)_config_opts_i686_linux=linux-generic32
   $(package)_config_opts_arm_linux=linux-generic32

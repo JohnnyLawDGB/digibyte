@@ -68,12 +68,22 @@ MockOracleManager& MockOracleManager::GetInstance()
 
 CAmount MockOracleManager::GetCurrentPrice() const
 {
+    // SECURITY (DGB-SEC-005): Runtime guard — reject on non-REGTEST networks
+    if (Params().GetChainType() != ChainType::REGTEST) {
+        return 0;
+    }
     LOCK(cs_price);
     return mockPriceMicroUSD;
 }
 
 void MockOracleManager::SetMockPrice(CAmount price_micro_usd)
 {
+    // SECURITY (DGB-SEC-005): Runtime guard — mock oracle must only operate in REGTEST
+    if (Params().GetChainType() != ChainType::REGTEST) {
+        LogPrintf("MockOracleManager: SECURITY - SetMockPrice rejected on non-REGTEST network\n");
+        return;
+    }
+
     LOCK(cs_price);
 
     // Validate price is reasonable

@@ -4554,4 +4554,242 @@ BOOST_AUTO_TEST_CASE(redteam_t2_03e_fee_tolerance_minimum_exploit)
     BOOST_TEST_MESSAGE("T2-03e: Fee tolerance minimum exploitation " << (result ? "VULNERABLE" : "DEFENDED"));
 }
 
+// =============================================================================
+// T2-04: Oracle Price Staleness Exploit
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t2_04a_stale_cached_price_no_expiry)
+{
+    // ATTACK: Oracle goes offline, cached price persists forever.
+    // DGB price crashes, attacker mints DD using stale high price with less collateral.
+    //
+    // GetLatestPrice() returns cached_price without checking last_update_time.
+    // last_update_time is tracked but NEVER checked for freshness.
+
+    BOOST_TEST_MESSAGE("=== T2-04a: Stale Cached Price — No Expiry Check ===");
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1);
+
+    // Simulate: oracle sends price at time T
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    // Create a valid oracle message with price $0.05 (50000 micro-USD)
+    CKey oracleKey;
+    oracleKey.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;  // $0.05
+    msg.timestamp = baseTime;
+    msg.SignPhase2(oracleKey);
+
+    // Inject directly (bypass chainparams check)
+    manager.InjectTestMessage(msg);
+
+    // Force cached price update
+    {
+        std::vector<uint64_t> prices = {50000};
+        // Manually set cached price via UpdatePriceCache
+        manager.UpdatePriceCache(100, 50000);
+    }
+
+    CAmount priceAtTime = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(priceAtTime, 50000);
+    BOOST_TEST_MESSAGE("T2-04a: Price at T=0: " << priceAtTime << " micro-USD ($" << priceAtTime / 1000000.0 << ")");
+
+    // Advance time by 2 hours (well past ORACLE_MAX_AGE_SECONDS = 3600)
+    SetMockTime(baseTime + 7200);
+
+    // GetLatestPrice() should ideally return 0 (stale), but currently returns cached value
+    CAmount priceAfter2h = manager.GetLatestPrice();
+
+    BOOST_TEST_MESSAGE("T2-04a: Price after 2 hours (no oracle updates): " << priceAfter2h << " micro-USD");
+
+    // BUG CHECK: If price is still returned after 2 hours with no updates, staleness is not checked
+    if (priceAfter2h > 0) {
+        BOOST_TEST_MESSAGE("VULNERABILITY [T2-04a]: GetLatestPrice() returns stale price " << priceAfter2h
+            << " micro-USD after 2 hours with no oracle updates! "
+            << "last_update_time is tracked but NEVER checked.");
+
+        // Demonstrate the exploit: attacker uses stale $0.05 price when real price dropped to $0.001
+        // With stale price: 1 DGB = $0.05, so $1 DD needs 2000 DGB at 1000% ratio
+        // With real price: 1 DGB = $0.001, so $1 DD needs 100000 DGB at 1000% ratio
+        // Attacker gets 50x leverage on under-collateralized DD
+        BOOST_CHECK_MESSAGE(priceAfter2h == 0,
+            "EXPLOIT [T2-04a]: Stale cached oracle price persists indefinitely! "
+            "Cached price = " + std::to_string(priceAfter2h) + " micro-USD after 2 hours. "
+            "last_update_time exists but GetLatestPrice() NEVER checks it. "
+            "An attacker can DDoS oracles and mint DD using the last known (higher) price "
+            "while the real DGB price has crashed, creating under-collateralized tokens.");
+    } else {
+        BOOST_TEST_MESSAGE("T2-04a: DEFENDED — GetLatestPrice() correctly returns 0 for stale price");
+    }
+
+    // Advance time by 24 hours — price should definitely be invalid
+    SetMockTime(baseTime + 86400);
+    CAmount priceAfter24h = manager.GetLatestPrice();
+    BOOST_TEST_MESSAGE("T2-04a: Price after 24 hours: " << priceAfter24h << " micro-USD");
+
+    BOOST_CHECK_MESSAGE(priceAfter24h == 0,
+        "EXPLOIT [T2-04a]: Oracle price persists after 24 HOURS! "
+        "Price = " + std::to_string(priceAfter24h) + " micro-USD. "
+        "No staleness timeout exists in GetLatestPrice().");
+
+    SetMockTime(0);  // Reset mock time
+    manager.Clear();
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_04b_hardcoded_fallback_price)
+{
+    // ATTACK: GetOraclePriceForTransaction() has a hardcoded fallback price of $0.0065
+    // If oracle system returns 0, minting proceeds at this arbitrary fixed price.
+    // This bypasses the oracle system entirely.
+
+    BOOST_TEST_MESSAGE("=== T2-04b: Hardcoded Fallback Oracle Price ===");
+
+    // On a fresh node or after oracle failure, GetOraclePriceForTransaction falls through to:
+    // static const CAmount FALLBACK_ORACLE_PRICE_MICRO_USD = 6500;
+    //
+    // This means ANY node can mint DD tokens using $0.0065/DGB even if:
+    // - No oracles have ever been online
+    // - All oracles are offline
+    // - Real DGB price is completely different
+    //
+    // The fallback should NOT exist — oracle failure should HALT minting, not use a guess.
+
+    // Verify the fallback exists by checking the price flow
+    // In regtest, MockOracleManager takes priority, so we need to check the code path directly
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    // With no oracle data at all, GetLatestPrice returns 0
+    CAmount noDataPrice = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(noDataPrice, 0);
+    BOOST_TEST_MESSAGE("T2-04b: GetLatestPrice() with no data = " << noDataPrice << " (correctly 0)");
+
+    // But GetOraclePriceForTransaction in validation.cpp falls back to FALLBACK_ORACLE_PRICE_MICRO_USD = 6500
+    // This is a code-level finding — the fallback bypasses oracle consensus entirely
+    // We can verify this by examining the function, but can't easily call it from unit tests
+    // without setting up the full transaction validation context
+
+    BOOST_TEST_MESSAGE("FINDING [T2-04b]: validation.cpp GetOraclePriceForTransaction() has hardcoded fallback "
+        "FALLBACK_ORACLE_PRICE_MICRO_USD = 6500 ($0.0065/DGB). "
+        "When oracle system returns 0, minting uses this fixed price instead of rejecting. "
+        "This bypasses oracle consensus entirely on fresh nodes or during oracle outages.");
+
+    // Verify the code: validation.cpp line ~1844
+    // static const CAmount FALLBACK_ORACLE_PRICE_MICRO_USD = 6500;
+    // This should be removed — oracle failure = no minting, period.
+
+    manager.Clear();
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_04c_last_update_time_unused)
+{
+    // ATTACK: Verify that last_update_time is stored but never used for validation.
+    // This is the root cause of T2-04a — the freshness timestamp exists but is decorative.
+
+    BOOST_TEST_MESSAGE("=== T2-04c: last_update_time Is Unused ===");
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1);
+
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    // Set a price
+    manager.UpdatePriceCache(100, 50000);
+
+    // Get stats — last_update should be baseTime
+    auto stats = manager.GetStats();
+    BOOST_CHECK_EQUAL(stats.latest_price, 50000);
+    BOOST_CHECK(stats.last_update > 0);
+    BOOST_TEST_MESSAGE("T2-04c: Stats.last_update = " << stats.last_update << ", latest_price = " << stats.latest_price);
+
+    // Advance time way past any reasonable staleness window
+    SetMockTime(baseTime + 604800);  // 1 week later
+
+    // Price is still available
+    CAmount stalePrice = manager.GetLatestPrice();
+    BOOST_TEST_MESSAGE("T2-04c: Price after 1 WEEK: " << stalePrice << " micro-USD");
+
+    // Stats still show the old update time
+    auto staleStats = manager.GetStats();
+    int64_t age = (baseTime + 604800) - staleStats.last_update;
+    BOOST_TEST_MESSAGE("T2-04c: Price age: " << age << " seconds (" << age / 3600 << " hours, " << age / 86400 << " days)");
+
+    BOOST_CHECK_MESSAGE(stalePrice == 0,
+        "EXPLOIT [T2-04c]: cached_price persists for " + std::to_string(age) + " seconds ("
+        + std::to_string(age / 86400) + " days) without any oracle update! "
+        "last_update_time = " + std::to_string(staleStats.last_update) + " but NOTHING checks it. "
+        "OracleStats::last_update is informational only — purely decorative.");
+
+    SetMockTime(0);
+    manager.Clear();
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_04d_stale_price_enables_undercollateralized_mint)
+{
+    // ATTACK: Full exploit demonstration.
+    // 1. Oracle price $0.05 cached
+    // 2. Oracle goes offline, real DGB price drops to $0.001
+    // 3. Attacker mints DD using stale $0.05 price
+    // 4. Required collateral is 50x less than it should be
+
+    BOOST_TEST_MESSAGE("=== T2-04d: Stale Price Enables Under-Collateralized Minting ===");
+
+    auto regTestParams = CChainParams::RegTest({});
+    int64_t baseTime = 1700000000;
+    SetMockTime(baseTime);
+
+    // Oracle sets price at $0.05 (50000 micro-USD)
+    CAmount stalePrice = 50000;
+
+    // Calculate collateral needed at stale $0.05 price (1-hour lock = 1000% ratio)
+    CAmount ddToMint = 100;  // $1.00 in DD cents
+    int lockBlocks = 240;    // 1-hour lock
+    DigiDollar::ValidationContext ctxStale(1000, stalePrice, 150, *regTestParams);
+    CAmount collateralAtStale = DigiDollar::CalculateRequiredCollateral(ddToMint, lockBlocks, ctxStale);
+
+    BOOST_TEST_MESSAGE("T2-04d: At stale price $0.05: collateral needed = " << collateralAtStale << " sats ("
+        << collateralAtStale / COIN << " DGB)");
+
+    // Now simulate: price SHOULD be $0.001 (1000 micro-USD) — DGB crashed 50x
+    CAmount realPrice = 1000;
+    DigiDollar::ValidationContext ctxReal(1000, realPrice, 150, *regTestParams);
+    CAmount collateralAtReal = DigiDollar::CalculateRequiredCollateral(ddToMint, lockBlocks, ctxReal);
+
+    BOOST_TEST_MESSAGE("T2-04d: At real price $0.001: collateral needed = " << collateralAtReal << " sats ("
+        << collateralAtReal / COIN << " DGB)");
+
+    // The exploit: attacker provides collateralAtStale (much less than collateralAtReal)
+    // Validation passes because it uses stale price
+    if (collateralAtStale > 0 && collateralAtReal > 0) {
+        double undercollateralizedRatio = static_cast<double>(collateralAtReal) / collateralAtStale;
+        BOOST_TEST_MESSAGE("T2-04d: Under-collateralization factor: " << undercollateralizedRatio << "x");
+        BOOST_TEST_MESSAGE("T2-04d: Attacker provides " << (1.0 / undercollateralizedRatio * 100.0) << "% of required collateral");
+
+        // Verify the stale price validation passes
+        DigiDollar::ValidationContext ctxExploit(1000, stalePrice, 150, *regTestParams);
+        CAmount requiredAtStale = DigiDollar::CalculateRequiredCollateral(ddToMint, lockBlocks, ctxExploit);
+        BOOST_CHECK(requiredAtStale > 0);
+
+        // With stale price, collateralAtStale is enough (validation passes)
+        // But with real price, it's woefully insufficient
+        BOOST_TEST_MESSAGE("EXPLOIT [T2-04d]: Attacker mints $1 DD with " << collateralAtStale << " sats collateral. "
+            "Correct requirement at real price: " << collateralAtReal << " sats. "
+            "Under-collateralized by " << undercollateralizedRatio << "x. "
+            "Root cause: GetLatestPrice() has no staleness check.");
+    }
+
+    SetMockTime(0);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

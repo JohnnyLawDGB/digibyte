@@ -27,6 +27,30 @@ const unsigned int WALLET_CRYPTO_IV_SIZE = 16;
  * Wallet Private Keys are then encrypted using AES-256-CBC
  * with the double-sha256 of the public key as the IV, and the
  * master key's key as the encryption key (see keystore.[ch]).
+ *
+ * SECURITY NOTE (DGB-SEC-006): Deterministic IV Design
+ * =====================================================
+ * The IV for private key encryption is the first 16 bytes of
+ * Hash(pubkey) (double-SHA256), NOT a random nonce. This is an
+ * intentional design inherited from Bitcoin Core, not a weakness:
+ *
+ * 1. Uniqueness: Each private key has a unique public key, so each
+ *    key gets a unique IV. AES-CBC only requires IVs to be unique
+ *    per key+IV pair, not unpredictable.
+ *
+ * 2. Key binding: The IV cryptographically binds each ciphertext to
+ *    its public key. Swapping ciphertexts between keys fails because
+ *    decryption uses the wrong IV, and VerifyPubKey() catches this.
+ *
+ * 3. Determinism: Re-encrypting the same key produces identical
+ *    ciphertext. This is acceptable — wallet keys are encrypted once
+ *    with one master key, and determinism enables verification.
+ *
+ * 4. Trade-off: An attacker who knows a plaintext private key can
+ *    verify their guess by re-encrypting with the deterministic IV
+ *    and comparing to the stored ciphertext. This is moot in
+ *    practice: if the attacker has the master key (needed to
+ *    encrypt), they can already decrypt all keys.
  */
 
 /** Master key for wallet encryption */

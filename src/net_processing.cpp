@@ -5692,6 +5692,37 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
+        // Rate limit GETORACLES requests: max 10 per minute per peer.
+        // Without this, an attacker can spam GETORACLES causing repeated responses
+        // of N oracle messages each time, wasting outbound bandwidth.
+        {
+            static std::map<NodeId, std::pair<int64_t, int>> getoracles_rate_limit;
+            int64_t now = GetTime();
+
+            // Cleanup disconnected peers periodically
+            if (getoracles_rate_limit.size() > 100) {
+                auto it = getoracles_rate_limit.begin();
+                while (it != getoracles_rate_limit.end()) {
+                    if (now - it->second.first > 300) {
+                        it = getoracles_rate_limit.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+
+            auto& [last_reset, count] = getoracles_rate_limit[pfrom.GetId()];
+            if (now - last_reset > 60) {
+                last_reset = now;
+                count = 0;
+            }
+            if (++count > 10) {
+                LogPrint(BCLog::NET, "GETORACLES rate limit exceeded from peer=%d (%d/min)\n",
+                         pfrom.GetId(), count);
+                return;
+            }
+        }
+
         GetOracleDataMsg request;
         vRecv >> request;
 

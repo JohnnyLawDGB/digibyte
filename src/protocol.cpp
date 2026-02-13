@@ -252,6 +252,16 @@ GenTxid ToGenTxid(const CInv& inv)
 
 uint256 OraclePriceMsg::GetHash() const
 {
+    // Use Phase2 signature hash (oracle_id + price + timestamp) for dedup.
+    // GetSignatureHash() includes block_height+nonce which are NOT covered by
+    // Phase2 signatures. An attacker can mutate those fields to create distinct
+    // hashes that bypass dedup while the Phase2 signature remains valid.
+    // Using Phase2 hash ensures all mutations of the same (id, price, timestamp)
+    // triple map to the same dedup hash.
+    if (!price_message.schnorr_sig.empty()) {
+        return price_message.GetPhase2SignatureHash();
+    }
+    // Fallback for Phase1 compact messages (no signature)
     return price_message.GetSignatureHash();
 }
 

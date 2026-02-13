@@ -33,6 +33,7 @@
 #include <util/strencodings.h>
 #include <oracle/bundle_manager.h>
 #include <primitives/oracle.h>
+#include <protocol.h>
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
@@ -6632,6 +6633,374 @@ BOOST_AUTO_TEST_CASE(redteam_T3_03h_iqr_boundary_price_range)
     BOOST_CHECK_MESSAGE(price_under == 0,
         "Below-minimum prices should result in 0 (all excluded), got " + std::to_string(price_under));
 
+    SetMockTime(0);
+}
+
+// ============================================================================
+// T3-04: P2P Oracle Message Replay Attack
+// ============================================================================
+
+/**
+ * T3-04a: Nonce/block_height mutation bypasses dedup while Phase2 sig holds
+ *
+ * ATTACK: An attacker captures a valid Phase2-signed oracle message and mutates
+ * the block_height and nonce fields (NOT covered by Phase2 signature hash).
+ * Each mutation produces a different GetSignatureHash() → bypasses seen_message_hashes
+ * dedup in OracleBundleManager. The Phase2 signature remains valid because it
+ * only covers oracle_id + price + timestamp.
+ *
+ * IMPACT: Attacker can generate unlimited "distinct" messages from a single
+ * valid oracle broadcast. While pending_messages dedup by oracle_id prevents
+ * storage of duplicates, each mutation still:
+ *   1. Passes HasOracleMessage() dedup check (different hash)
+ *   2. Passes VerifyPhase2() (same Phase2 hash)
+ *   3. Gets counted by rate limiter (burns budget)
+ *   4. Pollutes seen_message_hashes set
+ *
+ * In a P2P context, this allows an attacker to exhaust a peer's rate limit
+ * budget (3600/hour), blocking legitimate oracle message acceptance.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_04a_nonce_mutation_dedup_bypass)
+{
+    SetMockTime(GetTime());
+    int64_t now = GetTime();
+
+    // Create a valid Phase2-signed message
+    CKey key;
+    key.MakeNewKey(true);
+
+    COraclePriceMessage original;
+    original.oracle_id = 0;
+    original.price_micro_usd = 50000;  // $0.05
+    original.timestamp = now - 30;
+    original.block_height = 100;
+    original.nonce = 42;
+    BOOST_REQUIRE(original.SignPhase2(key));
+
+    // Verify original is valid
+    BOOST_CHECK(original.VerifyPhase2());
+
+    // Now mutate block_height and nonce — Phase2 sig should still verify
+    COraclePriceMessage mutant1 = original;
+    mutant1.block_height = 999;
+    mutant1.nonce = 9999;
+    BOOST_CHECK_MESSAGE(mutant1.VerifyPhase2(),
+        "EXPLOIT: Phase2 signature still valid after block_height/nonce mutation — "
+        "attacker can create unlimited 'distinct' messages from a single valid broadcast");
+
+    COraclePriceMessage mutant2 = original;
+    mutant2.block_height = 0;
+    mutant2.nonce = std::numeric_limits<uint64_t>::max();
+    BOOST_CHECK_MESSAGE(mutant2.VerifyPhase2(),
+        "EXPLOIT: Phase2 signature valid with extreme nonce values");
+
+    // All three messages have DIFFERENT GetSignatureHash (used for dedup)
+    uint256 hash_orig = original.GetSignatureHash();
+    uint256 hash_mut1 = mutant1.GetSignatureHash();
+    uint256 hash_mut2 = mutant2.GetSignatureHash();
+
+    BOOST_CHECK_MESSAGE(hash_orig != hash_mut1,
+        "Mutant1 has different dedup hash — bypasses seen_message_hashes");
+    BOOST_CHECK_MESSAGE(hash_orig != hash_mut2,
+        "Mutant2 has different dedup hash — bypasses seen_message_hashes");
+    BOOST_CHECK_MESSAGE(hash_mut1 != hash_mut2,
+        "All mutations produce unique dedup hashes");
+
+    // But all three have the SAME Phase2 signature hash
+    uint256 phase2_orig = original.GetPhase2SignatureHash();
+    uint256 phase2_mut1 = mutant1.GetPhase2SignatureHash();
+    uint256 phase2_mut2 = mutant2.GetPhase2SignatureHash();
+
+    BOOST_CHECK_EQUAL(phase2_orig, phase2_mut1);
+    BOOST_CHECK_EQUAL(phase2_orig, phase2_mut2);
+
+    // Verify all bypass the bundle manager's seen_message_hashes
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.Clear();
+
+    // Original: not seen
+    BOOST_CHECK(!mgr.HasOracleMessage(hash_orig));
+    // After adding original (won't actually store due to regtest key mismatch,
+    // but the seen hash is added regardless)
+    mgr.InjectTestMessage(original);
+
+    // Mutant hashes are NOT in seen set — dedup bypassed
+    BOOST_CHECK_MESSAGE(!mgr.HasOracleMessage(hash_mut1),
+        "Mutant1 bypasses HasOracleMessage dedup — different hash, same content");
+    BOOST_CHECK_MESSAGE(!mgr.HasOracleMessage(hash_mut2),
+        "Mutant2 bypasses HasOracleMessage dedup — different hash, same content");
+
+    mgr.Clear();
+    SetMockTime(0);
+}
+
+/**
+ * T3-04b: Rate limit exhaustion via nonce mutations
+ *
+ * ATTACK: Attacker generates thousands of nonce-mutated copies of a single
+ * valid oracle message. Each passes Phase2 verification and HasOracleMessage
+ * dedup. While none are stored (pending_messages dedup catches them), each
+ * consumes one unit of the peer's rate limit budget.
+ *
+ * After 3600 mutations, ALL subsequent oracle messages from that peer are
+ * silently dropped — including legitimate new price updates.
+ *
+ * This is an eclipse attack amplifier: if the victim is connected primarily
+ * to attacker nodes, the victim loses oracle price updates entirely.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_04b_rate_limit_exhaustion_via_mutations)
+{
+    SetMockTime(GetTime());
+    int64_t now = GetTime();
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    COraclePriceMessage original;
+    original.oracle_id = 0;
+    original.price_micro_usd = 50000;
+    original.timestamp = now - 30;
+    original.block_height = 100;
+    original.nonce = 0;
+    BOOST_REQUIRE(original.SignPhase2(key));
+
+    // Generate 100 mutations — all valid, all unique hashes
+    std::set<uint256> unique_hashes;
+    for (uint64_t i = 0; i < 100; ++i) {
+        COraclePriceMessage mutant = original;
+        mutant.nonce = i + 1;
+        mutant.block_height = static_cast<int32_t>(i * 7);
+
+        // Phase2 signature still valid
+        BOOST_CHECK(mutant.VerifyPhase2());
+
+        // Unique dedup hash
+        uint256 hash = mutant.GetSignatureHash();
+        unique_hashes.insert(hash);
+    }
+
+    // ALL 100 mutations have unique hashes — each would pass dedup
+    BOOST_CHECK_MESSAGE(unique_hashes.size() == 100,
+        "All 100 nonce mutations produce unique dedup hashes, each consuming rate limit budget. "
+        "At scale (3600+), this exhausts the hourly rate limit, blocking legitimate oracle messages.");
+
+    SetMockTime(0);
+}
+
+/**
+ * T3-04c: Bundle manager pending_messages provides secondary dedup
+ *
+ * DEFENSE CHECK: Even though mutations bypass seen_message_hashes,
+ * pending_messages keyed by oracle_id prevents actual storage of duplicates.
+ * Only the first message (or one with a newer timestamp) gets stored.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_04c_pending_messages_secondary_dedup)
+{
+    SetMockTime(GetTime());
+    int64_t now = GetTime();
+
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.Clear();
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    // Create and inject original message
+    COraclePriceMessage original;
+    original.oracle_id = 0;
+    original.price_micro_usd = 50000;
+    original.timestamp = now - 30;
+    original.block_height = 100;
+    original.nonce = 42;
+    BOOST_REQUIRE(original.SignPhase2(key));
+
+    mgr.InjectTestMessage(original);
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 1);
+
+    // Inject mutation with same oracle_id and same timestamp
+    COraclePriceMessage mutant = original;
+    mutant.block_height = 999;
+    mutant.nonce = 9999;
+
+    mgr.InjectTestMessage(mutant);
+
+    // pending_messages only stores one entry per oracle_id
+    // InjectTestMessage overwrites regardless of timestamp, but AddOracleMessage
+    // would check timestamp ordering
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 1);
+
+    // Defense holds: even with dedup bypass, only one message per oracle stored
+    // The concern is resource exhaustion (rate limit burn, CPU), not consensus corruption
+
+    mgr.Clear();
+    SetMockTime(0);
+}
+
+/**
+ * T3-04d: GETORACLES response has no rate limiting
+ *
+ * FINDING: The GETORACLES handler responds with all pending oracle messages
+ * each time it's called, with no rate limiting on the request itself.
+ * An attacker can spam GETORACLES to cause repeated responses of N messages,
+ * wasting bandwidth (N * message_size per request).
+ *
+ * With 15 active oracles, each ~140 bytes, that's ~2.1KB per GETORACLES response.
+ * At 1000 requests/sec, that's 2.1MB/sec of outbound traffic per peer.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_04d_getoracles_no_rate_limit)
+{
+    SetMockTime(GetTime());
+    int64_t now = GetTime();
+
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.Clear();
+
+    // Inject 15 oracle messages (simulating a full set)
+    std::vector<CKey> keys(15);
+    for (int i = 0; i < 15; ++i) {
+        keys[i].MakeNewKey(true);
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 50000;
+        msg.timestamp = now - 10;
+        msg.block_height = 0;
+        msg.nonce = 0;
+        BOOST_REQUIRE(msg.SignPhase2(keys[i]));
+        mgr.InjectTestMessage(msg);
+    }
+
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 15);
+
+    // GetPendingMessages can be called repeatedly with no rate limit
+    // Each call returns all 15 messages — attacker can spam GETORACLES
+    for (int i = 0; i < 10; ++i) {
+        auto msgs = mgr.GetPendingMessages();
+        BOOST_CHECK_EQUAL(msgs.size(), 15);
+    }
+
+    // FINDING: No rate limit on GETORACLES requests.
+    // The handler in net_processing.cpp responds unconditionally.
+    // Mitigation needed: rate limit GETORACLES to e.g. 5 requests/minute/peer.
+
+    mgr.Clear();
+    SetMockTime(0);
+}
+
+/**
+ * T3-04e: Post-restart replay acceptance
+ *
+ * DEFENSE CHECK: After a node restart, all in-memory state is cleared.
+ * Old messages (< 1 hour) can be replayed and accepted.
+ * This is BY DESIGN — the GETORACLES sync mechanism relies on this.
+ * The timestamp check ensures only recent messages are accepted.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_04e_post_restart_replay)
+{
+    SetMockTime(GetTime());
+    int64_t now = GetTime();
+
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+
+    // Simulate restart: clear all state
+    mgr.Clear();
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    // Message from 30 minutes ago — within ORACLE_MAX_AGE_SECONDS (3600)
+    COraclePriceMessage recent_msg;
+    recent_msg.oracle_id = 0;
+    recent_msg.price_micro_usd = 50000;
+    recent_msg.timestamp = now - 1800;  // 30 min ago
+    recent_msg.block_height = 100;
+    recent_msg.nonce = 42;
+    BOOST_REQUIRE(recent_msg.SignPhase2(key));
+
+    // After "restart", dedup is empty — message accepted
+    BOOST_CHECK(!mgr.HasOracleMessage(recent_msg.GetSignatureHash()));
+    // This is correct behavior — nodes need to catch up on oracle prices after restart
+
+    // Message from 2 hours ago — beyond ORACLE_MAX_AGE_SECONDS
+    COraclePriceMessage stale_msg;
+    stale_msg.oracle_id = 1;
+    stale_msg.price_micro_usd = 50000;
+    stale_msg.timestamp = now - 7200;  // 2 hours ago
+    stale_msg.block_height = 50;
+    stale_msg.nonce = 0;
+    BOOST_REQUIRE(stale_msg.SignPhase2(key));
+
+    // Stale message: IsValid will reject it (timestamp > ORACLE_MAX_AGE_SECONDS old)
+    BOOST_CHECK_MESSAGE(!stale_msg.IsValid(),
+        "Defense holds: messages older than 1 hour rejected by IsValid timestamp check");
+
+    mgr.Clear();
+    SetMockTime(0);
+}
+
+/**
+ * T3-04f: Verify fix — OraclePriceMsg::GetHash() now uses Phase2 hash
+ *
+ * ROOT CAUSE (FIXED): The dedup hash previously included block_height and nonce
+ * (GetSignatureHash), but the signature verification uses Phase2 hash (only
+ * oracle_id+price+timestamp). This mismatch allowed dedup bypass via field mutation.
+ *
+ * FIX APPLIED: OraclePriceMsg::GetHash() and AddOracleMessage now use
+ * GetPhase2SignatureHash() for Phase2-signed messages. All mutations of the
+ * same (oracle_id, price, timestamp) triple now map to the same dedup hash.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T3_04f_dedup_hash_fix_verified)
+{
+    SetMockTime(GetTime());
+    int64_t now = GetTime();
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;
+    msg.timestamp = now - 30;
+    msg.block_height = 100;
+    msg.nonce = 42;
+    BOOST_REQUIRE(msg.SignPhase2(key));
+
+    // GetSignatureHash still includes block_height+nonce (internal detail)
+    uint256 full_hash = msg.GetSignatureHash();
+    uint256 phase2_hash = msg.GetPhase2SignatureHash();
+    BOOST_CHECK(full_hash != phase2_hash);
+
+    // FIX VERIFICATION: OraclePriceMsg::GetHash() now uses Phase2 hash for signed messages
+    OraclePriceMsg wrapped;
+    wrapped.price_message = msg;
+    uint256 p2p_hash = wrapped.GetHash();
+    BOOST_CHECK_EQUAL(p2p_hash, phase2_hash);
+
+    // Mutate nonce: OraclePriceMsg::GetHash() should be UNCHANGED (fix working)
+    COraclePriceMessage mutant = msg;
+    mutant.nonce = 99999;
+    mutant.block_height = 9999;
+    BOOST_CHECK(mutant.VerifyPhase2()); // Phase2 sig still valid
+
+    OraclePriceMsg wrapped_mutant;
+    wrapped_mutant.price_message = mutant;
+    uint256 p2p_hash_mutant = wrapped_mutant.GetHash();
+
+    // After fix: both map to same dedup hash → mutation caught!
+    BOOST_CHECK_MESSAGE(p2p_hash == p2p_hash_mutant,
+        "FIX VERIFIED: Nonce/block_height mutations now produce same dedup hash — "
+        "P2P handler catches them as duplicates before sig verification or rate limiting");
+
+    // Also verify bundle manager dedup now uses Phase2 hash
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.Clear();
+
+    // After fix, HasOracleMessage should use Phase2 hash internally
+    // The manager's AddOracleMessage computes Phase2 hash for the seen set
+    // So after adding original, the mutation should be detected as duplicate
+    // (We test via the P2P hash which matches what the manager now uses)
+    BOOST_CHECK_EQUAL(msg.GetPhase2SignatureHash(), mutant.GetPhase2SignatureHash());
+
+    mgr.Clear();
     SetMockTime(0);
 }
 

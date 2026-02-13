@@ -87,8 +87,13 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         }
     }
 
-    // Calculate message hash for duplicate detection
-    uint256 msg_hash = message.GetSignatureHash();
+    // Calculate message hash for duplicate detection.
+    // Use Phase2 hash (oracle_id + price + timestamp) for Phase2-signed messages.
+    // GetSignatureHash() includes block_height+nonce which are NOT covered by
+    // Phase2 signatures — an attacker can mutate those fields to bypass dedup.
+    uint256 msg_hash = (!message.schnorr_sig.empty())
+        ? message.GetPhase2SignatureHash()
+        : message.GetSignatureHash();
 
     // Check if we've already seen this exact message
     if (seen_message_hashes.count(msg_hash) > 0) {

@@ -18,6 +18,8 @@
 #include <node/transaction.h>
 #include <txmempool.h>
 #include <util/time.h>
+
+#include <limits>
 #include <util/moneystr.h>
 #include <validation.h>
 #include <node/blockstorage.h>
@@ -685,14 +687,39 @@ int SystemHealthMonitor::CalculateSystemHealth(CAmount ddSupply, CAmount collate
         return 300; // Perfect health if no DD issued
     }
 
+    // Guard against invalid price (same pattern as DCA::CalculateSystemHealth)
+    if (price <= 0) {
+        return 0; // Cannot calculate without valid price
+    }
+
     // Calculate collateral value in cents
     // price is in cents (100 = $1.00 DGB price)
     // collateral is in satoshis
     // Formula: (satoshis * price_cents) / COIN = cents
-    CAmount collateralValue = (collateral * price) / COIN;
+    // Guard against overflow: divide first when collateral is large
+    CAmount collateralValue;
+    const CAmount maxSafe = std::numeric_limits<CAmount>::max() / price;
+    if (collateral > maxSafe) {
+        collateralValue = (collateral / COIN) * price;
+    } else {
+        collateralValue = (collateral * price) / COIN;
+    }
 
     // Health = (Collateral Value / DD Value) * 100
-    int health = static_cast<int>((collateralValue * 100) / ddSupply);
+    // Guard against overflow in numerator
+    int health;
+    const CAmount maxSafeMul = std::numeric_limits<CAmount>::max() / 100;
+    if (collateralValue > maxSafeMul) {
+        // When ddSupply is 1-99, ddSupply/100 is 0 due to integer division.
+        // Return max health since collateral dwarfs the tiny supply.
+        CAmount scaledSupply = ddSupply / 100;
+        if (scaledSupply == 0) {
+            return 300;
+        }
+        health = static_cast<int>(collateralValue / scaledSupply);
+    } else {
+        health = static_cast<int>((collateralValue * 100) / ddSupply);
+    }
 
     // Cap at reasonable maximum
     return std::min(health, 300);

@@ -361,11 +361,13 @@ bool EmergencyRedemptionRatio::ShouldBlockMinting()
         oraclePriceMicroUSD = OracleBundleManager::GetInstance().GetLatestPrice();
     }
 
-    // If no oracle price available, we can't determine emergency state
-    // Default to allowing minting (benefit of doubt)
+    // FIX [T2-05c]: If no oracle price available, we can't determine health.
+    // Fail-CLOSED: block minting when system state is unknown.
+    // This prevents minting during oracle outages which could destabilize
+    // the system if health is actually below 100%.
     if (oraclePriceMicroUSD <= 0) {
-        LogPrint(BCLog::DIGIDOLLAR, "ERR: No oracle price available, allowing minting\n");
-        return false;
+        LogPrint(BCLog::DIGIDOLLAR, "ERR: No oracle price available, blocking minting (fail-closed)\n");
+        return true;
     }
 
     // Convert micro-USD to millicents for health calculation

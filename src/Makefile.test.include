@@ -79,6 +79,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_dca_tests.cpp \
   test/digidollar_err_tests.cpp \
   test/digidollar_health_tests.cpp \
+  test/digidollar_t2_05_tests.cpp \
   test/digidollar_opcodes_tests.cpp \
   test/digidollar_oracle_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \

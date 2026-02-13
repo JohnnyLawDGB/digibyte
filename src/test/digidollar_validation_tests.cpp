@@ -3253,8 +3253,10 @@ BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_partial, DigiDollarValidationTes
 
     bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurned, state);
 
-    // Should PASS: burning half DD, releasing half collateral
-    BOOST_CHECK_MESSAGE(result, "Partial collateral release should pass, got: " + state.GetRejectReason());
+    // SECURITY [T2-03]: Partial burn now REJECTED — collateral UTXO is indivisible,
+    // excess becomes miner fee enabling collateral theft. Must burn full DD amount.
+    BOOST_CHECK_MESSAGE(!result, "Partial collateral release should now be rejected [T2-03 fix]");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-collateral-release-partial-burn");
 }
 
 BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_nullptr_fallback, DigiDollarValidationTestSetup)

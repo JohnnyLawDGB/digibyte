@@ -1658,20 +1658,28 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
         }
     }
 
-    // Calculate proportionally allowed collateral release
-    // allowed_release = (dd_burned / original_dd_minted) * locked_collateral
-    // Use 64-bit math carefully to avoid overflow
-    CAmount allowedRelease;
-    if (ddBurned >= originalDDMinted) {
-        // Full redemption
-        allowedRelease = lockedCollateral;
-    } else {
-        // Partial redemption: proportional release using integer math
-        // Use __int128 to prevent overflow: ddBurned * lockedCollateral can exceed int64
-        allowedRelease = static_cast<int64_t>(
-            static_cast<__int128>(ddBurned) * static_cast<__int128>(lockedCollateral) /
-            static_cast<__int128>(originalDDMinted));
+    // SECURITY [T2-03]: Require full DD burn for collateral release.
+    //
+    // In the UTXO model, the entire collateral UTXO is consumed as vin[0].
+    // Partial burns are NOT safe because:
+    //   1) The excess collateral (lockedCollateral - proportionalRelease) becomes miner fee
+    //   2) A miner-attacker can burn 1% of DD and recover 100% of collateral (99% as fee)
+    //   3) Cross-mint burns allow releasing collateral from mint A using DD from mint B
+    //   4) Remaining DD from the original mint stays in circulation, completely unbacked
+    //
+    // To redeem, you MUST burn at least the full DD amount minted against this collateral.
+    // Burning more than originalDDMinted is allowed (user's loss, not a security risk).
+    if (ddBurned < originalDDMinted) {
+        LogPrintf("DigiDollar: SECURITY [T2-03] - Partial DD burn rejected: burned %lld < original %lld. "
+                  "Full burn required to release collateral (UTXO is indivisible).\n",
+                  (long long)ddBurned, (long long)originalDDMinted);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-partial-burn",
+                           strprintf("Must burn all DD minted against this collateral: burned %lld < required %lld",
+                                     (long long)ddBurned, (long long)originalDDMinted));
     }
+
+    // Full redemption: ddBurned >= originalDDMinted
+    CAmount allowedRelease = lockedCollateral;
 
     // Small fee tolerance (0.1% or 1000 satoshis, whichever is larger)
     CAmount feeTolerance = std::max((CAmount)1000, allowedRelease / 1000);

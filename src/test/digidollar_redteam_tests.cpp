@@ -3389,9 +3389,11 @@ BOOST_AUTO_TEST_CASE(redteam_t1_08c_redeem_full_burn_valid_with_txlookup)
         "Error: " + state.GetRejectReason());
 }
 
-BOOST_AUTO_TEST_CASE(redteam_t1_08d_redeem_partial_burn_proportional)
+BOOST_AUTO_TEST_CASE(redteam_t1_08d_redeem_partial_burn_rejected)
 {
-    // VALID: Burn half DD → release half collateral (proportional)
+    // SECURITY [T2-03 fix]: Partial burn is now REJECTED because the collateral UTXO
+    // is indivisible — the excess goes to miner fees, enabling collateral theft.
+    // Previously this test expected partial burns to pass; now they must fail.
 
     auto regTestParams = CChainParams::RegTest({});
 
@@ -3429,7 +3431,7 @@ BOOST_AUTO_TEST_CASE(redteam_t1_08d_redeem_partial_burn_proportional)
         return false;
     };
 
-    // Redeem: burn 5000 DD (half), release 100 DGB (half of 200) — should PASS
+    // Redeem: burn 5000 DD (half) — should now FAIL (partial burn rejected)
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
     mtx.vin.push_back(CTxIn(collOutpoint));
@@ -3443,9 +3445,10 @@ BOOST_AUTO_TEST_CASE(redteam_t1_08d_redeem_partial_burn_proportional)
 
     bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurnedHalf, state);
 
-    BOOST_CHECK_MESSAGE(result,
-        "VALID [T1-08d]: Burning half DD should allow releasing half collateral. "
-        "Error: " + state.GetRejectReason());
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE [T1-08d/T2-03]: Partial burn must be rejected to prevent miner fee "
+        "collateral theft. Error: " + state.GetRejectReason());
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-collateral-release-partial-burn");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t1_08e_redeem_partial_burn_excessive_release)
@@ -4166,6 +4169,389 @@ BOOST_AUTO_TEST_CASE(redteam_t2_02g_mixed_dd_and_regular_inputs)
         "Reason: " + state.GetRejectReason());
 
     BOOST_TEST_MESSAGE("T2-02g: Mixed DD + regular input transfer correctly validated");
+}
+
+// =============================================================================
+// T2-03: Collateral Release Excess — Get Back More DGB Than Entitled
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t2_03a_partial_burn_miner_fee_collateral_theft)
+{
+    // CRITICAL ATTACK [T2-03a]: Miner fee collateral theft via partial burn
+    //
+    // Scenario: Attacker mints 10,000 DD with 200 DGB collateral. Later, attacker
+    // creates a redemption tx burning only 1% (100 DD) of the original DD. The
+    // validation correctly limits DGB OUTPUTS to 1% (2 DGB). But the FULL collateral
+    // UTXO (200 DGB) is consumed as vin[0]. The remaining 198 DGB becomes miner fee.
+    //
+    // If the attacker is a miner (or colludes with one), they recover ALL 200 DGB
+    // while only burning 100 DD. The other 9,900 DD remains in circulation, unbacked.
+    //
+    // The validator checks outputs but does NOT check that fee (inputs - outputs)
+    // doesn't steal locked collateral. A consensus-level economic exploit.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey collateralKey;
+    collateralKey.MakeNewKey(true);
+    XOnlyPubKey collateralXOnlyKey(collateralKey.GetPubKey());
+    CScript rawCollateralP2TR = MakeP2TR(collateralXOnlyKey);
+
+    CAmount lockedCollateral = 200 * COIN;    // 200 DGB locked
+    CAmount originalDD = 10000;               // 10,000 DD cents ($100)
+    CAmount ddBurned = 100;                   // Burn only 1% (100 DD cents = $1)
+
+    // Create the original mint transaction
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 0x01000770;
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256S("aa03000000000000000000000000000000000000000000000000000000000001"), 0)));
+    mintTx.vout.push_back(CTxOut(lockedCollateral, rawCollateralP2TR));
+    CKey ddKey;
+    ddKey.MakeNewKey(true);
+    mintTx.vout.push_back(CTxOut(0, MakeP2TR(XOnlyPubKey(ddKey.GetPubKey()))));
+    mintTx.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDD, 1000, 1, collateralXOnlyKey)));
+
+    CTransactionRef mintTxRef = MakeTransactionRef(mintTx);
+    uint256 mintTxHash = mintTxRef->GetHash();
+
+    // Set up coins view with collateral UTXO
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint collOutpoint(mintTxHash, 0);
+    coinsView.AddCoin(collOutpoint, Coin(CTxOut(lockedCollateral, rawCollateralP2TR), 400, false), false);
+
+    auto txLookup = [&mintTxRef, &mintTxHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == mintTxHash) {
+            tx_out = mintTxRef;
+            return true;
+        }
+        return false;
+    };
+
+    // EXPLOIT TX: Burn 100 DD (1%), output only 2 DGB (1% of collateral)
+    // Remaining 198 DGB becomes miner fee
+    CAmount allowedOutput = 2 * COIN;  // 1% of 200 DGB
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770;  // REDEEM type
+    mtx.vin.push_back(CTxIn(collOutpoint));  // 200 DGB collateral
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("bb03010000000000000000000000000000000000000000000000000000000001"), 0)));  // DD input
+    mtx.vout.push_back(CTxOut(allowedOutput, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));  // Only 2 DGB output
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    // The collateral release check will PASS — outputs (2 DGB) <= allowedRelease (2 DGB)
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurned, state);
+
+    // VULNERABILITY: This passes! But 198 DGB (99% of collateral) goes to miner as fee.
+    // The implicit fee = 200 DGB (input) - 2 DGB (output) = 198 DGB
+    // A miner-attacker recovers ALL collateral while burning only 1% of DD.
+    CAmount implicitFee = lockedCollateral - allowedOutput;
+    CAmount allowedRelease = static_cast<int64_t>(
+        static_cast<__int128>(ddBurned) * static_cast<__int128>(lockedCollateral) /
+        static_cast<__int128>(originalDD));
+
+    BOOST_TEST_MESSAGE("T2-03a: Partial burn 1% DD, output = " << allowedOutput / COIN << " DGB");
+    BOOST_TEST_MESSAGE("T2-03a: Collateral input = " << lockedCollateral / COIN << " DGB");
+    BOOST_TEST_MESSAGE("T2-03a: Implicit miner fee (stolen collateral) = " << implicitFee / COIN << " DGB");
+    BOOST_TEST_MESSAGE("T2-03a: Validation result = " << (result ? "PASS (VULNERABILITY!)" : "FAIL (DEFENDED)"));
+
+    // If validation passes, this is a CRITICAL BUG — partial burn allows
+    // miner to steal locked collateral as fees.
+    // After fix: should FAIL because ddBurned < originalDDMinted
+    BOOST_CHECK_MESSAGE(!result,
+        "EXPLOIT [T2-03a]: Partial burn (1%) passed validation! "
+        "Miner steals " + std::to_string(implicitFee / COIN) + " DGB as fees. "
+        "Fix: Require ddBurned >= originalDDMinted (no partial redemptions). "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_03b_cross_mint_dd_burn_collateral_theft)
+{
+    // ATTACK [T2-03b]: Use DD from mint B to release collateral from mint A
+    //
+    // Attacker mints A (10,000 DD / 200 DGB collateral) and transfers 10,000 DD to users.
+    // Attacker separately obtains 100 DD from mint B (cheap).
+    // Attacker creates redemption: vin[0] = A's collateral, burns B's 100 DD.
+    //
+    // Validator checks: ddBurned (100) vs originalDDMinted from A (10,000)
+    // allowedRelease = (100/10000) * 200 = 2 DGB output
+    // Fee = 200 - 2 = 198 DGB to miner
+    //
+    // RESULT: Mint A's collateral released, mint A's 10,000 DD still circulating unbacked.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey collKeyA;
+    collKeyA.MakeNewKey(true);
+    XOnlyPubKey xPubA(collKeyA.GetPubKey());
+    CScript p2trA = MakeP2TR(xPubA);
+
+    CAmount collateralA = 200 * COIN;
+    CAmount originalDDA = 10000;    // Mint A: 10,000 DD
+    CAmount ddBurnedFromB = 100;    // Burning DD from a DIFFERENT mint
+
+    // Create mint A
+    CMutableTransaction mintTxA;
+    mintTxA.nVersion = 0x01000770;
+    mintTxA.vin.push_back(CTxIn(COutPoint(uint256S("aa03b00000000000000000000000000000000000000000000000000000000001"), 0)));
+    mintTxA.vout.push_back(CTxOut(collateralA, p2trA));
+    CKey ddKeyA;
+    ddKeyA.MakeNewKey(true);
+    mintTxA.vout.push_back(CTxOut(0, MakeP2TR(XOnlyPubKey(ddKeyA.GetPubKey()))));
+    mintTxA.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDDA, 1000, 1, xPubA)));
+
+    CTransactionRef mintTxRefA = MakeTransactionRef(mintTxA);
+    uint256 mintHashA = mintTxRefA->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint collOutpointA(mintHashA, 0);
+    coinsView.AddCoin(collOutpointA, Coin(CTxOut(collateralA, p2trA), 400, false), false);
+
+    auto txLookup = [&mintTxRefA, &mintHashA](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == mintHashA) {
+            tx_out = mintTxRefA;
+            return true;
+        }
+        return false;
+    };
+
+    // Redemption: burn 100 DD from mint B, using mint A's collateral
+    CAmount output = 2 * COIN;  // (100/10000) * 200 = 2 DGB
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770;
+    mtx.vin.push_back(CTxIn(collOutpointA));  // Mint A's collateral
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("bb03b00000000000000000000000000000000000000000000000000000000001"), 0)));  // DD from mint B
+    mtx.vout.push_back(CTxOut(output, CScript() << OP_1 << ToByteVector(xPubA)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurnedFromB, state);
+
+    CAmount implicitFee = collateralA - output;
+
+    BOOST_TEST_MESSAGE("T2-03b: Cross-mint burn — DD from mint B (100) vs mint A collateral (200 DGB)");
+    BOOST_TEST_MESSAGE("T2-03b: Implicit fee (stolen) = " << implicitFee / COIN << " DGB");
+    BOOST_TEST_MESSAGE("T2-03b: Result = " << (result ? "PASS (VULNERABLE)" : "FAIL (DEFENDED)"));
+
+    // After fix: should FAIL — ddBurned (100) < originalDDMinted from A (10,000)
+    BOOST_CHECK_MESSAGE(!result,
+        "EXPLOIT [T2-03b]: Cross-mint burn passed! Mint A's 10,000 DD remains unbacked. "
+        "Fee steals " + std::to_string(implicitFee / COIN) + " DGB. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_03c_full_burn_still_works)
+{
+    // VALID [T2-03c]: Full burn should still be allowed after fix
+    // ddBurned == originalDDMinted → full collateral release
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey collateralKey;
+    collateralKey.MakeNewKey(true);
+    XOnlyPubKey collateralXOnlyKey(collateralKey.GetPubKey());
+    CScript rawCollateralP2TR = MakeP2TR(collateralXOnlyKey);
+
+    CAmount lockedCollateral = 200 * COIN;
+    CAmount originalDD = 10000;
+    CAmount ddBurned = 10000;  // Full burn!
+
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 0x01000770;
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256S("cc03000000000000000000000000000000000000000000000000000000000001"), 0)));
+    mintTx.vout.push_back(CTxOut(lockedCollateral, rawCollateralP2TR));
+    CKey ddKey;
+    ddKey.MakeNewKey(true);
+    mintTx.vout.push_back(CTxOut(0, MakeP2TR(XOnlyPubKey(ddKey.GetPubKey()))));
+    mintTx.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDD, 1000, 1, collateralXOnlyKey)));
+
+    CTransactionRef mintTxRef = MakeTransactionRef(mintTx);
+    uint256 mintTxHash = mintTxRef->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint collOutpoint(mintTxHash, 0);
+    coinsView.AddCoin(collOutpoint, Coin(CTxOut(lockedCollateral, rawCollateralP2TR), 400, false), false);
+
+    auto txLookup = [&mintTxRef, &mintTxHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == mintTxHash) {
+            tx_out = mintTxRef;
+            return true;
+        }
+        return false;
+    };
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770;
+    mtx.vin.push_back(CTxIn(collOutpoint));
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("dd03010000000000000000000000000000000000000000000000000000000001"), 0)));
+    mtx.vout.push_back(CTxOut(lockedCollateral, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurned, state);
+
+    BOOST_CHECK_MESSAGE(result,
+        "REGRESSION [T2-03c]: Full burn (ddBurned == originalDDMinted) must still allow "
+        "full collateral release. Error: " + state.GetRejectReason());
+
+    BOOST_TEST_MESSAGE("T2-03c: Full burn redemption correctly allowed");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_03d_slight_overburn_still_works)
+{
+    // VALID [T2-03d]: Burning slightly MORE DD than original mint (e.g., from multiple
+    // DD sources) should still allow full collateral release.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey collateralKey;
+    collateralKey.MakeNewKey(true);
+    XOnlyPubKey collateralXOnlyKey(collateralKey.GetPubKey());
+    CScript rawCollateralP2TR = MakeP2TR(collateralXOnlyKey);
+
+    CAmount lockedCollateral = 200 * COIN;
+    CAmount originalDD = 10000;
+    CAmount ddBurned = 10500;  // Burn more than minted — acceptable, user's loss
+
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 0x01000770;
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256S("ee03000000000000000000000000000000000000000000000000000000000001"), 0)));
+    mintTx.vout.push_back(CTxOut(lockedCollateral, rawCollateralP2TR));
+    CKey ddKey;
+    ddKey.MakeNewKey(true);
+    mintTx.vout.push_back(CTxOut(0, MakeP2TR(XOnlyPubKey(ddKey.GetPubKey()))));
+    mintTx.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDD, 1000, 1, collateralXOnlyKey)));
+
+    CTransactionRef mintTxRef = MakeTransactionRef(mintTx);
+    uint256 mintTxHash = mintTxRef->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint collOutpoint(mintTxHash, 0);
+    coinsView.AddCoin(collOutpoint, Coin(CTxOut(lockedCollateral, rawCollateralP2TR), 400, false), false);
+
+    auto txLookup = [&mintTxRef, &mintTxHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == mintTxHash) {
+            tx_out = mintTxRef;
+            return true;
+        }
+        return false;
+    };
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770;
+    mtx.vin.push_back(CTxIn(collOutpoint));
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("ff03010000000000000000000000000000000000000000000000000000000001"), 0)));
+    mtx.vout.push_back(CTxOut(lockedCollateral, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurned, state);
+
+    BOOST_CHECK_MESSAGE(result,
+        "REGRESSION [T2-03d]: Burning more DD than originally minted should still allow "
+        "full collateral release. Error: " + state.GetRejectReason());
+
+    BOOST_TEST_MESSAGE("T2-03d: Over-burn redemption correctly allowed");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_03e_fee_tolerance_minimum_exploit)
+{
+    // ATTACK [T2-03e]: Exploit the minimum fee tolerance of 1000 satoshis
+    //
+    // For tiny partial burns, allowedRelease is small but feeTolerance = max(1000, allowedRelease/1000)
+    // When allowedRelease < 1,000,000 sats (0.01 DGB), tolerance > 0.1% of allowed
+    // At extreme: allowedRelease = 100 sats, feeTolerance = 1000 sats → can release 11x allowed!
+    //
+    // While individual excess is tiny (1000 sats per tx), a miner creating thousands
+    // of these per block could accumulate meaningful theft.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey collateralKey;
+    collateralKey.MakeNewKey(true);
+    XOnlyPubKey collateralXOnlyKey(collateralKey.GetPubKey());
+    CScript rawCollateralP2TR = MakeP2TR(collateralXOnlyKey);
+
+    CAmount lockedCollateral = 200 * COIN;
+    CAmount originalDD = 10000;
+    CAmount ddBurned = 1;  // Burn just 1 DD cent ($0.01)
+
+    // Expected: allowedRelease = (1/10000) * 200 DGB = 0.02 DGB = 2,000,000 sats
+    // feeTolerance = max(1000, 2,000,000/1000) = max(1000, 2000) = 2000 sats
+    // Max allowed output = 2,002,000 sats
+
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 0x01000770;
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256S("ff03e00000000000000000000000000000000000000000000000000000000001"), 0)));
+    mintTx.vout.push_back(CTxOut(lockedCollateral, rawCollateralP2TR));
+    CKey ddKey;
+    ddKey.MakeNewKey(true);
+    mintTx.vout.push_back(CTxOut(0, MakeP2TR(XOnlyPubKey(ddKey.GetPubKey()))));
+    mintTx.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDD, 1000, 1, collateralXOnlyKey)));
+
+    CTransactionRef mintTxRef = MakeTransactionRef(mintTx);
+    uint256 mintTxHash = mintTxRef->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint collOutpoint(mintTxHash, 0);
+    coinsView.AddCoin(collOutpoint, Coin(CTxOut(lockedCollateral, rawCollateralP2TR), 400, false), false);
+
+    auto txLookup = [&mintTxRef, &mintTxHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == mintTxHash) {
+            tx_out = mintTxRef;
+            return true;
+        }
+        return false;
+    };
+
+    CAmount allowedRelease = static_cast<int64_t>(
+        static_cast<__int128>(ddBurned) * static_cast<__int128>(lockedCollateral) /
+        static_cast<__int128>(originalDD));
+    CAmount feeTolerance = std::max((CAmount)1000, allowedRelease / 1000);
+
+    BOOST_TEST_MESSAGE("T2-03e: allowedRelease = " << allowedRelease << " sats, feeTolerance = " << feeTolerance << " sats");
+
+    // Try to release allowedRelease + feeTolerance (maximum allowed)
+    CAmount exploitOutput = allowedRelease + feeTolerance;
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770;
+    mtx.vin.push_back(CTxIn(collOutpoint));
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("ff03e10000000000000000000000000000000000000000000000000000000001"), 0)));
+    mtx.vout.push_back(CTxOut(exploitOutput, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(tx, ctxWithCoins, ddBurned, state);
+
+    // After partial-burn fix, this should be rejected entirely (ddBurned < originalDDMinted)
+    BOOST_CHECK_MESSAGE(!result,
+        "EXPLOIT [T2-03e]: Micro-burn with tolerance exploitation passed! "
+        "Released " + std::to_string(exploitOutput) + " sats for burning just 1 DD cent. "
+        "Reason: " + state.GetRejectReason());
+
+    BOOST_TEST_MESSAGE("T2-03e: Fee tolerance minimum exploitation " << (result ? "VULNERABLE" : "DEFENDED"));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

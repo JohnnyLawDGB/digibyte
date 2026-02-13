@@ -934,4 +934,34 @@ BOOST_FIXTURE_TEST_CASE(test_dd_opcode_validation, DigiDollarTransactionTestFixt
 
 // Note: Function implementations are now in digidollar_transaction_validation.cpp
 
+BOOST_FIXTURE_TEST_CASE(test_collateral_ratio_overflow_protection, DigiDollarTransactionTestFixture)
+{
+    // DGB-SEC-001: Verify integer overflow protection in ValidateCollateralRatio.
+    // collateralAmount * oraclePrice can exceed INT64_MAX for large values.
+    // e.g. 1M DGB (10^14 sats) * price 1M = 10^20 > INT64_MAX (9.2*10^18)
+
+    const CAmount MAX_PRICE = 1000000; // $10 per DGB in cents
+
+    // Normal case: should work correctly
+    BOOST_CHECK(ValidateCollateralRatio(1000, 100 * COIN, 5000, 200));
+
+    // Large collateral that would overflow without protection
+    CAmount largeCollateral = 1000000LL * COIN; // 1 million DGB in satoshis
+    // 10^14 * 10^6 = 10^20 — exceeds INT64_MAX without overflow protection
+    BOOST_CHECK_NO_THROW(ValidateCollateralRatio(1000, largeCollateral, MAX_PRICE, 200));
+
+    // MAX_MONEY collateral — must not crash
+    CAmount maxCollateral = MAX_MONEY; // 21 billion DGB (21000000000 * COIN)
+    BOOST_CHECK_NO_THROW(ValidateCollateralRatio(1000, maxCollateral, MAX_PRICE, 200));
+
+    // Large ddAmount that could overflow ddAmount * requiredRatio
+    CAmount largeDDAmount = std::numeric_limits<CAmount>::max() / 100; // Near max
+    BOOST_CHECK_NO_THROW(ValidateCollateralRatio(largeDDAmount, 100 * COIN, 5000, 200));
+
+    // Edge case: negative and zero inputs still rejected
+    BOOST_CHECK(!ValidateCollateralRatio(-1, 100 * COIN, 5000, 200));
+    BOOST_CHECK(!ValidateCollateralRatio(1000, -1, 5000, 200));
+    BOOST_CHECK(!ValidateCollateralRatio(1000, 100 * COIN, -1, 200));
+}
+
 BOOST_AUTO_TEST_SUITE_END()

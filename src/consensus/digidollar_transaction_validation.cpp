@@ -12,6 +12,7 @@
 #include <util/strencodings.h>
 
 #include <algorithm>
+#include <limits>
 #include <set>
 
 // =====================================
@@ -34,11 +35,28 @@ bool ValidateCollateralRatio(CAmount ddAmount, CAmount collateralAmount, CAmount
     // collateralAmount is in DGB satoshis (100000000 satoshis = 1 DGB)
 
     // Required USD value = ddAmount * requiredRatio / 100
-    CAmount requiredUSDCents = (ddAmount * requiredRatio) / 100;
+    // Overflow protection: ddAmount * requiredRatio can overflow int64_t for large values
+    CAmount requiredUSDCents;
+    const CAmount maxSafeDDMul = std::numeric_limits<CAmount>::max() / requiredRatio;
+    if (ddAmount > maxSafeDDMul) {
+        // Divide first to avoid overflow, accepting minor precision loss
+        requiredUSDCents = (ddAmount / 100) * requiredRatio;
+    } else {
+        requiredUSDCents = (ddAmount * requiredRatio) / 100;
+    }
 
     // Collateral value in cents = (collateralAmount / COIN) * oraclePrice
     // = collateralAmount * oraclePrice / COIN
-    CAmount collateralValueCents = (collateralAmount * oraclePrice) / COIN;
+    // Overflow protection: collateralAmount * oraclePrice can exceed int64_t max
+    // (e.g. 1M DGB in sats * price 1M = 10^20 > INT64_MAX 9.2*10^18)
+    CAmount collateralValueCents;
+    const CAmount maxSafeCollateral = std::numeric_limits<CAmount>::max() / oraclePrice;
+    if (collateralAmount > maxSafeCollateral) {
+        // Divide by COIN first, then multiply (matches dca.cpp pattern)
+        collateralValueCents = (collateralAmount / COIN) * oraclePrice;
+    } else {
+        collateralValueCents = (collateralAmount * oraclePrice) / COIN;
+    }
 
     return collateralValueCents >= requiredUSDCents;
 }

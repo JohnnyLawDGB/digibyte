@@ -5569,12 +5569,38 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             Misbehaving(*peer, 10, "oversized oracle bundle");
             return;
         }
-        for (const auto& msg : bundle_msg.bundle.messages) {
-            if (!msg.schnorr_sig.empty()) {
-                if (!msg.VerifyPhase2() && !msg.Verify()) {
-                    LogPrint(BCLog::NET, "Oracle bundle contains invalid signature from oracle %d peer=%d\n",
+        // SECURITY: Bind pubkeys from chainparams BEFORE signature verification.
+        // Without this, an attacker can generate their own keypair, sign messages
+        // claiming any oracle_id, set oracle_pubkey to their own key, and the
+        // bundle would pass verification — enabling P2P relay amplification.
+        // This mirrors the pubkey rebinding in the ORACLEPRICE handler above.
+        {
+            const CChainParams& params = m_chainparams;
+            for (auto& msg : bundle_msg.bundle.messages) {
+                if (msg.oracle_id >= ORACLE_TOTAL_COUNT) {
+                    Misbehaving(*peer, 10, "invalid oracle ID in bundle message");
+                    return;
+                }
+                const OracleNodeInfo* oracle_config = params.GetOracleNode(msg.oracle_id);
+                if (!oracle_config) {
+                    Misbehaving(*peer, 10, "unknown oracle ID in bundle message");
+                    return;
+                }
+                // Force the authorized pubkey — ignore whatever the sender supplied
+                msg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
+
+                if (!msg.schnorr_sig.empty()) {
+                    if (!msg.VerifyPhase2() && !msg.Verify()) {
+                        LogPrint(BCLog::NET, "Oracle bundle contains invalid signature from oracle %d peer=%d\n",
+                                  msg.oracle_id, pfrom.GetId());
+                        Misbehaving(*peer, 20, "invalid signature in oracle bundle");
+                        return;
+                    }
+                } else {
+                    // Empty signature — reject (Phase 2 requires Schnorr signatures)
+                    LogPrint(BCLog::NET, "Oracle bundle message missing signature from oracle %d peer=%d\n",
                               msg.oracle_id, pfrom.GetId());
-                    Misbehaving(*peer, 20, "invalid signature in oracle bundle");
+                    Misbehaving(*peer, 10, "missing signature in oracle bundle");
                     return;
                 }
             }
@@ -5625,17 +5651,26 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // ── Step 6: Store + relay ──
+        // ── Step 6: Store + relay (only relay if at least one message stored) ──
         OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        int stored_count = 0;
         for (const auto& msg : bundle_msg.bundle.messages) {
-            bundleManager.AddOracleMessage(msg);
+            if (bundleManager.AddOracleMessage(msg)) {
+                stored_count++;
+            }
         }
 
         // Mark sender as knowing this bundle
         AddKnownOracle(*peer, bundle_hash);
 
-        LogPrint(BCLog::NET, "Stored oracle bundle: epoch=%d, messages=%d, peer=%d\n",
-                 bundle_msg.bundle.epoch, bundle_msg.bundle.messages.size(), pfrom.GetId());
+        if (stored_count == 0) {
+            LogPrint(BCLog::NET, "Oracle bundle had no new/valid messages, skipping relay (epoch=%d, peer=%d)\n",
+                     bundle_msg.bundle.epoch, pfrom.GetId());
+            return;
+        }
+
+        LogPrint(BCLog::NET, "Stored oracle bundle: epoch=%d, messages=%d (stored=%d), peer=%d\n",
+                 bundle_msg.bundle.epoch, bundle_msg.bundle.messages.size(), stored_count, pfrom.GetId());
 
         // Relay to peers who don't already know this bundle
         m_connman.ForEachNode([&bundle_msg, &bundle_hash, this](CNode* pnode) {

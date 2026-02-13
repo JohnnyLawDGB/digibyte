@@ -5928,4 +5928,316 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01h_bundle_isvalid_no_rebind)
         "Consider adding a chainparams pubkey verification inside IsValid() as defense-in-depth.");
 }
 
+// ============================================================================
+// T3-02: Oracle ID Spoofing
+// Attack: Can an attacker impersonate a legitimate oracle by spoofing oracle_id?
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
+{
+    // ATTACK [T3-02a]: ORACLEBUNDLE P2P handler verifies signatures using
+    // attacker-supplied pubkeys WITHOUT rebinding from chainparams.
+    //
+    // The ORACLEPRICE handler correctly rebinds:
+    //   oracle_msg.price_message.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
+    //
+    // But the ORACLEBUNDLE handler does:
+    //   for (const auto& msg : bundle_msg.bundle.messages) {
+    //       if (!msg.schnorr_sig.empty()) {
+    //           if (!msg.VerifyPhase2() && !msg.Verify()) { ... }
+    //       }
+    //   }
+    //
+    // No pubkey rebinding! Attacker generates own keypair, signs messages
+    // claiming any oracle_id, sets oracle_pubkey to their own key.
+    // VerifyPhase2() passes. Bundle passes P2P validation and gets RELAYED
+    // to all connected peers — P2P relay amplification attack.
+
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+
+    // Forge 8 messages (ORACLE_CONSENSUS_REQUIRED) with different oracle_ids
+    COracleBundle forgedBundle;
+    forgedBundle.epoch = 0;
+    forgedBundle.timestamp = GetTime();
+
+    std::vector<uint64_t> prices;
+    for (uint32_t i = 0; i < ORACLE_CONSENSUS_REQUIRED; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 50000 + i * 100; // Slight variation
+        msg.timestamp = GetTime();
+        msg.block_height = 0;
+        msg.nonce = i;
+        // Set attacker's pubkey
+        msg.oracle_pubkey = XOnlyPubKey(attackerKey.GetPubKey());
+        // Sign with attacker's key
+        BOOST_REQUIRE(msg.SignPhase2(attackerKey));
+        prices.push_back(msg.price_micro_usd);
+        forgedBundle.messages.push_back(msg);
+    }
+
+    // Set median price
+    std::sort(prices.begin(), prices.end());
+    forgedBundle.median_price_micro_usd = (prices[prices.size()/2 - 1] + prices[prices.size()/2]) / 2;
+
+    // Simulate what ORACLEBUNDLE P2P handler does (before fix):
+    // Verify signatures WITHOUT rebinding pubkeys from chainparams
+    bool all_sigs_pass = true;
+    for (const auto& msg : forgedBundle.messages) {
+        if (!msg.schnorr_sig.empty()) {
+            if (!msg.VerifyPhase2() && !msg.Verify()) {
+                all_sigs_pass = false;
+                break;
+            }
+        }
+    }
+
+    // BUG: All signatures pass because they're verified against attacker's pubkey
+    BOOST_CHECK_MESSAGE(all_sigs_pass,
+        "BUG [T3-02a]: Forged bundle with attacker-signed messages passes P2P "
+        "signature verification because ORACLEBUNDLE handler does NOT rebind "
+        "pubkeys from chainparams before calling VerifyPhase2().");
+
+    // The bundle also passes consensus check
+    BOOST_CHECK_MESSAGE(forgedBundle.HasConsensus(),
+        "BUG [T3-02a]: Forged bundle meets consensus threshold (8 messages). "
+        "Combined with missing pubkey rebinding, this means the entire P2P "
+        "validation pipeline is bypassed.");
+
+    // Bundle.IsValid also passes (it doesn't rebind either)
+    BOOST_CHECK_MESSAGE(forgedBundle.IsValid(GetTime(), ORACLE_CONSENSUS_REQUIRED),
+        "BUG [T3-02a]: bundle.IsValid() passes with attacker pubkeys — confirming "
+        "that the bundle passes ALL P2P validation checks and will be relayed.");
+
+    BOOST_TEST_MESSAGE("BUG [T3-02a]: ORACLEBUNDLE P2P relay amplification attack. "
+        "Attacker generates own keypair, forges bundle with 8+ messages claiming "
+        "different oracle_ids. All P2P validation passes. Bundle relayed to entire "
+        "network. Defense: IsValidOracleMessage in AddOracleMessage catches at storage "
+        "level, but relay damage is done. "
+        "FIX NEEDED: Rebind pubkeys from chainparams in ORACLEBUNDLE handler before "
+        "sig verification (same pattern as ORACLEPRICE handler). Also: only relay "
+        "bundle if at least one message was successfully stored.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_02b_isvalidoraclemessage_catches_spoofed_id)
+{
+    // DEFENSE [T3-02b]: IsValidOracleMessage (Phase Two) correctly rebinds
+    // pubkeys from chainparams, catching oracle ID spoofing at the storage level.
+
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+
+    COraclePriceMessage spoofedMsg;
+    spoofedMsg.oracle_id = 0;  // Claim to be oracle 0
+    spoofedMsg.price_micro_usd = 50000;
+    spoofedMsg.timestamp = GetTime();
+    spoofedMsg.oracle_pubkey = XOnlyPubKey(attackerKey.GetPubKey());
+    BOOST_REQUIRE(spoofedMsg.SignPhase2(attackerKey));
+
+    // Direct verification passes (attacker's own key)
+    BOOST_CHECK(spoofedMsg.VerifyPhase2());
+
+    // But after rebinding from chainparams, it should fail
+    auto regTestParams = CChainParams::RegTest({});
+    const OracleNodeInfo* oracle_config = regTestParams->GetOracleNode(0);
+    BOOST_REQUIRE(oracle_config != nullptr);
+
+    COraclePriceMessage boundMsg = spoofedMsg;
+    boundMsg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
+
+    BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+        "DEFENSE [T3-02b]: After rebinding pubkey from chainparams, spoofed oracle "
+        "message is rejected. IsValidOracleMessage does this for Phase Two.");
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-02b]: IsValidOracleMessage correctly rebinds "
+        "pubkeys from chainparams for Phase Two (min_oracle_count > 1). Oracle ID "
+        "spoofing cannot inject fake prices into the bundle manager.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_02c_oracle_id_range_check)
+{
+    // DEFENSE [T3-02c]: Verify oracle_id range checks are present at P2P layer.
+    // oracle_id >= ORACLE_TOTAL_COUNT should be rejected.
+
+    // Valid range: 0 to ORACLE_TOTAL_COUNT-1 (29)
+    BOOST_CHECK(ORACLE_TOTAL_COUNT == 30);
+    BOOST_CHECK(ORACLE_ACTIVE_COUNT == 15);
+
+    // Verify chainparams has nodes for valid IDs (using regtest)
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Valid IDs should have oracle configs
+    for (uint32_t id = 0; id < 7; id++) { // Regtest has 7 oracles
+        const OracleNodeInfo* config = regTestParams->GetOracleNode(id);
+        BOOST_CHECK_MESSAGE(config != nullptr,
+            "DEFENSE [T3-02c]: Oracle ID " + std::to_string(id) + " has chainparams config");
+    }
+
+    // Invalid IDs should NOT have configs
+    for (uint32_t id : {30u, 31u, 100u, 255u, 0xFFFFu}) {
+        const OracleNodeInfo* config = regTestParams->GetOracleNode(id);
+        BOOST_CHECK_MESSAGE(config == nullptr,
+            "DEFENSE [T3-02c]: Oracle ID " + std::to_string(id) + " correctly has no config");
+    }
+
+    // P2P handler checks: oracle_id >= ORACLE_TOTAL_COUNT
+    // An attacker trying oracle_id=30 or higher would be caught
+    BOOST_CHECK(30 >= ORACLE_TOTAL_COUNT); // 30 >= 30 → true → rejected
+    BOOST_CHECK(29 < ORACLE_TOTAL_COUNT);  // 29 < 30 → false → not rejected by range check
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-02c]: Oracle ID range validation at P2P layer "
+        "rejects oracle_id >= ORACLE_TOTAL_COUNT (30). Valid range is 0-29.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_02d_oracle_id_byte_truncation_coinbase)
+{
+    // INFO [T3-02d]: Oracle ID is stored as 1 byte in coinbase OP_RETURN format.
+    // Phase 1: compact_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF))
+    // Phase 2: p2_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF))
+    //
+    // This means oracle_id is truncated to 0-255 range on-chain.
+    // Currently ORACLE_TOTAL_COUNT is 30, so all IDs fit in 1 byte.
+    // If ORACLE_TOTAL_COUNT ever exceeds 255, coinbase format breaks silently.
+
+    BOOST_CHECK_MESSAGE(ORACLE_TOTAL_COUNT <= 255,
+        "INFO [T3-02d]: ORACLE_TOTAL_COUNT (" + std::to_string(ORACLE_TOTAL_COUNT) +
+        ") fits in 1 byte. If this constant is increased above 255, the coinbase "
+        "oracle format (Phase 1 and Phase 2) will silently truncate oracle IDs.");
+
+    // Verify truncation behavior
+    uint32_t id_255 = 255;
+    uint32_t id_256 = 256;
+    BOOST_CHECK(static_cast<unsigned char>(id_255 & 0xFF) == 255);
+    BOOST_CHECK(static_cast<unsigned char>(id_256 & 0xFF) == 0);  // Truncates to 0!
+
+    BOOST_TEST_MESSAGE("INFO [T3-02d]: Oracle ID stored as uint8_t in coinbase OP_RETURN. "
+        "oracle_id=256 would silently map to oracle_id=0 on-chain. Not currently "
+        "exploitable (ORACLE_TOTAL_COUNT=30), but a latent truncation hazard if "
+        "oracle count is ever increased above 255.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_02e_p2p_price_handler_rebinding)
+{
+    // DEFENSE [T3-02e]: Verify the ORACLEPRICE P2P handler correctly rebinds
+    // pubkeys. The pattern is:
+    //   1. Deserialize message (contains attacker-supplied pubkey)
+    //   2. Look up oracle_config from chainparams by oracle_id
+    //   3. Replace: oracle_msg.price_message.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey)
+    //   4. Verify signature against the rebound pubkey
+    //
+    // Simulate this pattern to confirm it rejects spoofed oracle IDs.
+
+    CKey attackerKey, legitimateKey;
+    attackerKey.MakeNewKey(true);
+    legitimateKey.MakeNewKey(true);
+
+    // Attacker sends message claiming oracle_id=0, signed with their key
+    COraclePriceMessage attackerMsg;
+    attackerMsg.oracle_id = 0;
+    attackerMsg.price_micro_usd = 1000; // Extremely low price to undercollateralize
+    attackerMsg.timestamp = GetTime();
+    BOOST_REQUIRE(attackerMsg.SignPhase2(attackerKey));
+
+    // Without rebinding: passes (attacker's own key)
+    BOOST_CHECK(attackerMsg.VerifyPhase2());
+
+    // Simulate P2P handler rebinding to legitimate key
+    attackerMsg.oracle_pubkey = XOnlyPubKey(legitimateKey.GetPubKey());
+
+    // After rebinding: fails (signature doesn't match legitimate key)
+    BOOST_CHECK_MESSAGE(!attackerMsg.VerifyPhase2(),
+        "DEFENSE [T3-02e]: After pubkey rebinding, attacker's signature is rejected. "
+        "This is the correct behavior of the ORACLEPRICE P2P handler.");
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-02e]: ORACLEPRICE handler rebinding pattern works "
+        "correctly. Attacker cannot impersonate oracle 0 by sending a self-signed "
+        "message with a spoofed oracle_id.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_02f_empty_sig_bundle_bypass)
+{
+    // ATTACK [T3-02f]: Can an attacker bypass signature verification in the
+    // ORACLEBUNDLE handler by sending messages with empty signatures?
+    //
+    // The handler skips sig check for empty sigs:
+    //   if (!msg.schnorr_sig.empty()) { ... verify ... }
+    //
+    // With empty sig, the message passes P2P sig check entirely.
+    // Then IsValidOracleMessage checks VerifyPhase2() which requires sig.size()==64.
+
+    COraclePriceMessage emptySigMsg;
+    emptySigMsg.oracle_id = 0;
+    emptySigMsg.price_micro_usd = 50000;
+    emptySigMsg.timestamp = GetTime();
+    emptySigMsg.schnorr_sig.clear();  // Empty signature
+
+    // ORACLEBUNDLE handler: empty sig → skip verification → passes P2P check
+    bool passes_p2p = emptySigMsg.schnorr_sig.empty() || emptySigMsg.VerifyPhase2();
+    BOOST_CHECK_MESSAGE(passes_p2p,
+        "BUG [T3-02f]: Empty-signature message passes ORACLEBUNDLE P2P sig check "
+        "because the handler skips verification for empty signatures.");
+
+    // IsValidOracleMessage (Phase Two): VerifyPhase2() requires 64-byte sig
+    bool passes_storage = emptySigMsg.VerifyPhase2();
+    BOOST_CHECK_MESSAGE(!passes_storage,
+        "DEFENSE [T3-02f]: Empty-signature message fails IsValidOracleMessage "
+        "because VerifyPhase2() requires 64-byte Schnorr signature.");
+
+    BOOST_TEST_MESSAGE("PARTIAL DEFENSE [T3-02f]: Empty-sig messages bypass ORACLEBUNDLE P2P "
+        "sig verification (skipped entirely), but are caught at storage level. "
+        "Same relay amplification issue as T3-02a — message passes P2P, gets relayed, "
+        "then silently rejected by AddOracleMessage.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t3_02g_unconditional_bundle_relay)
+{
+    // ATTACK [T3-02g]: ORACLEBUNDLE handler relays bundle unconditionally
+    // after calling AddOracleMessage, regardless of whether ANY message was stored.
+    //
+    // Code (net_processing.cpp):
+    //   for (const auto& msg : bundle_msg.bundle.messages) {
+    //       bundleManager.AddOracleMessage(msg);  // return value IGNORED
+    //   }
+    //   // ... relay to all peers ...
+    //
+    // If all messages are rejected (e.g., all spoofed), the forged bundle
+    // is STILL relayed to every connected peer. This is the amplification
+    // part of the attack — one attacker message becomes N relay messages.
+
+    // This test documents the code pattern issue
+    BOOST_TEST_MESSAGE("BUG [T3-02g]: ORACLEBUNDLE handler does not check AddOracleMessage "
+        "return values. Bundle is relayed unconditionally after storage attempts. "
+        "Combined with T3-02a (missing pubkey rebinding) and T3-02f (empty sig bypass), "
+        "an attacker can flood the P2P network with fake bundles that pass all "
+        "handler-level checks, get relayed to every peer, but are silently "
+        "dropped at the storage level. "
+        "FIX: Check AddOracleMessage return values; only relay if ≥1 message stored.");
+
+    // Verify the basic assumption: AddOracleMessage returns bool
+    // (We can't easily test P2P relay in unit tests, but we can verify
+    // that the storage-level defense works)
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.SetEnabled(true);
+    mgr.SetMinOracleCount(4);  // Phase Two mode
+
+    CKey attackerKey;
+    attackerKey.MakeNewKey(true);
+
+    // Spoofed message
+    COraclePriceMessage spoofed;
+    spoofed.oracle_id = 0;
+    spoofed.price_micro_usd = 50000;
+    spoofed.timestamp = GetTime();
+    BOOST_REQUIRE(spoofed.SignPhase2(attackerKey));
+
+    // Storage rejects it
+    bool stored = mgr.AddOracleMessage(spoofed);
+    BOOST_CHECK_MESSAGE(!stored,
+        "DEFENSE [T3-02g]: IsValidOracleMessage correctly rejects spoofed message. "
+        "But the ORACLEBUNDLE handler ignores this return value and relays anyway.");
+
+    mgr.SetEnabled(false);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

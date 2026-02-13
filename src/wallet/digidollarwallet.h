@@ -15,6 +15,7 @@
 #include <base58.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 // Use existing CDigiDollarAddress from base58.h
@@ -180,6 +181,19 @@ private:
 
     // Pointer to wallet for UTXO access
     wallet::CWallet* m_wallet;
+
+    /** Null-safe dual lock: acquires cs_wallet (if m_wallet != nullptr) then cs_dd_wallet. */
+    [[nodiscard]] std::pair<std::unique_lock<RecursiveMutex>,
+                            std::unique_lock<RecursiveMutex>> LockDDWallet() const
+    {
+        if (m_wallet) {
+            std::unique_lock<RecursiveMutex> wl(m_wallet->cs_wallet);
+            std::unique_lock<RecursiveMutex> dl(cs_dd_wallet);
+            return {std::move(wl), std::move(dl)};
+        }
+        return {std::unique_lock<RecursiveMutex>(),
+                std::unique_lock<RecursiveMutex>(cs_dd_wallet)};
+    }
 
 public:
     DigiDollarWallet();

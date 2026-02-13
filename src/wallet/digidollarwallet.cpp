@@ -61,6 +61,7 @@ DigiDollarWallet::DigiDollarWallet(wallet::CWallet* wallet) : mockBalance(0), to
 
 size_t DigiDollarWallet::LoadFromDatabase()
 {
+    LOCK(cs_dd_wallet);
     if (!m_wallet) {
         LogPrint(BCLog::WALLETDB, "DigiDollarWallet::LoadFromDatabase - No wallet pointer\n");
         return 0;
@@ -157,6 +158,7 @@ size_t DigiDollarWallet::LoadFromDatabase()
 
 size_t DigiDollarWallet::LoadPositionsFromDatabase()
 {
+    LOCK(cs_dd_wallet);
     wallet::WalletBatch batch(m_wallet->GetDatabase());
     size_t count = 0;
 
@@ -202,6 +204,7 @@ size_t DigiDollarWallet::LoadPositionsFromDatabase()
 
 size_t DigiDollarWallet::LoadBalancesFromDatabase()
 {
+    LOCK(cs_dd_wallet);
     wallet::WalletBatch batch(m_wallet->GetDatabase());
     size_t count = 0;
 
@@ -240,6 +243,7 @@ size_t DigiDollarWallet::LoadBalancesFromDatabase()
 
 size_t DigiDollarWallet::LoadTransactionsFromDatabase()
 {
+    LOCK(cs_dd_wallet);
     wallet::WalletBatch batch(m_wallet->GetDatabase());
     size_t count = 0;
 
@@ -278,6 +282,7 @@ size_t DigiDollarWallet::LoadTransactionsFromDatabase()
 
 void DigiDollarWallet::RecalculateTotals()
 {
+    LOCK(cs_dd_wallet);
     // Recalculate total DD balance
     total_dd_balance = 0;
     for (const auto& [addr, bal] : dd_balances) {
@@ -298,6 +303,7 @@ void DigiDollarWallet::RecalculateTotals()
 
 void DigiDollarWallet::StoreAddressKey(const XOnlyPubKey& output_key, const CKey& key)
 {
+    LOCK(cs_dd_wallet);
     // Store in in-memory map
     std::array<unsigned char, 32> key_bytes;
     std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
@@ -319,6 +325,7 @@ void DigiDollarWallet::StoreAddressKey(const XOnlyPubKey& output_key, const CKey
 
 size_t DigiDollarWallet::LoadDDAddressKeys()
 {
+    LOCK(cs_dd_wallet);
     if (!m_wallet) {
         LogPrint(BCLog::WALLETDB, "DigiDollarWallet::LoadDDAddressKeys - No wallet pointer\n");
         return 0;
@@ -371,6 +378,7 @@ size_t DigiDollarWallet::LoadDDAddressKeys()
 
 bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) const
 {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // First check if this is a DD output (P2TR with value=0)
     if (txout.nValue != 0 || txout.scriptPubKey.size() != 34 || txout.scriptPubKey[0] != OP_1) {
         return false;
@@ -562,6 +570,7 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
 
 bool DigiDollarWallet::IsDDOutputMine(const COutPoint& outpoint) const
 {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // PRIMARY CHECK: If it's in dd_utxos, we own it
     // This is the source of truth for DD ownership (like mapWallet for DGB)
     // CRITICAL for detecting TRANSFER change outputs after wallet restore,
@@ -587,6 +596,7 @@ bool DigiDollarWallet::IsDDOutputMine(const COutPoint& outpoint) const
 
 void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
 {
+    LOCK(cs_dd_wallet);
     // Store in in-memory map
     dd_owner_keys[dd_timelock_id] = key;
 
@@ -606,6 +616,7 @@ void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& 
 
 size_t DigiDollarWallet::LoadDDOwnerKeys()
 {
+    LOCK(cs_dd_wallet);
     if (!m_wallet) {
         LogPrint(BCLog::WALLETDB, "DigiDollarWallet::LoadDDOwnerKeys - No wallet pointer\n");
         return 0;
@@ -656,8 +667,100 @@ size_t DigiDollarWallet::LoadDDOwnerKeys()
     return count;
 }
 
+// =============================================================================
+// Thread-safe accessor implementations (moved from inline in header for locking)
+// =============================================================================
+
+bool DigiDollarWallet::GetOwnerKey(const uint256& dd_timelock_id, CKey& key) const
+{
+    LOCK(cs_dd_wallet);
+    auto it = dd_owner_keys.find(dd_timelock_id);
+    if (it == dd_owner_keys.end()) return false;
+    key = it->second;
+    return true;
+}
+
+bool DigiDollarWallet::GetAddressKey(const XOnlyPubKey& output_key, CKey& key) const
+{
+    LOCK(cs_dd_wallet);
+    std::array<unsigned char, 32> key_bytes;
+    std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
+    auto it = dd_address_keys.find(key_bytes);
+    if (it == dd_address_keys.end()) return false;
+    key = it->second;
+    return true;
+}
+
+void DigiDollarWallet::AddDDUTXO(const COutPoint& outpoint, CAmount dd_amount)
+{
+    LOCK(cs_dd_wallet);
+    dd_utxos[outpoint] = dd_amount;
+}
+
+void DigiDollarWallet::RemoveDDUTXO(const COutPoint& outpoint)
+{
+    LOCK(cs_dd_wallet);
+    dd_utxos.erase(outpoint);
+}
+
+bool DigiDollarWallet::HasDDUTXO(const COutPoint& outpoint) const
+{
+    LOCK(cs_dd_wallet);
+    return dd_utxos.find(outpoint) != dd_utxos.end();
+}
+
+void DigiDollarWallet::SetMockBalance(CAmount balance)
+{
+    LOCK(cs_dd_wallet);
+    mockBalance = balance;
+}
+
+void DigiDollarWallet::AddMockTransaction(const DDTransaction& tx)
+{
+    LOCK(cs_dd_wallet);
+    mockHistory.push_back(tx);
+}
+
+void DigiDollarWallet::AddMockUTXO(const CDigiDollarOutput& utxo)
+{
+    LOCK(cs_dd_wallet);
+    mockUTXOs.push_back(utxo);
+}
+
+void DigiDollarWallet::ClearMockData()
+{
+    LOCK(cs_dd_wallet);
+    mockBalance = 0;
+    mockHistory.clear();
+    mockUTXOs.clear();
+}
+
+size_t DigiDollarWallet::GetBalanceCount() const
+{
+    LOCK(cs_dd_wallet);
+    return dd_balances.size();
+}
+
+size_t DigiDollarWallet::GetPositionCount() const
+{
+    LOCK(cs_dd_wallet);
+    return collateral_positions.size();
+}
+
+bool DigiDollarWallet::IsLockedByDD(const COutPoint& outpoint) const
+{
+    LOCK(cs_dd_wallet);
+    if (dd_utxos.count(outpoint)) return true;
+    for (const auto& [id, pos] : collateral_positions) {
+        if (pos.is_active && COutPoint(id, 0) == outpoint) return true;
+    }
+    return false;
+}
+
+
 bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
                                         std::string& txid, std::string& error) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Clear previous results
     txid.clear();
     error.clear();
@@ -1143,6 +1246,7 @@ CAmount DigiDollarWallet::GetDDBalanceLegacy() const {
 }
 
 std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Return actual transaction history (with mock fallback for testing)
     std::vector<DDTransaction> history = transaction_history;
 
@@ -1505,6 +1609,7 @@ bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int blo
 }
 
 void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int block_height) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!m_wallet) return;
 
     const CTransaction& tx = *ptx;
@@ -2107,6 +2212,7 @@ bool DigiDollarWallet::RedeemDigiDollar(const COutPoint& collateralUtxo,
                                        DigiDollar::RedemptionPath path,
                                        std::string& txid,
                                        std::string& error) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Clear previous results
     txid.clear();
     error.clear();
@@ -2207,6 +2313,7 @@ bool DigiDollarWallet::RedeemDigiDollar(const COutPoint& collateralUtxo,
 }
 
 std::vector<DigiDollar::RedeemablePosition> DigiDollarWallet::GetRedeemablePositions() const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Placeholder implementation for RED phase
     std::vector<DigiDollar::RedeemablePosition> positions;
 
@@ -2230,6 +2337,7 @@ std::vector<DigiDollar::RedeemablePosition> DigiDollarWallet::GetRedeemablePosit
 }
 
 CAmount DigiDollarWallet::CalculateRedemptionValue(const COutPoint& position) const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Placeholder implementation for RED phase
     CAmount redemptionValue = 0;
 
@@ -2260,6 +2368,7 @@ CAmount DigiDollarWallet::CalculateRedemptionValue(const COutPoint& position) co
 }
 
 bool DigiDollarWallet::CanRedeem(const COutPoint& position, DigiDollar::RedemptionPath& availablePath) const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Placeholder implementation for RED phase
     availablePath = DigiDollar::RedemptionPath::NORMAL;
 
@@ -2295,6 +2404,7 @@ bool DigiDollarWallet::CanRedeem(const COutPoint& position, DigiDollar::Redempti
 }
 
 std::vector<DDTransaction> DigiDollarWallet::GetRedemptionHistory() const {
+    LOCK(cs_dd_wallet);
     // Placeholder implementation for RED phase
     std::vector<DDTransaction> redemptions;
 
@@ -2311,6 +2421,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetRedemptionHistory() const {
 }
 
 CAmount DigiDollarWallet::EstimateRedemptionFee(const COutPoint& position, DigiDollar::RedemptionPath path) const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // DigiDollar transactions must pay at least 0.1 DGB fee to miners
     static const CAmount MIN_DD_TX_FEE = 10000000;       // 0.1 DGB minimum
     static const CAmount FEE_RATE_PER_KB = 200000;       // 0.002 DGB/kB
@@ -2339,6 +2450,7 @@ CAmount DigiDollarWallet::EstimateRedemptionFee(const COutPoint& position, DigiD
 }
 
 CAmount DigiDollarWallet::GetDGBBalance() const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Placeholder implementation for RED phase
     CAmount dgbBalance = 0;
 
@@ -2357,6 +2469,7 @@ CAmount DigiDollarWallet::GetDGBBalance() const {
 // =============================================================================
 
 bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& burnedUtxos) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     LogPrintf("DigiDollar: BurnDigiDollars - Burning %lld DD cents\n", static_cast<long long>(amount));
 
     // Validate input
@@ -2445,6 +2558,7 @@ bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& b
 }
 
 bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool partial, CAmount remainingDD) {
+    LOCK(cs_dd_wallet);
     LogPrintf("DigiDollar: CloseCollateralPosition - %s closure of position %s:%d\n",
               partial ? "Partial" : "Full", outpoint.hash.ToString(), outpoint.n);
 
@@ -2567,6 +2681,7 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
 // =============================================================================
 
 bool DigiDollarWallet::WriteDDBalance(const CDigiDollarAddress& addr, const CAmount& balance) {
+    LOCK(cs_dd_wallet);
     if (!m_wallet) {
         LogPrintf("ERROR: DigiDollarWallet::WriteDDBalance - No wallet pointer set\n");
         return error("DigiDollarWallet::WriteDDBalance: No wallet pointer set");
@@ -2632,6 +2747,7 @@ bool DigiDollarWallet::WriteDDBalance(const CDigiDollarAddress& addr, const CAmo
 }
 
 bool DigiDollarWallet::WriteDDTimeLock(const WalletCollateralPosition& position) {
+    LOCK(cs_dd_wallet);
     try {
         if (position.dd_timelock_id.IsNull()) {
             return error("DigiDollarWallet::WriteDDTimeLock: Invalid position ID");
@@ -2680,6 +2796,7 @@ bool DigiDollarWallet::WriteDDTimeLock(const WalletCollateralPosition& position)
 }
 
 bool DigiDollarWallet::UpdatePositionStatus(const uint256& dd_timelock_id, bool active) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (dd_timelock_id.IsNull()) {
         return error("DigiDollarWallet::UpdatePositionStatus: Invalid position ID");
     }
@@ -2738,6 +2855,7 @@ bool DigiDollarWallet::UpdatePositionStatus(const uint256& dd_timelock_id, bool 
 // =============================================================================
 
 CAmount DigiDollarWallet::GetDDBalance(const CDigiDollarAddress& addr) const {
+    LOCK(cs_dd_wallet);
     try {
         std::string key = addr.ToString();
         if (key.empty()) {
@@ -2771,6 +2889,7 @@ CAmount DigiDollarWallet::GetDDBalance(const CDigiDollarAddress& addr) const {
 }
 
 CAmount DigiDollarWallet::GetTotalDDBalance() const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     try {
         // Calculate SPENDABLE balance from dd_utxos map.
         // Includes confirmed UTXOs AND trusted unconfirmed ones (our own
@@ -2810,6 +2929,7 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
 }
 
 CAmount DigiDollarWallet::GetPendingDDBalance() const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     try {
         // Pending balance: untrusted unconfirmed DD UTXOs only.
         // Trusted unconfirmed (our own change/mints) are now included in
@@ -2847,6 +2967,7 @@ CAmount DigiDollarWallet::GetPendingDDBalance() const {
 }
 
 CAmount DigiDollarWallet::GetLockedCollateral() const {
+    LOCK(cs_dd_wallet);
     try {
         CAmount locked = 0;
         for (const auto& entry : collateral_positions) {
@@ -2865,6 +2986,7 @@ CAmount DigiDollarWallet::GetLockedCollateral() const {
 }
 
 std::vector<WalletCollateralPosition> DigiDollarWallet::GetDDTimeLocks(bool active_only) const {
+    LOCK(cs_dd_wallet);
     std::vector<WalletCollateralPosition> positions;
 
     try {
@@ -2885,6 +3007,7 @@ std::vector<WalletCollateralPosition> DigiDollarWallet::GetDDTimeLocks(bool acti
 }
 
 std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     std::vector<DDUtxo> utxos;
 
     LogPrintf("DigiDollar: GetDDUTXOs - Scanning dd_utxos map (FIX #1)\n");
@@ -2929,6 +3052,7 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
 }
 
 CAmount DigiDollarWallet::GetDDFromUTXO(const COutPoint& outpoint) const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // FIX #1: Look up UTXO in dd_utxos map (not collateral_positions)
     auto it = dd_utxos.find(outpoint);
     if (it == dd_utxos.end()) {
@@ -2953,6 +3077,7 @@ CAmount DigiDollarWallet::GetDDFromUTXO(const COutPoint& outpoint) const {
 }
 
 bool DigiDollarWallet::IsDDTokenUnspent(const uint256& dd_timelock_id) const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // DD token output is always at index 1 of the mint transaction
     COutPoint dd_token_outpoint(dd_timelock_id, 1);
 
@@ -2978,6 +3103,7 @@ bool DigiDollarWallet::IsDDTokenUnspent(const uint256& dd_timelock_id) const {
 }
 
 void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& position) {
+    LOCK(cs_dd_wallet);
     try {
         // Write position to database (this also updates the in-memory map)
         if (!WriteDDTimeLock(position)) {
@@ -3031,6 +3157,7 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
 }
 
 bool DigiDollarWallet::AddRedemptionToHistory(const DDTransaction& tx) {
+    LOCK(cs_dd_wallet);
     try {
         // Add to in-memory history
         transaction_history.push_back(tx);
@@ -3054,6 +3181,7 @@ bool DigiDollarWallet::AddRedemptionToHistory(const DDTransaction& tx) {
 }
 
 size_t DigiDollarWallet::ScanForDDUTXOs() {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!m_wallet) {
         LogPrintf("DigiDollar: ScanForDDUTXOs called but no wallet pointer set\n");
         return 0;
@@ -3275,6 +3403,7 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
 // =============================================================================
 
 bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uint256& txid) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!m_wallet) {
         return false;
     }
@@ -3438,6 +3567,7 @@ bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uin
 // =============================================================================
 
 bool DigiDollarWallet::MintDigiDollar(const CAmount& dd_amount, uint32_t lock_tier, CTransactionRef& tx_out) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     try {
         LogPrintf("DigiDollar: MintDigiDollar called - amount: %lld, tier: %u\n", static_cast<long long>(dd_amount), lock_tier);
 
@@ -3508,6 +3638,7 @@ bool DigiDollarWallet::MintDigiDollar(const CAmount& dd_amount, uint32_t lock_ti
 }
 
 bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount, CTransactionRef& tx_out) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     try {
         LogPrintf("DigiDollar: TransferDigiDollar called - to: %s, amount: %lld\n", to.ToString(), static_cast<long long>(amount));
 
@@ -3884,6 +4015,7 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 }
 
 bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAmount& amount, CTransactionRef& tx_out) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     try {
         LogPrintf("DigiDollar: RedeemDigiDollar called - position: %s, amount: %lld\n", dd_timelock_id.ToString(), static_cast<long long>(amount));
 
@@ -4100,6 +4232,7 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
 // =============================================================================
 
 bool DigiDollarWallet::UpdateDDTimeLockStatus(const uint256& dd_timelock_id, bool new_status) {
+    LOCK(cs_dd_wallet);
     // Validate input
     if (dd_timelock_id.IsNull()) {
         LogPrintf("DigiDollar: UpdateDDTimeLockStatus - Invalid DDTimeLock ID (null)\n");
@@ -4153,6 +4286,7 @@ bool DigiDollarWallet::UpdateDDTimeLockStatus(const uint256& dd_timelock_id, boo
 
 
 std::string DigiDollarWallet::GetDDTimeLockStatus(const uint256& dd_timelock_id) const {
+    LOCK(cs_dd_wallet);
     // Validate input
     if (dd_timelock_id.IsNull()) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: GetDDTimeLockStatus - Invalid DDTimeLock ID (null)\n");
@@ -4183,6 +4317,7 @@ std::string DigiDollarWallet::GetDDTimeLockStatus(const uint256& dd_timelock_id)
 }
 
 bool DigiDollarWallet::IsDDTimeLockRedeemable(const uint256& dd_timelock_id, int current_height) const {
+    LOCK(cs_dd_wallet);
     // Validate input
     if (dd_timelock_id.IsNull()) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: IsDDTimeLockRedeemable - Invalid DDTimeLock ID (null)\n");
@@ -4231,10 +4366,12 @@ bool DigiDollarWallet::IsDDTimeLockRedeemable(const uint256& dd_timelock_id, int
 // =============================================================================
 
 void DigiDollarWallet::SetMockDDBalance(const CDigiDollarAddress& addr, CAmount balance) {
+    LOCK(cs_dd_wallet);
     WriteDDBalance(addr, balance);
 }
 
 void DigiDollarWallet::AddMockPosition(const uint256& id, CAmount dd, CAmount dgb, uint32_t tier, int64_t height) {
+    LOCK(cs_dd_wallet);
     WalletCollateralPosition position(id, dd, dgb, tier, height);
 
     // For testing without a wallet pointer, directly update in-memory cache
@@ -4262,6 +4399,7 @@ void DigiDollarWallet::AddMockPosition(const uint256& id, CAmount dd, CAmount dg
 }
 
 void DigiDollarWallet::ClearWalletData() {
+    LOCK(cs_dd_wallet);
     dd_balances.clear();
     collateral_positions.clear();
     transaction_history.clear();
@@ -4321,6 +4459,7 @@ bool DigiDollarWallet::ValidateTransferParams(const CDigiDollarAddress& to, cons
 }
 
 bool DigiDollarWallet::ValidateRedeemParams(const uint256& dd_timelock_id, const CAmount& amount) const {
+    LOCK(cs_dd_wallet);
     if (dd_timelock_id.IsNull()) {
         LogPrintf("DigiDollar: Invalid position ID\n");
         return false;
@@ -4352,6 +4491,7 @@ bool DigiDollarWallet::ValidateRedeemParams(const uint256& dd_timelock_id, const
 }
 
 bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* amounts) const {
+    LOCK(cs_dd_wallet);
     // Reset output parameters
     selected_total = 0;
     selected_utxos.clear();
@@ -4414,6 +4554,7 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
 }
 
 bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts, const std::vector<COutPoint>* exclude_utxos) const {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Reset output parameters
     selected_total = 0;
     selected_utxos.clear();
@@ -4558,6 +4699,7 @@ CAmount DigiDollarWallet::CalculateTransactionFee(const CMutableTransaction& tx)
 bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
                                      const std::vector<COutPoint>& dd_utxos,
                                      const std::vector<COutPoint>& fee_utxos) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!m_wallet) {
         LogPrintf("DigiDollar: SignDDInputs - No wallet available\n");
         return false;
@@ -5185,6 +5327,7 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
 bool DigiDollarWallet::SignFeeInputs(CMutableTransaction& tx,
                                       const std::vector<COutPoint>& fee_utxos,
                                       size_t dd_input_count) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Validate that we have fee inputs to sign
     if (fee_utxos.empty()) {
         LogPrintf("DigiDollar: SignFeeInputs - No fee UTXOs provided\n");
@@ -5295,6 +5438,7 @@ bool DigiDollarWallet::SignFeeInputs(CMutableTransaction& tx,
 bool DigiDollarWallet::SignTransaction(CMutableTransaction& tx,
                                         const std::vector<COutPoint>& dd_utxos,
                                         const std::vector<COutPoint>& fee_utxos) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     LogPrintf("DigiDollar: SignTransaction - Signing %d DD inputs and %d fee inputs\n",
               dd_utxos.size(), fee_utxos.size());
 
@@ -5329,6 +5473,7 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
                                                   const std::vector<COutPoint>& dd_utxos,
                                                   const std::vector<COutPoint>& fee_utxos,
                                                   const CKey& owner_key) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     LogPrintf("DigiDollar: SignRedemptionTransaction - Signing collateral + %d DD inputs + %d fee inputs\n",
               dd_utxos.size(), fee_utxos.size());
 
@@ -5709,6 +5854,7 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
 // =============================================================================
 
 bool DigiDollarWallet::MarkDDUTXOsSpent(const std::vector<COutPoint>& spent_utxos) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     LogPrintf("DigiDollar: MarkDDUTXOsSpent - Marking %d DD UTXOs as spent\n", spent_utxos.size());
 
     // Validate input
@@ -5767,6 +5913,7 @@ bool DigiDollarWallet::MarkDDUTXOsSpent(const std::vector<COutPoint>& spent_utxo
 }
 
 bool DigiDollarWallet::AddDDChangeUTXO(const CTransactionRef& tx, uint32_t change_vout, CAmount dd_amount) {
+    LOCK(cs_dd_wallet);
     LogPrintf("DigiDollar: AddDDChangeUTXO - Adding change UTXO at vout[%d] with %d DD\n",
               change_vout, dd_amount);
 
@@ -5833,6 +5980,7 @@ bool DigiDollarWallet::UpdateDDUTXOSet(const CTransactionRef& tx,
                                        const std::vector<COutPoint>& input_utxos,
                                        int change_vout,
                                        CAmount change_amount) {
+    LOCK(cs_dd_wallet);
     LogPrintf("DigiDollar: UpdateDDUTXOSet - Updating UTXO set for tx %s\n",
               tx ? tx->GetHash().ToString() : "null");
 
@@ -5870,6 +6018,7 @@ bool DigiDollarWallet::UpdateDDUTXOSet(const CTransactionRef& tx,
 // =============================================================================
 
 bool DigiDollarWallet::CommitDDTransaction(const CTransactionRef& tx, std::string& error) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     // Clear previous error
     error.clear();
 
@@ -5959,6 +6108,7 @@ int DigiDollarWallet::GetDDTransactionConfirmations(const uint256& txid) const {
 }
 
 void DigiDollarWallet::UpdateDDConfirmations(const uint256& block_hash) {
+    LOCK(cs_dd_wallet);
     LogPrintf("DigiDollar: UpdateDDConfirmations - Updating confirmations for block %s\n",
               block_hash.ToString());
 
@@ -5993,6 +6143,7 @@ void DigiDollarWallet::UpdateDDConfirmations(const uint256& block_hash) {
 }
 
 std::vector<uint256> DigiDollarWallet::GetUnconfirmedDDTransactions() const {
+    LOCK(cs_dd_wallet);
     std::vector<uint256> unconfirmed;
 
     LogPrint(BCLog::WALLETDB, "DigiDollar: GetUnconfirmedDDTransactions - Scanning transaction history\n");
@@ -6018,6 +6169,7 @@ std::vector<uint256> DigiDollarWallet::GetUnconfirmedDDTransactions() const {
 }
 
 void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, const uint256& txid) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!m_wallet) {
         LogPrintf("DigiDollar: ProcessIncomingTransaction called but no wallet pointer\n");
         return;
@@ -6160,6 +6312,7 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
  */
 bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
                                                std::vector<std::pair<uint32_t, CAmount>>& our_dd_outputs) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!tx) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: DetectIncomingDDOutputs - null transaction\n");
         return false;
@@ -6274,6 +6427,7 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
 bool DigiDollarWallet::AddReceivedDDUTXO(const CTransactionRef& tx,
                                          uint32_t vout_index,
                                          CAmount dd_amount) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!tx) {
         LogPrintf("DigiDollar: AddReceivedDDUTXO - null transaction\n");
         return false;
@@ -6351,6 +6505,7 @@ bool DigiDollarWallet::AddReceivedDDUTXO(const CTransactionRef& tx,
  * Process incoming DD transaction (Tasks 6.1-6.3 combined)
  */
 bool DigiDollarWallet::ProcessIncomingDDTransaction(const CTransactionRef& tx) {
+    LOCK2(m_wallet->cs_wallet, cs_dd_wallet);
     if (!tx) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessIncomingDDTransaction - null transaction\n");
         return false;

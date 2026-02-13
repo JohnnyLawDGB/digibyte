@@ -7,6 +7,7 @@
 
 #include <consensus/amount.h>
 #include <key.h>
+#include <sync.h>
 #include <wallet/wallet.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/txbuilder.h>
@@ -126,34 +127,46 @@ struct DDUtxo {
  * Enhanced with Phase 5 core functions (Tasks 5.1-5.3)
  */
 class DigiDollarWallet {
+public:
+    /**
+     * Mutex guarding all DigiDollar wallet data structures.
+     * Must be held when accessing dd_utxos, dd_owner_keys, dd_address_keys,
+     * collateral_positions, dd_balances, transaction_history, and balance totals.
+     *
+     * Lock ordering: When both cs_wallet and cs_dd_wallet are needed, ALWAYS
+     * acquire cs_wallet first to prevent deadlocks. Use LOCK2(m_wallet->cs_wallet,
+     * cs_dd_wallet) for methods that need both.
+     */
+    mutable RecursiveMutex cs_dd_wallet;
+
 private:
     // Mock data for testing - in real implementation would use actual wallet
-    CAmount mockBalance;
-    std::vector<DDTransaction> mockHistory;
-    std::vector<CDigiDollarOutput> mockUTXOs;
+    CAmount mockBalance GUARDED_BY(cs_dd_wallet);
+    std::vector<DDTransaction> mockHistory GUARDED_BY(cs_dd_wallet);
+    std::vector<CDigiDollarOutput> mockUTXOs GUARDED_BY(cs_dd_wallet);
 
     // Phase 5 additions: Core wallet data structures (Task 5.1)
-    std::map<std::string, WalletDDBalance> dd_balances;
-    std::map<uint256, WalletCollateralPosition> collateral_positions;
-    std::vector<DDTransaction> transaction_history;
+    std::map<std::string, WalletDDBalance> dd_balances GUARDED_BY(cs_dd_wallet);
+    std::map<uint256, WalletCollateralPosition> collateral_positions GUARDED_BY(cs_dd_wallet);
+    std::vector<DDTransaction> transaction_history GUARDED_BY(cs_dd_wallet);
 
     // FIX #1: Track actual DD UTXOs (not just positions)
     // Maps (txid, vout) → DD amount in cents
     // This replaces the broken assumption that DD is always at (mint_txid, 1)
-    std::map<COutPoint, CAmount> dd_utxos;
+    std::map<COutPoint, CAmount> dd_utxos GUARDED_BY(cs_dd_wallet);
 
     // Internal state tracking (Task 5.2)
-    CAmount total_dd_balance;
-    CAmount locked_collateral;
+    CAmount total_dd_balance GUARDED_BY(cs_dd_wallet);
+    CAmount locked_collateral GUARDED_BY(cs_dd_wallet);
 
     // DD owner keys storage (for signing transfers)
     // Maps dd_timelock_id -> owner CKey
-    std::map<uint256, CKey> dd_owner_keys;
+    std::map<uint256, CKey> dd_owner_keys GUARDED_BY(cs_dd_wallet);
 
     // DD address keys storage (for received DD tokens)
     // Maps XOnlyPubKey (output_key from P2TR address) -> owner CKey
     // This enables spending DD received at addresses we generated via getdigidollaraddress
-    std::map<std::array<unsigned char, 32>, CKey> dd_address_keys;
+    std::map<std::array<unsigned char, 32>, CKey> dd_address_keys GUARDED_BY(cs_dd_wallet);
 
     // Pointer to wallet for UTXO access
     wallet::CWallet* m_wallet;
@@ -191,12 +204,7 @@ public:
      * @param key Output parameter for the key
      * @return true if key found
      */
-    bool GetOwnerKey(const uint256& dd_timelock_id, CKey& key) const {
-        auto it = dd_owner_keys.find(dd_timelock_id);
-        if (it == dd_owner_keys.end()) return false;
-        key = it->second;
-        return true;
-    }
+    bool GetOwnerKey(const uint256& dd_timelock_id, CKey& key) const;
 
     // ====================================================================
     // DD ADDRESS KEY MANAGEMENT (for received DD tokens)
@@ -225,14 +233,7 @@ public:
      * @param key Output parameter for the private key
      * @return true if key found
      */
-    bool GetAddressKey(const XOnlyPubKey& output_key, CKey& key) const {
-        std::array<unsigned char, 32> key_bytes;
-        std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
-        auto it = dd_address_keys.find(key_bytes);
-        if (it == dd_address_keys.end()) return false;
-        key = it->second;
-        return true;
-    }
+    bool GetAddressKey(const XOnlyPubKey& output_key, CKey& key) const;
 
     /**
      * Check if a DD output belongs to this wallet
@@ -356,17 +357,13 @@ public:
      * @param outpoint UTXO outpoint (txid, vout)
      * @param dd_amount DD amount in cents
      */
-    void AddDDUTXO(const COutPoint& outpoint, CAmount dd_amount) {
-        dd_utxos[outpoint] = dd_amount;
-    }
+    void AddDDUTXO(const COutPoint& outpoint, CAmount dd_amount);
 
     /**
      * Remove DD UTXO from tracking map when spent (FIX #1)
      * @param outpoint UTXO outpoint to remove
      */
-    void RemoveDDUTXO(const COutPoint& outpoint) {
-        dd_utxos.erase(outpoint);
-    }
+    void RemoveDDUTXO(const COutPoint& outpoint);
 
     /**
      * Check if a DD UTXO exists in the tracking map (regardless of IsSpent status).
@@ -374,9 +371,7 @@ public:
      * @param outpoint UTXO outpoint to check
      * @return true if the UTXO is tracked in dd_utxos map
      */
-    bool HasDDUTXO(const COutPoint& outpoint) const {
-        return dd_utxos.find(outpoint) != dd_utxos.end();
-    }
+    bool HasDDUTXO(const COutPoint& outpoint) const;
 
     /**
      * Check if DD token UTXO for a position is still unspent
@@ -655,30 +650,22 @@ public:
     bool IsDDTimeLockRedeemable(const uint256& dd_timelock_id, int current_height) const;
 
     // Test/mock functions
-    void SetMockBalance(CAmount balance) { mockBalance = balance; }
-    void AddMockTransaction(const DDTransaction& tx) { mockHistory.push_back(tx); }
-    void AddMockUTXO(const CDigiDollarOutput& utxo) { mockUTXOs.push_back(utxo); }
-    void ClearMockData() { mockBalance = 0; mockHistory.clear(); mockUTXOs.clear(); }
+    void SetMockBalance(CAmount balance);
+    void AddMockTransaction(const DDTransaction& tx);
+    void AddMockUTXO(const CDigiDollarOutput& utxo);
+    void ClearMockData();
 
     // Phase 5 test helpers
     void SetMockDDBalance(const CDigiDollarAddress& addr, CAmount balance);
     void AddMockPosition(const uint256& id, CAmount dd, CAmount dgb, uint32_t tier, int64_t height);
-    size_t GetBalanceCount() const { return dd_balances.size(); }
-    size_t GetPositionCount() const { return collateral_positions.size(); }
+    size_t GetBalanceCount() const;
+    size_t GetPositionCount() const;
 
     /**
      * Check if an outpoint is locked by DigiDollar (either collateral or DD token).
      * Used to protect DD locks from being wiped by UnlockAllCoins.
      */
-    bool IsLockedByDD(const COutPoint& outpoint) const {
-        // Check if it's a DD token UTXO
-        if (dd_utxos.count(outpoint)) return true;
-        // Check if it's a collateral output (index 0 of a known position's txid)
-        for (const auto& [id, pos] : collateral_positions) {
-            if (pos.is_active && COutPoint(id, 0) == outpoint) return true;
-        }
-        return false;
-    }
+    bool IsLockedByDD(const COutPoint& outpoint) const;
     void ClearWalletData();
 
     // Coin selection and fee calculation helpers (public for testing and integration)

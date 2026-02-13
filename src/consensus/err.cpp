@@ -334,7 +334,7 @@ bool EmergencyRedemptionRatio::ValidateERRRedemption(const CTransaction& tx, CAm
     return true;
 }
 
-bool EmergencyRedemptionRatio::ShouldBlockMinting()
+bool EmergencyRedemptionRatio::ShouldBlockMinting(CAmount oraclePriceOverride)
 {
     // Block minting if:
     // 1. ERR is formally activated (via oracle consensus), OR
@@ -354,12 +354,15 @@ bool EmergencyRedemptionRatio::ShouldBlockMinting()
         return false;
     }
 
-    // Need oracle price to calculate health
-    CAmount oraclePriceMicroUSD = 0;
-    if (Params().GetChainType() == ChainType::REGTEST) {
-        oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
-    } else {
-        oraclePriceMicroUSD = OracleBundleManager::GetInstance().GetLatestPrice();
+    // Use override price if provided (e.g., from ValidationContext during block validation),
+    // otherwise query the global oracle.
+    CAmount oraclePriceMicroUSD = oraclePriceOverride;
+    if (oraclePriceMicroUSD <= 0) {
+        if (Params().GetChainType() == ChainType::REGTEST) {
+            oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+        } else {
+            oraclePriceMicroUSD = OracleBundleManager::GetInstance().GetLatestPrice();
+        }
     }
 
     // FIX [T2-05c]: If no oracle price available, we can't determine health.

@@ -252,7 +252,7 @@ public:
      * - Allow system health to recover
      * - Protect existing DD holders
      */
-    static bool ShouldBlockMinting();
+    static bool ShouldBlockMinting(CAmount oraclePriceOverride = 0);
 
     /**
      * Get ERR statistics for monitoring and reporting.

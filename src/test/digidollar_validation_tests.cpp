@@ -313,31 +313,45 @@ BOOST_FIXTURE_TEST_CASE(script_validation_non_dd_script, DigiDollarValidationTes
 
 BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_tx, DigiDollarValidationTestSetup)
 {
-    // Create a mock mint transaction
+    // Create a valid mint transaction with all required components:
+    // - Collateral input
+    // - DD OP_RETURN with owner pubkey (required for NUMS verification per T1-04b)
+    // - Collateral output (P2TR with NUMS internal key)
+    // - DD token output
     CMutableTransaction mtx;
     mtx.nVersion = 0x01000770; // DD_TX_MINT (type=1 in bits 24-31, marker=0x0770 in bits 0-15)
 
-    // Add collateral input (simplified for test)
+    // Add collateral input
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
 
-    // Add collateral output
+    // Set up mint parameters
     DigiDollar::MintParams params;
     params.ddAmount = 10000; // $100.00
-    params.lockHeight = mockHeight + 30 * 24 * 60 * 4;
+    params.lockHeight = mockHeight + 30 * 24 * 60 * 4; // 30-day lock
     params.ownerKey = testXOnlyKey;
-    params.internalKey = testXOnlyKey;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
     params.oracleKeys = DigiDollar::GetOracleKeys(15);
 
     CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
     CAmount requiredCollateral = (static_cast<uint64_t>(params.ddAmount) * COIN * 500 * 100) / mockOraclePrice;
 
-    mtx.vout.resize(2);
-    mtx.vout[0] = CTxOut(requiredCollateral, collateralScript);
+    // DD OP_RETURN with owner pubkey (required for NUMS verification)
+    CScript opReturn = CScript() << OP_RETURN
+                                 << std::vector<unsigned char>{'D', 'D'}
+                                 << CScriptNum(1)
+                                 << CScriptNum(params.ddAmount)
+                                 << CScriptNum(params.lockHeight)
+                                 << CScriptNum(1)  // lockTier 1 = 30 days
+                                 << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
+
+    mtx.vout.resize(3);
+    mtx.vout[0] = CTxOut(0, opReturn);
+    mtx.vout[1] = CTxOut(requiredCollateral, collateralScript);
 
     // Add DD token output
     CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, params.ddAmount);
-    mtx.vout[1] = CTxOut(0, ddScript); // DD tokens have no DGB value
+    mtx.vout[2] = CTxOut(0, ddScript); // DD tokens have no DGB value
 
     CTransaction tx(mtx);
     TxValidationState state;

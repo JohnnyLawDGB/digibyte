@@ -582,15 +582,17 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `WalletCollateralPosition` (struct) → dd_timelock_id, dd_minted, dgb_collateral, lock_tier, unlock_height, is_active, owner_keyid
 - `DDUtxo` (struct) → spendable DD UTXO: outpoint, dd_amount, is_spendable
 - `DigiDollarWallet` (class) → high-level wallet interface for DD operations
+  - **Key Encryption (T4-03a):**
+    - `EncryptDDKeys(vMasterKey, encrypted_batch)` → encrypts all plaintext DD keys, called from CWallet::EncryptWallet()
   - **Owner Key Management:**
-    - `StoreOwnerKey(dd_timelock_id, key)` → persists DD owner key to wallet database for restart survival
-    - `LoadDDOwnerKeys()` → loads persisted owner keys during wallet init
-    - `GetOwnerKey(dd_timelock_id, key)` → retrieves owner key for signing
+    - `StoreOwnerKey(dd_timelock_id, key)` → persists DD owner key; encrypts if wallet is encrypted (T4-03a)
+    - `LoadDDOwnerKeys()` → loads persisted owner keys during wallet init (handles both plaintext and encrypted)
+    - `GetOwnerKey(dd_timelock_id, key)` → retrieves and decrypts owner key for signing (T4-03a)
   - **Address Key Management:**
-    - `StoreAddressKey(output_key, key)` → persists P2TR address key for received DD spending
-    - `LoadDDAddressKeys()` → loads persisted address keys during wallet init
-    - `GetAddressKey(output_key, key)` → retrieves address key for signing
-    - `IsDDOutputMine(txout, txid)` → checks dd_owner_keys, dd_address_keys, and IsMine for ownership
+    - `StoreAddressKey(output_key, key)` → persists P2TR address key; encrypts if wallet is encrypted (T4-03a)
+    - `LoadDDAddressKeys()` → loads persisted address keys during wallet init (handles both plaintext and encrypted)
+    - `GetAddressKey(output_key, key)` → retrieves and decrypts address key for signing (T4-03a)
+    - `IsDDOutputMine(txout, txid)` → checks dd_owner_keys, dd_crypted_owner_keys, dd_address_keys, dd_crypted_address_keys, and IsMine for ownership
     - `IsDDOutputMine(outpoint)` → checks dd_utxos map (source of truth for owned DD)
   - **Database Extension (Task 5.1):**
     - `WriteDDBalance(addr, balance)` → persists DD balance to wallet.dat
@@ -793,6 +795,8 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 
 ### src/wallet/walletdb.h / src/wallet/walletdb.cpp
 - ⚠️ `WalletBatch` DD persistence methods: `WriteDDBalance()`, `WriteDDTimeLock()`, `ReadDDTimeLock()`, `WriteDDTransaction()`, `WriteDDOwnerKey()`, `WriteDDAddressKey()`, `EraseDDTimeLock()` (74 references)
+- ⚠️ `WalletBatch` encrypted DD key methods (T4-03a): `WriteCryptedDDOwnerKey()`, `ReadCryptedDDOwnerKey()`, `EraseCryptedDDOwnerKey()`, `WriteCryptedDDAddressKey()`, `ReadCryptedDDAddressKey()`, `EraseCryptedDDAddressKey()`
+- ⚠️ DB keys: `DD_CRYPTED_ADDRESS_KEY` ("ddcaddrkey"), `DD_CRYPTED_OWNER_KEY` ("ddcownerkey")
 
 ### src/wallet/spend.cpp
 - ⚠️ Coin selection excludes DD-locked UTXOs from regular DGB spending

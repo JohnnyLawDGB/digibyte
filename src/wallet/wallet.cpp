@@ -866,6 +866,20 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
             }
         }
 
+        // T4-03a: Encrypt DigiDollar private keys (owner keys and address keys)
+        // These are stored separately from m_spk_managers and must be encrypted
+        // in the same atomic transaction to prevent plaintext key leakage.
+        if (m_dd_wallet) {
+            if (!m_dd_wallet->EncryptDDKeys(_vMasterKey, encrypted_batch)) {
+                encrypted_batch->TxnAbort();
+                delete encrypted_batch;
+                encrypted_batch = nullptr;
+                // DD keys failed to encrypt — abort to avoid mixed state
+                assert(false);
+            }
+            WalletLogPrintf("Encrypted DigiDollar private keys\n");
+        }
+
         // Encryption was introduced in version 0.4.0
         SetMinVersion(FEATURE_WALLETCRYPT, encrypted_batch);
 

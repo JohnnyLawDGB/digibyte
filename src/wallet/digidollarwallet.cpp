@@ -4,6 +4,7 @@
 
 #include <wallet/digidollarwallet.h>
 #include <wallet/wallet.h>
+#include <wallet/crypter.h>
 #include <wallet/spend.h>
 #include <wallet/receive.h>
 #include <wallet/coincontrol.h>
@@ -301,24 +302,131 @@ void DigiDollarWallet::RecalculateTotals()
              static_cast<long long>(total_dd_balance), static_cast<long long>(locked_collateral));
 }
 
+// =============================================================================
+// T4-03a: Encrypt existing DD keys when wallet encryption is enabled
+// =============================================================================
+
+bool DigiDollarWallet::EncryptDDKeys(const wallet::CKeyingMaterial& vMasterKey, wallet::WalletBatch* encrypted_batch)
+{
+    LOCK(cs_dd_wallet);
+    LogPrintf("DigiDollarWallet: Encrypting %zu owner keys and %zu address keys\n",
+              dd_owner_keys.size(), dd_address_keys.size());
+
+    bool use_external_batch = (encrypted_batch != nullptr);
+
+    // Encrypt all plaintext owner keys
+    for (const auto& [timelock_id, key] : dd_owner_keys) {
+        CPubKey pubkey = key.GetPubKey();
+        wallet::CKeyingMaterial vchSecret(key.begin(), key.end());
+        std::vector<unsigned char> vchCryptedSecret;
+
+        if (!wallet::EncryptSecret(vMasterKey, vchSecret, pubkey.GetHash(), vchCryptedSecret)) {
+            LogPrintf("DigiDollarWallet: ERROR - Failed to encrypt DD owner key for timelock %s\n",
+                      timelock_id.ToString());
+            return false;
+        }
+
+        dd_crypted_owner_keys[timelock_id] = std::make_pair(pubkey, vchCryptedSecret);
+
+        // Persist to database
+        if (use_external_batch) {
+            if (!encrypted_batch->WriteCryptedDDOwnerKey(timelock_id, pubkey, vchCryptedSecret)) {
+                LogPrintf("DigiDollarWallet: ERROR - Failed to write encrypted DD owner key to database\n");
+                return false;
+            }
+        } else if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteCryptedDDOwnerKey(timelock_id, pubkey, vchCryptedSecret)) {
+                LogPrintf("DigiDollarWallet: ERROR - Failed to write encrypted DD owner key to database\n");
+                return false;
+            }
+        }
+    }
+
+    // Encrypt all plaintext address keys
+    for (const auto& [key_bytes, key] : dd_address_keys) {
+        CPubKey pubkey = key.GetPubKey();
+        wallet::CKeyingMaterial vchSecret(key.begin(), key.end());
+        std::vector<unsigned char> vchCryptedSecret;
+
+        if (!wallet::EncryptSecret(vMasterKey, vchSecret, pubkey.GetHash(), vchCryptedSecret)) {
+            LogPrintf("DigiDollarWallet: ERROR - Failed to encrypt DD address key %s\n",
+                      HexStr(key_bytes));
+            return false;
+        }
+
+        dd_crypted_address_keys[key_bytes] = std::make_pair(pubkey, vchCryptedSecret);
+
+        // Persist to database
+        if (use_external_batch) {
+            if (!encrypted_batch->WriteCryptedDDAddressKey(key_bytes, pubkey, vchCryptedSecret)) {
+                LogPrintf("DigiDollarWallet: ERROR - Failed to write encrypted DD address key to database\n");
+                return false;
+            }
+        } else if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteCryptedDDAddressKey(key_bytes, pubkey, vchCryptedSecret)) {
+                LogPrintf("DigiDollarWallet: ERROR - Failed to write encrypted DD address key to database\n");
+                return false;
+            }
+        }
+    }
+
+    // Clear plaintext keys from memory — they are now encrypted
+    dd_owner_keys.clear();
+    dd_address_keys.clear();
+
+    LogPrintf("DigiDollarWallet: Successfully encrypted %zu owner keys and %zu address keys\n",
+              dd_crypted_owner_keys.size(), dd_crypted_address_keys.size());
+    return true;
+}
+
 void DigiDollarWallet::StoreAddressKey(const XOnlyPubKey& output_key, const CKey& key)
 {
     LOCK(cs_dd_wallet);
-    // Store in in-memory map
     std::array<unsigned char, 32> key_bytes;
     std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
-    dd_address_keys[key_bytes] = key;
 
-    LogPrintf("DigiDollarWallet: Stored DD address key for output key %s\n",
+    LogPrintf("DigiDollarWallet: Storing DD address key for output key %s\n",
               HexStr(output_key));
 
-    // Persist to wallet database
-    if (m_wallet) {
-        wallet::WalletBatch batch(m_wallet->GetDatabase());
-        if (!batch.WriteDDAddressKey(key_bytes, key)) {
-            LogPrintf("DigiDollarWallet: WARNING - Failed to persist DD address key to database\n");
-        } else {
-            LogPrintf("DigiDollarWallet: Persisted DD address key to database\n");
+    // If wallet is encrypted, encrypt the key before storage (T4-03a)
+    if (m_wallet && m_wallet->IsCrypted()) {
+        CPubKey pubkey = key.GetPubKey();
+        wallet::CKeyingMaterial vchSecret(key.begin(), key.end());
+        std::vector<unsigned char> vchCryptedSecret;
+
+        if (!wallet::EncryptSecret(m_wallet->GetEncryptionKey(), vchSecret, pubkey.GetHash(), vchCryptedSecret)) {
+            LogPrintf("DigiDollarWallet: ERROR - Failed to encrypt DD address key\n");
+            return;
+        }
+
+        // Store encrypted in memory
+        dd_crypted_address_keys[key_bytes] = std::make_pair(pubkey, vchCryptedSecret);
+        // Remove any plaintext version from memory
+        dd_address_keys.erase(key_bytes);
+
+        // Persist encrypted to database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteCryptedDDAddressKey(key_bytes, pubkey, vchCryptedSecret)) {
+                LogPrintf("DigiDollarWallet: WARNING - Failed to persist encrypted DD address key to database\n");
+            } else {
+                LogPrintf("DigiDollarWallet: Persisted encrypted DD address key to database\n");
+            }
+        }
+    } else {
+        // Store plaintext in memory
+        dd_address_keys[key_bytes] = key;
+
+        // Persist plaintext to wallet database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteDDAddressKey(key_bytes, key)) {
+                LogPrintf("DigiDollarWallet: WARNING - Failed to persist DD address key to database\n");
+            } else {
+                LogPrintf("DigiDollarWallet: Persisted DD address key to database\n");
+            }
         }
     }
 }
@@ -334,10 +442,11 @@ size_t DigiDollarWallet::LoadDDAddressKeys()
     wallet::WalletBatch batch(m_wallet->GetDatabase());
     size_t count = 0;
 
-    // Clear in-memory map before loading
+    // Clear in-memory maps before loading
     dd_address_keys.clear();
+    dd_crypted_address_keys.clear();
 
-    // Iterate through database to find DD address keys
+    // Iterate through database to find DD address keys (both plaintext and encrypted)
     std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
     if (cursor) {
         wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
@@ -352,6 +461,7 @@ size_t DigiDollarWallet::LoadDDAddressKeys()
             key_stream >> key_type;
 
             if (key_type == wallet::DBKeys::DD_ADDRESS_KEY) {
+                // Plaintext DD address key (unencrypted wallet)
                 std::array<unsigned char, 32> output_key_bytes;
                 key_stream >> output_key_bytes;
 
@@ -363,16 +473,30 @@ size_t DigiDollarWallet::LoadDDAddressKeys()
                     dd_address_keys[output_key_bytes] = key;
                     count++;
 
-                    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded DD address key %s\n",
+                    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded plaintext DD address key %s\n",
                             HexStr(output_key_bytes));
                 } else {
                     LogPrintf("DigiDollarWallet: WARNING - Failed to load DD address key from database\n");
                 }
+            } else if (key_type == wallet::DBKeys::DD_CRYPTED_ADDRESS_KEY) {
+                // Encrypted DD address key (T4-03a: encrypted wallet)
+                std::array<unsigned char, 32> output_key_bytes;
+                key_stream >> output_key_bytes;
+
+                std::pair<CPubKey, std::vector<unsigned char>> val;
+                value_stream >> val;
+
+                dd_crypted_address_keys[output_key_bytes] = val;
+                count++;
+
+                LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded encrypted DD address key %s\n",
+                        HexStr(output_key_bytes));
             }
         }
     }
 
-    LogPrintf("DigiDollarWallet: Loaded %zu DD address keys from database\n", count);
+    LogPrintf("DigiDollarWallet: Loaded %zu DD address keys (%zu plaintext, %zu encrypted) from database\n",
+              count, dd_address_keys.size(), dd_crypted_address_keys.size());
     return count;
 }
 
@@ -433,6 +557,21 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
         }
     }
 
+    // T4-03a: Also check encrypted owner keys for TRANSFER change output matching
+    // We can check pubkey-derived tweaked keys without decrypting the secret
+    for (const auto& [key_txid, crypted_pair] : dd_crypted_owner_keys) {
+        if (key_txid == txid) continue;  // Already checked via GetOwnerKey above
+        const CPubKey& pubkey = crypted_pair.first;
+        XOnlyPubKey owner_xonly(pubkey);
+        auto tweaked = owner_xonly.CreateTapTweak(nullptr);
+        if (tweaked) {
+            if (std::equal(output_key_bytes.begin(), output_key_bytes.end(),
+                          tweaked->first.begin())) {
+                return true;
+            }
+        }
+    }
+
     // Check dd_address_keys (for DD addresses generated via getdigidollaraddress)
     XOnlyPubKey output_key(output_key_bytes);
     CKey address_key;
@@ -447,7 +586,7 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
     //
     // This is computationally intensive but only needed during rescan when
     // dd_address_keys hasn't been rebuilt yet.
-    if (m_wallet && dd_address_keys.empty()) {
+    if (m_wallet && dd_address_keys.empty() && dd_crypted_address_keys.empty()) {
         LogPrintf("DigiDollar: IsDDOutputMine: dd_address_keys empty, trying descriptor key derivation for TARGET output_key=%s\n",
                   HexStr(output_key_bytes));
 
@@ -598,19 +737,47 @@ bool DigiDollarWallet::IsDDOutputMine(const COutPoint& outpoint) const
 void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
 {
     LOCK(cs_dd_wallet);
-    // Store in in-memory map
-    dd_owner_keys[dd_timelock_id] = key;
 
-    LogPrintf("DigiDollarWallet: Stored DD owner key for timelock %s\n",
+    LogPrintf("DigiDollarWallet: Storing DD owner key for timelock %s\n",
               dd_timelock_id.ToString());
 
-    // Persist to wallet database
-    if (m_wallet) {
-        wallet::WalletBatch batch(m_wallet->GetDatabase());
-        if (!batch.WriteDDOwnerKey(dd_timelock_id, key)) {
-            LogPrintf("DigiDollarWallet: WARNING - Failed to persist DD owner key to database\n");
-        } else {
-            LogPrintf("DigiDollarWallet: Persisted DD owner key to database\n");
+    // If wallet is encrypted, encrypt the key before storage (T4-03a)
+    if (m_wallet && m_wallet->IsCrypted()) {
+        CPubKey pubkey = key.GetPubKey();
+        wallet::CKeyingMaterial vchSecret(key.begin(), key.end());
+        std::vector<unsigned char> vchCryptedSecret;
+
+        if (!wallet::EncryptSecret(m_wallet->GetEncryptionKey(), vchSecret, pubkey.GetHash(), vchCryptedSecret)) {
+            LogPrintf("DigiDollarWallet: ERROR - Failed to encrypt DD owner key\n");
+            return;
+        }
+
+        // Store encrypted in memory
+        dd_crypted_owner_keys[dd_timelock_id] = std::make_pair(pubkey, vchCryptedSecret);
+        // Remove any plaintext version from memory
+        dd_owner_keys.erase(dd_timelock_id);
+
+        // Persist encrypted to database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteCryptedDDOwnerKey(dd_timelock_id, pubkey, vchCryptedSecret)) {
+                LogPrintf("DigiDollarWallet: WARNING - Failed to persist encrypted DD owner key to database\n");
+            } else {
+                LogPrintf("DigiDollarWallet: Persisted encrypted DD owner key to database\n");
+            }
+        }
+    } else {
+        // Store plaintext in memory
+        dd_owner_keys[dd_timelock_id] = key;
+
+        // Persist plaintext to wallet database
+        if (m_wallet) {
+            wallet::WalletBatch batch(m_wallet->GetDatabase());
+            if (!batch.WriteDDOwnerKey(dd_timelock_id, key)) {
+                LogPrintf("DigiDollarWallet: WARNING - Failed to persist DD owner key to database\n");
+            } else {
+                LogPrintf("DigiDollarWallet: Persisted DD owner key to database\n");
+            }
         }
     }
 }
@@ -626,10 +793,11 @@ size_t DigiDollarWallet::LoadDDOwnerKeys()
     wallet::WalletBatch batch(m_wallet->GetDatabase());
     size_t count = 0;
 
-    // Clear in-memory map before loading
+    // Clear in-memory maps before loading
     dd_owner_keys.clear();
+    dd_crypted_owner_keys.clear();
 
-    // Iterate through database to find DD owner keys
+    // Iterate through database to find DD owner keys (both plaintext and encrypted)
     std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
     if (cursor) {
         wallet::DatabaseCursor::Status status = wallet::DatabaseCursor::Status::MORE;
@@ -644,6 +812,7 @@ size_t DigiDollarWallet::LoadDDOwnerKeys()
             key_stream >> key_type;
 
             if (key_type == wallet::DBKeys::DD_OWNER_KEY) {
+                // Plaintext DD owner key (unencrypted wallet)
                 uint256 dd_timelock_id;
                 key_stream >> dd_timelock_id;
 
@@ -655,16 +824,30 @@ size_t DigiDollarWallet::LoadDDOwnerKeys()
                     dd_owner_keys[dd_timelock_id] = key;
                     count++;
 
-                    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded DD owner key for timelock %s\n",
+                    LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded plaintext DD owner key for timelock %s\n",
                             dd_timelock_id.ToString());
                 } else {
                     LogPrintf("DigiDollarWallet: WARNING - Failed to load DD owner key from database\n");
                 }
+            } else if (key_type == wallet::DBKeys::DD_CRYPTED_OWNER_KEY) {
+                // Encrypted DD owner key (T4-03a: encrypted wallet)
+                uint256 dd_timelock_id;
+                key_stream >> dd_timelock_id;
+
+                std::pair<CPubKey, std::vector<unsigned char>> val;
+                value_stream >> val;
+
+                dd_crypted_owner_keys[dd_timelock_id] = val;
+                count++;
+
+                LogPrint(BCLog::WALLETDB, "DigiDollarWallet: Loaded encrypted DD owner key for timelock %s\n",
+                        dd_timelock_id.ToString());
             }
         }
     }
 
-    LogPrintf("DigiDollarWallet: Loaded %zu DD owner keys from database\n", count);
+    LogPrintf("DigiDollarWallet: Loaded %zu DD owner keys (%zu plaintext, %zu encrypted) from database\n",
+              count, dd_owner_keys.size(), dd_crypted_owner_keys.size());
     return count;
 }
 
@@ -675,10 +858,36 @@ size_t DigiDollarWallet::LoadDDOwnerKeys()
 bool DigiDollarWallet::GetOwnerKey(const uint256& dd_timelock_id, CKey& key) const
 {
     LOCK(cs_dd_wallet);
+
+    // First try plaintext keys (unencrypted wallet)
     auto it = dd_owner_keys.find(dd_timelock_id);
-    if (it == dd_owner_keys.end()) return false;
-    key = it->second;
-    return true;
+    if (it != dd_owner_keys.end()) {
+        key = it->second;
+        return true;
+    }
+
+    // Try encrypted keys (T4-03a: encrypted wallet)
+    auto cit = dd_crypted_owner_keys.find(dd_timelock_id);
+    if (cit != dd_crypted_owner_keys.end()) {
+        if (!m_wallet) return false;
+        if (m_wallet->IsLocked()) {
+            LogPrintf("DigiDollarWallet: Cannot decrypt DD owner key — wallet is locked\n");
+            return false;
+        }
+        const CPubKey& pubkey = cit->second.first;
+        const std::vector<unsigned char>& vchCryptedSecret = cit->second.second;
+        wallet::CKeyingMaterial vchSecret;
+        if (!wallet::DecryptSecret(m_wallet->GetEncryptionKey(), vchCryptedSecret, pubkey.GetHash(), vchSecret)) {
+            LogPrintf("DigiDollarWallet: ERROR - Failed to decrypt DD owner key for timelock %s\n",
+                      dd_timelock_id.ToString());
+            return false;
+        }
+        if (vchSecret.size() != 32) return false;
+        key.Set(vchSecret.begin(), vchSecret.end(), pubkey.IsCompressed());
+        return key.VerifyPubKey(pubkey);
+    }
+
+    return false;
 }
 
 bool DigiDollarWallet::GetAddressKey(const XOnlyPubKey& output_key, CKey& key) const
@@ -686,10 +895,35 @@ bool DigiDollarWallet::GetAddressKey(const XOnlyPubKey& output_key, CKey& key) c
     LOCK(cs_dd_wallet);
     std::array<unsigned char, 32> key_bytes;
     std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
+
+    // First try plaintext keys (unencrypted wallet)
     auto it = dd_address_keys.find(key_bytes);
-    if (it == dd_address_keys.end()) return false;
-    key = it->second;
-    return true;
+    if (it != dd_address_keys.end()) {
+        key = it->second;
+        return true;
+    }
+
+    // Try encrypted keys (T4-03a: encrypted wallet)
+    auto cit = dd_crypted_address_keys.find(key_bytes);
+    if (cit != dd_crypted_address_keys.end()) {
+        if (!m_wallet) return false;
+        if (m_wallet->IsLocked()) {
+            LogPrintf("DigiDollarWallet: Cannot decrypt DD address key — wallet is locked\n");
+            return false;
+        }
+        const CPubKey& pubkey = cit->second.first;
+        const std::vector<unsigned char>& vchCryptedSecret = cit->second.second;
+        wallet::CKeyingMaterial vchSecret;
+        if (!wallet::DecryptSecret(m_wallet->GetEncryptionKey(), vchCryptedSecret, pubkey.GetHash(), vchSecret)) {
+            LogPrintf("DigiDollarWallet: ERROR - Failed to decrypt DD address key\n");
+            return false;
+        }
+        if (vchSecret.size() != 32) return false;
+        key.Set(vchSecret.begin(), vchSecret.end(), pubkey.IsCompressed());
+        return key.VerifyPubKey(pubkey);
+    }
+
+    return false;
 }
 
 void DigiDollarWallet::AddDDUTXO(const COutPoint& outpoint, CAmount dd_amount)

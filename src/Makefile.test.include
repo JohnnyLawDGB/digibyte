@@ -112,6 +112,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_persistence_serialization_tests.cpp \
   test/digidollar_persistence_keys_tests.cpp \
   test/digidollar_persistence_walletbatch_tests.cpp \
+  test/digidollar_key_encryption_tests.cpp \
   test/digidollar_redeem_tests.cpp \
   test/digidollar_restore_tests.cpp \
   test/digidollar_timelock_tests.cpp \

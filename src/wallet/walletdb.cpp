@@ -70,9 +70,11 @@ const std::string DD_TRANSACTION{"ddtx"};
 const std::string DD_BALANCE{"ddbalance"};
 const std::string DD_OUTPUT{"ddutxo"};
 const std::string DD_METADATA{"ddmeta"};
-const std::string DD_ADDRESS_KEY{"ddaddrkey"};  // DD address keys for received tokens
-const std::string DD_OWNER_KEY{"ddownerkey"};   // DD owner keys for minted tokens (vault redemption)
-const std::string ORACLE_KEY{"oraclekey"};       // Oracle private keys by oracle_id
+const std::string DD_ADDRESS_KEY{"ddaddrkey"};          // DD address keys for received tokens (plaintext)
+const std::string DD_OWNER_KEY{"ddownerkey"};           // DD owner keys for minted tokens (plaintext)
+const std::string DD_CRYPTED_ADDRESS_KEY{"ddcaddrkey"};  // Encrypted DD address keys (T4-03a)
+const std::string DD_CRYPTED_OWNER_KEY{"ddcownerkey"};   // Encrypted DD owner keys (T4-03a)
+const std::string ORACLE_KEY{"oraclekey"};               // Oracle private keys by oracle_id
 
 const std::unordered_set<std::string> LEGACY_TYPES{CRYPTED_KEY, CSCRIPT, DEFAULTKEY, HDCHAIN, KEYMETA, KEY, OLD_KEY, POOL, WATCHMETA, WATCHS};
 } // namespace DBKeys
@@ -675,6 +677,92 @@ bool WalletBatch::EraseDDOwnerKey(const uint256& dd_timelock_id)
     bool success = EraseIC(std::make_pair(DBKeys::DD_OWNER_KEY, dd_timelock_id));
     if (success) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: Erased DD owner key for timelock %s from database\n",
+                 dd_timelock_id.ToString());
+    }
+    return success;
+}
+
+// =============================================================================
+// Encrypted DD key persistence (T4-03a: wallet encryption support)
+// =============================================================================
+
+bool WalletBatch::WriteCryptedDDAddressKey(const std::array<unsigned char, 32>& output_key,
+                                            const CPubKey& pubkey,
+                                            const std::vector<unsigned char>& vchCryptedSecret)
+{
+    // Write the encrypted key, storing pubkey alongside for IV derivation on read
+    if (!WriteIC(std::make_pair(DBKeys::DD_CRYPTED_ADDRESS_KEY, output_key),
+                 std::make_pair(pubkey, vchCryptedSecret), false)) {
+        return false;
+    }
+    // Erase the plaintext key entry if present
+    EraseIC(std::make_pair(DBKeys::DD_ADDRESS_KEY, output_key));
+    LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote encrypted DD address key for output key %s\n",
+             HexStr(Span<const unsigned char>(output_key.data(), output_key.size())));
+    return true;
+}
+
+bool WalletBatch::ReadCryptedDDAddressKey(const std::array<unsigned char, 32>& output_key,
+                                            CPubKey& pubkey,
+                                            std::vector<unsigned char>& vchCryptedSecret)
+{
+    std::pair<CPubKey, std::vector<unsigned char>> val;
+    if (!m_batch->Read(std::make_pair(DBKeys::DD_CRYPTED_ADDRESS_KEY, output_key), val)) {
+        return false;
+    }
+    pubkey = val.first;
+    vchCryptedSecret = val.second;
+    LogPrint(BCLog::WALLETDB, "DigiDollar: Read encrypted DD address key for output key %s\n",
+             HexStr(Span<const unsigned char>(output_key.data(), output_key.size())));
+    return true;
+}
+
+bool WalletBatch::EraseCryptedDDAddressKey(const std::array<unsigned char, 32>& output_key)
+{
+    bool success = EraseIC(std::make_pair(DBKeys::DD_CRYPTED_ADDRESS_KEY, output_key));
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased encrypted DD address key for output key %s\n",
+                 HexStr(Span<const unsigned char>(output_key.data(), output_key.size())));
+    }
+    return success;
+}
+
+bool WalletBatch::WriteCryptedDDOwnerKey(const uint256& dd_timelock_id,
+                                          const CPubKey& pubkey,
+                                          const std::vector<unsigned char>& vchCryptedSecret)
+{
+    // Write the encrypted key, storing pubkey alongside for IV derivation on read
+    if (!WriteIC(std::make_pair(DBKeys::DD_CRYPTED_OWNER_KEY, dd_timelock_id),
+                 std::make_pair(pubkey, vchCryptedSecret), false)) {
+        return false;
+    }
+    // Erase the plaintext key entry if present
+    EraseIC(std::make_pair(DBKeys::DD_OWNER_KEY, dd_timelock_id));
+    LogPrint(BCLog::WALLETDB, "DigiDollar: Wrote encrypted DD owner key for timelock %s\n",
+             dd_timelock_id.ToString());
+    return true;
+}
+
+bool WalletBatch::ReadCryptedDDOwnerKey(const uint256& dd_timelock_id,
+                                          CPubKey& pubkey,
+                                          std::vector<unsigned char>& vchCryptedSecret)
+{
+    std::pair<CPubKey, std::vector<unsigned char>> val;
+    if (!m_batch->Read(std::make_pair(DBKeys::DD_CRYPTED_OWNER_KEY, dd_timelock_id), val)) {
+        return false;
+    }
+    pubkey = val.first;
+    vchCryptedSecret = val.second;
+    LogPrint(BCLog::WALLETDB, "DigiDollar: Read encrypted DD owner key for timelock %s\n",
+             dd_timelock_id.ToString());
+    return true;
+}
+
+bool WalletBatch::EraseCryptedDDOwnerKey(const uint256& dd_timelock_id)
+{
+    bool success = EraseIC(std::make_pair(DBKeys::DD_CRYPTED_OWNER_KEY, dd_timelock_id));
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: Erased encrypted DD owner key for timelock %s\n",
                  dd_timelock_id.ToString());
     }
     return success;

@@ -8,6 +8,7 @@
 #include <consensus/amount.h>
 #include <key.h>
 #include <sync.h>
+#include <support/allocators/secure.h>
 #include <wallet/wallet.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/txbuilder.h>
@@ -159,14 +160,23 @@ private:
     CAmount total_dd_balance GUARDED_BY(cs_dd_wallet);
     CAmount locked_collateral GUARDED_BY(cs_dd_wallet);
 
-    // DD owner keys storage (for signing transfers)
+    // DD owner keys storage (for signing transfers) — plaintext, only when wallet is NOT encrypted
     // Maps dd_timelock_id -> owner CKey
     std::map<uint256, CKey> dd_owner_keys GUARDED_BY(cs_dd_wallet);
 
-    // DD address keys storage (for received DD tokens)
+    // DD address keys storage (for received DD tokens) — plaintext, only when wallet is NOT encrypted
     // Maps XOnlyPubKey (output_key from P2TR address) -> owner CKey
     // This enables spending DD received at addresses we generated via getdigidollaraddress
     std::map<std::array<unsigned char, 32>, CKey> dd_address_keys GUARDED_BY(cs_dd_wallet);
+
+    // Encrypted DD owner keys (T4-03a: wallet encryption support)
+    // Maps dd_timelock_id -> (pubkey, encrypted_secret)
+    // Used when wallet is encrypted; decrypted on-demand via GetOwnerKey()
+    std::map<uint256, std::pair<CPubKey, std::vector<unsigned char>>> dd_crypted_owner_keys GUARDED_BY(cs_dd_wallet);
+
+    // Encrypted DD address keys (T4-03a: wallet encryption support)
+    // Maps output_key_bytes -> (pubkey, encrypted_secret)
+    std::map<std::array<unsigned char, 32>, std::pair<CPubKey, std::vector<unsigned char>>> dd_crypted_address_keys GUARDED_BY(cs_dd_wallet);
 
     // Pointer to wallet for UTXO access
     wallet::CWallet* m_wallet;
@@ -184,10 +194,22 @@ public:
     // ====================================================================
 
     /**
+     * Encrypt all existing plaintext DD keys using the wallet master key.
+     * Called from CWallet::EncryptWallet() after master key is set up.
+     * Converts all dd_owner_keys and dd_address_keys from plaintext to encrypted,
+     * erases plaintext entries from wallet.dat, and writes encrypted entries.
+     * @param vMasterKey The wallet encryption master key
+     * @param encrypted_batch Optional batch for atomic write (used during EncryptWallet)
+     * @return true if all keys encrypted successfully
+     */
+    bool EncryptDDKeys(const wallet::CKeyingMaterial& vMasterKey, wallet::WalletBatch* encrypted_batch = nullptr);
+
+    /**
      * Store DD owner key for a time-lock position
      * @param dd_timelock_id The time-lock position ID (mint tx hash)
      * @param key The owner private key
-     * @note Persists the key to the wallet database for survival across restarts
+     * @note If wallet is encrypted, key is encrypted before storage.
+     *       Persists the key to the wallet database for survival across restarts.
      */
     void StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key);
 
@@ -200,9 +222,11 @@ public:
 
     /**
      * Retrieve DD owner key for a time-lock position
+     * If wallet is encrypted, decrypts the key using the master encryption key.
+     * Wallet must be unlocked for this to succeed on encrypted wallets.
      * @param dd_timelock_id The time-lock position ID
      * @param key Output parameter for the key
-     * @return true if key found
+     * @return true if key found and decrypted successfully
      */
     bool GetOwnerKey(const uint256& dd_timelock_id, CKey& key) const;
 
@@ -215,7 +239,8 @@ public:
      * Called when getdigidollaraddress generates a new address
      * @param output_key The XOnlyPubKey (output key) from the P2TR address
      * @param key The private key that can sign for this address
-     * @note Persists the key to the wallet database for survival across restarts
+     * @note If wallet is encrypted, key is encrypted before storage.
+     *       Persists the key to the wallet database for survival across restarts.
      */
     void StoreAddressKey(const XOnlyPubKey& output_key, const CKey& key);
 
@@ -228,10 +253,12 @@ public:
 
     /**
      * Retrieve DD address key for a P2TR output key
-     * Used when spending received DD tokens
+     * Used when spending received DD tokens.
+     * If wallet is encrypted, decrypts the key using the master encryption key.
+     * Wallet must be unlocked for this to succeed on encrypted wallets.
      * @param output_key The XOnlyPubKey (output key) from the P2TR address
      * @param key Output parameter for the private key
-     * @return true if key found
+     * @return true if key found and decrypted successfully
      */
     bool GetAddressKey(const XOnlyPubKey& output_key, CKey& key) const;
 

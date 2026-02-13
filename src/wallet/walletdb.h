@@ -94,14 +94,16 @@ extern const std::string WATCHMETA;
 extern const std::string WATCHS;
 
 // DigiDollar database keys
-extern const std::string DD_POSITION;      // "ddposition" - DDTimeLocks (time-locked DGB backing DigiDollars)
-extern const std::string DD_TRANSACTION;   // "ddtx"       - DD transaction history
-extern const std::string DD_BALANCE;       // "ddbalance"  - DD balance per address
-extern const std::string DD_OUTPUT;        // "ddutxo"     - DD UTXO tracking
-extern const std::string DD_METADATA;      // "ddmeta"     - DD wallet metadata
-extern const std::string DD_ADDRESS_KEY;   // "ddaddrkey"  - DD address keys for received tokens
-extern const std::string DD_OWNER_KEY;     // "ddownerkey" - DD owner keys for minted tokens (vault redemption)
-extern const std::string ORACLE_KEY;       // "oraclekey"  - Oracle private keys by oracle_id
+extern const std::string DD_POSITION;              // "ddposition" - DDTimeLocks (time-locked DGB backing DigiDollars)
+extern const std::string DD_TRANSACTION;           // "ddtx"       - DD transaction history
+extern const std::string DD_BALANCE;               // "ddbalance"  - DD balance per address
+extern const std::string DD_OUTPUT;                // "ddutxo"     - DD UTXO tracking
+extern const std::string DD_METADATA;              // "ddmeta"     - DD wallet metadata
+extern const std::string DD_ADDRESS_KEY;           // "ddaddrkey"  - DD address keys for received tokens (plaintext)
+extern const std::string DD_OWNER_KEY;             // "ddownerkey" - DD owner keys for minted tokens (plaintext)
+extern const std::string DD_CRYPTED_ADDRESS_KEY;   // "ddcaddrkey" - encrypted DD address keys
+extern const std::string DD_CRYPTED_OWNER_KEY;     // "ddcownerkey" - encrypted DD owner keys
+extern const std::string ORACLE_KEY;               // "oraclekey"  - Oracle private keys by oracle_id
 
 // Keys in this set pertain only to the legacy wallet (LegacyScriptPubKeyMan) and are removed during migration from legacy to descriptors.
 extern const std::unordered_set<std::string> LEGACY_TYPES;
@@ -314,6 +316,24 @@ public:
     bool WriteDDOwnerKey(const uint256& dd_timelock_id, const CKey& key);
     bool ReadDDOwnerKey(const uint256& dd_timelock_id, CKey& key);
     bool EraseDDOwnerKey(const uint256& dd_timelock_id);
+
+    // Encrypted DigiDollar address key persistence (T4-03a: wallet encryption support)
+    bool WriteCryptedDDAddressKey(const std::array<unsigned char, 32>& output_key,
+                                  const CPubKey& pubkey,
+                                  const std::vector<unsigned char>& vchCryptedSecret);
+    bool ReadCryptedDDAddressKey(const std::array<unsigned char, 32>& output_key,
+                                  CPubKey& pubkey,
+                                  std::vector<unsigned char>& vchCryptedSecret);
+    bool EraseCryptedDDAddressKey(const std::array<unsigned char, 32>& output_key);
+
+    // Encrypted DigiDollar owner key persistence (T4-03a: wallet encryption support)
+    bool WriteCryptedDDOwnerKey(const uint256& dd_timelock_id,
+                                const CPubKey& pubkey,
+                                const std::vector<unsigned char>& vchCryptedSecret);
+    bool ReadCryptedDDOwnerKey(const uint256& dd_timelock_id,
+                                CPubKey& pubkey,
+                                std::vector<unsigned char>& vchCryptedSecret);
+    bool EraseCryptedDDOwnerKey(const uint256& dd_timelock_id);
 
     // Oracle key persistence
     bool WriteOracleKey(uint32_t oracle_id, const CKey& key);

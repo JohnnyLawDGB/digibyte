@@ -318,7 +318,7 @@ static void BenchmarkMedianCalculation(benchmark::Bench& bench)
 
     bench.run([&] {
         // Calculate median (with outlier filtering)
-        uint64_t median = bundle.GetConsensusPrice();
+        uint64_t median = bundle.GetConsensusPrice(Params().GetConsensus().nOracleRequiredMessages);
         assert(median > 0);
     });
 }

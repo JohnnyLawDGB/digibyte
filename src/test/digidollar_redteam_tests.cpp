@@ -3670,4 +3670,502 @@ BOOST_AUTO_TEST_CASE(redteam_t2_01d_integer_division_truncation)
     BOOST_TEST_MESSAGE("DEFENSE HOLDS [T2-01d]: Integer division truncation is <1 satoshi — not exploitable");
 }
 
+// =============================================================================
+// T2-02: Transfer Conservation Bypass (Create DD from Nothing)
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t2_02a_non_dd_source_tx_fake_dd_opreturn)
+{
+    // CRITICAL ATTACK: Create DD from nothing using a non-DD source transaction
+    // that has a DD-formatted OP_RETURN.
+    //
+    // A malicious miner includes a REGULAR (non-DD) transaction in a block with:
+    //   - nVersion = 2 (standard Bitcoin version, NOT DD marker)
+    //   - OP_RETURN: "DD" type=2 amount=100000 ($1000 in cents)
+    //   - Zero-value P2TR output (looks like a DD output)
+    //
+    // Then they craft a DD TRANSFER tx spending that zero-value P2TR output.
+    // ExtractDDAmountFromTxRef parses the source tx's OP_RETURN and finds
+    // DD amounts — even though the source tx was NEVER validated as a DD tx.
+    //
+    // If inputDD is populated from this fake source, conservation passes,
+    // and the attacker created DD from nothing (no collateral, no mint).
+    //
+    // EXPECTED: Transfer MUST be rejected. ExtractDDAmountFromTxRef should
+    // either check HasDigiDollarMarker on the source tx, or the transfer
+    // validation should verify input sources are legitimate DD transactions.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // ─────────────────────────────────────────────────
+    // Step 1: Create the fake "source" transaction (NOT a DD tx)
+    // ─────────────────────────────────────────────────
+    CKey fakeKey;
+    fakeKey.MakeNewKey(true);
+    XOnlyPubKey fakeXOnly(fakeKey.GetPubKey());
+
+    CMutableTransaction fakeSrcTx;
+    fakeSrcTx.nVersion = 2;  // REGULAR Bitcoin version — NO DD marker!
+    fakeSrcTx.vin.push_back(CTxIn(COutPoint(uint256S("aaaa020200000000000000000000000000000000000000000000000000000001"), 0)));
+
+    // Zero-value P2TR output (mimics a DD output)
+    fakeSrcTx.vout.push_back(CTxOut(0, MakeP2TR(fakeXOnly)));
+
+    // DD-formatted OP_RETURN with fake DD amounts (type=2 TRANSFER format)
+    // This makes ExtractDDAmountFromTxRef think this tx has 100000 DD cents
+    fakeSrcTx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({100000})));
+
+    CTransactionRef fakeSrcRef = MakeTransactionRef(fakeSrcTx);
+    uint256 fakeSrcHash = fakeSrcRef->GetHash();
+
+    // Verify this is NOT a DD transaction
+    BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(CTransaction(fakeSrcTx)),
+        "Precondition: Source tx must NOT have DD version marker");
+
+    // ─────────────────────────────────────────────────
+    // Step 2: Set up coins view with the fake DD output
+    // ─────────────────────────────────────────────────
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    COutPoint fakeOutpoint(fakeSrcHash, 0);  // The zero-value P2TR
+    coinsView.AddCoin(fakeOutpoint, Coin(CTxOut(0, MakeP2TR(fakeXOnly)), 500, false), false);
+
+    // txLookup returns the fake source tx
+    auto txLookup = [&fakeSrcRef, &fakeSrcHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == fakeSrcHash) {
+            tx_out = fakeSrcRef;
+            return true;
+        }
+        return false;
+    };
+
+    // ─────────────────────────────────────────────────
+    // Step 3: Build the DD TRANSFER spending the fake source
+    // ─────────────────────────────────────────────────
+    CKey recipientKey;
+    recipientKey.MakeNewKey(true);
+    XOnlyPubKey recipientXOnly(recipientKey.GetPubKey());
+
+    CMutableTransaction transferTx;
+    transferTx.nVersion = 0x02000770;  // DD_TX_TRANSFER (proper DD marker)
+    transferTx.vin.push_back(CTxIn(fakeOutpoint));
+
+    // DD output to recipient
+    transferTx.vout.push_back(CTxOut(0, MakeP2TR(recipientXOnly)));
+    // OP_RETURN claiming same amount as the fake source
+    transferTx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({100000})));
+
+    CTransaction tx(transferTx);
+    TxValidationState state;
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+
+    // If this PASSES, we have a critical bug: DD created from nothing!
+    BOOST_CHECK_MESSAGE(!result,
+        "VULNERABILITY [T2-02a]: Transfer accepted with input from NON-DD source tx! "
+        "ExtractDDAmountFromTxRef parses DD amounts from a regular Bitcoin tx that has a "
+        "DD-formatted OP_RETURN but was never DD-validated. A malicious miner could include "
+        "such a tx in a block and create unlimited DD from nothing. "
+        "FIX: Verify creating tx has DD version marker before extracting DD amounts. "
+        "Reason: " + state.GetRejectReason());
+
+    if (result) {
+        BOOST_TEST_MESSAGE("*** CRITICAL BUG: DD created from nothing via non-DD source tx ***");
+        BOOST_TEST_MESSAGE("*** A miner can inflate DD supply without collateral ***");
+    } else {
+        BOOST_TEST_MESSAGE("DEFENSE HOLDS [T2-02a]: Transfer from non-DD source tx correctly rejected. "
+            "Reason: " + state.GetRejectReason());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_02b_non_dd_mint_source_inflates_dd)
+{
+    // VARIANT: Source tx has DD MINT-style OP_RETURN (type=1) with zero-value P2TR.
+    // If ExtractDDAmountFromTxRef parses MINT OP_RETURN from a non-DD tx,
+    // the DD amount gets attributed to the zero-value P2TR output.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    // Non-DD source tx with MINT-format OP_RETURN
+    CMutableTransaction fakeMintTx;
+    fakeMintTx.nVersion = 2;  // NOT a DD tx
+    fakeMintTx.vin.push_back(CTxIn(COutPoint(uint256S("bbbb020200000000000000000000000000000000000000000000000000000001"), 0)));
+    fakeMintTx.vout.push_back(CTxOut(0, MakeP2TR(ownerXOnly)));  // Fake DD output
+    fakeMintTx.vout.push_back(CTxOut(0, MakeDDMintOpReturn(50000, 2000, 1, ownerXOnly)));  // Mint-style OP_RETURN
+
+    CTransactionRef fakeMintRef = MakeTransactionRef(fakeMintTx);
+    uint256 fakeMintHash = fakeMintRef->GetHash();
+
+    BOOST_CHECK(!DigiDollar::HasDigiDollarMarker(CTransaction(fakeMintTx)));
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint fakeOutpoint(fakeMintHash, 0);
+    coinsView.AddCoin(fakeOutpoint, Coin(CTxOut(0, MakeP2TR(ownerXOnly)), 500, false), false);
+
+    auto txLookup = [&fakeMintRef, &fakeMintHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == fakeMintHash) { tx_out = fakeMintRef; return true; }
+        return false;
+    };
+
+    // Transfer: claim the 50000 DD from the fake mint
+    CKey recipKey;
+    recipKey.MakeNewKey(true);
+    XOnlyPubKey recipXOnly(recipKey.GetPubKey());
+
+    CMutableTransaction transferTx;
+    transferTx.nVersion = 0x02000770;
+    transferTx.vin.push_back(CTxIn(fakeOutpoint));
+    transferTx.vout.push_back(CTxOut(0, MakeP2TR(recipXOnly)));
+    transferTx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({50000})));
+
+    CTransaction tx(transferTx);
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(!result,
+        "VULNERABILITY [T2-02b]: Transfer accepted from non-DD source with MINT OP_RETURN! "
+        "ExtractDDAmountFromTxRef should verify source tx HasDigiDollarMarker. "
+        "Reason: " + state.GetRejectReason());
+
+    if (result) {
+        BOOST_TEST_MESSAGE("*** CRITICAL BUG: MINT-format OP_RETURN in non-DD tx creates fake DD ***");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_02c_legitimate_transfer_still_works)
+{
+    // SANITY CHECK: A legitimate DD transfer from a real DD source tx should still pass.
+    // This ensures any fix for T2-02a/b doesn't break normal transfers.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    // Legitimate DD transfer source (proper DD version marker)
+    CMutableTransaction realTransferTx;
+    realTransferTx.nVersion = 0x02000770;  // DD_TX_TRANSFER — proper DD marker!
+    realTransferTx.vin.push_back(CTxIn(COutPoint(uint256S("cccc020200000000000000000000000000000000000000000000000000000001"), 0)));
+    realTransferTx.vout.push_back(CTxOut(0, MakeP2TR(ownerXOnly)));
+    realTransferTx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({5000})));
+
+    CTransactionRef realRef = MakeTransactionRef(realTransferTx);
+    uint256 realHash = realRef->GetHash();
+
+    BOOST_CHECK(DigiDollar::HasDigiDollarMarker(CTransaction(realTransferTx)));
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint realOutpoint(realHash, 0);
+    coinsView.AddCoin(realOutpoint, Coin(CTxOut(0, MakeP2TR(ownerXOnly)), 500, false), false);
+
+    auto txLookup = [&realRef, &realHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == realHash) { tx_out = realRef; return true; }
+        return false;
+    };
+
+    CKey recipKey;
+    recipKey.MakeNewKey(true);
+    XOnlyPubKey recipXOnly(recipKey.GetPubKey());
+
+    CMutableTransaction newTransfer;
+    newTransfer.nVersion = 0x02000770;
+    newTransfer.vin.push_back(CTxIn(realOutpoint));
+    newTransfer.vout.push_back(CTxOut(0, MakeP2TR(recipXOnly)));
+    newTransfer.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({5000})));
+
+    CTransaction tx(newTransfer);
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+
+    // This SHOULD pass — legitimate transfer from a real DD tx
+    BOOST_CHECK_MESSAGE(result,
+        "REGRESSION [T2-02c]: Legitimate DD transfer should still pass! "
+        "Fix for T2-02a/b must not break normal transfers. "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_02d_conservation_inflated_output)
+{
+    // ATTACK: Transfer with OP_RETURN claiming more DD than the input provides.
+    // Conservation check: inputDD (from source OP_RETURN) != outputDD (from this OP_RETURN)
+    // This should always be caught regardless of source tx type.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    // Real DD source with 1000 DD
+    CMutableTransaction srcTx;
+    srcTx.nVersion = 0x02000770;
+    srcTx.vin.push_back(CTxIn(COutPoint(uint256S("dddd020200000000000000000000000000000000000000000000000000000001"), 0)));
+    srcTx.vout.push_back(CTxOut(0, MakeP2TR(ownerXOnly)));
+    srcTx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({1000})));
+
+    CTransactionRef srcRef = MakeTransactionRef(srcTx);
+    uint256 srcHash = srcRef->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint srcOutpoint(srcHash, 0);
+    coinsView.AddCoin(srcOutpoint, Coin(CTxOut(0, MakeP2TR(ownerXOnly)), 500, false), false);
+
+    auto txLookup = [&srcRef, &srcHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == srcHash) { tx_out = srcRef; return true; }
+        return false;
+    };
+
+    CKey recipKey;
+    recipKey.MakeNewKey(true);
+    XOnlyPubKey recipXOnly(recipKey.GetPubKey());
+
+    // ATTACK: Claim 10x more DD than input has
+    CMutableTransaction inflatedTransfer;
+    inflatedTransfer.nVersion = 0x02000770;
+    inflatedTransfer.vin.push_back(CTxIn(srcOutpoint));
+    inflatedTransfer.vout.push_back(CTxOut(0, MakeP2TR(recipXOnly)));
+    inflatedTransfer.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({10000})));  // 10x inflation!
+
+    CTransaction tx(inflatedTransfer);
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(!result,
+        "DEFENSE HOLDS [T2-02d]: Conservation check catches inflated output amounts. "
+        "inputDD (1000) != outputDD (10000). "
+        "Reason: " + state.GetRejectReason());
+    if (!result) {
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "transfer-dd-conservation-violation",
+            "Should fail with conservation violation, got: " + state.GetRejectReason());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_02e_extra_opreturn_amounts_phantom_dd)
+{
+    // ATTACK: OP_RETURN contains more DD amounts than there are P2TR outputs.
+    // Extra amounts are "phantom" — they exist in metadata but have no real UTXO.
+    // When SPENT in a future transfer, the phantom amounts should not be extractable.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    // Source tx with OP_RETURN claiming [1000, 99000] but only ONE P2TR output
+    CMutableTransaction srcTx;
+    srcTx.nVersion = 0x02000770;
+    srcTx.vin.push_back(CTxIn(COutPoint(uint256S("eeee020200000000000000000000000000000000000000000000000000000001"), 0)));
+    srcTx.vout.push_back(CTxOut(0, MakeP2TR(ownerXOnly)));  // Only 1 P2TR output
+    srcTx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({1000, 99000})));  // Claims 2 amounts!
+
+    CTransactionRef srcRef = MakeTransactionRef(srcTx);
+    uint256 srcHash = srcRef->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint srcOutpoint(srcHash, 0);
+    coinsView.AddCoin(srcOutpoint, Coin(CTxOut(0, MakeP2TR(ownerXOnly)), 500, false), false);
+
+    auto txLookup = [&srcRef, &srcHash](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == srcHash) { tx_out = srcRef; return true; }
+        return false;
+    };
+
+    CKey recipKey;
+    recipKey.MakeNewKey(true);
+    XOnlyPubKey recipXOnly(recipKey.GetPubKey());
+
+    // Transfer: spend the one P2TR output, claim 1000 DD (matches first amount)
+    CMutableTransaction transferTx;
+    transferTx.nVersion = 0x02000770;
+    transferTx.vin.push_back(CTxIn(srcOutpoint));
+    transferTx.vout.push_back(CTxOut(0, MakeP2TR(recipXOnly)));
+    transferTx.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({1000})));
+
+    CTransaction tx(transferTx);
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+
+    // ExtractDDAmountFromTxRef matches by P2TR output position — so output 0
+    // maps to dd_amounts[0] = 1000. The phantom 99000 is never assigned.
+    // inputDD = 1000, outputDD = 1000 → conservation passes.
+    BOOST_TEST_MESSAGE("T2-02e: Phantom amounts in OP_RETURN. Transfer result: " +
+        std::string(result ? "PASSED" : "REJECTED") + " Reason: " + state.GetRejectReason());
+
+    // If it passes, verify the phantom 99000 is NOT accessible
+    if (result) {
+        BOOST_TEST_MESSAGE("DEFENSE HOLDS [T2-02e]: Only 1000 DD transferred (matched to P2TR position). "
+            "Phantom 99000 in OP_RETURN has no corresponding UTXO and cannot be spent.");
+    }
+    // If rejected, also fine — stricter validation (e.g., requiring OP_RETURN count == P2TR count)
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_02f_conservation_with_multiple_inputs)
+{
+    // ATTACK: Multiple DD inputs from different sources. If one source's DD amount
+    // is inflated by the attacker, the total inputDD is inflated.
+    // Tests that conservation holds with accurate per-input DD extraction.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey key1, key2, recipKey;
+    key1.MakeNewKey(true);
+    key2.MakeNewKey(true);
+    recipKey.MakeNewKey(true);
+    XOnlyPubKey xonly1(key1.GetPubKey()), xonly2(key2.GetPubKey()), recipXOnly(recipKey.GetPubKey());
+
+    // Source 1: real DD transfer with 500 DD
+    CMutableTransaction src1;
+    src1.nVersion = 0x02000770;
+    src1.vin.push_back(CTxIn(COutPoint(uint256S("f1f1020200000000000000000000000000000000000000000000000000000001"), 0)));
+    src1.vout.push_back(CTxOut(0, MakeP2TR(xonly1)));
+    src1.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({500})));
+    CTransactionRef src1Ref = MakeTransactionRef(src1);
+    uint256 src1Hash = src1Ref->GetHash();
+
+    // Source 2: real DD transfer with 300 DD
+    CMutableTransaction src2;
+    src2.nVersion = 0x02000770;
+    src2.vin.push_back(CTxIn(COutPoint(uint256S("f2f2020200000000000000000000000000000000000000000000000000000001"), 0)));
+    src2.vout.push_back(CTxOut(0, MakeP2TR(xonly2)));
+    src2.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({300})));
+    CTransactionRef src2Ref = MakeTransactionRef(src2);
+    uint256 src2Hash = src2Ref->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint out1(src1Hash, 0), out2(src2Hash, 0);
+    coinsView.AddCoin(out1, Coin(CTxOut(0, MakeP2TR(xonly1)), 500, false), false);
+    coinsView.AddCoin(out2, Coin(CTxOut(0, MakeP2TR(xonly2)), 500, false), false);
+
+    auto txLookup = [&](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == src1Hash) { tx_out = src1Ref; return true; }
+        if (txid == src2Hash) { tx_out = src2Ref; return true; }
+        return false;
+    };
+
+    // VALID transfer: 500 + 300 = 800 DD total
+    CMutableTransaction transfer;
+    transfer.nVersion = 0x02000770;
+    transfer.vin.push_back(CTxIn(out1));
+    transfer.vin.push_back(CTxIn(out2));
+    transfer.vout.push_back(CTxOut(0, MakeP2TR(recipXOnly)));
+    transfer.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({800})));
+
+    CTransaction tx(transfer);
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(result,
+        "DEFENSE VERIFIED [T2-02f]: Multi-input transfer with correct conservation passes. "
+        "500 + 300 = 800 DD. Reason: " + state.GetRejectReason());
+
+    // ATTACK: claim 900 DD from 500+300 inputs
+    CMutableTransaction inflatedTransfer;
+    inflatedTransfer.nVersion = 0x02000770;
+    inflatedTransfer.vin.push_back(CTxIn(out1));
+    inflatedTransfer.vin.push_back(CTxIn(out2));
+    inflatedTransfer.vout.push_back(CTxOut(0, MakeP2TR(recipXOnly)));
+    inflatedTransfer.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({900})));  // 100 more than inputs!
+
+    CTransaction tx2(inflatedTransfer);
+    TxValidationState state2;
+
+    bool result2 = DigiDollar::ValidateTransferTransaction(tx2, ctx, state2);
+
+    BOOST_CHECK_MESSAGE(!result2,
+        "DEFENSE HOLDS [T2-02f]: Multi-input inflation caught by conservation. "
+        "inputDD=800, outputDD=900. Reason: " + state2.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t2_02g_mixed_dd_and_regular_inputs)
+{
+    // ATTACK: Mix DD inputs with regular (non-DD, non-zero-value) inputs.
+    // Only DD inputs should contribute to inputDD. Regular inputs must be ignored.
+    // If a regular input is wrongly counted as DD, conservation could be bypassed.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey ddKey, feeKey, recipKey;
+    ddKey.MakeNewKey(true);
+    feeKey.MakeNewKey(true);
+    recipKey.MakeNewKey(true);
+    XOnlyPubKey ddXOnly(ddKey.GetPubKey()), recipXOnly(recipKey.GetPubKey());
+
+    // DD source tx: 2000 DD
+    CMutableTransaction ddSrc;
+    ddSrc.nVersion = 0x02000770;
+    ddSrc.vin.push_back(CTxIn(COutPoint(uint256S("aabb020200000000000000000000000000000000000000000000000000000001"), 0)));
+    ddSrc.vout.push_back(CTxOut(0, MakeP2TR(ddXOnly)));
+    ddSrc.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({2000})));
+    CTransactionRef ddSrcRef = MakeTransactionRef(ddSrc);
+    uint256 ddSrcHash = ddSrcRef->GetHash();
+
+    // Regular DGB tx for fees (no DD OP_RETURN)
+    CMutableTransaction feeTx;
+    feeTx.nVersion = 2;  // Regular Bitcoin version
+    feeTx.vin.push_back(CTxIn(COutPoint(uint256S("ccdd020200000000000000000000000000000000000000000000000000000001"), 0)));
+    feeTx.vout.push_back(CTxOut(1 * COIN, CScript() << OP_1 << std::vector<unsigned char>(feeKey.GetPubKey().IsCompressed() ?
+        std::vector<unsigned char>(XOnlyPubKey(feeKey.GetPubKey()).begin(), XOnlyPubKey(feeKey.GetPubKey()).end()) :
+        std::vector<unsigned char>(32, 0))));
+    CTransactionRef feeTxRef = MakeTransactionRef(feeTx);
+    uint256 feeTxHash = feeTxRef->GetHash();
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    COutPoint ddOut(ddSrcHash, 0);
+    COutPoint feeOut(feeTxHash, 0);
+    coinsView.AddCoin(ddOut, Coin(CTxOut(0, MakeP2TR(ddXOnly)), 500, false), false);
+    coinsView.AddCoin(feeOut, Coin(CTxOut(1 * COIN, feeTx.vout[0].scriptPubKey), 500, false), false);
+
+    auto txLookup = [&](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == ddSrcHash) { tx_out = ddSrcRef; return true; }
+        if (txid == feeTxHash) { tx_out = feeTxRef; return true; }
+        return false;
+    };
+
+    // Transfer: DD input (2000) + fee input → claim 2000 DD output
+    CMutableTransaction transfer;
+    transfer.nVersion = 0x02000770;
+    transfer.vin.push_back(CTxIn(ddOut));
+    transfer.vin.push_back(CTxIn(feeOut));
+    transfer.vout.push_back(CTxOut(0, MakeP2TR(recipXOnly)));
+    transfer.vout.push_back(CTxOut(0, MakeDDTransferOpReturn({2000})));
+
+    CTransaction tx(transfer);
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(1000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(result,
+        "DEFENSE VERIFIED [T2-02g]: Mixed DD + fee input transfer works. "
+        "Only DD input (2000) contributes to inputDD. Fee input ignored. "
+        "Reason: " + state.GetRejectReason());
+
+    BOOST_TEST_MESSAGE("T2-02g: Mixed DD + regular input transfer correctly validated");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -170,6 +170,17 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
 static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutPoint& prevout, CAmount& amount) {
     amount = 0;
 
+    // SECURITY: Verify the creating transaction is actually a DigiDollar transaction.
+    // Without this check, a malicious miner could include a regular (non-DD) transaction
+    // with a DD-formatted OP_RETURN and zero-value P2TR outputs. A subsequent DD transfer
+    // spending those outputs would pass conservation checks because ExtractDDAmountFromTxRef
+    // would find DD amounts in the non-DD source tx's OP_RETURN — creating DD from nothing.
+    if (!DigiDollar::HasDigiDollarMarker(*prev_tx)) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromTxRef - source tx %s is not a DD transaction (version=0x%08x)\n",
+                 prevout.hash.ToString(), prev_tx->nVersion);
+        return false;
+    }
+
     // Parse the OP_RETURN in the previous transaction to get DD amounts
     std::vector<CAmount> dd_amounts;
     for (const auto& vout : prev_tx->vout) {

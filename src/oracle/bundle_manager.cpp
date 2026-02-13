@@ -221,6 +221,7 @@ void OracleBundleManager::ClearPendingMessages()
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
     pending_messages.clear();
+    seen_message_hashes.clear();
     LogPrintf("Oracle: Manually cleared all pending messages\n");
 }
 

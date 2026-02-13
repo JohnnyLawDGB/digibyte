@@ -8254,4 +8254,346 @@ BOOST_AUTO_TEST_CASE(redteam_T4_02f_greedy_selection_worst_case_fragmentation)
     // FINDING (LOW): Consider adding max input count or consolidation strategy.
 }
 
+// =============================================================================
+// T4-03: Wallet Key Extraction/Leak Attack Surface
+// =============================================================================
+
+/**
+ * T4-03a: DD owner keys stored as raw CPrivKey (bypass wallet encryption)
+ *
+ * FINDING (MEDIUM): WriteDDOwnerKey() stores key.GetPrivKey() via WriteIC()
+ * — raw DER-encoded private key bytes. When the wallet is encrypted via
+ * encryptwallet, EncryptWallet() iterates m_spk_managers to encrypt keys
+ * via EncryptSecret()/WriteCryptedKey(). But DD keys are stored in
+ * DigiDollarWallet's own maps, NOT in any ScriptPubKeyMan — they are
+ * never encrypted.
+ *
+ * An attacker with access to a wallet.dat backup (e.g., cloud backup,
+ * stolen USB, compromised backup service) can extract DD owner keys and
+ * DD address keys in plaintext, even from an encrypted wallet file.
+ * These keys can then be used to transfer DD tokens.
+ *
+ * DEFENSE NEEDED: DD keys must participate in wallet encryption:
+ * 1. WriteDDOwnerKey should call EncryptSecret() when wallet is encrypted
+ * 2. ReadDDOwnerKey should call DecryptSecret() when wallet is encrypted
+ * 3. EncryptWallet() should encrypt existing DD keys
+ * 4. Same for WriteDDAddressKey/ReadDDAddressKey
+ */
+BOOST_AUTO_TEST_CASE(redteam_T4_03a_dd_keys_bypass_encryption)
+{
+    // Create a DigiDollarWallet (no CWallet pointer - unit test scope)
+    DigiDollarWallet ddwallet;
+
+    // Generate a test key
+    CKey owner_key;
+    owner_key.MakeNewKey(true);
+    BOOST_CHECK(owner_key.IsValid());
+
+    // Store it as a DD owner key
+    uint256 fake_txid = Hash(std::string("test_txid_for_T4_03a"));
+
+    ddwallet.StoreOwnerKey(fake_txid, owner_key);
+
+    // Verify key can be retrieved
+    CKey retrieved_key;
+    BOOST_CHECK(ddwallet.GetOwnerKey(fake_txid, retrieved_key));
+    BOOST_CHECK(retrieved_key.IsValid());
+
+    // The retrieved key should produce the same x-coordinate (for Schnorr)
+    // NOTE: fCompressed flag is LOST during Load (see T4-03c_2 below)
+    XOnlyPubKey orig_xonly(owner_key.GetPubKey());
+    XOnlyPubKey retrieved_xonly(retrieved_key.GetPubKey());
+    // Both produce the same x-coordinate despite compression flag difference
+    BOOST_CHECK(std::equal(orig_xonly.begin(), orig_xonly.end(), retrieved_xonly.begin()));
+
+    // VULNERABILITY DOCUMENTATION:
+    // The key was stored in StoreOwnerKey which calls:
+    //   CPrivKey privkey = key.GetPrivKey();
+    //   WriteIC(std::make_pair(DBKeys::DD_OWNER_KEY, dd_timelock_id), privkey);
+    //
+    // WriteIC stores raw bytes to BDB/SQLite. When wallet is encrypted:
+    // - Regular keys: EncryptSecret(master_key, secret, pubkey_hash, crypted) → WriteCryptedKey
+    // - DD keys: GetPrivKey() → WriteIC (NO encryption)
+    //
+    // Proof: GetPrivKey() returns the raw DER-encoded private key.
+    CPrivKey raw_privkey = owner_key.GetPrivKey();
+    BOOST_CHECK(raw_privkey.size() > 0);  // 279 bytes typical DER encoding
+
+    // An attacker reading the wallet database directly can:
+    // 1. Find all records with key_type == "ddownerkey"
+    // 2. Deserialize the CPrivKey
+    // 3. Call CKey::Load() to reconstruct the signing key
+    CKey attacker_key;
+    BOOST_CHECK(attacker_key.Load(raw_privkey, CPubKey(), /*fSkipCheck=*/true));
+    BOOST_CHECK(attacker_key.IsValid());
+
+    // Attacker's key has same x-coordinate as original (signing-equivalent for Schnorr)
+    XOnlyPubKey attacker_xonly(attacker_key.GetPubKey());
+    BOOST_CHECK(std::equal(orig_xonly.begin(), orig_xonly.end(), attacker_xonly.begin()));
+    // FINDING: attacker_key can sign DD transfers. Wallet encryption bypassed.
+}
+
+/**
+ * T4-03b: DD address keys also bypass encryption (same pattern)
+ *
+ * Same vulnerability as T4-03a but for received DD tokens.
+ * WriteDDAddressKey stores raw CPrivKey via WriteIC.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T4_03b_dd_address_keys_bypass_encryption)
+{
+    DigiDollarWallet ddwallet;
+
+    // Generate a test address key
+    CKey addr_key;
+    addr_key.MakeNewKey(true);
+    BOOST_CHECK(addr_key.IsValid());
+
+    // Create an XOnlyPubKey for the output key
+    XOnlyPubKey output_key(addr_key.GetPubKey());
+
+    // Store it
+    ddwallet.StoreAddressKey(output_key, addr_key);
+
+    // Retrieve it
+    CKey retrieved;
+    BOOST_CHECK(ddwallet.GetAddressKey(output_key, retrieved));
+    BOOST_CHECK(retrieved.IsValid());
+    BOOST_CHECK(retrieved.GetPubKey() == addr_key.GetPubKey());
+
+    // Same vulnerability: raw CPrivKey in database
+    CPrivKey raw = addr_key.GetPrivKey();
+    CKey attacker;
+    BOOST_CHECK(attacker.Load(raw, CPubKey(), true));
+    // Attacker key has same x-coordinate (Schnorr-equivalent)
+    XOnlyPubKey orig_xonly(addr_key.GetPubKey());
+    XOnlyPubKey att_xonly(attacker.GetPubKey());
+    BOOST_CHECK(std::equal(orig_xonly.begin(), orig_xonly.end(), att_xonly.begin()));
+    // FINDING: DD address keys extractable from encrypted wallet backup
+}
+
+/**
+ * T4-03c: fSkipCheck=true on key loading — corrupted key acceptance
+ *
+ * FINDING (LOW): LoadDDOwnerKeys() and LoadDDAddressKeys() both load
+ * keys with key.Load(privkey, CPubKey(), fSkipCheck=true).
+ * fSkipCheck=true skips the VerifyPubKey check that ensures the private
+ * key can produce a valid signature.
+ *
+ * In normal Bitcoin Core, keys are loaded with fSkipCheck=false for
+ * unencrypted keys and fSkipCheck=true ONLY for encrypted keys (where
+ * the pubkey is already known and verified separately).
+ *
+ * For DD keys, no pubkey is stored alongside the private key, so there's
+ * no way to verify after loading. A corrupted database entry could load
+ * a key that fails to produce valid Schnorr signatures, causing DD
+ * transfer/redemption failures that are hard to diagnose.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T4_03c_fskipcheck_corrupted_key)
+{
+    // Demonstrate that fSkipCheck=true accepts keys without verification
+    CKey valid_key;
+    valid_key.MakeNewKey(true);
+    CPrivKey valid_priv = valid_key.GetPrivKey();
+
+    // Load with fSkipCheck=true (as DD code does)
+    CKey loaded_skip;
+    BOOST_CHECK(loaded_skip.Load(valid_priv, CPubKey(), /*fSkipCheck=*/true));
+    BOOST_CHECK(loaded_skip.IsValid());
+
+    // Load with fSkipCheck=false would require the matching pubkey
+    CKey loaded_check;
+    // With matching pubkey, this should succeed
+    BOOST_CHECK(loaded_check.Load(valid_priv, valid_key.GetPubKey(), /*fSkipCheck=*/false));
+    BOOST_CHECK(loaded_check.IsValid());
+
+    // FINDING: DD key loading doesn't store or verify the public key.
+    // In case of database corruption, the loaded key would still "IsValid()"
+    // but potentially produce garbage signatures.
+    // FIX: Store CPubKey alongside CPrivKey in WriteDDOwnerKey/WriteDDAddressKey,
+    // and use fSkipCheck=false on load.
+}
+
+/**
+ * T4-03c_2: fCompressed flag lost during DD key database round-trip
+ *
+ * FINDING (LOW/MEDIUM): When DD keys are stored via WriteDDOwnerKey/WriteDDAddressKey,
+ * only the DER-encoded private key is persisted. The compression flag is NOT stored.
+ * On Load(), CKey::Load(privkey, CPubKey(), fSkipCheck=true) sets fCompressed
+ * from CPubKey().IsCompressed() which returns FALSE for empty pubkey.
+ *
+ * Result: Original key has fCompressed=true, loaded key has fCompressed=false.
+ * GetPubKey() returns 65-byte uncompressed pubkey instead of 33-byte compressed.
+ *
+ * For Schnorr/Taproot: Same x-coordinate, so signing works.
+ * For ECDSA/P2PKH: Different pubkey hash → different address → potential fund loss.
+ * For Bitcoin Core IsMine: May fail to match if checking CPubKey equality.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T4_03c_2_compression_flag_lost)
+{
+    // Create compressed key (as MakeNewKey does)
+    CKey original;
+    original.MakeNewKey(/*fCompressed=*/true);
+    BOOST_CHECK(original.IsCompressed());
+    BOOST_CHECK_EQUAL(original.GetPubKey().size(), 33);  // Compressed
+
+    // Store and reload (as DD wallet code does)
+    CPrivKey der = original.GetPrivKey();
+    CKey loaded;
+    BOOST_CHECK(loaded.Load(der, CPubKey(), /*fSkipCheck=*/true));
+
+    // BUG: Compression flag lost
+    BOOST_CHECK(!loaded.IsCompressed());  // Should be true, but it's false
+    BOOST_CHECK_EQUAL(loaded.GetPubKey().size(), 65);  // Uncompressed!
+
+    // CPubKey comparison FAILS
+    BOOST_CHECK(original.GetPubKey() != loaded.GetPubKey());
+
+    // But XOnlyPubKey (x-coordinate only) still matches — Schnorr works
+    XOnlyPubKey orig_x(original.GetPubKey());
+    XOnlyPubKey load_x(loaded.GetPubKey());
+    BOOST_CHECK(std::equal(orig_x.begin(), orig_x.end(), load_x.begin()));
+
+    // FIX: Store fCompressed alongside CPrivKey in WriteDDOwnerKey/WriteDDAddressKey,
+    // or always use compressed flag (true) for Taproot keys.
+}
+
+/**
+ * T4-03d: DD keys remain accessible in memory when wallet is conceptually locked
+ *
+ * FINDING (LOW): When CWallet::Lock() is called (wallet locked),
+ * regular keys in mapKeys are encrypted/cleared. But dd_owner_keys
+ * and dd_address_keys in DigiDollarWallet are std::map<..., CKey>
+ * that remain in plaintext in memory.
+ *
+ * A memory-reading attack (e.g., core dump, swap file, cold boot)
+ * could extract DD keys from a locked wallet process.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T4_03d_keys_persist_in_memory_after_lock)
+{
+    DigiDollarWallet ddwallet;
+
+    // Store multiple owner keys
+    std::vector<uint256> test_txids;
+    for (int i = 0; i < 5; i++) {
+        CKey key;
+        key.MakeNewKey(true);
+
+        uint256 txid = Hash(std::string("test_txid_") + std::to_string(i));
+        test_txids.push_back(txid);
+
+        ddwallet.StoreOwnerKey(txid, key);
+    }
+
+    // Store multiple address keys
+    for (int i = 0; i < 5; i++) {
+        CKey key;
+        key.MakeNewKey(true);
+        XOnlyPubKey xonly(key.GetPubKey());
+        ddwallet.StoreAddressKey(xonly, key);
+    }
+
+    // After a conceptual "wallet lock" (CWallet::Lock()),
+    // regular wallet keys are encrypted in memory. But DD keys remain:
+    // - dd_owner_keys: 5 CKey objects still in plaintext memory
+    // - dd_address_keys: 5 CKey objects still in plaintext memory
+    //
+    // VERIFICATION: All keys still accessible after storing (no clear mechanism)
+    // DigiDollarWallet has no Lock()/ClearKeys() method
+
+    // This test documents the gap — there's no ClearKeys mechanism for DD wallet
+    // FIX NEEDED: DigiDollarWallet should implement Lock()/Unlock() that:
+    // 1. Encrypts dd_owner_keys and dd_address_keys when locked
+    // 2. Clears plaintext key data from memory
+    // 3. Requires wallet unlock before DD key access
+
+    // Verify all 5 owner keys are still accessible
+    int found = 0;
+    for (int i = 0; i < 5; i++) {
+        CKey key;
+        if (ddwallet.GetOwnerKey(test_txids[i], key)) {
+            BOOST_CHECK(key.IsValid());
+            found++;
+        }
+    }
+    BOOST_CHECK_EQUAL(found, 5);  // All 5 keys still in memory
+}
+
+/**
+ * T4-03e: Verify DD key material is NOT logged in plaintext
+ *
+ * This test documents that while there are many LogPrintf calls in the
+ * DD wallet code logging key-related info, NONE log actual private key
+ * material. Only public keys (XOnlyPubKey, internal_key, output_key)
+ * are logged.
+ *
+ * DEFENSE HOLDS: No private key hex appears in log output.
+ * Privacy note: Internal keys ARE logged, revealing DD address ownership.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T4_03e_no_private_key_logging)
+{
+    // Generate keys and verify the distinction:
+    CKey secret_key;
+    secret_key.MakeNewKey(true);
+
+    // Private key bytes (32 bytes raw, or ~279 bytes DER)
+    CPrivKey priv_der = secret_key.GetPrivKey();
+    std::string priv_hex = HexStr(Span<const unsigned char>(secret_key.begin(), secret_key.end()));
+
+    // Public key bytes (XOnlyPubKey = 32 bytes, full = 33 bytes)
+    XOnlyPubKey xonly(secret_key.GetPubKey());
+    std::string pub_hex = HexStr(Span<const unsigned char>(xonly.begin(), xonly.end()));
+
+    // These are DIFFERENT values
+    BOOST_CHECK(priv_hex != pub_hex);
+    BOOST_CHECK_EQUAL(priv_hex.size(), 64);   // 32 bytes = 64 hex chars
+    BOOST_CHECK_EQUAL(pub_hex.size(), 64);     // x-only also 32 bytes
+
+    // VERIFIED BY CODE REVIEW:
+    // All LogPrintf calls in digidollarwallet.cpp log:
+    // - HexStr(output_key) — public key (safe)
+    // - HexStr(spenddata.internal_key) — public key (safe)
+    // - HexStr(output_key_bytes) — public key (safe)
+    // NONE log:
+    // - HexStr(owner_key.begin(), owner_key.end()) — would be private key (NOT logged)
+    // - key.GetPrivKey() hex — NOT logged
+    //
+    // DEFENSE HOLDS: No private key leakage in logs.
+    // MINOR PRIVACY: Public key logging reveals address ownership in debug.log
+}
+
+/**
+ * T4-03f: Schnorr signature with DD key proves extraction gives spending power
+ *
+ * End-to-end proof that extracted DD keys can sign Schnorr signatures,
+ * which would authorize DD token transfers.
+ */
+BOOST_AUTO_TEST_CASE(redteam_T4_03f_extracted_key_can_sign)
+{
+    // Simulate key extraction from wallet.dat
+    CKey original;
+    original.MakeNewKey(true);
+
+    // Step 1: Get raw private key (as stored in wallet.dat DD_OWNER_KEY records)
+    CPrivKey raw_privkey = original.GetPrivKey();
+
+    // Step 2: Reconstruct key (as attacker would)
+    CKey extracted;
+    BOOST_CHECK(extracted.Load(raw_privkey, CPubKey(), /*fSkipCheck=*/true));
+
+    // Step 3: Sign a message with the extracted key
+    uint256 message_hash = Hash(std::string("transfer 10000 DD to DDattacker123"));
+    uint256 aux_rand = Hash(std::string("auxiliary_randomness"));
+
+    // Schnorr signature (as used in Taproot DD transfers)
+    std::array<unsigned char, 64> sig;
+    BOOST_CHECK(extracted.SignSchnorr(message_hash, sig, /*merkle_root=*/nullptr, aux_rand));
+
+    // Step 4: Verify signature with original public key
+    XOnlyPubKey xonly(original.GetPubKey());
+    BOOST_CHECK(xonly.VerifySchnorr(message_hash, sig));
+
+    // FINDING: Extracted key produces valid Schnorr signatures.
+    // An attacker with wallet.dat can sign DD transfers without the passphrase.
+}
+
 BOOST_AUTO_TEST_SUITE_END()

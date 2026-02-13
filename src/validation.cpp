@@ -2761,13 +2761,21 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                     return false;
                 };
 
+                // SECURITY [T1-05a]: Only skip oracle validation during IBD (Initial Block Download).
+                // During IBD, oracle prices may not be available because the node is syncing
+                // historical blocks. But for new tip blocks (not in IBD), we MUST validate
+                // collateral ratios against oracle prices. Without this check, a malicious
+                // miner could include a mint tx with trivial collateral and have it accepted
+                // by all non-IBD nodes because economic validation was unconditionally skipped.
+                const bool fInIBD = m_chainman.IsInitialBlockDownload();
+
                 DigiDollar::ValidationContext ddContext(
                     pindex->nHeight,
                     GetOraclePriceForTransaction(tx, pindex->nHeight),  // Oracle price (may be 0 during IBD)
                     DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
                     m_chainman.GetParams(),
                     &view,                                               // Coins view for UTXO lookup
-                    true,                                                // skipOracleValidation = true for block connect
+                    fInIBD,                                              // Only skip oracle validation during IBD
                     txLookup                                             // Block-db tx lookup for DD amounts
                 );
 

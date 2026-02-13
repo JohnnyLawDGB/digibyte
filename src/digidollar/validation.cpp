@@ -185,17 +185,45 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
             if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
             if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
 
-            // Skip transaction type
+            // Read transaction type (1=MINT, 2=TRANSFER, 3=REDEEM)
             if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            int64_t txType = 0;
+            if (data.size() > 0) {
+                try {
+                    CScriptNum txTypeNum(data, true);
+                    txType = txTypeNum.GetInt64();
+                } catch (const scriptnum_error&) {
+                    continue;
+                }
+            }
 
-            // Extract all DD amounts from OP_RETURN
-            while (vout.scriptPubKey.GetOp(pc, opcode, data)) {
-                if (data.size() > 0) {
+            // SECURITY: Type-aware parsing of OP_RETURN fields.
+            // Mint OP_RETURN format:    DD <type=1> <ddAmount> <lockHeight> <lockTier>
+            // Transfer OP_RETURN format: DD <type=2> <amount1> <amount2> ... <amountN>
+            // Redeem OP_RETURN format:   DD <type=3> <ddAmount> [additional fields]
+            //
+            // For MINT (type 1), only the FIRST value after type is the DD amount.
+            // lockHeight and lockTier are NOT DD amounts. Reading them as such would
+            // allow an attacker to add extra P2TR zero-value outputs and inflate the
+            // DD supply (e.g., 360-day lockHeight = 2,073,600 interpreted as $20,736).
+            if (txType == 1 || txType == 3) {
+                // MINT or REDEEM: Only first push is DD amount
+                if (vout.scriptPubKey.GetOp(pc, opcode, data) && data.size() > 0) {
                     try {
-                        CScriptNum scriptNum(data, true, 8);  // 8-byte max for large DD amounts
+                        CScriptNum scriptNum(data, true, 8);
                         dd_amounts.push_back(scriptNum.GetInt64());
-                    } catch (const scriptnum_error&) {
-                        continue;
+                    } catch (const scriptnum_error&) {}
+                }
+            } else {
+                // TRANSFER: All remaining pushes are DD amounts (one per output)
+                while (vout.scriptPubKey.GetOp(pc, opcode, data)) {
+                    if (data.size() > 0) {
+                        try {
+                            CScriptNum scriptNum(data, true, 8);  // 8-byte max for large DD amounts
+                            dd_amounts.push_back(scriptNum.GetInt64());
+                        } catch (const scriptnum_error&) {
+                            continue;
+                        }
                     }
                 }
             }
@@ -618,6 +646,7 @@ bool ValidateMintTransaction(const CTransaction& tx,
     CAmount totalCollateral = 0;
     bool hasCollateralOutput = false;
     bool hasDDOutput = false;
+    int ddOutputCount = 0;  // Security: count DD outputs to prevent inflation attack
     int64_t lockTime = 0;
 
     for (size_t i = 0; i < tx.vout.size(); i++) {
@@ -706,6 +735,20 @@ bool ValidateMintTransaction(const CTransaction& tx,
             if (!ValidateDDOutput(output, tx, state)) {
                 return false;
             }
+            ddOutputCount++;
+
+            // Security: Mint transactions MUST have exactly 1 DD output.
+            // Extra P2TR zero-value outputs would be indexed against the OP_RETURN
+            // metadata (lockHeight, lockTier fields), causing those non-amount values
+            // to be misinterpreted as DD amounts during transfer validation lookups.
+            // This would allow an attacker to inflate DD supply from nothing.
+            if (ddOutputCount > 1) {
+                LogPrintf("DigiDollar: SECURITY - Mint tx has %d DD outputs (max 1 allowed). "
+                         "Rejecting to prevent OP_RETURN inflation attack.\n", ddOutputCount);
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-multiple-dd-outputs",
+                                   "Mint transactions must have exactly 1 DD token output");
+            }
+
             hasDDOutput = true;
 
             // Phase 1: Try to extract DD amount from metadata if available

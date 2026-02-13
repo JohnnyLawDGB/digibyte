@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2021 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2014-2026 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <kernel/chainparams.h>
@@ -167,16 +167,15 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
 
         // Deployment of Taproot (BIPs 340-342)
-        // SAFETY: Dates far in future to prevent accidental activation during development
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1893456000; // 1st January 2030
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 2051222400; // 1st January 2035
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1736510438; // 10th January 2025
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1799582438; // 10th January 2027
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
         // Deployment of DigiDollar stablecoin features
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1767225600; // Jan 1, 2026
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1830297600; // Jan 1, 2028
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1777593600; // May 1, 2026
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1840752000; // May 1, 2028
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 22014720; // Aligned to confirmation window (546 * 40320)
 
         // The best chain should have at least this much work.

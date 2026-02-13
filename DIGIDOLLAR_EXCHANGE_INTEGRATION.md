@@ -1,0 +1,389 @@
+# DigiDollar Exchange Integration Guide
+
+*For exchanges that already support DigiByte and want to add DigiDollar (DD) trading pairs.*
+
+---
+
+## What Is DigiDollar?
+
+DigiDollar is a decentralized USD stablecoin built natively into DigiByte Core. Each DD = $1 USD, backed by DGB collateral locked in time-locked on-chain vaults. It uses the same blockchain, same nodes, same infrastructure — just new transaction types and a dedicated address format.
+
+If you already run a DigiByte node, you're most of the way there.
+
+---
+
+## Key Facts for Exchanges
+
+| Feature | Detail |
+|---------|--------|
+| Asset type | Native UTXO on DigiByte blockchain |
+| Value | 1 DD = $1.00 USD |
+| Amount unit in RPC | **USD cents** (10000 = $100.00) |
+| Address format | `DD...` (mainnet), `TD...` (testnet) |
+| Transaction fees | Paid in **DGB** (not DD) |
+| Minimum fee | 0.1 DGB per transaction |
+| Block time | 15 seconds (same as DGB) |
+| Confirmations | Same security model as DGB |
+| Backend required | DigiByte Core v9.26.0+ with `digidollar=1` |
+
+---
+
+## 1. Node Setup
+
+Upgrade your existing DigiByte node to v9.26.0+ and enable DigiDollar:
+
+```ini
+# digibyte.conf
+server=1
+digidollar=1
+txindex=1
+rpcuser=youruser
+rpcpassword=yourpassword
+
+# For testnet testing:
+# testnet=1
+# [test]
+# digidollar=1
+# addnode=oracle1.digibyte.io
+```
+
+That's it. Your existing DGB infrastructure stays the same — DD runs alongside it.
+
+---
+
+## 2. Wallet Setup
+
+You'll need a wallet that holds both DGB and DD:
+- **DGB** — for paying transaction fees on DD sends
+- **DD** — for processing customer withdrawals
+
+```bash
+# Create a wallet (or use your existing one)
+digibyte-cli createwallet "exchange-hot"
+
+# Verify DD is active
+digibyte-cli getdigidollardeploymentinfo
+# status should be "active"
+```
+
+---
+
+## 3. Generating Customer Deposit Addresses
+
+Generate a unique DD address for each customer, just like you do for DGB:
+
+```bash
+digibyte-cli getdigidollaraddress
+# Returns: "DD1q..."  (mainnet)
+# Returns: "TD1q..."  (testnet)
+```
+
+**Important:** DD addresses are NOT the same as DGB addresses. They use a different prefix (`DD/TD/RD`) and are P2TR (Taproot) encoded. Validate the prefix before accepting user input.
+
+**List all generated DD addresses:**
+```bash
+digibyte-cli listdigidollaraddresses
+```
+
+---
+
+## 4. Detecting Customer Deposits
+
+Poll for incoming DD transactions the same way you poll for DGB:
+
+```bash
+# List recent DD transactions (last 100, receive only)
+digibyte-cli listdigidollartxs 100 0 "" "receive"
+```
+
+**Each transaction returns:**
+```json
+{
+  "txid": "abc123...",
+  "category": "receive",
+  "amount": 50000,
+  "address": "DDcustomerDepositAddr...",
+  "confirmations": 12,
+  "blockheight": 22100000,
+  "blockhash": "def456...",
+  "time": 1770934000,
+  "fee": 0
+}
+```
+
+**Match deposits to customers** by the `address` field (the unique DD address you generated for them).
+
+**Check a specific address balance:**
+```bash
+digibyte-cli getdigidollarbalance "DDcustomerAddr..." 6
+# Second param = minimum confirmations (recommend 6+)
+```
+
+### Recommended Confirmation Thresholds
+
+| Deposit Size | Confirmations | Wait Time |
+|-------------|---------------|-----------|
+| < $100 | 6 | ~90 seconds |
+| $100 - $10,000 | 20 | ~5 minutes |
+| > $10,000 | 60 | ~15 minutes |
+
+Same security model as DGB — 15-second blocks with 5 mining algorithms.
+
+---
+
+## 5. Processing Customer Withdrawals
+
+Send DD to a customer's DD address:
+
+```bash
+digibyte-cli senddigidollar "DDcustomerAddress..." 25000
+# Sends $250.00 (25000 cents)
+```
+
+**Response:**
+```json
+{
+  "txid": "ghi789...",
+  "to_address": "DDcustomerAddress...",
+  "amount": 25000,
+  "status": "sent",
+  "fee_paid": "0.10000000",
+  "inputs_used": 2,
+  "change_amount": 25000
+}
+```
+
+### Critical: You Need DGB for Fees
+
+Every DD send requires DGB to pay the miner fee (minimum 0.1 DGB). **Always maintain a DGB balance in your hot wallet.** If you run out of DGB, DD withdrawals will fail.
+
+**Check your DGB fee balance:**
+```bash
+digibyte-cli getbalance
+```
+
+### Withdrawal Limits
+
+- No minimum send amount (any cent value works)
+- Maximum: $100,000 per transaction
+- Consecutive sends work without waiting for confirmations
+
+---
+
+## 6. Balance Monitoring
+
+### Hot Wallet Balances
+
+```bash
+# DD balance (confirmed + pending)
+digibyte-cli getdigidollarbalance
+# Returns: { "confirmed": 500000, "pending": 25000, "total": 525000 }
+# (amounts in cents — 500000 = $5,000.00)
+
+# DGB balance (for fees)
+digibyte-cli getbalance
+
+# Combined view
+digibyte-cli getdigidollarinfo
+```
+
+### Watch-Only (Cold Wallet Monitoring)
+
+Both `getdigidollarbalance` and `listdigidollaraddresses` support `include_watchonly` for monitoring cold wallet addresses without the private keys on your hot node.
+
+---
+
+## 7. Oracle Price Data
+
+The DGB/USD price is provided by a decentralized oracle network. This is useful for display purposes and understanding collateral mechanics:
+
+```bash
+digibyte-cli getoracleprice
+# Returns: { "price_usd": "0.00631", "price_micro_usd": 6310, ... }
+```
+
+**Oracle details:**
+- 5-of-8 Schnorr threshold consensus (testnet)
+- 8-of-15 planned for mainnet
+- Sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com
+- Outlier filtering with Median Absolute Deviation
+
+---
+
+## 8. Network Health Monitoring
+
+```bash
+digibyte-cli getdigidollarstats
+```
+
+Returns system-wide metrics:
+- **Total DD supply** — all DigiDollars in circulation
+- **Total collateral** — all DGB locked as backing
+- **System health ratio** — collateral value / DD supply (should be >100%)
+
+This is useful for risk monitoring. If system health drops significantly, new minting gets more expensive (Dynamic Collateral Adjustment) and the Emergency Reserve Ratio (ERR) may activate.
+
+---
+
+## 9. Identifying DD Transactions in Raw Data
+
+If your backend processes raw transactions:
+
+**Detect DD transactions:**
+```
+(tx.nVersion & 0x0000FFFF) == 0x0770
+```
+
+**Extract type:**
+```
+(tx.nVersion >> 24) & 0xFF
+  1 = MINT
+  2 = TRANSFER  ← most common for deposits/withdrawals
+  3 = REDEEM
+```
+
+**Find DD amount in OP_RETURN:**
+- Look for output with: `OP_RETURN "DD" <type> <amount_cents> <lockHeight>`
+- Amount is an integer in USD cents
+
+**DD outputs have 0-satoshi value** — the DD amount is encoded in the script/OP_RETURN, not in `nValue`. Don't filter these out as dust!
+
+---
+
+## 10. API Integration Summary
+
+### Essential RPCs for an Exchange
+
+| Operation | RPC | Notes |
+|-----------|-----|-------|
+| **Generate deposit address** | `getdigidollaraddress` | One per customer |
+| **Check deposit balance** | `getdigidollarbalance "addr" 6` | Use minconf |
+| **Detect deposits** | `listdigidollartxs 100 0 "" "receive"` | Poll regularly |
+| **Process withdrawal** | `senddigidollar "addr" <cents>` | Need DGB for fees |
+| **Check DGB fee balance** | `getbalance` | Keep funded! |
+| **Transaction history** | `listdigidollartxs` | Filter by category/address |
+| **System status** | `getdigidollardeploymentinfo` | Verify DD is active |
+| **Network health** | `getdigidollarstats` | Monitor collateral health |
+| **Oracle price** | `getoracleprice` | Current DGB/USD |
+
+### RPCs You Probably DON'T Need
+
+Exchanges typically handle deposits and withdrawals — not minting or redeeming. These are for users who want to create/destroy DD:
+
+| RPC | Purpose |
+|-----|---------|
+| `mintdigidollar` | Lock DGB → create DD (user operation) |
+| `redeemdigidollar` | Burn DD → unlock DGB (user operation) |
+| `listdigidollarpositions` | View collateral positions |
+| `calculatecollateralrequirement` | Estimate collateral for minting |
+
+---
+
+## 11. Hot Wallet Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│                Exchange Backend              │
+│                                             │
+│  ┌──────────┐    ┌──────────┐              │
+│  │ DGB Hot   │    │ DD Hot    │              │
+│  │ Wallet    │    │ Wallet    │              │
+│  │ (fees)    │    │ (withdraws)│             │
+│  └─────┬─────┘    └─────┬─────┘             │
+│        │                │                    │
+│        └───────┬────────┘                    │
+│                │                             │
+│     ┌──────────▼──────────┐                 │
+│     │  DigiByte Core Node  │                 │
+│     │  v9.26.0+            │                 │
+│     │  digidollar=1        │                 │
+│     └──────────────────────┘                 │
+│                                             │
+│  Monitor:                                    │
+│  • getdigidollarbalance (DD deposits)       │
+│  • getbalance (DGB fee reserve)             │
+│  • listdigidollartxs (deposit detection)    │
+│                                             │
+│  Process:                                    │
+│  • senddigidollar (DD withdrawals)          │
+│  • Ensure DGB balance covers fees           │
+└─────────────────────────────────────────────┘
+```
+
+### Key Points
+
+1. **One node handles both DGB and DD** — same daemon, same wallet
+2. **Keep DGB funded** — DD withdrawals fail without DGB for fees
+3. **DD and DGB are separate balances** — track both independently
+4. **Standard confirmation logic** — same security as DGB deposits
+5. **DD addresses are different from DGB addresses** — don't mix them up
+
+---
+
+## 12. Common Pitfalls
+
+| Pitfall | Solution |
+|---------|----------|
+| Sending to a DGB address instead of DD | Validate `DD/TD/RD` prefix before processing |
+| Running out of DGB for fees | Monitor DGB balance, auto-top-up from exchange reserves |
+| Filtering out 0-sat outputs as dust | DD token outputs are 0-sat by design — don't discard them |
+| Using wrong amount units | RPC uses **cents** not dollars (multiply by 100) |
+| Not checking activation status | Call `getdigidollardeploymentinfo` — DD RPCs error before activation |
+| Ignoring system health | Monitor `getdigidollarstats` — ERR state affects the broader ecosystem |
+
+---
+
+## 13. Test on Testnet Now!
+
+DigiDollar is **live and activated on testnet18**. Start building your integration today.
+
+### Testnet Quick Start
+
+1. **Download** DigiByte Core v9.26.0-rc18
+2. **Configure:**
+   ```ini
+   testnet=1
+   [test]
+   digidollar=1
+   addnode=oracle1.digibyte.io
+   server=1
+   rpcuser=youruser
+   rpcpassword=yourpassword
+   ```
+3. **Launch:** `digibyted -testnet -daemon`
+4. **Get testnet DGB:** Ask in https://app.gitter.im/#/room/#digidollar:gitter.im
+5. **Generate DD address:** `digibyte-cli -testnet getdigidollaraddress`
+6. **Receive test DD** from the community
+7. **Practice withdrawals:** `digibyte-cli -testnet senddigidollar "TDaddr..." 1000`
+
+### Testnet Details
+
+| Parameter | Value |
+|-----------|-------|
+| P2P Port | 12032 |
+| RPC Port | 14025 |
+| DD Address Prefix | `TD` |
+| Status | **Active** (BIP9 activated at block 599) |
+| Oracle | 5-of-8 Schnorr consensus, 6 exchange sources |
+
+---
+
+## 14. Mainnet Timeline
+
+| Milestone | Date |
+|-----------|------|
+| Testnet activated | February 12, 2026 ✅ |
+| Target wallet release | May 1, 2026 |
+| BIP9 signaling window opens | May 1, 2026 |
+| BIP9 signaling window closes | May 1, 2028 |
+| Activation requirement | 70% of miners signal over 40,320 blocks (~1 week) |
+
+---
+
+## Questions & Support
+
+- **Developer chat:** https://app.gitter.im/#/room/#digidollar:gitter.im
+- **Testnet tracker:** https://digibyte.io/testnet/activation
+- **GitHub:** https://github.com/DigiByte-Core/digibyte
+
+💎 DigiDollar — the first truly decentralized stablecoin on a UTXO blockchain.

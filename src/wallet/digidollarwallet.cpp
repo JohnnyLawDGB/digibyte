@@ -384,8 +384,9 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
         return false;
     }
 
-    // Try standard wallet IsMine first
-    if (m_wallet && m_wallet->IsMine(txout) != wallet::ISMINE_NO) {
+    // Try standard wallet IsMine first — require SPENDABLE to exclude watch-only
+    // SECURITY [T4-04]: Using ISMINE_SPENDABLE prevents watch-only DD balance contamination
+    if (m_wallet && (m_wallet->IsMine(txout) & wallet::ISMINE_SPENDABLE)) {
         return true;
     }
 
@@ -1666,9 +1667,13 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             if (it != m_wallet->mapWallet.end()) {
                 // We have the input transaction - check if we owned that output
                 if (txin.prevout.n < it->second.tx->vout.size()) {
-                    if (m_wallet->IsMine(it->second.tx->vout[txin.prevout.n]) != wallet::ISMINE_NO) {
+                    // SECURITY [T4-04]: Require ISMINE_SPENDABLE to prevent watch-only
+                    // addresses from claiming ownership of DD mint transactions during rescan.
+                    // Without this, importing a watch-only address and rescanning would
+                    // contaminate dd_utxos and collateral_positions with foreign UTXOs.
+                    if (m_wallet->IsMine(it->second.tx->vout[txin.prevout.n]) & wallet::ISMINE_SPENDABLE) {
                         is_our_mint = true;
-                        LogPrintf("DigiDollar: ProcessDDTxForRescan - Our input found, this is our mint\n");
+                        LogPrintf("DigiDollar: ProcessDDTxForRescan - Our spendable input found, this is our mint\n");
                         break;
                     }
                 }
@@ -1683,9 +1688,10 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             for (size_t i = 1; i < tx.vout.size(); ++i) {
                 if (tx.vout[i].scriptPubKey.IsUnspendable()) continue; // Skip OP_RETURN
                 // First try standard IsMine (works for non-DD outputs like change)
-                if (m_wallet->IsMine(tx.vout[i]) != wallet::ISMINE_NO) {
+                // SECURITY [T4-04]: Require ISMINE_SPENDABLE — watch-only must not match
+                if (m_wallet->IsMine(tx.vout[i]) & wallet::ISMINE_SPENDABLE) {
                     is_our_mint = true;
-                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our output found at vout[%zu] via IsMine\n", i);
+                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our spendable output found at vout[%zu] via IsMine\n", i);
                     break;
                 }
                 // Then try IsDDOutputMine for 0-value P2TR DD token outputs
@@ -1992,10 +1998,18 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             bool is_ours = IsDDOutputMine(txout, tx.GetHash());
             LogPrintf("DigiDollar: TRANSFER output vout[%zu] - dd_output_count=%d, IsDDOutputMine=%d, is_our_send=%d\n",
                       i, dd_output_count, is_ours ? 1 : 0, is_our_send ? 1 : 0);
+            // SECURITY [T4-04]: Don't blindly assume "2nd DD output = change".
+            // In a multi-recipient transfer, the 2nd output may be another recipient.
+            // Only claim ownership if the wallet can actually spend this output.
             if (!is_ours && is_our_send && dd_output_count > 1) {
-                // This is a change output from our send
-                is_ours = true;
-                LogPrintf("DigiDollar: Identified change output via is_our_send at vout[%zu]\n", i);
+                // Verify wallet ownership via IsMine (SPENDABLE) before claiming as change.
+                // This prevents claiming foreign outputs as our change during rescan.
+                if (m_wallet->IsMine(txout) & wallet::ISMINE_SPENDABLE) {
+                    is_ours = true;
+                    LogPrintf("DigiDollar: Identified change output via is_our_send + IsMine(SPENDABLE) at vout[%zu]\n", i);
+                } else {
+                    LogPrintf("DigiDollar: Skipping non-owned DD output at vout[%zu] (is_our_send but not spendable)\n", i);
+                }
             }
 
             if (is_ours) {

@@ -19,6 +19,8 @@
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
 #include <consensus/dca.h>
+#include <consensus/err.h>
+#include <digidollar/health.h>
 #include <kernel/chainparams.h>
 #include <primitives/transaction.h>
 #include <script/standard.h>
@@ -4790,6 +4792,306 @@ BOOST_AUTO_TEST_CASE(redteam_t2_04d_stale_price_enables_undercollateralized_mint
     }
 
     SetMockTime(0);
+}
+
+// =============================================================================
+// T2-05: DCA/ERR Health Calculation Gaming
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_T2_05a_hardcoded_system_health)
+{
+    // ATTACK: GetSystemCollateralRatio() is hardcoded to 150, meaning:
+    // - DCA multiplier is ALWAYS 1.0x (no collateral adjustment)
+    // - ERR never triggers (150 > 100)
+    // - System protections completely disabled in consensus validation
+    //
+    // EXPLOIT: Keep minting DD when system is catastrophically under-collateralized.
+    // No DCA increase, no ERR mint-blocking, no death spiral protection.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Prove GetSystemCollateralRatio() always returns 150
+    CAmount health1 = DigiDollar::GetSystemCollateralRatio();
+    CAmount health2 = DigiDollar::GetSystemCollateralRatio();
+    CAmount health3 = DigiDollar::GetSystemCollateralRatio();
+    BOOST_CHECK_EQUAL(health1, 150);
+    BOOST_CHECK_EQUAL(health2, 150);
+    BOOST_CHECK_EQUAL(health3, 150);
+    BOOST_TEST_MESSAGE("T2-05a: GetSystemCollateralRatio() returns hardcoded " << health1 << " (always 'healthy')");
+
+    // Prove DCA multiplier is always 1.0x because health is always 150
+    double multiplier = DigiDollar::DCA::DynamicCollateralAdjustment::GetDCAMultiplier(health1);
+    BOOST_CHECK_EQUAL(multiplier, 1.0);
+    BOOST_TEST_MESSAGE("T2-05a: DCA multiplier at health=" << health1 << ": " << multiplier << "x (no adjustment)");
+
+    // Prove ERR would never trigger
+    bool errShouldActivate = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(health1);
+    BOOST_CHECK_EQUAL(errShouldActivate, false);
+    BOOST_TEST_MESSAGE("T2-05a: ERR activation at health=" << health1 << ": " << (errShouldActivate ? "YES" : "NO"));
+
+    // Show what SHOULD happen at different health levels
+    struct HealthScenario {
+        int health;
+        double expectedMultiplier;
+        bool expectedERR;
+        const char* description;
+    };
+
+    std::vector<HealthScenario> scenarios = {
+        {150, 1.0, false, "Healthy system"},
+        {130, 1.2, false, "Warning level"},
+        {110, 1.5, false, "Critical level"},
+        {90,  2.0, true,  "Emergency - under-collateralized"},
+        {50,  2.0, true,  "Catastrophic - 50% backed"},
+        {10,  2.0, true,  "Near-zero backing"},
+    };
+
+    for (const auto& s : scenarios) {
+        double dcaMult = DigiDollar::DCA::DynamicCollateralAdjustment::GetDCAMultiplier(s.health);
+        bool errActive = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(s.health);
+        BOOST_CHECK_EQUAL(dcaMult, s.expectedMultiplier);
+        BOOST_CHECK_EQUAL(errActive, s.expectedERR);
+        BOOST_TEST_MESSAGE("T2-05a: Health " << s.health << "% -> DCA " << dcaMult << "x, ERR " 
+            << (errActive ? "ACTIVE" : "inactive") << " (" << s.description << ")");
+    }
+
+    // EXPLOIT DEMONSTRATION: Compare collateral requirements at different health levels
+    const CAmount ddAmount = 10000; // $100 DD
+    const int lockBlocks = 30 * DigiDollar::BLOCKS_PER_DAY;
+    const CAmount oraclePrice = 5000; // $0.005 per DGB
+
+    // What consensus ALWAYS calculates (health hardcoded to 150):
+    DigiDollar::ValidationContext ctxAlwaysHealthy(1000, oraclePrice, 150, *regTestParams);
+    CAmount collateralHealthy = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, ctxAlwaysHealthy);
+
+    // What consensus SHOULD calculate at health=90 (emergency):
+    DigiDollar::ValidationContext ctxEmergency(1000, oraclePrice, 90, *regTestParams);
+    CAmount collateralEmergency = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, ctxEmergency);
+
+    // What consensus SHOULD calculate at health=50 (catastrophic):
+    DigiDollar::ValidationContext ctxCatastrophic(1000, oraclePrice, 50, *regTestParams);
+    CAmount collateralCatastrophic = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, ctxCatastrophic);
+
+    BOOST_TEST_MESSAGE("T2-05a: Collateral for $100 DD at health=150%: " << collateralHealthy << " sats");
+    BOOST_TEST_MESSAGE("T2-05a: Collateral for $100 DD at health=90%:  " << collateralEmergency << " sats (should be 2x)");
+    BOOST_TEST_MESSAGE("T2-05a: Collateral for $100 DD at health=50%:  " << collateralCatastrophic << " sats (should be 2x)");
+
+    // Verify emergency requires 2x collateral
+    BOOST_CHECK(collateralEmergency > collateralHealthy);
+    double emergencyRatio = static_cast<double>(collateralEmergency) / collateralHealthy;
+    BOOST_TEST_MESSAGE("T2-05a: Emergency requires " << emergencyRatio << "x more collateral");
+
+    BOOST_TEST_MESSAGE("CRITICAL BUG [T2-05a]: GetSystemCollateralRatio() is hardcoded to 150. "
+        "Both mempool and ConnectBlock use this for ctx.systemCollateral. "
+        "DCA multiplier is ALWAYS 1.0x (no adjustment). ERR never triggers. "
+        "Death spiral protection completely disabled.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T2_05b_dca_never_applied_in_consensus)
+{
+    // ATTACK: Prove that even with a proper DCA system, the consensus path
+    // never applies DCA adjustments because health is hardcoded.
+    // 
+    // Scenario: System has 10x more DD than collateral backing (10% health).
+    // Expected: DCA should double collateral requirements.
+    // Actual: Collateral requirements unchanged (1.0x multiplier).
+
+    auto regTestParams = CChainParams::RegTest({});
+    const CAmount ddAmount = 10000; // $100 DD
+    const int lockBlocks = 365 * DigiDollar::BLOCKS_PER_DAY; // 1 year
+    const CAmount oraclePrice = 5000; // $0.005 per DGB
+
+    // Consensus path: uses hardcoded health=150
+    DigiDollar::ValidationContext ctxConsensus(1000, oraclePrice, 150, *regTestParams);
+    CAmount collateralConsensus = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, ctxConsensus);
+
+    // What DCA SHOULD produce at emergency health:
+    int baseRatio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, regTestParams->GetDigiDollarParams());
+    int adjustedRatio = DigiDollar::DCA::DynamicCollateralAdjustment::ApplyDCA(baseRatio, 50); // 50% health
+
+    BOOST_TEST_MESSAGE("T2-05b: Base collateral ratio for 1yr lock: " << baseRatio << "%");
+    BOOST_TEST_MESSAGE("T2-05b: DCA-adjusted ratio at 50% health: " << adjustedRatio << "% (2.0x multiplier)");
+    BOOST_TEST_MESSAGE("T2-05b: Consensus ALWAYS uses: " << baseRatio << "% (no DCA applied)");
+    BOOST_CHECK_EQUAL(adjustedRatio, baseRatio * 2);
+    BOOST_CHECK(adjustedRatio > baseRatio);
+
+    // Prove the collateral calculation uses the un-adjusted ratio in consensus
+    DigiDollar::ValidationContext ctxDCA(1000, oraclePrice, 50, *regTestParams);
+    CAmount collateralDCA = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, ctxDCA);
+
+    BOOST_TEST_MESSAGE("T2-05b: Collateral at consensus health (150%): " << collateralConsensus << " sats");
+    BOOST_TEST_MESSAGE("T2-05b: Collateral at real health (50%): " << collateralDCA << " sats");
+    double dcaImpact = static_cast<double>(collateralDCA) / collateralConsensus;
+    BOOST_TEST_MESSAGE("T2-05b: DCA impact: " << dcaImpact << "x more collateral required at 50% health");
+
+    BOOST_TEST_MESSAGE("BUG [T2-05b]: In production, attacker keeps minting at base ratio "
+        "even when system is 50% collateralized. DCA multiplier is always 1.0x in consensus.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T2_05c_err_never_blocks_minting)
+{
+    // ATTACK: Prove that ERR mint-blocking never engages through the consensus
+    // validation path because ctx.systemCollateral is always 150.
+    //
+    // The only mint-blocking comes from ShouldBlockMintingDuringERR() which
+    // delegates to ShouldBlockMinting() - but that relies on cached metrics
+    // that are only populated by RPC calls.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Get hardcoded health
+    CAmount health = DigiDollar::GetSystemCollateralRatio();
+    BOOST_CHECK_EQUAL(health, 150);
+
+    // ERR should NOT activate at 150
+    BOOST_CHECK_EQUAL(DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(health), false);
+
+    // Even with extreme under-collateralization scenarios, consensus always sees 150
+    // This means the redemption path check at validation.cpp:1416 NEVER takes ERR path
+    //   if (ctx.systemCollateral < 100) { // ERR path }
+    //   else { // Normal path — ALWAYS this one }
+    bool normalPath = (health >= 100);
+    bool errPath = (health < 100);
+    BOOST_CHECK_EQUAL(normalPath, true);
+    BOOST_CHECK_EQUAL(errPath, false);
+
+    BOOST_TEST_MESSAGE("T2-05c: Consensus health=" << health << " -> Normal redemption path ALWAYS taken");
+    BOOST_TEST_MESSAGE("T2-05c: ERR path is dead code in consensus — never executed");
+    BOOST_TEST_MESSAGE("T2-05c: ValidateEmergencyRedemptionConditions returns 'err-validation-incomplete' anyway");
+    BOOST_TEST_MESSAGE("BUG [T2-05c]: ERR protection is non-functional. During a death spiral, "
+        "minting continues, normal redemptions continue, no emergency measures engage.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T2_05d_unit_mismatch_health_calculation)
+{
+    // ATTACK: GetLastOraclePrice() returns cents (50 = $0.50/DGB)
+    // but CalculateSystemHealth() treats its oraclePrice parameter as
+    // millicents (50 millicents = $0.0005/DGB).
+    //
+    // This means when GetCurrentSystemHealth() is eventually used with
+    // real data, health is calculated 1000x too LOW.
+    //
+    // Example: System at 150% collateralization shows as 0.15%
+
+    // Simulate: 100 DGB collateral, 50 cents of DD, price $0.50/DGB
+    CAmount totalCollateral = 100 * COIN; // 100 DGB in satoshis
+    CAmount totalDD = 5000; // $50 in cents
+    CAmount priceInCents = 50; // $0.50 per DGB in cents
+
+    // CalculateSystemHealth treats price as millicents
+    // With price=50 millicents = $0.0005:
+    // collateralValueMillicents = (10,000,000,000 * 50) / 100,000,000 = 5000
+    // collateralValueCents = 5000 / 1000 = 5
+    // health = (5 * 100) / 5000 = 0
+    int healthWithCents = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
+        totalCollateral, totalDD, priceInCents);
+
+    // Now with CORRECT units (millicents): 50 cents = 50000 millicents
+    CAmount priceInMillicents = 50000; // $0.50 per DGB in millicents
+    int healthWithMillicents = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
+        totalCollateral, totalDD, priceInMillicents);
+
+    BOOST_TEST_MESSAGE("T2-05d: 100 DGB collateral, $50 DD supply, $0.50/DGB price");
+    BOOST_TEST_MESSAGE("T2-05d: Health with cents (50):      " << healthWithCents << "% (should be ~100%)");
+    BOOST_TEST_MESSAGE("T2-05d: Health with millicents (50000): " << healthWithMillicents << "%");
+
+    // The cents calculation produces wildly wrong result
+    BOOST_CHECK(healthWithCents < 10); // Calculates near-zero health
+    BOOST_CHECK(healthWithMillicents >= 80 && healthWithMillicents <= 120); // Should be close to 100%
+
+    BOOST_TEST_MESSAGE("MEDIUM BUG [T2-05d]: GetLastOraclePrice() returns cents, "
+        "CalculateSystemHealth() expects millicents. Health calculated 1000x too low. "
+        "Currently masked by hardcoded GetSystemCollateralRatio()=150, but will break "
+        "when that's fixed to use real health calculations.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T2_05e_should_block_minting_fails_open)
+{
+    // ATTACK: ShouldBlockMinting() is the ONLY real-time health check,
+    // but it fails open in multiple scenarios:
+    // 1. Cached metrics empty (fresh node) -> allows minting
+    // 2. No oracle price -> allows minting
+    // 3. totalDDSupply <= 0 -> allows minting
+    //
+    // An attacker on a fresh node or one where ScanUTXOSet hasn't been
+    // called can bypass ERR mint-blocking entirely.
+
+    // On a fresh start, SystemHealthMonitor metrics are empty
+    // ShouldBlockMinting() checks totalDDSupply <= 0 first and returns false
+    bool shouldBlock = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldBlockMinting();
+
+    BOOST_TEST_MESSAGE("T2-05e: ShouldBlockMinting() on fresh node: " << (shouldBlock ? "BLOCKED" : "ALLOWED"));
+    // Fresh node has no metrics -> allows minting
+    BOOST_CHECK_EQUAL(shouldBlock, false);
+
+    BOOST_TEST_MESSAGE("MEDIUM BUG [T2-05e]: ShouldBlockMinting() fails-open when cached metrics "
+        "are empty. On a fresh node or before first UTXO scan, ERR mint-blocking is disabled. "
+        "Combined with hardcoded GetSystemCollateralRatio()=150, there is NO functional "
+        "mint-blocking during system emergencies.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_T2_05f_death_spiral_no_protection)
+{
+    // ATTACK: Demonstrate a full death spiral scenario where ALL protections fail.
+    //
+    // Scenario:
+    // 1. System starts healthy (150% collateralized)
+    // 2. DGB price drops 75% -> system now at ~37.5% health
+    // 3. Attacker keeps minting DD at base collateral ratio (no DCA increase)
+    // 4. Each mint further dilutes the system
+    // 5. No ERR blocks minting
+    // 6. No DCA increases requirements
+    // 7. System becomes insolvent
+    //
+    // All because GetSystemCollateralRatio() returns 150 regardless of reality.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // System starts with $1M DD, $1.5M collateral (150% health)
+    CAmount initialDD = 100000000; // $1M in cents
+    CAmount initialCollateral = 1500000 * COIN; // 1.5M DGB
+    CAmount initialPrice = 100000; // $0.10/DGB in millicents → $1.5M collateral value
+
+    int healthBefore = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
+        initialCollateral, initialDD, initialPrice);
+    BOOST_TEST_MESSAGE("T2-05f: Initial system health: " << healthBefore << "% ($1.5M backing $1M DD)");
+
+    // Price drops 75%
+    CAmount crashedPrice = initialPrice / 4; // $0.025/DGB
+    int healthAfterCrash = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
+        initialCollateral, initialDD, crashedPrice);
+    BOOST_TEST_MESSAGE("T2-05f: Health after 75% price crash: " << healthAfterCrash << "% ($375K backing $1M DD)");
+    BOOST_CHECK(healthAfterCrash < 50); // System is critically under-collateralized
+
+    // But consensus still sees health=150
+    CAmount consensusHealth = DigiDollar::GetSystemCollateralRatio();
+    BOOST_CHECK_EQUAL(consensusHealth, 150);
+
+    // DCA at real health should be 2.0x (emergency)
+    double dcaAtRealHealth = DigiDollar::DCA::DynamicCollateralAdjustment::GetDCAMultiplier(healthAfterCrash);
+    BOOST_CHECK_EQUAL(dcaAtRealHealth, 2.0);
+
+    // DCA at consensus health is still 1.0x
+    double dcaAtConsensusHealth = DigiDollar::DCA::DynamicCollateralAdjustment::GetDCAMultiplier(consensusHealth);
+    BOOST_CHECK_EQUAL(dcaAtConsensusHealth, 1.0);
+
+    // ERR should be active at real health
+    bool errShouldBeActive = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(healthAfterCrash);
+    BOOST_CHECK_EQUAL(errShouldBeActive, true);
+
+    // ERR at consensus health: inactive
+    bool errAtConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(consensusHealth);
+    BOOST_CHECK_EQUAL(errAtConsensus, false);
+
+    BOOST_TEST_MESSAGE("T2-05f: Real health=" << healthAfterCrash << "% -> DCA " << dcaAtRealHealth << "x, ERR " 
+        << (errShouldBeActive ? "ACTIVE" : "inactive"));
+    BOOST_TEST_MESSAGE("T2-05f: Consensus health=" << consensusHealth << "% -> DCA " << dcaAtConsensusHealth << "x, ERR "
+        << (errAtConsensus ? "ACTIVE" : "inactive"));
+
+    BOOST_TEST_MESSAGE("CRITICAL BUG [T2-05f]: After 75% price crash, system is at " << healthAfterCrash 
+        << "% health but consensus reports 150%. DCA remains 1.0x (should be 2.0x). "
+        "ERR remains inactive (should block minting). Attacker can continue minting "
+        "DD at base ratios, accelerating the death spiral.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

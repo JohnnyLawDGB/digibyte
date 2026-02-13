@@ -4,6 +4,7 @@
 
 #include <consensus/err.h>
 #include <consensus/dca.h>
+#include <consensus/params.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/health.h>
 #include <digidollar/validation.h>
@@ -119,10 +120,10 @@ CAmount EmergencyRedemptionRatio::GetAdjustedRedemption(CAmount normalRedemption
     return normalRedemption;
 }
 
-bool EmergencyRedemptionRatio::HasOracleConsensus(const COracleBundle& bundle)
+bool EmergencyRedemptionRatio::HasOracleConsensus(const COracleBundle& bundle, const Consensus::Params& params)
 {
-    // Use the existing oracle consensus system
-    return bundle.HasConsensus();
+    // Use the chainparams-specified oracle consensus threshold
+    return bundle.HasConsensus(params.nOracleRequiredMessages);
 }
 
 ERRState EmergencyRedemptionRatio::GetCurrentState()
@@ -213,7 +214,7 @@ size_t EmergencyRedemptionRatio::ProcessERRQueue(size_t maxRedemptions)
     return processed;
 }
 
-bool EmergencyRedemptionRatio::ActivateERR(const COracleBundle& oracleBundle, uint32_t activationHeight)
+bool EmergencyRedemptionRatio::ActivateERR(const COracleBundle& oracleBundle, uint32_t activationHeight, const Consensus::Params& params)
 {
     // Check if ERR is already active
     if (s_currentState.isActive) {
@@ -229,8 +230,8 @@ bool EmergencyRedemptionRatio::ActivateERR(const COracleBundle& oracleBundle, ui
         return false;
     }
 
-    // Validate oracle consensus
-    if (!HasOracleConsensus(oracleBundle)) {
+    // Validate oracle consensus using chainparams threshold
+    if (!HasOracleConsensus(oracleBundle, params)) {
         LogPrint(BCLog::DIGIDOLLAR, "ERR: Activation denied - insufficient oracle consensus\n");
         return false;
     }

@@ -17,6 +17,7 @@
 class XOnlyPubKey;
 class COraclePriceMessage;
 class COracleBundle;
+namespace Consensus { struct Params; }
 
 namespace DigiDollar {
 
@@ -130,7 +131,7 @@ public:
      * - Messages are within acceptable time window
      * - Price consensus exists among oracles
      */
-    static bool HasOracleConsensus(const COracleBundle& bundle);
+    static bool HasOracleConsensus(const COracleBundle& bundle, const Consensus::Params& params);
 
     /**
      * Get the current ERR system state.
@@ -200,7 +201,7 @@ public:
      * - ERR not already active
      * - Oracle messages within time window
      */
-    static bool ActivateERR(const COracleBundle& oracleBundle, uint32_t activationHeight);
+    static bool ActivateERR(const COracleBundle& oracleBundle, uint32_t activationHeight, const Consensus::Params& params);
 
     /**
      * Deactivate ERR system when health recovers.

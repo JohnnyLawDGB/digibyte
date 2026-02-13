@@ -277,7 +277,7 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_sufficient_signatures, DigiDollarER
     }
 
     // Act: Check oracle consensus
-    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle);
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, Params().GetConsensus());
 
     // Assert: GREEN phase - verify correct behavior
     BOOST_CHECK(hasConsensus); // Should have consensus with 8/15 signatures
@@ -285,23 +285,24 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_sufficient_signatures, DigiDollarER
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_insufficient_signatures, DigiDollarERRTestSetup)
 {
-    // Arrange: Create oracle bundle with only 7 messages (insufficient)
+    const Consensus::Params& params = Params().GetConsensus();
+    int required = params.nOracleRequiredMessages;
+
+    // Arrange: Create oracle bundle with fewer messages than required
     COracleBundle bundle(1); // Epoch 1
 
-    for (int i = 0; i < 7; i++) {
+    // Add (required - 1) messages — insufficient for consensus
+    for (int i = 0; i < required - 1; i++) {
         COraclePriceMessage msg(i, mockOraclePrice, GetTime());
         msg.schnorr_sig = std::vector<unsigned char>(64, 0x01); // Mock signature
         bundle.AddMessage(msg);
     }
 
-    // Act: Check oracle consensus - EXPECTED TO FAIL (RED phase)
-    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle);
+    // Act: Check oracle consensus — should fail with fewer than required messages
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, params);
 
-    // Assert: Should fail in RED phase
+    // Assert: Should NOT have consensus with insufficient messages
     BOOST_CHECK(!hasConsensus);
-
-    // After GREEN phase:
-    // BOOST_CHECK(!hasConsensus); // Should NOT have consensus with only 7/15
 }
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_no_messages, DigiDollarERRTestSetup)
@@ -310,7 +311,7 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_no_messages, DigiDollarERRTestSetup
     COracleBundle bundle(1); // Epoch 1, no messages
 
     // Act: Check oracle consensus - EXPECTED TO FAIL (RED phase)
-    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle);
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, Params().GetConsensus());
 
     // Assert: Should fail in RED phase
     BOOST_CHECK(!hasConsensus);
@@ -330,7 +331,7 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_exactly_threshold, DigiDollarERRTes
     }
 
     // Act: Check consensus at threshold
-    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle);
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, Params().GetConsensus());
 
     // Assert: GREEN phase - verify correct behavior
     BOOST_CHECK(hasConsensus); // Should have consensus at exactly 8/15
@@ -799,9 +800,11 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
             validationContext.systemCollateral = health;
 
             // Test with insufficient oracle messages
+            const Consensus::Params& cparams = Params().GetConsensus();
+            const int required = cparams.nOracleRequiredMessages;
             COracleBundle insufficientBundle(1); // Epoch 1
             std::vector<COraclePriceMessage> insufficientMessages;
-            for (int i = 0; i < 5; i++) { // Only 5 out of required 8
+            for (int i = 0; i < required - 1; i++) { // One fewer than required
                 COraclePriceMessage msg(i, mockOraclePrice, GetTime());
                 msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
                 insufficientBundle.AddMessage(msg);
@@ -809,7 +812,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
             }
 
             // Should not activate without consensus even if health is low
-            bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(insufficientBundle);
+            bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(insufficientBundle, cparams);
             BOOST_CHECK(!hasConsensus);
 
             // Test consensus failure handling - GREEN phase
@@ -971,7 +974,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         }
 
         // Should handle large number of messages gracefully
-        bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(largeBundle);
+        bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(largeBundle, Params().GetConsensus());
         BOOST_CHECK(hasConsensus); // GREEN phase - has consensus (>= 8 messages)
 
         // Test large message handling - GREEN phase
@@ -1005,7 +1008,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
             malformedMessages.push_back(msg);
         }
 
-        bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(malformedBundle);
+        bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(malformedBundle, Params().GetConsensus());
         BOOST_CHECK(hasConsensus); // GREEN phase - has >= 8 messages (consensus logic doesn't validate signatures here)
 
         // Test malformed message handling - GREEN phase
@@ -1027,7 +1030,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
 
         // Perform consensus check multiple times
         for (int i = 0; i < 100; ++i) {
-            bool consensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(loadTestBundle);
+            bool consensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(loadTestBundle, Params().GetConsensus());
             (void)consensus; // Suppress unused variable warning
         }
 

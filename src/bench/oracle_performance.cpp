@@ -231,7 +231,8 @@ static void BenchmarkOracleBundleValidation(benchmark::Bench& bench)
 
     bench.run([&] {
         // Validate bundle (all signatures, structure, timestamps)
-        bool valid = bundle.IsValid();
+        // Use 1 as min_required since benchmark bundle has 1 message
+        bool valid = bundle.IsValid(1);
         assert(valid);
     });
 }

@@ -725,8 +725,8 @@ CAmount OracleBundleManager::GetLatestPrice() const
 bool OracleBundleManager::UpdateCachedPrice(int32_t epoch)
 {
     COracleBundle bundle = GetCurrentBundle(epoch);
-    if (bundle.HasConsensus()) {
-        CAmount price = bundle.GetConsensusPrice();
+    if (bundle.HasConsensus(min_oracle_count)) {
+        CAmount price = bundle.GetConsensusPrice(min_oracle_count);
         if (price > 0) {
             std::lock_guard<std::mutex> lock(mtx_bundles);
             cached_price = price;
@@ -1251,7 +1251,7 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     // Phase 1: Use generic bundle.IsValid() which checks Phase 1 signatures
     // Phase 2: Skip generic IsValid() — ValidatePhaseTwoBundle does Phase 2-specific validation
     if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
-        if (!bundle.IsValid(block.nTime)) {
+        if (!bundle.IsValid(consensusParams_ref.nOracleRequiredMessages, block.nTime)) {
             LogPrintf("Oracle: Invalid oracle bundle in block %d\n", block_height);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "invalid oracle bundle structure");
         }
@@ -1386,9 +1386,10 @@ bool OracleDataValidator::ValidateOracleBundle(const COracleBundle& bundle, int3
         return false;
     }
 
-    // Check consensus requirement
-    if (!bundle.HasConsensus()) {
-        LogPrintf("Oracle: Bundle does not have required consensus (%d messages)\n", bundle.messages.size());
+    // Check consensus requirement using chainparams threshold
+    if (!bundle.HasConsensus(params.nOracleRequiredMessages)) {
+        LogPrintf("Oracle: Bundle does not have required consensus (%zu of %d messages)\n",
+                  bundle.messages.size(), params.nOracleRequiredMessages);
         return false;
     }
 
@@ -1418,9 +1419,9 @@ bool OracleDataValidator::CheckOracleEpoch(const COracleBundle& bundle, int32_t 
     return bundle.ValidateEpoch(current_epoch);
 }
 
-bool OracleDataValidator::CheckOracleConsensus(const COracleBundle& bundle)
+bool OracleDataValidator::CheckOracleConsensus(const COracleBundle& bundle, const Consensus::Params& params)
 {
-    return bundle.HasConsensus();
+    return bundle.HasConsensus(params.nOracleRequiredMessages);
 }
 
 /**
@@ -1718,9 +1719,10 @@ CAmount GetOraclePriceForHeight(int nHeight)
     // Fallback: Try to get from current epoch bundle (for mempool transactions)
     int32_t epoch = GetCurrentEpoch(nHeight);
     COracleBundle bundle = manager.GetCurrentBundle(epoch);
+    const int nRequired = manager.GetMinOracleCount();
 
-    if (bundle.HasConsensus()) {
-        CAmount price = bundle.GetConsensusPrice();
+    if (bundle.HasConsensus(nRequired)) {
+        CAmount price = bundle.GetConsensusPrice(nRequired);
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using current epoch price for height %d (epoch %d): %lld micro-USD\n",
                  nHeight, epoch, price);
         return price;
@@ -1729,8 +1731,8 @@ CAmount GetOraclePriceForHeight(int nHeight)
     // Try previous epoch as fallback
     if (epoch > 0) {
         COracleBundle prev_bundle = manager.GetCurrentBundle(epoch - 1);
-        if (prev_bundle.HasConsensus()) {
-            CAmount price = prev_bundle.GetConsensusPrice();
+        if (prev_bundle.HasConsensus(nRequired)) {
+            CAmount price = prev_bundle.GetConsensusPrice(nRequired);
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using previous epoch price for height %d: %lld micro-USD\n",
                      nHeight, price);
             return price;

@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
     manager.TryCreateBundle(current_epoch);  // Explicitly create bundle for this epoch
     COracleBundle bundle = manager.GetCurrentBundle(current_epoch);
 
-    BOOST_CHECK(bundle.IsValid());
+    BOOST_CHECK(bundle.IsValid(1));
     BOOST_CHECK_EQUAL(bundle.messages.size(), 1);  // Phase One: 1-of-1
     BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, mock_price);
 
@@ -193,7 +193,7 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
     COracleBundle extracted_bundle;
     BOOST_REQUIRE(manager.ExtractOracleBundle(coinbase, extracted_bundle));
 
-    BOOST_CHECK(extracted_bundle.IsValid());
+    BOOST_CHECK(extracted_bundle.IsValid(1));
     BOOST_CHECK_EQUAL(extracted_bundle.messages.size(), 1);
     BOOST_CHECK_EQUAL(extracted_bundle.median_price_micro_usd, mock_price);
     BOOST_CHECK_EQUAL(extracted_bundle.messages[0].oracle_id, msg.oracle_id);

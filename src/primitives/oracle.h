@@ -133,14 +133,16 @@ public:
     }
 
     //! Validation
-    bool IsValid(int64_t reference_time = 0, int min_required = ORACLE_CONSENSUS_REQUIRED) const;  // Validate bundle structure and signatures
+    //! @param min_required  Number of oracle messages required for consensus (from chainparams.nOracleRequiredMessages)
+    //! @param reference_time  Block time for timestamp validation (0 = use current time)
+    bool IsValid(int min_required, int64_t reference_time = 0) const;  // Validate bundle structure and signatures
 
     //! Message management
     bool AddMessage(const COraclePriceMessage& message);
 
-    //! Consensus validation
-    bool HasConsensus(int min_required = ORACLE_CONSENSUS_REQUIRED) const;   // Configurable consensus threshold (default: 8 of 15)
-    uint64_t GetConsensusPrice(int min_required = ORACLE_CONSENSUS_REQUIRED) const;     // Median price calculation (DigiDollar cents: 100 = $1.00)
+    //! Consensus validation — min_required MUST come from consensus.nOracleRequiredMessages
+    bool HasConsensus(int min_required) const;
+    uint64_t GetConsensusPrice(int min_required) const;
     bool ValidateEpoch(int32_t current_epoch) const;
 
     //! Outlier filtering

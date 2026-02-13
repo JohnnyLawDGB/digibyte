@@ -5906,7 +5906,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01h_bundle_isvalid_no_rebind)
 
     // WARNING: bundle.IsValid() with attacker pubkey DOES pass
     // This is NOT a bug — the function trusts its caller to bind pubkeys
-    BOOST_CHECK_MESSAGE(bundle.IsValid(GetTime(), 1),
+    BOOST_CHECK_MESSAGE(bundle.IsValid(1, GetTime()),
         "INFO [T3-01h]: bundle.IsValid() passes with attacker pubkey — this is expected. "
         "The function verifies cryptographic correctness, not authorization. "
         "Callers (ExtractOracleBundle, P2P handler) must bind chainparams pubkeys first.");
@@ -5990,13 +5990,13 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
         "pubkeys from chainparams before calling VerifyPhase2().");
 
     // The bundle also passes consensus check
-    BOOST_CHECK_MESSAGE(forgedBundle.HasConsensus(),
+    BOOST_CHECK_MESSAGE(forgedBundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED),
         "BUG [T3-02a]: Forged bundle meets consensus threshold (8 messages). "
         "Combined with missing pubkey rebinding, this means the entire P2P "
         "validation pipeline is bypassed.");
 
     // Bundle.IsValid also passes (it doesn't rebind either)
-    BOOST_CHECK_MESSAGE(forgedBundle.IsValid(GetTime(), ORACLE_CONSENSUS_REQUIRED),
+    BOOST_CHECK_MESSAGE(forgedBundle.IsValid(ORACLE_CONSENSUS_REQUIRED, GetTime()),
         "BUG [T3-02a]: bundle.IsValid() passes with attacker pubkeys — confirming "
         "that the bundle passes ALL P2P validation checks and will be relayed.");
 
@@ -6994,42 +6994,41 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04f_dedup_hash_fix_verified)
 }
 
 /**
- * RED TEAM T3-05: Consensus Threshold Bypass
+ * RED TEAM T3-05: Consensus Threshold Bypass — FIXED
  *
- * ATTACK VECTOR: Multiple code paths call HasConsensus() and GetConsensusPrice()
+ * ORIGINAL BUG: Multiple code paths called HasConsensus() and GetConsensusPrice()
  * WITHOUT passing the network-specific min_oracle_count parameter. The default
- * parameter is ORACLE_CONSENSUS_REQUIRED=8 (compile-time constant).
+ * parameter was ORACLE_CONSENSUS_REQUIRED=8 (compile-time constant).
  *
- * On any network where nOracleRequiredMessages != ORACLE_CONSENSUS_REQUIRED,
- * these code paths use the WRONG threshold:
- *   - Testnet: needs 5, default requires 8 → 5-7 message bundles rejected
- *   - Any future network with fewer oracles: threshold impossibly high
+ * FIX: Removed default parameters from HasConsensus(), GetConsensusPrice(), and
+ * IsValid(). All callers now must pass min_required explicitly from
+ * consensus.nOracleRequiredMessages (chainparams). This prevents any future
+ * code from accidentally using the wrong threshold.
  *
- * AFFECTED CODE PATHS:
- *   1. UpdateCachedPrice() — uses HasConsensus()/GetConsensusPrice() defaults
- *   2. OracleDataValidator::ValidateOracleBundle() — uses HasConsensus() default
- *   3. OracleDataValidator::CheckOracleConsensus() — uses HasConsensus() default
- *   4. GetOraclePriceForHeight() fallback — uses HasConsensus()/GetConsensusPrice()
- *   5. net_processing.cpp ORACLEBUNDLE handler — uses HasConsensus() default
- *   6. EmergencyRedemptionRatio::HasOracleConsensus() — uses HasConsensus() default
+ * FIXED CODE PATHS:
+ *   1. UpdateCachedPrice() — now uses min_oracle_count member
+ *   2. OracleDataValidator::ValidateOracleBundle() — now uses params.nOracleRequiredMessages
+ *   3. OracleDataValidator::CheckOracleConsensus() — now accepts params, uses nOracleRequiredMessages
+ *   4. GetOraclePriceForHeight() fallback — now uses manager.GetMinOracleCount()
+ *   5. net_processing.cpp ORACLEBUNDLE handler — now uses m_chainman.GetConsensus().nOracleRequiredMessages
+ *   6. EmergencyRedemptionRatio::HasOracleConsensus() — now accepts params, uses nOracleRequiredMessages
  */
 BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
 {
-    // ORACLE_CONSENSUS_REQUIRED is a compile-time constant (8)
-    // HasConsensus() defaults to this value when called without arguments
-    // This test proves that bundles meeting a LOWER threshold (e.g., testnet 5-of-8)
-    // are incorrectly rejected by code paths using the default
+    // FIX VERIFIED [T3-05a]: HasConsensus() no longer has default parameters.
+    // All callers must pass min_required explicitly from chainparams.
+    // The compile-time ORACLE_CONSENSUS_REQUIRED constant is only used in tests
+    // to explicitly request mainnet's 8-of-15 threshold.
 
     const Consensus::Params& params = Params().GetConsensus();
     int runtime_required = params.nOracleRequiredMessages;
     int runtime_total = params.nOracleTotalOracles;
 
     BOOST_TEST_MESSAGE("Network oracle config: " << runtime_required << "-of-" << runtime_total);
-    BOOST_TEST_MESSAGE("Compile-time default ORACLE_CONSENSUS_REQUIRED=" << ORACLE_CONSENSUS_REQUIRED);
+    BOOST_TEST_MESSAGE("Compile-time constant ORACLE_CONSENSUS_REQUIRED=" << ORACLE_CONSENSUS_REQUIRED);
 
     // Simulate a testnet scenario: 5 valid messages should meet 5-of-8 threshold
-    // but HasConsensus() default requires 8
-    int testnet_required = 5;  // Testnet's nOracleRequiredMessages
+    int testnet_required = 5;
 
     COracleBundle bundle(0);
     for (int i = 0; i < testnet_required; i++) {
@@ -7046,42 +7045,29 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
     BOOST_CHECK_MESSAGE(bundle.HasConsensus(testnet_required),
         "5 messages should meet 5-of-8 threshold (testnet)");
 
-    // BUG: Default parameter uses ORACLE_CONSENSUS_REQUIRED=8
-    // 5 messages < 8 → HasConsensus() returns false
-    bool default_consensus = bundle.HasConsensus();
-    BOOST_CHECK_MESSAGE(!default_consensus,
-        "BUG CONFIRMED: HasConsensus() with default ORACLE_CONSENSUS_REQUIRED=" <<
-        ORACLE_CONSENSUS_REQUIRED << " rejects 5-message bundle that meets testnet 5-of-8 threshold. "
-        "Code paths using HasConsensus() without explicit min_oracle_count will reject "
-        "valid testnet bundles unless ALL 8 oracles respond.");
+    // With mainnet threshold (8), 5 messages is NOT sufficient — this is CORRECT behavior
+    bool mainnet_consensus = bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED);
+    BOOST_CHECK_MESSAGE(!mainnet_consensus,
+        "FIXED: HasConsensus(8) correctly rejects 5-message bundle. "
+        "After fix, there are no default parameters — all callers pass explicit threshold "
+        "from chainparams.nOracleRequiredMessages, so each network uses the right value.");
 
-    // 5 messages also fails GetConsensusPrice() default
-    uint64_t default_price = bundle.GetConsensusPrice();
-    BOOST_CHECK_MESSAGE(default_price == 0,
-        "BUG CONFIRMED: GetConsensusPrice() also uses default threshold 8 — "
-        "returns 0 for 5-message bundle");
-
+    // GetConsensusPrice with correct threshold works
     uint64_t correct_price = bundle.GetConsensusPrice(testnet_required);
     BOOST_CHECK_MESSAGE(correct_price == 50000,
         "With correct threshold (5), GetConsensusPrice returns 50000");
 
-    // Even 7-of-8 messages fail the default on testnet
-    for (int i = testnet_required; i < 7; i++) {
-        CKey key;
-        key.MakeNewKey(true);
-        COraclePriceMessage msg(i, 50000, GetTime());
-        msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        msg.SignPhase2(key);
-        bundle.messages.push_back(msg);
-    }
-    BOOST_CHECK_MESSAGE(!bundle.HasConsensus(),
-        "BUG: 7 messages still fails default threshold of 8 — "
-        "even with 7-of-8 oracle quorum, system is dead if one oracle is offline");
+    // GetConsensusPrice with mainnet threshold correctly returns 0
+    uint64_t mainnet_price = bundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
+    BOOST_CHECK_MESSAGE(mainnet_price == 0,
+        "FIXED: GetConsensusPrice(8) correctly returns 0 for 5-message bundle. "
+        "On testnet, callers use nOracleRequiredMessages=5 and get the correct price.");
 }
 
 BOOST_AUTO_TEST_CASE(T3_05b_update_cached_price_uses_wrong_threshold)
 {
-    // UpdateCachedPrice calls HasConsensus()/GetConsensusPrice() with defaults
+    // FIX VERIFIED [T3-05b]: UpdateCachedPrice now uses min_oracle_count
+    // (set from consensus.nOracleRequiredMessages during initialization)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
@@ -7102,32 +7088,29 @@ BOOST_AUTO_TEST_CASE(T3_05b_update_cached_price_uses_wrong_threshold)
     }
     bundle.median_price_micro_usd = 50000;
 
-    // Store via UpdateBundle — this path correctly uses min_oracle_count
-    // So cached_price WILL be set here (5 >= 5)
+    // Store via UpdateBundle
     manager.UpdateBundle(bundle);
 
-    // But UpdateCachedPrice uses HasConsensus()/GetConsensusPrice() with DEFAULT threshold
-    // This is a SEPARATE code path that bypasses min_oracle_count
+    // FIXED: UpdateCachedPrice now uses min_oracle_count (5), not ORACLE_CONSENSUS_REQUIRED (8)
     bool updated = manager.UpdateCachedPrice(epoch);
 
-    // BUG: Returns false because HasConsensus() defaults to 8, not min_oracle_count (5)
-    BOOST_CHECK_MESSAGE(!updated,
-        "BUG CONFIRMED: UpdateCachedPrice fails with 5 messages because "
-        "it calls HasConsensus() with default " << ORACLE_CONSENSUS_REQUIRED <<
-        " instead of manager's min_oracle_count (5)");
+    BOOST_CHECK_MESSAGE(updated,
+        "FIXED: UpdateCachedPrice succeeds with 5 messages because "
+        "it now uses min_oracle_count (5) from chainparams, not hardcoded 8");
 
     manager.Clear();
 }
 
 BOOST_AUTO_TEST_CASE(T3_05c_validate_oracle_bundle_wrong_threshold)
 {
-    // OracleDataValidator::ValidateOracleBundle uses HasConsensus() with default
+    // FIX VERIFIED [T3-05c]: ValidateOracleBundle now uses params.nOracleRequiredMessages
     const Consensus::Params& params = Params().GetConsensus();
+    int required = params.nOracleRequiredMessages;
 
-    // Create a 5-message bundle (valid for testnet 5-of-8)
+    // Create a bundle with exactly the required messages for this network
     int32_t epoch = GetCurrentEpoch(1000);
     COracleBundle bundle(epoch);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < required; i++) {
         CKey key;
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, GetTime());
@@ -7137,30 +7120,27 @@ BOOST_AUTO_TEST_CASE(T3_05c_validate_oracle_bundle_wrong_threshold)
     }
     bundle.median_price_micro_usd = 50000;
 
-    // ValidateOracleBundle internally calls CheckOracleConsensus which calls
-    // HasConsensus() with the default ORACLE_CONSENSUS_REQUIRED=8
-    // 5 messages < 8 → bundle rejected before signature validation even starts
+    // FIXED: ValidateOracleBundle now passes params.nOracleRequiredMessages to HasConsensus
     bool valid = OracleDataValidator::ValidateOracleBundle(bundle, epoch, params);
 
-    BOOST_CHECK_MESSAGE(!valid,
-        "BUG CONFIRMED: ValidateOracleBundle rejects 5-message bundle because "
-        "CheckOracleConsensus uses default threshold " << ORACLE_CONSENSUS_REQUIRED <<
-        " instead of network-specific nOracleRequiredMessages");
+    BOOST_CHECK_MESSAGE(valid,
+        "FIXED: ValidateOracleBundle accepts " << required << "-message bundle because "
+        "it now uses params.nOracleRequiredMessages instead of hardcoded ORACLE_CONSENSUS_REQUIRED");
 }
 
 BOOST_AUTO_TEST_CASE(T3_05d_net_processing_oraclebundle_wrong_threshold)
 {
-    // The P2P ORACLEBUNDLE handler in net_processing.cpp calls:
-    //   bundle_msg.bundle.HasConsensus()
-    // with NO explicit threshold parameter.
+    // FIX VERIFIED [T3-05d]: P2P ORACLEBUNDLE handler now uses
+    // m_chainman.GetConsensus().nOracleRequiredMessages instead of the
+    // compile-time ORACLE_CONSENSUS_REQUIRED constant.
     //
-    // On testnet (5-of-8): valid bundles with 5-7 messages are rejected at P2P
-    // layer, peers are misbehavior-banned (+5) for sending them.
-    //
-    // This test proves the threshold mismatch exists at the API level.
+    // This test verifies the API-level fix: HasConsensus() requires explicit parameter.
+
+    const Consensus::Params& params = Params().GetConsensus();
+    int required = params.nOracleRequiredMessages;
 
     COracleBundle bundle(0);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < required; i++) {
         CKey key;
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, GetTime());
@@ -7170,14 +7150,13 @@ BOOST_AUTO_TEST_CASE(T3_05d_net_processing_oraclebundle_wrong_threshold)
     }
     bundle.median_price_micro_usd = 50000;
 
-    // The P2P handler does exactly this:
-    bool p2p_check = bundle.HasConsensus();  // defaults to 8
+    // With correct chainparams threshold, bundle has consensus
+    bool p2p_check = bundle.HasConsensus(required);
 
-    BOOST_CHECK_MESSAGE(!p2p_check,
-        "BUG CONFIRMED: P2P ORACLEBUNDLE handler's HasConsensus() (default " <<
-        ORACLE_CONSENSUS_REQUIRED << ") rejects 5-message bundle. "
-        "On testnet, peers sending valid 5-of-8 bundles get Misbehaving(+5). "
-        "If sustained, legitimate oracle relaying peers get banned.");
+    BOOST_CHECK_MESSAGE(p2p_check,
+        "FIXED: HasConsensus(" << required << ") accepts " << required << "-message bundle. "
+        "P2P handler now uses chainparams threshold, so valid bundles are not rejected "
+        "and legitimate oracle peers are not banned.");
 }
 
 BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_hardcodes_epoch_zero)

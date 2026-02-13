@@ -61,6 +61,7 @@ public:
     void SetEnabled(bool enable) { enabled = enable; }
     bool IsEnabled() const { return enabled; }
     void SetMinOracleCount(int32_t min_count) { min_oracle_count = min_count; }
+    int32_t GetMinOracleCount() const { return min_oracle_count; }
 
     //! Message management
     bool AddOracleMessage(const COraclePriceMessage& message);
@@ -191,7 +192,7 @@ private:
     //! Internal validation helpers
     static bool CheckOracleSignatures(const COracleBundle& bundle, const Consensus::Params& params);
     static bool CheckOracleEpoch(const COracleBundle& bundle, int32_t current_epoch);
-    static bool CheckOracleConsensus(const COracleBundle& bundle);
+    static bool CheckOracleConsensus(const COracleBundle& bundle, const Consensus::Params& params);
 };
 
 //! Global oracle bundle manager instance

@@ -5636,9 +5636,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── Step 5: Remaining validation (consensus, epoch) ──
-        if (!bundle_msg.bundle.HasConsensus()) {
+        const int nOracleRequired = m_chainman.GetConsensus().nOracleRequiredMessages;
+        if (!bundle_msg.bundle.HasConsensus(nOracleRequired)) {
             LogPrint(BCLog::NET, "Oracle bundle lacks consensus (%d of %d required) from peer=%d\n",
-                      bundle_msg.bundle.messages.size(), ORACLE_CONSENSUS_REQUIRED, pfrom.GetId());
+                      bundle_msg.bundle.messages.size(), nOracleRequired, pfrom.GetId());
             Misbehaving(*peer, 5, "oracle bundle lacks consensus");
             return;
         }

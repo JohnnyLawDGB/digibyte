@@ -254,12 +254,12 @@ BOOST_AUTO_TEST_CASE(test_oracle_bundle_consensus_validation)
         COraclePriceMessage msg{i, 5, GetTime()};
         bundle.AddMessage(msg);
     }
-    BOOST_CHECK(!bundle.HasConsensus()); // Only 7 messages, need 8
+    BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Only 7 messages, need 8
 
     // Add one more message to reach consensus
     COraclePriceMessage msg8{8, 5, GetTime()};
     bundle.AddMessage(msg8);
-    BOOST_CHECK(bundle.HasConsensus()); // Now has 8 messages
+    BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Now has 8 messages
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_message_types_in_all_net_message_types)

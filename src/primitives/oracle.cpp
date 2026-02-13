@@ -200,7 +200,7 @@ COracleBundle::COracleBundle(int32_t epoch_in) : epoch(epoch_in)
 {
 }
 
-bool COracleBundle::IsValid(int64_t reference_time, int min_required) const
+bool COracleBundle::IsValid(int min_required, int64_t reference_time) const
 {
     // Check if bundle has messages
     if (messages.empty()) {

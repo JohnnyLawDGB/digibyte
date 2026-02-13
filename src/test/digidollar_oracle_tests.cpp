@@ -156,26 +156,26 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_consensus_requirement)
     COracleBundle bundle(42);
 
     // No messages - no consensus
-    BOOST_CHECK(!bundle.HasConsensus());
+    BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Add 7 messages - still no consensus (need 8 of 15)
     for (int i = 0; i < 7; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
-    BOOST_CHECK(!bundle.HasConsensus());
+    BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Add 8th message - now has consensus
     COraclePriceMessage msg8(7, 6000, GetTime());  // $0.006 (realistic price)
     bundle.AddMessage(msg8);
-    BOOST_CHECK(bundle.HasConsensus());
+    BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Test with more messages (up to 15)
     for (int i = 8; i < 15; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
-    BOOST_CHECK(bundle.HasConsensus());
+    BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Test with too many messages (should reject)
     COraclePriceMessage extra_msg(15, 6000, GetTime());  // $0.006 (realistic price)
@@ -196,7 +196,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_median_calculation)
         bundle.AddMessage(msg);
     }
 
-    CAmount median_price = bundle.GetConsensusPrice();
+    CAmount median_price = bundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
     // Sorted: 3000, 4000, 4500, 4700, 4800, 5000, 5200, 5500, 6000 (micro-USD)
     // Median (5th element): 4800 micro-USD = $0.0048
     BOOST_CHECK_EQUAL(median_price, 4800);
@@ -205,7 +205,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_median_calculation)
     COraclePriceMessage msg10(9, 4900, GetTime());
     bundle.AddMessage(msg10);
 
-    median_price = bundle.GetConsensusPrice();
+    median_price = bundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
     // Sorted: 3000, 4000, 4500, 4700, 4800, 4900, 5000, 5200, 5500, 6000 (micro-USD)
     // Median (average of 5th and 6th): (4800 + 4900) / 2 = 4850 micro-USD
     BOOST_CHECK_EQUAL(median_price, 4850);
@@ -828,7 +828,7 @@ BOOST_AUTO_TEST_CASE(oracle_data_validation)
         bundle.AddMessage(msg);
     }
 
-    BOOST_CHECK(bundle.HasConsensus());
+    BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Test epoch validation
     BOOST_CHECK(bundle.ValidateEpoch(50));  // Current epoch
@@ -948,7 +948,7 @@ BOOST_AUTO_TEST_CASE(test_price_aggregation_outliers)
         insufficient_bundle.AddMessage(outlier_msg);
     }
 
-    BOOST_CHECK(!insufficient_bundle.HasConsensus());
+    BOOST_CHECK(!insufficient_bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Test statistical outlier detection with IQR method
     COracleBundle iqr_bundle(3);

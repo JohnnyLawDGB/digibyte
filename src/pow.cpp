@@ -412,6 +412,12 @@ const CBlockIndex* GetLastBlockIndexForAlgo(const CBlockIndex* pindex, const Con
 
 const CBlockIndex* GetLastBlockIndexForAlgoFast(const CBlockIndex* pindex, const Consensus::Params& params, int algo)
 {
+    // DGB-BUG-011 FIX: Check algo bounds before using as array index
+    // If algo is ALGO_UNKNOWN (-1) or out of bounds, fall back to slow iteration
+    if (algo < 0 || algo >= NUM_ALGOS_IMPL) {
+        return GetLastBlockIndexForAlgo(pindex, params, algo);
+    }
+
     for (; pindex; pindex = pindex->lastAlgoBlocks[algo])
     {
         if (pindex->GetAlgo() != algo)

@@ -105,6 +105,10 @@ bool CCrypter::Decrypt(const std::vector<unsigned char>& vchCiphertext, CKeyingM
     return true;
 }
 
+// DGB-SEC-006: nIV is Hash(pubkey) — deterministic by design.
+// See crypter.h for full security rationale. The first 16 bytes of
+// the 32-byte hash are used as the AES-256-CBC initialization vector,
+// binding each ciphertext to its corresponding public key.
 bool EncryptSecret(const CKeyingMaterial& vMasterKey, const CKeyingMaterial &vchPlaintext, const uint256& nIV, std::vector<unsigned char> &vchCiphertext)
 {
     CCrypter cKeyCrypter;

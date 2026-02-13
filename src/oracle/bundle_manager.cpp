@@ -460,6 +460,11 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
 
         // Per-oracle entries: oracle_id + schnorr_sig
         for (const auto& msg : bundle.messages) {
+            // SECURITY (DGB-SEC-004): Defense-in-depth — reject at serialization
+            if (msg.oracle_id > 255) {
+                LogPrintf("Oracle: Phase Two rejecting oracle_id %d > 255\n", msg.oracle_id);
+                return CScript();
+            }
             p2_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF));
             if (msg.schnorr_sig.size() == 64) {
                 p2_data.insert(p2_data.end(), msg.schnorr_sig.begin(), msg.schnorr_sig.end());
@@ -493,6 +498,11 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
     compact_data.reserve(17);
 
     // Oracle ID (uint8 for Phase One, expandable to uint32 for Phase Two)
+    // SECURITY (DGB-SEC-004): Defense-in-depth — reject at serialization
+    if (msg.oracle_id > 255) {
+        LogPrintf("Oracle: Phase One rejecting oracle_id %d > 255\n", msg.oracle_id);
+        return CScript();
+    }
     compact_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF));
 
     // Price in micro-USD (uint64, little-endian)
@@ -1054,6 +1064,15 @@ void OracleBundleManager::UpdateEpochBundle(int32_t epoch)
 
 bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& message) const
 {
+    // SECURITY (DGB-SEC-004): Reject oracle_id > 255. The on-chain script
+    // format stores oracle_id as a single byte. Accepting larger IDs would
+    // silently truncate, causing ID collisions and signature mismatches.
+    if (message.oracle_id > 255) {
+        LogPrintf("Oracle: Rejecting message with oracle_id %d > 255 (exceeds 1-byte on-chain format)\n",
+                 message.oracle_id);
+        return false;
+    }
+
     // Phase One: Skip chainparams check when min_oracle_count == 1 (testing mode)
     if (min_oracle_count == 1) {
         if (!message.IsValid()) return false;

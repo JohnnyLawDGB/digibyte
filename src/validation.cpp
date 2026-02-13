@@ -1827,10 +1827,11 @@ CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight) {
         return oracle_price_micro_usd;
     }
 
-    // For regtest, check the mock oracle
+    // For regtest only, check the mock oracle
     // Mock oracle now returns price directly in micro-USD (no conversion needed)
     // e.g., 6500 micro-USD = $0.0065 per DGB
-    if (MockOracleManager::GetInstance().IsEnabled()) {
+    // SECURITY FIX (DGB-SEC-005): Guard mock oracle access behind REGTEST check
+    if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         CAmount mock_price_micro_usd = MockOracleManager::GetInstance().GetCurrentPrice();
         if (mock_price_micro_usd > 0) {
             LogPrintf("DigiDollar: Using mock oracle price: %lld micro-USD ($%.6f)\n",

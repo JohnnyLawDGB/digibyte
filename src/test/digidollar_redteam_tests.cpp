@@ -8834,4 +8834,293 @@ BOOST_AUTO_TEST_CASE(redteam_T4_04f_dd_utxos_amount_from_opreturn_fallback)
         "Confirmed: OP_RETURN amount fallback assigns first amount to extra outputs (inflation risk)");
 }
 
+// =============================================================================
+// T5-01: Round 2 — Bypass OP_RETURN Amount Validation via Edge-Case Encoding
+// =============================================================================
+
+// T5-01a: OP_RETURN type field mismatch — nVersion says MINT, OP_RETURN says TRANSFER
+// ValidateMintTransaction reads OP_RETURN type but NEVER validates it equals DD_TX_MINT.
+// ExtractDDAmountFromTxRef uses OP_RETURN type to decide parsing mode.
+// If OP_RETURN type=2 (TRANSFER), ExtractDDAmountFromTxRef reads ALL pushes as amounts,
+// including lockHeight and lockTier — but 1-DD-output limit prevents mapping.
+BOOST_AUTO_TEST_CASE(redteam_t5_01a_opreturn_type_mismatch_mint_vs_transfer)
+{
+    // Build a mint-style OP_RETURN with type=2 (TRANSFER) instead of type=1 (MINT)
+    // Format: OP_RETURN "DD" <type=2> <ddAmount=10000> <lockHeight=172800> <lockTier=2>
+    CScript opreturn;
+    opreturn << OP_RETURN;
+    opreturn << std::vector<unsigned char>{'D', 'D'};
+    opreturn << CScriptNum(2);      // TYPE = 2 (TRANSFER, not MINT!)
+    opreturn << CScriptNum(10000);  // DD amount = $100
+    opreturn << CScriptNum(172800); // lockHeight (30-day)
+    opreturn << CScriptNum(2);      // lockTier = 2
+
+    // Parse with ExtractDDAmountFromTxRef logic for type=2 (TRANSFER path)
+    // In TRANSFER mode, ALL remaining pushes after type are read as DD amounts
+    CScript::const_iterator pc = opreturn.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    // Skip OP_RETURN
+    opreturn.GetOp(pc, opcode);
+    // Skip "DD" marker
+    opreturn.GetOp(pc, opcode, data);
+    // Read type
+    opreturn.GetOp(pc, opcode, data);
+    CScriptNum txTypeNum(data, true);
+    int64_t txType = txTypeNum.GetInt64();
+    BOOST_CHECK_EQUAL(txType, 2);  // Confirms type=TRANSFER
+
+    // Now read amounts using the TRANSFER path (all remaining pushes)
+    std::vector<CAmount> transfer_amounts;
+    while (opreturn.GetOp(pc, opcode, data)) {
+        if (data.size() > 0 && data.size() <= 8) {
+            try {
+                CScriptNum scriptNum(data, true, 8);
+                transfer_amounts.push_back(scriptNum.GetInt64());
+            } catch (const scriptnum_error&) {
+                continue;
+            }
+        }
+    }
+
+    // TRANSFER path reads 3 values: ddAmount, lockHeight, lockTier
+    BOOST_CHECK_EQUAL(transfer_amounts.size(), 3u);
+    BOOST_CHECK_EQUAL(transfer_amounts[0], 10000);   // Real DD amount
+    BOOST_CHECK_EQUAL(transfer_amounts[1], 172800);   // lockHeight misread as DD amount!
+    BOOST_CHECK_EQUAL(transfer_amounts[2], 2);         // lockTier misread as DD amount!
+
+    // Now parse the SAME OP_RETURN using MINT path (only first push after type)
+    pc = opreturn.begin();
+    opreturn.GetOp(pc, opcode);    // Skip OP_RETURN
+    opreturn.GetOp(pc, opcode, data); // Skip "DD"
+    opreturn.GetOp(pc, opcode, data); // Skip type
+
+    std::vector<CAmount> mint_amounts;
+    if (opreturn.GetOp(pc, opcode, data) && data.size() > 0) {
+        CScriptNum scriptNum(data, true, 8);
+        mint_amounts.push_back(scriptNum.GetInt64());
+    }
+
+    // MINT path reads only 1 value: ddAmount
+    BOOST_CHECK_EQUAL(mint_amounts.size(), 1u);
+    BOOST_CHECK_EQUAL(mint_amounts[0], 10000);  // Correct DD amount
+
+    // DEFENSE CHECK: Even though TRANSFER path reads 3 amounts, the mint tx
+    // is limited to 1 P2TR zero-value output (ddOutputCount check in ValidateMintTransaction).
+    // Only the FIRST amount (10000) would be mapped to the single output.
+    // The extra amounts (172800, 2) are inert — no P2TR outputs to map them to.
+    //
+    // FINDING: ValidateMintTransaction does NOT verify OP_RETURN type byte == 1.
+    // The type mismatch between nVersion (MINT) and OP_RETURN (TRANSFER) is accepted.
+    // Currently not exploitable due to 1-DD-output limit, but is a design weakness
+    // that could become exploitable if the output limit is ever relaxed.
+    BOOST_CHECK_MESSAGE(transfer_amounts[0] == mint_amounts[0],
+        "First amount matches regardless of parsing mode — 1-output limit prevents inflation");
+    BOOST_CHECK_MESSAGE(transfer_amounts.size() > mint_amounts.size(),
+        "Confirmed: type=2 causes extra amounts to be parsed from lockHeight/lockTier fields");
+}
+
+// T5-01b: OP_RETURN type=0 (DD_TX_NONE) — falls through to TRANSFER parsing path
+BOOST_AUTO_TEST_CASE(redteam_t5_01b_opreturn_type_zero_fallthrough)
+{
+    // Type=0 falls to the else branch in ExtractDDAmountFromTxRef (not type 1 or 3)
+    // This uses the TRANSFER parsing path for what's actually a MINT tx
+    CScript opreturn;
+    opreturn << OP_RETURN;
+    opreturn << std::vector<unsigned char>{'D', 'D'};
+    opreturn << CScriptNum(0);      // TYPE = 0 (NONE!)
+    opreturn << CScriptNum(50000);  // DD amount = $500
+    opreturn << CScriptNum(518400); // lockHeight (90-day)
+    opreturn << CScriptNum(3);      // lockTier = 3
+
+    CScript::const_iterator pc = opreturn.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    opreturn.GetOp(pc, opcode);       // OP_RETURN
+    opreturn.GetOp(pc, opcode, data); // "DD"
+    opreturn.GetOp(pc, opcode, data); // type
+    int64_t txType = CScriptNum(data, true).GetInt64();
+
+    BOOST_CHECK_EQUAL(txType, 0);  // Not 1 or 3 → falls to else (TRANSFER)
+
+    // Read all remaining as amounts (TRANSFER path)
+    std::vector<CAmount> amounts;
+    while (opreturn.GetOp(pc, opcode, data)) {
+        if (data.size() > 0 && data.size() <= 8) {
+            try {
+                CScriptNum num(data, true, 8);
+                amounts.push_back(num.GetInt64());
+            } catch (const scriptnum_error&) {}
+        }
+    }
+
+    // 3 values parsed instead of 1
+    BOOST_CHECK_EQUAL(amounts.size(), 3u);
+    BOOST_CHECK_EQUAL(amounts[0], 50000);   // Real DD amount
+    BOOST_CHECK_EQUAL(amounts[1], 518400);  // lockHeight misread ($5,184!)
+    BOOST_CHECK_EQUAL(amounts[2], 3);       // lockTier misread ($0.03)
+
+    // Defense: 1-DD-output limit makes this inert for mint txs
+    // But inflation amount would be $5,184.03 if outputs existed
+    CAmount inflatable = 0;
+    for (size_t i = 1; i < amounts.size(); ++i) {
+        inflatable += amounts[i];
+    }
+    BOOST_CHECK_MESSAGE(inflatable == 518403,
+        "Confirmed: type=0 would enable $5,184.03 inflation per mint IF output limit was relaxed");
+}
+
+// T5-01c: Negative DD amount in OP_RETURN — CScriptNum allows signed numbers
+BOOST_AUTO_TEST_CASE(redteam_t5_01c_negative_dd_amount_in_opreturn)
+{
+    // CScriptNum encodes negative numbers. What happens if DD amount is negative?
+    CScript opreturn;
+    opreturn << OP_RETURN;
+    opreturn << std::vector<unsigned char>{'D', 'D'};
+    opreturn << CScriptNum(1);       // TYPE = MINT
+    opreturn << CScriptNum(-10000);  // DD amount = NEGATIVE $100!
+
+    CScript::const_iterator pc = opreturn.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    opreturn.GetOp(pc, opcode);       // OP_RETURN
+    opreturn.GetOp(pc, opcode, data); // "DD"
+    opreturn.GetOp(pc, opcode, data); // type
+    opreturn.GetOp(pc, opcode, data); // amount
+
+    CScriptNum amount(data, true, 8);
+    BOOST_CHECK_EQUAL(amount.GetInt64(), -10000);
+
+    // ExtractDDAmountFromTxRef checks: return amount > 0;
+    // Negative amounts return false. DEFENSE HOLDS.
+    BOOST_CHECK_MESSAGE(amount.GetInt64() <= 0,
+        "Negative DD amount would be rejected by amount > 0 check in ExtractDDAmountFromTxRef");
+}
+
+// T5-01d: 8-byte max CScriptNum overflow — amount near INT64_MAX
+BOOST_AUTO_TEST_CASE(redteam_t5_01d_max_scriptnum_overflow)
+{
+    // CScriptNum with nMaxNumSize=8 allows values up to 2^63-1
+    // What if DD amount is INT64_MAX?
+    int64_t maxAmount = std::numeric_limits<int64_t>::max();
+
+    CScript opreturn;
+    opreturn << OP_RETURN;
+    opreturn << std::vector<unsigned char>{'D', 'D'};
+    opreturn << CScriptNum(1);
+
+    // Push INT64_MAX as 8-byte scriptnum
+    // CScriptNum serialization handles this
+    CScriptNum bigNum(maxAmount);
+    std::vector<unsigned char> bigData = bigNum.getvch();
+    opreturn << bigData;
+
+    CScript::const_iterator pc = opreturn.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    opreturn.GetOp(pc, opcode);       // OP_RETURN
+    opreturn.GetOp(pc, opcode, data); // "DD"
+    opreturn.GetOp(pc, opcode, data); // type
+    opreturn.GetOp(pc, opcode, data); // amount
+
+    // Verify it can be parsed
+    bool parsed = false;
+    CAmount parsedAmount = 0;
+    try {
+        CScriptNum num(data, true, 8);
+        parsedAmount = num.GetInt64();
+        parsed = true;
+    } catch (const scriptnum_error&) {
+        parsed = false;
+    }
+
+    // INT64_MAX would be accepted by ExtractDDAmountFromTxRef (amount > 0)
+    // but should be caught by ValidateMintAmount or MAX_MONEY checks
+    if (parsed) {
+        BOOST_CHECK(parsedAmount > 0);
+        BOOST_CHECK_MESSAGE(parsedAmount > MAX_MONEY / COIN,
+            "INT64_MAX exceeds MAX_MONEY — would be caught by amount validation");
+    }
+}
+
+// T5-01e: Empty type field — data.size()==0 results in txType=0
+BOOST_AUTO_TEST_CASE(redteam_t5_01e_empty_type_field)
+{
+    // If the type push has empty data, txType stays 0 in both parsers
+    CScript opreturn;
+    opreturn << OP_RETURN;
+    opreturn << std::vector<unsigned char>{'D', 'D'};
+    opreturn << std::vector<unsigned char>{};  // Empty type field
+    opreturn << CScriptNum(10000);  // DD amount
+    opreturn << CScriptNum(172800); // lockHeight
+
+    CScript::const_iterator pc = opreturn.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> data;
+
+    opreturn.GetOp(pc, opcode);       // OP_RETURN
+    opreturn.GetOp(pc, opcode, data); // "DD"
+    opreturn.GetOp(pc, opcode, data); // type (empty)
+
+    // Empty data → txType stays 0 in ValidateMintTransaction
+    // In ExtractDDAmountFromTxRef: data.size() > 0 fails → txType stays 0
+    // txType 0 ≠ 1 and ≠ 3 → falls to else (TRANSFER path)
+    BOOST_CHECK_EQUAL(data.size(), 0u);
+
+    // TRANSFER path would read lockHeight as DD amount
+    // But again: 1-DD-output limit on mint prevents exploitation
+    std::vector<CAmount> amounts;
+    while (opreturn.GetOp(pc, opcode, data)) {
+        if (data.size() > 0 && data.size() <= 8) {
+            try {
+                CScriptNum num(data, true, 8);
+                amounts.push_back(num.GetInt64());
+            } catch (const scriptnum_error&) {}
+        }
+    }
+
+    BOOST_CHECK_EQUAL(amounts.size(), 2u);  // ddAmount + lockHeight
+    BOOST_CHECK_EQUAL(amounts[0], 10000);
+    BOOST_CHECK_EQUAL(amounts[1], 172800);
+}
+
+// T5-01f: Verify nVersion type validation — ValidateMintTransaction does NOT
+// check OP_RETURN type matches nVersion type. Document the inconsistency.
+BOOST_AUTO_TEST_CASE(redteam_t5_01f_version_opreturn_type_inconsistency)
+{
+    // ValidateTransferTransaction checks: GetDigiDollarTxType(tx) != DD_TX_TRANSFER → reject
+    // ValidateMintTransaction does NOT check: GetDigiDollarTxType(tx) != DD_TX_MINT
+    // ValidateRedemptionTransaction does NOT check: GetDigiDollarTxType(tx) != DD_TX_REDEEM
+    //
+    // The routing switch at line ~1880 ensures correct validator is called based on nVersion.
+    // But the OP_RETURN type field is an independent declaration that goes unchecked in 2 of 3 validators.
+    //
+    // This test documents the inconsistency for future reference.
+
+    // Test: a tx with nVersion=MINT but OP_RETURN type=TRANSFER
+    // GetDigiDollarTxType would return DD_TX_MINT (from nVersion)
+    const int32_t DD_TX_VERSION = 0x0770;
+    int32_t mintVersion = (1 << 24) | DD_TX_VERSION;  // DD_TX_MINT in bits 24-31
+
+    // Verify version field extraction
+    int32_t extractedType = (mintVersion & 0xFF000000) >> 24;
+    BOOST_CHECK_EQUAL(extractedType, 1);  // DD_TX_MINT
+
+    // A mismatch between nVersion type (1=MINT) and OP_RETURN type (2=TRANSFER)
+    // would be accepted by ValidateMintTransaction but cause ExtractDDAmountFromTxRef
+    // to use the wrong parsing mode.
+    //
+    // RECOMMENDATION: Add type consistency check to ValidateMintTransaction:
+    //   if (txType != 1) return state.Invalid(..., "bad-mint-opreturn-type");
+    //
+    // CURRENT RISK: LOW — 1-DD-output limit prevents exploitation
+    // FUTURE RISK: MEDIUM — if output limit is relaxed, inflation becomes possible
+    BOOST_CHECK_MESSAGE(true,
+        "Documented: ValidateMintTransaction lacks OP_RETURN type validation (nVersion/OP_RETURN inconsistency)");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

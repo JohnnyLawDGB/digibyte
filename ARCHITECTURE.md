@@ -1,7 +1,7 @@
 # DigiByte Blockchain Architecture
 **DigiByte v8.26 (Based on Bitcoin Core v26.2)**
 *Comprehensive Technical Documentation*
-*Last Updated: 2026-02-01*
+*Last Updated: 2026-02-14*
 *Validation Status: ✅ 100% Validated Against Codebase*
 
 ---
@@ -1090,7 +1090,9 @@ REDEEM Transaction:
 
 **File:** `src/digidollar/health.cpp`
 
-The system uses UTXO scanning for decentralized statistics:
+#### Baseline: UTXO Scanning
+
+The system uses UTXO scanning for initial decentralized statistics:
 
 ```cpp
 void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, ...)
@@ -1101,13 +1103,10 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, ...)
     while (pcursor->Valid()) {
         // Find DD vaults: P2TR output 0 with value > 0
         if (key.n == 0 && coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
-            // Fetch full transaction for OP_RETURN metadata
             CTransactionRef tx = GetTransaction(...);
-
-            // Extract DD amount from OP_RETURN (output 2)
             if (DigiDollar::ExtractDDAmount(tx->vout[2].scriptPubKey, ddAmount)) {
                 s_currentMetrics.totalDDSupply += ddAmount;
-                s_currentMetrics.totalCollateral += collateral;
+                s_currentMetrics.totalCollateral += dgbCollateral;
             }
         }
         pcursor->Next();
@@ -1115,7 +1114,25 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, ...)
 }
 ```
 
-**Result:** All nodes see identical network statistics.
+#### Incremental Tracking (T5-06)
+
+After the initial UTXO scan, DD supply and collateral are tracked incrementally via `ConnectBlock()`/`DisconnectBlock()` callbacks:
+
+```cpp
+// Called from ConnectBlock() under cs_main when a DD mint is connected:
+static void OnMintConnected(CAmount ddAmount, CAmount dgbCollateral);
+
+// Called from ConnectBlock() under cs_main when a DD redeem is connected:
+static void OnRedeemConnected(CAmount ddAmount, CAmount dgbCollateral);
+
+// Reverse operations for DisconnectBlock() (reorgs):
+static void OnMintDisconnected(CAmount ddAmount, CAmount dgbCollateral);
+static void OnRedeemDisconnected(CAmount ddAmount, CAmount dgbCollateral);
+```
+
+This avoids rescanning the entire UTXO set for every health check. The ERR system uses these live metrics to determine whether emergency redemption is active.
+
+**Result:** All nodes see identical network statistics, updated incrementally per block.
 
 ---
 
@@ -1126,16 +1143,27 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, ...)
 **Files:** `src/oracle/`, `src/primitives/oracle.h`
 
 ```
-Phase 1 (Testnet): 1-of-1 single oracle consensus
-Phase 2 (Mainnet): 8-of-15 multi-oracle consensus (planned)
+Phase 1 (Regtest/Early Testnet): 1-of-1 single oracle consensus
+Phase 2 (Testnet/Mainnet): Multi-oracle Schnorr consensus with IQR outlier filtering
 
 Data Flow:
-Exchange APIs → Price Aggregation → Oracle Message → P2P Broadcast
+Exchange APIs → Price Aggregation → Schnorr-Signed Oracle Message → P2P Broadcast
                                          ↓
-                              Block Validation ← Coinbase OP_RETURN
+                    OracleBundleManager collects messages from multiple oracles
                                          ↓
-                              Price Cache Update → DigiDollar Operations
+                    IQR outlier filtering → Median consensus price
+                                         ↓
+                    Block Validation ← Coinbase OP_RETURN (compact bundle)
+                                         ↓
+                    Block-extracted oracle price → DigiDollar validation
 ```
+
+#### Phase Transition
+
+| Phase | Oracle Count | Consensus | Outlier Filter | Activation |
+|-------|-------------|-----------|----------------|------------|
+| Phase 1 | 1-of-1 | Single Schnorr sig | None | `nOracleActivationHeight` |
+| Phase 2 | N-of-M multi-oracle | Multiple Schnorr sigs | IQR 1.5×IQR rule | `nDigiDollarPhase2Height` |
 
 ### 13.2 Price Message Structure
 
@@ -1192,9 +1220,58 @@ Coinbase OP_RETURN (22 bytes):
 └───────────────────────────────────────┘
 ```
 
-### 13.5 Block Validation
+### 13.5 Consensus Price Calculation (IQR)
 
-**File:** `src/validation.cpp` (lines 4369-4419)
+**File:** `src/oracle/bundle_manager.cpp` — `CalculateConsensusPrice()`
+
+The consensus price is computed deterministically from bundle messages using IQR (Interquartile Range) outlier filtering:
+
+```
+1. Filter messages by price range only (NOT timestamp — avoids wall-clock dependency)
+2. Sort valid prices
+3. If < 4 prices: return simple median (no outlier filtering possible)
+4. Compute Q1 (25th percentile) and Q3 (75th percentile)
+5. IQR = Q3 - Q1
+6. Lower bound = Q1 - 1.5 × IQR
+7. Upper bound = Q3 + 1.5 × IQR
+8. Filter outliers outside [lower, upper]
+9. Return median of remaining prices
+```
+
+**SECURITY:** `CalculateConsensusPrice()` deliberately avoids `GetTime()` for timestamp checks. Timestamp validation uses `block.nTime` in `ValidateBlockOracleData()` to ensure deterministic consensus independent of wall-clock time (prevents chain splits during IBD or delayed relay).
+
+### 13.6 Block-Extracted Oracle Price
+
+**File:** `src/validation.cpp`
+
+During `ConnectBlock()`, the oracle price is extracted directly from the block's coinbase OP_RETURN rather than queried from memory. This ensures DD transaction validation uses the exact same price the miner used:
+
+```cpp
+// In ConnectBlock():
+COracleBundle extractedBundle;
+if (oracleManager.ExtractOracleBundle(*block.vtx[0], extractedBundle) &&
+    extractedBundle.median_price_micro_usd > 0) {
+    blockOraclePrice = extractedBundle.median_price_micro_usd;
+}
+// This price is passed to DD validation — deterministic, block-local
+```
+
+### 13.7 Phase Validation
+
+**File:** `src/oracle/bundle_manager.cpp`
+
+```cpp
+// Phase routing:
+ValidateBundle(bundle, height, params)
+  → if height >= Phase2Height: ValidatePhaseTwoBundle()  // Multi-oracle Schnorr sigs
+  → else:                      ValidatePhaseOneBundle()  // Single oracle Schnorr sig
+
+GetRequiredConsensus(height, params)  // Returns minimum oracle count for phase
+```
+
+### 13.8 Block Validation (Legacy)
+
+**File:** `src/validation.cpp`
 
 ```cpp
 // In ContextualCheckBlock():
@@ -1202,10 +1279,6 @@ if (IsOracleEnabled(height)) {
     COracleBundle bundle;
     if (!ExtractOracleBundle(coinbaseTx, bundle))
         return state.Invalid(BLOCK_CONSENSUS, "bad-oracle-data");
-
-    // Phase 1: Require exactly 1 message
-    if (bundle.messages.size() != 1)
-        return state.Invalid(BLOCK_CONSENSUS, "bad-oracle-count");
 
     // Validate timestamp within ±1 hour of block time
     if (abs(bundle.timestamp - block.nTime) > 3600)
@@ -1346,7 +1419,7 @@ make check
 
 ## Appendix D: Codebase Validation Report
 
-### Validation Date: 2026-02-01
+### Validation Date: 2026-02-14
 
 This architecture document has been **100% validated against the actual DigiByte v8.26 codebase** using comprehensive automated analysis across 10 major subsystems.
 
@@ -1406,11 +1479,16 @@ This architecture document has been **100% validated against the actual DigiByte
 
 | Feature | Implementation | Status |
 |---------|---------------|--------|
-| COraclePriceMessage (128 bytes) | primitives/oracle.h:32-108 | ✅ |
-| Compact Format (22 bytes) | oracle/bundle_manager.cpp:277-324 | ✅ |
+| COraclePriceMessage (128 bytes) | primitives/oracle.h:31+ | ✅ |
+| Compact Format (22 bytes) | oracle/bundle_manager.cpp | ✅ |
 | 12 Exchange Fetchers | oracle/exchange.cpp | ✅ |
-| Block Validation | validation.cpp:4127 | ✅ |
-| Price Cache | oracle/bundle_manager.cpp:958-978 | ✅ |
+| Block Validation | validation.cpp | ✅ |
+| Price Cache | oracle/bundle_manager.cpp | ✅ |
+| Phase 2 Multi-Oracle Schnorr | oracle/bundle_manager.cpp:ValidatePhaseTwoBundle | ✅ |
+| IQR Outlier Filtering | oracle/bundle_manager.cpp:CalculateConsensusPrice | ✅ |
+| Block-Extracted Oracle Price | validation.cpp:ConnectBlock | ✅ |
+| Incremental DD Supply Tracking | digidollar/health.cpp:OnMintConnected/OnRedeemConnected | ✅ |
+| RED HORNET Phase 2 Audit | test/redteam_phase2_audit_tests.cpp (15 exploit tests) | ✅ |
 
 ### Cross-Reference Documents
 
@@ -1422,4 +1500,5 @@ This document is consistent with:
 
 *Document Version: 2.0*
 *Generated from DigiByte v8.26 codebase analysis*
-*Validated against actual source code implementation on 2026-02-01*
+*Auto-generated: 2026-02-14*
+*Validated against actual source code implementation on 2026-02-14*

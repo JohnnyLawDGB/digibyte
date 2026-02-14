@@ -1,6 +1,6 @@
 # REPO_MAP_DIGIDOLLAR.md — DigiDollar + Oracle Subsystem v9.26
 
-*Generated: 2026-02-12*
+*Auto-generated: 2026-02-14*
 
 This is the granular file index for all DigiDollar and Oracle source code. Read `DIGIDOLLAR_ARCHITECTURE.md` and `DIGIDOLLAR_ORACLE_ARCHITECTURE.md` first for system design context.
 
@@ -74,6 +74,11 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - 10-tier system: {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650} days
 - CalculateSystemHealth uses (collateral × price / COIN × 100) / ddSupply, capped at 300%
 - Integrates with Volatility, DCA, and ERR subsystems for protection status
+- **Incremental DD metrics tracking (T5-06)** — called from ConnectBlock/DisconnectBlock under cs_main:
+  - `OnMintConnected(ddAmount, dgbCollateral)` → increments totalDDSupply and totalCollateral when a DD mint is connected
+  - `OnRedeemConnected(ddAmount, dgbCollateral)` → decrements supply/collateral when a DD redeem is connected (clamped to 0)
+  - `OnMintDisconnected(ddAmount, dgbCollateral)` → reverses mint during reorg (decrements, clamped to 0)
+  - `OnRedeemDisconnected(ddAmount, dgbCollateral)` → reverses redeem during reorg (re-increments supply/collateral)
 
 ### src/digidollar/scripts.h
 - `DigiDollar::COLLATERAL_NUMS_POINT_BYTES` → BIP-341 NUMS (Nothing Up My Sleeve) point bytes: provably unspendable key for Taproot internal key, prevents key-path spending that bypasses CLTV
@@ -355,7 +360,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
     - `ValidatePhaseOneBundle(bundle, params)` → static: Phase 1 validation rules
     - `ValidateBundle(bundle, height, params)` → static: dispatches to correct phase validator
     - `GetRequiredConsensus(height, params)` → returns required oracle count for height
-    - `CalculateConsensusPrice(bundle, params)` → static: calculates median with outlier filtering
+    - `CalculateConsensusPrice(bundle, params)` → static: calculates IQR-filtered median price (1.5×IQR outlier rule); uses price-range checks only (no wall-clock time) for deterministic consensus
   - **Network:**
     - `BroadcastMessage(message)` → broadcasts via P2P
     - `ProcessIncomingMessage(message)` → handles incoming P2P oracle message
@@ -391,6 +396,9 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - Full implementation of OracleBundleManager, OracleDataValidator, and OracleIntegration
 - Epoch-based bundle management with configurable consensus thresholds
 - Price cache with per-height storage for block connect/disconnect
+- **Phase 2 multi-oracle validation:** `ValidatePhaseTwoBundle()` verifies multiple Schnorr signatures, `ValidatePhaseOneBundle()` verifies single oracle
+- **IQR consensus price:** `CalculateConsensusPrice()` sorts prices, computes Q1/Q3, filters outliers outside Q1−1.5×IQR to Q3+1.5×IQR, returns median of filtered set; falls back to unfiltered median if <4 prices or all filtered
+- **Consensus attestations:** `AddConsensusAttestation()` / `ClearPendingAttestations()` for multi-oracle consensus flow
 
 ### src/oracle/exchange.h
 - `ExchangeAPI::BaseExchangeFetcher` (base class) → persistent CURL handle to prevent socket exhaustion on Windows
@@ -455,7 +463,8 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetOraclePrivateKey()` → returns key (hardcoded for Phase 1 testnet)
   - `GetOraclePublicKey()` → returns XOnlyPubKey for Schnorr signatures
   - `ValidateOracleKey()` → verifies key is authorized in chainparams
-  - `CreatePriceMessage(price, timestamp)` → creates signed COraclePriceMessage
+  - `CreatePriceMessage(price, timestamp)` → creates Schnorr-signed COraclePriceMessage
+  - `CreateConsensusAttestation(consensus_price, consensus_timestamp)` → creates signed attestation of agreed consensus price (Phase 2)
   - `BroadcastPriceMessage(message)` → broadcasts via P2P network
 - `ExchangePriceFetcher` (class) → fetches from multiple exchanges, calculates median
   - `ExchangePrice` (struct) → exchange, price, timestamp, valid
@@ -878,7 +887,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_persistence_serialization_tests.cpp` | DD data structure serialization/deserialization for wallet database |
 | `digidollar_persistence_walletbatch_tests.cpp` | WalletBatch DD read/write operations, database integrity |
 | `digidollar_redeem_tests.cpp` | Redemption tx building, collateral release, timelock validation, ERR path, full burn requirement |
-| `digidollar_redteam_tests.cpp` | Security-focused: NUMS bypass attempts, inflation attacks, cross-mint burns, partial burn exploits |
+| `digidollar_redteam_tests.cpp` | Security-focused (~9000+ lines): NUMS bypass, inflation attacks, cross-mint burns, partial burn exploits, RED HORNET audit T5–T10 (activation boundaries, zero-amount ops, MAX_MONEY overflow, mempool ancestor limits, rapid mint/redeem, oracle partition/sybil/eclipse, miner reordering/censorship/timestamp, reorg collateral theft, double-spend) |
 | `digidollar_restore_tests.cpp` | Wallet restore from blockchain rescan, position reconstruction, key recovery |
 | `digidollar_rpc_tests.cpp` | RPC command validation: mintdigidollar, senddigidollar, redeemdigidollar, getdigidollarbalance |
 | `digidollar_scripts_tests.cpp` | P2TR script creation, MAST tree construction, NUMS point, Taproot tweak, metadata registry |
@@ -899,7 +908,8 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `oracle_message_tests.cpp` | COraclePriceMessage signing, verification, Schnorr signatures, conflict detection |
 | `oracle_miner_tests.cpp` | Oracle bundle embedding in coinbase, miner integration |
 | `oracle_p2p_tests.cpp` | Oracle P2P message validation, rate limiting, DOS protection |
-| `oracle_phase2_tests.cpp` | Phase 2 oracle validation rules, on-chain format, signature hash changes |
+| `oracle_phase2_tests.cpp` | Phase 2 oracle validation rules, on-chain format, signature hash changes, multi-oracle Schnorr consensus |
+| `redteam_phase2_audit_tests.cpp` | **RED HORNET Phase 2** — 15 exploit tests: Schnorr sig bypass, selective price inclusion, consensus fork vectors, oracle identity attacks, signature replay, version downgrade (Phase 2→1), IQR outlier gaming, consensus price determinism |
 | `oracle_rpc_tests.cpp` | Oracle RPC commands: getoracleprice, createoraclekey, startoracle |
 | `oracle_wallet_key_tests.cpp` | Oracle key generation, storage, validation against chainparams |
 

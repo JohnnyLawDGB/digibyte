@@ -1,6 +1,6 @@
 # REPO_MAP.md — DigiByte Core v9.26
 
-*Generated: 2026-02-12*
+*Auto-generated: 2026-02-14*
 
 > This map covers **core DigiByte C++ code only**. DigiDollar subsystem (`src/digidollar/`, `src/oracle/`, `src/rpc/digidollar*`) is documented in `REPO_MAP_DIGIDOLLAR.md`. Third-party libs (leveldb, secp256k1, crc32c, minisketch, univalue) and the `depends/` directory are excluded.
 >
@@ -581,7 +581,7 @@
 - `HasValidProofOfWork()` → validates PoW for a vector of block headers
 - `IsBlockMutated()` → detects witness malleation attacks on block data
 - `CalculateHeadersWork()` → sums proof-of-work across a vector of headers
-- ⚠️ `GetOraclePriceForTransaction()` → retrieves oracle-reported DGB/USD price for DD transaction validation
+- ⚠️ `GetOraclePriceForTransaction()` → retrieves oracle-reported DGB/USD price for DD transaction validation; in ConnectBlock path, uses block-extracted oracle price from coinbase OP_RETURN for deterministic consensus
 - `GetBlockSubsidy()` → calculates mining reward for a given block height (halving schedule)
 - `IsAlgoActive()` → checks if a specific mining algorithm is active at a given chain position
 - `CVerifyDB` (class) → verifies blockchain database integrity on startup
@@ -1366,7 +1366,8 @@
   - `VerifySignature()` → verifies Schnorr signature against oracle's public key
   - `IsExpired()` → checks if price message has expired based on block height
 - ⚠️ `COracleBundle` (class) → collection of oracle price messages forming a consensus price
-  - `GetMedianPrice()` → computes median price from all valid messages in bundle
+  - `GetConsensusPrice()` → computes IQR-filtered median price from valid messages (replaces old `GetMedianPrice`)
+  - `HasConsensus()` → checks if bundle has minimum required oracle messages
   - `Validate()` → validates bundle completeness, signatures, and consistency
   - `GetEpoch()` → returns the oracle epoch this bundle belongs to
 - ⚠️ `OracleNodeInfo` (struct) → oracle identity: ID, public key, and status

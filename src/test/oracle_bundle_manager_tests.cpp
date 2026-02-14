@@ -13,6 +13,7 @@
 #include <oracle/node.h>
 #include <primitives/oracle.h>
 #include <test/util/setup_common.h>
+#include <test/util/random.h>
 #include <util/time.h>
 
 BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_tests, RegTestingSetup)
@@ -296,6 +297,94 @@ BOOST_AUTO_TEST_CASE(oracle_stats_reporting)
 
     LogPrintf("Test: Oracle stats - pending=%d, consensus=%s, price=%lld\n",
              stats.pending_messages, stats.has_consensus ? "true" : "false", stats.latest_price);
+}
+
+/**
+ * Test RegisterSeenHash prevents P2P duplicate processing
+ *
+ * When a P2P message is successfully added via AddOracleMessage, the
+ * P2P handler should register the wrapper hash (OraclePriceMsg::GetHash())
+ * so that subsequent relays from other peers are caught by HasOracleMessage()
+ * without hitting AddOracleMessage again (which logs 3 lines per call).
+ *
+ * This test verifies that RegisterSeenHash() properly inserts a hash into
+ * seen_message_hashes, and that HasOracleMessage() returns true for it.
+ */
+BOOST_AUTO_TEST_CASE(register_seen_hash_dedup)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1);
+
+    // Create a valid oracle message
+    CKey oracle_key;
+    oracle_key.MakeNewKey(true);
+
+    COraclePriceMessage msg(0, 6000, GetTime());
+    msg.SignPhase2(oracle_key);
+
+    // Simulate the P2P wrapper hash (what OraclePriceMsg::GetHash() returns)
+    // This is what net_processing computes before calling HasOracleMessage
+    uint256 p2p_hash = msg.GetPhase2SignatureHash();
+
+    // Before registration, HasOracleMessage should return false for a random hash
+    uint256 random_hash = InsecureRand256();
+    BOOST_CHECK(!manager.HasOracleMessage(random_hash));
+
+    // Register the P2P hash explicitly
+    manager.RegisterSeenHash(p2p_hash);
+
+    // Now HasOracleMessage should return true
+    BOOST_CHECK(manager.HasOracleMessage(p2p_hash));
+
+    // Other hashes should still not be seen
+    BOOST_CHECK(!manager.HasOracleMessage(random_hash));
+}
+
+/**
+ * Test that AddOracleMessage + RegisterSeenHash together prevent duplicate log spam
+ *
+ * Simulates the flow: first peer sends oracle message → accepted via AddOracleMessage,
+ * then P2P calls RegisterSeenHash. Subsequent peers' messages (same hash) should be
+ * caught by HasOracleMessage without calling AddOracleMessage at all.
+ */
+BOOST_AUTO_TEST_CASE(full_dedup_flow_prevents_log_spam)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1);
+
+    CKey oracle_key;
+    oracle_key.MakeNewKey(true);
+
+    COraclePriceMessage msg(0, 7500, GetTime());
+    msg.SignPhase2(oracle_key);
+
+    // Step 1: First peer sends message → AddOracleMessage succeeds
+    BOOST_CHECK(manager.AddOracleMessage(msg));
+
+    // Step 2: After successful add, P2P handler registers the wrapper hash
+    // (In production this is OraclePriceMsg::GetHash(), which for Phase2
+    // messages equals GetPhase2SignatureHash())
+    uint256 p2p_hash = msg.GetPhase2SignatureHash();
+    manager.RegisterSeenHash(p2p_hash);
+
+    // Step 3: Second peer sends the same message
+    // HasOracleMessage should catch it immediately
+    BOOST_CHECK(manager.HasOracleMessage(p2p_hash));
+
+    // Step 4: Even the internal hash (what AddOracleMessage inserted) should be seen
+    // AddOracleMessage uses GetPhase2SignatureHash() for Phase2 messages
+    uint256 internal_hash = msg.GetPhase2SignatureHash();
+    BOOST_CHECK(manager.HasOracleMessage(internal_hash));
+
+    // Step 5: A completely new message should NOT be seen
+    COraclePriceMessage msg2(1, 8000, GetTime());
+    msg2.SignPhase2(oracle_key);
+    uint256 new_hash = msg2.GetPhase2SignatureHash();
+    BOOST_CHECK(!manager.HasOracleMessage(new_hash));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -5510,6 +5510,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
+        // Register the P2P wrapper hash in the bundle manager's seen set so that
+        // subsequent relays of the same message from other peers are caught by
+        // HasOracleMessage() without entering AddOracleMessage() (which logs
+        // multiple lines per call). This closes the hash-mismatch dedup gap.
+        bundleManager.RegisterSeenHash(msg_hash);
+
         // Mark sender as knowing this oracle message (don't relay back to them)
         AddKnownOracle(*peer, msg_hash);
 

@@ -52,7 +52,7 @@ OracleBundleManager::~OracleBundleManager()
 
 bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 {
-    LogPrintf("Oracle: AddOracleMessage called for oracle_id=%d, price=%llu, timestamp=%d, enabled=%d\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: AddOracleMessage called for oracle_id=%d, price=%llu, timestamp=%d, enabled=%d\n",
              message.oracle_id, message.price_micro_usd, message.timestamp, enabled);
 
     if (!enabled) {
@@ -65,7 +65,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         return false;
     }
 
-    LogPrintf("Oracle: Message passed IsValidOracleMessage check\n");
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message passed IsValidOracleMessage check\n");
 
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
@@ -98,7 +98,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 
     // Check if we've already seen this exact message
     if (seen_message_hashes.count(msg_hash) > 0) {
-        LogPrintf("Oracle: Ignoring duplicate message from oracle %d\n", message.oracle_id);
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring duplicate message from oracle %d\n", message.oracle_id);
         return false;
     }
 
@@ -131,7 +131,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
             it->second = message;
             LogPrintf("Oracle: Updated message from oracle %d with newer timestamp\n", message.oracle_id);
         } else {
-            LogPrintf("Oracle: Ignoring older message from oracle %d\n", message.oracle_id);
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring older message from oracle %d\n", message.oracle_id);
             return false;
         }
     } else {
@@ -212,7 +212,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
                 }
             }
         } else {
-            LogPrintf("Oracle: %d fresh messages, need %d for consensus - cached price unchanged\n",
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: %d fresh messages, need %d for consensus - cached price unchanged\n",
                      fresh_count, min_oracle_count);
         }
     }
@@ -238,18 +238,18 @@ std::vector<COraclePriceMessage> OracleBundleManager::GetPendingMessages() const
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
-    LogPrintf("Oracle: GetPendingMessages called, pending_messages.size()=%zu\n", pending_messages.size());
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: GetPendingMessages called, pending_messages.size()=%zu\n", pending_messages.size());
 
     std::vector<COraclePriceMessage> messages;
     messages.reserve(pending_messages.size());
 
     for (const auto& [oracle_id, message] : pending_messages) {
-        LogPrintf("Oracle: GetPendingMessages - oracle_id=%d, price=%llu, timestamp=%d\n",
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: GetPendingMessages - oracle_id=%d, price=%llu, timestamp=%d\n",
                  oracle_id, message.price_micro_usd, message.timestamp);
         messages.push_back(message);
     }
 
-    LogPrintf("Oracle: GetPendingMessages returning %zu messages\n", messages.size());
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: GetPendingMessages returning %zu messages\n", messages.size());
     return messages;
 }
 
@@ -1010,6 +1010,12 @@ bool OracleBundleManager::HasOracleMessage(const uint256& hash) const
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
     return seen_message_hashes.count(hash) > 0;
+}
+
+void OracleBundleManager::RegisterSeenHash(const uint256& hash)
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    seen_message_hashes.insert(hash);
 }
 
 bool OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)

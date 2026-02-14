@@ -119,6 +119,17 @@ public:
     bool BroadcastMessage(const COraclePriceMessage& message);
     void ProcessIncomingMessage(const COraclePriceMessage& message);
     bool HasOracleMessage(const uint256& hash) const;
+
+    /**
+     * Register a hash in the seen_message_hashes set (P2P dedup).
+     * Called by net_processing after a successful AddOracleMessage() to ensure
+     * the P2P wrapper hash (OraclePriceMsg::GetHash()) is also tracked.
+     * This prevents duplicate processing when the same message arrives from
+     * multiple peers.
+     * @param hash The hash to register (typically OraclePriceMsg::GetHash())
+     */
+    void RegisterSeenHash(const uint256& hash);
+
     void SetConnman(CConnman* connman);
 
     //! Status and statistics

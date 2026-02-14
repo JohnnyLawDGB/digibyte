@@ -528,7 +528,7 @@ public:
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
         digidollarParams.oracleThreshold = 5;                         // 5-of-9 consensus for Phase Two (strict majority)
         digidollarParams.activeOracles = 9;                           // 9 active oracles
-        digidollarParams.oracleCount = 8;                             // Total 8 oracles defined
+        digidollarParams.oracleCount = 9;                             // Total 9 oracles defined
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
@@ -553,7 +553,7 @@ public:
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // oracle 5 - Ycagel
         consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // oracle 6 - Aussie (new key RC15)
         consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // oracle 7 - LookInto (new key RC13)
-        consensus.vOraclePublicKeys.push_back("b46e8d77e747dda86ce81cd5dc47e933e3723cf4902101cc7b76ef88f6c06d8b");  // oracle 8 - JohnnyLawDGB (new RC19)
+        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // oracle 8 - JohnnyLawDGB (new RC19)
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
         LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
@@ -581,7 +581,7 @@ private:
             {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12033", true},  // Ycagel
             {6,  ParsePubKey("037a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digibyte.io:12033", true},  // Aussie (new key RC15)
             {7,  ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12033", true},  // LookInto (new key RC13)
-            {8,  ParsePubKey("02b46e8d77e747dda86ce81cd5dc47e933e3723cf4902101cc7b76ef88f6c06d8b"), "oracle9.digibyte.io:12033", true},  // JohnnyLawDGB (new RC19)
+            {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12033", true},  // JohnnyLawDGB (new RC19)
         };
     }
 };

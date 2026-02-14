@@ -2701,6 +2701,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
         nInputs += tx.vin.size();
 
+        // SECURITY [T5-02]: Coinbase must NEVER carry a DigiDollar marker.
+        // DD validation is inside the `if (!tx.IsCoinBase())` block below,
+        // so a coinbase with a DD marker would completely skip DD validation.
+        // A malicious miner could craft a coinbase with DD nVersion + zero-value
+        // P2TR outputs + DD OP_RETURN to create DD tokens from nothing — no
+        // collateral required. This check blocks the attack at the earliest point.
+        if (tx.IsCoinBase() && DigiDollar::HasDigiDollarMarker(tx)) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-dd-marker",
+                               "coinbase transaction must not carry DigiDollar version marker");
+        }
+
         if (!tx.IsCoinBase())
         {
             CAmount txfee = 0;

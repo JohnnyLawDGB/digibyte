@@ -171,6 +171,18 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
 static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutPoint& prevout, CAmount& amount) {
     amount = 0;
 
+    // SECURITY [T5-02]: Reject coinbase transactions as DD sources.
+    // A malicious miner could craft a coinbase with DD nVersion + zero-value P2TR
+    // outputs + DD OP_RETURN. ConnectBlock's DD validation is inside `if (!IsCoinBase())`
+    // so the coinbase would skip all DD checks. If we then extract DD amounts from the
+    // coinbase here, a later DD TRANSFER would pass conservation — creating DD from nothing.
+    // This is defense-in-depth alongside the ConnectBlock coinbase DD marker rejection.
+    if (prev_tx->IsCoinBase()) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromTxRef - REJECTED coinbase tx %s as DD source (attack vector T5-02)\n",
+                 prevout.hash.ToString());
+        return false;
+    }
+
     // SECURITY: Verify the creating transaction is actually a DigiDollar transaction.
     // Without this check, a malicious miner could include a regular (non-DD) transaction
     // with a DD-formatted OP_RETURN and zero-value P2TR outputs. A subsequent DD transfer

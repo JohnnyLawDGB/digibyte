@@ -14,8 +14,6 @@ on:
       - develop
       - master
       - 'release/**'
-      - 'feature/**'
-      - 'fix/**'
     tags-ignore:
       - '**'
 

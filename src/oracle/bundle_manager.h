@@ -121,6 +121,30 @@ public:
     bool HasOracleMessage(const uint256& hash) const;
 
     /**
+     * Broadcast a consensus proposal (epoch, price, timestamp) to the P2P network.
+     * Called by AddOracleBundleToBlock() when consensus is computed but not enough
+     * attestations exist. Remote oracle nodes will sign and send back attestations.
+     * @param epoch Current oracle epoch
+     * @param consensus_price IQR-filtered median price
+     * @param consensus_timestamp Median timestamp
+     * @return true if broadcast was initiated
+     */
+    bool BroadcastConsensusProposal(int32_t epoch, uint64_t consensus_price, int64_t consensus_timestamp);
+
+    /**
+     * Check if a consensus proposal has already been broadcast for this epoch.
+     * Prevents spamming the network with duplicate proposals.
+     */
+    bool HasBroadcastConsensusProposal(int32_t epoch) const;
+
+    /**
+     * Track seen attestation hashes for replay prevention.
+     * @param hash Phase2 signature hash of the attestation
+     * @return true if this is a new (unseen) attestation
+     */
+    bool RegisterSeenAttestation(const uint256& hash);
+
+    /**
      * Register a hash in the seen_message_hashes set (P2P dedup).
      * Called by net_processing after a successful AddOracleMessage() to ensure
      * the P2P wrapper hash (OraclePriceMsg::GetHash()) is also tracked.
@@ -189,6 +213,12 @@ private:
     //! Consensus attestations: Phase 2 messages signed over consensus values
     //! Separate from pending_messages (which contain individual prices)
     std::unordered_map<uint32_t, COraclePriceMessage> pending_attestations;
+
+    //! Track which epochs have had consensus proposals broadcast (prevent spam)
+    std::set<int32_t> broadcast_proposal_epochs;
+
+    //! Track seen attestation hashes (replay prevention)
+    std::set<uint256> seen_attestation_hashes;
 
     //! Price cache (block height -> price in micro-USD)
     std::map<int, uint64_t> height_to_price;

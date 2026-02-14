@@ -9300,4 +9300,318 @@ BOOST_AUTO_TEST_CASE(redteam_t5_02d_normal_tx_dd_extraction_works)
         "Normal DD tx with DD marker passes HasDigiDollarMarker correctly");
 }
 
+// =============================================================================
+// T5-03: Phase 2 On-Chain Signature Verification — Consensus Price Mismatch
+// =============================================================================
+
+// T5-03a: Phase 2 signatures become non-verifiable when oracles report
+//         different prices (realistic production scenario).
+//
+// VULNERABILITY: The Phase 2 on-chain format stores ONE consensus price and
+// ONE timestamp for all oracles. But each oracle signs H(oracle_id,
+// THEIR_price, THEIR_timestamp). After extraction from on-chain data,
+// VerifyPhase2() is called with the consensus price/timestamp, producing a
+// DIFFERENT hash than what the oracle actually signed. Signatures fail.
+//
+// Impact: Phase 2 multi-oracle verification is fundamentally broken when
+// oracles report even slightly different prices or timestamps. In production,
+// this means ValidatePhaseTwoBundle will reject most/all bundles.
+BOOST_AUTO_TEST_CASE(redteam_t5_03a_phase2_consensus_price_sig_mismatch)
+{
+    // Generate 5 oracle key pairs (simulating 5 independent oracle nodes)
+    std::vector<CKey> oracle_keys(5);
+    for (int i = 0; i < 5; i++) {
+        oracle_keys[i].MakeNewKey(true);
+    }
+
+    // Each oracle reports a SLIGHTLY different price (realistic: different exchanges)
+    // Prices in micro-USD: $0.0499, $0.0500, $0.0501, $0.0502, $0.0498
+    std::vector<uint64_t> individual_prices = {49900, 50000, 50100, 50200, 49800};
+    // Each oracle signs at a slightly different time
+    int64_t base_time = 1707000000;
+    std::vector<int64_t> individual_timestamps = {
+        base_time, base_time + 1, base_time + 2, base_time + 3, base_time + 4
+    };
+
+    // Step 1: Each oracle signs their OWN price/timestamp (as happens in production)
+    std::vector<COraclePriceMessage> signed_messages;
+    for (int i = 0; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = individual_prices[i];
+        msg.timestamp = individual_timestamps[i];
+        msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
+        BOOST_CHECK(msg.SignPhase2(oracle_keys[i]));
+        BOOST_CHECK(msg.VerifyPhase2()); // Sig verifies against individual values
+        signed_messages.push_back(msg);
+    }
+
+    // Step 2: Miner computes consensus price (median = 50000) and picks timestamp
+    uint64_t consensus_price = 50000;  // Median of the 5 prices
+    int64_t consensus_timestamp = base_time;  // Miner picks one timestamp
+
+    // Step 3: Build a Phase 2 on-chain bundle (simulating CreateOracleScript)
+    COracleBundle bundle;
+    bundle.median_price_micro_usd = consensus_price;
+    bundle.timestamp = consensus_timestamp;
+    bundle.epoch = 0;
+
+    // Step 4: Simulate what ExtractOracleBundle does — assign consensus values
+    // to ALL messages (this is what happens when reading Phase 2 from on-chain)
+    for (int i = 0; i < 5; i++) {
+        COraclePriceMessage extracted_msg;
+        extracted_msg.oracle_id = signed_messages[i].oracle_id;
+        extracted_msg.schnorr_sig = signed_messages[i].schnorr_sig;
+        extracted_msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
+        // ON-CHAIN FORMAT LOSES INDIVIDUAL VALUES:
+        extracted_msg.price_micro_usd = consensus_price;     // NOT their signed price!
+        extracted_msg.timestamp = consensus_timestamp;         // NOT their signed timestamp!
+        bundle.messages.push_back(extracted_msg);
+    }
+
+    // Step 5: Verify — signatures should FAIL because hash input changed
+    int valid_count = 0;
+    int fail_count = 0;
+    for (const auto& msg : bundle.messages) {
+        if (msg.VerifyPhase2()) {
+            valid_count++;
+        } else {
+            fail_count++;
+        }
+    }
+
+    // Oracle 1 signed (id=1, 50000, base_time+1) but extracted msg has (id=1, 50000, base_time)
+    // Oracle 0 signed (id=0, 49900, base_time) but extracted msg has (id=0, 50000, base_time)
+    // NONE should verify because both price AND timestamp differ for most
+    // Oracle index 1 has price=50000 matching consensus but timestamp differs by 1
+
+    // The key assertion: most signatures should fail
+    BOOST_CHECK_MESSAGE(fail_count > 0,
+        "VULNERABILITY: Phase 2 signatures should fail when individual prices/timestamps "
+        "differ from consensus values. fail_count=" + std::to_string(fail_count) +
+        ", valid_count=" + std::to_string(valid_count));
+
+    // In a realistic scenario, NO oracle signed the exact (consensus_price, consensus_timestamp) pair
+    // because oracle 0 signed price=49900 (not 50000) and the only oracle with price=50000
+    // signed with timestamp base_time+1 (not base_time)
+    BOOST_CHECK_MESSAGE(valid_count < 4,
+        "CRITICAL: Fewer than min_required (4) signatures verify after on-chain extraction. "
+        "Phase 2 consensus verification is broken for realistic multi-price scenarios. "
+        "valid_count=" + std::to_string(valid_count));
+
+    // Log details for debugging
+    BOOST_TEST_MESSAGE("Phase 2 signature verification after on-chain extraction:");
+    BOOST_TEST_MESSAGE("  Consensus price: " << consensus_price << " micro-USD");
+    BOOST_TEST_MESSAGE("  Consensus timestamp: " << consensus_timestamp);
+    BOOST_TEST_MESSAGE("  Valid signatures: " << valid_count << "/5");
+    BOOST_TEST_MESSAGE("  Failed signatures: " << fail_count << "/5");
+    for (int i = 0; i < 5; i++) {
+        BOOST_TEST_MESSAGE("  Oracle " << i << ": signed price=" << individual_prices[i]
+            << " ts=" << individual_timestamps[i]
+            << " | extracted price=" << consensus_price
+            << " ts=" << consensus_timestamp
+            << " | verify=" << bundle.messages[i].VerifyPhase2());
+    }
+}
+
+// T5-03b: Phase 2 signatures work ONLY when all oracles sign identical values
+//         (proves the mock oracle test harness masks the real-world bug)
+BOOST_AUTO_TEST_CASE(redteam_t5_03b_phase2_identical_prices_verify_ok)
+{
+    // This is the MOCK scenario — all oracles use same price and timestamp
+    // This is what happens in MockOracleManager::CreateMockBundle
+    std::vector<CKey> oracle_keys(5);
+    for (int i = 0; i < 5; i++) {
+        oracle_keys[i].MakeNewKey(true);
+    }
+
+    uint64_t shared_price = 50000;
+    int64_t shared_timestamp = 1707000000;
+
+    // All oracles sign the SAME (price, timestamp) — unrealistic but is current test behavior
+    COracleBundle bundle;
+    bundle.median_price_micro_usd = shared_price;
+    bundle.timestamp = shared_timestamp;
+    bundle.epoch = 0;
+
+    for (int i = 0; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = shared_price;
+        msg.timestamp = shared_timestamp;
+        msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
+        BOOST_CHECK(msg.SignPhase2(oracle_keys[i]));
+        bundle.messages.push_back(msg);
+    }
+
+    // All signatures verify because price and timestamp match exactly
+    int valid_count = 0;
+    for (const auto& msg : bundle.messages) {
+        if (msg.VerifyPhase2()) valid_count++;
+    }
+
+    BOOST_CHECK_EQUAL(valid_count, 5);
+    BOOST_TEST_MESSAGE("All 5 signatures verify when prices are identical (mock scenario)");
+    BOOST_TEST_MESSAGE("This proves the test harness masks the real-world signature mismatch bug");
+}
+
+// T5-03c: Even 1 micro-USD price difference breaks signature verification
+BOOST_AUTO_TEST_CASE(redteam_t5_03c_phase2_one_microusd_breaks_sig)
+{
+    CKey key;
+    key.MakeNewKey(true);
+
+    int64_t ts = 1707000000;
+
+    // Oracle signs price=50000
+    COraclePriceMessage signed_msg;
+    signed_msg.oracle_id = 0;
+    signed_msg.price_micro_usd = 50000;
+    signed_msg.timestamp = ts;
+    signed_msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+    BOOST_CHECK(signed_msg.SignPhase2(key));
+    BOOST_CHECK(signed_msg.VerifyPhase2());
+
+    // After extraction, consensus price is 50001 (just 1 micro-USD off)
+    COraclePriceMessage extracted_msg = signed_msg;
+    extracted_msg.price_micro_usd = 50001;  // 1 micro-USD = $0.000001 difference
+
+    // Signature FAILS — hash is completely different due to Schnorr/SHA256
+    BOOST_CHECK_MESSAGE(!extracted_msg.VerifyPhase2(),
+        "CONFIRMED: Even 1 micro-USD price difference ($0.000001) invalidates "
+        "the Schnorr signature. Phase 2 on-chain verification is fundamentally "
+        "broken for realistic multi-price scenarios.");
+}
+
+// T5-03d: Even 1 second timestamp difference breaks signature verification
+BOOST_AUTO_TEST_CASE(redteam_t5_03d_phase2_one_second_breaks_sig)
+{
+    CKey key;
+    key.MakeNewKey(true);
+
+    // Oracle signs with timestamp T
+    COraclePriceMessage signed_msg;
+    signed_msg.oracle_id = 0;
+    signed_msg.price_micro_usd = 50000;
+    signed_msg.timestamp = 1707000000;
+    signed_msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+    BOOST_CHECK(signed_msg.SignPhase2(key));
+    BOOST_CHECK(signed_msg.VerifyPhase2());
+
+    // After extraction, consensus timestamp is T+1 (1 second off)
+    COraclePriceMessage extracted_msg = signed_msg;
+    extracted_msg.timestamp = 1707000001;  // Just 1 second later
+
+    BOOST_CHECK_MESSAGE(!extracted_msg.VerifyPhase2(),
+        "CONFIRMED: Even 1 second timestamp difference invalidates the Schnorr "
+        "signature. Since each oracle calls GetTime() independently, timestamps "
+        "will never match exactly across oracles.");
+}
+
+// T5-03e: Full round-trip through CreateOracleScript → ExtractOracleBundle
+//         with realistic different prices proves verification breaks
+BOOST_AUTO_TEST_CASE(redteam_t5_03e_phase2_full_roundtrip_different_prices)
+{
+    // Use the OracleBundleManager to test the full serialize → deserialize → verify path
+    OracleBundleManager manager;
+    manager.SetEnabled(true);
+
+    std::vector<CKey> oracle_keys(4);
+    for (int i = 0; i < 4; i++) {
+        oracle_keys[i].MakeNewKey(true);
+    }
+
+    int64_t base_time = 1707000000;
+    // Realistic prices from different exchanges
+    std::vector<uint64_t> prices = {49850, 50050, 49950, 50150};
+
+    // Create bundle with individual oracle messages
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    for (int i = 0; i < 4; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = prices[i];
+        msg.timestamp = base_time + i;  // Each oracle at different time
+        msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
+        BOOST_CHECK(msg.SignPhase2(oracle_keys[i]));
+        BOOST_CHECK(msg.VerifyPhase2());  // Individual sig verifies
+        bundle.messages.push_back(msg);
+    }
+
+    // Compute consensus price (what the miner would do)
+    auto regTestParams = CChainParams::RegTest({});
+    bundle.median_price_micro_usd = static_cast<uint64_t>(
+        OracleBundleManager::CalculateConsensusPrice(bundle, regTestParams->GetConsensus()));
+    bundle.timestamp = base_time;  // Miner picks a timestamp
+
+    BOOST_TEST_MESSAGE("Consensus price calculated: " << bundle.median_price_micro_usd
+        << " from individual prices: " << prices[0] << "," << prices[1]
+        << "," << prices[2] << "," << prices[3]);
+
+    // Serialize to on-chain format
+    CScript oracle_script = manager.CreateOracleScript(bundle);
+
+    // The script should be non-empty (Phase 2 format) OR empty if Phase 2 isn't active
+    // For this test, we simulate the extraction manually since chainparams may not
+    // have Phase 2 active in regtest
+    if (oracle_script.empty()) {
+        BOOST_TEST_MESSAGE("Phase 2 script creation returned empty (expected in regtest). "
+                          "Testing extraction logic directly.");
+
+        // Simulate what ExtractOracleBundle does to the messages:
+        // Replace individual prices/timestamps with consensus values
+        for (auto& msg : bundle.messages) {
+            msg.price_micro_usd = bundle.median_price_micro_usd;
+            msg.timestamp = bundle.timestamp;
+        }
+
+        // Now verify — should fail for oracles that didn't sign the consensus values
+        int valid_count = 0;
+        for (const auto& msg : bundle.messages) {
+            if (msg.VerifyPhase2()) valid_count++;
+        }
+
+        BOOST_CHECK_MESSAGE(valid_count < 4,
+            "Phase 2 round-trip verification broken: only " +
+            std::to_string(valid_count) + "/4 signatures verify after "
+            "consensus price/timestamp substitution");
+
+        BOOST_TEST_MESSAGE("After consensus substitution: " << valid_count << "/4 valid");
+    } else {
+        // Full round-trip through script serialization
+        BOOST_TEST_MESSAGE("Phase 2 script created: " << oracle_script.size() << " bytes");
+
+        // Build a fake coinbase with the oracle script
+        CMutableTransaction coinbase_tx;
+        coinbase_tx.vin.resize(1);
+        coinbase_tx.vin[0].prevout.SetNull();
+        coinbase_tx.vin[0].scriptSig = CScript() << 100;  // BIP34 height
+        coinbase_tx.vout.resize(2);
+        coinbase_tx.vout[0].nValue = 50 * COIN;
+        coinbase_tx.vout[0].scriptPubKey = CScript() << OP_TRUE;
+        coinbase_tx.vout[1].nValue = 0;
+        coinbase_tx.vout[1].scriptPubKey = oracle_script;
+
+        CTransactionRef coinbase_ref = MakeTransactionRef(std::move(coinbase_tx));
+
+        // Extract bundle from coinbase
+        COracleBundle extracted_bundle;
+        bool extracted = manager.ExtractOracleBundle(*coinbase_ref, extracted_bundle);
+        BOOST_CHECK(extracted);
+
+        // Verify signatures on extracted bundle
+        int valid_count = 0;
+        for (const auto& msg : extracted_bundle.messages) {
+            if (msg.VerifyPhase2()) valid_count++;
+        }
+
+        BOOST_CHECK_MESSAGE(valid_count < 4,
+            "CRITICAL: Phase 2 full round-trip: only " +
+            std::to_string(valid_count) + "/4 signatures verify. "
+            "The on-chain format loses individual prices/timestamps, "
+            "making signature verification impossible.");
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

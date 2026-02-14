@@ -176,6 +176,40 @@ public:
      */
     static const SystemMetrics& GetCachedMetrics() { return s_currentMetrics; }
 
+    /**
+     * Incrementally update metrics when a DD mint transaction is connected to a block.
+     * Called from ConnectBlock() under cs_main.
+     * @param ddAmount DD amount minted (from OP_RETURN metadata, in cents)
+     * @param dgbCollateral DGB collateral locked (in satoshis)
+     */
+    static void OnMintConnected(CAmount ddAmount, CAmount dgbCollateral);
+
+    /**
+     * Incrementally update metrics when a DD redeem transaction is connected to a block.
+     * Decrements supply/collateral as the vault is spent.
+     * Called from ConnectBlock() under cs_main.
+     * @param ddAmount DD amount from the original mint (in cents)
+     * @param dgbCollateral DGB collateral released (in satoshis)
+     */
+    static void OnRedeemConnected(CAmount ddAmount, CAmount dgbCollateral);
+
+    /**
+     * Reverse incremental update when a DD mint transaction is disconnected.
+     * Called from DisconnectBlock() under cs_main.
+     * @param ddAmount DD amount that was minted (in cents)
+     * @param dgbCollateral DGB collateral that was locked (in satoshis)
+     */
+    static void OnMintDisconnected(CAmount ddAmount, CAmount dgbCollateral);
+
+    /**
+     * Reverse incremental update when a DD redeem transaction is disconnected.
+     * Restores supply/collateral as the vault is un-spent.
+     * Called from DisconnectBlock() under cs_main.
+     * @param ddAmount DD amount from the original mint (in cents)
+     * @param dgbCollateral DGB collateral that was released (in satoshis)
+     */
+    static void OnRedeemDisconnected(CAmount ddAmount, CAmount dgbCollateral);
+
 private:
     // Internal data structures
     static SystemMetrics s_currentMetrics;

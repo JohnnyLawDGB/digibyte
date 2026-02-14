@@ -503,6 +503,47 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
              FormatMoney(s_currentMetrics.totalDDSupply));
 }
 
+// ============================================================================
+// Incremental metrics tracking (T5-06)
+// Called from ConnectBlock/DisconnectBlock under cs_main.
+// ============================================================================
+
+void SystemHealthMonitor::OnMintConnected(CAmount ddAmount, CAmount dgbCollateral)
+{
+    s_currentMetrics.totalDDSupply += ddAmount;
+    s_currentMetrics.totalCollateral += dgbCollateral;
+    LogPrint(BCLog::DIGIDOLLAR, "Health: Mint connected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
+             FormatMoney(ddAmount), FormatMoney(dgbCollateral),
+             FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
+}
+
+void SystemHealthMonitor::OnRedeemConnected(CAmount ddAmount, CAmount dgbCollateral)
+{
+    s_currentMetrics.totalDDSupply = std::max<CAmount>(0, s_currentMetrics.totalDDSupply - ddAmount);
+    s_currentMetrics.totalCollateral = std::max<CAmount>(0, s_currentMetrics.totalCollateral - dgbCollateral);
+    LogPrint(BCLog::DIGIDOLLAR, "Health: Redeem connected - DD -%s, Collateral -%s (totals: DD=%s, Collateral=%s)\n",
+             FormatMoney(ddAmount), FormatMoney(dgbCollateral),
+             FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
+}
+
+void SystemHealthMonitor::OnMintDisconnected(CAmount ddAmount, CAmount dgbCollateral)
+{
+    s_currentMetrics.totalDDSupply = std::max<CAmount>(0, s_currentMetrics.totalDDSupply - ddAmount);
+    s_currentMetrics.totalCollateral = std::max<CAmount>(0, s_currentMetrics.totalCollateral - dgbCollateral);
+    LogPrint(BCLog::DIGIDOLLAR, "Health: Mint disconnected - DD -%s, Collateral -%s (totals: DD=%s, Collateral=%s)\n",
+             FormatMoney(ddAmount), FormatMoney(dgbCollateral),
+             FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
+}
+
+void SystemHealthMonitor::OnRedeemDisconnected(CAmount ddAmount, CAmount dgbCollateral)
+{
+    s_currentMetrics.totalDDSupply += ddAmount;
+    s_currentMetrics.totalCollateral += dgbCollateral;
+    LogPrint(BCLog::DIGIDOLLAR, "Health: Redeem disconnected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
+             FormatMoney(ddAmount), FormatMoney(dgbCollateral),
+             FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
+}
+
 void SystemHealthMonitor::AggregateWalletStats(
     const std::vector<std::shared_ptr<wallet::CWallet>>& wallets,
     CAmount& totalDDSupply,

@@ -5,6 +5,7 @@
 #include <validation.h>
 #include <digidollar/validation.h>
 #include <digidollar/digidollar.h>
+#include <digidollar/health.h>
 
 #include <kernel/chain.h>
 #include <kernel/coinstats.h>
@@ -2347,6 +2348,46 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
                 error("DisconnectBlock(): transaction and undo data inconsistent");
                 return DISCONNECT_FAILED;
             }
+
+            // ===== Reverse incremental DD metrics tracking (T5-06) =====
+            // Must run BEFORE ApplyTxInUndo moves the undo coin data.
+            if (DigiDollar::HasDigiDollarMarker(tx)) {
+                auto ddTxType = DigiDollar::GetDigiDollarTxType(tx);
+                if (ddTxType == DigiDollar::DD_TX_MINT) {
+                    // Undo a MINT: subtract its DD supply and collateral from metrics
+                    CAmount ddAmount = 0;
+                    if (tx.vout.size() >= 3 &&
+                        DigiDollar::ExtractDDAmount(tx.vout[2].scriptPubKey, ddAmount) &&
+                        ddAmount > 0) {
+                        DigiDollar::SystemHealthMonitor::OnMintDisconnected(ddAmount, tx.vout[0].nValue);
+                    }
+                } else if (ddTxType == DigiDollar::DD_TX_REDEEM && !txundo.vprevout.empty()) {
+                    // Undo a REDEEM: the vault is restored, add back to metrics.
+                    // txundo.vprevout[0] is the vault coin being un-spent.
+                    CAmount vaultCollateral = txundo.vprevout[0].out.nValue;
+                    CAmount ddAmount = 0;
+                    // Look up original MINT tx from block storage to get DD amount
+                    uint32_t mintHeight = txundo.vprevout[0].nHeight;
+                    const CBlockIndex* pMintBlock = pindex->GetAncestor(mintHeight);
+                    if (pMintBlock) {
+                        CBlock mintBlock;
+                        if (m_blockman.ReadBlockFromDisk(mintBlock, *pMintBlock)) {
+                            for (const auto& btx : mintBlock.vtx) {
+                                if (btx->GetHash() == tx.vin[0].prevout.hash &&
+                                    btx->vout.size() >= 3) {
+                                    DigiDollar::ExtractDDAmount(btx->vout[2].scriptPubKey, ddAmount);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (ddAmount > 0 && vaultCollateral > 0) {
+                        DigiDollar::SystemHealthMonitor::OnRedeemDisconnected(ddAmount, vaultCollateral);
+                    }
+                }
+            }
+            // ===== End reverse incremental DD metrics tracking =====
+
             for (unsigned int j = tx.vin.size(); j > 0;) {
                 --j;
                 const COutPoint& out = tx.vin[j].prevout;
@@ -2799,6 +2840,38 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                     return error("%s: DigiDollar validation failed: %s, %s", __func__,
                                tx.GetHash().ToString(), dd_state.ToString());
                 }
+
+                // ===== Incremental DD metrics tracking (T5-06) =====
+                // Update cached system metrics so ShouldBlockMinting() always
+                // works off current data instead of stale ScanUTXOSet results.
+                auto ddTxType = DigiDollar::GetDigiDollarTxType(tx);
+                if (ddTxType == DigiDollar::DD_TX_MINT) {
+                    // MINT: extract DD amount from OP_RETURN (output 2) and collateral from output 0
+                    CAmount mintDDAmount = 0;
+                    if (tx.vout.size() >= 3 &&
+                        DigiDollar::ExtractDDAmount(tx.vout[2].scriptPubKey, mintDDAmount) &&
+                        mintDDAmount > 0) {
+                        DigiDollar::SystemHealthMonitor::OnMintConnected(mintDDAmount, tx.vout[0].nValue);
+                    }
+                } else if (ddTxType == DigiDollar::DD_TX_REDEEM && !tx.vin.empty()) {
+                    // REDEEM: decrement by the original MINT's DD amount and collateral.
+                    // Input 0 is the vault coin (output 0 of the original MINT).
+                    const Coin& vaultCoin = view.AccessCoin(tx.vin[0].prevout);
+                    if (!vaultCoin.IsSpent()) {
+                        CAmount redeemCollateral = vaultCoin.out.nValue;
+                        CAmount redeemDDAmount = 0;
+                        // Look up the original MINT tx to extract DD amount from its OP_RETURN
+                        CTransactionRef origMintTx;
+                        if (txLookup(tx.vin[0].prevout.hash, vaultCoin.nHeight, origMintTx) &&
+                            origMintTx->vout.size() >= 3) {
+                            DigiDollar::ExtractDDAmount(origMintTx->vout[2].scriptPubKey, redeemDDAmount);
+                        }
+                        if (redeemDDAmount > 0 && redeemCollateral > 0) {
+                            DigiDollar::SystemHealthMonitor::OnRedeemConnected(redeemDDAmount, redeemCollateral);
+                        }
+                    }
+                }
+                // ===== End incremental DD metrics tracking =====
             }
         }
 

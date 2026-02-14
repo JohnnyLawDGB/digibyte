@@ -133,7 +133,7 @@ jobs:
         run: ./src/test/test_digibyte --show_progress
 
       - name: Run Functional Tests
-        run: test/functional/test_runner.py --jobs=1
+        run: test/functional/test_runner.py --jobs=2
 
       - name: Upload Test Suite Log
         uses: actions/upload-artifact@v4
@@ -239,7 +239,7 @@ jobs:
         run: ./src/test/test_digibyte --show_progress
 
       - name: Run Functional Tests
-        run: test/functional/test_runner.py --jobs=1
+        run: test/functional/test_runner.py --jobs=2
 
       - name: Upload Test Suite Log
         uses: actions/upload-artifact@v4

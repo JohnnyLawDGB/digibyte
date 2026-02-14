@@ -6,12 +6,16 @@ name: CI
 on:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request.
   pull_request:
+  # Allow manual triggering from the Actions tab.
+  workflow_dispatch:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#push.
   push:
     branches:
       - develop
       - master
       - 'release/**'
+      - 'feature/**'
+      - 'fix/**'
     tags-ignore:
       - '**'
 

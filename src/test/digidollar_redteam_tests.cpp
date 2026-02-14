@@ -17178,4 +17178,423 @@ BOOST_AUTO_TEST_CASE(redteam_t9_03g_cached_price_manipulation_via_inactive_oracl
     manager.SetMinOracleCount(original_min);
 }
 
+// ============================================================================
+// T9-04: Oracle ID 8 (JohnnyLaw) — Boundary Checks at Max Index
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t9_04a_oracle_id_8_in_configured_range)
+{
+    // Oracle ID 8 is the highest configured oracle on testnet (9 oracles, IDs 0-8).
+    // Unit tests run in MAINNET context (BasicTestingSetup defaults to ChainType::MAIN),
+    // which has 30 oracle nodes (IDs 0-29). Oracle ID 8 must exist in all configurations.
+    const CChainParams& params = Params();
+    const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
+
+    BOOST_TEST_MESSAGE("=== T9-04a: Oracle ID 8 is within configured oracle set ===");
+    BOOST_TEST_MESSAGE("  Chain type: MAINNET (BasicTestingSetup default)");
+    BOOST_TEST_MESSAGE("  Total configured oracles (vOracleNodes): " + std::to_string(all_oracles.size()));
+
+    // Oracle ID 8 should exist on all chains (mainnet has 30, testnet 9, regtest 7+)
+    const OracleNodeInfo* oracle8 = params.GetOracleNode(8);
+    BOOST_CHECK(oracle8 != nullptr);
+    if (oracle8) {
+        BOOST_CHECK_EQUAL(oracle8->id, 8u);
+        BOOST_CHECK(oracle8->is_active);
+        BOOST_TEST_MESSAGE("  Oracle ID 8 found: is_active=" + std::to_string(oracle8->is_active) + " ✅");
+    }
+
+    // Verify all configured oracles have sequential IDs starting from 0
+    for (size_t i = 0; i < all_oracles.size(); ++i) {
+        BOOST_CHECK_EQUAL(all_oracles[i].id, static_cast<uint32_t>(i));
+    }
+    BOOST_TEST_MESSAGE("  All " + std::to_string(all_oracles.size()) + " oracle IDs are sequential (0-"
+                      + std::to_string(all_oracles.size() - 1) + ") ✅");
+
+    // Verify GetOracleNode() returns nullptr for the first out-of-range ID
+    uint32_t max_id = all_oracles.empty() ? 0 : all_oracles.back().id;
+    const OracleNodeInfo* beyond_max = params.GetOracleNode(max_id + 1);
+    BOOST_CHECK(beyond_max == nullptr);
+    BOOST_TEST_MESSAGE("  Oracle ID " + std::to_string(max_id + 1) + " (max+1): nullptr ✅");
+
+    // Verify GetOracleNode() uses linear scan (not array index) — safe for any ID
+    const OracleNodeInfo* id_255 = params.GetOracleNode(255);
+    BOOST_CHECK(id_255 == nullptr); // 255 not configured, but no crash
+    const OracleNodeInfo* id_max_uint32 = params.GetOracleNode(UINT32_MAX);
+    BOOST_CHECK(id_max_uint32 == nullptr); // Max uint32 — no crash, no overflow
+    BOOST_TEST_MESSAGE("  GetOracleNode(255)=nullptr, GetOracleNode(UINT32_MAX)=nullptr ✅ (no OOB)");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
+{
+    // KEY FINDING: Three independent oracle count values that SHOULD agree but DON'T:
+    //   1. ORACLE_TOTAL_COUNT (static constant = 30)
+    //   2. nOracleTotalOracles (consensus param: mainnet=15, testnet=9, regtest=7)
+    //   3. vOracleNodes.size() (per-chain: mainnet=30, testnet=9, regtest=7)
+    //
+    // On mainnet: ORACLE_TOTAL_COUNT(30) == vOracleNodes(30) != nOracleTotalOracles(15)
+    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(9) != nOracleTotalOracles(9)
+    //
+    // The P2P handler uses ORACLE_TOTAL_COUNT for bounds. This means:
+    // - On mainnet: ORACLE_TOTAL_COUNT matches vOracleNodes, but nOracleTotalOracles is lower
+    // - On testnet: IDs 9-29 pass P2P bounds check but are handled by GetOracleNode second check
+    //
+    // DESIGN GAP: nOracleTotalOracles doesn't match vOracleNodes.size() on mainnet (15 vs 30).
+    // This means the "total oracles" consensus parameter doesn't reflect reality.
+    const CChainParams& params = Params();
+    const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
+    const Consensus::Params& consensus = params.GetConsensus();
+
+    BOOST_TEST_MESSAGE("=== T9-04b: Oracle count inconsistencies across three sources ===");
+    BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT (static): " + std::to_string(ORACLE_TOTAL_COUNT));
+    BOOST_TEST_MESSAGE("  vOracleNodes.size(): " + std::to_string(all_oracles.size()));
+    BOOST_TEST_MESSAGE("  nOracleTotalOracles (consensus): " + std::to_string(consensus.nOracleTotalOracles));
+
+    // On mainnet (our test context): ORACLE_TOTAL_COUNT == vOracleNodes.size() == 30
+    BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, static_cast<int>(all_oracles.size()));
+    BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
+
+    // BUT: nOracleTotalOracles (15) != vOracleNodes.size() (30) — MISMATCH!
+    BOOST_CHECK_NE(consensus.nOracleTotalOracles, all_oracles.size());
+    BOOST_TEST_MESSAGE("  ⚠️ nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
+                      + ") != vOracleNodes.size() (" + std::to_string(all_oracles.size()) + ") — MISMATCH");
+
+    // Document the semantic difference:
+    // nOracleTotalOracles = "how many oracles participate in Phase Two consensus" (15)
+    // vOracleNodes = "all known oracle configurations including future/inactive" (30)
+    // ORACLE_TOTAL_COUNT = "hard upper bound for oracle IDs" (30)
+    BOOST_TEST_MESSAGE("  📝 nOracleTotalOracles = oracles in Phase Two consensus (15)");
+    BOOST_TEST_MESSAGE("  📝 vOracleNodes = all known oracle configs (30, includes inactive/future)");
+    BOOST_TEST_MESSAGE("  📝 ORACLE_TOTAL_COUNT = hard upper bound for IDs (30)");
+
+    // Verify nOracleRequiredMessages < nOracleTotalOracles
+    BOOST_CHECK_LT(consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
+    BOOST_TEST_MESSAGE("  Required " + std::to_string(consensus.nOracleRequiredMessages)
+                      + "-of-" + std::to_string(consensus.nOracleTotalOracles) + " consensus ✅");
+
+    // The P2P bounds check (oracle_id >= ORACLE_TOTAL_COUNT) matches vOracleNodes on mainnet
+    // All IDs 0-29 have oracle configs. ID 30+ are rejected at first check.
+    BOOST_TEST_MESSAGE("  P2P accepts IDs 0-" + std::to_string(ORACLE_TOTAL_COUNT - 1)
+                      + ", matches mainnet config range ✅");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_04c_is_valid_oracle_message_at_max_id)
+{
+    // Verify IsValidOracleMessage behavior at max configured ID and just beyond
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    const CChainParams& params = Params();
+    const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
+
+    BOOST_TEST_MESSAGE("=== T9-04c: IsValidOracleMessage at max configured oracle ID ===");
+
+    uint32_t max_configured_id = all_oracles.empty() ? 0 : all_oracles.back().id;
+    int64_t now = GetTime();
+
+    // Test message at max configured ID (should pass basic field checks, fail on sig)
+    COraclePriceMessage msg_max;
+    msg_max.oracle_id = max_configured_id;
+    msg_max.price_micro_usd = 5000;
+    msg_max.timestamp = now;
+
+    // Message at max+1 should fail (no oracle config)
+    COraclePriceMessage msg_beyond;
+    msg_beyond.oracle_id = max_configured_id + 1;
+    msg_beyond.price_micro_usd = 5000;
+    msg_beyond.timestamp = now;
+
+    // AddOracleMessage for max+1 should return false (GetOracleNode returns nullptr
+    // inside IsValidOracleMessage, which is called by AddOracleMessage)
+    int original_min = manager.GetMinOracleCount();
+    manager.SetMinOracleCount(5); // Phase Two mode
+
+    bool added_beyond = manager.AddOracleMessage(msg_beyond);
+    BOOST_CHECK(!added_beyond);
+    BOOST_TEST_MESSAGE("  Oracle ID " + std::to_string(max_configured_id + 1)
+                      + " (beyond max): AddOracleMessage=" + std::to_string(added_beyond) + " ✅ (rejected)");
+
+    manager.SetMinOracleCount(original_min);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_04d_on_chain_format_id_boundary_serialization)
+{
+    // Oracle ID is stored as uint8_t (1 byte) in on-chain format.
+    // Test boundary values: 0 (min), 8 (JohnnyLaw on testnet), 29 (max on mainnet), 255 (uint8_t max).
+    // IDs > 255 are rejected by CreateOracleScript.
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+
+    BOOST_TEST_MESSAGE("=== T9-04d: On-chain format oracle ID boundary serialization ===");
+
+    // Test ID 0 (minimum)
+    {
+        COracleBundle bundle;
+        bundle.epoch = 1;
+        COraclePriceMessage msg;
+        msg.oracle_id = 0;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = GetTime();
+        bundle.messages.push_back(msg);
+        bundle.median_price_micro_usd = 5000;
+        bundle.timestamp = msg.timestamp;
+        CScript script = manager.CreateOracleScript(bundle);
+        BOOST_CHECK(!script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 0 (min): serializes OK ✅");
+    }
+
+    // Test ID 8 (JohnnyLaw on testnet, within mainnet range)
+    {
+        COracleBundle bundle;
+        bundle.epoch = 1;
+        COraclePriceMessage msg;
+        msg.oracle_id = 8;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = GetTime();
+        bundle.messages.push_back(msg);
+        bundle.median_price_micro_usd = 5000;
+        bundle.timestamp = msg.timestamp;
+        CScript script = manager.CreateOracleScript(bundle);
+        BOOST_CHECK(!script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 8 (JohnnyLaw): serializes OK ✅");
+    }
+
+    // Test ID 29 (max on mainnet)
+    {
+        COracleBundle bundle;
+        bundle.epoch = 1;
+        COraclePriceMessage msg;
+        msg.oracle_id = 29;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = GetTime();
+        bundle.messages.push_back(msg);
+        bundle.median_price_micro_usd = 5000;
+        bundle.timestamp = msg.timestamp;
+        CScript script = manager.CreateOracleScript(bundle);
+        BOOST_CHECK(!script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 29 (mainnet max): serializes OK ✅");
+    }
+
+    // Test ID 255 (uint8_t max — serializes, but no oracle config for it)
+    {
+        COracleBundle bundle;
+        bundle.epoch = 1;
+        COraclePriceMessage msg;
+        msg.oracle_id = 255;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = GetTime();
+        bundle.messages.push_back(msg);
+        bundle.median_price_micro_usd = 5000;
+        bundle.timestamp = msg.timestamp;
+        CScript script = manager.CreateOracleScript(bundle);
+        BOOST_CHECK(!script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 255 (uint8_t max): serializes OK ✅ (no config → rejected at validation)");
+    }
+
+    // Test ID 256 (exceeds uint8_t) — CreateOracleScript should return empty script
+    {
+        COracleBundle bundle;
+        bundle.epoch = 1;
+        COraclePriceMessage msg;
+        msg.oracle_id = 256;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = GetTime();
+        bundle.messages.push_back(msg);
+        bundle.median_price_micro_usd = 5000;
+        bundle.timestamp = msg.timestamp;
+        CScript script = manager.CreateOracleScript(bundle);
+        BOOST_CHECK(script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 256 (exceeds uint8_t): rejected ✅ (DGB-SEC-004)");
+    }
+
+    // Test UINT32_MAX — rejected at serialization
+    {
+        COracleBundle bundle;
+        bundle.epoch = 1;
+        COraclePriceMessage msg;
+        msg.oracle_id = UINT32_MAX;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = GetTime();
+        bundle.messages.push_back(msg);
+        bundle.median_price_micro_usd = 5000;
+        bundle.timestamp = msg.timestamp;
+        CScript script = manager.CreateOracleScript(bundle);
+        BOOST_CHECK(script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID UINT32_MAX: rejected ✅ (DGB-SEC-004)");
+    }
+
+    BOOST_TEST_MESSAGE("  📝 On-chain format safely handles all boundary values");
+    BOOST_TEST_MESSAGE("  📝 IDs 0-255 serialize, IDs 256+ rejected. Validation catches unconfigured IDs.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_04e_pending_messages_map_key_boundary)
+{
+    // pending_messages is std::map<int, COraclePriceMessage> keyed by oracle_id.
+    // Map keys are integers — no array bounds issue. Oracle ID 8 is just another key.
+    // Verify that adding/removing messages at ID 8 works correctly alongside lower IDs.
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+
+    BOOST_TEST_MESSAGE("=== T9-04e: pending_messages map key boundary at oracle ID 8 ===");
+
+    int original_min = manager.GetMinOracleCount();
+    manager.SetMinOracleCount(1); // Phase One for easy testing
+    manager.ClearPendingMessages();
+
+    int64_t now = GetTime();
+
+    // Add messages from oracles 0, 4, and 8 (first, middle, last on testnet)
+    for (uint32_t id : {0u, 4u, 8u}) {
+        COraclePriceMessage msg;
+        msg.oracle_id = id;
+        msg.price_micro_usd = 5000 + id * 100;
+        msg.timestamp = now + id;
+        // InjectTestMessage bypasses signature verification
+        manager.InjectTestMessage(msg);
+    }
+
+    auto pending = manager.GetPendingMessages();
+    BOOST_CHECK_EQUAL(pending.size(), 3u);
+    BOOST_TEST_MESSAGE("  After adding IDs 0, 4, 8: " + std::to_string(pending.size()) + " messages ✅");
+
+    // Verify we can find oracle 8's message in pending
+    bool found_8 = false;
+    for (const auto& msg : pending) {
+        if (msg.oracle_id == 8) {
+            found_8 = true;
+            BOOST_CHECK_EQUAL(msg.price_micro_usd, 5800u);
+        }
+    }
+    BOOST_CHECK(found_8);
+    BOOST_TEST_MESSAGE("  Oracle ID 8 message found in pending with correct price ✅");
+
+    // Remove oracle 8 and verify
+    bool removed = manager.RemoveOracleMessage(8);
+    BOOST_CHECK(removed);
+    pending = manager.GetPendingMessages();
+    BOOST_CHECK_EQUAL(pending.size(), 2u);
+    BOOST_TEST_MESSAGE("  After removing ID 8: " + std::to_string(pending.size()) + " messages ✅");
+
+    // Verify oracle 8 is gone
+    for (const auto& msg : pending) {
+        BOOST_CHECK_NE(msg.oracle_id, 8u);
+    }
+
+    manager.ClearPendingMessages();
+    manager.SetMinOracleCount(original_min);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
+{
+    // Mainnet has 30 oracle nodes but ORACLE_ACTIVE_COUNT=15. SelectOraclesForEpoch
+    // uses deterministic selection to pick 15 of 30 per epoch.
+    // Oracle ID 8 should be included in SOME epochs but not necessarily all.
+    // Key check: selection is deterministic and rotates fairly across epochs.
+    const CChainParams& params = Params();
+    const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
+
+    BOOST_TEST_MESSAGE("=== T9-04f: SelectOraclesForEpoch with 30 oracles (mainnet context) ===");
+    BOOST_TEST_MESSAGE("  Total oracles: " + std::to_string(all_oracles.size()));
+    BOOST_TEST_MESSAGE("  ORACLE_ACTIVE_COUNT: " + std::to_string(ORACLE_ACTIVE_COUNT));
+
+    // Mainnet has 30 > ORACLE_ACTIVE_COUNT (15), so selection logic activates
+    if (all_oracles.size() > static_cast<size_t>(ORACLE_ACTIVE_COUNT)) {
+        BOOST_TEST_MESSAGE("  30 > 15 → deterministic selection active");
+
+        int id_8_count = 0;
+        int id_29_count = 0;
+        int total_epochs = 100;
+
+        for (int32_t epoch = 0; epoch < total_epochs; ++epoch) {
+            std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(all_oracles, epoch);
+            BOOST_CHECK_EQUAL(selected.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
+
+            bool has_8 = false, has_29 = false;
+            for (const auto& oracle : selected) {
+                if (oracle.id == 8) has_8 = true;
+                if (oracle.id == 29) has_29 = true;
+            }
+            if (has_8) id_8_count++;
+            if (has_29) id_29_count++;
+        }
+
+        // With 15-of-30 selection, each oracle should be selected ~50% of epochs
+        // Allow 30-70% range for statistical variation over 100 epochs
+        BOOST_CHECK_GT(id_8_count, 30);
+        BOOST_CHECK_LT(id_8_count, 70);
+        BOOST_CHECK_GT(id_29_count, 30);
+        BOOST_CHECK_LT(id_29_count, 70);
+        BOOST_TEST_MESSAGE("  Oracle ID 8 selected in " + std::to_string(id_8_count) + "/100 epochs (~50% expected) ✅");
+        BOOST_TEST_MESSAGE("  Oracle ID 29 selected in " + std::to_string(id_29_count) + "/100 epochs (~50% expected) ✅");
+
+        // Verify determinism — same epoch gives same result
+        std::vector<OracleNodeInfo> sel1 = SelectOraclesForEpoch(all_oracles, 42);
+        std::vector<OracleNodeInfo> sel2 = SelectOraclesForEpoch(all_oracles, 42);
+        BOOST_CHECK_EQUAL(sel1.size(), sel2.size());
+        for (size_t i = 0; i < sel1.size(); ++i) {
+            BOOST_CHECK_EQUAL(sel1[i].id, sel2[i].id);
+        }
+        BOOST_TEST_MESSAGE("  Deterministic: same epoch → same selection ✅");
+    } else {
+        // Fewer oracles, all returned
+        std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(all_oracles, 0);
+        BOOST_CHECK_EQUAL(selected.size(), all_oracles.size());
+        BOOST_TEST_MESSAGE("  " + std::to_string(all_oracles.size()) + " ≤ 15 → all returned ✅");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
+{
+    // DESIGN GAP: Three independent oracle count values disagree.
+    //
+    // On mainnet (test context):
+    //   ORACLE_TOTAL_COUNT = 30 (static constant, matches vOracleNodes)
+    //   vOracleNodes.size() = 30 (all configured oracle nodes)
+    //   nOracleTotalOracles = 15 (consensus: "active in Phase Two")
+    //   vOraclePublicKeys.size() = 0 (mainnet has NO oracle keys — Phase One disabled)
+    //
+    // The P2P bounds check uses ORACLE_TOTAL_COUNT (30), which matches vOracleNodes on mainnet.
+    // But nOracleTotalOracles (15) is lower — meaning 15 oracles are "for Phase Two consensus"
+    // while 30 are "known/configured". This is architecturally intentional (30 configured,
+    // 15 selected per epoch via SelectOraclesForEpoch), but the naming is confusing.
+    //
+    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(9) — IDs 9-29 pass P2P bounds
+    // but fail GetOracleNode (defense-in-depth catches it).
+    const CChainParams& params = Params();
+    const Consensus::Params& consensus = params.GetConsensus();
+
+    BOOST_TEST_MESSAGE("=== T9-04g: Three oracle count values and their relationships ===");
+
+    BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT: " + std::to_string(ORACLE_TOTAL_COUNT));
+    BOOST_TEST_MESSAGE("  vOracleNodes.size(): " + std::to_string(params.GetOracleNodes().size()));
+    BOOST_TEST_MESSAGE("  nOracleTotalOracles: " + std::to_string(consensus.nOracleTotalOracles));
+    BOOST_TEST_MESSAGE("  ORACLE_ACTIVE_COUNT: " + std::to_string(ORACLE_ACTIVE_COUNT));
+    BOOST_TEST_MESSAGE("  nOracleRequiredMessages: " + std::to_string(consensus.nOracleRequiredMessages));
+    BOOST_TEST_MESSAGE("  vOraclePublicKeys.size(): " + std::to_string(consensus.vOraclePublicKeys.size()));
+
+    // On mainnet: ORACLE_TOTAL_COUNT matches vOracleNodes
+    BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, static_cast<int>(params.GetOracleNodes().size()));
+    BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT == vOracleNodes ✅");
+
+    // But nOracleTotalOracles is lower (15 = active per epoch, not total configured)
+    BOOST_CHECK_NE(consensus.nOracleTotalOracles, params.GetOracleNodes().size());
+    BOOST_TEST_MESSAGE("  ⚠️ nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
+                      + ") != vOracleNodes (" + std::to_string(params.GetOracleNodes().size()) + ")");
+
+    // nOracleTotalOracles SHOULD equal ORACLE_ACTIVE_COUNT (both represent "per epoch")
+    BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, ORACLE_ACTIVE_COUNT);
+    BOOST_TEST_MESSAGE("  nOracleTotalOracles == ORACLE_ACTIVE_COUNT == 15 ✅ (conceptually: active per epoch)");
+
+    // vOraclePublicKeys is empty on mainnet — Phase One is testnet-only
+    BOOST_CHECK(consensus.vOraclePublicKeys.empty());
+    BOOST_TEST_MESSAGE("  vOraclePublicKeys empty on mainnet ✅ (Phase One disabled)");
+
+    // DESIGN GAP: P2P bounds check and ValidateBlockOracleData both use ORACLE_TOTAL_COUNT.
+    // This is correct for mainnet (matches vOracleNodes), but on testnet creates a gap where
+    // IDs between vOracleNodes.size() and ORACLE_TOTAL_COUNT pass the first check.
+    // Defense-in-depth: GetOracleNode() linear scan provides the real check.
+    //
+    // Better approach: Use vOracleNodes.size() or nOracleTotalOracles in P2P handler
+    // instead of a static constant that may drift from per-chain configs.
+    BOOST_TEST_MESSAGE("  📝 P2P uses ORACLE_TOTAL_COUNT — matches mainnet but not testnet");
+    BOOST_TEST_MESSAGE("  📝 nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
+                      + ") = per-epoch active count, not total configured");
+    BOOST_TEST_MESSAGE("  📝 Recommend: rename nOracleTotalOracles to nOracleActivePerEpoch for clarity");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

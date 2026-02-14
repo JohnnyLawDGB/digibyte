@@ -16230,4 +16230,537 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01g_even_count_median_formula_divergence)
                        << " → " << collateral_gap << " sat collateral gap per $100 DD ⚠️");
 }
 
+// =============================================================================
+// T9-02: 5 Oracles with 2 Stale — Expiry Drops Below Threshold?
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t9_02a_inject_bypasses_stale_purge)
+{
+    // DESIGN GAP: InjectTestMessage (and by extension AddOracleBundleToBlock's
+    // direct read of pending_messages) does NOT purge stale entries.
+    // The stale purge ONLY runs inside AddOracleMessage(), which requires
+    // valid Schnorr signatures (IsValidOracleMessage -> VerifyPhase2).
+    BOOST_TEST_MESSAGE("T9-02a: InjectTestMessage bypasses stale purge — stale messages persist");
+
+    OracleBundleManager manager;
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(5);  // testnet threshold
+
+    int64_t now = GetTime();
+
+    // Inject 5 messages: oracles 0-2 fresh, oracles 3-4 stale (4000s old)
+    for (uint32_t i = 0; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000 + i * 100;
+        msg.timestamp = (i < 3) ? now : (now - 4000);  // 3 fresh, 2 stale
+        manager.InjectTestMessage(msg);
+    }
+
+    // ALL 5 persist — InjectTestMessage does NOT purge stale entries
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 5u);
+
+    // GetPendingMessages also returns all 5 including stale
+    std::vector<COraclePriceMessage> msgs = manager.GetPendingMessages();
+    BOOST_CHECK_EQUAL(msgs.size(), 5u);
+
+    // Count stale messages that SHOULD have been purged
+    int stale_count = 0;
+    for (const auto& m : msgs) {
+        if (now - m.timestamp > ORACLE_MAX_AGE_SECONDS) {
+            stale_count++;
+        }
+    }
+    BOOST_CHECK_EQUAL(stale_count, 2);
+
+    // AddOracleMessage (which has the purge) rejects messages without valid
+    // Schnorr signatures. So the purge ONLY fires when a legitimately signed
+    // oracle message arrives via P2P. Code paths that read pending_messages
+    // directly (GetPendingMessages, AddOracleBundleToBlock Phase Two) will
+    // include stale messages.
+    //
+    // RACE WINDOW: Between the last AddOracleMessage purge and the next
+    // AddOracleBundleToBlock call, stale entries accumulate. With oracles
+    // broadcasting every ~60s, this window is typically small but nonzero.
+
+    BOOST_TEST_MESSAGE("  pending_messages: " << msgs.size() << " total, "
+                       << stale_count << " stale (not purged)");
+    BOOST_TEST_MESSAGE("  DESIGN GAP: Stale purge only in AddOracleMessage (requires sig) ⚠️");
+    BOOST_TEST_MESSAGE("  GetPendingMessages/AddOracleBundleToBlock bypass purge ⚠️");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_02b_get_pending_messages_returns_stale)
+{
+    // DESIGN GAP: GetPendingMessages() does NOT filter stale messages.
+    // Any consumer (including AddOracleBundleToBlock Phase Two path) gets stale data.
+    BOOST_TEST_MESSAGE("T9-02b: GetPendingMessages() returns stale messages without filtering");
+
+    OracleBundleManager manager;
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(5);
+
+    int64_t now = GetTime();
+
+    // Inject 5 messages: 3 fresh, 2 stale
+    for (uint32_t i = 0; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000 + i * 100;
+        msg.timestamp = (i < 3) ? now : (now - 4000);
+        manager.InjectTestMessage(msg);
+    }
+
+    // GetPendingMessages returns ALL 5 (no purge)
+    std::vector<COraclePriceMessage> messages = manager.GetPendingMessages();
+    BOOST_CHECK_EQUAL(messages.size(), 5u);
+
+    // Count stale messages
+    int stale_count = 0;
+    for (const auto& msg : messages) {
+        if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) {
+            stale_count++;
+        }
+    }
+    BOOST_CHECK_EQUAL(stale_count, 2);
+
+    // GetPendingMessageCount also returns 5
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 5u);
+
+    BOOST_TEST_MESSAGE("  GetPendingMessages returned " << messages.size()
+                       << " messages including " << stale_count << " stale ⚠️");
+    BOOST_TEST_MESSAGE("  DESIGN GAP: No staleness filter in GetPendingMessages() ⚠️");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_02c_phase2_bundle_creation_includes_stale)
+{
+    // DESIGN GAP: AddOracleBundleToBlock Phase Two path reads pending_messages
+    // WITHOUT a stale purge. Stale messages can be included in the block bundle.
+    BOOST_TEST_MESSAGE("T9-02c: Phase Two bundle creation path includes stale messages");
+
+    // Create a bundle directly from pending messages (simulating the Phase Two path)
+    OracleBundleManager manager;
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(5);
+
+    int64_t now = GetTime();
+
+    // Inject 5 messages: 3 fresh, 2 stale with DIFFERENT prices
+    // Fresh oracles: $0.0050 (DGB dropped)
+    // Stale oracles: $0.0055 (old higher price)
+    for (uint32_t i = 0; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        if (i < 3) {
+            msg.price_micro_usd = 5000;  // Fresh: $0.005
+            msg.timestamp = now;
+        } else {
+            msg.price_micro_usd = 5500;  // Stale: $0.0055 (10% higher)
+            msg.timestamp = now - 4000;   // 4000s old (stale)
+        }
+        manager.InjectTestMessage(msg);
+    }
+
+    // Simulate Phase Two path: read pending_messages directly
+    std::vector<COraclePriceMessage> pending = manager.GetPendingMessages();
+    BOOST_CHECK_EQUAL(pending.size(), 5u);  // Includes stale!
+
+    // Create bundle from ALL pending (as AddOracleBundleToBlock does)
+    COracleBundle bundle;
+    bundle.epoch = 1;
+    bundle.messages = pending;
+
+    // HasConsensus passes because it counts ALL messages
+    BOOST_CHECK(bundle.HasConsensus(5));
+
+    // GetConsensusPrice includes stale prices in median calculation
+    uint64_t price_with_stale = bundle.GetConsensusPrice(5);
+
+    // Now create bundle with ONLY fresh messages
+    COracleBundle fresh_bundle;
+    fresh_bundle.epoch = 1;
+    for (const auto& msg : pending) {
+        if (now - msg.timestamp <= ORACLE_MAX_AGE_SECONDS) {
+            fresh_bundle.AddMessage(msg);
+        }
+    }
+    BOOST_CHECK_EQUAL(fresh_bundle.messages.size(), 3u);  // Only 3 fresh
+    BOOST_CHECK(!fresh_bundle.HasConsensus(5));  // Below threshold
+
+    // The fresh-only bundle can't even reach consensus!
+    uint64_t price_fresh_only = fresh_bundle.GetConsensusPrice(5);
+    BOOST_CHECK_EQUAL(price_fresh_only, 0u);  // No consensus with 3 < 5
+
+    // With stale included: consensus achieved but price may be skewed
+    // Sorted prices: [5000, 5000, 5000, 5500, 5500]
+    // FilterOutliers: median=5000, threshold=500 (10%), range [4500, 5500]
+    // 5500 is AT boundary (deviation = 500 = threshold) → included
+    // Median of 5 values: 5000
+    BOOST_TEST_MESSAGE("  Price with stale: " << price_with_stale
+                       << ", fresh-only consensus: " << price_fresh_only);
+    BOOST_TEST_MESSAGE("  DESIGN GAP: Phase Two path achieves consensus using stale messages ⚠️");
+    BOOST_TEST_MESSAGE("  Fresh oracles alone (3) cannot reach threshold (5) ⚠️");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_02d_bundle_timestamp_hides_stale_messages)
+{
+    // DESIGN GAP: bundle.timestamp is set from pending[0].timestamp in Phase Two.
+    // If pending[0] is a FRESH oracle, the bundle timestamp is fresh even though
+    // individual messages may be stale. ValidateBlockOracleData checks only
+    // bundle.timestamp — stale messages pass block validation.
+    BOOST_TEST_MESSAGE("T9-02d: Bundle timestamp from fresh oracle hides stale message ages");
+
+    int64_t now = GetTime();
+    int64_t stale_time = now - 4000;  // 4000 seconds ago
+
+    // Simulate Phase Two bundle creation from AddOracleBundleToBlock:
+    // bundle.timestamp = pending[0].timestamp
+    // where pending is ordered by oracle_id (std::map iteration)
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    // Oracle 0 (lowest ID, will be pending[0]) — FRESH
+    COraclePriceMessage msg0;
+    msg0.oracle_id = 0;
+    msg0.price_micro_usd = 5000;
+    msg0.timestamp = now;
+    bundle.AddMessage(msg0);
+
+    // Oracle 1 — FRESH
+    COraclePriceMessage msg1;
+    msg1.oracle_id = 1;
+    msg1.price_micro_usd = 5000;
+    msg1.timestamp = now;
+    bundle.AddMessage(msg1);
+
+    // Oracle 2 — FRESH
+    COraclePriceMessage msg2;
+    msg2.oracle_id = 2;
+    msg2.price_micro_usd = 5000;
+    msg2.timestamp = now;
+    bundle.AddMessage(msg2);
+
+    // Oracle 3 — STALE (4000s old)
+    COraclePriceMessage msg3;
+    msg3.oracle_id = 3;
+    msg3.price_micro_usd = 5800;  // Higher stale price
+    msg3.timestamp = stale_time;
+    bundle.AddMessage(msg3);
+
+    // Oracle 4 — STALE (4000s old)
+    COraclePriceMessage msg4;
+    msg4.oracle_id = 4;
+    msg4.price_micro_usd = 5800;  // Higher stale price
+    msg4.timestamp = stale_time;
+    bundle.AddMessage(msg4);
+
+    // In AddOracleBundleToBlock: bundle.timestamp = pending[0].timestamp = now (FRESH)
+    bundle.timestamp = msg0.timestamp;  // Fresh oracle's timestamp
+
+    // Simulate ValidateBlockOracleData timestamp check:
+    // oracle_age = block.nTime - bundle.timestamp
+    uint32_t block_time = static_cast<uint32_t>(now);
+    int64_t oracle_age = block_time - bundle.timestamp;
+
+    // Bundle passes the staleness check!
+    BOOST_CHECK(oracle_age <= ORACLE_MAX_AGE_SECONDS);
+
+    // But individual messages 3 and 4 are stale
+    int64_t msg3_age = now - msg3.timestamp;
+    int64_t msg4_age = now - msg4.timestamp;
+    BOOST_CHECK(msg3_age > ORACLE_MAX_AGE_SECONDS);
+    BOOST_CHECK(msg4_age > ORACLE_MAX_AGE_SECONDS);
+
+    // Per-message staleness check would catch these:
+    int stale_in_bundle = 0;
+    for (const auto& msg : bundle.messages) {
+        if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) {
+            stale_in_bundle++;
+        }
+    }
+    BOOST_CHECK_EQUAL(stale_in_bundle, 2);
+
+    BOOST_TEST_MESSAGE("  Bundle timestamp age: " << oracle_age << "s (PASSES staleness check)");
+    BOOST_TEST_MESSAGE("  Individual stale messages in bundle: " << stale_in_bundle);
+    BOOST_TEST_MESSAGE("  DESIGN GAP: bundle.timestamp hides per-message staleness ⚠️");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_02e_stale_messages_skew_consensus_price)
+{
+    // IMPACT: When stale messages are included, they can skew the consensus
+    // price by up to the staleness price drift. In a volatile market, this
+    // can be significant.
+    BOOST_TEST_MESSAGE("T9-02e: Stale messages skew consensus price in volatile market");
+
+    int64_t now = GetTime();
+
+    // Scenario: DGB price crashed 15% in the last hour
+    // Fresh oracles: $0.0042/DGB (post-crash)
+    // Stale oracles: $0.0050/DGB (pre-crash, 4000s ago)
+
+    // Bundle with ALL 5 (3 fresh + 2 stale)
+    COracleBundle mixed_bundle;
+    mixed_bundle.epoch = 1;
+
+    // 3 fresh at post-crash price
+    for (uint32_t i = 0; i < 3; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 4200;  // $0.0042
+        msg.timestamp = now;
+        mixed_bundle.AddMessage(msg);
+    }
+    // 2 stale at pre-crash price
+    for (uint32_t i = 3; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000;  // $0.005 (pre-crash)
+        msg.timestamp = now - 4000;
+        mixed_bundle.AddMessage(msg);
+    }
+
+    BOOST_CHECK(mixed_bundle.HasConsensus(5));
+    uint64_t mixed_price = mixed_bundle.GetConsensusPrice(5);
+
+    // Fresh-only bundle (won't reach consensus, but calculate price for comparison)
+    COracleBundle fresh_bundle;
+    fresh_bundle.epoch = 1;
+    for (uint32_t i = 0; i < 3; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 4200;
+        msg.timestamp = now;
+        fresh_bundle.AddMessage(msg);
+    }
+    // 3-of-5 doesn't meet threshold, but calculate median manually
+    uint64_t fresh_price = 4200;  // Only price, all identical
+
+    // What about with CalculateConsensusPrice (IQR filter)?
+    const Consensus::Params& params = Params().GetConsensus();
+    CAmount calc_price = OracleBundleManager::CalculateConsensusPrice(mixed_bundle, params);
+
+    // Sorted prices: [4200, 4200, 4200, 5000, 5000]
+    // For GetConsensusPrice (10% filter):
+    //   median = 4200 (index 2), threshold = 420
+    //   deviation of 5000: |5000-4200| = 800 > 420 → FILTERED
+    //   After filter: [4200, 4200, 4200] → median = 4200
+    // For CalculateConsensusPrice (IQR filter, 5+ messages):
+    //   Q1 = prices[5/4] = prices[1] = 4200
+    //   Q3 = prices[15/4] = prices[3] = 5000
+    //   IQR = 800, lower = 4200 - 1200 = 3000, upper = 5000 + 1200 = 6200
+    //   All 5 pass IQR filter → median of [4200, 4200, 4200, 5000, 5000] = 4200
+
+    BOOST_TEST_MESSAGE("  Mixed bundle (3 fresh + 2 stale) GetConsensusPrice: " << mixed_price);
+    BOOST_TEST_MESSAGE("  CalculateConsensusPrice (IQR): " << calc_price);
+    BOOST_TEST_MESSAGE("  Fresh-only median: " << fresh_price);
+
+    // In this 15% crash scenario, outlier filter happens to catch the stale prices
+    // But with smaller drift, they won't be caught
+
+    // Now test with smaller drift (5% crash — within 10% filter threshold)
+    COracleBundle subtle_bundle;
+    subtle_bundle.epoch = 1;
+    for (uint32_t i = 0; i < 3; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 4750;  // Fresh: $0.00475
+        msg.timestamp = now;
+        subtle_bundle.AddMessage(msg);
+    }
+    for (uint32_t i = 3; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000;  // Stale: $0.005 (5.2% higher)
+        msg.timestamp = now - 4000;
+        subtle_bundle.AddMessage(msg);
+    }
+
+    uint64_t subtle_price = subtle_bundle.GetConsensusPrice(5);
+    CAmount subtle_calc = OracleBundleManager::CalculateConsensusPrice(subtle_bundle, params);
+
+    // Sorted: [4750, 4750, 4750, 5000, 5000]
+    // 10% filter: median=4750, threshold=475, 5000 deviation=250 < 475 → INCLUDED
+    // Median of 5: 4750 (middle element)
+    // But with different distribution this could shift
+
+    BOOST_TEST_MESSAGE("  Subtle drift (5%): GetConsensusPrice=" << subtle_price
+                       << ", CalculateConsensusPrice=" << subtle_calc);
+
+    // Critical scenario: 2 fresh at low, 1 fresh at mid, 2 stale at high
+    COracleBundle skewed_bundle;
+    skewed_bundle.epoch = 1;
+
+    COraclePriceMessage m0; m0.oracle_id = 0; m0.price_micro_usd = 4700; m0.timestamp = now;
+    COraclePriceMessage m1; m1.oracle_id = 1; m1.price_micro_usd = 4800; m1.timestamp = now;
+    COraclePriceMessage m2; m2.oracle_id = 2; m2.price_micro_usd = 4900; m2.timestamp = now;
+    COraclePriceMessage m3; m3.oracle_id = 3; m3.price_micro_usd = 5100; m3.timestamp = now - 4000;
+    COraclePriceMessage m4; m4.oracle_id = 4; m4.price_micro_usd = 5200; m4.timestamp = now - 4000;
+
+    skewed_bundle.AddMessage(m0);
+    skewed_bundle.AddMessage(m1);
+    skewed_bundle.AddMessage(m2);
+    skewed_bundle.AddMessage(m3);
+    skewed_bundle.AddMessage(m4);
+
+    uint64_t skewed_price = skewed_bundle.GetConsensusPrice(5);
+    CAmount skewed_calc = OracleBundleManager::CalculateConsensusPrice(skewed_bundle, params);
+
+    // Sorted: [4700, 4800, 4900, 5100, 5200]
+    // Median (odd): index 2 = 4900
+    // 10% filter: median=4900, threshold=490
+    //   |4700-4900|=200 OK, |4800-4900|=100 OK, |5100-4900|=200 OK, |5200-4900|=300 OK
+    //   All within 490 → all included → median = 4900
+    // Fresh-only median: [4700, 4800, 4900] → 4800
+    // PRICE SHIFT: 4900 vs 4800 = 100 µUSD ($0.0001)
+
+    uint64_t fresh_only_median = 4800;  // Median of [4700, 4800, 4900]
+
+    BOOST_TEST_MESSAGE("  Skewed bundle: GetConsensusPrice=" << skewed_price
+                       << ", CalculateConsensusPrice=" << skewed_calc);
+    BOOST_TEST_MESSAGE("  Fresh-only median would be: " << fresh_only_median);
+
+    if (skewed_price != fresh_only_median) {
+        int64_t shift = static_cast<int64_t>(skewed_price) - static_cast<int64_t>(fresh_only_median);
+        // Calculate collateral impact for $100 DD at 200% ratio
+        CAmount collateral_mixed = static_cast<CAmount>(((__int128)100 * COIN * 200 * 100) / skewed_price);
+        CAmount collateral_fresh = static_cast<CAmount>(((__int128)100 * COIN * 200 * 100) / fresh_only_median);
+        CAmount gap = collateral_fresh - collateral_mixed;
+        BOOST_TEST_MESSAGE("  Price shift: " << shift << " µUSD");
+        BOOST_TEST_MESSAGE("  Collateral gap: " << gap << " sat per $100 DD");
+        BOOST_TEST_MESSAGE("  DESIGN GAP: Stale messages shift median price ⚠️");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_02f_stale_purge_boundary_exact_3600s)
+{
+    // BOUNDARY: Test the exact ORACLE_MAX_AGE_SECONDS boundary.
+    // The purge uses STRICT greater-than (>), so messages AT 3600s are NOT purged.
+    BOOST_TEST_MESSAGE("T9-02f: Stale purge boundary — messages at exactly 3600s NOT purged");
+
+    OracleBundleManager manager;
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(5);
+
+    int64_t now = GetTime();
+
+    // Inject 5 messages: 3 fresh, 2 at EXACTLY 3600s boundary
+    for (uint32_t i = 0; i < 3; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = now;
+        manager.InjectTestMessage(msg);
+    }
+    for (uint32_t i = 3; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5500;
+        msg.timestamp = now - ORACLE_MAX_AGE_SECONDS;  // Exactly 3600s
+        manager.InjectTestMessage(msg);
+    }
+
+    // NOTE: AddOracleMessage requires valid Schnorr signatures and will reject
+    // unsigned test messages. The purge logic in AddOracleMessage uses:
+    //   if (now - stale_it->second.timestamp > ORACLE_MAX_AGE_SECONDS)
+    // This is STRICT greater-than, so messages at EXACTLY 3600s are NOT purged.
+    //
+    // Since we can't trigger AddOracleMessage without valid sigs in unit tests,
+    // we verify the boundary behavior by examining the timestamps directly.
+
+    // Verify boundary messages exist in pending (no purge ran)
+    size_t count = manager.GetPendingMessageCount();
+    BOOST_CHECK_EQUAL(count, 5u);  // All 5 still present
+
+    // Manually check boundary: messages at exactly 3600s
+    std::vector<COraclePriceMessage> msgs = manager.GetPendingMessages();
+    int at_boundary = 0;
+    for (const auto& m : msgs) {
+        int64_t age = now - m.timestamp;
+        if (age == ORACLE_MAX_AGE_SECONDS) {
+            at_boundary++;
+            // Strict > check: age (3600) > 3600 is FALSE → NOT stale
+            BOOST_CHECK(!(age > ORACLE_MAX_AGE_SECONDS));
+        }
+    }
+    BOOST_CHECK_EQUAL(at_boundary, 2);
+
+    // At 3601s, the check would be: 3601 > 3600 = TRUE → IS stale
+    int64_t boundary_plus_one = ORACLE_MAX_AGE_SECONDS + 1;
+    BOOST_CHECK(boundary_plus_one > ORACLE_MAX_AGE_SECONDS);
+
+    BOOST_TEST_MESSAGE("  Messages at exactly " << ORACLE_MAX_AGE_SECONDS
+                       << "s: " << at_boundary << " found, NOT stale (strict >)");
+    BOOST_TEST_MESSAGE("  At " << (ORACLE_MAX_AGE_SECONDS + 1) << "s they WOULD be stale");
+    BOOST_TEST_MESSAGE("  Off-by-one at boundary is benign (1 second) ✅");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_02g_cached_price_stale_after_threshold_drop)
+{
+    // VERIFY: When oracle count drops below threshold, cached_price becomes stale.
+    // Use UpdateBundle() to set cached_price (bypasses sig requirement), then
+    // test what happens when consensus drops below threshold.
+    BOOST_TEST_MESSAGE("T9-02g: cached_price staleness when oracle count drops below threshold");
+
+    OracleBundleManager manager;
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(5);
+
+    int64_t now = GetTime();
+
+    // Phase 1: Create bundle with 5 oracles — sets cached_price via UpdateBundle
+    COracleBundle full_bundle;
+    full_bundle.epoch = 1;
+    for (uint32_t i = 0; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000;
+        msg.timestamp = now;
+        full_bundle.AddMessage(msg);
+    }
+    full_bundle.median_price_micro_usd = 5000;
+
+    // UpdateBundle sets cached_price when HasConsensus is true
+    bool updated = manager.UpdateBundle(full_bundle);
+    BOOST_CHECK(updated);
+
+    CAmount price_with_consensus = manager.GetLatestPrice();
+    BOOST_CHECK(price_with_consensus > 0);
+    BOOST_CHECK_EQUAL(price_with_consensus, 5000);
+    BOOST_TEST_MESSAGE("  With 5 oracles: price=" << price_with_consensus << " \xE2\x9C\x85");
+
+    // Phase 2: Oracles 3,4 go offline. Inject only 3 fresh messages.
+    // cached_price stays frozen because no new consensus is reached.
+    manager.ClearPendingMessages();
+    for (uint32_t i = 0; i < 3; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 4200;  // Lower price (market dropped)
+        msg.timestamp = now;
+        manager.InjectTestMessage(msg);
+    }
+
+    // 3 < 5 => no consensus possible
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 3u);
+
+    // cached_price is still 5000 (set by UpdateBundle), and last_update_time
+    // is recent (set within this test), so GetLatestPrice still returns old price
+    CAmount price_below_threshold = manager.GetLatestPrice();
+
+    // KEY FINDING: The old (higher) price is still returned because:
+    // 1. cached_price = 5000 (from Phase 1 consensus)
+    // 2. last_update_time = now (recent, within ORACLE_MAX_AGE_SECONDS)
+    // 3. No mechanism to invalidate cached_price when consensus drops
+    //
+    // In production: if 2 oracles go offline, the remaining 3 cannot update
+    // cached_price. The old price persists for up to ORACLE_MAX_AGE_SECONDS.
+    // If the market crashed, minting uses the OLD higher price = less collateral!
+    BOOST_CHECK_EQUAL(price_below_threshold, 5000);
+
+    BOOST_TEST_MESSAGE("  With 3 oracles (below threshold): price=" << price_below_threshold);
+    BOOST_TEST_MESSAGE("  Old price 5000 still used despite only 3/5 oracles reporting \xE2\x9A\xA0\xEF\xB8\x8F");
+    BOOST_TEST_MESSAGE("  DESIGN GAP: No mechanism to invalidate cached_price when");
+    BOOST_TEST_MESSAGE("  consensus drops below threshold. Window: up to "
+                       << ORACLE_MAX_AGE_SECONDS << "s of stale exposure");
+    BOOST_TEST_MESSAGE("  In a market crash, minting uses stale high price = less collateral \xE2\x9A\xA0\xEF\xB8\x8F");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

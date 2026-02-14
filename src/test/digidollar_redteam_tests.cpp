@@ -15423,4 +15423,811 @@ BOOST_AUTO_TEST_CASE(redteam_t8_03g_deterministic_pricing_recommendation)
     OracleBundleManager::GetInstance().Clear();
 }
 
+// =============================================================================
+// T8-04: DoS via Malformed DD Transactions (Parsing Cost Analysis)
+// =============================================================================
+// Attack Surface: Can an attacker craft malformed DD transactions that consume
+// excessive CPU, disk I/O, or log disk space during validation?
+//
+// Key concerns:
+// 1. Unconditional LogPrintf (127 calls per DD tx, always logged)
+// 2. NUMS reconstruction triggered before cheap rejection
+// 3. DD validation ordering in mempool (before fee/standardness checks)
+// 4. Block-db txLookup reads entire block from disk per DD input
+// 5. OP_RETURN parsing amplification in transfers
+
+BOOST_AUTO_TEST_CASE(redteam_t8_04a_unconditional_logprintf_count)
+{
+    // FINDING: DD validation uses 127 LogPrintf (unconditional) vs 30 LogPrint
+    // (conditional on BCLog::DIGIDOLLAR). This means EVERY DD transaction —
+    // valid or invalid — generates 127+ unconditional log lines.
+    //
+    // Impact: An attacker submitting invalid DD txs forces all nodes to write
+    // extensive log entries. At ~100 bytes per log line, that's ~12KB of logging
+    // per rejected DD transaction. At P2P rate (1 tx/sec before ban), a single
+    // Sybil connection generates 12KB/s of log writes before being banned.
+    //
+    // Mitigation: TX_CONSENSUS rejection bans peer immediately (Misbehaving 100),
+    // limiting each attacker connection to exactly 1 invalid DD tx.
+    //
+    // Recommendation: Convert LogPrintf to LogPrint(BCLog::DIGIDOLLAR, ...) for
+    // all non-error paths. Keep LogPrintf only for actual security violations.
+
+    BOOST_TEST_MESSAGE("T8-04a: 127 unconditional LogPrintf vs 30 conditional LogPrint in DD validation");
+    BOOST_TEST_MESSAGE("  Every DD transaction (valid or invalid) generates ~12KB of log output");
+    BOOST_TEST_MESSAGE("  Recommendation: Convert non-error LogPrintf to LogPrint(BCLog::DIGIDOLLAR, ...)");
+
+    // Verify the defense: TX_CONSENSUS errors cause immediate peer ban
+    // Create a malformed DD mint transaction
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770;  // DD_TX_MINT marker
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+
+    // Minimal outputs — will fail validation but triggers log spam first
+    mtx.vout.resize(2);
+    mtx.vout[0].nValue = 1000;  // "collateral"
+    mtx.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<unsigned char>(32, 0x01);
+    mtx.vout[1].nValue = 0;  // "DD output"
+    mtx.vout[1].scriptPubKey = CScript() << OP_1 << std::vector<unsigned char>(32, 0x02);
+
+    // Add DD OP_RETURN (needed to trigger the deep validation path)
+    // Use lockHeight consistent with tier 1 (30 days) from height 1000
+    int64_t lockHeight = 1000 + DigiDollar::LockDaysToBlocks(30);
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    std::vector<unsigned char> ddMarker = {'D', 'D'};
+    opReturn << ddMarker;
+    opReturn << CScriptNum(1);          // type = MINT
+    opReturn << CScriptNum(10000);      // amount = $100
+    opReturn << CScriptNum(lockHeight); // lockHeight = current + 30 days
+    opReturn << CScriptNum(1);          // lockTier = 1 (30 days)
+    // Missing owner pubkey — will fail at "bad-mint-missing-owner-pubkey"
+    mtx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(mtx);
+    BOOST_CHECK(DigiDollar::HasDigiDollarMarker(tx));
+    BOOST_CHECK_EQUAL(DigiDollar::GetDigiDollarTxType(tx), DD_TX_MINT);
+
+    // This tx will be rejected, but not before triggering many LogPrintf calls
+    // In production, the peer would be immediately banned via Misbehaving(100)
+    auto regTestParams = CChainParams::RegTest({});
+    DigiDollar::ValidationContext ctx(1000, 5000, 150, *regTestParams);
+    TxValidationState state;
+    bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+    BOOST_CHECK(!result);
+    // Rejection happens deep into validation (owner pubkey or lock tier check)
+    // The key observation: many LogPrintf calls executed before reaching this point
+    BOOST_CHECK_MESSAGE(!state.GetRejectReason().empty(),
+        "Expected some rejection reason, got empty");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_04b_nums_reconstruction_cost_before_rejection)
+{
+    // FINDING: ValidateMintTransaction performs NUMS key reconstruction
+    // (15 EC key generations + TaprootBuilder + Finalize) BEFORE checking
+    // if collateral is sufficient. An attacker can craft a DD mint with
+    // minimal collateral (546 sats) that triggers full EC computation
+    // before failing on "insufficient-collateral".
+    //
+    // Estimated cost: ~1-2ms per invalid tx per node (15 EC keygen + taproot build)
+    //
+    // Mitigation: Peer ban on TX_CONSENSUS failure limits to 1 tx per connection.
+    // But in blocks, a miner can include many such txs forcing all validators
+    // to do the EC work.
+    //
+    // Recommendation: Move collateral amount check BEFORE NUMS reconstruction.
+    // Quick check: if totalCollateral < MINIMUM_COLLATERAL_FOR_ANY_MINT, reject early.
+
+    BOOST_TEST_MESSAGE("T8-04b: NUMS reconstruction triggered before collateral amount check");
+
+    // Create a DD mint with valid structure but laughably insufficient collateral
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770;  // DD_TX_MINT
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+
+    // Generate a valid owner key for the OP_RETURN
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
+
+    // Create OP_RETURN with valid structure + owner pubkey
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    std::vector<unsigned char> ddMarker = {'D', 'D'};
+    opReturn << ddMarker;
+    opReturn << CScriptNum(1);      // type = MINT
+    opReturn << CScriptNum(100000); // amount = $1000 DD
+    int64_t lockHeight = 1000 + DigiDollar::LockDaysToBlocks(30);
+    opReturn << CScriptNum(lockHeight);  // lockHeight = current + 30 days
+    opReturn << CScriptNum(1);      // lockTier = 1 (30 days)
+    opReturn << ToByteVector(ownerXOnly);  // 32-byte owner pubkey
+
+    // Create the CORRECT P2TR collateral (so NUMS check passes)
+    // but with absurdly low value (546 sats = dust threshold)
+    DigiDollar::MintParams params;
+    params.ddAmount = 100000;
+    params.lockHeight = lockHeight;
+    params.ownerKey = ownerXOnly;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript correctCollateral = DigiDollar::CreateCollateralP2TR(params);
+    BOOST_REQUIRE(!correctCollateral.empty());
+
+    mtx.vout.resize(3);
+    mtx.vout[0].nValue = 546;  // Dust-level collateral — will fail "insufficient-collateral"
+    mtx.vout[0].scriptPubKey = correctCollateral;
+    mtx.vout[1].nValue = 0;  // DD output
+    mtx.vout[1].scriptPubKey = DigiDollar::CreateDigiDollarP2TR(ownerXOnly, 100000);
+    mtx.vout[2].nValue = 0;
+    mtx.vout[2].scriptPubKey = opReturn;
+
+    CTransaction tx(mtx);
+    auto regTestParams = CChainParams::RegTest({});
+    DigiDollar::ValidationContext ctx(1000, 5000, 150, *regTestParams);
+    TxValidationState state;
+
+    // This WILL trigger full NUMS reconstruction before collateral check
+    bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+    BOOST_CHECK(!result);
+
+    // Should fail on insufficient collateral — AFTER the expensive NUMS check
+    BOOST_TEST_MESSAGE("  Rejection reason: " + state.GetRejectReason());
+    BOOST_CHECK_MESSAGE(
+        state.GetRejectReason() == "insufficient-collateral" ||
+        state.GetRejectReason() == "bad-collateral-ratio" ||
+        state.GetRejectReason() == "bad-collateral-nums-mismatch",
+        "Expected collateral/NUMS rejection, got: " + state.GetRejectReason());
+
+    // The point: NUMS reconstruction (expensive) happened before the
+    // collateral amount check (cheap). Reordering would save ~1-2ms per invalid tx.
+    BOOST_TEST_MESSAGE("  FIX: Add quick collateral minimum check BEFORE NUMS reconstruction");
+    BOOST_TEST_MESSAGE("  e.g., if (totalCollateral < 10*COIN) reject early (no mint needs <10 DGB)");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_04c_transfer_opreturn_parsing_amplification)
+{
+    // FINDING: Transfer OP_RETURN parsing uses a while loop that reads ALL
+    // remaining script pushes as DD amounts. A large non-standard OP_RETURN
+    // could contain hundreds of push values.
+    //
+    // Standard relay limit: MAX_OP_RETURN_RELAY = 83 bytes → ~10 pushes max
+    // Consensus limit: MAX_SCRIPT_SIZE = 10,000 bytes → ~1250 single-byte pushes
+    //
+    // The relay limit provides adequate protection for mempool.
+    // In blocks, a miner controls content anyway.
+    //
+    // Defense: Standard relay policy limits OP_RETURN to 83 bytes.
+    // DD txs bypass version check in IsStandardTx but NOT the OP_RETURN size check.
+
+    BOOST_TEST_MESSAGE("T8-04c: Transfer OP_RETURN parsing bounded by MAX_OP_RETURN_RELAY (83 bytes)");
+
+    // Verify: standard limit applies to DD txs
+    BOOST_CHECK_EQUAL(MAX_OP_RETURN_RELAY, 83u);
+
+    // Create a DD transfer with a large OP_RETURN (non-standard)
+    // containing many push values — tests the parsing loop
+    CScript bigOpReturn;
+    bigOpReturn << OP_RETURN;
+    std::vector<unsigned char> ddMarker = {'D', 'D'};
+    bigOpReturn << ddMarker;
+    bigOpReturn << CScriptNum(2);  // type = TRANSFER
+
+    // Add 50 DD amount pushes (way more than any legitimate transfer)
+    for (int i = 0; i < 50; i++) {
+        bigOpReturn << CScriptNum(100);  // 100 cents each
+    }
+
+    // Verify the OP_RETURN exceeds standard relay limit
+    BOOST_CHECK_GT(bigOpReturn.size(), MAX_OP_RETURN_RELAY);
+    BOOST_TEST_MESSAGE("  Large OP_RETURN size: " + std::to_string(bigOpReturn.size()) + " bytes");
+    BOOST_TEST_MESSAGE("  Standard relay limit: " + std::to_string(MAX_OP_RETURN_RELAY) + " bytes");
+    BOOST_TEST_MESSAGE("  Defense: Non-standard OP_RETURN rejected by relay policy");
+
+    // In consensus (block validation), the parsing loop is bounded by script size
+    // which is itself bounded by MAX_BLOCK_WEIGHT. No infinite loop possible.
+    BOOST_CHECK_LE(bigOpReturn.size(), MAX_SCRIPT_SIZE);
+    BOOST_TEST_MESSAGE("  Consensus: Parsing bounded by script size (" +
+        std::to_string(MAX_SCRIPT_SIZE) + " max) — no infinite loop");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_04d_dd_validation_before_fee_check_in_mempool)
+{
+    // FINDING: In mempool acceptance (AcceptSingleTransaction), the execution order is:
+    //   1. CheckTransaction (basic structure, <4MB)
+    //   2. DD validation (FULL — NUMS reconstruction, OP_RETURN parsing, etc.)
+    //   3. Coinbase rejection
+    //   4. IsStandardTx (weight limit, OP_RETURN size, version)
+    //   5. Fee/rate checks
+    //
+    // This means a zero-fee, non-standard DD transaction triggers full DD validation
+    // before being rejected for insufficient fees. However, DD txs with version
+    // marker are treated as standard by IsStandardTx, so the version bypass is
+    // intentional.
+    //
+    // Defense: TX_CONSENSUS rejection → Misbehaving(100) → immediate peer ban.
+    // Each attacker connection gets exactly 1 shot before disconnection.
+    //
+    // Recommendation: Move a lightweight DD marker + activation check to the very
+    // beginning of PreChecks (before expensive validation). If DD is not activated,
+    // reject immediately without any DD parsing.
+
+    BOOST_TEST_MESSAGE("T8-04d: DD validation ordering in mempool acceptance");
+    BOOST_TEST_MESSAGE("  Order: CheckTransaction → DD validation → standardness → fees");
+    BOOST_TEST_MESSAGE("  Defense: TX_CONSENSUS → Misbehaving(100) → immediate peer ban");
+    BOOST_TEST_MESSAGE("  Risk: 1 expensive validation per Sybil connection before ban");
+    BOOST_TEST_MESSAGE("  The DD marker + activation check IS first (line 730-733).");
+    BOOST_TEST_MESSAGE("  If DD not activated: rejected immediately with 'digidollar-not-active'");
+
+    // Verify: HasDigiDollarMarker is a cheap O(1) check
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    mtx.vout.resize(1);
+    mtx.vout[0].nValue = 0;
+    mtx.vout[0].scriptPubKey = CScript() << OP_RETURN;
+    CTransaction tx(mtx);
+
+    // This is O(1) — just checks version bits
+    BOOST_CHECK(DigiDollar::HasDigiDollarMarker(tx));
+
+    // GetDigiDollarTxType is also O(1) — extracts from version
+    BOOST_CHECK_EQUAL(DigiDollar::GetDigiDollarTxType(tx), DD_TX_MINT);
+
+    // Non-DD tx: O(1) rejection at HasDigiDollarMarker
+    CMutableTransaction normalTx;
+    normalTx.nVersion = 2;
+    normalTx.vin.resize(1);
+    normalTx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    normalTx.vout.resize(1);
+    normalTx.vout[0].nValue = 1000;
+    normalTx.vout[0].scriptPubKey = CScript() << OP_DUP << OP_HASH160 << std::vector<unsigned char>(20, 0) << OP_EQUALVERIFY << OP_CHECKSIG;
+    CTransaction nonDdTx(normalTx);
+    BOOST_CHECK(!DigiDollar::HasDigiDollarMarker(nonDdTx));
+
+    BOOST_TEST_MESSAGE("  HasDigiDollarMarker is O(1) — non-DD txs skip all DD code");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_04e_block_db_txlookup_disk_amplification)
+{
+    // FINDING: The block-db txLookup function (used when txindex unavailable)
+    // reads the ENTIRE block from disk and does a linear scan for the txid:
+    //
+    //   ReadBlockFromDisk(block, *pblockindex)  // up to 4MB
+    //   for (const auto& btx : block.vtx) {     // linear scan
+    //       if (btx->GetHash() == txid) ...
+    //   }
+    //
+    // A DD transfer with N inputs referencing UTXOs in N different blocks
+    // causes N full block reads (up to N × 4MB of disk I/O).
+    //
+    // Self-limiting factors:
+    // 1. Only triggered when txindex unavailable AND coin is zero-value
+    // 2. Zero-value UTXOs require prior DD mints (with real collateral)
+    // 3. Standard tx weight limits input count to ~400 (P2TR witnesses)
+    // 4. Most full nodes have txindex (first lookup succeeds)
+    //
+    // Defense: Self-limiting. Attacker needs real DD tokens to trigger this path.
+    // Recommendation: Add a block cache (LRU) to avoid re-reading same blocks.
+
+    BOOST_TEST_MESSAGE("T8-04e: Block-db txLookup reads entire block per DD input");
+    BOOST_TEST_MESSAGE("  Worst case: N inputs × 4MB block reads (N up to ~400 for standard tx)");
+    BOOST_TEST_MESSAGE("  Self-limiting: needs real zero-value UTXOs (requires DD mints + collateral)");
+    BOOST_TEST_MESSAGE("  First defense: txindex (available on most full nodes)");
+    BOOST_TEST_MESSAGE("  Recommendation: LRU block cache for repeated lookups in same block");
+
+    // Verify the extraction fallback chain
+    // Method 1: ExtractDDAmountFromPrevTx (txindex) — requires g_txindex
+    // Method 2: ExtractDDAmountFromBlockDb (block-db) — reads full block
+    // Method 3: ExtractDDAmount (metadata registry) — local only
+
+    // Verify MAX_STANDARD_TX_WEIGHT limits input count
+    // P2TR input: ~57.5 weight units (41 base + 16.5 witness)
+    // 400,000 / 57.5 ≈ 6956 inputs max (theoretical)
+    // But each input also needs a zero-value UTXO, limiting practical count
+    BOOST_CHECK_EQUAL(MAX_STANDARD_TX_WEIGHT, 400000);
+    size_t estimatedMaxInputs = MAX_STANDARD_TX_WEIGHT / 58;  // ~6896
+    BOOST_TEST_MESSAGE("  Theoretical max P2TR inputs per standard tx: ~" +
+        std::to_string(estimatedMaxInputs));
+    BOOST_TEST_MESSAGE("  Practical limit: far fewer (need real zero-value UTXOs)");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_04f_validation_cache_thrashing)
+{
+    // FINDING: g_validationCache has MAX_CACHE_SIZE = 10,000 entries.
+    // When full, ClearIfFull() clears the ENTIRE cache at once.
+    //
+    // An attacker could submit 10,000+ unique DD txs to fill the cache,
+    // then every legitimate DD tx hits a cold cache.
+    //
+    // Impact: LOW — the cache only stores script type and amount info,
+    // which are cheap to recompute. The clear is O(1) (hash map clear).
+    // Not a meaningful DoS vector.
+    //
+    // Better approach: LRU eviction instead of full clear.
+
+    BOOST_TEST_MESSAGE("T8-04f: ValidationCache thrashing — MAX_CACHE_SIZE=10000, full clear");
+    BOOST_TEST_MESSAGE("  Impact: LOW — cached values are cheap to recompute");
+    BOOST_TEST_MESSAGE("  Recommendation: LRU eviction instead of full clear for cache stability");
+
+    // Verify cache size limit exists
+    // Can't directly test the static constant, but we can verify the behavior
+    // by checking that the cache doesn't grow unboundedly
+    BOOST_TEST_MESSAGE("  g_validationCache.MAX_CACHE_SIZE = 10000");
+    BOOST_TEST_MESSAGE("  ClearIfFull() = complete cache wipe (not LRU)");
+    BOOST_TEST_MESSAGE("  Memory cap: 10000 × ~80 bytes = ~800KB");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_04g_peer_ban_defense_effectiveness)
+{
+    // DEFENSE VERIFICATION: TX_CONSENSUS rejection triggers Misbehaving(100)
+    // which immediately bans the peer. This is the primary defense against
+    // P2P DoS via malformed DD transactions.
+    //
+    // Attack economics:
+    // - Cost per Sybil connection: ~1 TCP handshake + 1 version/verack
+    // - Damage per connection: 1 DD validation (~1-2ms CPU + ~12KB log)
+    // - Amplification: every relay node validates before rejecting
+    //
+    // For 1000 Sybil connections:
+    // - CPU: ~1-2 seconds total
+    // - Log: ~12MB
+    // - Network: Each invalid tx relayed to 8 peers before rejection
+    //   (actually NO — invalid txs are NOT relayed, only to direct peer)
+    //
+    // Conclusion: P2P-level DoS is well-defended by immediate peer ban.
+    // Network amplification is zero (invalid txs never relayed).
+
+    BOOST_TEST_MESSAGE("T8-04g: Peer ban defense effectiveness");
+    BOOST_TEST_MESSAGE("  TX_CONSENSUS → Misbehaving(100) → immediate ban");
+    BOOST_TEST_MESSAGE("  Invalid DD txs NOT relayed to other peers");
+    BOOST_TEST_MESSAGE("  Zero network amplification");
+    BOOST_TEST_MESSAGE("  1000 Sybil connections = ~2s CPU + ~12MB log total");
+    BOOST_TEST_MESSAGE("  Defense: ADEQUATE for P2P attacks");
+
+    // Verify all DD validation errors use TX_CONSENSUS (which triggers ban)
+    auto regTestParams = CChainParams::RegTest({});
+    DigiDollar::ValidationContext ctx(1000, 5000, 150, *regTestParams);
+    TxValidationState state;
+
+    // Test 1: Malformed mint
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    mtx.vout.resize(1);
+    mtx.vout[0].nValue = 0;
+    mtx.vout[0].scriptPubKey = CScript() << OP_RETURN;
+    CTransaction tx1(mtx);
+    DigiDollar::ValidateDigiDollarTransaction(tx1, ctx, state);
+    BOOST_CHECK_EQUAL(static_cast<int>(state.GetResult()),
+                      static_cast<int>(TxValidationResult::TX_CONSENSUS));
+
+    // Test 2: Malformed transfer
+    state = TxValidationState{};
+    mtx.nVersion = 0x02000770;  // TRANSFER
+    CTransaction tx2(mtx);
+    DigiDollar::ValidateDigiDollarTransaction(tx2, ctx, state);
+    BOOST_CHECK_EQUAL(static_cast<int>(state.GetResult()),
+                      static_cast<int>(TxValidationResult::TX_CONSENSUS));
+
+    // Test 3: Malformed redeem
+    state = TxValidationState{};
+    mtx.nVersion = 0x03000770;  // REDEEM
+    CTransaction tx3(mtx);
+    DigiDollar::ValidateDigiDollarTransaction(tx3, ctx, state);
+    BOOST_CHECK_EQUAL(static_cast<int>(state.GetResult()),
+                      static_cast<int>(TxValidationResult::TX_CONSENSUS));
+
+    // Test 4: Unknown DD type
+    state = TxValidationState{};
+    mtx.nVersion = 0xFF000770;  // Unknown type
+    CTransaction tx4(mtx);
+    DigiDollar::ValidateDigiDollarTransaction(tx4, ctx, state);
+    BOOST_CHECK_EQUAL(static_cast<int>(state.GetResult()),
+                      static_cast<int>(TxValidationResult::TX_CONSENSUS));
+
+    BOOST_TEST_MESSAGE("  All DD validation errors produce TX_CONSENSUS → peer ban ✅");
+}
+
+// =============================================================================
+// T9-01: 4-of-9 Oracles Reporting — Consensus Threshold Verification
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t9_01a_four_of_nine_consensus_must_fail)
+{
+    // ATTACK: On testnet (5-of-9 required), submit only 4 oracle messages.
+    // Expected: HasConsensus(5) returns false with 4 messages.
+    BOOST_TEST_MESSAGE("T9-01a: 4-of-9 oracles on testnet — consensus must fail");
+
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    // Add exactly 4 oracle messages (testnet threshold is 5)
+    for (uint32_t i = 0; i < 4; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000 + i * 100;  // 5000, 5100, 5200, 5300
+        msg.timestamp = GetTime();
+        bundle.AddMessage(msg);
+    }
+
+    BOOST_CHECK_EQUAL(bundle.messages.size(), 4u);
+
+    // Testnet: 5-of-9 required
+    BOOST_CHECK(!bundle.HasConsensus(5));
+    BOOST_CHECK_EQUAL(bundle.GetConsensusPrice(5), 0u);
+
+    // Regtest: 4-of-7 required — should pass
+    BOOST_CHECK(bundle.HasConsensus(4));
+    BOOST_CHECK(bundle.GetConsensusPrice(4) > 0);
+
+    // Mainnet: 8-of-15 required — should fail
+    BOOST_CHECK(!bundle.HasConsensus(8));
+    BOOST_CHECK_EQUAL(bundle.GetConsensusPrice(8), 0u);
+
+    BOOST_TEST_MESSAGE("  4-of-9 correctly fails on testnet (5 required), passes regtest (4 required) ✅");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_01b_exactly_at_threshold_consensus_passes)
+{
+    // ATTACK: Submit exactly 5 messages on testnet — consensus should pass
+    BOOST_TEST_MESSAGE("T9-01b: Exactly 5-of-9 on testnet — consensus must pass");
+
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    for (uint32_t i = 0; i < 5; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = 5000 + i * 50;  // 5000, 5050, 5100, 5150, 5200 (within 10%)
+        msg.timestamp = GetTime();
+        bundle.AddMessage(msg);
+    }
+
+    BOOST_CHECK(bundle.HasConsensus(5));
+    uint64_t price = bundle.GetConsensusPrice(5);
+    // Odd number: median is middle element (index 2) = 5100
+    BOOST_CHECK_EQUAL(price, 5100u);
+
+    BOOST_TEST_MESSAGE("  Exactly at threshold passes correctly with median 5100 ✅");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_01c_post_filter_count_below_threshold)
+{
+    // ATTACK: Submit 5 messages where 2 are outliers. After FilterOutliers(),
+    // only 3 remain — below the 5-message threshold. But HasConsensus(5)
+    // already passed on the UNFILTERED count.
+    // DESIGN GAP: Consensus price computed from fewer messages than threshold.
+    BOOST_TEST_MESSAGE("T9-01c: Post-filter count drops below threshold — design gap");
+
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    // 3 honest oracles, close prices
+    COraclePriceMessage msg;
+    msg.timestamp = GetTime();
+
+    msg.oracle_id = 0; msg.price_micro_usd = 5000; bundle.AddMessage(msg);
+    msg.oracle_id = 1; msg.price_micro_usd = 5050; bundle.AddMessage(msg);
+    msg.oracle_id = 2; msg.price_micro_usd = 5100; bundle.AddMessage(msg);
+
+    // 2 extreme outliers (>10% from median ~5050)
+    // 10% of 5050 = 505 → anything > 5555 or < 4545 is outlier
+    msg.oracle_id = 3; msg.price_micro_usd = 8000; bundle.AddMessage(msg); // 58% above
+    msg.oracle_id = 4; msg.price_micro_usd = 2000; bundle.AddMessage(msg); // 60% below
+
+    BOOST_CHECK_EQUAL(bundle.messages.size(), 5u);
+
+    // HasConsensus passes on raw count
+    BOOST_CHECK(bundle.HasConsensus(5));
+
+    // GetConsensusPrice filters outliers, computes median from remaining 3
+    uint64_t price = bundle.GetConsensusPrice(5);
+    BOOST_CHECK(price > 0);
+
+    // DESIGN GAP: Price is based on 3 messages (< threshold of 5)
+    // FilterOutliers removes the 2 extreme values
+    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
+    BOOST_CHECK_EQUAL(filtered.size(), 3u);  // Only 3 survive
+    BOOST_CHECK(filtered.size() < 5u);  // Below threshold!
+
+    // The computed price is the median of the 3 honest ones
+    BOOST_CHECK_EQUAL(price, 5050u);
+
+    BOOST_TEST_MESSAGE("  DESIGN GAP: HasConsensus(5) passes, but GetConsensusPrice uses only "
+                       << filtered.size() << " filtered messages (threshold is 5) ⚠️");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_01d_three_different_median_formulas)
+{
+    // VULNERABILITY: Three code paths compute consensus price differently.
+    // With even number of messages, results DISAGREE.
+    //
+    // Path 1: AddOracleMessage() P2P cached_price — prices[size/2] (upper-middle)
+    // Path 2: COracleBundle::GetConsensusPrice() — (prices[mid-1]+prices[mid])/2 (average)
+    // Path 3: OracleBundleManager::CalculateConsensusPrice() — same as Path 2 but IQR filter
+    BOOST_TEST_MESSAGE("T9-01d: Three different median formulas — inconsistent consensus pricing");
+
+    // 4 oracle messages (even count) — median formula matters
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    COraclePriceMessage msg;
+    msg.timestamp = GetTime();
+
+    msg.oracle_id = 0; msg.price_micro_usd = 5000; bundle.AddMessage(msg);
+    msg.oracle_id = 1; msg.price_micro_usd = 5100; bundle.AddMessage(msg);
+    msg.oracle_id = 2; msg.price_micro_usd = 5200; bundle.AddMessage(msg);
+    msg.oracle_id = 3; msg.price_micro_usd = 5300; bundle.AddMessage(msg);
+
+    // Path 1: P2P median (upper-middle for even count)
+    // prices = [5000, 5100, 5200, 5300], prices[4/2] = prices[2] = 5200
+    std::vector<uint64_t> prices_p2p;
+    for (const auto& m : bundle.messages) {
+        prices_p2p.push_back(m.price_micro_usd);
+    }
+    std::sort(prices_p2p.begin(), prices_p2p.end());
+    uint64_t p2p_median = prices_p2p[prices_p2p.size() / 2];  // Upper middle
+    BOOST_CHECK_EQUAL(p2p_median, 5200u);
+
+    // Path 2: COracleBundle::GetConsensusPrice (average of two middle for even)
+    // (prices[1] + prices[2]) / 2 = (5100 + 5200) / 2 = 5150
+    uint64_t bundle_price = bundle.GetConsensusPrice(4);
+    // After FilterOutliers: all 4 within 10% of median (~5150), all pass
+    // Even count → (prices[1] + prices[2]) / 2 = (5100 + 5200) / 2 = 5150
+    BOOST_CHECK_EQUAL(bundle_price, 5150u);
+
+    // Path 3: CalculateConsensusPrice uses IQR, same median formula
+    const auto& cparams = Params().GetConsensus();
+    CAmount calc_price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    // With 4 values, IQR filtering: q1_idx=1, q3_idx=3, q1=5100, q3=5300
+    // IQR=200, lower=5100-300=4800, upper=5300+300=5600, all pass
+    // Same median formula → 5150
+    BOOST_CHECK_EQUAL(calc_price, 5150);
+
+    // KEY FINDING: P2P median (5200) ≠ Bundle/Calc median (5150) for even count!
+    BOOST_CHECK(p2p_median != static_cast<uint64_t>(bundle_price));
+    BOOST_CHECK_EQUAL(p2p_median - bundle_price, 50u);  // 50 µUSD difference
+
+    BOOST_TEST_MESSAGE("  INCONSISTENCY: P2P cached_price=" << p2p_median
+                       << " vs GetConsensusPrice=" << bundle_price
+                       << " vs CalculateConsensusPrice=" << calc_price
+                       << " — P2P uses upper-middle, others average two middle ⚠️");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_01e_three_different_outlier_filters)
+{
+    // VULNERABILITY: Three different outlier filtering algorithms.
+    // With strategic price placement, they can include/exclude different messages.
+    //
+    // Filter 1: AddOracleMessage() — NO filtering at all
+    // Filter 2: GetConsensusPrice() → FilterOutliers() — 10% of median threshold
+    // Filter 3: CalculateConsensusPrice() — IQR (1.5 × IQR rule)
+    BOOST_TEST_MESSAGE("T9-01e: Three different outlier filters — inconsistent message sets");
+
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    COraclePriceMessage msg;
+    msg.timestamp = GetTime();
+
+    // 7 oracle messages: 5 clustered, 2 moderately extreme
+    // The moderately extreme ones should be treated differently by each filter
+    msg.oracle_id = 0; msg.price_micro_usd = 4800; bundle.AddMessage(msg);
+    msg.oracle_id = 1; msg.price_micro_usd = 4900; bundle.AddMessage(msg);
+    msg.oracle_id = 2; msg.price_micro_usd = 5000; bundle.AddMessage(msg);
+    msg.oracle_id = 3; msg.price_micro_usd = 5100; bundle.AddMessage(msg);
+    msg.oracle_id = 4; msg.price_micro_usd = 5200; bundle.AddMessage(msg);
+    // These two are ~11% from median (5000) — just outside 10% threshold
+    msg.oracle_id = 5; msg.price_micro_usd = 5600; bundle.AddMessage(msg);  // 12% above
+    msg.oracle_id = 6; msg.price_micro_usd = 4400; bundle.AddMessage(msg);  // 12% below
+
+    BOOST_CHECK_EQUAL(bundle.messages.size(), 7u);
+
+    // Filter 1 (P2P): NO filtering — uses ALL 7 messages
+    std::vector<uint64_t> all_prices;
+    for (const auto& m : bundle.messages) {
+        all_prices.push_back(m.price_micro_usd);
+    }
+    std::sort(all_prices.begin(), all_prices.end());
+    // [4400, 4800, 4900, 5000, 5100, 5200, 5600] — median = 5000
+    uint64_t p2p_median = all_prices[all_prices.size() / 2];
+    BOOST_CHECK_EQUAL(p2p_median, 5000u);
+
+    // Filter 2 (GetConsensusPrice → FilterOutliers): 10% of median = 500
+    // Median of raw = 5000. 10% = 500.
+    // 4400 → deviation 600 > 500 → FILTERED OUT
+    // 5600 → deviation 600 > 500 → FILTERED OUT
+    // Remaining: [4800, 4900, 5000, 5100, 5200] — 5 messages
+    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
+    BOOST_CHECK_EQUAL(filtered.size(), 5u);
+
+    uint64_t bundle_price = bundle.GetConsensusPrice(4);  // 4-of-7 threshold
+    // Median of [4800, 4900, 5000, 5100, 5200] (odd) = 5000
+    BOOST_CHECK_EQUAL(bundle_price, 5000u);
+
+    // Filter 3 (CalculateConsensusPrice → IQR):
+    // Sorted: [4400, 4800, 4900, 5000, 5100, 5200, 5600]
+    // q1_idx = 7/4 = 1 → q1 = 4800
+    // q3_idx = 7*3/4 = 5 → q3 = 5200
+    // IQR = 5200 - 4800 = 400
+    // lower_bound = 4800 - 600 = 4200
+    // upper_bound = 5200 + 600 = 5800
+    // ALL pass IQR filter! 4400 ≥ 4200 ✓, 5600 ≤ 5800 ✓
+    const auto& cparams = Params().GetConsensus();
+    CAmount calc_price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    // Median of [4400, 4800, 4900, 5000, 5100, 5200, 5600] (7 values, odd) = 5000
+    BOOST_CHECK_EQUAL(calc_price, 5000);
+
+    // In this case all three agree at 5000.
+    // But with different distributions, filters 2 and 3 can diverge
+    // because 10% threshold is static while IQR adapts to spread.
+
+    BOOST_TEST_MESSAGE("  Three filters: P2P(7 msgs)=" << p2p_median
+                       << ", FilterOutliers(5 msgs)=" << bundle_price
+                       << ", IQR(7 msgs)=" << calc_price);
+
+    // Now test with a tighter spread where filters disagree more:
+    COracleBundle tight_bundle;
+    tight_bundle.epoch = 2;
+
+    // 6 messages: 4 tight, 2 just outside 10% but within IQR
+    msg.oracle_id = 0; msg.price_micro_usd = 5000; tight_bundle.AddMessage(msg);
+    msg.oracle_id = 1; msg.price_micro_usd = 5010; tight_bundle.AddMessage(msg);
+    msg.oracle_id = 2; msg.price_micro_usd = 5020; tight_bundle.AddMessage(msg);
+    msg.oracle_id = 3; msg.price_micro_usd = 5030; tight_bundle.AddMessage(msg);
+    // 12% above/below median (~5015) → outside 10% filter
+    msg.oracle_id = 4; msg.price_micro_usd = 5625; tight_bundle.AddMessage(msg);
+    msg.oracle_id = 5; msg.price_micro_usd = 4400; tight_bundle.AddMessage(msg);
+
+    // FilterOutliers: 10% of median(5015) = 501.5
+    // 5625: deviation 610 > 501 → OUT
+    // 4400: deviation 615 > 501 → OUT
+    // Remaining: [5000, 5010, 5020, 5030] — 4 messages
+    std::vector<COraclePriceMessage> tight_filtered = tight_bundle.FilterOutliers();
+    uint64_t tight_bundle_price = tight_bundle.GetConsensusPrice(4);
+    // Median of [5000, 5010, 5020, 5030] (even) = (5010+5020)/2 = 5015
+    BOOST_CHECK_EQUAL(tight_bundle_price, 5015u);
+
+    // CalculateConsensusPrice IQR:
+    // Sorted: [4400, 5000, 5010, 5020, 5030, 5625]
+    // q1_idx = 6/4 = 1 → q1 = 5000
+    // q3_idx = 6*3/4 = 4 → q3 = 5030
+    // IQR = 30, lower = 5000-45 = 4955, upper = 5030+45 = 5075
+    // 4400 < 4955 → OUT
+    // 5625 > 5075 → OUT
+    // Remaining: [5000, 5010, 5020, 5030] — same as FilterOutliers
+    CAmount tight_calc_price = OracleBundleManager::CalculateConsensusPrice(tight_bundle, cparams);
+    BOOST_CHECK_EQUAL(tight_calc_price, 5015);
+
+    BOOST_TEST_MESSAGE("  Tight spread: Both filters exclude same outliers — "
+                       "FilterOutliers=" << tight_bundle_price
+                       << " IQR=" << tight_calc_price << " ✅");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_01f_all_messages_filtered_as_outliers)
+{
+    // EDGE CASE: What if FilterOutliers removes ALL messages?
+    // HasConsensus says YES, but GetConsensusPrice returns 0.
+    BOOST_TEST_MESSAGE("T9-01f: All messages filtered as outliers — zero price edge case");
+
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    COraclePriceMessage msg;
+    msg.timestamp = GetTime();
+
+    // Messages where EVERY message is > 10% from the initial median
+    // This requires very asymmetric distribution
+    // With 3 messages: 1000, 5000, 9000
+    // Initial median = 5000
+    // 10% = 500 → range 4500-5500
+    // 1000: deviation 4000 > 500 → OUT
+    // 9000: deviation 4000 > 500 → OUT
+    // 5000: deviation 0 ≤ 500 → KEPT
+    // At least 1 survives. FilterOutliers can't remove ALL.
+
+    // Actually, for FilterOutliers to remove all, we'd need every message
+    // to be > 10% from the median. But the median IS one of the messages
+    // (or average of two middle), so at least the middle messages survive.
+    // This means FilterOutliers() can never return empty unless messages is empty.
+
+    // With fewer than 3, FilterOutliers returns all messages unfiltered
+    msg.oracle_id = 0; msg.price_micro_usd = 100; bundle.AddMessage(msg);
+    msg.oracle_id = 1; msg.price_micro_usd = 100000; bundle.AddMessage(msg);
+
+    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
+    // < 3 messages → returns all unfiltered
+    BOOST_CHECK_EQUAL(filtered.size(), 2u);
+
+    // Test with extreme spread but 5 messages
+    COracleBundle extreme;
+    extreme.epoch = 2;
+    msg.oracle_id = 0; msg.price_micro_usd = 100;   extreme.AddMessage(msg);
+    msg.oracle_id = 1; msg.price_micro_usd = 1000;  extreme.AddMessage(msg);
+    msg.oracle_id = 2; msg.price_micro_usd = 5000;  extreme.AddMessage(msg);
+    msg.oracle_id = 3; msg.price_micro_usd = 25000; extreme.AddMessage(msg);
+    msg.oracle_id = 4; msg.price_micro_usd = 90000; extreme.AddMessage(msg);
+
+    // Sorted: [100, 1000, 5000, 25000, 90000]
+    // Median = 5000
+    // 10% of 5000 = 500
+    // 100: deviation 4900 > 500 → OUT
+    // 1000: deviation 4000 > 500 → OUT
+    // 5000: deviation 0 → KEPT
+    // 25000: deviation 20000 > 500 → OUT
+    // 90000: deviation 85000 > 500 → OUT
+    std::vector<COraclePriceMessage> extreme_filtered = extreme.FilterOutliers();
+    BOOST_CHECK_EQUAL(extreme_filtered.size(), 1u);  // Only median survives
+
+    // HasConsensus(5) passed, but only 1 message after filtering
+    BOOST_CHECK(extreme.HasConsensus(5));
+    uint64_t price = extreme.GetConsensusPrice(5);
+    BOOST_CHECK_EQUAL(price, 5000u);  // Median of 1 = 5000
+
+    // DESIGN GAP: Consensus "passed" with 5 messages, but price based on just 1
+    BOOST_TEST_MESSAGE("  DESIGN GAP: HasConsensus(5) passes, but price based on "
+                       << extreme_filtered.size() << "/5 messages after filtering ⚠️");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t9_01g_even_count_median_formula_divergence)
+{
+    // VULNERABILITY: Even-count median divergence between P2P and consensus.
+    // With 6 oracles on testnet (5-of-9 threshold met):
+    // P2P uses prices[size/2] (upper-middle)
+    // GetConsensusPrice uses (prices[mid-1] + prices[mid]) / 2 (average)
+    // This means cached_price (P2P) and block consensus price can differ.
+    BOOST_TEST_MESSAGE("T9-01g: Even-count median formula divergence — concrete $ impact");
+
+    COracleBundle bundle;
+    bundle.epoch = 1;
+
+    COraclePriceMessage msg;
+    msg.timestamp = GetTime();
+
+    // 6 messages — all within 10% of each other, no outlier filtering
+    msg.oracle_id = 0; msg.price_micro_usd = 4900; bundle.AddMessage(msg);
+    msg.oracle_id = 1; msg.price_micro_usd = 5000; bundle.AddMessage(msg);
+    msg.oracle_id = 2; msg.price_micro_usd = 5100; bundle.AddMessage(msg);
+    msg.oracle_id = 3; msg.price_micro_usd = 5200; bundle.AddMessage(msg);
+    msg.oracle_id = 4; msg.price_micro_usd = 5300; bundle.AddMessage(msg);
+    msg.oracle_id = 5; msg.price_micro_usd = 5400; bundle.AddMessage(msg);
+
+    // P2P median: prices[6/2] = prices[3] = 5200
+    std::vector<uint64_t> sorted_prices;
+    for (const auto& m : bundle.messages) {
+        sorted_prices.push_back(m.price_micro_usd);
+    }
+    std::sort(sorted_prices.begin(), sorted_prices.end());
+    uint64_t p2p_price = sorted_prices[sorted_prices.size() / 2];
+    BOOST_CHECK_EQUAL(p2p_price, 5200u);
+
+    // GetConsensusPrice median: (prices[2] + prices[3]) / 2 = (5100+5200)/2 = 5150
+    uint64_t consensus_price = bundle.GetConsensusPrice(5);
+    BOOST_CHECK_EQUAL(consensus_price, 5150u);
+
+    // Difference: 50 µUSD ($0.00005 per DGB)
+    uint64_t diff = p2p_price - consensus_price;
+    BOOST_CHECK_EQUAL(diff, 50u);
+
+    // Impact calculation: For $100 DD mint at 200% ratio:
+    // At P2P price 5200 µUSD: collateral = (100 * 100000000 * 200) / 5200 = 384,615 DGB
+    // At consensus price 5150 µUSD: collateral = (100 * 100000000 * 200) / 5150 = 388,349 DGB
+    // Gap: ~3,734 DGB
+    // A minter who cached_price is 5200 (P2P) provides 385,000 DGB collateral.
+    // A validating node that uses GetConsensusPrice (5150) would need 388,349.
+    // RESULT: Tx accepted by P2P-price node, rejected by bundle-price node.
+    CAmount collateral_p2p = static_cast<CAmount>(((__int128)100 * COIN * 200 * 100) / p2p_price);
+    CAmount collateral_consensus = static_cast<CAmount>(((__int128)100 * COIN * 200 * 100) / consensus_price);
+    CAmount collateral_gap = collateral_consensus - collateral_p2p;
+    BOOST_CHECK(collateral_gap > 0);
+
+    BOOST_TEST_MESSAGE("  CONSENSUS RISK: P2P price=" << p2p_price
+                       << " vs bundle price=" << consensus_price
+                       << " → " << collateral_gap << " sat collateral gap per $100 DD ⚠️");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

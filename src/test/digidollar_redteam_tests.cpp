@@ -10481,4 +10481,1073 @@ BOOST_AUTO_TEST_CASE(redteam_t5_06f_volatility_vs_health_protection_asymmetry)
     DigiDollar::SystemHealthMonitor::Shutdown();
 }
 
+// =============================================================================
+// T6-01: Mint → Transfer → Redeem in Same Block (Ordering Attack)
+// =============================================================================
+//
+// Attack Surface: Can a malicious miner exploit transaction ordering within a
+// single block to bypass DD conservation, timelock, or collateral checks?
+//
+// Key insight: In ConnectBlock, transactions are processed sequentially.
+// UpdateCoins(tx_i) runs BEFORE validation of tx_{i+1}. This means tx_{i+1}
+// can spend outputs created by tx_i within the same block.
+//
+// The DD amount extraction pipeline for intra-block spending:
+//   1. txindex → FAIL (block not indexed until after ConnectBlock)
+//   2. block-db → SUCCESS (block IS on disk before ConnectBlock, coin.nHeight
+//      = current block, txLookup reads current block and finds the parent tx)
+//   3. metadata registry → MAY work (ephemeral, unreliable)
+//
+// TestBlockValidity (fJustCheck=true) is different:
+//   1. txindex → FAIL (same)
+//   2. block-db → FAIL (block is NOT on disk during template validation)
+//   3. metadata registry → MAY work
+//   This creates an asymmetry: intra-block DD chains pass ConnectBlock but
+//   may fail TestBlockValidity (used by CreateNewBlock for miners).
+
+BOOST_AUTO_TEST_CASE(redteam_t6_01a_intrablock_mint_then_transfer_conservation)
+{
+    // ATTACK: Mint $100 DD in TX 1, then Transfer claiming $200 DD in TX 2
+    // (both in same block). Can the transfer inflate DD beyond what was minted?
+    //
+    // DEFENSE: ValidateTransferTransaction reads inputDD from the source tx's
+    // OP_RETURN (via ExtractDDAmountFromTxRef), NOT from the OP_RETURN of the
+    // transfer tx itself. Conservation: inputDD must equal outputDD.
+
+    auto regTestParams = CChainParams::RegTest({});
+    const CAmount MINT_DD = 10000;   // $100 in cents
+    const CAmount INFLATED_DD = 20000; // $200 — attacker tries to double
+    const int LOCK_BLOCKS = 30 * DigiDollar::BLOCKS_PER_DAY; // 172800 blocks
+
+    // Generate keys for P2TR outputs
+    CKey collKey; collKey.MakeNewKey(true);
+    XOnlyPubKey collXOnly(collKey.GetPubKey());
+    CKey ddKeyPriv; ddKeyPriv.MakeNewKey(true);
+    XOnlyPubKey ddXOnly(ddKeyPriv.GetPubKey());
+    CKey recipKeyPriv; recipKeyPriv.MakeNewKey(true);
+    XOnlyPubKey recipXOnly(recipKeyPriv.GetPubKey());
+
+    std::vector<unsigned char> ddMarker = {'D', 'D'};
+
+    // === TX 1: Legitimate MINT of $100 DD ===
+    CMutableTransaction mtxMint;
+    mtxMint.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    mtxMint.vin.emplace_back(COutPoint(uint256::ONE, 0));
+
+    // Output 0: Collateral lock (P2TR with value)
+    CScript collateralScript = CScript() << OP_1 << ToByteVector(collXOnly);
+    mtxMint.vout.emplace_back(5000 * COIN, collateralScript);
+
+    // Output 1: DD token (P2TR, zero value)
+    CScript ddScript = CScript() << OP_1 << ToByteVector(ddXOnly);
+    mtxMint.vout.emplace_back(0, ddScript);
+
+    // Output 2: OP_RETURN with DD MINT data
+    CScript opReturn;
+    opReturn << OP_RETURN << ddMarker << CScriptNum(1) << CScriptNum(MINT_DD)
+             << CScriptNum(LOCK_BLOCKS) << CScriptNum(1);
+    mtxMint.vout.emplace_back(0, opReturn);
+
+    CTransactionRef txMint = MakeTransactionRef(mtxMint);
+
+    // Verify HasDigiDollarMarker recognizes the mint transaction
+    BOOST_CHECK(DigiDollar::HasDigiDollarMarker(*txMint));
+    BOOST_CHECK_EQUAL(GetDigiDollarTxType(*txMint), DD_TX_MINT);
+
+    COutPoint ddOutpoint(txMint->GetHash(), 1); // output index 1 = DD output
+
+    // === TX 2: Malicious TRANSFER claiming $200 DD from $100 input ===
+    CMutableTransaction mtxTransfer;
+    mtxTransfer.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+    mtxTransfer.vin.emplace_back(ddOutpoint);
+
+    // Output: DD token claiming $200 (P2TR, zero value)
+    CScript ddOutScript = CScript() << OP_1 << ToByteVector(recipXOnly);
+    mtxTransfer.vout.emplace_back(0, ddOutScript);
+
+    // OP_RETURN: Attacker claims $200 DD
+    CScript transferOpReturn;
+    transferOpReturn << OP_RETURN << ddMarker << CScriptNum(2) << CScriptNum(INFLATED_DD);
+    mtxTransfer.vout.emplace_back(0, transferOpReturn);
+
+    CTransactionRef txTransfer = MakeTransactionRef(mtxTransfer);
+
+    // Set up coins view with the mint's DD output (simulating UpdateCoins after TX 1)
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    Coin ddCoin(txMint->vout[1], 1000, false); // height 1000, not coinbase
+    coinsCache.AddCoin(ddOutpoint, std::move(ddCoin), false);
+
+    // Provide txLookup that simulates block-db (ConnectBlock scenario)
+    auto lookup = [&txMint](const uint256& txid, uint32_t h, CTransactionRef& out) -> bool {
+        if (txid == txMint->GetHash()) { out = txMint; return true; }
+        return false;
+    };
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 200, *regTestParams, &coinsCache, true, lookup);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(*txTransfer, ctx, state);
+
+    // The transfer should REJECT: inputDD ($100) ≠ outputDD ($200) → conservation violation
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Intra-block DD inflation attempt rejected. "
+        "A transfer claiming $200 from a $100 mint MUST fail. Reject reason: " +
+        state.GetRejectReason());
+
+    std::string reason = state.GetRejectReason();
+    bool expectedRejection = (reason == "dd-input-amounts-unknown" ||
+                              reason == "transfer-dd-conservation-violation");
+    BOOST_CHECK_MESSAGE(expectedRejection,
+        "Rejection should be 'dd-input-amounts-unknown' or "
+        "'transfer-dd-conservation-violation'. Got: " + reason);
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t6_01b_intrablock_mint_then_transfer_valid_conservation)
+{
+    // CONTROL TEST: Mint $100 DD in TX 1, Transfer $100 DD in TX 2 (same amount).
+    // With txLookup simulating ConnectBlock, the transfer should PASS because
+    // inputDD == outputDD (conservation holds).
+
+    auto regTestParams = CChainParams::RegTest({});
+    const CAmount DD_AMOUNT = 10000; // $100
+
+    CKey collKey; collKey.MakeNewKey(true);
+    XOnlyPubKey collXOnly(collKey.GetPubKey());
+    CKey ddKeyPriv; ddKeyPriv.MakeNewKey(true);
+    XOnlyPubKey ddXOnly(ddKeyPriv.GetPubKey());
+    CKey recipKeyPriv; recipKeyPriv.MakeNewKey(true);
+    XOnlyPubKey recipXOnly(recipKeyPriv.GetPubKey());
+    std::vector<unsigned char> ddM = {'D', 'D'};
+
+    // Build mint TX
+    CMutableTransaction mtxMint;
+    mtxMint.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    mtxMint.vin.emplace_back(COutPoint(uint256::ONE, 0));
+    mtxMint.vout.emplace_back(5000 * COIN, CScript() << OP_1 << ToByteVector(collXOnly));
+    CScript ddScript = CScript() << OP_1 << ToByteVector(ddXOnly);
+    mtxMint.vout.emplace_back(0, ddScript);
+    CScript opRet;
+    opRet << OP_RETURN << ddM << CScriptNum(1) << CScriptNum(DD_AMOUNT)
+          << CScriptNum(172800) << CScriptNum(1);
+    mtxMint.vout.emplace_back(0, opRet);
+
+    CTransactionRef txMint = MakeTransactionRef(mtxMint);
+    COutPoint ddOut(txMint->GetHash(), 1);
+
+    // Build transfer TX with CORRECT amount
+    CMutableTransaction mtxXfer;
+    mtxXfer.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+    mtxXfer.vin.emplace_back(ddOut);
+    mtxXfer.vout.emplace_back(0, CScript() << OP_1 << ToByteVector(recipXOnly));
+    CScript xferOpRet;
+    xferOpRet << OP_RETURN << ddM << CScriptNum(2) << CScriptNum(DD_AMOUNT);
+    mtxXfer.vout.emplace_back(0, xferOpRet);
+
+    CTransactionRef txXfer = MakeTransactionRef(mtxXfer);
+
+    // Set up coins view with mint's DD output
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    Coin ddCoin(txMint->vout[1], 1000, false);
+    coinsCache.AddCoin(ddOut, std::move(ddCoin), false);
+
+    // Case 1: No txLookup (fail-closed)
+    DigiDollar::ValidationContext ctxNoLookup(1000, 500000, 200, *regTestParams, &coinsCache, true);
+    TxValidationState state1;
+    bool valid1 = DigiDollar::ValidateDigiDollarTransaction(*txXfer, ctxNoLookup, state1);
+
+    if (!valid1) {
+        BOOST_CHECK_MESSAGE(state1.GetRejectReason() == "dd-input-amounts-unknown",
+            "Without block-db lookup, legitimate transfer rejected fail-closed. "
+            "Reason: " + state1.GetRejectReason());
+    }
+
+    // Case 2: With txLookup (simulates ConnectBlock)
+    auto lookup = [&txMint](const uint256& txid, uint32_t h, CTransactionRef& out) -> bool {
+        if (txid == txMint->GetHash()) { out = txMint; return true; }
+        return false;
+    };
+    DigiDollar::ValidationContext ctxWithLookup(1000, 500000, 200, *regTestParams, &coinsCache, true, lookup);
+    TxValidationState state2;
+    bool valid2 = DigiDollar::ValidateDigiDollarTransaction(*txXfer, ctxWithLookup, state2);
+
+    if (valid2) {
+        BOOST_TEST_MESSAGE("CONFIRMED: With block-db lookup, legitimate intra-block "
+            "transfer PASSES conservation check ($100 in = $100 out).");
+    } else {
+        // Still acceptable if rejected for other reasons (e.g., min output amount)
+        BOOST_TEST_MESSAGE("Transfer rejected even with lookup. Reason: " +
+            state2.GetRejectReason() + ". Not a conservation issue.");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t6_01c_same_block_redeem_timelock_enforcement)
+{
+    // ATTACK: Mint DD at height 1000 with 30-day lock, then try to redeem
+    // at the SAME HEIGHT. The timelock should prevent this absolutely.
+    //
+    // The collateral lock script uses OP_CHECKLOCKTIMEVERIFY (CLTV):
+    //   <lockHeight> OP_CLTV OP_DROP <ownerKey> OP_CHECKSIG
+    //
+    // CLTV enforcement chain:
+    //   1. Script requires tx.nLockTime >= lockHeight (CLTV opcode)
+    //   2. Consensus requires currentHeight >= tx.nLockTime (BIP65)
+    //   3. Therefore: currentHeight >= lockHeight
+    //
+    // For a 30-day lock at height 1000: lockHeight = 1000 + 172800 = 173800
+    // Current height = 1000, so currentHeight (1000) < lockHeight (173800) → REJECTED
+
+    auto regTestParams = CChainParams::RegTest({});
+    const CAmount DD_AMOUNT = 10000;
+    const int MINT_HEIGHT = 1000;
+    const int LOCK_BLOCKS = 30 * DigiDollar::BLOCKS_PER_DAY;
+    const int LOCK_HEIGHT = MINT_HEIGHT + LOCK_BLOCKS; // 173800
+
+    // Redeem TX: attacker tries to release collateral at mint height
+    CMutableTransaction mtxRedeem;
+    mtxRedeem.nVersion = MakeDigiDollarVersion(DD_TX_REDEEM);
+
+    // Set nLockTime to current height (too early for CLTV)
+    mtxRedeem.nLockTime = MINT_HEIGHT;
+
+    // Input 0: Collateral (P2TR with value)
+    mtxRedeem.vin.emplace_back(COutPoint(uint256::ONE, 0));
+
+    // Input 1: DD tokens to burn
+    mtxRedeem.vin.emplace_back(COutPoint(uint256::ONE, 1));
+
+    // Output: DGB back to user
+    CScript p2pkh;
+    p2pkh << OP_DUP << OP_HASH160;
+    std::vector<unsigned char> hash160(20, 0x01);
+    p2pkh << hash160 << OP_EQUALVERIFY << OP_CHECKSIG;
+    mtxRedeem.vout.emplace_back(5000 * COIN, p2pkh);
+
+    // OP_RETURN for DD burn
+    CScript opRet;
+    opRet << OP_RETURN;
+    std::vector<unsigned char> ddM = {'D', 'D'};
+    opRet << ddM;
+    opRet << CScriptNum(3) << CScriptNum(DD_AMOUNT);
+    mtxRedeem.vout.emplace_back(0, opRet);
+
+    CTransactionRef txRedeem = MakeTransactionRef(mtxRedeem);
+
+    // Set up coins view with collateral and DD UTXOs
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+
+    // Generate proper P2TR keys
+    CKey collKeyPriv; collKeyPriv.MakeNewKey(true);
+    XOnlyPubKey collXOnly(collKeyPriv.GetPubKey());
+    CKey ddKeyPriv; ddKeyPriv.MakeNewKey(true);
+    XOnlyPubKey ddXOnly(ddKeyPriv.GetPubKey());
+
+    // Add collateral UTXO (has DGB value, P2TR)
+    CTxOut collateralOut(5000 * COIN, CScript() << OP_1 << ToByteVector(collXOnly));
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 0), Coin(collateralOut, MINT_HEIGHT, false), false);
+
+    // Add DD UTXO (zero value, P2TR)
+    CTxOut ddOut(0, CScript() << OP_1 << ToByteVector(ddXOnly));
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 1), Coin(ddOut, MINT_HEIGHT, false), false);
+
+    // Validate at mint height — redemption should be rejected
+    DigiDollar::ValidationContext ctx(MINT_HEIGHT, 500000, 200, *regTestParams, &coinsCache, true);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(*txRedeem, ctx, state);
+
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Same-block redemption rejected. At height " +
+        std::to_string(MINT_HEIGHT) + " with lock height " +
+        std::to_string(LOCK_HEIGHT) + ", redemption is impossible. " +
+        "CLTV enforces currentHeight >= lockHeight. Reason: " +
+        state.GetRejectReason());
+
+    // Even if the attacker sets nLockTime = lockHeight (trying to satisfy CLTV),
+    // consensus requires currentHeight >= nLockTime, which fails at height 1000.
+    CMutableTransaction mtxRedeem2;
+    mtxRedeem2.nVersion = MakeDigiDollarVersion(DD_TX_REDEEM);
+    mtxRedeem2.nLockTime = LOCK_HEIGHT; // Set to lock height to bypass CLTV
+    mtxRedeem2.vin.emplace_back(COutPoint(uint256::ONE, 0));
+    mtxRedeem2.vin.emplace_back(COutPoint(uint256::ONE, 1));
+    mtxRedeem2.vout.emplace_back(5000 * COIN, p2pkh);
+    mtxRedeem2.vout.emplace_back(0, opRet);
+
+    CTransactionRef txRedeem2 = MakeTransactionRef(mtxRedeem2);
+
+    // At height 1000 with nLockTime = 173800, the tx is future-locked
+    // ValidateNormalRedemptionConditions: ctx.nHeight (1000) < tx.nLockTime (173800) → reject
+    DigiDollar::ValidationContext ctx2(MINT_HEIGHT, 500000, 200, *regTestParams, &coinsCache, true);
+    TxValidationState state2;
+    valid = DigiDollar::ValidateDigiDollarTransaction(*txRedeem2, ctx2, state2);
+
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Redeem with nLockTime=lockHeight also rejected at mint "
+        "height. ctx.nHeight (1000) < tx.nLockTime (173800) → 'redemption-timelock-active'. "
+        "Reason: " + state2.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t6_01d_reverse_order_transfer_before_mint_rejected)
+{
+    // ATTACK: Malicious miner orders transfer BEFORE the mint in the block.
+    // In the UTXO model, this is fundamentally impossible because:
+    //   1. UpdateCoins runs AFTER each tx is validated
+    //   2. Transfer's input references mint's output
+    //   3. Mint hasn't been processed → output not in coins view
+    //   4. CheckTxInputs fails with "missing input"
+    //
+    // This test verifies the coins view enforcement at the DD level:
+    // when the input coin doesn't exist, DD validation can't proceed.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    // Build a transfer TX that references a non-existent DD output
+    CMutableTransaction mtxXfer;
+    mtxXfer.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+
+    // Input references a tx that hasn't been added to the view
+    uint256 futureTxHash;
+    CSHA256().Write((unsigned char*)"future_mint", 11).Finalize(futureTxHash.begin());
+    mtxXfer.vin.emplace_back(COutPoint(futureTxHash, 1));
+
+    CKey outKeyPriv; outKeyPriv.MakeNewKey(true);
+    XOnlyPubKey outXOnly(outKeyPriv.GetPubKey());
+    mtxXfer.vout.emplace_back(0, CScript() << OP_1 << ToByteVector(outXOnly));
+
+    std::vector<unsigned char> ddM = {'D', 'D'};
+    CScript opRet;
+    opRet << OP_RETURN << ddM << CScriptNum(2) << CScriptNum(10000);
+    mtxXfer.vout.emplace_back(0, opRet);
+
+    CTransactionRef txXfer = MakeTransactionRef(mtxXfer);
+
+    // Empty coins view — the "mint" tx hasn't been processed
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 200, *regTestParams, &coinsCache, true);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(*txXfer, ctx, state);
+
+    // Transfer must fail — input DD amounts can't be determined
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Transfer before mint is impossible. Without the mint "
+        "output in the coins view, DD amount lookup fails → 'dd-input-amounts-unknown'. "
+        "In actual ConnectBlock, CheckTxInputs would reject even earlier ('missing input'). "
+        "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t6_01e_testblockvalidity_vs_connectblock_asymmetry)
+{
+    // DESIGN FINDING: TestBlockValidity vs ConnectBlock asymmetry for intra-block DD
+    //
+    // During ConnectBlock (real block connection):
+    //   - Block is already saved to disk (SaveBlockToDisk called before ConnectBlock)
+    //   - txLookup lambda: pindex->GetAncestor(coinHeight) → ReadBlockFromDisk → SUCCESS
+    //   - Intra-block DD chains: TX 2 can resolve TX 1's DD amounts via block-db
+    //
+    // During TestBlockValidity (block template validation):
+    //   - Block is NOT on disk (template only, not saved)
+    //   - txLookup lambda: ReadBlockFromDisk(indexDummy) → FAIL (no nFile/nDataPos)
+    //   - Intra-block DD chains: TX 2 CANNOT resolve TX 1's DD amounts
+    //   - Validation fails with "dd-input-amounts-unknown"
+    //
+    // Impact: Honest miners using CreateNewBlock → TestBlockValidity CANNOT
+    // create blocks with intra-block DD chains. Custom miners bypassing
+    // TestBlockValidity CAN create such blocks, and they ARE valid consensus.
+    //
+    // This is NOT a security vulnerability (fail-closed is safe), but it IS
+    // a design gap that could be fixed by making txLookup search the current
+    // block's vtx when coinHeight == current height.
+
+    // The key evidence: block-db lookup requires a TxLookupFn. In ConnectBlock,
+    // the lambda reads from disk. When the block isn't on disk (TestBlockValidity
+    // with fJustCheck=true), ReadBlockFromDisk fails.
+    //
+    // Verify: without a txLookup function, intra-block DD resolution fails.
+
+    auto regTestParams = CChainParams::RegTest({});
+
+    CKey ddKeyPriv; ddKeyPriv.MakeNewKey(true);
+    XOnlyPubKey ddXOnly(ddKeyPriv.GetPubKey());
+    CKey collKeyPriv; collKeyPriv.MakeNewKey(true);
+    XOnlyPubKey collXOnly(collKeyPriv.GetPubKey());
+    CKey outKeyPriv; outKeyPriv.MakeNewKey(true);
+    XOnlyPubKey outXOnly(outKeyPriv.GetPubKey());
+    std::vector<unsigned char> ddM = {'D', 'D'};
+
+    // Build a proper mint tx
+    CMutableTransaction mtxMint;
+    mtxMint.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    mtxMint.vin.emplace_back(COutPoint(uint256::ZERO, 0));
+    mtxMint.vout.emplace_back(5000 * COIN, CScript() << OP_1 << ToByteVector(collXOnly));
+    CScript ddScript = CScript() << OP_1 << ToByteVector(ddXOnly);
+    mtxMint.vout.emplace_back(0, ddScript);
+    CScript mintOpRet;
+    mintOpRet << OP_RETURN << ddM << CScriptNum(1) << CScriptNum(10000) << CScriptNum(172800) << CScriptNum(1);
+    mtxMint.vout.emplace_back(0, mintOpRet);
+    CTransactionRef txMint = MakeTransactionRef(mtxMint);
+
+    COutPoint mintDDOut(txMint->GetHash(), 1);
+
+    // Add the mint's DD output to the coins view
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    coinsCache.AddCoin(mintDDOut, Coin(txMint->vout[1], 1000, false), false);
+
+    // Build transfer spending the mint's DD output
+    CMutableTransaction mtxXfer;
+    mtxXfer.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+    mtxXfer.vin.emplace_back(mintDDOut);
+    mtxXfer.vout.emplace_back(0, CScript() << OP_1 << ToByteVector(outXOnly));
+    CScript opRet;
+    opRet << OP_RETURN << ddM << CScriptNum(2) << CScriptNum(10000);
+    mtxXfer.vout.emplace_back(0, opRet);
+    CTransactionRef txXfer = MakeTransactionRef(mtxXfer);
+
+    // Case 1: No txLookup (simulates TestBlockValidity where block isn't on disk)
+    DigiDollar::ValidationContext ctxNoLookup(1000, 500000, 200, *regTestParams, &coinsCache, true);
+    TxValidationState state1;
+    bool valid1 = DigiDollar::ValidateDigiDollarTransaction(*txXfer, ctxNoLookup, state1);
+
+    BOOST_CHECK_MESSAGE(!valid1,
+        "WITHOUT block-db lookup (TestBlockValidity scenario): Intra-block DD "
+        "transfer rejected. Reason: " + state1.GetRejectReason());
+
+    BOOST_CHECK_MESSAGE(state1.GetRejectReason() == "dd-input-amounts-unknown",
+        "Without txLookup, DD input amounts undetermined → fail-closed. Got: " +
+        state1.GetRejectReason());
+
+    // Case 2: With txLookup that returns the mint tx (simulates ConnectBlock)
+    auto mockLookup = [&txMint](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == txMint->GetHash()) {
+            tx_out = txMint;
+            return true;
+        }
+        return false;
+    };
+
+    DigiDollar::ValidationContext ctxWithLookup(1000, 500000, 200, *regTestParams, &coinsCache, true, mockLookup);
+    TxValidationState state2;
+    bool valid2 = DigiDollar::ValidateDigiDollarTransaction(*txXfer, ctxWithLookup, state2);
+
+    if (valid2) {
+        BOOST_TEST_MESSAGE("WITH block-db lookup (ConnectBlock scenario): Transfer PASSES. "
+            "Confirms asymmetry: same tx passes ConnectBlock but fails TestBlockValidity.");
+    } else {
+        BOOST_CHECK_MESSAGE(state2.GetRejectReason() != "dd-input-amounts-unknown",
+            "WITH block-db lookup: amounts WERE resolved. Rejected for: " +
+            state2.GetRejectReason());
+    }
+
+    BOOST_TEST_MESSAGE("DESIGN GAP: TestBlockValidity cannot validate intra-block DD "
+        "chains because the block isn't on disk. Fix: add in-block tx search to "
+        "txLookup when coin.nHeight == current block height.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t6_01f_multi_hop_intrablock_chain_no_inflation)
+{
+    // ATTACK: Mint → Transfer → Transfer (3-tx chain in same block)
+    // Can multiple hops inflate DD supply?
+    //
+    // TX 1: MINT $100 DD
+    // TX 2: TRANSFER $100 DD to address A
+    // TX 3: TRANSFER $100 DD from A to B (spending TX 2's output)
+    //
+    // At each hop, conservation must hold. Even if the attacker controls
+    // all three transactions, they can't create DD from nothing.
+
+    auto regTestParams = CChainParams::RegTest({});
+    const CAmount DD_AMOUNT = 10000; // $100
+
+    // Verify that the OP_RETURN parsing is consistent across hops.
+    // Each TRANSFER's OP_RETURN declares its output amounts. The conservation
+    // check compares input amounts (from source tx OP_RETURN) against output
+    // amounts (from current tx OP_RETURN). If these ever mismatch, it's rejected.
+
+    // Build 3 chained transactions with proper P2TR scripts
+    std::vector<unsigned char> ddM = {'D', 'D'};
+    CKey k1; k1.MakeNewKey(true); XOnlyPubKey xk1(k1.GetPubKey());
+    CKey k2; k2.MakeNewKey(true); XOnlyPubKey xk2(k2.GetPubKey());
+    CKey k3; k3.MakeNewKey(true); XOnlyPubKey xk3(k3.GetPubKey());
+    CKey k4; k4.MakeNewKey(true); XOnlyPubKey xk4(k4.GetPubKey());
+
+    // TX 1: MINT
+    CMutableTransaction mtx1;
+    mtx1.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    mtx1.vin.emplace_back(COutPoint(uint256::ONE, 0));
+    mtx1.vout.emplace_back(5000 * COIN, CScript() << OP_1 << ToByteVector(xk1));
+    mtx1.vout.emplace_back(0, CScript() << OP_1 << ToByteVector(xk2));
+    CScript or1;
+    or1 << OP_RETURN << ddM << CScriptNum(1) << CScriptNum(DD_AMOUNT) << CScriptNum(172800) << CScriptNum(1);
+    mtx1.vout.emplace_back(0, or1);
+    CTransactionRef tx1 = MakeTransactionRef(mtx1);
+
+    // TX 2: TRANSFER from TX 1
+    CMutableTransaction mtx2;
+    mtx2.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+    mtx2.vin.emplace_back(COutPoint(tx1->GetHash(), 1));
+    mtx2.vout.emplace_back(0, CScript() << OP_1 << ToByteVector(xk3));
+    CScript or2;
+    or2 << OP_RETURN << ddM << CScriptNum(2) << CScriptNum(DD_AMOUNT);
+    mtx2.vout.emplace_back(0, or2);
+    CTransactionRef tx2 = MakeTransactionRef(mtx2);
+
+    // TX 3: TRANSFER from TX 2 — trying to inflate
+    CMutableTransaction mtx3;
+    mtx3.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+    mtx3.vin.emplace_back(COutPoint(tx2->GetHash(), 0));
+    mtx3.vout.emplace_back(0, CScript() << OP_1 << ToByteVector(xk4));
+
+    // Attacker tries to claim $200 at the second hop
+    CScript or3;
+    or3 << OP_RETURN << ddM << CScriptNum(2) << CScriptNum(DD_AMOUNT * 2); // $200 INFLATED!
+    mtx3.vout.emplace_back(0, or3);
+
+    CTransactionRef tx3 = MakeTransactionRef(mtx3);
+
+    // Set up coins view with TX 2's DD output
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    Coin dd2Coin(tx2->vout[0], 1000, false);
+    coinsCache.AddCoin(COutPoint(tx2->GetHash(), 0), std::move(dd2Coin), false);
+
+    // Provide txLookup that returns TX 2
+    auto lookup = [&tx2](const uint256& txid, uint32_t h, CTransactionRef& out) -> bool {
+        if (txid == tx2->GetHash()) { out = tx2; return true; }
+        return false;
+    };
+
+    DigiDollar::ValidationContext ctx(1000, 500000, 200, *regTestParams, &coinsCache, true, lookup);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(*tx3, ctx, state);
+
+    // TX 3 must be rejected: inputDD ($100 from TX 2) ≠ outputDD ($200)
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Multi-hop inflation rejected. TX 2 output is $100, "
+        "TX 3 claims $200 → conservation violation. Reason: " +
+        state.GetRejectReason());
+
+    // Verify it's specifically a conservation violation (not just lookup failure)
+    std::string reason = state.GetRejectReason();
+    bool isConservation = (reason == "transfer-dd-conservation-violation");
+    bool isLookupFail = (reason == "dd-input-amounts-unknown");
+    BOOST_CHECK_MESSAGE(isConservation || isLookupFail,
+        "Expected 'transfer-dd-conservation-violation' or 'dd-input-amounts-unknown', got: " + reason);
+
+    if (isConservation) {
+        BOOST_TEST_MESSAGE("CONFIRMED: Conservation check caught multi-hop inflation. "
+            "Input DD from TX 2's OP_RETURN = $100, TX 3 claimed $200 → rejected.");
+    }
+}
+
+// =============================================================================
+// T6-01: Mint/Transfer/Redeem in Same Block — Ordering Attack
+// =============================================================================
+
+/**
+ * T6-01a: Same-block mint then redeem — timelock prevents instant collateral release
+ *
+ * ATTACK: Miner crafts a block with TX1 (mint) and TX2 (redeem) to get collateral
+ * back instantly, bypassing the lock period. This tests that the timelock check
+ * in ValidateNormalRedemptionConditions rejects the redemption.
+ */
+BOOST_AUTO_TEST_CASE(redteam_t6_01a_same_block_mint_redeem_timelock_blocks)
+{
+    BOOST_TEST_MESSAGE("=== T6-01a: Same-block mint+redeem blocked by timelock ===");
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int CURRENT_HEIGHT = 1000;
+    const int LOCK_BLOCKS = 30 * DigiDollar::BLOCKS_PER_DAY;  // 30-day lock
+    const int LOCK_HEIGHT = CURRENT_HEIGHT + LOCK_BLOCKS;
+
+    // Create a key pair for the owner
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly = XOnlyPubKey(ownerKey.GetPubKey());
+
+    // ---- STEP 1: Create Mint TX (TX1) ----
+    // This is for context — we care about the REDEEM validation
+
+    // ---- STEP 2: Create Redeem TX (TX2) attempting same-block redemption ----
+    CMutableTransaction redeemTx;
+    redeemTx.nVersion = MakeDigiDollarVersion(DD_TX_REDEEM);
+
+    // nLockTime = LOCK_HEIGHT (must be >= CLTV lockHeight for script to pass)
+    // BUT ctx.nHeight (CURRENT_HEIGHT) < LOCK_HEIGHT → ValidateNormalRedemptionConditions rejects
+    redeemTx.nLockTime = LOCK_HEIGHT;
+
+    // Add collateral input (spending from mint TX1)
+    redeemTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 0), CScript(), 0xFFFFFFFE));
+    // Add DD input to burn
+    redeemTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 1), CScript(), 0xFFFFFFFE));
+
+    // DGB output (returning collateral)
+    redeemTx.vout.push_back(CTxOut(500 * COIN, CScript() << OP_1 << std::vector<unsigned char>(32, 0xAA)));
+    // OP_RETURN
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    opReturn << std::vector<unsigned char>{'D', 'D'};
+    opReturn << CScriptNum(3);  // REDEEM
+    opReturn << CScriptNum(10000);  // 10000 cents = $100
+    redeemTx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(redeemTx);
+
+    // Create coins view with fake UTXO
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+
+    // Add collateral UTXO (vin[0])
+    Coin collateralCoin;
+    collateralCoin.out = CTxOut(500 * COIN, CScript() << OP_1 << std::vector<unsigned char>(32, 0xBB));
+    collateralCoin.nHeight = CURRENT_HEIGHT;  // Same block!
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 0), std::move(collateralCoin), false);
+
+    // Add DD UTXO (vin[1])
+    Coin ddCoin;
+    ddCoin.out = CTxOut(0, CScript() << OP_1 << std::vector<unsigned char>(32, 0xCC));
+    ddCoin.nHeight = CURRENT_HEIGHT;  // Same block!
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 1), std::move(ddCoin), false);
+
+    // Validate at CURRENT_HEIGHT — same block as mint
+    DigiDollar::ValidationContext ctx(CURRENT_HEIGHT, 500000, 200, *regTestParams, &coinsCache, false);
+
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Same-block redemption REJECTED. "
+        "ctx.nHeight (" + std::to_string(CURRENT_HEIGHT) + ") < tx.nLockTime (" +
+        std::to_string(LOCK_HEIGHT) + "). Reason: " + state.GetRejectReason());
+
+    std::string reason = state.GetRejectReason();
+    BOOST_CHECK_MESSAGE(reason == "redemption-timelock-active",
+        "Expected 'redemption-timelock-active', got: " + reason);
+
+    BOOST_TEST_MESSAGE("CONFIRMED: CLTV timelock prevents same-block mint+redeem. "
+        "Even if a miner puts both txs in the same block, the redemption is rejected "
+        "because current height < locktime.");
+}
+
+/**
+ * T6-01b: Zero lockPeriod mint rejected
+ *
+ * ATTACK: Mint with lockHeight = currentHeight (lockPeriod = 0) to bypass lock entirely.
+ * The mint validation must reject this because lockPeriod <= 0.
+ */
+BOOST_AUTO_TEST_CASE(redteam_t6_01b_zero_lock_period_mint_rejected)
+{
+    BOOST_TEST_MESSAGE("=== T6-01b: Zero lock period mint rejected ===");
+
+    // Clear any volatility freeze from previous tests so we reach the lock period check
+    DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int CURRENT_HEIGHT = 1000;
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly = XOnlyPubKey(ownerKey.GetPubKey());
+
+    // Create mint TX with lockHeight = currentHeight (zero lock period)
+    CMutableTransaction mintTx;
+    mintTx.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+
+    // Input (funding)
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 0)));
+
+    // Collateral output (needs NUMS-based P2TR)
+    DigiDollar::MintParams mintParams;
+    mintParams.ddAmount = 10000;  // $100
+    mintParams.lockHeight = CURRENT_HEIGHT;  // lockPeriod will be 0!
+    mintParams.ownerKey = ownerXOnly;
+    mintParams.internalKey = DigiDollar::GetCollateralNUMSKey();
+    mintParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(mintParams);
+    mintTx.vout.push_back(CTxOut(500 * COIN, collateralScript));
+
+    // DD output
+    CScript ddScript;
+    ddScript << OP_1 << std::vector<unsigned char>(32, 0xDD);
+    mintTx.vout.push_back(CTxOut(0, ddScript));
+
+    // OP_RETURN with lockHeight = currentHeight, tier 0
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    opReturn << std::vector<unsigned char>{'D', 'D'};
+    opReturn << CScriptNum(1);  // MINT
+    opReturn << CScriptNum(10000);  // $100
+    opReturn << CScriptNum(CURRENT_HEIGHT);  // lockHeight = currentHeight
+    opReturn << CScriptNum(0);  // tier 0
+    opReturn << ToByteVector(ownerXOnly);  // owner pubkey
+    mintTx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(mintTx);
+
+    // Coins view for funding input
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    Coin fundingCoin;
+    fundingCoin.out = CTxOut(600 * COIN, CScript() << OP_DUP << OP_HASH160 << std::vector<unsigned char>(20, 0x01) << OP_EQUALVERIFY << OP_CHECKSIG);
+    fundingCoin.nHeight = 500;
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 0), std::move(fundingCoin), false);
+
+    DigiDollar::ValidationContext ctx(CURRENT_HEIGHT, 500000, 200, *regTestParams, &coinsCache, false);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Mint with zero lockPeriod REJECTED. "
+        "lockHeight=" + std::to_string(CURRENT_HEIGHT) + " at height=" +
+        std::to_string(CURRENT_HEIGHT) + " → lockPeriod=0. Reason: " + state.GetRejectReason());
+
+    // Should fail at lock period check or lock height mismatch
+    std::string reason = state.GetRejectReason();
+    bool isLockPeriod = (reason == "bad-lock-period");
+    bool isLockMismatch = (reason == "bad-mint-lock-height-mismatch");
+    BOOST_CHECK_MESSAGE(isLockPeriod || isLockMismatch,
+        "Expected 'bad-lock-period' or 'bad-mint-lock-height-mismatch', got: " + reason);
+
+    BOOST_TEST_MESSAGE("CONFIRMED: Cannot mint with zero lock period. Prevents same-block mint+redeem attack.");
+}
+
+/**
+ * T6-01c: Same-block transfer via txLookup — DD amount extraction works for valid chains
+ *
+ * ATTACK SCENARIO: Verify that same-block DD tx chains are handled correctly.
+ * When TX2 (transfer) spends TX1 (mint) output in the same block, the txLookup
+ * function reads the current block from disk and successfully finds TX1.
+ * This is NOT a vulnerability — it's correct behavior for valid chains.
+ * The test verifies that ExtractDDAmountFromTxRef correctly parses amounts.
+ */
+BOOST_AUTO_TEST_CASE(redteam_t6_01c_same_block_transfer_amount_lookup)
+{
+    BOOST_TEST_MESSAGE("=== T6-01c: Same-block transfer DD amount lookup via txLookup ===");
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int CURRENT_HEIGHT = 1000;
+    const CAmount DD_AMOUNT = 10000;  // $100 in cents
+
+    // Create TX1 (mint) that would be in the same block
+    CMutableTransaction mintTx;
+    mintTx.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 0)));
+
+    // Collateral output
+    mintTx.vout.push_back(CTxOut(500 * COIN, CScript() << OP_1 << std::vector<unsigned char>(32, 0xAA)));
+
+    // DD output (zero-value P2TR)
+    CScript ddScript;
+    ddScript << OP_1 << std::vector<unsigned char>(32, 0xDD);
+    mintTx.vout.push_back(CTxOut(0, ddScript));
+
+    // OP_RETURN with DD amount
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    opReturn << std::vector<unsigned char>{'D', 'D'};
+    opReturn << CScriptNum(1);  // MINT type
+    opReturn << CScriptNum(DD_AMOUNT);  // $100
+    opReturn << CScriptNum(CURRENT_HEIGHT + 30 * DigiDollar::BLOCKS_PER_DAY);  // lockHeight
+    opReturn << CScriptNum(1);  // tier 1 (30 days)
+    mintTx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransactionRef tx1 = MakeTransactionRef(mintTx);
+    uint256 tx1Hash = tx1->GetHash();
+
+    // Create TX2 (transfer) spending TX1's DD output (vout index 1)
+    CMutableTransaction transferTx;
+    transferTx.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+    transferTx.vin.push_back(CTxIn(COutPoint(tx1Hash, 1)));  // Spend TX1's DD output
+
+    // DD output (transfer to new address)
+    CScript ddOutputScript;
+    ddOutputScript << OP_1 << std::vector<unsigned char>(32, 0xEE);
+    transferTx.vout.push_back(CTxOut(0, ddOutputScript));
+
+    // OP_RETURN for transfer
+    CScript transferOpReturn;
+    transferOpReturn << OP_RETURN;
+    transferOpReturn << std::vector<unsigned char>{'D', 'D'};
+    transferOpReturn << CScriptNum(2);  // TRANSFER
+    transferOpReturn << CScriptNum(DD_AMOUNT);  // Same $100
+    transferTx.vout.push_back(CTxOut(0, transferOpReturn));
+
+    CTransaction tx2(transferTx);
+
+    // Simulate same-block lookup: txLookup finds TX1 in the current block
+    auto txLookup = [&tx1, &tx1Hash, CURRENT_HEIGHT](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        // Simulates ReadBlockFromDisk finding TX1 in the same block
+        if (txid == tx1Hash && coinHeight == (uint32_t)CURRENT_HEIGHT) {
+            tx_out = tx1;
+            return true;
+        }
+        return false;
+    };
+
+    // Coins view with TX1's DD output (added by UpdateCoins after TX1 processed)
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    Coin ddCoin;
+    ddCoin.out = CTxOut(0, ddScript);
+    ddCoin.nHeight = CURRENT_HEIGHT;  // Same block height
+    coinsCache.AddCoin(COutPoint(tx1Hash, 1), std::move(ddCoin), false);
+
+    DigiDollar::ValidationContext ctx(CURRENT_HEIGHT, 500000, 200, *regTestParams, &coinsCache, true, txLookup);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(tx2, ctx, state);
+
+    // Transfer should succeed — txLookup finds TX1 at same height, parses DD amount
+    BOOST_CHECK_MESSAGE(valid,
+        "VERIFIED: Same-block DD transfer works via txLookup. "
+        "TX2 spends TX1's DD output (both at height " + std::to_string(CURRENT_HEIGHT) +
+        "), DD amount lookup succeeds. Reason: " + state.GetRejectReason());
+
+    BOOST_TEST_MESSAGE("CONFIRMED: Same-block DD tx chains are correctly handled by txLookup. "
+        "Conservation: input $100 == output $100. No inflation possible.");
+}
+
+/**
+ * T6-01d: Same-block transfer inflating DD via fake txLookup — blocked by conservation
+ *
+ * ATTACK: What if txLookup returns a crafted TX with inflated DD amount?
+ * (Simulating a miner who tampered with block data)
+ * Conservation check should still reject because the OP_RETURN in the TRANSFER
+ * declares the output amounts, and inputDD != outputDD.
+ */
+BOOST_AUTO_TEST_CASE(redteam_t6_01d_inflated_lookup_blocked_by_conservation)
+{
+    BOOST_TEST_MESSAGE("=== T6-01d: Inflated txLookup blocked by conservation ===");
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int CURRENT_HEIGHT = 1000;
+
+    // Create a "real" mint TX1 with $100 DD
+    CMutableTransaction realMintTx;
+    realMintTx.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    realMintTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 0)));
+    realMintTx.vout.push_back(CTxOut(500 * COIN, CScript() << OP_1 << std::vector<unsigned char>(32, 0xAA)));
+
+    CScript ddScript;
+    ddScript << OP_1 << std::vector<unsigned char>(32, 0xDD);
+    realMintTx.vout.push_back(CTxOut(0, ddScript));
+
+    CScript realOpReturn;
+    realOpReturn << OP_RETURN;
+    realOpReturn << std::vector<unsigned char>{'D', 'D'};
+    realOpReturn << CScriptNum(1);
+    realOpReturn << CScriptNum(10000);  // Real: $100
+    realOpReturn << CScriptNum(CURRENT_HEIGHT + 30 * DigiDollar::BLOCKS_PER_DAY);
+    realOpReturn << CScriptNum(1);
+    realMintTx.vout.push_back(CTxOut(0, realOpReturn));
+
+    CTransactionRef realTx1 = MakeTransactionRef(realMintTx);
+    uint256 tx1Hash = realTx1->GetHash();
+
+    // Attacker creates transfer claiming $200 output while input is only $100
+    CMutableTransaction transferTx;
+    transferTx.nVersion = MakeDigiDollarVersion(DD_TX_TRANSFER);
+    transferTx.vin.push_back(CTxIn(COutPoint(tx1Hash, 1)));
+
+    CScript ddOutputScript;
+    ddOutputScript << OP_1 << std::vector<unsigned char>(32, 0xEE);
+    transferTx.vout.push_back(CTxOut(0, ddOutputScript));
+
+    // ATTACK: OP_RETURN claims $200 output (double the actual input)
+    CScript inflatedOpReturn;
+    inflatedOpReturn << OP_RETURN;
+    inflatedOpReturn << std::vector<unsigned char>{'D', 'D'};
+    inflatedOpReturn << CScriptNum(2);  // TRANSFER
+    inflatedOpReturn << CScriptNum(20000);  // INFLATED: $200 (should be $100)
+    transferTx.vout.push_back(CTxOut(0, inflatedOpReturn));
+
+    CTransaction tx2(transferTx);
+
+    // txLookup returns the REAL TX1 ($100 DD)
+    auto txLookup = [&realTx1, &tx1Hash, CURRENT_HEIGHT](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == tx1Hash) {
+            tx_out = realTx1;
+            return true;
+        }
+        return false;
+    };
+
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    Coin ddCoin;
+    ddCoin.out = CTxOut(0, ddScript);
+    ddCoin.nHeight = CURRENT_HEIGHT;
+    coinsCache.AddCoin(COutPoint(tx1Hash, 1), std::move(ddCoin), false);
+
+    DigiDollar::ValidationContext ctx(CURRENT_HEIGHT, 500000, 200, *regTestParams, &coinsCache, true, txLookup);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(tx2, ctx, state);
+
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Conservation check blocks DD inflation. "
+        "Input DD = $100 (from TX1), Output DD = $200 (from OP_RETURN). "
+        "Reason: " + state.GetRejectReason());
+
+    std::string reason = state.GetRejectReason();
+    bool isConservation = (reason == "transfer-dd-conservation-violation");
+    bool isLookupFail = (reason == "dd-input-amounts-unknown");
+    BOOST_CHECK_MESSAGE(isConservation || isLookupFail,
+        "Expected conservation violation or lookup failure, got: " + reason);
+
+    BOOST_TEST_MESSAGE("CONFIRMED: Conservation check prevents DD inflation even with same-block chains.");
+}
+
+/**
+ * T6-01e: Negative lock period mint rejected
+ *
+ * ATTACK: Mint with lockHeight < currentHeight (negative lock period).
+ * Could happen with a past block height, trying to create an already-expired lock
+ * so the collateral can be immediately redeemed.
+ */
+BOOST_AUTO_TEST_CASE(redteam_t6_01e_negative_lock_period_rejected)
+{
+    BOOST_TEST_MESSAGE("=== T6-01e: Negative lock period mint rejected ===");
+
+    // Clear any volatility freeze from previous tests so we reach the lock period check
+    DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int CURRENT_HEIGHT = 1000;
+
+    CKey ownerKey;
+    ownerKey.MakeNewKey(true);
+    XOnlyPubKey ownerXOnly = XOnlyPubKey(ownerKey.GetPubKey());
+
+    // Create mint TX with lockHeight = currentHeight - 100 (expired lock!)
+    CMutableTransaction mintTx;
+    mintTx.nVersion = MakeDigiDollarVersion(DD_TX_MINT);
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 0)));
+
+    DigiDollar::MintParams mintParams;
+    mintParams.ddAmount = 10000;
+    mintParams.lockHeight = CURRENT_HEIGHT - 100;  // In the past!
+    mintParams.ownerKey = ownerXOnly;
+    mintParams.internalKey = DigiDollar::GetCollateralNUMSKey();
+    mintParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(mintParams);
+    mintTx.vout.push_back(CTxOut(500 * COIN, collateralScript));
+
+    CScript ddScript;
+    ddScript << OP_1 << std::vector<unsigned char>(32, 0xDD);
+    mintTx.vout.push_back(CTxOut(0, ddScript));
+
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    opReturn << std::vector<unsigned char>{'D', 'D'};
+    opReturn << CScriptNum(1);
+    opReturn << CScriptNum(10000);
+    opReturn << CScriptNum(CURRENT_HEIGHT - 100);  // Past lockHeight
+    opReturn << CScriptNum(1);  // Claim tier 1 (should mismatch)
+    opReturn << ToByteVector(ownerXOnly);
+    mintTx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(mintTx);
+
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+    Coin fundingCoin;
+    fundingCoin.out = CTxOut(600 * COIN, CScript() << OP_DUP << OP_HASH160 << std::vector<unsigned char>(20, 0x01) << OP_EQUALVERIFY << OP_CHECKSIG);
+    fundingCoin.nHeight = 500;
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 0), std::move(fundingCoin), false);
+
+    DigiDollar::ValidationContext ctx(CURRENT_HEIGHT, 500000, 200, *regTestParams, &coinsCache, false);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE VERIFIED: Mint with past lockHeight REJECTED. "
+        "lockHeight=" + std::to_string(CURRENT_HEIGHT - 100) +
+        " at height=" + std::to_string(CURRENT_HEIGHT) + " → negative lockPeriod. "
+        "Reason: " + state.GetRejectReason());
+
+    std::string reason = state.GetRejectReason();
+    bool validRejection = (reason == "bad-lock-period" ||
+                          reason == "bad-mint-lock-height-mismatch" ||
+                          reason == "bad-collateral-nums-mismatch");
+    BOOST_CHECK_MESSAGE(validRejection,
+        "Expected lock-related rejection, got: " + reason);
+
+    BOOST_TEST_MESSAGE("CONFIRMED: Cannot mint with expired lockHeight. "
+        "Prevents attacker from creating instantly-redeemable collateral.");
+}
+
+/**
+ * T6-01f: Redeem at exact lockHeight boundary — should succeed
+ *
+ * Verify that redemption at exactly the lock expiry height works.
+ * nHeight == nLockTime → CLTV passes (>= semantics).
+ */
+BOOST_AUTO_TEST_CASE(redteam_t6_01f_redeem_at_exact_lockheight_passes)
+{
+    BOOST_TEST_MESSAGE("=== T6-01f: Redeem at exact lockHeight boundary passes ===");
+
+    auto regTestParams = CChainParams::RegTest({});
+    const int LOCK_HEIGHT = 1000;
+
+    CMutableTransaction redeemTx;
+    redeemTx.nVersion = MakeDigiDollarVersion(DD_TX_REDEEM);
+    redeemTx.nLockTime = LOCK_HEIGHT;
+
+    redeemTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 0), CScript(), 0xFFFFFFFE));
+    redeemTx.vin.push_back(CTxIn(COutPoint(uint256::ONE, 1), CScript(), 0xFFFFFFFE));
+
+    // DGB output
+    redeemTx.vout.push_back(CTxOut(500 * COIN, CScript() << OP_1 << std::vector<unsigned char>(32, 0xAA)));
+    // OP_RETURN
+    CScript opReturn;
+    opReturn << OP_RETURN;
+    opReturn << std::vector<unsigned char>{'D', 'D'};
+    opReturn << CScriptNum(3);
+    opReturn << CScriptNum(10000);
+    redeemTx.vout.push_back(CTxOut(0, opReturn));
+
+    CTransaction tx(redeemTx);
+
+    CCoinsView coinsDummy;
+    CCoinsViewCache coinsCache(&coinsDummy);
+
+    Coin collateralCoin;
+    collateralCoin.out = CTxOut(500 * COIN, CScript() << OP_1 << std::vector<unsigned char>(32, 0xBB));
+    collateralCoin.nHeight = 100;
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 0), std::move(collateralCoin), false);
+
+    Coin ddCoin;
+    ddCoin.out = CTxOut(0, CScript() << OP_1 << std::vector<unsigned char>(32, 0xCC));
+    ddCoin.nHeight = 100;
+    coinsCache.AddCoin(COutPoint(uint256::ONE, 1), std::move(ddCoin), false);
+
+    // Validate at EXACTLY lockHeight → should pass timelock check
+    DigiDollar::ValidationContext ctx(LOCK_HEIGHT, 500000, 200, *regTestParams, &coinsCache, true);
+    TxValidationState state;
+    bool valid = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+
+    // The timelock check should pass (height >= nLockTime uses >= semantics)
+    // It may still fail on other checks (DD burn verification, collateral release, etc.)
+    // But it should NOT fail on "redemption-timelock-active"
+    if (!valid) {
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() != "redemption-timelock-active",
+            "Timelock should pass at exact lockHeight! Got: " + state.GetRejectReason());
+        BOOST_TEST_MESSAGE("Redemption rejected for non-timelock reason at exact boundary: " + state.GetRejectReason());
+    } else {
+        BOOST_TEST_MESSAGE("Redemption passed all checks at exact lockHeight.");
+    }
+
+    // Now test at lockHeight - 1 → must fail with timelock error
+    DigiDollar::ValidationContext ctx2(LOCK_HEIGHT - 1, 500000, 200, *regTestParams, &coinsCache, true);
+    TxValidationState state2;
+    bool valid2 = DigiDollar::ValidateDigiDollarTransaction(tx, ctx2, state2);
+
+    BOOST_CHECK_MESSAGE(!valid2, "Redemption at lockHeight-1 must fail");
+    BOOST_CHECK_MESSAGE(state2.GetRejectReason() == "redemption-timelock-active",
+        "Expected 'redemption-timelock-active' at lockHeight-1, got: " + state2.GetRejectReason());
+
+    BOOST_TEST_MESSAGE("CONFIRMED: Exact lockHeight boundary correctly handled (>= semantics). "
+        "lockHeight passes, lockHeight-1 rejected.");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

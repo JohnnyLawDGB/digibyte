@@ -73,6 +73,20 @@ public:
     //! For testing: directly inject a message into pending (bypasses validation)
     void InjectTestMessage(const COraclePriceMessage& message);
 
+    //! Consensus attestation management (Phase 2)
+    //! Consensus attestations are messages signed over the consensus price/timestamp
+    //! (as opposed to individual oracle prices). These are used for Phase 2 on-chain data.
+    bool AddConsensusAttestation(const COraclePriceMessage& attestation);
+    std::vector<COraclePriceMessage> GetPendingAttestations() const;
+    size_t GetPendingAttestationCount() const;
+    void ClearPendingAttestations();
+
+    //! Compute consensus values from pending individual messages
+    //! @param[out] consensus_price Computed consensus price (IQR median)
+    //! @param[out] consensus_timestamp Computed consensus timestamp (median of message timestamps)
+    //! @return true if enough messages exist for consensus computation
+    bool ComputeConsensusValues(uint64_t& consensus_price, int64_t& consensus_timestamp) const;
+
     //! Bundle management
     COracleBundle GetCurrentBundle(int32_t epoch) const;
     bool UpdateBundle(const COracleBundle& bundle);
@@ -160,6 +174,10 @@ private:
     bool IsValidOracleMessage(const COraclePriceMessage& message) const;
     std::vector<uint32_t> GetActiveOraclesForEpoch(int32_t epoch) const;
     bool HasRequiredSignatures(const COracleBundle& bundle, int32_t block_height) const;
+
+    //! Consensus attestations: Phase 2 messages signed over consensus values
+    //! Separate from pending_messages (which contain individual prices)
+    std::unordered_map<uint32_t, COraclePriceMessage> pending_attestations;
 
     //! Price cache (block height -> price in micro-USD)
     std::map<int, uint64_t> height_to_price;

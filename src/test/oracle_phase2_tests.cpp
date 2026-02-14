@@ -17,8 +17,10 @@
 
 #include <chainparams.h>
 #include <consensus/params.h>
+#include <crypto/sha256.h>
 #include <key.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/mock_oracle.h>
 #include <primitives/oracle.h>
 #include <pubkey.h>
 #include <random.h>
@@ -58,7 +60,7 @@ static COraclePriceMessage CreateSignedOracleMessage(
 }
 
 /**
- * Create multiple oracle keys for testing
+ * Create multiple oracle keys for testing (random keys, for non-round-trip tests)
  */
 static std::vector<CKey> CreateOracleKeys(size_t count)
 {
@@ -68,6 +70,31 @@ static std::vector<CKey> CreateOracleKeys(size_t count)
         CKey key;
         key.MakeNewKey(true);
         keys.push_back(key);
+    }
+    return keys;
+}
+
+/**
+ * Get deterministic regtest oracle keys (match chainparams pubkeys)
+ * These keys are derived from SHA256("digibyte_regtest_oracle_N") — same as MockOracleManager
+ */
+static CKey GetRegtestOracleKey(uint32_t oracle_id)
+{
+    std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write((const unsigned char*)seed.data(), seed.size()).Finalize(hash.begin());
+
+    CKey key;
+    key.Set(hash.begin(), hash.end(), true);
+    return key;
+}
+
+static std::vector<CKey> GetRegtestOracleKeys(size_t count)
+{
+    std::vector<CKey> keys;
+    keys.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        keys.push_back(GetRegtestOracleKey(i));
     }
     return keys;
 }
@@ -736,7 +763,27 @@ BOOST_AUTO_TEST_CASE(mainnet_configuration)
 // PENDING MESSAGE LIFECYCLE TESTS
 // =============================================================================
 
-// Test: Pending messages are cleared after Phase Two bundle creation
+// Helper: Create N consensus attestation keys and inject signed attestations
+static std::vector<CKey> InjectConsensusAttestations(
+    OracleBundleManager& manager,
+    size_t count,
+    uint64_t consensus_price,
+    int64_t consensus_timestamp)
+{
+    auto keys = CreateOracleKeys(count);
+    for (size_t i = 0; i < count; ++i) {
+        // Create a consensus-signed message (same price/timestamp for all oracles)
+        COraclePriceMessage att = CreateSignedOracleMessage(
+            keys[i], i, consensus_price, consensus_timestamp, 200);
+        // Inject as individual message (provides price for consensus computation)
+        manager.InjectTestMessage(att);
+        // Also add as consensus attestation (provides Phase 2 sig for block construction)
+        manager.AddConsensusAttestation(att);
+    }
+    return keys;
+}
+
+// Test: Pending messages and attestations are cleared after Phase Two bundle creation
 BOOST_FIXTURE_TEST_CASE(pending_messages_cleared_after_bundle, BasicTestingSetup)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
@@ -748,32 +795,31 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_cleared_after_bundle, BasicTestingSetup
     // Clear state using public API
     manager.ClearPendingMessages();
 
-    // Inject 8 test messages (bypasses validation, meets 8-of-15 default threshold)
-    for (uint32_t i = 0; i < 8; ++i) {
-        COraclePriceMessage msg;
-        msg.oracle_id = i;
-        msg.price_micro_usd = 10000;
-        msg.timestamp = GetTime();
-        msg.block_height = 200;
-        msg.nonce = i;
-        manager.InjectTestMessage(msg);
-    }
+    // Inject 8 consensus attestations (properly signed, same price)
+    uint64_t consensus_price = 10000;
+    int64_t consensus_timestamp = GetTime();
+    InjectConsensusAttestations(manager, 8, consensus_price, consensus_timestamp);
 
-    // Verify 8 messages pending
+    // Verify 8 messages pending + 8 attestations
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 8);
+    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 8);
 
-    // Create a block — this should consume and clear pending messages
+    // Create a block — this should consume and clear pending messages + attestations
     CBlock block;
     block.nTime = GetTime();
     manager.AddOracleBundleToBlock(block, 200);
 
-    // After bundle creation, pending messages should be cleared
+    // After bundle creation, both pending messages and attestations should be cleared
     BOOST_CHECK_MESSAGE(
         manager.GetPendingMessageCount() == 0,
         strprintf("Pending messages should be 0 after bundle creation, got %zu", manager.GetPendingMessageCount())
     );
+    BOOST_CHECK_MESSAGE(
+        manager.GetPendingAttestationCount() == 0,
+        strprintf("Attestations should be 0 after bundle creation, got %zu", manager.GetPendingAttestationCount())
+    );
 
-    LogPrintf("Test PASSED: Pending messages cleared after Phase Two bundle creation\n");
+    LogPrintf("Test PASSED: Pending messages and attestations cleared after Phase Two bundle creation\n");
 }
 
 // Test: With fewer than required messages, pending messages should NOT be cleared
@@ -784,16 +830,8 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_preserved_when_insufficient, BasicTesti
     manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
     manager.ClearPendingMessages();
 
-    // Inject only 2 messages (below 3-of-5 threshold)
-    for (uint32_t i = 0; i < 2; ++i) {
-        COraclePriceMessage msg;
-        msg.oracle_id = i;
-        msg.price_micro_usd = 10000;
-        msg.timestamp = GetTime();
-        msg.block_height = 200;
-        msg.nonce = i;
-        manager.InjectTestMessage(msg);
-    }
+    // Inject only 2 consensus attestations (below 8-of-15 threshold)
+    InjectConsensusAttestations(manager, 2, 10000, GetTime());
 
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 2);
 
@@ -819,16 +857,9 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
     manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
     manager.ClearPendingMessages();
 
-    // Block 1: Inject 8 messages, create bundle
-    for (uint32_t i = 0; i < 8; ++i) {
-        COraclePriceMessage msg;
-        msg.oracle_id = i;
-        msg.price_micro_usd = 10000;
-        msg.timestamp = GetTime();
-        msg.block_height = 200;
-        msg.nonce = i;
-        manager.InjectTestMessage(msg);
-    }
+    // Block 1: Inject 8 consensus attestations, create bundle
+    int64_t ts1 = GetTime();
+    InjectConsensusAttestations(manager, 8, 10000, ts1);
 
     CBlock block1;
     block1.nTime = GetTime();
@@ -836,17 +867,11 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
 
     // Pending should be cleared after consuming into bundle
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0);
+    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 0);
 
-    // Block 2: Inject only 2 messages (insufficient)
-    for (uint32_t i = 0; i < 2; ++i) {
-        COraclePriceMessage msg;
-        msg.oracle_id = i;
-        msg.price_micro_usd = 10000;
-        msg.timestamp = GetTime();
-        msg.block_height = 201;
-        msg.nonce = i + 100;
-        manager.InjectTestMessage(msg);
-    }
+    // Block 2: Inject only 2 attestations (insufficient)
+    int64_t ts2 = GetTime();
+    InjectConsensusAttestations(manager, 2, 10000, ts2);
 
     // Should have exactly 2 (no carryover from block 1)
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 2);
@@ -862,6 +887,338 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
     manager.ClearPendingMessages();
 
     LogPrintf("Test PASSED: No stale message carryover between blocks\n");
+}
+
+// =============================================================================
+// T5-03: PHASE 2 ROUND-TRIP TESTS (on-chain format verification)
+// =============================================================================
+
+/**
+ * Test: Phase 2 round-trip — consensus-signed messages survive CreateOracleScript → ExtractOracleBundle
+ * This is the CRITICAL test that validates the T5-03 fix.
+ * Previously, oracles signed individual prices but on-chain stored consensus price,
+ * making signature verification impossible after extraction.
+ *
+ * Uses REGTEST oracle keys (matching chainparams) because ExtractOracleBundle
+ * binds pubkeys from chainparams for security.
+ */
+BOOST_AUTO_TEST_CASE(phase2_roundtrip_consensus_signed)
+{
+    LogPrintf("Test: Phase 2 round-trip with consensus-signed messages\n");
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1); // Don't need full consensus for this test
+
+    // Use regtest oracle keys (match chainparams) — extraction binds chainparams pubkeys
+    auto oracle_keys = GetRegtestOracleKeys(5);
+    int64_t timestamp = GetTime();
+
+    // Step 1: All oracles sign the SAME consensus price and timestamp
+    // This is the Phase 2 design: oracles sign consensus values, not individual prices
+    uint64_t consensus_price = 51000;
+    int64_t consensus_timestamp = timestamp;
+
+    COracleBundle bundle;
+    bundle.epoch = GetCurrentEpoch(200);
+    bundle.timestamp = consensus_timestamp;
+
+    for (size_t i = 0; i < 5; ++i) {
+        COraclePriceMessage msg = CreateSignedOracleMessage(
+            oracle_keys[i], i, consensus_price, consensus_timestamp, 200);
+        bundle.messages.push_back(msg);
+    }
+    bundle.median_price_micro_usd = consensus_price;
+
+    // Step 2: Serialize to on-chain Phase 2 format
+    CScript oracle_script = manager.CreateOracleScript(bundle);
+    BOOST_CHECK_MESSAGE(!oracle_script.empty(), "Phase 2 oracle script should not be empty");
+
+    // Step 3: Create a coinbase transaction with the oracle data
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 72000 * COIN;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+
+    CTxOut oracle_out;
+    oracle_out.nValue = 0;
+    oracle_out.scriptPubKey = oracle_script;
+    coinbase.vout.push_back(oracle_out);
+
+    CTransaction tx(coinbase);
+
+    // Step 4: Extract the bundle back from the transaction
+    COracleBundle extracted;
+    bool extracted_ok = manager.ExtractOracleBundle(tx, extracted);
+    BOOST_CHECK_MESSAGE(extracted_ok, "Phase 2 bundle extraction should succeed");
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
+    BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, consensus_price);
+    BOOST_CHECK_EQUAL(extracted.timestamp, consensus_timestamp);
+
+    // Step 5: Verify Phase 2 signatures survive the round-trip
+    // This is the KEY assertion — it failed before the T5-03 fix
+    // After extraction, pubkeys are bound from chainparams (not from the message)
+    int valid_sigs = 0;
+    for (const auto& msg : extracted.messages) {
+        BOOST_CHECK_EQUAL(msg.price_micro_usd, consensus_price);
+        BOOST_CHECK_EQUAL(msg.timestamp, consensus_timestamp);
+        if (msg.VerifyPhase2()) {
+            valid_sigs++;
+        }
+    }
+    BOOST_CHECK_MESSAGE(valid_sigs == 5,
+        strprintf("All 5 Phase 2 signatures should verify after round-trip, got %d", valid_sigs));
+
+    LogPrintf("Test PASSED: Phase 2 round-trip — %d/5 signatures verified\n", valid_sigs);
+}
+
+/**
+ * Test: Individual-price signatures DO NOT survive Phase 2 round-trip
+ * This documents the bug that T5-03 fixes — when oracles sign their individual prices
+ * but the on-chain format stores consensus price, signatures break.
+ */
+BOOST_AUTO_TEST_CASE(phase2_roundtrip_individual_prices_break)
+{
+    LogPrintf("Test: Phase 2 round-trip with individual prices (expected to break sigs)\n");
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1);
+
+    auto oracle_keys = GetRegtestOracleKeys(5);
+    int64_t timestamp = GetTime();
+
+    // Each oracle signs its OWN individual price (the OLD broken behavior)
+    uint64_t individual_prices[] = {49000, 50000, 51000, 52000, 53000};
+
+    COracleBundle bundle;
+    bundle.epoch = GetCurrentEpoch(200);
+    bundle.timestamp = timestamp;
+
+    for (size_t i = 0; i < 5; ++i) {
+        COraclePriceMessage msg = CreateSignedOracleMessage(
+            oracle_keys[i], i, individual_prices[i], timestamp, 200);
+        bundle.messages.push_back(msg);
+    }
+
+    // Consensus price is the median, which differs from individual prices
+    Consensus::Params params = CreatePhase2Params(3, 10);
+    bundle.median_price_micro_usd = OracleBundleManager::CalculateConsensusPrice(bundle, params);
+    BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 51000); // Median of 49k-53k
+
+    // Serialize → extract round-trip
+    CScript oracle_script = manager.CreateOracleScript(bundle);
+    BOOST_CHECK(!oracle_script.empty());
+
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 72000 * COIN;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+    CTxOut oracle_out;
+    oracle_out.nValue = 0;
+    oracle_out.scriptPubKey = oracle_script;
+    coinbase.vout.push_back(oracle_out);
+    CTransaction tx(coinbase);
+
+    COracleBundle extracted;
+    BOOST_CHECK(manager.ExtractOracleBundle(tx, extracted));
+
+    // After extraction, ALL messages have consensus price (51000), not individual prices
+    // The signatures were over individual prices, so they WON'T verify
+    int valid_sigs = 0;
+    for (const auto& msg : extracted.messages) {
+        BOOST_CHECK_EQUAL(msg.price_micro_usd, 51000); // All set to consensus
+        if (msg.VerifyPhase2()) {
+            valid_sigs++;
+        }
+    }
+
+    // Only oracle 2 (who had price 51000 = consensus price) would verify
+    // The rest signed different prices → signatures break
+    BOOST_CHECK_MESSAGE(valid_sigs < 5,
+        strprintf("Individual-price signatures should NOT all verify after round-trip, got %d/5", valid_sigs));
+
+    LogPrintf("Test PASSED: Individual-price round-trip correctly shows %d/5 sigs broken\n", valid_sigs);
+}
+
+/**
+ * Test: Full Phase 2 pipeline — attestations → AddOracleBundleToBlock → extract → validate
+ * End-to-end test of the corrected flow.
+ */
+BOOST_AUTO_TEST_CASE(phase2_full_pipeline)
+{
+    LogPrintf("Test: Full Phase 2 pipeline with consensus attestations\n");
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4); // Phase Two: 4-of-7 (regtest)
+
+    // Use regtest oracle keys (match chainparams pubkeys for extraction binding)
+    auto oracle_keys = GetRegtestOracleKeys(5);
+    int64_t timestamp = GetTime();
+
+    // Simulate: oracles have different individual prices
+    uint64_t individual_prices[] = {49000, 50000, 51000, 52000, 53000};
+
+    // Step 1: Inject individual prices into pending messages (round 1)
+    for (size_t i = 0; i < 5; ++i) {
+        COraclePriceMessage msg = CreateSignedOracleMessage(
+            oracle_keys[i], i, individual_prices[i], timestamp, 200);
+        manager.InjectTestMessage(msg);
+    }
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 5);
+
+    // Step 2: Compute consensus (like each oracle would do independently)
+    uint64_t consensus_price = 0;
+    int64_t consensus_timestamp = 0;
+    BOOST_CHECK(manager.ComputeConsensusValues(consensus_price, consensus_timestamp));
+    BOOST_CHECK_EQUAL(consensus_price, 51000); // Median of 49k-53k
+
+    // Step 3: Each oracle signs the consensus values (round 2 attestations)
+    for (size_t i = 0; i < 5; ++i) {
+        COraclePriceMessage att = CreateSignedOracleMessage(
+            oracle_keys[i], i, consensus_price, consensus_timestamp, 200);
+        BOOST_CHECK(manager.AddConsensusAttestation(att));
+    }
+    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 5);
+
+    // Step 4: Miner builds block (uses consensus attestations)
+    CBlock block;
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 72000 * COIN;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+    block.nTime = GetTime();
+
+    BOOST_CHECK(manager.AddOracleBundleToBlock(block, 200));
+
+    // Step 5: Verify bundle was embedded
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0); // Consumed
+    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 0); // Consumed
+    BOOST_CHECK(block.vtx[0]->vout.size() >= 2); // Oracle output added
+
+    // Step 6: Extract and validate (simulating block validation on receiving node)
+    COracleBundle extracted;
+    BOOST_CHECK(manager.ExtractOracleBundle(*block.vtx[0], extracted));
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
+    BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, consensus_price);
+
+    // Step 7: Verify ALL signatures survive round-trip
+    int valid_sigs = 0;
+    for (const auto& msg : extracted.messages) {
+        if (msg.VerifyPhase2()) {
+            valid_sigs++;
+        }
+    }
+    BOOST_CHECK_EQUAL(valid_sigs, 5);
+
+    LogPrintf("Test PASSED: Full Phase 2 pipeline — %d/5 signatures verified after round-trip\n", valid_sigs);
+}
+
+/**
+ * Test: Phase 2 bitmask — oracle IDs are correctly preserved through round-trip
+ */
+BOOST_AUTO_TEST_CASE(phase2_oracle_ids_preserved)
+{
+    LogPrintf("Test: Phase 2 oracle IDs preserved through round-trip\n");
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1);
+
+    // Use random keys here — we're testing ID preservation, not sig verification
+    auto oracle_keys = CreateOracleKeys(5);
+    int64_t timestamp = GetTime();
+    uint64_t consensus_price = 50000;
+
+    // Use non-sequential oracle IDs to test ID preservation
+    uint32_t oracle_ids[] = {0, 3, 5, 7, 8};
+
+    COracleBundle bundle;
+    bundle.epoch = 0;
+    bundle.timestamp = timestamp;
+
+    for (size_t i = 0; i < 5; ++i) {
+        COraclePriceMessage msg = CreateSignedOracleMessage(
+            oracle_keys[i], oracle_ids[i], consensus_price, timestamp, 200);
+        bundle.messages.push_back(msg);
+    }
+    bundle.median_price_micro_usd = consensus_price;
+
+    // Round-trip
+    CScript script = manager.CreateOracleScript(bundle);
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 0;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+    CTxOut oracle_out;
+    oracle_out.nValue = 0;
+    oracle_out.scriptPubKey = script;
+    coinbase.vout.push_back(oracle_out);
+    CTransaction tx(coinbase);
+
+    COracleBundle extracted;
+    BOOST_CHECK(manager.ExtractOracleBundle(tx, extracted));
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
+
+    // Verify oracle IDs are preserved
+    for (size_t i = 0; i < 5; ++i) {
+        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, oracle_ids[i]);
+    }
+
+    LogPrintf("Test PASSED: Oracle IDs preserved through Phase 2 round-trip\n");
+}
+
+/**
+ * Test: ComputeConsensusValues returns correct median price and timestamp
+ */
+BOOST_AUTO_TEST_CASE(compute_consensus_values)
+{
+    LogPrintf("Test: ComputeConsensusValues correctness\n");
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(3);
+
+    auto oracle_keys = CreateOracleKeys(5);
+
+    // Inject 5 messages with different prices and timestamps
+    int64_t base_ts = GetTime();
+    uint64_t prices[] = {48000, 50000, 52000, 54000, 56000};
+    int64_t timestamps[] = {base_ts - 10, base_ts - 5, base_ts, base_ts + 5, base_ts + 10};
+
+    for (size_t i = 0; i < 5; ++i) {
+        COraclePriceMessage msg = CreateSignedOracleMessage(
+            oracle_keys[i], i, prices[i], timestamps[i], 200);
+        manager.InjectTestMessage(msg);
+    }
+
+    uint64_t consensus_price = 0;
+    int64_t consensus_timestamp = 0;
+    BOOST_CHECK(manager.ComputeConsensusValues(consensus_price, consensus_timestamp));
+
+    // Price median: 52000 (middle of sorted 48k, 50k, 52k, 54k, 56k)
+    BOOST_CHECK_EQUAL(consensus_price, 52000);
+
+    // Timestamp median: base_ts (middle of sorted timestamps)
+    BOOST_CHECK_EQUAL(consensus_timestamp, base_ts);
+
+    LogPrintf("Test PASSED: Consensus values = price=%llu, timestamp=%lld\n",
+              consensus_price, consensus_timestamp);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

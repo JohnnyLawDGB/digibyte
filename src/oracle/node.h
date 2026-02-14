@@ -106,6 +106,16 @@ public:
 
     //! Message creation and broadcasting
     COraclePriceMessage CreatePriceMessage(CAmount price, int64_t timestamp);
+
+    /**
+     * Create a consensus attestation — Phase 2 signed message over consensus values.
+     * All oracles sign the SAME consensus price/timestamp, enabling on-chain verification.
+     * @param consensus_price The consensus price all oracles agreed upon
+     * @param consensus_timestamp The consensus timestamp (median of individual timestamps)
+     * @return Signed message with consensus values, or empty message on failure
+     */
+    COraclePriceMessage CreateConsensusAttestation(uint64_t consensus_price, int64_t consensus_timestamp);
+
     bool BroadcastPriceMessage(const COraclePriceMessage& message);
 
 private:

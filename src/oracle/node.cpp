@@ -235,6 +235,29 @@ COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timest
     return message;
 }
 
+COraclePriceMessage OracleNode::CreateConsensusAttestation(uint64_t consensus_price, int64_t consensus_timestamp)
+{
+    COraclePriceMessage message(oracle_id, consensus_price, consensus_timestamp);
+
+    // Set oracle public key (XOnlyPubKey)
+    message.oracle_pubkey = XOnlyPubKey(public_key);
+
+    // Set nonce for uniqueness
+    message.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
+
+    // Sign Phase 2: H(oracle_id, consensus_price, consensus_timestamp)
+    // This signature will verify on-chain because the block stores these same consensus values
+    if (!message.SignPhase2(private_key)) {
+        LogPrintf("Oracle: Failed to create consensus attestation for oracle %d\n", oracle_id);
+        return COraclePriceMessage();
+    }
+
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Created consensus attestation for oracle %d: price=%llu, timestamp=%lld\n",
+             oracle_id, consensus_price, consensus_timestamp);
+
+    return message;
+}
+
 bool OracleNode::BroadcastPriceMessage(const COraclePriceMessage& message)
 {
     if (!message.IsValid()) {
@@ -329,10 +352,33 @@ void OracleNode::BroadcastCurrentPrice()
     int64_t timestamp = GetTime();
 
     if (price > 0) {
+        // T5-03: Check if consensus has formed from pending P2P messages.
+        // If so, broadcast a consensus attestation (signed over consensus values)
+        // instead of individual price. This enables Phase 2 on-chain verification.
+        OracleBundleManager& bm = OracleBundleManager::GetInstance();
+        uint64_t consensus_price = 0;
+        int64_t consensus_timestamp = 0;
+
+        if (bm.GetMinOracleCount() > 1 && bm.ComputeConsensusValues(consensus_price, consensus_timestamp)) {
+            // Consensus exists — create attestation over consensus values
+            COraclePriceMessage attestation = CreateConsensusAttestation(consensus_price, consensus_timestamp);
+            if (!attestation.schnorr_sig.empty()) {
+                // Submit as consensus attestation (for block construction)
+                bm.AddConsensusAttestation(attestation);
+
+                // Also broadcast via P2P so other nodes receive our attestation
+                if (BroadcastPriceMessage(attestation)) {
+                    std::lock_guard<std::mutex> lock(mtx_price);
+                    last_broadcast_price = price;
+                    last_broadcast_timestamp = timestamp;
+                }
+                return;
+            }
+        }
+
+        // No consensus yet or Phase 1 — broadcast individual price as before
         COraclePriceMessage message = CreatePriceMessage(price, timestamp);
         if (BroadcastPriceMessage(message)) {
-            // Ensure our last broadcast price is always stored —
-            // even if exchange fetch cache expired, we know what we reported
             std::lock_guard<std::mutex> lock(mtx_price);
             last_broadcast_price = price;
             last_broadcast_timestamp = timestamp;

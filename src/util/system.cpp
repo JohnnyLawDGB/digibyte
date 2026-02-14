@@ -1157,9 +1157,9 @@ int RaiseFileDescriptorLimit(int nMinFD) {
             getrlimit(RLIMIT_NOFILE, &limitFD);
         }
         // Clamp to INT_MAX to avoid overflow when rlim_cur is RLIM_INFINITY
-        if (limitFD.rlim_cur > (rlim_t)std::numeric_limits<int>::max())
+        if (limitFD.rlim_cur > static_cast<rlim_t>(std::numeric_limits<int>::max()))
             return std::numeric_limits<int>::max();
-        return limitFD.rlim_cur;
+        return static_cast<int>(limitFD.rlim_cur);
     }
     return nMinFD; // getrlimit failed, assume it's fine
 #endif

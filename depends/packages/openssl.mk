@@ -14,7 +14,7 @@ define $(package)_set_vars
   $(package)_config_opts+=no-md2 no-rc5 no-rdrand no-rfc3779 no-sctp no-shared
   $(package)_config_opts+=no-ssl-trace no-ssl2 no-ssl3 no-tests no-unit-test no-weak-ssl-ciphers
   $(package)_config_opts+=no-zlib no-zlib-dynamic no-static-engine no-comp no-afalgeng
-  $(package)_config_opts+=no-engine no-hw no-asm $($(package)_cflags) $($(package)_cppflags)
+  $(package)_config_opts+=no-engine no-hw no-asm
   $(package)_config_opts_linux=-fPIC -D_GNU_SOURCE
   $(package)_config_opts_freebsd=-fPIC
   $(package)_config_opts_x86_64_linux=linux-x86_64
@@ -36,7 +36,7 @@ define $(package)_preprocess_cmds
 endef
 
 define $(package)_config_cmds
-  $($(package)_config_env) ./Configure $($(package)_config_opts) --prefix=$(host_prefix) --openssldir=/etc/ssl
+  $($(package)_config_env) ./Configure $($(package)_config_opts) $(if $($(package)_cflags),CFLAGS="$($(package)_cflags)") $(if $($(package)_cppflags),CPPFLAGS="$($(package)_cppflags)") --prefix=$(host_prefix) --openssldir=/etc/ssl
 endef
 
 define $(package)_build_cmds

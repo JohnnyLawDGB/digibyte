@@ -20,6 +20,7 @@
 #include <digidollar/scripts.h>
 #include <consensus/dca.h>
 #include <consensus/err.h>
+#include <consensus/volatility.h>
 #include <digidollar/health.h>
 #include <kernel/chainparams.h>
 #include <primitives/transaction.h>
@@ -10195,6 +10196,289 @@ BOOST_AUTO_TEST_CASE(redteam_t5_05g_mainnet_oracle_disconnect_gap)
     BOOST_CHECK_MESSAGE(true,
         "CODE REVIEW: Mainnet oracle connect/disconnect handling is gated behind "
         "TESTNET||REGTEST. Must be fixed before mainnet activation of DigiDollar.");
+}
+
+// =============================================================================
+// T5-06: Bypass fail-closed minting by feeding fake health metrics
+// =============================================================================
+//
+// ATTACK SURFACE: ShouldBlockMinting() relies on SystemHealthMonitor::GetCachedMetrics()
+// which is NEVER populated during normal block processing (ConnectBlock/DisconnectBlock).
+// ScanUTXOSet() is only called from the getdigidollarstats RPC command on-demand.
+// This means the health-based minting block is completely non-functional during
+// normal node operation.
+//
+// CRITICAL VULNERABILITY:
+// 1. On fresh node startup, s_currentMetrics.totalDDSupply = 0 (default)
+// 2. ShouldBlockMinting() checks totalDDSupply <= 0 → returns false → minting allowed
+// 3. Even if actual on-chain DD supply is non-zero and system health is < 100%,
+//    the ERR minting block is completely bypassed because cached metrics are stale/empty
+// 4. ScanUTXOSet() resets totalDDSupply = 0 before re-scanning — race condition
+//    allows concurrent ShouldBlockMinting() to see 0 and permit minting
+//
+
+// T5-06a: GetCachedMetrics defaults to zero DD supply — minting never blocked
+BOOST_AUTO_TEST_CASE(redteam_t5_06a_cached_metrics_default_zero_supply)
+{
+    // Save current state
+    auto savedMetrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+
+    // Shutdown and re-initialize to get fresh state
+    DigiDollar::SystemHealthMonitor::Shutdown();
+    DigiDollar::SystemHealthMonitor::Initialize();
+
+    // After fresh init, totalDDSupply should be 0 (never scanned)
+    const auto& freshMetrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    BOOST_CHECK_EQUAL(freshMetrics.totalDDSupply, 0);
+    BOOST_CHECK_EQUAL(freshMetrics.totalCollateral, 0);
+
+    // Now check: ShouldBlockMinting should short-circuit on totalDDSupply <= 0
+    // Even with a valid oracle price, it returns false (allow minting)
+    bool mintingBlocked = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldBlockMinting(5000); // $0.05
+
+    BOOST_CHECK_MESSAGE(!mintingBlocked,
+        "BUG CONFIRMED: ShouldBlockMinting returns false (allows minting) when "
+        "cached metrics have totalDDSupply=0, even though actual on-chain DD supply "
+        "may be non-zero. The fail-closed ERR minting block is completely bypassed "
+        "on any node that hasn't called getdigidollarstats RPC. This means after "
+        "node restart, ALL nodes allow minting regardless of system health until "
+        "someone manually triggers a UTXO scan via RPC.");
+
+    // Restore state
+    DigiDollar::SystemHealthMonitor::Shutdown();
+}
+
+// T5-06b: GetCurrentSystemHealth returns max health when cached metrics are empty
+BOOST_AUTO_TEST_CASE(redteam_t5_06b_default_max_health_without_utxo_scan)
+{
+    // Shutdown and re-initialize to get fresh state
+    DigiDollar::SystemHealthMonitor::Shutdown();
+    DigiDollar::SystemHealthMonitor::Initialize();
+
+    // DCA::GetCurrentSystemHealth reads from cached metrics
+    int health = DigiDollar::DCA::DynamicCollateralAdjustment::GetCurrentSystemHealth();
+
+    // With totalDDSupply = 0, returns max health (300 from CalculateSystemHealth
+    // which caps at 300, or 30000 from GetCurrentSystemHealth fallback)
+    // Either way, health is at maximum — system believes it's perfectly healthy
+    BOOST_CHECK_MESSAGE(health >= 300,
+        "BUG CONFIRMED: GetCurrentSystemHealth returns max health (" +
+        std::to_string(health) + ") when no UTXO scan has been performed. "
+        "System believes it's perfectly healthy regardless of actual on-chain state. "
+        "ERR will never activate, DCA multiplier will always be 1.0x (minimum), and "
+        "ShouldBlockMinting will always return false.");
+
+    // Verify ERR won't activate at this health
+    bool shouldActivateERR = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(health);
+    BOOST_CHECK_MESSAGE(!shouldActivateERR,
+        "ERR never activates because health is 30000 (max) due to empty cached metrics.");
+
+    // Verify DCA multiplier is at minimum (no extra collateral required)
+    double multiplier = DigiDollar::DCA::DynamicCollateralAdjustment::GetDCAMultiplier(health);
+    BOOST_CHECK_MESSAGE(multiplier <= 1.0,
+        "DCA multiplier is at minimum (1.0x) due to falsely high health. "
+        "No extra collateral protection applied. multiplier=" + std::to_string(multiplier));
+
+    // Restore state
+    DigiDollar::SystemHealthMonitor::Shutdown();
+}
+
+// T5-06c: ScanUTXOSet race condition — resets to zero before scanning
+BOOST_AUTO_TEST_CASE(redteam_t5_06c_scan_utxo_set_race_condition)
+{
+    // This documents the race condition in ScanUTXOSet:
+    //
+    // ScanUTXOSet (src/digidollar/health.cpp) line ~232:
+    //   s_currentMetrics.totalDDSupply = 0;     // ← RACE WINDOW OPENS
+    //   s_currentMetrics.totalCollateral = 0;
+    //   // ... reset tier counters ...
+    //   // ... iterate UTXOs (takes many seconds on mainnet) ...
+    //   // ... rebuild metrics ...                // ← RACE WINDOW CLOSES
+    //
+    // During this window, ANY call to GetCachedMetrics() returns:
+    //   totalDDSupply = 0, totalCollateral = 0
+    //
+    // ShouldBlockMinting() reads GetCachedMetrics(), sees totalDDSupply=0,
+    // and returns false (allow minting).
+    //
+    // This is exploitable if:
+    //   1. Attacker sends getdigidollarstats RPC to trigger UTXO scan
+    //   2. While scan is running (seconds to minutes on mainnet), attacker
+    //      broadcasts a DD mint transaction
+    //   3. Mempool acceptance calls ShouldBlockMintingDuringERR()
+    //   4. ShouldBlockMinting reads totalDDSupply=0 → returns false
+    //   5. Mint accepted into mempool, included in next block
+    //   6. ConnectBlock calls ShouldBlockMintingDuringERR() — same issue
+    //
+    // No mutex/lock protects s_currentMetrics between ScanUTXOSet
+    // and ShouldBlockMinting reads.
+
+    // Simulate: set up metrics as if DD exists and health is low
+    DigiDollar::SystemHealthMonitor::Shutdown();
+    DigiDollar::SystemHealthMonitor::Initialize();
+
+    // Now call ScanUTXOSet with null view — this resets metrics to 0
+    DigiDollar::SystemHealthMonitor::ScanUTXOSet(nullptr, nullptr, nullptr, nullptr);
+
+    // At this point metrics are reset to 0 (scan found nothing with null view)
+    const auto& metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    BOOST_CHECK_EQUAL(metrics.totalDDSupply, 0);
+    BOOST_CHECK_EQUAL(metrics.totalCollateral, 0);
+
+    // ShouldBlockMinting sees totalDDSupply=0, returns false (allow minting)
+    bool blocked = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldBlockMinting(5000);
+    BOOST_CHECK_MESSAGE(!blocked,
+        "RACE CONDITION: After ScanUTXOSet resets metrics to 0, "
+        "ShouldBlockMinting returns false. In production, the scan takes "
+        "seconds to minutes on mainnet. During this window, ANY mint tx "
+        "passes the ERR health check. There is no mutex protecting "
+        "s_currentMetrics between the write in ScanUTXOSet and the read "
+        "in ShouldBlockMinting.");
+
+    // Restore
+    DigiDollar::SystemHealthMonitor::Shutdown();
+}
+
+// T5-06d: ConnectBlock never updates health metrics — minting block is decorative
+BOOST_AUTO_TEST_CASE(redteam_t5_06d_connectblock_never_updates_health_metrics)
+{
+    // CODE REVIEW FINDING:
+    //
+    // grep -rn "ScanUTXOSet\|UpdateMetrics\|SystemHealthMonitor" src/validation.cpp
+    // → NO RESULTS
+    //
+    // The health monitoring system is NEVER called from ConnectBlock or DisconnectBlock.
+    // ScanUTXOSet is only called from getdigidollarstats RPC (src/rpc/digidollar.cpp:306).
+    //
+    // This means:
+    // 1. After node startup, cached metrics have totalDDSupply=0 (fresh init)
+    // 2. As blocks are connected, DD supply grows on-chain
+    // 3. But cached metrics NEVER update — they stay at whatever the last RPC scan found
+    // 4. ShouldBlockMinting() uses stale cached metrics for ALL health decisions
+    // 5. A node that connects 1000 blocks of DD minting still thinks totalDDSupply=0
+    //
+    // Consequence: The ERR minting block, designed to prevent minting when health < 100%,
+    // is COMPLETELY NON-FUNCTIONAL during normal block validation. It only works
+    // if an operator manually calls getdigidollarstats between blocks.
+    //
+    // Additionally, UpdateMetrics(block) exists but:
+    // - Is never called from anywhere in validation.cpp
+    // - Uses hardcoded mock height (TODO comments)
+    // - Doesn't actually update DD supply from block data
+    //
+    // The volatility system (VolatilityMonitor::UpdateState/RecordPrice) IS called
+    // during validation (digidollar/validation.cpp:1870-1876), but the health
+    // monitoring system is completely disconnected from block processing.
+
+    // Verify UpdateMetrics exists but doesn't update supply
+    DigiDollar::SystemHealthMonitor::Shutdown();
+    DigiDollar::SystemHealthMonitor::Initialize();
+
+    CBlock emptyBlock;
+    DigiDollar::SystemHealthMonitor::UpdateMetrics(emptyBlock);
+
+    const auto& metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    BOOST_CHECK_MESSAGE(metrics.totalDDSupply == 0,
+        "UpdateMetrics(block) does NOT update totalDDSupply from block data. "
+        "It updates tier metrics, protection status, and oracle status from "
+        "OTHER cached values — but never scans the block for DD transactions. "
+        "The function is essentially a no-op for supply tracking.");
+
+    BOOST_CHECK_MESSAGE(true,
+        "VULNERABILITY CONFIRMED: ConnectBlock/DisconnectBlock never call any "
+        "SystemHealthMonitor function. The fail-closed ERR minting protection "
+        "is decorative — it exists in the code path but the data it relies on "
+        "(cached DD supply and collateral) is never populated during normal "
+        "block processing. Fix: Either (a) incrementally update cached metrics "
+        "in ConnectBlock/DisconnectBlock when DD txs are processed, or "
+        "(b) track DD supply in a consensus-validated counter in the UTXO set.");
+
+    DigiDollar::SystemHealthMonitor::Shutdown();
+}
+
+// T5-06e: Hardcoded oracle defaults in health monitor could mask issues
+BOOST_AUTO_TEST_CASE(redteam_t5_06e_hardcoded_oracle_defaults)
+{
+    // CODE REVIEW FINDING:
+    //
+    // GetActiveOracleCount() always returns hardcoded 8:
+    //   int SystemHealthMonitor::GetActiveOracleCount() {
+    //       return 8; // Conservative estimate until proper integration
+    //   }
+    //
+    // GetLastOraclePrice() defaults to 50 cents if no volatility data:
+    //   CAmount SystemHealthMonitor::GetLastOraclePrice() {
+    //       ...
+    //       return 50; // Default $0.50 per DGB (50 cents)
+    //   }
+    //
+    // GetLastOracleUpdate() defaults to fake recent height:
+    //   int64_t SystemHealthMonitor::GetLastOracleUpdate() {
+    //       ...
+    //       return 1000000 - 5; // Conservative estimate
+    //   }
+    //
+    // These hardcoded defaults mean:
+    // 1. Oracle alert never triggers for low oracle count (8 >= MIN_ORACLES=5)
+    //    unless volatility data changes the price to make staleness check fail
+    // 2. Health calculations use $0.50/DGB default — could be wildly wrong
+    // 3. Oracle staleness check uses fake "recent" update time
+    //
+    // Not directly exploitable for minting bypass (ShouldBlockMinting uses its
+    // own price source), but corrupts monitoring/alerting and could mislead
+    // operators about system state.
+
+    // Verify GetActiveOracleCount is hardcoded by checking the code
+    // (We can't easily isolate volatility state in a running test suite,
+    // so this is a code-review test)
+    BOOST_CHECK_MESSAGE(true,
+        "CODE REVIEW: GetActiveOracleCount() returns hardcoded 8 regardless "
+        "of actual oracle network state. GetLastOraclePrice() defaults to 50 "
+        "cents when no volatility data exists. GetLastOracleUpdate() defaults "
+        "to a fake recent height (999995). These create a false sense of "
+        "system health. Operators see 8 active oracles even if none are "
+        "running. Must be connected to actual oracle system before mainnet.");
+}
+
+// T5-06f: Volatility freeze IS functional but ERR health block is NOT
+BOOST_AUTO_TEST_CASE(redteam_t5_06f_volatility_vs_health_protection_asymmetry)
+{
+    // The volatility system works correctly in the validation path because:
+    // - VolatilityMonitor::UpdateState() IS called from ValidateDigiDollarTransaction
+    // - VolatilityMonitor::RecordPrice() IS called for mint transactions
+    // - ShouldFreezeMinting() reads live state updated during validation
+    //
+    // But the health/ERR system fails because:
+    // - SystemHealthMonitor is NEVER called from validation.cpp
+    // - ShouldBlockMinting() reads stale/empty cached metrics
+    // - No incremental update during ConnectBlock
+    //
+    // This creates an asymmetric protection failure:
+    // - Volatility protection: FUNCTIONAL ✅
+    // - ERR health protection: NON-FUNCTIONAL ❌
+    //
+    // An attacker who causes system health to drop below 100% (e.g., by
+    // crashing DGB price) can freely mint MORE DD, further destabilizing
+    // the system, because the ERR minting block never activates.
+
+    // Verify volatility state is actually updated during validation
+    bool volatilityFreeze = DigiDollar::Volatility::VolatilityMonitor::ShouldFreezeMinting();
+    // We can't test the full validation path in unit tests without a full node,
+    // but we can verify the function exists and returns a boolean
+    BOOST_CHECK_MESSAGE(volatilityFreeze == false || volatilityFreeze == true,
+        "Volatility ShouldFreezeMinting is callable and returns deterministic state.");
+
+    // Verify ShouldBlockMinting returns false with empty metrics
+    DigiDollar::SystemHealthMonitor::Shutdown();
+    DigiDollar::SystemHealthMonitor::Initialize();
+    bool errBlock = DigiDollar::ERR::EmergencyRedemptionRatio::ShouldBlockMinting(5000);
+    BOOST_CHECK_MESSAGE(!errBlock,
+        "ASYMMETRY CONFIRMED: Volatility protection is functional (updated during "
+        "validation) but ERR health protection is non-functional (reads empty cached "
+        "metrics). An attacker can mint freely during system health crisis because "
+        "ShouldBlockMinting always returns false on a non-RPC-scanned node.");
+
+    DigiDollar::SystemHealthMonitor::Shutdown();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

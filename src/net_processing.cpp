@@ -31,6 +31,7 @@
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/node.h>
 #include <random.h>
 #include <reverse_iterator.h>
 #include <scheduler.h>
@@ -5690,6 +5691,235 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_connman.PushMessage(pnode, CNetMsgMaker(pnode->GetCommonVersion()).Make(NetMsgType::ORACLEBUNDLE, bundle_msg));
         });
 
+        return;
+    }
+
+    if (msg_type == NetMsgType::ORACLECONSENSUS) {
+        // Gate: ignore oracle messages before activation height
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
+        // ── Step 1: Deserialize ──
+        OracleConsensusMsg consensus_msg;
+        vRecv >> consensus_msg;
+
+        // ── Step 2: Duplicate check ──
+        uint256 proposal_hash = consensus_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        if (bundleManager.HasOracleMessage(proposal_hash)) {
+            return; // Already seen this proposal
+        }
+        bundleManager.RegisterSeenHash(proposal_hash);
+
+        // ── Step 3: Rate limit consensus proposals ──
+        // Max 100 per hour per peer (generous — one per epoch × multiple peers)
+        {
+            static std::map<NodeId, std::pair<int64_t, int>> consensus_rate_limit;
+            int64_t now = GetTime();
+            if (consensus_rate_limit.size() > 100) {
+                auto it = consensus_rate_limit.begin();
+                while (it != consensus_rate_limit.end()) {
+                    if (now - it->second.first > 7200) {
+                        it = consensus_rate_limit.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+            auto& [last_reset, count] = consensus_rate_limit[pfrom.GetId()];
+            if (now - last_reset > 3600) { last_reset = now; count = 0; }
+            if (++count > 100) {
+                return; // Silently drop — proposals are best-effort
+            }
+        }
+
+        // ── Step 4: Validate epoch ──
+        int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
+        if (consensus_msg.epoch != current_epoch && consensus_msg.epoch != current_epoch - 1) {
+            LogPrint(BCLog::NET, "Oracle consensus proposal has stale epoch %d (current=%d) from peer=%d\n",
+                     consensus_msg.epoch, current_epoch, pfrom.GetId());
+            return;
+        }
+
+        // ── Step 5: Validate consensus price is reasonable ──
+        if (consensus_msg.consensus_price < ORACLE_MIN_PRICE_MICRO_USD ||
+            consensus_msg.consensus_price > ORACLE_MAX_PRICE_MICRO_USD) {
+            Misbehaving(*peer, 5, "unreasonable consensus proposal price");
+            return;
+        }
+
+        // ── Step 6: Cross-validate against our own price data ──
+        // The proposal's price should be within IQR tolerance of our own pending messages.
+        // This prevents a rogue node from proposing arbitrary prices.
+        {
+            uint64_t our_consensus_price = 0;
+            int64_t our_consensus_timestamp = 0;
+            if (bundleManager.ComputeConsensusValues(our_consensus_price, our_consensus_timestamp)) {
+                // Check proposed price is within 10% of our computed consensus
+                int64_t price_diff = std::abs(static_cast<int64_t>(consensus_msg.consensus_price) -
+                                              static_cast<int64_t>(our_consensus_price));
+                int64_t tolerance = static_cast<int64_t>(our_consensus_price) / 10; // 10%
+                if (tolerance < 1) tolerance = 1;
+                if (price_diff > tolerance) {
+                    LogPrint(BCLog::NET, "Oracle consensus proposal price %llu too far from our %llu (diff=%lld, tol=%lld) peer=%d\n",
+                             consensus_msg.consensus_price, our_consensus_price, price_diff, tolerance, pfrom.GetId());
+                    Misbehaving(*peer, 5, "consensus proposal price mismatch");
+                    return;
+                }
+            }
+            // If we can't compute our own consensus, we can still relay and let oracles decide
+        }
+
+        // ── Step 7: If we run a local oracle, create attestation and broadcast ──
+        {
+            OracleManager& om = OracleManager::GetInstance();
+            for (const auto& oracle_id : om.GetActiveOracleIds()) {
+                OracleNode* node = om.GetOracleNode(oracle_id);
+                if (!node || !node->IsRunning()) continue;
+
+                COraclePriceMessage att = node->CreateConsensusAttestation(
+                    consensus_msg.consensus_price, consensus_msg.consensus_timestamp);
+                if (att.schnorr_sig.empty()) continue;
+
+                // Store locally
+                bundleManager.AddConsensusAttestation(att);
+
+                // Broadcast attestation to network
+                OracleAttestationMsg att_msg;
+                att_msg.attestation = att;
+
+                uint256 att_hash = att_msg.GetHash();
+                bundleManager.RegisterSeenAttestation(att_hash);
+
+                m_connman.ForEachNode([this, &att_msg, &att_hash](CNode* pnode) {
+                    PeerRef relay_peer = GetPeerRef(pnode->GetId());
+                    if (!relay_peer) return;
+                    if (PeerKnowsOracle(*relay_peer, att_hash)) return;
+                    AddKnownOracle(*relay_peer, att_hash);
+                    m_connman.PushMessage(pnode,
+                        CNetMsgMaker(pnode->GetCommonVersion()).Make(
+                            NetMsgType::ORACLEATTESTATION, att_msg));
+                });
+
+                LogPrint(BCLog::NET, "Oracle: Generated and broadcast attestation for oracle %d in response to consensus proposal\n",
+                         oracle_id);
+            }
+        }
+
+        // ── Step 8: Relay proposal to other peers ──
+        AddKnownOracle(*peer, proposal_hash);
+        m_connman.ForEachNode([this, &consensus_msg, &proposal_hash](CNode* pnode) {
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
+            if (PeerKnowsOracle(*relay_peer, proposal_hash)) return;
+            AddKnownOracle(*relay_peer, proposal_hash);
+            m_connman.PushMessage(pnode,
+                CNetMsgMaker(pnode->GetCommonVersion()).Make(
+                    NetMsgType::ORACLECONSENSUS, consensus_msg));
+        });
+
+        LogPrint(BCLog::NET, "Accepted and relayed oracle consensus proposal: epoch=%d, price=%llu, peer=%d\n",
+                 consensus_msg.epoch, consensus_msg.consensus_price, pfrom.GetId());
+        return;
+    }
+
+    if (msg_type == NetMsgType::ORACLEATTESTATION) {
+        // Gate: ignore oracle messages before activation height
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
+        // ── Step 1: Deserialize ──
+        OracleAttestationMsg att_msg;
+        vRecv >> att_msg;
+
+        uint256 att_hash = att_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+
+        // ── Step 2: Replay prevention ──
+        if (!bundleManager.RegisterSeenAttestation(att_hash)) {
+            LogPrint(BCLog::NET, "Ignoring duplicate/replay oracle attestation from oracle %d peer=%d\n",
+                     att_msg.attestation.oracle_id, pfrom.GetId());
+            return;
+        }
+
+        // ── Step 3: Validate oracle ID ──
+        if (att_msg.attestation.oracle_id >= ORACLE_TOTAL_COUNT) {
+            Misbehaving(*peer, 10, "invalid oracle ID in attestation");
+            return;
+        }
+
+        // ── Step 4: SECURITY CRITICAL — Bind pubkey from chainparams ──
+        // Same pattern as ORACLEPRICE handler: NEVER trust the sender's pubkey.
+        {
+            const CChainParams& params = m_chainparams;
+            const OracleNodeInfo* oracle_config = params.GetOracleNode(att_msg.attestation.oracle_id);
+            if (!oracle_config) {
+                Misbehaving(*peer, 10, "unknown oracle ID in attestation");
+                return;
+            }
+            att_msg.attestation.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
+        }
+
+        // ── Step 5: Signature verification EARLY ──
+        if (!att_msg.attestation.VerifyPhase2()) {
+            LogPrint(BCLog::NET, "Oracle attestation signature verification failed oracle=%d peer=%d\n",
+                     att_msg.attestation.oracle_id, pfrom.GetId());
+            Misbehaving(*peer, 20, "invalid attestation signature");
+            return;
+        }
+
+        // ── Step 6: Rate limit (same pattern as ORACLEPRICE) ──
+        {
+            static constexpr int ATT_RATE_LIMIT_PER_HOUR = 3600;
+            static std::map<NodeId, std::pair<int64_t, int>> att_rate_limit;
+            int64_t now = GetTime();
+            if (att_rate_limit.size() > 100) {
+                auto it = att_rate_limit.begin();
+                while (it != att_rate_limit.end()) {
+                    if (now - it->second.first > 7200) {
+                        it = att_rate_limit.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+            auto& [last_reset, count] = att_rate_limit[pfrom.GetId()];
+            if (now - last_reset > 3600) { last_reset = now; count = 0; }
+            if (++count > ATT_RATE_LIMIT_PER_HOUR) {
+                return; // Silently drop — no penalty for relay
+            }
+        }
+
+        // ── Step 7: Validate price range ──
+        if (att_msg.attestation.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
+            att_msg.attestation.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
+            Misbehaving(*peer, 5, "unreasonable attestation price");
+            return;
+        }
+
+        // ── Step 8: Store attestation ──
+        if (!bundleManager.AddConsensusAttestation(att_msg.attestation)) {
+            LogPrint(BCLog::NET, "Failed to store oracle attestation from oracle %d peer=%d\n",
+                     att_msg.attestation.oracle_id, pfrom.GetId());
+            return;
+        }
+
+        // ── Step 9: Relay ──
+        AddKnownOracle(*peer, att_hash);
+        m_connman.ForEachNode([this, &att_msg, &att_hash](CNode* pnode) {
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
+            if (PeerKnowsOracle(*relay_peer, att_hash)) return;
+            AddKnownOracle(*relay_peer, att_hash);
+            m_connman.PushMessage(pnode,
+                CNetMsgMaker(pnode->GetCommonVersion()).Make(
+                    NetMsgType::ORACLEATTESTATION, att_msg));
+        });
+
+        LogPrint(BCLog::NET, "Accepted and relayed oracle attestation: oracle=%d, price=%llu, peer=%d\n",
+                 att_msg.attestation.oracle_id, att_msg.attestation.price_micro_usd, pfrom.GetId());
         return;
     }
 

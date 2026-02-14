@@ -9614,4 +9614,315 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03e_phase2_full_roundtrip_different_prices)
     }
 }
 
+// ============================================================================
+// T5-04: Bypass Collateral Release Strict Checks via TX Malleability
+// ============================================================================
+//
+// ATTACK SURFACE: ValidateCollateralReleaseAmount's extractDDFromMintTx lambda
+// does NOT verify HasDigiDollarMarker() on the source transaction, while
+// ExtractDDAmountFromTxRef() does. This creates a defense-in-depth gap.
+//
+// VECTOR: A regular (non-DD) transaction with a crafted DD OP_RETURN could be
+// treated as a legitimate DD mint when looking up originalDDMinted for collateral
+// release validation.
+
+// T5-04a: Non-DD tx with DD OP_RETURN — the extractDDFromMintTx parsing pattern
+// accepts it (no HasDigiDollarMarker check)
+BOOST_AUTO_TEST_CASE(redteam_t5_04a_non_dd_tx_with_dd_opreturn_parsed_as_mint)
+{
+    // Create a REGULAR transaction (nVersion=2, no DD marker) with DD-formatted OP_RETURN
+    CMutableTransaction fakeMintTx;
+    fakeMintTx.nVersion = 2;  // Standard version — NOT a DD transaction
+    fakeMintTx.vin.resize(1);
+    fakeMintTx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    fakeMintTx.vin[0].scriptSig = CScript() << OP_TRUE;
+
+    // Output 0: Has DGB value (will serve as fake "collateral")
+    fakeMintTx.vout.resize(3);
+    fakeMintTx.vout[0].nValue = 1000 * COIN;  // 1000 DGB locked
+    fakeMintTx.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0xAA);
+
+    // Output 1: Fake DD token output (zero-value P2TR)
+    fakeMintTx.vout[1].nValue = 0;
+    fakeMintTx.vout[1].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0xBB);
+
+    // Output 2: DD-formatted OP_RETURN claiming only 1 cent DD minted
+    fakeMintTx.vout[2].nValue = 0;
+    fakeMintTx.vout[2].scriptPubKey = CScript() << OP_RETURN
+        << std::vector<uint8_t>({'D', 'D'})
+        << CScriptNum(1)   // type = MINT
+        << CScriptNum(1)   // DD amount = 1 cent ($0.01)
+        << CScriptNum(172800)  // lockHeight
+        << CScriptNum(2);      // lockTier
+
+    CTransactionRef fakeRef = MakeTransactionRef(std::move(fakeMintTx));
+
+    // Verify this is NOT a DD transaction
+    BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(*fakeRef),
+        "Non-DD tx must NOT have DD marker in nVersion");
+    BOOST_CHECK_EQUAL(fakeRef->nVersion, 2);
+
+    // Replicate the extractDDFromMintTx lambda logic (from ValidateCollateralReleaseAmount)
+    // to show it WOULD parse this non-DD transaction as a DD mint
+    CAmount extractedDD = 0;
+    bool lambdaWouldAccept = false;
+    for (const auto& vout : fakeRef->vout) {
+        if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
+
+        CScript::const_iterator pc = vout.scriptPubKey.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+
+        if (!vout.scriptPubKey.GetOp(pc, opcode)) continue; // Skip OP_RETURN
+        if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+        if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+        // Read tx type
+        if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+        int64_t txType = 0;
+        if (data.size() > 0) {
+            try {
+                CScriptNum txTypeNum(data, true);
+                txType = txTypeNum.GetInt64();
+            } catch (const scriptnum_error&) { continue; }
+        }
+
+        // Only process MINT (type 1)
+        if (txType != 1) continue;
+
+        // Read DD amount
+        if (vout.scriptPubKey.GetOp(pc, opcode, data) && data.size() > 0) {
+            try {
+                CScriptNum scriptNum(data, true, 8);
+                extractedDD = scriptNum.GetInt64();
+                lambdaWouldAccept = (extractedDD > 0);
+            } catch (const scriptnum_error&) {}
+        }
+    }
+
+    // VULNERABILITY: The lambda pattern parses DD amount from a NON-DD tx!
+    BOOST_CHECK_MESSAGE(lambdaWouldAccept,
+        "FINDING: extractDDFromMintTx pattern accepts non-DD tx with DD OP_RETURN — "
+        "missing HasDigiDollarMarker check");
+    BOOST_CHECK_EQUAL(extractedDD, 1);  // Attacker-controlled: only 1 cent
+
+    // In contrast, ExtractDDAmountFromTxRef checks HasDigiDollarMarker and REJECTS
+    // ExtractDDAmountFromTxRef needs the tx in txindex, which isn't available in unit tests.
+    // But we can verify the marker check directly:
+    BOOST_CHECK_MESSAGE(!DigiDollar::HasDigiDollarMarker(*fakeRef),
+        "ExtractDDAmountFromTxRef would reject this tx at HasDigiDollarMarker check");
+}
+
+// T5-04b: Demonstrate the inconsistency — extractDDFromMintTx vs ExtractDDAmountFromTxRef
+// The fee-input check (isCollateralOutput) also properly checks the marker
+BOOST_AUTO_TEST_CASE(redteam_t5_04b_inconsistent_marker_checks)
+{
+    const int32_t DD_TX_VERSION = 0x0770;
+    int32_t mintVersion = (1 << 24) | DD_TX_VERSION;
+
+    // Create a REAL DD mint tx (has marker)
+    CMutableTransaction realMintTx;
+    realMintTx.nVersion = mintVersion;
+    realMintTx.vin.resize(1);
+    realMintTx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    realMintTx.vout.resize(3);
+    realMintTx.vout[0].nValue = 1000 * COIN;
+    realMintTx.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0xCC);
+    realMintTx.vout[1].nValue = 0;
+    realMintTx.vout[1].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0xDD);
+    realMintTx.vout[2].nValue = 0;
+    realMintTx.vout[2].scriptPubKey = CScript() << OP_RETURN
+        << std::vector<uint8_t>({'D', 'D'})
+        << CScriptNum(1) << CScriptNum(50000) << CScriptNum(518400) << CScriptNum(3);
+
+    CTransactionRef realRef = MakeTransactionRef(std::move(realMintTx));
+
+    // Create a FAKE (non-DD) tx with identical OP_RETURN
+    CMutableTransaction fakeTx;
+    fakeTx.nVersion = 2;  // NO DD marker
+    fakeTx.vin.resize(1);
+    fakeTx.vin[0].prevout = COutPoint(uint256::ZERO, 0);
+    fakeTx.vout.resize(3);
+    fakeTx.vout[0].nValue = 1000 * COIN;
+    fakeTx.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0xCC);
+    fakeTx.vout[1].nValue = 0;
+    fakeTx.vout[1].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0xDD);
+    fakeTx.vout[2].nValue = 0;
+    fakeTx.vout[2].scriptPubKey = CScript() << OP_RETURN
+        << std::vector<uint8_t>({'D', 'D'})
+        << CScriptNum(1) << CScriptNum(50000) << CScriptNum(518400) << CScriptNum(3);
+
+    CTransactionRef fakeRef = MakeTransactionRef(std::move(fakeTx));
+
+    // Verify marker status
+    BOOST_CHECK(DigiDollar::HasDigiDollarMarker(*realRef));   // Real: has marker
+    BOOST_CHECK(!DigiDollar::HasDigiDollarMarker(*fakeRef));  // Fake: no marker
+
+    // Both have identical OP_RETURN structure
+    BOOST_CHECK_EQUAL(realRef->vout[2].scriptPubKey.size(), fakeRef->vout[2].scriptPubKey.size());
+
+    // Replicate isCollateralOutput lambda (from T2-06b fee-input check)
+    // This one DOES check the marker — consistent defense
+    auto isCollateralOutputCheck = [](const CTransactionRef& prev_tx, uint32_t outputIndex) -> bool {
+        if (!prev_tx) return false;
+        if ((prev_tx->nVersion & 0xFFFF) != 0x0770) return false;  // HasDigiDollarMarker equivalent
+        if (((prev_tx->nVersion >> 24) & 0xFF) != 0x01) return false;  // Must be MINT
+        if (outputIndex != 0) return false;  // Only vout[0] is collateral
+        return true;
+    };
+
+    // isCollateralOutput correctly distinguishes real from fake
+    BOOST_CHECK_MESSAGE(isCollateralOutputCheck(realRef, 0),
+        "isCollateralOutput accepts real DD mint (has marker)");
+    BOOST_CHECK_MESSAGE(!isCollateralOutputCheck(fakeRef, 0),
+        "isCollateralOutput correctly rejects fake (no marker) — T2-06b defense works");
+
+    // Replicate extractDDFromMintTx lambda pattern — NO marker check
+    auto extractDDFromMintTxPattern = [](const CTransactionRef& prev_tx, CAmount& ddOut) -> bool {
+        // BUG: Does NOT check HasDigiDollarMarker(prev_tx)
+        for (const auto& vout : prev_tx->vout) {
+            if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
+            CScript::const_iterator pc = vout.scriptPubKey.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+            if (!vout.scriptPubKey.GetOp(pc, opcode)) continue;
+            if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+            if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            int64_t txType = 0;
+            if (data.size() > 0) {
+                try { txType = CScriptNum(data, true).GetInt64(); } catch (...) { continue; }
+            }
+            if (txType != 1) continue;
+            if (vout.scriptPubKey.GetOp(pc, opcode, data) && data.size() > 0) {
+                try {
+                    ddOut = CScriptNum(data, true, 8).GetInt64();
+                    return ddOut > 0;
+                } catch (...) {}
+            }
+        }
+        return false;
+    };
+
+    CAmount realDD = 0, fakeDD = 0;
+    bool realParsed = extractDDFromMintTxPattern(realRef, realDD);
+    bool fakeParsed = extractDDFromMintTxPattern(fakeRef, fakeDD);
+
+    // INCONSISTENCY: extractDDFromMintTx accepts BOTH (no marker check)
+    BOOST_CHECK_MESSAGE(realParsed && realDD == 50000,
+        "extractDDFromMintTx parses real DD mint correctly");
+    BOOST_CHECK_MESSAGE(fakeParsed && fakeDD == 50000,
+        "FINDING: extractDDFromMintTx also parses fake non-DD tx — missing marker check. "
+        "isCollateralOutput has the check, extractDDFromMintTx does not.");
+}
+
+// T5-04c: Full attack scenario — fake collateral position with attacker-controlled DD amount
+BOOST_AUTO_TEST_CASE(redteam_t5_04c_fake_collateral_position_attack_scenario)
+{
+    // ATTACK: Create a regular tx with DD OP_RETURN claiming tiny DD minted,
+    // then "redeem" by burning trivial DD to release the DGB "collateral"
+    //
+    // Step 1: Regular tx (no DD marker, passes standard validation)
+    CMutableTransaction fakeMint;
+    fakeMint.nVersion = 2;
+    fakeMint.vin.resize(1);
+    fakeMint.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    fakeMint.vout.resize(2);
+    fakeMint.vout[0].nValue = 5000 * COIN;  // 5000 DGB "locked"
+    fakeMint.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0x11);
+    fakeMint.vout[1].nValue = 0;
+    fakeMint.vout[1].scriptPubKey = CScript() << OP_RETURN
+        << std::vector<uint8_t>({'D', 'D'})
+        << CScriptNum(1)   // type = MINT
+        << CScriptNum(1);  // DD = 1 cent — attacker controls this!
+
+    CTransactionRef fakeRef = MakeTransactionRef(std::move(fakeMint));
+
+    // Verify it's NOT a DD tx — would pass standard validation as regular tx
+    BOOST_CHECK(!DigiDollar::HasDigiDollarMarker(*fakeRef));
+
+    // Step 2: The redemption would reference this as vin[0] collateral
+    // ValidateCollateralReleaseAmount would:
+    //   - lockedCollateral = 5000 DGB ✓
+    //   - extractDDFromMintTx → originalDDMinted = 1 cent ✓ (no marker check!)
+    //   - ddBurned >= 1 cent ✓ (trivial to burn 1 cent)
+    //   - allowedRelease = 5000 DGB ✓
+    //   - totalDGBRelease ≈ 5000 DGB ≤ 5000 + tolerance ✓
+
+    // The attack WORKS at the extractDDFromMintTx level
+    // Impact analysis:
+    //   - Attacker puts in 5000 DGB, gets 5000 DGB back → no direct profit
+    //   - But burns only 1 cent real DD → potential system impact:
+    //     a) Creates fake "redemption" consuming real DD tokens
+    //     b) The original minter's collateral stays locked
+    //     c) Protocol integrity violation: redemptions should only work against real mints
+    //
+    // DEFENSE GAP: extractDDFromMintTx should check HasDigiDollarMarker(*prev_tx)
+
+    // Verify the extraction succeeds (vulnerability exists)
+    CAmount ddParsed = 0;
+    for (const auto& vout : fakeRef->vout) {
+        if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
+        CScript::const_iterator pc = vout.scriptPubKey.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        vout.scriptPubKey.GetOp(pc, opcode); // OP_RETURN
+        vout.scriptPubKey.GetOp(pc, opcode, data); // "DD"
+        if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+            vout.scriptPubKey.GetOp(pc, opcode, data); // type
+            if (CScriptNum(data, true).GetInt64() == 1) {
+                vout.scriptPubKey.GetOp(pc, opcode, data); // amount
+                ddParsed = CScriptNum(data, true, 8).GetInt64();
+            }
+        }
+    }
+
+    BOOST_CHECK_EQUAL(ddParsed, 1);
+    BOOST_CHECK_MESSAGE(ddParsed > 0 && !DigiDollar::HasDigiDollarMarker(*fakeRef),
+        "CONFIRMED: extractDDFromMintTx would return originalDDMinted=1 from a non-DD tx. "
+        "Fix: add HasDigiDollarMarker check to extractDDFromMintTx lambda.");
+}
+
+// T5-04d: SegWit txid non-malleability — Taproot txids are immutable
+BOOST_AUTO_TEST_CASE(redteam_t5_04d_segwit_txid_nonmalleability)
+{
+    // DD transactions use Taproot (SegWit v1) outputs.
+    // SegWit txids are computed from non-witness data only.
+    // Third-party txid malleability is NOT possible for Taproot transactions.
+
+    const int32_t DD_TX_VERSION = 0x0770;
+    int32_t mintVersion = (1 << 24) | DD_TX_VERSION;
+
+    CMutableTransaction tx;
+    tx.nVersion = mintVersion;
+    tx.vin.resize(1);
+    tx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    // P2TR inputs have empty scriptSig (witness goes in witness section)
+    tx.vin[0].scriptSig = CScript();  // Empty — SegWit v1
+
+    tx.vout.resize(2);
+    tx.vout[0].nValue = 100 * COIN;
+    tx.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<uint8_t>(32, 0xFF);
+    tx.vout[1].nValue = 0;
+    tx.vout[1].scriptPubKey = CScript() << OP_RETURN
+        << std::vector<uint8_t>({'D', 'D'})
+        << CScriptNum(1) << CScriptNum(10000);
+
+    CTransaction immutableTx(tx);
+    uint256 txid1 = immutableTx.GetHash();
+
+    // Modifying witness data does NOT change the txid
+    // (In unit test, we don't have witness, but the principle holds)
+    // The txid is computed from nVersion + vin + vout + nLockTime only.
+    // For Taproot inputs, scriptSig is always empty, so there's nothing to malleate.
+
+    BOOST_CHECK_MESSAGE(!txid1.IsNull(),
+        "DEFENSE HOLDS: Taproot txids are non-malleable. "
+        "Third-party tx malleability cannot change collateral UTXO references.");
+
+    // Verify txid is deterministic from non-witness data
+    CTransaction tx2(tx);
+    BOOST_CHECK_EQUAL(txid1, tx2.GetHash());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

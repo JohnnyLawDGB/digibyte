@@ -1609,6 +1609,19 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
 
         // Helper: extract DD minted amount from a mint transaction's OP_RETURN
         auto extractDDFromMintTx = [](const CTransactionRef& prev_tx, CAmount& ddOut) -> bool {
+            // SECURITY [T5-04]: Verify source tx is actually a DD transaction.
+            // Without this check, a regular (non-DD) tx with a crafted DD OP_RETURN
+            // could be treated as a legitimate mint, allowing an attacker to set
+            // originalDDMinted to an arbitrary (e.g. trivially small) value.
+            // This is consistent with ExtractDDAmountFromTxRef() which also checks
+            // HasDigiDollarMarker, and isCollateralOutput (T2-06b) which checks nVersion.
+            if (!DigiDollar::HasDigiDollarMarker(*prev_tx)) {
+                return false;
+            }
+            // Also verify it's a MINT transaction (type byte = 1 in upper nVersion bits)
+            if (DigiDollar::GetDigiDollarTxType(*prev_tx) != DD_TX_MINT) {
+                return false;
+            }
             for (const auto& vout : prev_tx->vout) {
                 if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
 

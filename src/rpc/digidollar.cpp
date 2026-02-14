@@ -9,6 +9,7 @@
 #include <rpc/digidollar_transactions.h>
 #include <random.h>
 #include <oracle/bundle_manager.h>
+#include <primitives/oracle.h>
 #include <oracle/node.h>
 #include <oracle/mock_oracle.h>
 #include <consensus/digidollar.h>
@@ -3152,8 +3153,11 @@ static RPCHelpMan getoracles()
             struct PendingPrice { uint64_t price = 0; int64_t timestamp = 0; };
             std::map<uint32_t, PendingPrice> pending_prices;
             {
+                int64_t now = GetTime();
                 std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
                 for (const auto& msg : pending) {
+                    // Skip stale pending messages — oracle may have gone offline
+                    if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
                     pending_prices[msg.oracle_id] = {msg.price_micro_usd, msg.timestamp};
                 }
             }

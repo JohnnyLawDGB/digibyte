@@ -1818,33 +1818,39 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
  * @param tx Transaction requiring price validation
  * @return Oracle price in micro-USD (e.g., 6500 = $0.0065 DGB)
  */
-CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight) {
-    // First, try the oracle integration system (for testnet/mainnet)
+CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight, CAmount blockOraclePrice) {
+    // T8-03: If a block-extracted oracle price is provided (ConnectBlock path),
+    // use it directly. This is DETERMINISTIC — all nodes extract the same price
+    // from the same block, eliminating consensus forks from P2P partition.
+    if (blockOraclePrice > 0) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Using block-extracted oracle price: %lld micro-USD ($%.6f)\n",
+                  blockOraclePrice, static_cast<double>(blockOraclePrice) / 1000000.0);
+        return blockOraclePrice;
+    }
+
+    // Mempool path: Fall back to P2P-gossiped cached price (non-deterministic, advisory only)
     CAmount oracle_price_micro_usd = OracleIntegration::GetCurrentOraclePriceMicroUSD();
 
     if (oracle_price_micro_usd > 0) {
-        LogPrintf("DigiDollar: Using oracle price: %lld micro-USD ($%.6f)\n",
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Using P2P oracle price: %lld micro-USD ($%.6f)\n",
                   oracle_price_micro_usd, static_cast<double>(oracle_price_micro_usd) / 1000000.0);
         return oracle_price_micro_usd;
     }
 
-    // For regtest only, check the mock oracle
-    // Mock oracle now returns price directly in micro-USD (no conversion needed)
-    // e.g., 6500 micro-USD = $0.0065 per DGB
+    // For regtest only, check the mock oracle (mempool validation)
     // SECURITY FIX (DGB-SEC-005): Guard mock oracle access behind REGTEST check
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         CAmount mock_price_micro_usd = MockOracleManager::GetInstance().GetCurrentPrice();
         if (mock_price_micro_usd > 0) {
-            LogPrintf("DigiDollar: Using mock oracle price: %lld micro-USD ($%.6f)\n",
+            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Using mock oracle price: %lld micro-USD ($%.6f)\n",
                       mock_price_micro_usd, static_cast<double>(mock_price_micro_usd) / 1000000.0);
             return mock_price_micro_usd;
         }
     }
 
     // SECURITY: No fallback price — oracle failure must HALT minting, not use a guess.
-    // A hardcoded fallback bypasses oracle consensus entirely.
     // Callers (mempool, ConnectBlock) must handle price=0 by rejecting DD transactions.
-    LogPrintf("DigiDollar: Oracle system unavailable, returning 0 (no fallback price)\n");
+    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Oracle system unavailable, returning 0 (no fallback price)\n");
     return 0;
 }
 
@@ -2402,30 +2408,29 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
     // move best block pointer to prevout block
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
-    // Revert oracle price cache if this block had oracle data (Phase One: testnet and regtest)
-    auto chain_type = Params().GetChainType();
-    if (chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) {
-        if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
-            const CTxOut& oracle_output = block.vtx[0]->vout[1];
-            if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
-                // This block had oracle data, need to revert the cache
-                OracleBundleManager& manager = OracleBundleManager::GetInstance();
-                manager.RemovePriceCache(pindex->nHeight);
+    // T8-03: Revert oracle price cache for ALL networks (not just testnet/regtest)
+    // Mainnet needs deterministic oracle pricing too.
+    if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
+        const CTxOut& oracle_output = block.vtx[0]->vout[1];
+        if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
+            // This block had oracle data, need to revert the cache
+            OracleBundleManager& manager = OracleBundleManager::GetInstance();
+            manager.RemovePriceCache(pindex->nHeight);
 
-                // In RegTest mode, also revert MockOracleManager by getting previous price
-                if (chain_type == ChainType::REGTEST && pindex->pprev) {
-                    // Reset to previous height's price or default
-                    uint64_t prevPrice = manager.GetOraclePriceForHeight(pindex->pprev->nHeight);
-                    if (prevPrice > 0) {
-                        MockOracleManager::GetInstance().SetMockPrice(prevPrice);
-                    } else {
-                        // Reset to default if no previous price
-                        MockOracleManager::GetInstance().Reset();
-                    }
+            // In RegTest mode, also revert MockOracleManager by getting previous price
+            auto chain_type = Params().GetChainType();
+            if (chain_type == ChainType::REGTEST && pindex->pprev) {
+                // Reset to previous height's price or default
+                uint64_t prevPrice = manager.GetOraclePriceForHeight(pindex->pprev->nHeight);
+                if (prevPrice > 0) {
+                    MockOracleManager::GetInstance().SetMockPrice(prevPrice);
+                } else {
+                    // Reset to default if no previous price
+                    MockOracleManager::GetInstance().Reset();
                 }
-
-                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Reverted price cache at height %d during block disconnect\n", pindex->nHeight);
             }
+
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Reverted price cache at height %d during block disconnect\n", pindex->nHeight);
         }
     }
 
@@ -2736,6 +2741,33 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     int nInputs = 0;
     int64_t nSigOpsCost = 0;
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
+
+    // T8-03: Extract oracle price from THIS block's coinbase BEFORE validating
+    // DD transactions. This ensures all nodes use the same deterministic price
+    // from the block itself, not the P2P-gossiped cached price which may differ
+    // between partitioned nodes.
+    CAmount blockOraclePrice = 0;
+    if (!fJustCheck && !block.vtx.empty()) {
+        OracleBundleManager& oracleManager = OracleBundleManager::GetInstance();
+        COracleBundle extractedBundle;
+        if (oracleManager.ExtractOracleBundle(*block.vtx[0], extractedBundle) &&
+            extractedBundle.median_price_micro_usd > 0) {
+            blockOraclePrice = static_cast<CAmount>(extractedBundle.median_price_micro_usd);
+
+            // Update oracle price cache for this height (ALL networks, not just testnet/regtest)
+            oracleManager.UpdatePriceCache(pindex->nHeight, extractedBundle.median_price_micro_usd);
+
+            // In RegTest mode, also update MockOracleManager for backward compatibility
+            if (m_chainman.GetParams().GetChainType() == ChainType::REGTEST) {
+                MockOracleManager::GetInstance().SetMockPrice(extractedBundle.median_price_micro_usd);
+            }
+
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle price: %llu micro-USD ($%.6f) — deterministic\n",
+                     pindex->nHeight, extractedBundle.median_price_micro_usd,
+                     extractedBundle.median_price_micro_usd / 1000000.0);
+        }
+    }
+
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = *(block.vtx[i]);
@@ -2824,7 +2856,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
                 DigiDollar::ValidationContext ddContext(
                     pindex->nHeight,
-                    GetOraclePriceForTransaction(tx, pindex->nHeight),  // Oracle price (may be 0 during IBD)
+                    GetOraclePriceForTransaction(tx, pindex->nHeight, blockOraclePrice),  // T8-03: Deterministic block oracle price
                     DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
                     m_chainman.GetParams(),
                     &view,                                               // Coins view for UTXO lookup
@@ -2971,28 +3003,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         time_5 - time_start // in microseconds (µs)
     );
 
-    // Update oracle price cache (Phase One: testnet and regtest)
-    auto chain_type = m_chainman.GetParams().GetChainType();
-    if ((chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) && !fJustCheck) {
-        if (!block.vtx.empty()) {
-            // Use OracleBundleManager's ExtractOracleBundle to properly parse compact format
-            OracleBundleManager& manager = OracleBundleManager::GetInstance();
-            COracleBundle bundle;
-
-            if (manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
-                // Update oracle price cache for this height
-                manager.UpdatePriceCache(pindex->nHeight, bundle.median_price_micro_usd);
-
-                // In RegTest mode, also update MockOracleManager so GetCurrentOraclePrice() returns correct value
-                if (chain_type == ChainType::REGTEST) {
-                    MockOracleManager::GetInstance().SetMockPrice(bundle.median_price_micro_usd);
-                }
-
-                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Updated price cache at height %d: %llu micro-USD ($%.6f)\n",
-                         pindex->nHeight, bundle.median_price_micro_usd, bundle.median_price_micro_usd / 1000000.0);
-            }
-        }
-    }
+    // NOTE: Oracle price cache is now updated BEFORE the DD validation loop (T8-03)
+    // to ensure deterministic pricing. See blockOraclePrice extraction above.
 
     return true;
 }

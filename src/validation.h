@@ -111,8 +111,12 @@ void StartScriptCheckWorkerThreads(int threads_num);
 /** Stop all of the script checking worker threads */
 void StopScriptCheckWorkerThreads();
 
-/** Get oracle price for DigiDollar transaction validation */
-CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight = 0);
+/** Get oracle price for DigiDollar transaction validation.
+ *  @param blockOraclePrice  If > 0, use this deterministic price extracted from the
+ *                           current block's coinbase (ConnectBlock path). Falls back to
+ *                           P2P/mock oracle only when blockOraclePrice is 0 (mempool path).
+ */
+CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight = 0, CAmount blockOraclePrice = 0);
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
 

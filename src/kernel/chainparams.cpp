@@ -527,7 +527,7 @@ public:
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
         digidollarParams.oracleThreshold = 5;                         // 5-of-9 consensus for Phase Two (strict majority)
-        digidollarParams.activeOracles = 8;                           // 8 active oracles
+        digidollarParams.activeOracles = 9;                           // 9 active oracles
         digidollarParams.oracleCount = 8;                             // Total 8 oracles defined
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)

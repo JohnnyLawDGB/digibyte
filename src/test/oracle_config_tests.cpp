@@ -100,9 +100,9 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Verify Phase Two: 5-of-8 consensus for testnet
+    // Verify Phase Two: 5-of-9 consensus for testnet
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 5);  // 5 signatures required
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);     // 8 active oracles
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 9);     // 9 active oracles
 
     // Verify ratio is 62.5% (5-of-8, strict majority)
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
@@ -271,8 +271,8 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 8 active oracles
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);
+    // Phase Two: 9 active oracles
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 9);
 
     // Verify oracle nodes match configuration
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
@@ -285,8 +285,8 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
         }
     }
 
-    // Phase Two: All 8 oracles should be active
-    BOOST_CHECK_EQUAL(active_count, 8);
+    // Phase Two: All 9 oracles should be active
+    BOOST_CHECK_EQUAL(active_count, 9);
 
     LogPrintf("Phase Two oracle count: %d active, %d total\n",
               active_count, oracle_nodes.size());
@@ -308,9 +308,9 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 5-of-8 consensus (strict majority)
+    // Phase Two: 5-of-9 consensus (strict majority)
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 5);
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 8);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 9);
 
     // Verify strict majority (threshold > activeOracles / 2)
     BOOST_CHECK(ddParams.oracleThreshold > ddParams.activeOracles / 2);

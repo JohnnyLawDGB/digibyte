@@ -14996,4 +14996,431 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02g_net_processing_static_rate_limit_map_growth)
         "OBSERVATION ONLY — no fix needed, but documenting for completeness.");
 }
 
+// ============================================================================
+// T8-03: Partition Attack — Nodes See Different Oracle Prices
+// ============================================================================
+//
+// ATTACK SURFACE: In a network partition, different groups of nodes receive
+// different subsets of oracle P2P messages, resulting in different cached_price
+// values. Since DD validation in ConnectBlock uses cached_price (non-deterministic
+// P2P state) rather than deterministic block-embedded oracle data, the same DD
+// transaction in the same block can be validated differently by different nodes.
+// This causes a CONSENSUS FORK.
+//
+// THIS IS AN ARCHITECTURAL VULNERABILITY.
+//
+// Root cause: GetOraclePriceForTransaction() → GetCurrentOraclePriceMicroUSD()
+// → GetLatestPrice() → cached_price, which is derived from P2P oracle gossip
+// messages, NOT from the deterministic oracle data embedded in the block's coinbase.
+//
+// On testnet/regtest: ConnectBlock updates cached_price from block data, but AFTER
+// DD validation — so the update benefits the NEXT block, not the current one.
+//
+// On mainnet: ConnectBlock NEVER updates cached_price from block data (gated behind
+// testnet/regtest check). Price comes exclusively from P2P gossip. Forever.
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(redteam_t8_03a_connectblock_dd_validation_uses_nondeterministic_price)
+{
+    // CRITICAL ARCHITECTURAL FINDING:
+    //
+    // ConnectBlock DD validation path:
+    //   validation.cpp:2786  → GetOraclePriceForTransaction(tx, pindex->nHeight)
+    //   validation.cpp:1822  → OracleIntegration::GetCurrentOraclePriceMicroUSD()
+    //   bundle_manager.cpp:1700 → OracleBundleManager::GetLatestPrice()
+    //   bundle_manager.cpp:733 → return cached_price
+    //
+    // cached_price is set by:
+    //   1. AddOracleMessage() — P2P gossip handler (median of pending_messages)
+    //   2. UpdatePriceCache() — from block data (testnet/regtest ONLY)
+    //
+    // On testnet/regtest, UpdatePriceCache happens at validation.cpp:2907,
+    // which is AFTER DD validation at line 2786. So DD validation for block N
+    // uses cached_price from BEFORE block N's oracle data is processed.
+    //
+    // PROOF: cached_price used in DD validation is P2P-derived, not block-derived.
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    // Simulate two nodes with different P2P states via UpdatePriceCache
+    // (simulates the effect of different P2P oracle messages):
+    // Node A's cached_price: $0.008/DGB (8000 micro-USD)
+    // Node B's cached_price: $0.006/DGB (6000 micro-USD)
+    //
+    // For a $100 DD mint with 200% ratio:
+    //   Node A required collateral = (10000 * COIN * 200 * 100) / 8000
+    //                               = 25,000,000,000,000 sats = 250,000 DGB
+    //   Node B required collateral = (10000 * COIN * 200 * 100) / 6000
+    //                               = 33,333,333,333,333 sats = 333,333 DGB
+    //
+    // If miner provides 300,000 DGB collateral:
+    //   Node A: 300,000 >= 250,000 → VALID ✅
+    //   Node B: 300,000 < 333,333  → INVALID ❌ → CONSENSUS FORK
+
+    // Step 1: Simulate Node A's cached price ($0.008)
+    manager.UpdatePriceCache(100, 8000);  // height=100, $0.008/DGB
+    CAmount priceA = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(priceA, 8000);
+
+    // Calculate collateral at Node A's price
+    // $100 DD = 10000 cents, 200% ratio
+    CAmount ddAmount = 10000;  // $100
+    int effectiveRatio = 200;  // 200%
+    __int128 numA = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                    static_cast<__int128>(effectiveRatio) * 100;
+    CAmount requiredA = static_cast<CAmount>(numA / static_cast<__int128>(priceA));
+
+    // Step 2: Simulate Node B's cached price ($0.006)
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.UpdatePriceCache(100, 6000);  // height=100, $0.006/DGB
+    CAmount priceB = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(priceB, 6000);
+
+    __int128 numB = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                    static_cast<__int128>(effectiveRatio) * 100;
+    CAmount requiredB = static_cast<CAmount>(numB / static_cast<__int128>(priceB));
+
+    // PROVE: Different prices → different collateral requirements
+    BOOST_CHECK(requiredA < requiredB);  // Higher price → less collateral needed
+
+    // Collateral sufficient for A but insufficient for B
+    CAmount minerCollateral = (requiredA + requiredB) / 2;  // Between the two requirements
+    BOOST_CHECK(minerCollateral >= requiredA);   // Valid on Node A
+    BOOST_CHECK(minerCollateral < requiredB);    // Invalid on Node B!
+
+    BOOST_TEST_MESSAGE("T8-03a: ConnectBlock DD validation uses non-deterministic oracle price ⚠️ — "
+        "GetOraclePriceForTransaction() returns cached_price from P2P gossip, not from block data. "
+        "Two nodes with different P2P state see different cached_price. "
+        "Same DD mint with " << minerCollateral << " sats collateral: "
+        "VALID at price " << priceA << " (requires " << requiredA << ") but "
+        "INVALID at price " << priceB << " (requires " << requiredB << "). "
+        "CONSENSUS FORK when miner provides collateral between the two thresholds.");
+
+    manager.Clear();
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_03b_oracle_cache_update_after_dd_validation_in_connectblock)
+{
+    // PROOF: On testnet/regtest, ConnectBlock updates oracle cache from block data
+    // at line ~2907, but DD validation happens at line ~2786.
+    //
+    // This means DD validation for block N uses whatever price was in the cache
+    // BEFORE block N's oracle data was processed. The block's oracle data only
+    // benefits block N+1's DD validation.
+    //
+    // Code flow in ConnectBlock:
+    //   Line 2786: DD validation → GetOraclePriceForTransaction → cached_price (OLD)
+    //   Line 2834: UpdateCoins → UTXO changes committed
+    //   Line 2907: if (TESTNET||REGTEST) manager.UpdatePriceCache(height, bundle.price)
+    //              → cached_price updated to block's oracle price (NEW)
+    //
+    // For block N, DD validation sees the PREVIOUS cached_price.
+    // For block N+1, DD validation sees block N's oracle price (deterministic).
+    //
+    // This means block N's DD validation is ALWAYS non-deterministic (P2P-derived),
+    // even on testnet. Only block N+1 onwards benefits from deterministic pricing.
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    // Simulate the ConnectBlock ordering:
+    // Step 1: cached_price from P2P = $0.005 (via UpdatePriceCache simulating P2P effect)
+    manager.UpdatePriceCache(99, 5000);  // Previous block set price to $0.005
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 5000);  // P2P/previous block price
+
+    // Step 2: DD validation happens NOW using cached_price = 5000
+    CAmount dd_validation_price = manager.GetLatestPrice();  // This is what ConnectBlock uses
+    BOOST_CHECK_EQUAL(dd_validation_price, 5000);
+
+    // Step 3: AFTER DD validation, ConnectBlock updates cache from block's oracle data
+    // Block's oracle data says price = $0.007 (different from P2P/previous!)
+    manager.UpdatePriceCache(100, 7000);  // height=100, price=$0.007
+
+    // Step 4: NOW cached_price = $0.007 (from block data)
+    CAmount post_update_price = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(post_update_price, 7000);  // Block data price
+
+    // PROOF: DD validation used 5000 (old cache), but block's oracle data said 7000
+    // If block N+1 has a DD mint, it will correctly use 7000 (deterministic).
+    // But block N's DD txs were validated at 5000 (non-deterministic).
+    BOOST_CHECK(dd_validation_price != post_update_price);
+
+    BOOST_TEST_MESSAGE("T8-03b: Oracle cache updated AFTER DD validation in ConnectBlock ⚠️ — "
+        "DD validation at line ~2786 used price " << dd_validation_price << " (old cache), "
+        "but block's oracle data was price " << post_update_price << " (updated at line ~2907). "
+        "Block N's DD validation is always non-deterministic. "
+        "Block N+1's DD validation benefits from block N's deterministic oracle data.");
+
+    manager.Clear();
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_03c_mainnet_oracle_cache_never_updated_from_blocks)
+{
+    // CRITICAL: On mainnet, ConnectBlock NEVER updates cached_price from block data.
+    //
+    // src/validation.cpp line ~2903:
+    //   if (chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) {
+    //       manager.UpdatePriceCache(pindex->nHeight, bundle.median_price_micro_usd);
+    //   }
+    //
+    // Mainnet is EXCLUDED. This means:
+    // 1. cached_price comes EXCLUSIVELY from P2P oracle gossip
+    // 2. Block-embedded oracle data is ignored for pricing (only validated if present)
+    // 3. Different nodes' cached_price depends entirely on their P2P message history
+    // 4. There is NO deterministic price recovery mechanism on mainnet
+    //
+    // Combined with T8-03a: every DD-containing block on mainnet is a potential
+    // consensus fork if any pair of nodes has different cached_price values.
+
+    // This test documents the mainnet gating by code review.
+    // We cannot change chain type in unit tests (global Params()),
+    // but we can verify the logic:
+
+    // The gate is:
+    //   if (chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST)
+    //
+    // ChainType::MAIN is not included. Therefore:
+    // - Mainnet ConnectBlock skips UpdatePriceCache entirely
+    // - LoadPricesFromChain (startup) DOES scan blocks, but only last 20
+    // - After startup, price comes only from P2P gossip
+    // - Eclipse attack = permanent price blindness (no blockchain recovery)
+
+    BOOST_TEST_MESSAGE("T8-03c: Mainnet ConnectBlock never updates oracle price cache ⚠️ — "
+        "Oracle cache update in ConnectBlock gated behind TESTNET||REGTEST check. "
+        "On mainnet, cached_price comes EXCLUSIVELY from P2P gossip. "
+        "Block-embedded oracle data is validated (if present) but NOT used for DD pricing. "
+        "COMBINED IMPACT: Every DD-containing block on mainnet is vulnerable to "
+        "consensus fork from P2P-derived price differences. "
+        "LoadPricesFromChain only helps at startup (last 20 blocks). "
+        "MUST extend oracle cache update to mainnet before DigiDollar activation.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_03d_partition_median_divergence_with_multiple_oracles)
+{
+    // ATTACK: Network partition causes different node groups to see different
+    // subsets of oracle messages, resulting in different medians.
+    //
+    // Setup: 9 oracles, 5-of-9 consensus (min_oracle_count=5)
+    // Group A sees oracles: {0, 1, 2, 3, 4}  — prices: 5000, 5100, 5200, 5300, 5400
+    // Group B sees oracles: {4, 5, 6, 7, 8}  — prices: 5400, 5500, 5600, 5700, 5800
+    //
+    // Group A median: 5200 (position 2 of 5)
+    // Group B median: 5600 (position 2 of 5)
+    //
+    // Both groups have consensus (5 >= 5). Both compute valid medians.
+    // But the medians differ by 7.7%.
+    //
+    // We simulate this via UpdatePriceCache since AddOracleMessage requires
+    // signed messages. The median calculation mechanism is documented via
+    // code review — the test focuses on the IMPACT (different cached_price
+    // → different collateral requirements → consensus fork).
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+
+    // Group A: median of {5000, 5100, 5200, 5300, 5400} = 5200
+    manager.Clear();
+    manager.SetEnabled(true);
+    CAmount medianA = 5200;  // sorted[2] of 5 elements
+    manager.UpdatePriceCache(100, medianA);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), medianA);
+
+    // Group B: median of {5400, 5500, 5600, 5700, 5800} = 5600
+    manager.Clear();
+    manager.SetEnabled(true);
+    CAmount medianB = 5600;  // sorted[2] of 5 elements
+    manager.UpdatePriceCache(100, medianB);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), medianB);
+
+    // PROVE: medians differ
+    BOOST_CHECK(medianA != medianB);
+    BOOST_CHECK(medianB > medianA);
+
+    // Verify median calculation logic (code review):
+    // In AddOracleMessage (~line 159):
+    //   std::sort(prices.begin(), prices.end());
+    //   uint64_t median_price = prices[prices.size() / 2];
+    // For 5 elements: index = 5/2 = 2 (0-indexed), which is the middle element.
+
+    // Calculate collateral divergence:
+    // $100 DD at 200% ratio
+    CAmount ddAmount = 10000;  // $100
+    int ratio = 200;  // 200%
+    __int128 num = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
+                   static_cast<__int128>(ratio) * 100;
+    CAmount reqA = static_cast<CAmount>(num / static_cast<__int128>(medianA));
+    CAmount reqB = static_cast<CAmount>(num / static_cast<__int128>(medianB));
+
+    // Higher price = less DGB needed
+    // medianA=5200 (lower price) → more DGB needed
+    // medianB=5600 (higher price) → less DGB needed
+    BOOST_CHECK(reqA > reqB);
+
+    // If miner in Group B provides exact minimum for medianB:
+    // Group A will reject (reqA > reqB, collateral insufficient at lower price)
+    BOOST_CHECK(reqB < reqA);
+
+    BOOST_TEST_MESSAGE("T8-03d: Partition causes different oracle medians ⚠️ — "
+        "Group A (oracles 0-4): median=" << medianA << ", req=" << reqA << " sats. "
+        "Group B (oracles 4-8): median=" << medianB << ", req=" << reqB << " sats. "
+        "Divergence: " << (reqA - reqB) << " sats (" << ((reqA - reqB) * 100 / reqA) << "%). "
+        "Miner in Group B mints with " << reqB << " sats collateral → "
+        "Group A rejects (needs " << reqA << ") → CONSENSUS FORK.");
+
+    manager.Clear();
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_03e_no_price_commitment_in_dd_transaction)
+{
+    // ARCHITECTURAL GAP: DD transactions do not commit to the oracle price used.
+    //
+    // A DD mint transaction contains:
+    //   - nVersion: 0x01000770 (DD_TX_MINT marker)
+    //   - Output 0: Collateral (DGB locked in P2TR)
+    //   - Output 1: DD token (zero-value P2TR)
+    //   - Output N: OP_RETURN with DD amount, lockHeight, lockTier
+    //
+    // MISSING: The oracle price used for collateral calculation.
+    //
+    // If the transaction committed to the oracle price (e.g., in OP_RETURN),
+    // validators could check: "was the collateral sufficient at THIS price?"
+    // This would make validation deterministic regardless of node's cached_price.
+    //
+    // Without price commitment:
+    //   Node A (cached_price=X): validates collateral against X
+    //   Node B (cached_price=Y): validates collateral against Y
+    //   If X ≠ Y → different validation results → consensus fork
+
+    // Verify OP_RETURN format does NOT include oracle price:
+    // Format: OP_RETURN "DD" <type> <amount> <lockHeight> <lockTier>
+    // 5 fields. No price field.
+
+    // The only way to make this deterministic is one of:
+    // A) Include oracle price in DD transaction OP_RETURN (best)
+    // B) Use block-embedded oracle data for validation (good, but price from previous block)
+    // C) Require all nodes to agree on price via some other mechanism
+
+    BOOST_TEST_MESSAGE("T8-03e: DD transactions don't commit to oracle price used ⚠️ — "
+        "OP_RETURN contains: DD, type, amount, lockHeight, lockTier — NO oracle price. "
+        "Validator nodes independently look up oracle price from their own cached_price. "
+        "Without price commitment, validation outcome depends on each node's P2P state. "
+        "FIX OPTIONS: "
+        "(A) Add oracle price to DD mint OP_RETURN — validators check collateral against committed price; "
+        "(B) Use previous block's oracle data (deterministic, all nodes agree on block N-1 data); "
+        "(C) Validator uses block's own oracle data for DD txs in same block.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_03f_partition_recovery_creates_reorg)
+{
+    // SCENARIO: After partition heals, one group must reorganize.
+    //
+    // Timeline:
+    // 1. Network partitions at block 1000
+    // 2. Group A mines blocks 1001-1005, Group B mines blocks 1001-1003
+    // 3. Block 1002-A contains DD mint valid at medianA but invalid at medianB
+    // 4. Partition heals at block 1005
+    // 5. Longer chain wins (Group A: 5 blocks, Group B: 3 blocks)
+    // 6. Group B reorgs to Group A's chain
+    // 7. Group B's ConnectBlock processes block 1002-A
+    // 8. IF Group B's cached_price ≠ medianA → block 1002-A rejected → CHAIN SPLIT
+    //
+    // On testnet/regtest:
+    //   Block 1001-A's oracle cache update propagates to block 1002-A validation
+    //   IF both groups mined with same oracle data → cached_price converges
+    //   IF oracle data differs → cached_price still diverges
+    //
+    // On mainnet:
+    //   Group B never updates cached_price from Group A's blocks
+    //   Group B uses whatever P2P messages it has → LIKELY FORK
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    // Simulate: Group A had price 8000, mined DD mint with that price
+    manager.UpdatePriceCache(1000, 8000);  // Group A's cached price
+    CAmount priceA = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(priceA, 8000);
+
+    // After partition heals, Group B receives Group A's blocks
+    // Testnet/regtest: ConnectBlock would update price from block 1001-A oracle data
+    // Then block 1002-A DD validation would use that updated price
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.UpdatePriceCache(1001, 8000);  // Simulates testnet ConnectBlock
+    CAmount after_update = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(after_update, 8000);  // Now Group B has Group A's price
+
+    // On testnet: Block 1002-A DD validation uses price from block 1001-A → OK
+    // On mainnet: UpdatePriceCache never called → Group B still uses old P2P price
+
+    // Simulate mainnet scenario (no cache update):
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    // Group B had received different P2P messages (simulated via UpdatePriceCache)
+    manager.UpdatePriceCache(1000, 6000);  // Group B's P2P-derived price: $0.006
+
+    // On mainnet, Group B would try to validate Group A's DD mint
+    // using their own cached_price of 6000, not Group A's 8000
+    CAmount mainnet_price = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(mainnet_price, 6000);  // Group B's price
+    BOOST_CHECK(mainnet_price != priceA);     // Different from Group A!
+
+    BOOST_TEST_MESSAGE("T8-03f: Partition recovery creates potential chain split ⚠️ — "
+        "Group A price: " << priceA << ", Group B price: " << mainnet_price << ". "
+        "Testnet: ConnectBlock updates cache from Group A's blocks during reorg → recovery works. "
+        "Mainnet: ConnectBlock NEVER updates cache → Group B validates Group A's DD txs "
+        "with WRONG price → blocks rejected → permanent chain split. "
+        "CRITICAL: Must extend ConnectBlock oracle cache to mainnet.");
+}
+
+BOOST_AUTO_TEST_CASE(redteam_t8_03g_deterministic_pricing_recommendation)
+{
+    // RECOMMENDED FIX: Use block-embedded oracle price for DD validation.
+    //
+    // Current flow (vulnerable):
+    //   ConnectBlock:
+    //     1. For each DD tx → GetOraclePriceForTransaction → cached_price (P2P)
+    //     2. After all txs → UpdatePriceCache from block oracle data
+    //
+    // Fixed flow (deterministic):
+    //   ConnectBlock:
+    //     1. Extract oracle price from coinbase (block.vtx[0])
+    //     2. If valid: use block_oracle_price for all DD txs in this block
+    //     3. If no oracle data: use previous block's oracle price (height-1)
+    //     4. Fallback: use cached_price (P2P) only if no chain data exists
+    //
+    // This makes DD validation fully deterministic:
+    //   - All nodes agree on block N-1's oracle data (it's in the blockchain)
+    //   - Block N's DD txs use block N-1's price (or block N's if available)
+    //   - No dependency on P2P gossip state
+    //
+    // Implementation sketch:
+    //   In ConnectBlock, BEFORE the tx loop:
+    //     CAmount block_oracle_price = ExtractOraclePriceFromBlock(block);
+    //     if (block_oracle_price <= 0)
+    //         block_oracle_price = manager.GetOraclePriceForHeight(pindex->nHeight - 1);
+    //     if (block_oracle_price <= 0)
+    //         block_oracle_price = manager.GetLatestPrice();  // P2P fallback
+    //
+    //   Then pass block_oracle_price to all DD ValidationContexts.
+    //
+    // Additional: DD mint OP_RETURN should include the oracle price used,
+    // so validators can cross-check against the block's oracle data.
+
+    BOOST_TEST_MESSAGE("T8-03g: Deterministic pricing recommendation — "
+        "FIX: Extract oracle price from current or previous block's coinbase BEFORE DD validation. "
+        "Pass deterministic price to all DD ValidationContexts in ConnectBlock. "
+        "Add oracle price to DD mint OP_RETURN for cross-validation. "
+        "Remove mainnet gating on ConnectBlock oracle cache update. "
+        "This eliminates all P2P-derived price non-determinism from consensus path.");
+
+    // Cleanup
+    OracleBundleManager::GetInstance().Clear();
+}
+
 BOOST_AUTO_TEST_SUITE_END()

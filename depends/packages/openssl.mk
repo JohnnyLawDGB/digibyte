@@ -15,8 +15,9 @@ define $(package)_set_vars
   $(package)_config_opts+=no-ssl-trace no-ssl2 no-ssl3 no-tests no-unit-test no-weak-ssl-ciphers
   $(package)_config_opts+=no-zlib no-zlib-dynamic no-static-engine no-comp no-afalgeng
   $(package)_config_opts+=no-engine no-hw no-asm
-  $(package)_config_opts_linux=-fPIC -D_GNU_SOURCE
-  $(package)_config_opts_freebsd=-fPIC
+  $(package)_cflags_linux=-fPIC
+  $(package)_cppflags_linux=-D_GNU_SOURCE
+  $(package)_cflags_freebsd=-fPIC
   $(package)_config_opts_x86_64_linux=linux-x86_64
   $(package)_config_opts_i686_linux=linux-generic32
   $(package)_config_opts_arm_linux=linux-generic32

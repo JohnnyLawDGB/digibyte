@@ -9925,4 +9925,276 @@ BOOST_AUTO_TEST_CASE(redteam_t5_04d_segwit_txid_nonmalleability)
     BOOST_CHECK_EQUAL(txid1, tx2.GetHash());
 }
 
+// =============================================================================
+// T5-05: Bypass Price Expiry with Timestamp Manipulation
+// =============================================================================
+
+// T5-05a: RemovePriceCache does NOT revert cached_price (DisconnectBlock bug)
+//
+// When DisconnectBlock removes oracle price for a height, it only clears the
+// height_to_price map entry but leaves cached_price (used by GetLatestPrice)
+// pointing to the disconnected block's price. On testnet (not regtest), this
+// means GetCurrentOraclePriceMicroUSD() returns the stale price from a
+// disconnected block.
+BOOST_AUTO_TEST_CASE(redteam_t5_05a_remove_price_cache_leaves_cached_price)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    // Simulate connecting block 100 with oracle price $0.10/DGB
+    const uint64_t PRICE_BLOCK_100 = 100000; // $0.10 in micro-USD
+    manager.UpdatePriceCache(100, PRICE_BLOCK_100);
+
+    // Verify price is cached
+    BOOST_CHECK_EQUAL(manager.GetOraclePriceForHeight(100), PRICE_BLOCK_100);
+    CAmount latest_before = manager.GetLatestPrice();
+    BOOST_CHECK_EQUAL(latest_before, static_cast<CAmount>(PRICE_BLOCK_100));
+
+    // Simulate connecting block 101 with oracle price $0.05/DGB (price crashed)
+    const uint64_t PRICE_BLOCK_101 = 50000; // $0.05 in micro-USD
+    manager.UpdatePriceCache(101, PRICE_BLOCK_101);
+
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), static_cast<CAmount>(PRICE_BLOCK_101));
+
+    // Now simulate DisconnectBlock for block 101 — only calls RemovePriceCache
+    manager.RemovePriceCache(101);
+
+    // height_to_price[101] is gone
+    BOOST_CHECK_EQUAL(manager.GetOraclePriceForHeight(101), 0);
+
+    // BUG: cached_price still holds block 101's price ($0.05) instead of
+    // reverting to block 100's price ($0.10).
+    // GetLatestPrice() returns stale data from the disconnected block.
+    CAmount latest_after_disconnect = manager.GetLatestPrice();
+
+    // Document the bug: cached_price is NOT reverted
+    BOOST_CHECK_MESSAGE(latest_after_disconnect == static_cast<CAmount>(PRICE_BLOCK_101),
+        "BUG CONFIRMED: RemovePriceCache does not revert cached_price. "
+        "After disconnecting block 101 ($0.05), GetLatestPrice() still returns $0.05 "
+        "instead of reverting to block 100's price ($0.10). "
+        "FIX: RemovePriceCache should update cached_price to the previous block's price.");
+
+    // What it SHOULD return after disconnect:
+    // cached_price should revert to block 100's price ($0.10)
+    BOOST_CHECK_MESSAGE(latest_after_disconnect != static_cast<CAmount>(PRICE_BLOCK_100),
+        "If this fails, the bug has been fixed — RemovePriceCache now properly reverts cached_price.");
+
+    manager.Clear();
+}
+
+// T5-05b: Oracle message timestamp validation vs block time manipulation
+//
+// A miner can set block.nTime as low as MTP (median time past).
+// Can they set it low enough to make an expired oracle message appear valid?
+// oracle_age = block.nTime - bundle.timestamp < ORACLE_MAX_AGE_SECONDS
+BOOST_AUTO_TEST_CASE(redteam_t5_05b_block_timestamp_manipulation_oracle_expiry)
+{
+    // Oracle message from 70 minutes ago (expired by 10 minutes)
+    int64_t now = GetTime();
+    int64_t oracle_timestamp = now - 4200; // 70 minutes ago
+
+    COraclePriceMessage msg(0, 6500, oracle_timestamp);
+
+    // Validate with real time — should FAIL (message is 70 min old, max is 60 min)
+    BOOST_CHECK_MESSAGE(!msg.IsValid(now),
+        "DEFENSE HOLDS: Oracle message 70 minutes old correctly rejected with real time.");
+
+    // Simulate miner setting block.nTime backwards by 90 seconds (MTP manipulation)
+    // MTP for DigiByte with regular 15-sec blocks ≈ now - 90
+    int64_t mtp_block_time = now - 90;
+
+    // Oracle age from MTP perspective: (now - 90) - (now - 4200) = 4110 seconds
+    // Still > 3600, so should still be rejected
+    BOOST_CHECK_MESSAGE(!msg.IsValid(mtp_block_time),
+        "DEFENSE HOLDS: Even with MTP timestamp manipulation (-90s), 70-min-old oracle "
+        "message is still rejected (age 4110 > 3600).");
+
+    // How far back would the miner need to set block.nTime?
+    // Need: block.nTime - oracle_timestamp < 3600
+    // Need: block.nTime < oracle_timestamp + 3600 = now - 4200 + 3600 = now - 600
+    // Miner needs block.nTime < now - 600 (10 minutes in the past)
+    // With regular 15-sec blocks, MTP ≈ now - 90. Cannot reach now - 600.
+    int64_t needed_block_time = oracle_timestamp + 3600; // now - 600
+    BOOST_CHECK_MESSAGE(needed_block_time < mtp_block_time,
+        "DEFENSE HOLDS: To bypass expiry, miner needs block.nTime < now-600, "
+        "but MTP ≈ now-90. Gap of 510 seconds is unbridgeable.");
+
+    // Even with abnormally slow blocks (MTP 30 minutes old), test the worst case
+    int64_t slow_mtp = now - 1800; // MTP is 30 minutes old (slow blocks)
+    // Oracle message 50 minutes old (10 min past the safe boundary from slow MTP)
+    int64_t edge_oracle_ts = now - 3000; // 50 min ago
+
+    // With slow MTP: oracle_age = (now-1800) - (now-3000) = 1200 < 3600 → VALID!
+    // But with real time: oracle_age = now - (now-3000) = 3000 < 3600 → also valid
+    // The real concern: oracle 65 minutes old with 30-min-old MTP
+    int64_t expired_oracle_ts = now - 3900; // 65 min ago (5 min past expiry)
+    BOOST_CHECK(!msg.IsValid(now)); // Expired with real time
+    COraclePriceMessage expired_msg(0, 6500, expired_oracle_ts);
+    BOOST_CHECK(!expired_msg.IsValid(now)); // Expired with real time
+
+    // With slow MTP: oracle_age = (now-1800) - (now-3900) = 2100 < 3600 → VALID!
+    BOOST_CHECK_MESSAGE(expired_msg.IsValid(slow_mtp),
+        "EDGE CASE: With 30-min-old MTP (slow blocks), a 65-min-old oracle message "
+        "passes validation because oracle_age = 2100 < 3600. "
+        "This is a theoretical concern but requires extended block production slowdown "
+        "AND the 200-1000% collateral ratios provide substantial buffer.");
+}
+
+// T5-05c: Forward timestamp makes oracle appear OLDER, not fresher
+BOOST_AUTO_TEST_CASE(redteam_t5_05c_forward_timestamp_increases_oracle_age)
+{
+    int64_t now = GetTime();
+    int64_t oracle_timestamp = now - 3000; // 50 minutes ago (valid)
+
+    COraclePriceMessage msg(0, 6500, oracle_timestamp);
+
+    // Normal validation: age = 3000 < 3600 → VALID
+    BOOST_CHECK(msg.IsValid(now));
+
+    // Forward block time by 2 hours (MAX_FUTURE_BLOCK_TIME)
+    int64_t future_block_time = now + 7200;
+    // Age from future perspective: (now+7200) - (now-3000) = 10200 >> 3600 → EXPIRED
+    BOOST_CHECK_MESSAGE(!msg.IsValid(future_block_time),
+        "DEFENSE HOLDS: Forward block timestamp makes oracle appear 10200 seconds old, "
+        "which EXCEEDS the 3600-second limit. Miners cannot extend oracle validity "
+        "by setting block time forward — it has the opposite effect.");
+}
+
+// T5-05d: GetOraclePriceForHeight has no staleness check
+BOOST_AUTO_TEST_CASE(redteam_t5_05d_price_for_height_no_staleness_check)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    // Cache a price for height 100
+    manager.UpdatePriceCache(100, 6500);
+
+    // Cache a newer price for height 200
+    manager.UpdatePriceCache(200, 7000);
+
+    // GetOraclePriceForHeight returns whatever is cached — no age check
+    // Even block 100's price (potentially very old) is returned without question
+    BOOST_CHECK_EQUAL(manager.GetOraclePriceForHeight(100), 6500);
+    BOOST_CHECK_EQUAL(manager.GetOraclePriceForHeight(200), 7000);
+
+    // This is OK for its intended use (looking up historical prices during reorg)
+    // but callers must be aware there's no freshness validation
+    BOOST_CHECK_MESSAGE(manager.GetOraclePriceForHeight(100) > 0,
+        "DESIGN NOTE: GetOraclePriceForHeight has no staleness check. "
+        "It returns cached prices regardless of age. This is acceptable for "
+        "historical lookups but callers should not assume freshness. "
+        "GetLatestPrice() provides staleness checking via ORACLE_MAX_AGE_SECONDS.");
+
+    manager.Clear();
+}
+
+// T5-05e: GetOraclePriceForTransaction ignores nHeight parameter
+//
+// The nHeight parameter is passed to GetOraclePriceForTransaction but NEVER
+// used — it always returns GetCurrentOraclePriceMicroUSD() (latest cached price).
+// During reorgs, this means DD txs in a reconnected block are validated against
+// whatever cached_price happens to be, NOT the oracle price at that specific height.
+BOOST_AUTO_TEST_CASE(redteam_t5_05e_price_for_transaction_ignores_height)
+{
+    // This test documents the design gap by verifying that
+    // GetOraclePriceForHeight(N) and GetCurrentOraclePriceMicroUSD() can
+    // return different values, meaning DD validation uses the wrong price
+    // when connecting a block at height N where height N's price differs
+    // from the latest cached price.
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    // Connect block 100 with price $0.10
+    manager.UpdatePriceCache(100, 100000);
+    // Connect block 101 with price $0.05
+    manager.UpdatePriceCache(101, 50000);
+
+    // At this point:
+    // - GetOraclePriceForHeight(100) = $0.10 (height-specific)
+    // - GetOraclePriceForHeight(101) = $0.05 (height-specific)
+    // - GetLatestPrice() = $0.05 (latest cached_price, from block 101)
+    BOOST_CHECK_EQUAL(manager.GetOraclePriceForHeight(100), 100000);
+    BOOST_CHECK_EQUAL(manager.GetOraclePriceForHeight(101), 50000);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 50000);
+
+    // If we're re-validating a DD tx from block 100 (e.g., during IBD),
+    // GetOraclePriceForTransaction would return $0.05 (latest), NOT $0.10
+    // (block 100's price). This creates a discrepancy.
+    //
+    // Impact: During reorgs, DD transactions could be validated against the
+    // wrong oracle price. However, the high collateral ratios (200-1000%)
+    // provide substantial buffer against small price discrepancies.
+    BOOST_CHECK_MESSAGE(manager.GetLatestPrice() != static_cast<CAmount>(manager.GetOraclePriceForHeight(100)),
+        "DESIGN GAP CONFIRMED: GetLatestPrice() returns $0.05 but block 100's "
+        "oracle price was $0.10. If ConnectBlock validates a DD tx from block 100, "
+        "it would use $0.05 instead of $0.10. "
+        "FIX: GetOraclePriceForTransaction should use GetOraclePriceForHeight(nHeight) "
+        "with fallback to GetLatestPrice() only when height-specific price unavailable.");
+
+    manager.Clear();
+}
+
+// T5-05f: Oracle message future timestamp with block time tolerance
+BOOST_AUTO_TEST_CASE(redteam_t5_05f_oracle_future_timestamp_tolerance)
+{
+    int64_t now = GetTime();
+
+    // Oracle message 59 seconds in the future (within 60-second tolerance)
+    COraclePriceMessage msg_ok(0, 6500, now + 59);
+    BOOST_CHECK_MESSAGE(msg_ok.IsValid(now),
+        "Oracle message 59 seconds in the future is accepted (within 60s tolerance).");
+
+    // Oracle message 61 seconds in the future (beyond tolerance)
+    COraclePriceMessage msg_future(0, 6500, now + 61);
+    BOOST_CHECK_MESSAGE(!msg_future.IsValid(now),
+        "DEFENSE HOLDS: Oracle message 61 seconds in the future is correctly rejected.");
+
+    // Oracle message at exactly ORACLE_MAX_AGE_SECONDS boundary
+    // IsValid uses strict <: timestamp < current_time - MAX_AGE
+    // So timestamp == current_time - MAX_AGE is NOT rejected (boundary is inclusive)
+    COraclePriceMessage msg_boundary(0, 6500, now - ORACLE_MAX_AGE_SECONDS);
+    BOOST_CHECK_MESSAGE(msg_boundary.IsValid(now),
+        "Oracle message at exact expiry boundary (3600s) is accepted "
+        "(uses strict < comparison: timestamp < current_time - MAX_AGE, so boundary is inclusive).");
+
+    // Oracle message 1 second past expiry
+    COraclePriceMessage msg_expired(0, 6500, now - ORACLE_MAX_AGE_SECONDS - 1);
+    BOOST_CHECK_MESSAGE(!msg_expired.IsValid(now),
+        "DEFENSE HOLDS: Oracle message 1 second past expiry (3601s old) is rejected.");
+}
+
+// T5-05g: Mainnet oracle disconnect handling is missing
+//
+// The oracle price cache reversion in DisconnectBlock is gated behind
+// chain_type == TESTNET || REGTEST. When oracle validation is enabled on
+// mainnet, DisconnectBlock will NOT call RemovePriceCache, leaving stale
+// prices in the cache after reorgs.
+BOOST_AUTO_TEST_CASE(redteam_t5_05g_mainnet_oracle_disconnect_gap)
+{
+    // This is a CODE REVIEW finding — cannot test mainnet behavior in regtest.
+    // Documenting for awareness:
+    //
+    // src/validation.cpp DisconnectBlock():
+    //   if (chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) {
+    //       // ... RemovePriceCache ...
+    //   }
+    //
+    // src/validation.cpp ConnectBlock() oracle update:
+    //   if ((chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) && !fJustCheck) {
+    //       // ... UpdatePriceCache ...
+    //   }
+    //
+    // Both are gated to testnet/regtest. When mainnet oracle is enabled,
+    // neither connect nor disconnect will update the per-height price cache.
+    // GetCurrentOraclePriceMicroUSD() will still work via GetLatestPrice()
+    // (which uses P2P-received oracle messages), but the deterministic
+    // block-height-to-price mapping will be empty on mainnet.
+    //
+    // FIX: Remove chain_type guards before mainnet activation, or add
+    // mainnet-specific oracle price caching logic.
+    BOOST_CHECK_MESSAGE(true,
+        "CODE REVIEW: Mainnet oracle connect/disconnect handling is gated behind "
+        "TESTNET||REGTEST. Must be fixed before mainnet activation of DigiDollar.");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -38,20 +38,18 @@ using namespace DigiDollar;
 BOOST_FIXTURE_TEST_SUITE(digidollar_bughunt_tests, RegTestingSetup)
 
 // =============================================================================
-// BUG #1: Oracle $10 Price Ceiling (HIGH)
-// Files: src/primitives/oracle.cpp:36, oracle.cpp:323, net_processing.cpp:5381
-// Issue: Three different MAX_PRICE constants. FilterOutliersAdvanced and P2P
-//        layer cap at $10, while IsValid() allows up to $100. System breaks
-//        if DGB exceeds $10.
+// BUG #1: Oracle Price Ceiling — RESOLVED (T9-01)
+// Original issue: Three different filter algorithms with inconsistent caps.
+// FilterOutliersAdvanced had $10 cap, FilterOutliers had 10% threshold.
+// FIX (T9-01): All removed. Unified on single IQR algorithm via
+// GetConsensusPrice(). Price range uses ORACLE_MIN/MAX_PRICE_MICRO_USD
+// constants ($0.0001 to $100). No separate filter-specific caps.
 // =============================================================================
 
-BOOST_AUTO_TEST_CASE(bughunt_1a_filter_rejects_valid_15_dollar_price)
+BOOST_AUTO_TEST_CASE(bughunt_1a_unified_iqr_accepts_15_dollar_price)
 {
-    // A $15/DGB price is perfectly valid per IsValid() ($100 max)
-    // but FilterOutliersAdvanced rejects it (MAX_REALISTIC_PRICE = $10)
-    //
-    // This test PASSES while the bug exists (filter rejects $15).
-    // It will FAIL when the bug is fixed (filter accepts $15).
+    // FIXED: Unified IQR filter uses ORACLE_MAX_PRICE_MICRO_USD ($100).
+    // $15/DGB is well within range and should be accepted by GetConsensusPrice.
 
     uint64_t price_15_dollars = 15000000; // $15.00 in micro-USD
     int64_t now = GetTime();
@@ -64,7 +62,7 @@ BOOST_AUTO_TEST_CASE(bughunt_1a_filter_rejects_valid_15_dollar_price)
     msg.block_height = 1000;
     BOOST_CHECK(msg.IsValid(now + 10));
 
-    // Now show FilterOutliersAdvanced rejects it via COracleBundle
+    // Verify GetConsensusPrice (unified IQR) accepts $15 prices
     COracleBundle bundle;
     for (int i = 0; i < 5; i++) {
         COraclePriceMessage m;
@@ -75,32 +73,30 @@ BOOST_AUTO_TEST_CASE(bughunt_1a_filter_rejects_valid_15_dollar_price)
         bundle.messages.push_back(m);
     }
 
-    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliersAdvanced();
-
-    // BUG: All valid $15 messages are rejected by the filter
-    // When bug is fixed, this line will fail (filtered won't be empty)
-    BOOST_CHECK_MESSAGE(filtered.empty(),
-        "BUG #1 FIXED? FilterOutliersAdvanced no longer rejects $15 prices. "
-        "Remove this test if MAX_REALISTIC_PRICE has been raised.");
+    // All identical $15 → IQR=0, all pass, median=$15
+    uint64_t consensus_price = bundle.GetConsensusPrice(5);
+    BOOST_CHECK_EQUAL(consensus_price, price_15_dollars);
+    BOOST_CHECK_MESSAGE(consensus_price > 0,
+        "BUG #1 FIXED: Unified IQR filter accepts $15 prices (no $10 cap)");
 }
 
-BOOST_AUTO_TEST_CASE(bughunt_1b_isvalid_vs_filter_inconsistency)
+BOOST_AUTO_TEST_CASE(bughunt_1b_unified_filter_no_inconsistency)
 {
-    // Show the inconsistency: IsValid allows $100, filter caps at $10
-    // Test prices at $9, $11, $50, $100
+    // FIXED: IsValid() and GetConsensusPrice() both use
+    // ORACLE_MIN/MAX_PRICE_MICRO_USD for range. No separate filter caps.
 
     struct PriceTest {
         uint64_t micro_usd;
         const char* label;
-        bool expect_isvalid;      // IsValid() result
-        bool expect_filtered_out; // FilterOutliersAdvanced removes it
+        bool expect_isvalid;       // IsValid() result
+        bool expect_consensus_ok;  // GetConsensusPrice returns > 0
     };
 
     PriceTest tests[] = {
-        {9000000,   "$9",   true, false},  // Both accept
-        {11000000,  "$11",  true, true},   // IsValid accepts, filter rejects (BUG)
-        {50000000,  "$50",  true, true},   // IsValid accepts, filter rejects (BUG)
-        {100000000, "$100", true, true},   // IsValid accepts, filter rejects (BUG)
+        {9000000,   "$9",   true, true},   // Both accept
+        {11000000,  "$11",  true, true},   // FIXED: Both accept ($100 max)
+        {50000000,  "$50",  true, true},   // FIXED: Both accept
+        {100000000, "$100", true, true},   // At max boundary — both accept
     };
 
     int64_t now = GetTime();
@@ -114,20 +110,18 @@ BOOST_AUTO_TEST_CASE(bughunt_1b_isvalid_vs_filter_inconsistency)
         bool valid = msg.IsValid(now + 10);
         BOOST_CHECK_EQUAL(valid, t.expect_isvalid);
 
-        // Check filter behavior via COracleBundle
+        // Check unified IQR filter via GetConsensusPrice
         COracleBundle bundle;
         for (int i = 0; i < 5; i++) {
             COraclePriceMessage m = msg;
             m.oracle_id = i + 1;
             bundle.messages.push_back(m);
         }
-        auto filtered = bundle.FilterOutliersAdvanced();
+        uint64_t price = bundle.GetConsensusPrice(5);
 
-        bool was_filtered_out = filtered.empty();
-        BOOST_CHECK_MESSAGE(was_filtered_out == t.expect_filtered_out,
-            "BUG #1: Price " << t.label << " filter behavior changed. "
-            "Expected filtered_out=" << t.expect_filtered_out <<
-            " got " << was_filtered_out);
+        BOOST_CHECK_MESSAGE((price > 0) == t.expect_consensus_ok,
+            "Price " << t.label << ": expected consensus_ok=" << t.expect_consensus_ok
+            << " got price=" << price);
     }
 }
 

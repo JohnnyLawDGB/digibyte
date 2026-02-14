@@ -275,193 +275,72 @@ uint64_t COracleBundle::GetConsensusPrice(int min_required) const
 {
     if (!HasConsensus(min_required)) return 0;
 
-    // Filter outliers first
-    std::vector<COraclePriceMessage> filtered = FilterOutliers();
-    if (filtered.empty()) return 0;
+    // CONSENSUS-CRITICAL: This MUST use the exact same IQR algorithm as
+    // OracleBundleManager::CalculateConsensusPrice() to avoid consensus forks.
+    // See T9-01: Unified oracle median/outlier formula.
 
-    // Extract prices and sort them
-    std::vector<uint64_t> prices;
-    prices.reserve(filtered.size());
-    for (const auto& msg : filtered) {
-        prices.push_back(msg.price_micro_usd);
+    // Step 1: Price-range filter only — deterministic, time-independent
+    std::vector<int64_t> prices;
+    for (const auto& msg : messages) {
+        if (msg.price_micro_usd >= ORACLE_MIN_PRICE_MICRO_USD &&
+            msg.price_micro_usd <= ORACLE_MAX_PRICE_MICRO_USD) {
+            prices.push_back(static_cast<int64_t>(msg.price_micro_usd));
+        }
     }
+
+    if (prices.empty()) return 0;
+
+    // Step 2: Sort for IQR calculation
     std::sort(prices.begin(), prices.end());
 
-    // Calculate median
-    size_t size = prices.size();
-    if (size % 2 == 0) {
-        // Even number of elements - average of middle two
-        return (prices[size/2 - 1] + prices[size/2]) / 2;
-    } else {
-        // Odd number of elements - middle element
-        return prices[size/2];
+    // Step 3: If less than 4 prices, just return median without outlier filtering
+    if (prices.size() < 4) {
+        size_t mid = prices.size() / 2;
+        if (prices.size() % 2 == 0) {
+            return static_cast<uint64_t>((prices[mid - 1] + prices[mid]) / 2);
+        }
+        return static_cast<uint64_t>(prices[mid]);
     }
+
+    // Step 4: Apply IQR outlier filtering (1.5 * IQR rule)
+    size_t q1_idx = prices.size() / 4;
+    size_t q3_idx = (prices.size() * 3) / 4;
+    int64_t q1 = prices[q1_idx];
+    int64_t q3 = prices[q3_idx];
+    int64_t iqr = q3 - q1;
+    int64_t lower_bound = q1 - (iqr * 3 / 2);  // 1.5 * IQR below Q1
+    int64_t upper_bound = q3 + (iqr * 3 / 2);  // 1.5 * IQR above Q3
+
+    // Step 5: Filter outliers
+    std::vector<int64_t> filtered;
+    for (int64_t price : prices) {
+        if (price >= lower_bound && price <= upper_bound) {
+            filtered.push_back(price);
+        }
+    }
+
+    // Step 6: If filtering removed all prices, fall back to unfiltered median
+    if (filtered.empty()) {
+        size_t mid = prices.size() / 2;
+        if (prices.size() % 2 == 0) {
+            return static_cast<uint64_t>((prices[mid - 1] + prices[mid]) / 2);
+        }
+        return static_cast<uint64_t>(prices[mid]);
+    }
+
+    // Step 7: Calculate median of filtered prices
+    std::sort(filtered.begin(), filtered.end());
+    size_t mid = filtered.size() / 2;
+    if (filtered.size() % 2 == 0) {
+        return static_cast<uint64_t>((filtered[mid - 1] + filtered[mid]) / 2);
+    }
+    return static_cast<uint64_t>(filtered[mid]);
 }
 
 bool COracleBundle::ValidateEpoch(int32_t current_epoch) const
 {
     // Accept current epoch or previous epoch only
     return epoch == current_epoch || epoch == current_epoch - 1;
-}
-
-std::vector<COraclePriceMessage> COracleBundle::FilterOutliers() const
-{
-    if (messages.size() < 3) {
-        // With fewer than 3 messages, can't filter outliers effectively
-        return messages;
-    }
-
-    // Calculate initial median
-    std::vector<uint64_t> prices;
-    for (const auto& msg : messages) {
-        prices.push_back(msg.price_micro_usd);
-    }
-    std::sort(prices.begin(), prices.end());
-
-    uint64_t median;
-    size_t size = prices.size();
-    if (size % 2 == 0) {
-        median = (prices[size/2 - 1] + prices[size/2]) / 2;
-    } else {
-        median = prices[size/2];
-    }
-
-    // Filter messages that are within 10% of median
-    std::vector<COraclePriceMessage> filtered;
-    uint64_t threshold = median * ORACLE_OUTLIER_THRESHOLD_PCT / 100;
-
-    for (const auto& msg : messages) {
-        uint64_t deviation = (msg.price_micro_usd > median) ?
-                             (msg.price_micro_usd - median) :
-                             (median - msg.price_micro_usd);
-        if (deviation <= threshold) {
-            filtered.push_back(msg);
-        }
-    }
-
-    return filtered;
-}
-
-std::vector<COraclePriceMessage> COracleBundle::FilterOutliersAdvanced() const
-{
-    const size_t MIN_MESSAGES_FOR_FILTERING = 3;
-    if (messages.size() < MIN_MESSAGES_FOR_FILTERING) {
-        return messages;
-    }
-
-    std::vector<COraclePriceMessage> valid_messages;
-    valid_messages.reserve(messages.size()); // Optimize memory allocation
-
-    // First pass: remove obviously invalid prices
-    // Uses shared constants from oracle.h (BUG #1 FIX: was $10, now $100)
-    for (const auto& msg : messages) {
-        // Extreme bounds checking with early exit conditions
-        if (msg.price_micro_usd == 0 ||
-            msg.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD ||
-            msg.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD) {
-            LogPrint(BCLog::DIGIDOLLAR, "FilterOutliersAdvanced: Rejecting price %llu micro-USD from oracle %u (out of bounds)\n",
-                     msg.price_micro_usd, msg.oracle_id);
-            continue;
-        }
-
-        valid_messages.push_back(msg);
-    }
-
-    if (valid_messages.size() < MIN_MESSAGES_FOR_FILTERING) {
-        LogPrint(BCLog::DIGIDOLLAR, "FilterOutliersAdvanced: Insufficient valid messages (%d), returning all\n",
-                 valid_messages.size());
-        return valid_messages;
-    }
-
-    // Second pass: statistical outlier removal using modified Z-score
-    std::vector<uint64_t> prices;
-    for (const auto& msg : valid_messages) {
-        prices.push_back(msg.price_micro_usd);
-    }
-    std::sort(prices.begin(), prices.end());
-
-    // Calculate median
-    uint64_t median;
-    size_t size = prices.size();
-    if (size % 2 == 0) {
-        median = (prices[size/2 - 1] + prices[size/2]) / 2;
-    } else {
-        median = prices[size/2];
-    }
-
-    // Calculate MAD (Median Absolute Deviation)
-    std::vector<uint64_t> deviations;
-    for (uint64_t price : prices) {
-        uint64_t deviation = (price > median) ? (price - median) : (median - price);
-        deviations.push_back(deviation);
-    }
-    std::sort(deviations.begin(), deviations.end());
-
-    uint64_t mad;
-    if (deviations.size() % 2 == 0) {
-        mad = (deviations[deviations.size()/2 - 1] + deviations[deviations.size()/2]) / 2;
-    } else {
-        mad = deviations[deviations.size()/2];
-    }
-
-    // Filter using modified Z-score (threshold: 3.5)
-    std::vector<COraclePriceMessage> final_filtered;
-    const uint64_t threshold_multiplier = 35; // 3.5 * 10 for integer math
-    const uint64_t mad_multiplier = 10;
-
-    for (const auto& msg : valid_messages) {
-        if (mad == 0) {
-            // All values are identical - include all
-            final_filtered.push_back(msg);
-        } else {
-            uint64_t deviation = (msg.price_micro_usd > median) ?
-                                 (msg.price_micro_usd - median) :
-                                 (median - msg.price_micro_usd);
-            uint64_t modified_zscore = (deviation * mad_multiplier) / mad;
-            if (modified_zscore <= threshold_multiplier) {
-                final_filtered.push_back(msg);
-            }
-        }
-    }
-
-    return final_filtered;
-}
-
-std::vector<COraclePriceMessage> COracleBundle::FilterOutliersIQR() const
-{
-    if (messages.size() < 3) {
-        return messages;
-    }
-
-    // Extract and sort prices
-    std::vector<std::pair<uint64_t, size_t>> price_indices;
-    for (size_t i = 0; i < messages.size(); i++) {
-        price_indices.push_back({messages[i].price_micro_usd, i});
-    }
-    std::sort(price_indices.begin(), price_indices.end());
-
-    // Calculate quartiles
-    size_t n = price_indices.size();
-    size_t q1_index = n / 4;
-    size_t q3_index = 3 * n / 4;
-
-    uint64_t q1 = price_indices[q1_index].first;
-    uint64_t q3 = price_indices[q3_index].first;
-    uint64_t iqr = q3 - q1;
-
-    // IQR bounds (1.5 * IQR rule)
-    uint64_t lower_bound = (q1 > (iqr * 3 / 2)) ? (q1 - (iqr * 3 / 2)) : 0; // Prevent underflow
-    uint64_t upper_bound = q3 + (iqr * 3 / 2);
-
-    // Filter messages within bounds
-    std::vector<COraclePriceMessage> filtered;
-    for (const auto& msg : messages) {
-        if (msg.price_micro_usd >= lower_bound && msg.price_micro_usd <= upper_bound) {
-            filtered.push_back(msg);
-        }
-    }
-
-    return filtered;
 }
 
 bool operator==(const COracleBundle& a, const COracleBundle& b)

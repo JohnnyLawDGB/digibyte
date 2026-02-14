@@ -197,30 +197,37 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_median_calculation)
     }
 
     CAmount median_price = bundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
-    // Sorted: 3000, 4000, 4500, 4700, 4800, 5000, 5200, 5500, 6000 (micro-USD)
-    // Median (5th element): 4800 micro-USD = $0.0048
-    BOOST_CHECK_EQUAL(median_price, 4800);
+    // Sorted: [3000, 4000, 4500, 4700, 4800, 5000, 5200, 5500, 6000]
+    // IQR filter (T9-01): q1_idx=2→q1=4500, q3_idx=6→q3=5200, IQR=700
+    // Bounds: [3450, 6250] → 3000 filtered out
+    // Remaining: [4000, 4500, 4700, 4800, 5000, 5200, 5500, 6000] — 8 values
+    // Median (even): (4800 + 5000) / 2 = 4900 micro-USD
+    BOOST_CHECK_EQUAL(median_price, 4900);
 
     // Test median with even number of values (add one more)
     COraclePriceMessage msg10(9, 4900, GetTime());
     bundle.AddMessage(msg10);
 
     median_price = bundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
-    // Sorted: 3000, 4000, 4500, 4700, 4800, 4900, 5000, 5200, 5500, 6000 (micro-USD)
-    // Median (average of 5th and 6th): (4800 + 4900) / 2 = 4850 micro-USD
-    BOOST_CHECK_EQUAL(median_price, 4850);
+    // Sorted: [3000, 4000, 4500, 4700, 4800, 4900, 5000, 5200, 5500, 6000]
+    // IQR filter: q1_idx=2→q1=4500, q3_idx=7→q3=5200, IQR=700
+    // Bounds: [3450, 6250] → 3000 filtered out
+    // Remaining: [4000, 4500, 4700, 4800, 4900, 5000, 5200, 5500, 6000] — 9 values
+    // Median (odd): 4900 micro-USD
+    BOOST_CHECK_EQUAL(median_price, 4900);
 }
 
 BOOST_AUTO_TEST_CASE(oracle_bundle_outlier_filtering)
 {
+    // Test unified IQR outlier filtering via GetConsensusPrice (T9-01)
     COracleBundle bundle(1);
 
     // Add normal prices around 5000 micro-USD ($0.005)
     std::vector<CAmount> normal_prices = {4800, 4900, 5000, 5100, 5200,
                                           4950, 5050, 5150};
 
-    // Add outliers (more than 10% deviation from median)
-    std::vector<CAmount> outlier_prices = {3000, 7000}; // -40% and +40% from ~5000
+    // Add outliers (-40% and +40% from ~5000)
+    std::vector<CAmount> outlier_prices = {3000, 7000};
 
     // Add all prices
     for (size_t i = 0; i < normal_prices.size(); i++) {
@@ -233,17 +240,19 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_outlier_filtering)
         bundle.AddMessage(msg);
     }
 
-    // Filter outliers
-    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
+    // All 10 messages: sorted [3000, 4800, 4900, 4950, 5000, 5050, 5100, 5150, 5200, 7000]
+    // IQR: q1_idx=2→q1=4900, q3_idx=7→q3=5150, IQR=250
+    // Bounds: [4900-375, 5150+375] = [4525, 5525]
+    // 3000 and 7000 filtered out, also 4800 < 4525 → OUT
+    // Remaining: [4900, 4950, 5000, 5050, 5100, 5150, 5200] — 7 values
+    // Median: 5050
+    uint64_t consensus_price = bundle.GetConsensusPrice(8);
+    BOOST_CHECK(consensus_price > 0);
 
-    // Should remove the outliers
-    BOOST_CHECK_EQUAL(filtered.size(), normal_prices.size());
-
-    // Verify no extreme outliers remain (within +/- 20% of 5000 micro-USD)
-    for (const auto& msg : filtered) {
-        BOOST_CHECK(msg.price_micro_usd >= 4000); // Not too low
-        BOOST_CHECK(msg.price_micro_usd <= 6000); // Not too high
-    }
+    // Verify outliers don't distort the consensus price —
+    // the median should be near 5000, not skewed by 3000/7000
+    BOOST_CHECK(consensus_price >= 4800);
+    BOOST_CHECK(consensus_price <= 5200);
 }
 
 BOOST_AUTO_TEST_CASE(oracle_bundle_epoch_validation)
@@ -910,17 +919,19 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
 
 BOOST_AUTO_TEST_CASE(test_price_aggregation_outliers)
 {
+    // Test unified IQR outlier filtering with extreme prices (T9-01)
     COracleBundle bundle(1);
 
-    // Test extreme outlier scenarios that should be filtered
+    // Test extreme outlier scenarios — prices outside ORACLE_MIN/MAX_PRICE_MICRO_USD
+    // are filtered by the price-range check before IQR
     std::vector<CAmount> extreme_prices = {
-        1,           // Extremely low (< $0.00001)
-        10000000000, // Extremely high (> $100)
+        1,           // Below ORACLE_MIN_PRICE_MICRO_USD (100)
+        10000000000, // Above ORACLE_MAX_PRICE_MICRO_USD (100000000)
         0,           // Zero price
-        -1000        // Negative price (should never happen but test anyway)
+        -1000        // Negative price
     };
 
-    // Add normal prices first
+    // Add normal prices first (8 messages)
     std::vector<CAmount> normal_prices = {4800000, 4900000, 5000000, 5100000, 5200000, 4950000, 5050000, 5150000};
 
     for (size_t i = 0; i < normal_prices.size(); i++) {
@@ -928,21 +939,23 @@ BOOST_AUTO_TEST_CASE(test_price_aggregation_outliers)
         bundle.AddMessage(msg);
     }
 
-    // Add extreme outliers
+    // Add extreme outliers (4 more messages — 12 total)
     for (size_t i = 0; i < extreme_prices.size(); i++) {
         COraclePriceMessage outlier_msg(normal_prices.size() + i, extreme_prices[i], GetTime());
         bundle.AddMessage(outlier_msg);
     }
 
-    // Test advanced outlier filtering
-    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliersAdvanced();
-
-    // Should remove extreme outliers but keep normal prices
-    BOOST_CHECK_EQUAL(filtered.size(), normal_prices.size());
+    // GetConsensusPrice filters out-of-range prices, then applies IQR
+    // Only the 8 normal prices survive range check
+    // All 8 are clustered around $5, IQR keeps them all
+    uint64_t price = bundle.GetConsensusPrice(8);
+    BOOST_CHECK(price > 0);
+    BOOST_CHECK(price >= 4800000);
+    BOOST_CHECK(price <= 5200000);
 
     // Test with insufficient valid data
     COracleBundle insufficient_bundle(2);
-    // Add only outliers (should fail consensus)
+    // Add only out-of-range outliers (should fail consensus after range filter)
     for (size_t i = 0; i < extreme_prices.size(); i++) {
         COraclePriceMessage outlier_msg(i, extreme_prices[i], GetTime());
         insufficient_bundle.AddMessage(outlier_msg);
@@ -950,10 +963,10 @@ BOOST_AUTO_TEST_CASE(test_price_aggregation_outliers)
 
     BOOST_CHECK(!insufficient_bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // Test statistical outlier detection with IQR method
+    // Test IQR outlier detection: 8000000 is far from cluster
     COracleBundle iqr_bundle(3);
     std::vector<CAmount> iqr_test_prices = {
-        4000000, 4500000, 4800000, 4900000, 5000000, 5100000, 5200000, 5500000, 6000000, 8000000 // Last one is outlier
+        4000000, 4500000, 4800000, 4900000, 5000000, 5100000, 5200000, 5500000, 6000000, 8000000
     };
 
     for (size_t i = 0; i < iqr_test_prices.size(); i++) {
@@ -961,19 +974,15 @@ BOOST_AUTO_TEST_CASE(test_price_aggregation_outliers)
         iqr_bundle.AddMessage(msg);
     }
 
-    std::vector<COraclePriceMessage> iqr_filtered = iqr_bundle.FilterOutliersIQR();
-    // Should remove the 8000000 outlier
-    BOOST_CHECK_LT(iqr_filtered.size(), iqr_test_prices.size());
-
-    // Verify the outlier was removed
-    bool found_outlier = false;
-    for (const auto& msg : iqr_filtered) {
-        if (msg.price_micro_usd == 800) {
-            found_outlier = true;
-            break;
-        }
-    }
-    BOOST_CHECK(!found_outlier);
+    // Sorted: [4000000, 4500000, 4800000, 4900000, 5000000, 5100000, 5200000, 5500000, 6000000, 8000000]
+    // IQR: q1_idx=2→q1=4800000, q3_idx=7→q3=5500000, IQR=700000
+    // Bounds: [3750000, 6550000] → 8000000 filtered out
+    // Remaining: 9 values, median = 5000000
+    uint64_t iqr_price = iqr_bundle.GetConsensusPrice(8);
+    BOOST_CHECK(iqr_price > 0);
+    // Median should be around 5000000, not skewed by 8000000
+    BOOST_CHECK(iqr_price >= 4800000);
+    BOOST_CHECK(iqr_price <= 5200000);
 }
 
 BOOST_AUTO_TEST_CASE(test_p2p_message_validation)

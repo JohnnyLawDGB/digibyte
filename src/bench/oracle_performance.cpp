@@ -324,10 +324,10 @@ static void BenchmarkMedianCalculation(benchmark::Bench& bench)
 }
 
 /**
- * Benchmark: Outlier Filtering Algorithms
- * Compare performance of basic, MAD, and IQR outlier filtering
+ * Benchmark: GetConsensusPrice (unified IQR outlier filtering)
+ * Tests the single canonical outlier filtering algorithm (T9-01)
  */
-static void BenchmarkOutlierFilteringBasic(benchmark::Bench& bench)
+static void BenchmarkConsensusPrice(benchmark::Bench& bench)
 {
     COracleBundle bundle;
     bundle.epoch = 100;
@@ -357,74 +357,8 @@ static void BenchmarkOutlierFilteringBasic(benchmark::Bench& bench)
     }
 
     bench.run([&] {
-        auto filtered = bundle.FilterOutliers();
-        assert(filtered.size() <= bundle.messages.size());
-    });
-}
-
-static void BenchmarkOutlierFilteringMAD(benchmark::Bench& bench)
-{
-    COracleBundle bundle;
-    bundle.epoch = 100;
-    bundle.timestamp = GetTime();
-
-    CKey key;
-    key.MakeNewKey(true);
-
-    for (int i = 0; i < 15; i++) {
-        COraclePriceMessage message;
-        message.oracle_id = i;
-
-        if (i == 0 || i == 7 || i == 14) {
-            message.price_micro_usd = 50000;
-        } else {
-            message.price_micro_usd = 12000 + (i * 50);
-        }
-
-        message.timestamp = GetTime();
-        message.block_height = 100000;
-        message.nonce = GetRand<uint64_t>();
-        message.Sign(key);
-
-        bundle.messages.push_back(message);
-    }
-
-    bench.run([&] {
-        auto filtered = bundle.FilterOutliersAdvanced(); // MAD-based
-        assert(filtered.size() <= bundle.messages.size());
-    });
-}
-
-static void BenchmarkOutlierFilteringIQR(benchmark::Bench& bench)
-{
-    COracleBundle bundle;
-    bundle.epoch = 100;
-    bundle.timestamp = GetTime();
-
-    CKey key;
-    key.MakeNewKey(true);
-
-    for (int i = 0; i < 15; i++) {
-        COraclePriceMessage message;
-        message.oracle_id = i;
-
-        if (i == 0 || i == 7 || i == 14) {
-            message.price_micro_usd = 50000;
-        } else {
-            message.price_micro_usd = 12000 + (i * 50);
-        }
-
-        message.timestamp = GetTime();
-        message.block_height = 100000;
-        message.nonce = GetRand<uint64_t>();
-        message.Sign(key);
-
-        bundle.messages.push_back(message);
-    }
-
-    bench.run([&] {
-        auto filtered = bundle.FilterOutliersIQR();
-        assert(filtered.size() <= bundle.messages.size());
+        uint64_t price = bundle.GetConsensusPrice(8);
+        assert(price > 0);
     });
 }
 
@@ -448,6 +382,4 @@ BENCHMARK(BenchmarkSchnorrVerifyInBlock, benchmark::PriorityLevel::HIGH);
 BENCHMARK(BenchmarkBundleCreation, benchmark::PriorityLevel::HIGH);
 BENCHMARK(BenchmarkMedianCalculation, benchmark::PriorityLevel::HIGH);
 
-BENCHMARK(BenchmarkOutlierFilteringBasic, benchmark::PriorityLevel::HIGH);
-BENCHMARK(BenchmarkOutlierFilteringMAD, benchmark::PriorityLevel::HIGH);
-BENCHMARK(BenchmarkOutlierFilteringIQR, benchmark::PriorityLevel::HIGH);
+BENCHMARK(BenchmarkConsensusPrice, benchmark::PriorityLevel::HIGH);

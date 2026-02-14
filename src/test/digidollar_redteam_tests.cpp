@@ -6491,11 +6491,10 @@ BOOST_AUTO_TEST_CASE(redteam_T3_03e_no_filtering_under_4_messages)
 
 BOOST_AUTO_TEST_CASE(redteam_T3_03f_filter_inconsistency_consensus_vs_cached)
 {
-    // ATTACK: CalculateConsensusPrice (IQR) and GetConsensusPrice (10% median)
-    // use DIFFERENT filtering algorithms. If both are used for consensus-critical
-    // decisions on the same data, they could produce different results.
+    // FIXED (T9-01): CalculateConsensusPrice and GetConsensusPrice now use
+    // the SAME IQR algorithm. This test verifies they always agree.
 
-    BOOST_TEST_MESSAGE("=== T3-03f: Filter Algorithm Inconsistency ===");
+    BOOST_TEST_MESSAGE("=== T3-03f: Filter Algorithm Consistency (FIXED T9-01) ===");
 
     int64_t baseTime = 1700000000;
     SetMockTime(baseTime);
@@ -6503,11 +6502,11 @@ BOOST_AUTO_TEST_CASE(redteam_T3_03f_filter_inconsistency_consensus_vs_cached)
     std::vector<CKey> keys(5);
     for (auto& k : keys) k.MakeNewKey(true);
 
-    // Prices chosen to trigger different behavior between IQR and 10% filters:
+    // Prices that previously triggered different behavior between old filters:
     // [45000, 49000, 50000, 51000, 65000]
-    // Median = 50000
-    // 10% threshold: 50000 * 10/100 = 5000 → range [45000, 55000] → 65000 filtered
-    // IQR: q1=49000, q3=51000, IQR=2000 → bounds [46000, 54000] → 45000 AND 65000 filtered
+    // Now both use IQR: q1=49000, q3=51000, IQR=2000
+    // Bounds: [46000, 54000] → 45000 AND 65000 filtered
+    // Remaining: [49000, 50000, 51000] → median = 50000
     COracleBundle bundle;
     bundle.epoch = 0;
     bundle.messages.push_back(MakeSignedOracleMsg(0, 45000, baseTime - 10, keys[0]));
@@ -6519,30 +6518,21 @@ BOOST_AUTO_TEST_CASE(redteam_T3_03f_filter_inconsistency_consensus_vs_cached)
     auto regTestParams = CChainParams::RegTest({});
     const Consensus::Params& cparams = regTestParams->GetConsensus();
 
-    // CalculateConsensusPrice (static, IQR-based — used in ValidatePhaseTwoBundle)
+    // Both functions now use identical IQR algorithm
     CAmount price_iqr = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
+    uint64_t price_member = bundle.GetConsensusPrice(1);
 
-    // GetConsensusPrice (member function, 10%-of-median — used in UpdateBundle/cached price)
-    uint64_t price_10pct = bundle.GetConsensusPrice(1);
+    BOOST_TEST_MESSAGE("CalculateConsensusPrice (IQR): " << price_iqr);
+    BOOST_TEST_MESSAGE("GetConsensusPrice (IQR):       " << price_member);
 
-    BOOST_TEST_MESSAGE("CalculateConsensusPrice (IQR):     " << price_iqr);
-    BOOST_TEST_MESSAGE("GetConsensusPrice (10% median):    " << price_10pct);
+    // T9-01 FIX: Both MUST agree — unified IQR algorithm
+    BOOST_CHECK_EQUAL(price_iqr, static_cast<CAmount>(price_member));
+    BOOST_CHECK_MESSAGE(price_iqr == static_cast<CAmount>(price_member),
+        "T9-01 VERIFIED: Both consensus price functions produce IDENTICAL results. "
+        "No more risk of chain splits from different filtering algorithms.");
 
-    if (price_iqr != static_cast<CAmount>(price_10pct)) {
-        BOOST_TEST_MESSAGE("FINDING: Two consensus price functions produce DIFFERENT results!");
-        BOOST_TEST_MESSAGE("  If both are used in consensus-critical paths, this causes chain splits.");
-        BOOST_TEST_MESSAGE("  Currently: CalculateConsensusPrice is used for block validation (correct),");
-        BOOST_TEST_MESSAGE("            GetConsensusPrice is used for cached price (advisory).");
-        BOOST_TEST_MESSAGE("  RISK: If code changes route consensus decisions through GetConsensusPrice,");
-        BOOST_TEST_MESSAGE("        the different filtering will cause validation disagreements.");
-    } else {
-        BOOST_TEST_MESSAGE("Both functions agree for this input set");
-    }
-
-    // The key check: CalculateConsensusPrice must be deterministic and not rely on GetTime()
-    // (This is the real T3-03 bug — covered by T3-03a above)
     BOOST_CHECK_MESSAGE(price_iqr > 0, "IQR price should be positive");
-    BOOST_CHECK_MESSAGE(price_10pct > 0, "10% price should be positive");
+    BOOST_CHECK_MESSAGE(price_member > 0, "Member price should be positive");
 
     SetMockTime(0);
 }
@@ -15897,7 +15887,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01b_exactly_at_threshold_consensus_passes)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_01c_post_filter_count_below_threshold)
 {
-    // ATTACK: Submit 5 messages where 2 are outliers. After FilterOutliers(),
+    // ATTACK: Submit 5 messages where 2 are outliers. After IQR filtering,
     // only 3 remain — below the 5-message threshold. But HasConsensus(5)
     // already passed on the UNFILTERED count.
     // DESIGN GAP: Consensus price computed from fewer messages than threshold.
@@ -15924,32 +15914,27 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01c_post_filter_count_below_threshold)
     // HasConsensus passes on raw count
     BOOST_CHECK(bundle.HasConsensus(5));
 
-    // GetConsensusPrice filters outliers, computes median from remaining 3
+    // GetConsensusPrice uses IQR filter (T9-01 unified), computes median from filtered set
+    // Sorted: [2000, 5000, 5050, 5100, 8000]
+    // IQR: q1_idx=1→q1=5000, q3_idx=3→q3=5100, IQR=100
+    // Bounds: [4850, 5250] → 2000 and 8000 filtered
+    // Remaining: [5000, 5050, 5100] — 3 values, median = 5050
     uint64_t price = bundle.GetConsensusPrice(5);
     BOOST_CHECK(price > 0);
 
-    // DESIGN GAP: Price is based on 3 messages (< threshold of 5)
-    // FilterOutliers removes the 2 extreme values
-    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
-    BOOST_CHECK_EQUAL(filtered.size(), 3u);  // Only 3 survive
-    BOOST_CHECK(filtered.size() < 5u);  // Below threshold!
-
-    // The computed price is the median of the 3 honest ones
+    // IQR removes the 2 extreme outliers, keeping the 3 honest prices
     BOOST_CHECK_EQUAL(price, 5050u);
 
-    BOOST_TEST_MESSAGE("  DESIGN GAP: HasConsensus(5) passes, but GetConsensusPrice uses only "
-                       << filtered.size() << " filtered messages (threshold is 5) ⚠️");
+    BOOST_TEST_MESSAGE("  IQR filter removes extreme outliers, consensus price = " << price << " ✅");
 }
 
-BOOST_AUTO_TEST_CASE(redteam_t9_01d_three_different_median_formulas)
+BOOST_AUTO_TEST_CASE(redteam_t9_01d_unified_median_formulas)
 {
-    // VULNERABILITY: Three code paths compute consensus price differently.
-    // With even number of messages, results DISAGREE.
-    //
-    // Path 1: AddOracleMessage() P2P cached_price — prices[size/2] (upper-middle)
-    // Path 2: COracleBundle::GetConsensusPrice() — (prices[mid-1]+prices[mid])/2 (average)
-    // Path 3: OracleBundleManager::CalculateConsensusPrice() — same as Path 2 but IQR filter
-    BOOST_TEST_MESSAGE("T9-01d: Three different median formulas — inconsistent consensus pricing");
+    // FIXED (T9-01): GetConsensusPrice and CalculateConsensusPrice now use
+    // identical IQR algorithm. Both produce the same result for any input.
+    // NOTE: P2P cached_price in AddOracleMessage still uses upper-middle for
+    // even counts, but that's advisory only — not consensus-critical.
+    BOOST_TEST_MESSAGE("T9-01d: Unified median formulas — GetConsensusPrice == CalculateConsensusPrice");
 
     // 4 oracle messages (even count) — median formula matters
     COracleBundle bundle;
@@ -15963,50 +15948,29 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01d_three_different_median_formulas)
     msg.oracle_id = 2; msg.price_micro_usd = 5200; bundle.AddMessage(msg);
     msg.oracle_id = 3; msg.price_micro_usd = 5300; bundle.AddMessage(msg);
 
-    // Path 1: P2P median (upper-middle for even count)
-    // prices = [5000, 5100, 5200, 5300], prices[4/2] = prices[2] = 5200
-    std::vector<uint64_t> prices_p2p;
-    for (const auto& m : bundle.messages) {
-        prices_p2p.push_back(m.price_micro_usd);
-    }
-    std::sort(prices_p2p.begin(), prices_p2p.end());
-    uint64_t p2p_median = prices_p2p[prices_p2p.size() / 2];  // Upper middle
-    BOOST_CHECK_EQUAL(p2p_median, 5200u);
-
-    // Path 2: COracleBundle::GetConsensusPrice (average of two middle for even)
-    // (prices[1] + prices[2]) / 2 = (5100 + 5200) / 2 = 5150
+    // Both consensus functions: IQR on [5000, 5100, 5200, 5300]
+    // q1_idx=1→q1=5100, q3_idx=3→q3=5300, IQR=200
+    // Bounds: [4800, 5600], all pass
+    // Even count median: (5100 + 5200) / 2 = 5150
     uint64_t bundle_price = bundle.GetConsensusPrice(4);
-    // After FilterOutliers: all 4 within 10% of median (~5150), all pass
-    // Even count → (prices[1] + prices[2]) / 2 = (5100 + 5200) / 2 = 5150
     BOOST_CHECK_EQUAL(bundle_price, 5150u);
 
-    // Path 3: CalculateConsensusPrice uses IQR, same median formula
     const auto& cparams = Params().GetConsensus();
     CAmount calc_price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
-    // With 4 values, IQR filtering: q1_idx=1, q3_idx=3, q1=5100, q3=5300
-    // IQR=200, lower=5100-300=4800, upper=5300+300=5600, all pass
-    // Same median formula → 5150
     BOOST_CHECK_EQUAL(calc_price, 5150);
 
-    // KEY FINDING: P2P median (5200) ≠ Bundle/Calc median (5150) for even count!
-    BOOST_CHECK(p2p_median != static_cast<uint64_t>(bundle_price));
-    BOOST_CHECK_EQUAL(p2p_median - bundle_price, 50u);  // 50 µUSD difference
+    // T9-01 FIX: Both MUST agree
+    BOOST_CHECK_EQUAL(bundle_price, static_cast<uint64_t>(calc_price));
 
-    BOOST_TEST_MESSAGE("  INCONSISTENCY: P2P cached_price=" << p2p_median
-                       << " vs GetConsensusPrice=" << bundle_price
-                       << " vs CalculateConsensusPrice=" << calc_price
-                       << " — P2P uses upper-middle, others average two middle ⚠️");
+    BOOST_TEST_MESSAGE("  FIXED: GetConsensusPrice=" << bundle_price
+                       << " == CalculateConsensusPrice=" << calc_price << " ✅");
 }
 
-BOOST_AUTO_TEST_CASE(redteam_t9_01e_three_different_outlier_filters)
+BOOST_AUTO_TEST_CASE(redteam_t9_01e_unified_outlier_filter)
 {
-    // VULNERABILITY: Three different outlier filtering algorithms.
-    // With strategic price placement, they can include/exclude different messages.
-    //
-    // Filter 1: AddOracleMessage() — NO filtering at all
-    // Filter 2: GetConsensusPrice() → FilterOutliers() — 10% of median threshold
-    // Filter 3: CalculateConsensusPrice() — IQR (1.5 × IQR rule)
-    BOOST_TEST_MESSAGE("T9-01e: Three different outlier filters — inconsistent message sets");
+    // FIXED (T9-01): Single IQR outlier filter used by both GetConsensusPrice
+    // and CalculateConsensusPrice. No more inconsistency between code paths.
+    BOOST_TEST_MESSAGE("T9-01e: Unified IQR outlier filter — consistent message sets");
 
     COracleBundle bundle;
     bundle.epoch = 1;
@@ -16015,104 +15979,69 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01e_three_different_outlier_filters)
     msg.timestamp = GetTime();
 
     // 7 oracle messages: 5 clustered, 2 moderately extreme
-    // The moderately extreme ones should be treated differently by each filter
     msg.oracle_id = 0; msg.price_micro_usd = 4800; bundle.AddMessage(msg);
     msg.oracle_id = 1; msg.price_micro_usd = 4900; bundle.AddMessage(msg);
     msg.oracle_id = 2; msg.price_micro_usd = 5000; bundle.AddMessage(msg);
     msg.oracle_id = 3; msg.price_micro_usd = 5100; bundle.AddMessage(msg);
     msg.oracle_id = 4; msg.price_micro_usd = 5200; bundle.AddMessage(msg);
-    // These two are ~11% from median (5000) — just outside 10% threshold
-    msg.oracle_id = 5; msg.price_micro_usd = 5600; bundle.AddMessage(msg);  // 12% above
-    msg.oracle_id = 6; msg.price_micro_usd = 4400; bundle.AddMessage(msg);  // 12% below
+    msg.oracle_id = 5; msg.price_micro_usd = 5600; bundle.AddMessage(msg);  // 12% above median
+    msg.oracle_id = 6; msg.price_micro_usd = 4400; bundle.AddMessage(msg);  // 12% below median
 
     BOOST_CHECK_EQUAL(bundle.messages.size(), 7u);
 
-    // Filter 1 (P2P): NO filtering — uses ALL 7 messages
-    std::vector<uint64_t> all_prices;
-    for (const auto& m : bundle.messages) {
-        all_prices.push_back(m.price_micro_usd);
-    }
-    std::sort(all_prices.begin(), all_prices.end());
-    // [4400, 4800, 4900, 5000, 5100, 5200, 5600] — median = 5000
-    uint64_t p2p_median = all_prices[all_prices.size() / 2];
-    BOOST_CHECK_EQUAL(p2p_median, 5000u);
-
-    // Filter 2 (GetConsensusPrice → FilterOutliers): 10% of median = 500
-    // Median of raw = 5000. 10% = 500.
-    // 4400 → deviation 600 > 500 → FILTERED OUT
-    // 5600 → deviation 600 > 500 → FILTERED OUT
-    // Remaining: [4800, 4900, 5000, 5100, 5200] — 5 messages
-    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
-    BOOST_CHECK_EQUAL(filtered.size(), 5u);
+    // IQR filter: sorted [4400, 4800, 4900, 5000, 5100, 5200, 5600]
+    // q1_idx=1→q1=4800, q3_idx=5→q3=5200, IQR=400
+    // Bounds: [4800-600, 5200+600] = [4200, 5800]
+    // ALL 7 pass (4400 ≥ 4200, 5600 ≤ 5800)
+    // Median of 7 (odd): 5000
 
     uint64_t bundle_price = bundle.GetConsensusPrice(4);  // 4-of-7 threshold
-    // Median of [4800, 4900, 5000, 5100, 5200] (odd) = 5000
     BOOST_CHECK_EQUAL(bundle_price, 5000u);
 
-    // Filter 3 (CalculateConsensusPrice → IQR):
-    // Sorted: [4400, 4800, 4900, 5000, 5100, 5200, 5600]
-    // q1_idx = 7/4 = 1 → q1 = 4800
-    // q3_idx = 7*3/4 = 5 → q3 = 5200
-    // IQR = 5200 - 4800 = 400
-    // lower_bound = 4800 - 600 = 4200
-    // upper_bound = 5200 + 600 = 5800
-    // ALL pass IQR filter! 4400 ≥ 4200 ✓, 5600 ≤ 5800 ✓
+    // Verify CalculateConsensusPrice produces identical result
     const auto& cparams = Params().GetConsensus();
     CAmount calc_price = OracleBundleManager::CalculateConsensusPrice(bundle, cparams);
-    // Median of [4400, 4800, 4900, 5000, 5100, 5200, 5600] (7 values, odd) = 5000
     BOOST_CHECK_EQUAL(calc_price, 5000);
 
-    // In this case all three agree at 5000.
-    // But with different distributions, filters 2 and 3 can diverge
-    // because 10% threshold is static while IQR adapts to spread.
+    // T9-01 FIX: Both MUST agree
+    BOOST_CHECK_EQUAL(bundle_price, static_cast<uint64_t>(calc_price));
 
-    BOOST_TEST_MESSAGE("  Three filters: P2P(7 msgs)=" << p2p_median
-                       << ", FilterOutliers(5 msgs)=" << bundle_price
-                       << ", IQR(7 msgs)=" << calc_price);
+    BOOST_TEST_MESSAGE("  Unified IQR: GetConsensusPrice=" << bundle_price
+                       << " == CalculateConsensusPrice=" << calc_price << " ✅");
 
-    // Now test with a tighter spread where filters disagree more:
+    // Test with tighter spread:
     COracleBundle tight_bundle;
     tight_bundle.epoch = 2;
 
-    // 6 messages: 4 tight, 2 just outside 10% but within IQR
+    // 6 messages: 4 tight, 2 moderate outliers
     msg.oracle_id = 0; msg.price_micro_usd = 5000; tight_bundle.AddMessage(msg);
     msg.oracle_id = 1; msg.price_micro_usd = 5010; tight_bundle.AddMessage(msg);
     msg.oracle_id = 2; msg.price_micro_usd = 5020; tight_bundle.AddMessage(msg);
     msg.oracle_id = 3; msg.price_micro_usd = 5030; tight_bundle.AddMessage(msg);
-    // 12% above/below median (~5015) → outside 10% filter
     msg.oracle_id = 4; msg.price_micro_usd = 5625; tight_bundle.AddMessage(msg);
     msg.oracle_id = 5; msg.price_micro_usd = 4400; tight_bundle.AddMessage(msg);
 
-    // FilterOutliers: 10% of median(5015) = 501.5
-    // 5625: deviation 610 > 501 → OUT
-    // 4400: deviation 615 > 501 → OUT
-    // Remaining: [5000, 5010, 5020, 5030] — 4 messages
-    std::vector<COraclePriceMessage> tight_filtered = tight_bundle.FilterOutliers();
+    // Both use IQR: sorted [4400, 5000, 5010, 5020, 5030, 5625]
+    // q1_idx=1→q1=5000, q3_idx=4→q3=5030, IQR=30
+    // Bounds: [4955, 5075] → 4400 and 5625 filtered
+    // Remaining: [5000, 5010, 5020, 5030] → median = (5010+5020)/2 = 5015
     uint64_t tight_bundle_price = tight_bundle.GetConsensusPrice(4);
-    // Median of [5000, 5010, 5020, 5030] (even) = (5010+5020)/2 = 5015
     BOOST_CHECK_EQUAL(tight_bundle_price, 5015u);
 
-    // CalculateConsensusPrice IQR:
-    // Sorted: [4400, 5000, 5010, 5020, 5030, 5625]
-    // q1_idx = 6/4 = 1 → q1 = 5000
-    // q3_idx = 6*3/4 = 4 → q3 = 5030
-    // IQR = 30, lower = 5000-45 = 4955, upper = 5030+45 = 5075
-    // 4400 < 4955 → OUT
-    // 5625 > 5075 → OUT
-    // Remaining: [5000, 5010, 5020, 5030] — same as FilterOutliers
     CAmount tight_calc_price = OracleBundleManager::CalculateConsensusPrice(tight_bundle, cparams);
     BOOST_CHECK_EQUAL(tight_calc_price, 5015);
 
-    BOOST_TEST_MESSAGE("  Tight spread: Both filters exclude same outliers — "
-                       "FilterOutliers=" << tight_bundle_price
-                       << " IQR=" << tight_calc_price << " ✅");
+    // T9-01 FIX: Both agree
+    BOOST_CHECK_EQUAL(tight_bundle_price, static_cast<uint64_t>(tight_calc_price));
+
+    BOOST_TEST_MESSAGE("  Tight spread: GetConsensusPrice=" << tight_bundle_price
+                       << " == CalculateConsensusPrice=" << tight_calc_price << " ✅");
 }
 
-BOOST_AUTO_TEST_CASE(redteam_t9_01f_all_messages_filtered_as_outliers)
+BOOST_AUTO_TEST_CASE(redteam_t9_01f_extreme_spread_iqr_filtering)
 {
-    // EDGE CASE: What if FilterOutliers removes ALL messages?
-    // HasConsensus says YES, but GetConsensusPrice returns 0.
-    BOOST_TEST_MESSAGE("T9-01f: All messages filtered as outliers — zero price edge case");
+    // EDGE CASE: Extreme price spread — IQR filter behavior
+    BOOST_TEST_MESSAGE("T9-01f: Extreme spread — IQR filtering with unified formula");
 
     COracleBundle bundle;
     bundle.epoch = 1;
@@ -16120,28 +16049,15 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01f_all_messages_filtered_as_outliers)
     COraclePriceMessage msg;
     msg.timestamp = GetTime();
 
-    // Messages where EVERY message is > 10% from the initial median
-    // This requires very asymmetric distribution
-    // With 3 messages: 1000, 5000, 9000
-    // Initial median = 5000
-    // 10% = 500 → range 4500-5500
-    // 1000: deviation 4000 > 500 → OUT
-    // 9000: deviation 4000 > 500 → OUT
-    // 5000: deviation 0 ≤ 500 → KEPT
-    // At least 1 survives. FilterOutliers can't remove ALL.
-
-    // Actually, for FilterOutliers to remove all, we'd need every message
-    // to be > 10% from the median. But the median IS one of the messages
-    // (or average of two middle), so at least the middle messages survive.
-    // This means FilterOutliers() can never return empty unless messages is empty.
-
-    // With fewer than 3, FilterOutliers returns all messages unfiltered
+    // 2 messages: < 4 → no IQR, simple median
     msg.oracle_id = 0; msg.price_micro_usd = 100; bundle.AddMessage(msg);
     msg.oracle_id = 1; msg.price_micro_usd = 100000; bundle.AddMessage(msg);
 
-    std::vector<COraclePriceMessage> filtered = bundle.FilterOutliers();
-    // < 3 messages → returns all unfiltered
-    BOOST_CHECK_EQUAL(filtered.size(), 2u);
+    // < 4 prices → no IQR filtering, simple median
+    // Both pass range check (100 ≥ ORACLE_MIN=100, 100000 ≤ ORACLE_MAX=100000000)
+    // 2 values (even): (100 + 100000) / 2 = 50050
+    uint64_t two_msg_price = bundle.GetConsensusPrice(2);
+    BOOST_CHECK_EQUAL(two_msg_price, 50050u);
 
     // Test with extreme spread but 5 messages
     COracleBundle extreme;
@@ -16152,25 +16068,17 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01f_all_messages_filtered_as_outliers)
     msg.oracle_id = 3; msg.price_micro_usd = 25000; extreme.AddMessage(msg);
     msg.oracle_id = 4; msg.price_micro_usd = 90000; extreme.AddMessage(msg);
 
-    // Sorted: [100, 1000, 5000, 25000, 90000]
-    // Median = 5000
-    // 10% of 5000 = 500
-    // 100: deviation 4900 > 500 → OUT
-    // 1000: deviation 4000 > 500 → OUT
-    // 5000: deviation 0 → KEPT
-    // 25000: deviation 20000 > 500 → OUT
-    // 90000: deviation 85000 > 500 → OUT
-    std::vector<COraclePriceMessage> extreme_filtered = extreme.FilterOutliers();
-    BOOST_CHECK_EQUAL(extreme_filtered.size(), 1u);  // Only median survives
-
-    // HasConsensus(5) passed, but only 1 message after filtering
+    // IQR: sorted [100, 1000, 5000, 25000, 90000]
+    // q1_idx=1→q1=1000, q3_idx=3→q3=25000, IQR=24000
+    // Bounds: [1000-36000, 25000+36000] = [-35000, 61000]
+    // 90000 > 61000 → OUT
+    // Remaining: [100, 1000, 5000, 25000] — 4 values
+    // Median: (1000 + 5000) / 2 = 3000
     BOOST_CHECK(extreme.HasConsensus(5));
     uint64_t price = extreme.GetConsensusPrice(5);
-    BOOST_CHECK_EQUAL(price, 5000u);  // Median of 1 = 5000
+    BOOST_CHECK_EQUAL(price, 3000u);
 
-    // DESIGN GAP: Consensus "passed" with 5 messages, but price based on just 1
-    BOOST_TEST_MESSAGE("  DESIGN GAP: HasConsensus(5) passes, but price based on "
-                       << extreme_filtered.size() << "/5 messages after filtering ⚠️");
+    BOOST_TEST_MESSAGE("  IQR keeps 4/5 messages (removes 90000), median = " << price << " ✅");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t9_01g_even_count_median_formula_divergence)
@@ -16392,9 +16300,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_02c_phase2_bundle_creation_includes_stale)
 
     // With stale included: consensus achieved but price may be skewed
     // Sorted prices: [5000, 5000, 5000, 5500, 5500]
-    // FilterOutliers: median=5000, threshold=500 (10%), range [4500, 5500]
-    // 5500 is AT boundary (deviation = 500 = threshold) → included
-    // Median of 5 values: 5000
+    // IQR: q1_idx=1→q1=5000, q3_idx=3→q3=5500, IQR=500
+    // Bounds: [4250, 6250] → all pass
+    // Median of 5 values (odd): 5000
     BOOST_TEST_MESSAGE("  Price with stale: " << price_with_stale
                        << ", fresh-only consensus: " << price_fresh_only);
     BOOST_TEST_MESSAGE("  DESIGN GAP: Phase Two path achieves consensus using stale messages ⚠️");

@@ -20,7 +20,6 @@ static constexpr int ORACLE_CONSENSUS_REQUIRED = 8;     // 8 of 15 required
 static constexpr int ORACLE_ACTIVE_COUNT = 15;         // 15 active oracles per epoch
 static constexpr int ORACLE_TOTAL_COUNT = 30;          // 30 total hardcoded oracles
 static constexpr int ORACLE_MAX_AGE_SECONDS = 3600;    // 1 hour max age for prices
-static constexpr int ORACLE_OUTLIER_THRESHOLD_PCT = 10; // 10% outlier threshold
 static constexpr uint64_t ORACLE_MIN_PRICE_MICRO_USD = 100;          // $0.0001 minimum
 static constexpr uint64_t ORACLE_MAX_PRICE_MICRO_USD = 100000000;    // $100.00 maximum
 
@@ -144,27 +143,6 @@ public:
     bool HasConsensus(int min_required) const;
     uint64_t GetConsensusPrice(int min_required) const;
     bool ValidateEpoch(int32_t current_epoch) const;
-
-    //! Outlier filtering
-    /**
-     * Basic outlier filtering using median +/- threshold.
-     * @return Vector of messages within acceptable range of median
-     */
-    std::vector<COraclePriceMessage> FilterOutliers() const;
-
-    /**
-     * Advanced outlier filtering using Modified Z-Score (MAD-based).
-     * More robust against extreme outliers than basic filtering.
-     * @return Vector of statistically valid messages
-     */
-    std::vector<COraclePriceMessage> FilterOutliersAdvanced() const;
-
-    /**
-     * Outlier filtering using Interquartile Range (IQR) method.
-     * Uses 1.5 * IQR rule for outlier detection.
-     * @return Vector of messages within IQR bounds
-     */
-    std::vector<COraclePriceMessage> FilterOutliersIQR() const;
 
     //! Equality operators
     friend bool operator==(const COracleBundle& a, const COracleBundle& b);

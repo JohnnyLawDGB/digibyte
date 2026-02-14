@@ -361,6 +361,9 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
     - `ProcessIncomingMessage(message)` → handles incoming P2P oracle message
     - `HasOracleMessage(hash)` → duplicate detection
     - `SetConnman(connman)` → sets P2P connection manager
+    - `BroadcastConsensusProposal(epoch, price, timestamp)` → Phase 2 Round 2: broadcasts consensus values to P2P for remote oracle attestation; tracks epochs to prevent spam
+    - `HasBroadcastConsensusProposal(epoch)` → checks if proposal was already sent for epoch
+    - `RegisterSeenAttestation(hash)` → tracks attestation hashes for replay prevention
   - **Status:**
     - `OracleStats` (struct) → pending_messages, active_bundles, latest_price, latest_epoch, last_update, has_consensus
     - `GetStats()` → returns current oracle statistics
@@ -760,7 +763,9 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ Allows 0-value P2TR outputs for DD token transfers
 
 ### src/protocol.h
-- ⚠️ `MSG_ORACLE_PRICE` and `MSG_ORACLE_BUNDLE` P2P message types for oracle network
+- ⚠️ `MSG_ORACLE_PRICE` (0x40000000), `MSG_ORACLE_BUNDLE` (0x40000001), `MSG_GET_ORACLE_DATA` (0x40000002), `MSG_ORACLE_CONSENSUS` (0x40000003), `MSG_ORACLE_ATTESTATION` (0x40000004) P2P message types for oracle network
+- ⚠️ `OracleConsensusMsg` (class) → Phase 2 Round 2 consensus proposal: epoch, consensus_price, consensus_timestamp with `GetHash()` for dedup
+- ⚠️ `OracleAttestationMsg` (class) → Phase 2 Round 2 oracle attestation wrapper: `COraclePriceMessage` signed over consensus values with `GetHash()` for dedup
 
 ### src/deploymentinfo.cpp
 - ⚠️ `DEPLOYMENT_DIGIDOLLAR` name and GBT name registration

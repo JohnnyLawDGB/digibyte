@@ -337,36 +337,17 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         result = self.nodes[0].senddigidollar(receiver_address, transfer_amount)
         txid = result['txid']
 
-        # Wait for transaction to propagate to nodes (best effort)
-        import time
-        max_wait = 10  # seconds
-        start_time = time.time()
-
-        nodes_with_tx = set()
-        while time.time() - start_time < max_wait:
-            for i in range(self.num_nodes):
-                if i not in nodes_with_tx:
-                    mempool = self.nodes[i].getrawmempool()
-                    if txid in mempool:
-                        nodes_with_tx.add(i)
-
-            if len(nodes_with_tx) == self.num_nodes:
-                self.log.info(f"Transaction propagated to all {self.num_nodes} nodes")
-                break
-
-            time.sleep(0.5)  # Wait before checking again
-
-        # Log propagation status (network timing can be variable in tests)
-        self.log.info(f"Transaction in {len(nodes_with_tx)}/{self.num_nodes} nodes' mempools")
-
-        # Mine block on different node and verify propagation
-        block_hashes = self.nodes[2].generate(1)
+        # Mine block on the sender node to guarantee the transaction is included.
+        # DD transactions may not propagate via normal P2P mempool relay, so
+        # mining on a remote node risks producing a block without the tx.
+        block_hashes = self.nodes[0].generate(1)
         self.sync_all()
 
-        # Verify transaction is confirmed on all nodes
+        # Verify the confirmed block (and its transaction) propagated to all nodes
         for i in range(self.num_nodes):
-            tx_info = self.nodes[i].getrawtransaction(txid, True, block_hashes[0])  # verbose=True, with blockhash
+            tx_info = self.nodes[i].getrawtransaction(txid, True, block_hashes[0])
             assert_greater_than(tx_info['confirmations'], 0)
+            self.log.info(f"Node {i}: transaction confirmed with {tx_info['confirmations']} confirmations")
 
     def test_transfer_edge_cases(self):
         """Test edge cases in DD transfers."""

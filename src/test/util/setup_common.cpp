@@ -127,6 +127,10 @@ BasicTestingSetup::BasicTestingSetup(const ChainType chainType, const std::vecto
     SeedInsecureRand();
     if (G_TEST_LOG_FUN) LogInstance().PushBackCallback(G_TEST_LOG_FUN);
     InitLogging(*m_node.args);
+    // Apply -debug and -loglevel args (these are not processed by InitLogging,
+    // which only sets log options like timestamps/file paths).
+    (void)init::SetLoggingCategories(*m_node.args);
+    (void)init::SetLoggingLevel(*m_node.args);
     AppInitParameterInteraction(*m_node.args);
     LogInstance().StartLogging();
     m_node.kernel = std::make_unique<kernel::Context>();

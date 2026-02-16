@@ -18,6 +18,7 @@
 #include <cerrno>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -186,7 +187,10 @@ int RaiseFileDescriptorLimit(int nMinFD)
             setrlimit(RLIMIT_NOFILE, &limitFD);
             getrlimit(RLIMIT_NOFILE, &limitFD);
         }
-        return limitFD.rlim_cur;
+        // Clamp to INT_MAX to avoid overflow when rlim_cur is RLIM_INFINITY
+        if (limitFD.rlim_cur > static_cast<rlim_t>(std::numeric_limits<int>::max()))
+            return std::numeric_limits<int>::max();
+        return static_cast<int>(limitFD.rlim_cur);
     }
     return nMinFD; // getrlimit failed, assume it's fine
 #endif

@@ -455,6 +455,11 @@ void DigiDollarMintWidget::updateBalance()
     } else {
         m_availableDGBValue->setText(formatDGBAmount(m_availableDGBBalance));
     }
+
+    // Re-validate amount field when balance changes (fixes stale yellow/green state
+    // when receiving DGB while on the Mint tab)
+    updateAmountValidation();
+    updateMintButton();
 }
 
 void DigiDollarMintWidget::updateOraclePrice()

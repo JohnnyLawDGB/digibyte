@@ -9,6 +9,7 @@
 #include <rpc/digidollar_transactions.h>
 #include <random.h>
 #include <oracle/bundle_manager.h>
+#include <primitives/oracle.h>
 #include <oracle/node.h>
 #include <oracle/mock_oracle.h>
 #include <consensus/digidollar.h>
@@ -2823,7 +2824,7 @@ static RPCHelpMan getalloracleprices()
 
             // Oracle names from chainparams
             const std::vector<OracleNodeInfo>& oracle_nodes = Params().GetOracleNodes();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB"};
 
             // Track latest price per oracle from on-chain data
             struct OracleData {
@@ -3113,7 +3114,7 @@ static RPCHelpMan getoracles()
             OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
             OracleManager& oracle_manager = OracleManager::GetInstance();
 
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB"};
 
             int32_t current_height = chainman.ActiveChain().Height();
             int32_t current_epoch = GetCurrentEpoch(current_height);
@@ -3152,8 +3153,11 @@ static RPCHelpMan getoracles()
             struct PendingPrice { uint64_t price = 0; int64_t timestamp = 0; };
             std::map<uint32_t, PendingPrice> pending_prices;
             {
+                int64_t now = GetTime();
                 std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
                 for (const auto& msg : pending) {
+                    // Skip stale pending messages — oracle may have gone offline
+                    if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
                     pending_prices[msg.oracle_id] = {msg.price_micro_usd, msg.timestamp};
                 }
             }
@@ -3248,7 +3252,7 @@ static RPCHelpMan listoracle()
                 }
             }
             OracleManager& oracle_manager = OracleManager::GetInstance();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB"};
 
             UniValue result(UniValue::VOBJ);
 

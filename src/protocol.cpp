@@ -52,6 +52,8 @@ const char* SENDTXRCNCL = "sendtxrcncl";
 const char* ORACLEPRICE = "oracleprice";
 const char* ORACLEBUNDLE = "oraclebundle";
 const char* GETORACLES = "getoracles";
+const char* ORACLECONSENSUS = "oracleconsns";
+const char* ORACLEATTESTATION = "oracleattest";
 } // namespace NetMsgType
 
 /** All known message types. Keep this in the same order as the list of
@@ -97,6 +99,8 @@ const static std::vector<std::string> g_all_net_message_types{
     NetMsgType::ORACLEPRICE,
     NetMsgType::ORACLEBUNDLE,
     NetMsgType::GETORACLES,
+    NetMsgType::ORACLECONSENSUS,
+    NetMsgType::ORACLEATTESTATION,
 };
 
 CMessageHeader::CMessageHeader(const MessageStartChars& pchMessageStartIn, const char* pszCommand, unsigned int nMessageSizeIn)
@@ -167,9 +171,11 @@ std::string CInv::GetCommand() const
     // Check for oracle messages first (they're outside MSG_TYPE_MASK range)
     switch (type)
     {
-    case MSG_ORACLE_PRICE:   return NetMsgType::ORACLEPRICE;
-    case MSG_ORACLE_BUNDLE:  return NetMsgType::ORACLEBUNDLE;
-    case MSG_GET_ORACLE_DATA: return NetMsgType::GETORACLES;
+    case MSG_ORACLE_PRICE:       return NetMsgType::ORACLEPRICE;
+    case MSG_ORACLE_BUNDLE:      return NetMsgType::ORACLEBUNDLE;
+    case MSG_GET_ORACLE_DATA:    return NetMsgType::GETORACLES;
+    case MSG_ORACLE_CONSENSUS:   return NetMsgType::ORACLECONSENSUS;
+    case MSG_ORACLE_ATTESTATION: return NetMsgType::ORACLEATTESTATION;
     }
 
     // Handle witness flag for standard messages

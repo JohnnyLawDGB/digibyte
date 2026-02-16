@@ -287,6 +287,18 @@ extern const char* ORACLEBUNDLE;
  * Part of the DigiDollar Oracle System.
  */
 extern const char* GETORACLES;
+/**
+ * The oracleconsensus message broadcasts computed consensus values (epoch, price, timestamp)
+ * so remote oracle nodes can sign and attest to the same values.
+ * Part of the DigiDollar Oracle System — Phase 2 Round 2 protocol.
+ */
+extern const char* ORACLECONSENSUS;
+/**
+ * The oracleattestation message carries a single oracle's Schnorr signature
+ * over consensus values (oracle_id, consensus_price, consensus_timestamp).
+ * Part of the DigiDollar Oracle System — Phase 2 Round 2 protocol.
+ */
+extern const char* ORACLEATTESTATION;
 }; // namespace NetMsgType
 
 /* Get a vector of all valid message types (see above) */
@@ -513,6 +525,8 @@ enum GetDataMsg : uint32_t {
     MSG_ORACLE_PRICE = 0x40000000,
     MSG_ORACLE_BUNDLE = 0x40000001,
     MSG_GET_ORACLE_DATA = 0x40000002,
+    MSG_ORACLE_CONSENSUS = 0x40000003,
+    MSG_ORACLE_ATTESTATION = 0x40000004,
 };
 
 /** inv message data */
@@ -552,7 +566,8 @@ public:
     }
     bool IsOracleMsg() const
     {
-        return type == MSG_ORACLE_PRICE || type == MSG_ORACLE_BUNDLE || type == MSG_GET_ORACLE_DATA;
+        return type == MSG_ORACLE_PRICE || type == MSG_ORACLE_BUNDLE || type == MSG_GET_ORACLE_DATA ||
+               type == MSG_ORACLE_CONSENSUS || type == MSG_ORACLE_ATTESTATION;
     }
 
     uint32_t type;
@@ -612,6 +627,55 @@ public:
     {
         READWRITE(obj.epoch);
         READWRITE(obj.oracle_id);
+    }
+};
+
+/**
+ * Oracle Consensus Proposal Message for P2P Network
+ * Broadcasts computed consensus values so remote oracles can attest.
+ * Phase 2 Round 2 protocol — Step 1.
+ */
+class OracleConsensusMsg
+{
+public:
+    int32_t epoch{0};
+    uint64_t consensus_price{0};       // IQR-filtered median price in micro-USD
+    int64_t consensus_timestamp{0};    // Median timestamp from individual messages
+
+    SERIALIZE_METHODS(OracleConsensusMsg, obj)
+    {
+        READWRITE(obj.epoch);
+        READWRITE(obj.consensus_price);
+        READWRITE(obj.consensus_timestamp);
+    }
+
+    uint256 GetHash() const
+    {
+        CHashWriter hasher(0);
+        hasher << epoch << consensus_price << consensus_timestamp;
+        return hasher.GetHash();
+    }
+};
+
+/**
+ * Oracle Attestation Message for P2P Network
+ * Carries a single oracle's Schnorr signature over consensus values.
+ * Phase 2 Round 2 protocol — Step 2.
+ */
+class OracleAttestationMsg
+{
+public:
+    COraclePriceMessage attestation;  // price_micro_usd = consensus_price, timestamp = consensus_timestamp
+
+    SERIALIZE_METHODS(OracleAttestationMsg, obj)
+    {
+        READWRITE(obj.attestation);
+    }
+
+    uint256 GetHash() const
+    {
+        // Use Phase2 signature hash for dedup (oracle_id + price + timestamp)
+        return attestation.GetPhase2SignatureHash();
     }
 };
 

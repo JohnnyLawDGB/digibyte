@@ -39,6 +39,7 @@ private Q_SLOTS:
     void privacyPositionsMaskTests();
     void privacyTransactionsMaskTests();
     void privacySignalPropagationTests();
+    void mintValidationUpdatesOnBalanceChange();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

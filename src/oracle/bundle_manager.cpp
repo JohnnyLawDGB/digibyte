@@ -52,7 +52,7 @@ OracleBundleManager::~OracleBundleManager()
 
 bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 {
-    LogPrintf("Oracle: AddOracleMessage called for oracle_id=%d, price=%llu, timestamp=%d, enabled=%d\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: AddOracleMessage called for oracle_id=%d, price=%llu, timestamp=%d, enabled=%d\n",
              message.oracle_id, message.price_micro_usd, message.timestamp, enabled);
 
     if (!enabled) {
@@ -65,7 +65,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         return false;
     }
 
-    LogPrintf("Oracle: Message passed IsValidOracleMessage check\n");
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message passed IsValidOracleMessage check\n");
 
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
@@ -98,7 +98,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 
     // Check if we've already seen this exact message
     if (seen_message_hashes.count(msg_hash) > 0) {
-        LogPrintf("Oracle: Ignoring duplicate message from oracle %d\n", message.oracle_id);
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring duplicate message from oracle %d\n", message.oracle_id);
         return false;
     }
 
@@ -131,7 +131,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
             it->second = message;
             LogPrintf("Oracle: Updated message from oracle %d with newer timestamp\n", message.oracle_id);
         } else {
-            LogPrintf("Oracle: Ignoring older message from oracle %d\n", message.oracle_id);
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring older message from oracle %d\n", message.oracle_id);
             return false;
         }
     } else {
@@ -212,7 +212,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
                 }
             }
         } else {
-            LogPrintf("Oracle: %d fresh messages, need %d for consensus - cached price unchanged\n",
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: %d fresh messages, need %d for consensus - cached price unchanged\n",
                      fresh_count, min_oracle_count);
         }
     }
@@ -238,18 +238,18 @@ std::vector<COraclePriceMessage> OracleBundleManager::GetPendingMessages() const
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
-    LogPrintf("Oracle: GetPendingMessages called, pending_messages.size()=%zu\n", pending_messages.size());
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: GetPendingMessages called, pending_messages.size()=%zu\n", pending_messages.size());
 
     std::vector<COraclePriceMessage> messages;
     messages.reserve(pending_messages.size());
 
     for (const auto& [oracle_id, message] : pending_messages) {
-        LogPrintf("Oracle: GetPendingMessages - oracle_id=%d, price=%llu, timestamp=%d\n",
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: GetPendingMessages - oracle_id=%d, price=%llu, timestamp=%d\n",
                  oracle_id, message.price_micro_usd, message.timestamp);
         messages.push_back(message);
     }
 
-    LogPrintf("Oracle: GetPendingMessages returning %zu messages\n", messages.size());
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: GetPendingMessages returning %zu messages\n", messages.size());
     return messages;
 }
 
@@ -611,6 +611,12 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
                 LogPrintf("Oracle: Phase Two - Created bundle with %zu consensus attestations, price=%llu\n",
                          valid_attestations.size(), consensus_price);
+            } else {
+                // Step 5: Not enough attestations — broadcast consensus proposal so
+                // remote oracle nodes can sign and send back attestations (Round 2).
+                // This is non-blocking: the bundle won't be ready for THIS block,
+                // but attestations will accumulate for the next block attempt.
+                BroadcastConsensusProposal(epoch, consensus_price, consensus_timestamp);
             }
         }
     }
@@ -1012,6 +1018,12 @@ bool OracleBundleManager::HasOracleMessage(const uint256& hash) const
     return seen_message_hashes.count(hash) > 0;
 }
 
+void OracleBundleManager::RegisterSeenHash(const uint256& hash)
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    seen_message_hashes.insert(hash);
+}
+
 bool OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
@@ -1047,6 +1059,73 @@ bool OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)
              message.oracle_id, message.price_micro_usd);
 
     return true;
+}
+
+bool OracleBundleManager::BroadcastConsensusProposal(int32_t epoch, uint64_t consensus_price, int64_t consensus_timestamp)
+{
+    {
+        std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+
+        // Don't spam: only broadcast once per epoch
+        if (broadcast_proposal_epochs.count(epoch)) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Consensus proposal already broadcast for epoch %d\n", epoch);
+            return false;
+        }
+        broadcast_proposal_epochs.insert(epoch);
+
+        // Cleanup old epochs (keep last 3)
+        while (broadcast_proposal_epochs.size() > 3) {
+            broadcast_proposal_epochs.erase(broadcast_proposal_epochs.begin());
+        }
+    }
+
+    if (!m_connman) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Cannot broadcast consensus proposal - no P2P connection\n");
+        return false;
+    }
+
+    OracleConsensusMsg proposal;
+    proposal.epoch = epoch;
+    proposal.consensus_price = consensus_price;
+    proposal.consensus_timestamp = consensus_timestamp;
+
+    m_connman->ForEachNode([this, &proposal](CNode* node) {
+        m_connman->PushMessage(node,
+            CNetMsgMaker(node->GetCommonVersion()).Make(
+                NetMsgType::ORACLECONSENSUS, proposal));
+    });
+
+    LogPrintf("Oracle: Broadcast consensus proposal for epoch %d: price=%llu, timestamp=%lld\n",
+             epoch, consensus_price, consensus_timestamp);
+    return true;
+}
+
+bool OracleBundleManager::HasBroadcastConsensusProposal(int32_t epoch) const
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    return broadcast_proposal_epochs.count(epoch) > 0;
+}
+
+bool OracleBundleManager::RegisterSeenAttestation(const uint256& hash)
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+
+    if (seen_attestation_hashes.count(hash)) {
+        return false; // Already seen — replay
+    }
+
+    seen_attestation_hashes.insert(hash);
+
+    // Limit set size to prevent memory exhaustion
+    if (seen_attestation_hashes.size() > 10000) {
+        // Remove oldest entries (set is ordered, so begin() is smallest hash)
+        auto it = seen_attestation_hashes.begin();
+        for (size_t i = 0; i < 1000 && it != seen_attestation_hashes.end(); ++i) {
+            it = seen_attestation_hashes.erase(it);
+        }
+    }
+
+    return true; // New attestation
 }
 
 void OracleBundleManager::SetConnman(CConnman* connman)
@@ -1211,6 +1290,8 @@ void OracleBundleManager::Clear()
         pending_messages.clear();
         pending_attestations.clear();
         seen_message_hashes.clear();
+        broadcast_proposal_epochs.clear();
+        seen_attestation_hashes.clear();
     }
 
     {

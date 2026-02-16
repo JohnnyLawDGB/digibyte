@@ -46,33 +46,38 @@ echo "=========================================="
 echo "Test started: $(date)"
 echo ""
 
-# Configuration - Multi-Oracle Keys (4-of-7 threshold)
+# Configuration - Multi-Oracle Keys (5-of-9 threshold)
 ORACLE_KEY_0="952f219b8442ac40e5d356c0dbf7a76d81904d196e859a75b63dfb02346501fe"
 ORACLE_KEY_1="7ede2d9b28569bcca3576e7982ce778cd3be4a6a0f1c99472c057e81cdebb0d8"
 ORACLE_KEY_2="dc025fb2dab1cb3bbb3a6763e53b32e7d6fa8c39c16465e3aae80dcaf684adfe"
 ORACLE_KEY_3="2e2e060fdcd5e26f9c5dc1ba422d9b1a7b33356c156fd128da453719e466e7ac"
+ORACLE_KEY_4="8d347622f08b18341a8edb94e6420e2c916fbacc43f7325219026734849a1d28"
 
-# Mini Testnet ports (4 nodes for multi-oracle testing)
+# Mini Testnet ports (5 nodes for multi-oracle testing — 5-of-9 consensus)
 BOB_PORT=12027
 BOB_RPC=14027
 ALICE_PORT=12029
 ALICE_RPC=14029
 CHARLIE_PORT=12030
 CHARLIE_RPC=14030
-DAVE_PORT=12033
-DAVE_RPC=14033
+DAVE_PORT=12031
+DAVE_RPC=14031
+EVE_PORT=12033
+EVE_RPC=14033
 
 # Data directories
 BOB_DATADIR="/tmp/bob_minitestnet"
 ALICE_DATADIR="/tmp/alice_minitestnet"
 CHARLIE_DATADIR="/tmp/charlie_minitestnet"
 DAVE_DATADIR="/tmp/dave_minitestnet"
+EVE_DATADIR="/tmp/eve_minitestnet"
 
 # CLI commands
 BOB_CLI="./src/digibyte-cli -testnet -datadir=$BOB_DATADIR -rpcport=$BOB_RPC"
 ALICE_CLI="./src/digibyte-cli -testnet -datadir=$ALICE_DATADIR -rpcport=$ALICE_RPC"
 CHARLIE_CLI="./src/digibyte-cli -testnet -datadir=$CHARLIE_DATADIR -rpcport=$CHARLIE_RPC"
 DAVE_CLI="./src/digibyte-cli -testnet -datadir=$DAVE_DATADIR -rpcport=$DAVE_RPC"
+EVE_CLI="./src/digibyte-cli -testnet -datadir=$EVE_DATADIR -rpcport=$EVE_RPC"
 
 # Colors
 RED='\033[0;31m'
@@ -88,6 +93,7 @@ EXPECT_BOB_DD=0
 EXPECT_ALICE_DD=0
 EXPECT_CHARLIE_DD=0
 EXPECT_DAVE_DD=0
+EXPECT_EVE_DD=0
 
 # Track mints for redemption
 declare -A BOB_MINTS     # txid -> dd_amount
@@ -291,7 +297,8 @@ sync_all_nodes() {
         local alice_height=$($ALICE_CLI getblockcount 2>/dev/null || echo "0")
         local charlie_height=$($CHARLIE_CLI getblockcount 2>/dev/null || echo "0")
         local dave_height=$($DAVE_CLI getblockcount 2>/dev/null || echo "0")
-        if [ "$alice_height" = "$target_height" ] && [ "$charlie_height" = "$target_height" ] && [ "$dave_height" = "$target_height" ]; then
+        local eve_height=$($EVE_CLI getblockcount 2>/dev/null || echo "0")
+        if [ "$alice_height" = "$target_height" ] && [ "$charlie_height" = "$target_height" ] && [ "$dave_height" = "$target_height" ] && [ "$eve_height" = "$target_height" ]; then
             return 0
         fi
         sleep 2
@@ -306,6 +313,7 @@ refresh_oracle_prices() {
     $BOB_CLI sendoracleprice $price 1 2>/dev/null || true
     $BOB_CLI sendoracleprice $price 2 2>/dev/null || true
     $BOB_CLI sendoracleprice $price 3 2>/dev/null || true
+    $BOB_CLI sendoracleprice $price 4 2>/dev/null || true
     $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
     sleep 2
 }
@@ -315,6 +323,7 @@ start_all_oracles() {
     $BOB_CLI startoracle 1 "$ORACLE_KEY_1" 2>/dev/null || true
     $BOB_CLI startoracle 2 "$ORACLE_KEY_2" 2>/dev/null || true
     $BOB_CLI startoracle 3 "$ORACLE_KEY_3" 2>/dev/null || true
+    $BOB_CLI startoracle 4 "$ORACLE_KEY_4" 2>/dev/null || true
 }
 
 # Tier descriptions (9 tiers: 0-8)
@@ -355,20 +364,20 @@ sleep 1
 
 # Clean up ALL test data directories to prevent stale wallet data issues
 echo "Removing old test data directories..."
-rm -rf $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR $DAVE_DATADIR
-rm -rf /tmp/bob_testnet*.log /tmp/alice_testnet*.log /tmp/charlie_testnet*.log
+rm -rf $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR $DAVE_DATADIR $EVE_DATADIR
+rm -rf /tmp/bob_testnet*.log /tmp/alice_testnet*.log /tmp/charlie_testnet*.log /tmp/eve_testnet*.log
 rm -rf /tmp/bob_descriptors.json /tmp/alice_descriptors.json
 rm -rf /tmp/bob_import_request.json /tmp/alice_import_request.json
 
 # Verify directories are actually removed
-if [ -d "$BOB_DATADIR" ] || [ -d "$ALICE_DATADIR" ] || [ -d "$CHARLIE_DATADIR" ] || [ -d "$DAVE_DATADIR" ]; then
+if [ -d "$BOB_DATADIR" ] || [ -d "$ALICE_DATADIR" ] || [ -d "$CHARLIE_DATADIR" ] || [ -d "$DAVE_DATADIR" ] || [ -d "$EVE_DATADIR" ]; then
     echo -e "${RED}WARNING: Failed to remove data directories. Retrying...${NC}"
     sleep 2
-    rm -rf $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR $DAVE_DATADIR
+    rm -rf $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR $DAVE_DATADIR $EVE_DATADIR
 fi
 
 # Create fresh directories
-mkdir -p $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR $DAVE_DATADIR
+mkdir -p $BOB_DATADIR $ALICE_DATADIR $CHARLIE_DATADIR $DAVE_DATADIR $EVE_DATADIR
 print_status "ok" "Clean environment ready (all stale data removed)"
 
 # Step 2: Start Bob's Qt node
@@ -423,25 +432,10 @@ print_status "ok" "Mined to height $HEIGHT"
 BOB_BALANCE=$($BOB_CLI -rpcwallet=bob getbalance)
 echo "Bob's DGB balance: $BOB_BALANCE DGB"
 
-# Step 4: Start 4 Live Oracles (4-of-7 threshold)
-print_header "Step 4: Starting 4 Live Oracles on Bob's node (4-of-7 threshold)"
-start_all_oracles
-sleep 2
-
-# Send initial prices from all 4 oracles
-refresh_oracle_prices 0.01
-
-for i in {1..20}; do
-    STATUS=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.status // "inactive"')
-    if [ "$STATUS" = "active" ]; then
-        print_status "ok" "4 Live Oracles are active (4-of-7 threshold met)"
-        break
-    fi
-    sleep 2
-done
-
-ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "LIVE Oracle Price: \$$ORACLE_PRICE per DGB (from 4-of-7 oracle consensus)"
+# Step 4: Oracle startup deferred to Step 8B (after BIP9 activation at height 600)
+print_header "Step 4: Oracle startup deferred (BIP9 activates at height 600)"
+echo "Oracles will be started after all nodes are synced past activation height."
+print_status "ok" "Oracle startup deferred to Step 8B"
 
 # Step 5: Start Alice's Qt node
 print_header "Step 5: Starting Alice's Qt node"
@@ -554,11 +548,49 @@ $DAVE_CLI createwallet "dave" 2>/dev/null || true
 DAVE_ADDR=$($DAVE_CLI -rpcwallet=dave getnewaddress "receive" "bech32")
 echo "Dave's address: $DAVE_ADDR"
 
-# Step 7: Fund Alice, Charlie, and Dave with DGB for their mints
-print_header "Step 7: Funding Alice, Charlie, and Dave with DGB"
+# Step 6C: Start Eve's Qt node (5th oracle operator — meets 5-of-9 threshold)
+print_header "Step 6C: Starting Eve's Qt node (Oracle 4)"
+env -i \
+    DISPLAY="${DISPLAY}" \
+    XAUTHORITY="${XAUTHORITY}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_SESSION_TYPE="${XDG_SESSION_TYPE}" \
+    HOME="${HOME}" \
+    USER="${USER}" \
+    PATH="${PATH}" \
+    ./src/qt/digibyte-qt \
+    -testnet \
+    -datadir=$EVE_DATADIR \
+    -port=$EVE_PORT \
+    -rpcport=$EVE_RPC \
+    -server \
+    -listen=1 \
+    -discover=0 \
+    -digidollar=1 \
+    -txindex=1 \
+    -fallbackfee=0.0001 \
+    -dandelion=0 \
+    -debug=digidollar \
+    -connect=127.0.0.1:$BOB_PORT \
+    > /tmp/eve_testnet.log 2>&1 &
+EVE_PID=$!
+echo "Eve's Qt started (PID: $EVE_PID)"
+
+if wait_for_rpc "$EVE_CLI" "Eve"; then
+    print_status "ok" "Eve's Qt RPC is ready"
+fi
+
+$EVE_CLI createwallet "eve" 2>/dev/null || true
+EVE_ADDR=$($EVE_CLI -rpcwallet=eve getnewaddress "receive" "bech32")
+echo "Eve's address: $EVE_ADDR"
+
+# Step 7: Fund Alice, Charlie, Dave, and Eve with DGB for their mints
+print_header "Step 7: Funding Alice, Charlie, Dave, and Eve with DGB"
 echo "Alice needs DGB for 2 mints ($200 worth of collateral)"
 echo "Charlie needs DGB for 2 mints ($200 worth of collateral)"
 echo "Dave needs DGB for minting ($100 worth of collateral)"
+echo "Eve needs DGB for minting ($100 worth of collateral)"
 
 # Mine blocks to Alice (100 blocks = 7.2M DGB)
 echo "Mining 100 blocks to Alice..."
@@ -575,6 +607,11 @@ echo "Mining 50 blocks to Dave..."
 $BOB_CLI generatetoaddress 50 "$DAVE_ADDR" > /dev/null 2>&1
 print_status "ok" "Dave funded: 50 blocks mined"
 
+# Mine blocks to Eve (50 blocks = 3.6M DGB)
+echo "Mining 50 blocks to Eve..."
+$BOB_CLI generatetoaddress 50 "$EVE_ADDR" > /dev/null 2>&1
+print_status "ok" "Eve funded: 50 blocks mined"
+
 # Step 8: Sync chains
 print_header "Step 8: Syncing chains"
 $BOB_CLI generatetoaddress 5 "$BOB_ADDR" > /dev/null 2>&1
@@ -582,6 +619,49 @@ sleep 5
 
 sync_all_nodes
 print_status "ok" "All nodes synced"
+
+# Step 8B: Start oracles NOW (BIP9 is active, height > 600)
+print_header "Step 8B: Starting 5 Live Oracles (BIP9 now active)"
+HEIGHT_8B=$($BOB_CLI getblockcount)
+echo "Current height: $HEIGHT_8B (BIP9 activates at 600)"
+
+# Verify BIP9 is active
+DD_STATUS=$($BOB_CLI getdigidollardeploymentinfo 2>/dev/null | jq -r '.deployments.digidollar.status // "unknown"' 2>/dev/null || echo "unknown")
+echo "DigiDollar BIP9 status: $DD_STATUS"
+
+start_all_oracles
+sleep 2
+
+# Send initial prices from all 5 oracles
+echo "Sending initial oracle prices..."
+refresh_oracle_prices 0.01
+
+# Wait for oracle consensus
+ORACLE_ACTIVE=false
+for i in {1..20}; do
+    ORACLE_PRICE_CHECK=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "0"')
+    if [ "$ORACLE_PRICE_CHECK" != "0" ] && [ "$ORACLE_PRICE_CHECK" != "N/A" ]; then
+        print_status "ok" "5 Live Oracles are active (5-of-9 threshold met)"
+        ORACLE_ACTIVE=true
+        break
+    fi
+    # Resend prices and mine more blocks
+    refresh_oracle_prices 0.01
+    sleep 2
+done
+
+ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
+echo "LIVE Oracle Price: \$$ORACLE_PRICE per DGB (from 5-of-9 oracle consensus)"
+
+if [ "$ORACLE_ACTIVE" = "false" ]; then
+    print_status "fail" "Oracle price still $0 after 20 attempts — oracle system not working"
+    echo "Check debug log: /tmp/bob_minitestnet/testnet19/debug.log"
+    echo "Last oracle lines:"
+    grep -i "oracle" /tmp/bob_minitestnet/testnet19/debug.log | tail -10
+    exit 1
+fi
+
+sync_all_nodes
 
 # ====================================================================================
 # INITIAL STATE - All balances should be 0
@@ -1419,52 +1499,53 @@ list_dd_positions "$ALICE_CLI" "alice" "Alice"
 list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 
 # ====================================================================================
-# Step 27A: 4-of-7 Oracle Consensus Verification
+# Step 27A: 5-of-9 Oracle Consensus Verification
 # ====================================================================================
-print_header "Step 27A: 4-of-7 Oracle Consensus Verification"
+print_header "Step 27A: 5-of-9 Oracle Consensus Verification"
 echo ""
-echo "Verifying that 4 oracles sending the same price produces consensus..."
-echo "All 4 oracles send \$0.01, mine blocks, verify price is \$0.01"
+echo "Verifying that 5 oracles sending the same price produces consensus..."
+echo "All 5 oracles send \$0.01, mine blocks, verify price is \$0.01"
 echo ""
 
 refresh_oracle_prices 0.01
 
 ORACLE_PRICE_27A=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "Oracle price after 4-of-7 consensus: \$$ORACLE_PRICE_27A"
+echo "Oracle price after 5-of-9 consensus: \$$ORACLE_PRICE_27A"
 
 if [ "$ORACLE_PRICE_27A" = "0.01000000" ] || [ "$ORACLE_PRICE_27A" = "0.01" ]; then
-    print_status "ok" "4-of-7 oracle consensus verified: price is \$0.01"
+    print_status "ok" "5-of-9 oracle consensus verified: price is \$0.01"
 else
     print_status "warn" "Oracle price is \$$ORACLE_PRICE_27A (expected \$0.01 - may differ by format)"
 fi
 
 # ====================================================================================
-# Step 27B: Below Threshold (3-of-7) - Should NOT change price
+# Step 27B: Below Threshold (4-of-9) - Should NOT change price
 # ====================================================================================
-print_header "Step 27B: Below Threshold Test (3-of-7 - should NOT change price)"
+print_header "Step 27B: Below Threshold Test (4-of-9 - should NOT change price)"
 echo ""
-echo "Sending a DIFFERENT price (\$0.02) from only 3 oracles..."
-echo "With 4-of-7 threshold, 3 oracles should NOT be enough to change the price."
+echo "Sending a DIFFERENT price (\$0.02) from only 4 oracles..."
+echo "With 5-of-9 threshold, 4 oracles should NOT be enough to change the price."
 echo ""
 
 # Record current price
 PRICE_BEFORE_27B=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "Price BEFORE 3-oracle update: \$$PRICE_BEFORE_27B"
+echo "Price BEFORE 4-oracle update: \$$PRICE_BEFORE_27B"
 
-# Send $0.02 from only 3 oracles (indices 0-2)
+# Send $0.02 from only 4 oracles (indices 0-3) — below 5-of-9 threshold
 $BOB_CLI sendoracleprice 0.02 0 2>/dev/null || true
 $BOB_CLI sendoracleprice 0.02 1 2>/dev/null || true
 $BOB_CLI sendoracleprice 0.02 2 2>/dev/null || true
+$BOB_CLI sendoracleprice 0.02 3 2>/dev/null || true
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 2
 
 PRICE_AFTER_27B=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "Price AFTER 3-oracle update: \$$PRICE_AFTER_27B"
+echo "Price AFTER 4-oracle update: \$$PRICE_AFTER_27B"
 
 if [ "$PRICE_AFTER_27B" != "0.02000000" ] && [ "$PRICE_AFTER_27B" != "0.02" ]; then
-    print_status "ok" "3-of-7 below threshold: price did NOT change to \$0.02 (still \$$PRICE_AFTER_27B)"
+    print_status "ok" "4-of-9 below threshold: price did NOT change to \$0.02 (still \$$PRICE_AFTER_27B)"
 else
-    print_status "fail" "3-of-7 should NOT reach consensus, but price changed to \$0.02!"
+    print_status "fail" "4-of-9 should NOT reach consensus, but price changed to \$0.02!"
 fi
 
 # ====================================================================================
@@ -1472,14 +1553,15 @@ fi
 # ====================================================================================
 print_header "Step 27C: Price Disagreement with Outlier (Median Filter Test)"
 echo ""
-echo "Sending \$0.01 from 3 oracles and \$0.05 from 1 oracle..."
+echo "Sending \$0.01 from 4 oracles and \$0.05 from 1 oracle..."
 echo "Median should filter the outlier and converge on \$0.01."
 echo ""
 
 $BOB_CLI sendoracleprice 0.01 0 2>/dev/null || true
 $BOB_CLI sendoracleprice 0.01 1 2>/dev/null || true
 $BOB_CLI sendoracleprice 0.01 2 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.05 3 2>/dev/null || true
+$BOB_CLI sendoracleprice 0.01 3 2>/dev/null || true
+$BOB_CLI sendoracleprice 0.05 4 2>/dev/null || true
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 2
 
@@ -1497,7 +1579,7 @@ fi
 # ====================================================================================
 print_header "Step 27D: Oracle Recovery Test"
 echo ""
-echo "All 4 oracles send \$0.01 to verify recovery after disagreement..."
+echo "All 5 oracles send \$0.01 to verify recovery after disagreement..."
 echo ""
 
 refresh_oracle_prices 0.01
@@ -1632,7 +1714,7 @@ else
 fi
 
 # Start all oracles on restarted node
-echo "Restarting all 4 oracles on Bob's node..."
+echo "Restarting all 5 oracles on Bob's node..."
 start_all_oracles
 sleep 2
 refresh_oracle_prices
@@ -2877,9 +2959,9 @@ echo "  [x] Network DD supply verification at every step"
 echo "  [x] Balance verification at every step"
 echo ""
 echo "MULTI-ORACLE COVERAGE:"
-echo "  [x] 4 oracles started (4-of-7 threshold)"
+echo "  [x] 5 oracles started (5-of-9 threshold)"
 echo "  [x] Oracle prices refreshed before every mint"
-echo "  [x] 4-of-7 consensus verification (Step 27A)"
+echo "  [x] 5-of-9 consensus verification (Step 27A)"
 echo "  [x] Below threshold rejection - 3-of-7 (Step 27B)"
 echo "  [x] Median filter with outlier (Step 27C)"
 echo "  [x] Oracle recovery after disagreement (Step 27D)"
@@ -2927,6 +3009,7 @@ echo "  - Bob's Qt (PID: $BOB_PID) — Oracle 0"
 echo "  - Alice's Qt (PID: $ALICE_PID) — Oracle 1"
 echo "  - Charlie's Qt (PID: $CHARLIE_PID) — Oracle 2"
 echo "  - Dave's Qt (PID: $DAVE_PID) — Oracle 3"
+echo "  - Eve's Qt (PID: $EVE_PID) — Oracle 4"
 echo ""
 
 # Show current balances for manual verification
@@ -2965,5 +3048,5 @@ echo ""
 echo "Press Ctrl+C to exit (will close all Qt windows)."
 echo ""
 
-trap "kill $BOB_PID $ALICE_PID $CHARLIE_PID $DAVE_PID 2>/dev/null; echo 'All Qt windows closed.'" EXIT
+trap "kill $BOB_PID $ALICE_PID $CHARLIE_PID $DAVE_PID $EVE_PID 2>/dev/null; echo 'All Qt windows closed.'" EXIT
 wait $BOB_PID

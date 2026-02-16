@@ -27,6 +27,7 @@
 #include <key_io.h>
 #include <oracle/mock_oracle.h>
 #include <oracle/bundle_manager.h>
+#include <coins.h>
 
 #include <algorithm>
 #include <regex>
@@ -3637,12 +3638,74 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
         LogPrintf("DigiDollar: Scan complete - Found %zu DD UTXOs, Total balance: %lld cents\n",
                   dd_utxo_count, static_cast<long long>(total_dd_balance));
 
+        // Post-scan validation: cross-check active positions against the UTXO set.
+        // Catches redeemed vaults that ProcessDDTxForRescan missed (e.g., custom
+        // Taproot MAST scripts not recognized as "ours" during wallet restore).
+        size_t corrected = ValidatePositionStates();
+        if (corrected > 0) {
+            LogPrintf("DigiDollar: ValidatePositionStates corrected %zu positions after scan\n", corrected);
+        }
+
         return dd_utxo_count;
 
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar: ScanForDDUTXOs exception - %s\n", e.what());
         return 0;
     }
+}
+
+size_t DigiDollarWallet::ValidatePositionStates()
+{
+    // NOTE: caller (ScanForDDUTXOs) already holds LockDDWallet and cs_wallet.
+    // Do NOT re-acquire those locks here — that would deadlock.
+    if (!m_wallet) {
+        LogPrintf("DigiDollar: ValidatePositionStates - no wallet pointer\n");
+        return 0;
+    }
+
+    // Collect collateral outpoints for all active positions
+    std::map<COutPoint, Coin> coins_to_check;
+    std::vector<uint256> active_ids;
+    for (const auto& [id, pos] : collateral_positions) {
+        if (pos.is_active) {
+            COutPoint collateral_outpoint(pos.dd_timelock_id, 0);
+            coins_to_check[collateral_outpoint] = Coin();
+            active_ids.push_back(id);
+        }
+    }
+
+    if (active_ids.empty()) {
+        return 0;
+    }
+
+    LogPrintf("DigiDollar: ValidatePositionStates checking %zu active positions against UTXO set\n",
+              active_ids.size());
+
+    // Query the UTXO set (chainstate + mempool) for all collateral outpoints
+    m_wallet->chain().findCoins(coins_to_check);
+
+    size_t corrected = 0;
+    for (const auto& id : active_ids) {
+        COutPoint collateral_outpoint(id, 0);
+        const Coin& coin = coins_to_check[collateral_outpoint];
+
+        if (coin.IsSpent()) {
+            // Collateral is NOT in the UTXO set → position was redeemed
+            auto it = collateral_positions.find(id);
+            if (it != collateral_positions.end() && it->second.is_active) {
+                it->second.is_active = false;
+                LogPrintf("DigiDollar: ValidatePositionStates - Position %s collateral not in UTXO set, marking inactive\n",
+                          id.GetHex());
+
+                // Persist to database
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.WriteDDTimeLock(it->second);
+                ++corrected;
+            }
+        }
+    }
+
+    return corrected;
 }
 
 // =============================================================================

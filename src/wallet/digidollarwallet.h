@@ -358,6 +358,20 @@ public:
     size_t ScanForDDUTXOs();
 
     /**
+     * Post-rescan validation: check every active position against the UTXO set.
+     * If the collateral output (COutPoint(dd_timelock_id, 0)) is NOT in the
+     * UTXO set, the position was redeemed and is marked is_active = false.
+     *
+     * This is a belt-and-suspenders fix for wallet restore scenarios where
+     * ProcessDDTxForRescan fails to detect REDEEM transactions (e.g., custom
+     * Taproot MAST scripts not recognized as "ours" during rescan).
+     *
+     * Called automatically at the end of ScanForDDUTXOs().
+     * @return Number of positions corrected (marked inactive)
+     */
+    size_t ValidatePositionStates();
+
+    /**
      * Process a single transaction for DD UTXOs (incremental update)
      * Called during block processing - much faster than full rescan
      * @param tx Transaction to process

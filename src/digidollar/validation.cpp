@@ -1878,7 +1878,12 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
     }
 
     // ERR Pre-validation: Check if minting should be blocked during ERR
-    if (txType == DD_TX_MINT && ShouldBlockMintingDuringERR(ctx)) {
+    // SECURITY: Skip during IBD (skipOracleValidation=true) because oracle data
+    // is unavailable during historical block replay. Without this guard,
+    // ShouldBlockMinting() fails-closed on price=0 and blocks all mints after
+    // the first DD supply increment — preventing new nodes from syncing.
+    // This is safe because IBD blocks were already validated by the network.
+    if (txType == DD_TX_MINT && !ctx.skipOracleValidation && ShouldBlockMintingDuringERR(ctx)) {
         LogPrintf("DigiDollar: Minting blocked during ERR activation\n");
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-blocked-during-err");
     }

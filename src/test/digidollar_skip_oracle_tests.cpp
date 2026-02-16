@@ -17,8 +17,10 @@
 
 #include <consensus/amount.h>
 #include <consensus/digidollar.h>
+#include <consensus/err.h>
 #include <consensus/volatility.h>
 #include <digidollar/validation.h>
+#include <digidollar/health.h>
 #include <digidollar/scripts.h>
 #include <digidollar/digidollar.h>
 #include <key.h>
@@ -230,6 +232,168 @@ BOOST_FIXTURE_TEST_CASE(valid_mint_passes_non_ibd, BasicTestingSetup)
         bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
         BOOST_CHECK(result);
     }
+}
+
+// =============================================================================
+// IBD ERR Minting Block Bug (Block 7586 testnet failure)
+//
+// BUG: During IBD, oracle price is 0 (no live oracles). Once totalDDSupply > 0
+// (from earlier mints that passed because supply was 0), ShouldBlockMinting()
+// sees price=0 and fails-closed, blocking ALL subsequent mints. This prevents
+// new nodes from syncing past the first mint-after-prior-mints block.
+//
+// The ERR pre-validation check at line 1881 of validation.cpp does NOT guard
+// on ctx.skipOracleValidation, unlike every other oracle-dependent check.
+// =============================================================================
+
+BOOST_FIXTURE_TEST_CASE(ibd_err_blocks_minting_with_nonzero_supply, BasicTestingSetup)
+{
+    // Reproduce the exact IBD failure: after earlier mints increment totalDDSupply,
+    // ShouldBlockMintingDuringERR() blocks minting because oracle price is 0 (fail-closed).
+    // With skipOracleValidation=true (IBD mode), the ERR check should be skipped.
+
+    CKey testKey;
+    testKey.MakeNewKey(true);
+    XOnlyPubKey ownerKey(testKey.GetPubKey());
+
+    DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+
+    int currentHeight = 7586; // The exact block that fails
+
+    // Simulate the IBD state: earlier mints already connected, so DD supply > 0.
+    // This is what OnMintConnected() does during ConnectBlock for prior blocks.
+    DigiDollar::SystemHealthMonitor::OnMintConnected(10000, 100 * COIN); // $100 DD, 100 DGB collateral
+
+    // Verify supply is non-zero (precondition for the bug)
+    const DigiDollar::SystemMetrics& metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    BOOST_CHECK(metrics.totalDDSupply > 0);
+    BOOST_TEST_MESSAGE("totalDDSupply after earlier mint: " + std::to_string(metrics.totalDDSupply));
+
+    // Build a mint tx with generous collateral (not the issue - ERR check happens first)
+    CAmount generousCollateral = 200000000000LL; // 2000 DGB
+    CMutableTransaction mtx = BuildMintTx(ownerKey, generousCollateral, currentHeight);
+    CTransaction tx(mtx);
+
+    // IBD mode: oracle price is 0 (no oracles running during sync), skipOracle=true
+    // BUG: ShouldBlockMintingDuringERR does NOT check skipOracleValidation,
+    // so it calls ShouldBlockMinting(0) which fails-closed → "minting-blocked-during-err"
+    {
+        DigiDollar::ValidationContext ctx(currentHeight, 0 /* no oracle in IBD */, 150, Params(),
+                                          nullptr, true /* skipOracleValidation = IBD mode */);
+        TxValidationState state;
+        bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+        BOOST_TEST_MESSAGE("IBD + nonzero supply + zero oracle: result=" +
+                          std::to_string(result) + " reason=" + state.GetRejectReason());
+        BOOST_CHECK_MESSAGE(result,
+            "IBD BUG: Mint blocked during IBD with reason: " + state.GetRejectReason() +
+            " — new nodes cannot sync past this block!");
+        // Before fix: fails with "minting-blocked-during-err"
+        // After fix: passes (ERR check skipped during IBD)
+    }
+
+    // Non-IBD mode with zero oracle: should STILL block (fail-closed is correct for live nodes)
+    {
+        DigiDollar::ValidationContext ctx(currentHeight, 0, 150, Params(),
+                                          nullptr, false /* NOT IBD */);
+        TxValidationState state;
+        bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+        BOOST_TEST_MESSAGE("Non-IBD + nonzero supply + zero oracle: result=" +
+                          std::to_string(result) + " reason=" + state.GetRejectReason());
+        // This should fail — either ERR blocks it or bad-oracle-price catches it
+        BOOST_CHECK_MESSAGE(!result,
+            "SECURITY: Non-IBD mint with zero oracle should be rejected!");
+    }
+
+    // Clean up: reverse the earlier mint so other tests aren't affected
+    DigiDollar::SystemHealthMonitor::OnMintDisconnected(10000, 100 * COIN);
+}
+
+BOOST_FIXTURE_TEST_CASE(ibd_err_check_with_valid_oracle_and_healthy_system, BasicTestingSetup)
+{
+    // When IBD has a valid block oracle price AND system is healthy,
+    // the ERR check should pass in both IBD and non-IBD modes.
+    // This ensures the fix doesn't accidentally skip ERR for non-IBD.
+
+    CKey testKey;
+    testKey.MakeNewKey(true);
+    XOnlyPubKey ownerKey(testKey.GetPubKey());
+
+    DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+
+    int currentHeight = 8000;
+    CAmount oraclePrice = 500000; // $0.50/DGB
+
+    // Set up existing DD supply (simulating earlier mints)
+    DigiDollar::SystemHealthMonitor::OnMintConnected(10000, 200 * COIN); // Well-collateralized
+
+    CAmount generousCollateral = 200000000000LL; // 2000 DGB
+    CMutableTransaction mtx = BuildMintTx(ownerKey, generousCollateral, currentHeight);
+    CTransaction tx(mtx);
+
+    // Non-IBD with healthy oracle: should pass (ERR is not active, health is fine)
+    {
+        DigiDollar::ValidationContext ctx(currentHeight, oraclePrice, 150, Params(),
+                                          nullptr, false /* NOT IBD */);
+        TxValidationState state;
+        bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+        BOOST_TEST_MESSAGE("Non-IBD + healthy oracle: result=" +
+                          std::to_string(result) + " reason=" + state.GetRejectReason());
+        BOOST_CHECK_MESSAGE(result,
+            "Healthy system mint rejected in non-IBD! reason: " + state.GetRejectReason());
+    }
+
+    // Clean up
+    DigiDollar::SystemHealthMonitor::OnMintDisconnected(10000, 200 * COIN);
+}
+
+BOOST_FIXTURE_TEST_CASE(non_ibd_err_still_blocks_when_active, BasicTestingSetup)
+{
+    // Critical security test: even with the IBD fix, ERR MUST still block minting
+    // in non-IBD mode when ERR is formally activated.
+
+    CKey testKey;
+    testKey.MakeNewKey(true);
+    XOnlyPubKey ownerKey(testKey.GetPubKey());
+
+    DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+
+    int currentHeight = 9000;
+    CAmount oraclePrice = 500000;
+
+    // Activate ERR by reconstructing with unhealthy system health (<100%)
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(50, currentHeight);
+
+    CAmount generousCollateral = 200000000000LL;
+    CMutableTransaction mtx = BuildMintTx(ownerKey, generousCollateral, currentHeight);
+    CTransaction tx(mtx);
+
+    // Non-IBD with active ERR: MUST block minting
+    {
+        DigiDollar::ValidationContext ctx(currentHeight, oraclePrice, 50, Params(),
+                                          nullptr, false /* NOT IBD */);
+        TxValidationState state;
+        bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+        BOOST_TEST_MESSAGE("Non-IBD + active ERR: result=" +
+                          std::to_string(result) + " reason=" + state.GetRejectReason());
+        BOOST_CHECK_MESSAGE(!result,
+            "SECURITY: ERR is active but minting was allowed!");
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "minting-blocked-during-err");
+    }
+
+    // IBD with active ERR: should be skipped (historical block already validated)
+    {
+        DigiDollar::ValidationContext ctx(currentHeight, oraclePrice, 50, Params(),
+                                          nullptr, true /* IBD mode */);
+        TxValidationState state;
+        bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
+        BOOST_TEST_MESSAGE("IBD + active ERR: result=" +
+                          std::to_string(result) + " reason=" + state.GetRejectReason());
+        BOOST_CHECK_MESSAGE(result,
+            "IBD should skip ERR check for historical blocks! reason: " + state.GetRejectReason());
+    }
+
+    // Clean up ERR state — reconstruct with healthy system
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(150, currentHeight);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

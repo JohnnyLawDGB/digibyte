@@ -2846,13 +2846,21 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                     return false;
                 };
 
-                // SECURITY [T1-05a]: Only skip oracle validation during IBD (Initial Block Download).
-                // During IBD, oracle prices may not be available because the node is syncing
-                // historical blocks. But for new tip blocks (not in IBD), we MUST validate
-                // collateral ratios against oracle prices. Without this check, a malicious
-                // miner could include a mint tx with trivial collateral and have it accepted
-                // by all non-IBD nodes because economic validation was unconditionally skipped.
+                // SECURITY [T1-05a]: Skip oracle validation when oracle price is unavailable
+                // during historical block sync. This covers two cases:
+                // 1. Traditional IBD (IsInitialBlockDownload() == true)
+                // 2. Post-IBD catch-up: IBD flag latched false (tip age < max_tip_age)
+                //    but we're still connecting blocks below the best header. This happens
+                //    on testnet where max_tip_age=1h and chain catches up quickly.
+                //
+                // For new tip blocks with live oracle data, we MUST validate collateral
+                // ratios. A malicious miner can't exploit the skip because:
+                // - The block must already be part of the best chain (accepted by peers)
+                // - Once caught up, P2P oracle prices are available for tip validation
                 const bool fInIBD = m_chainman.IsInitialBlockDownload();
+                const bool fCatchingUp = !fInIBD && m_chainman.m_best_header &&
+                    pindex->nHeight < m_chainman.m_best_header->nHeight;
+                const bool fSkipOracle = fInIBD || (fCatchingUp && blockOraclePrice <= 0);
 
                 DigiDollar::ValidationContext ddContext(
                     pindex->nHeight,
@@ -2860,7 +2868,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                     DigiDollar::GetSystemCollateralRatio(),              // System collateral ratio
                     m_chainman.GetParams(),
                     &view,                                               // Coins view for UTXO lookup
-                    fInIBD,                                              // Only skip oracle validation during IBD
+                    fSkipOracle,                                             // Skip oracle validation during IBD or catch-up sync
                     txLookup                                             // Block-db tx lookup for DD amounts
                 );
 

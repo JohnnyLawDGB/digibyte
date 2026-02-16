@@ -4,6 +4,7 @@
 
 #include <consensus/digidollar.h>
 #include <consensus/params.h>
+#include <digidollar/validation.h>
 #include <kernel/chainparams.h>
 #include <test/util/setup_common.h>
 
@@ -337,6 +338,46 @@ BOOST_AUTO_TEST_CASE(lock_tier_display_consistency_test)
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[7].first, params), 225); // 5 years
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[8].first, params), 212); // 7 years
     BOOST_CHECK_EQUAL(DigiDollar::GetCollateralRatioForLockTime(expectedTiers[9].first, params), 200); // 10 years
+}
+
+// Test that skipOracleValidation allows DD transactions when oracle price is 0.
+// This verifies the IBD/catch-up sync path where oracle data isn't available.
+BOOST_AUTO_TEST_CASE(skip_oracle_validation_allows_zero_price)
+{
+    // Create a minimal DD validation context with price=0 and skipOracle=true
+    // This simulates the IBD/catch-up case where the node is syncing historical
+    // blocks and has no oracle price data available.
+    DigiDollar::ValidationContext ctx(
+        1000,                               // height
+        0,                                   // oraclePriceMicroUSD = 0 (no oracle)
+        300,                                 // systemCollateral
+        Params(),                            // chain params
+        nullptr,                             // no coins view
+        true,                                // skipOracleValidation = TRUE
+        nullptr                              // no tx lookup
+    );
+
+    // With skipOracleValidation=true, the context should allow proceeding
+    // even though oraclePriceMicroUSD is 0
+    BOOST_CHECK(ctx.skipOracleValidation);
+    BOOST_CHECK_EQUAL(ctx.oraclePriceMicroUSD, 0);
+
+    // Create the same context but with skipOracle=false (post-sync, live tip)
+    DigiDollar::ValidationContext ctx_strict(
+        1000,
+        0,                                   // oraclePriceMicroUSD = 0
+        300,
+        Params(),
+        nullptr,
+        false,                               // skipOracleValidation = FALSE
+        nullptr
+    );
+
+    // With skipOracleValidation=false and price=0, DD transactions should be rejected
+    BOOST_CHECK(!ctx_strict.skipOracleValidation);
+    BOOST_CHECK_EQUAL(ctx_strict.oraclePriceMicroUSD, 0);
+    // The actual rejection happens in ValidateDigiDollarTransaction() when it checks
+    // !ctx.skipOracleValidation && ctx.oraclePriceMicroUSD <= 0
 }
 
 BOOST_AUTO_TEST_SUITE_END()

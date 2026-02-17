@@ -9,6 +9,7 @@ between a node running the coinstatsindex and a node without
 the index.
 """
 
+import socket
 from decimal import Decimal
 
 from test_framework.blocktools import (
@@ -29,6 +30,9 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
+    p2p_port,
+    rpc_port,
+    PortSeed,
 )
 from test_framework.wallet import (
     MiniWallet,
@@ -41,11 +45,50 @@ class CoinStatsIndexTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 2
         self.supports_cli = False
-        self.rpc_timeout = 180  # Needs extra time for reindexing under parallel load
+        self.rpc_timeout = 900  # Needs extra time for reindexing under parallel load
         self.extra_args = [
             ["-dandelion=0", "-minrelaytxfee=0.00000001"],
             ["-coinstatsindex", "-dandelion=0", "-minrelaytxfee=0.00000001"]
         ]
+
+    def _port_available(self, port):
+        """Check if a TCP port is available to bind on 127.0.0.1."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('127.0.0.1', port))
+            return True
+        except OSError:
+            return False
+
+    def setup_nodes(self):
+        """Check that assigned ports are free; bump PortSeed if not.
+
+        When running in parallel, the assigned RPC/P2P ports may collide with
+        other services on the machine.  Detect this early and shift to a free
+        port range so the nodes can actually start.
+        """
+        original_seed = PortSeed.n
+        for attempt in range(50):
+            ports_ok = True
+            for i in range(self.num_nodes):
+                if not self._port_available(rpc_port(i)) or not self._port_available(p2p_port(i)):
+                    ports_ok = False
+                    break
+            if ports_ok:
+                break
+            # Try next seed
+            PortSeed.n = original_seed + attempt + 1
+            self.log.info(f"Port conflict detected, trying PortSeed {PortSeed.n}")
+        else:
+            self.log.warning("Could not find free port range after 50 attempts")
+
+        if PortSeed.n != original_seed:
+            # Re-initialize datadir configs with new ports
+            from test_framework.util import initialize_datadir
+            for i in range(self.num_nodes):
+                initialize_datadir(self.options.tmpdir, i, self.chain, self.disable_autoconnect)
+
+        super().setup_nodes()
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
@@ -63,7 +106,7 @@ class CoinStatsIndexTest(DigiByteTestFramework):
         )
 
     def sync_index_node(self):
-        self.wait_until(lambda: self.nodes[1].getindexinfo()['coinstatsindex']['synced'] is True, timeout=180)
+        self.wait_until(lambda: self.nodes[1].getindexinfo()['coinstatsindex']['synced'] is True, timeout=900)
 
     def _test_coin_stats_index(self):
         node = self.nodes[0]

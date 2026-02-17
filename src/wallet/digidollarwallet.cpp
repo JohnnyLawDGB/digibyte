@@ -3160,6 +3160,14 @@ CAmount DigiDollarWallet::GetTotalDDBalance() const {
                                  outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
                         continue;
                     }
+                    // Mint outputs must be confirmed before spending — DD consensus requires it.
+                    // Mints create new DD that doesn't exist until confirmed in a block.
+                    // Only transfer change (type 2) should be spendable while unconfirmed.
+                    if (DigiDollar::GetDigiDollarTxType(*wtx->tx) == DD_TX_MINT) {
+                        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed MINT DD UTXO %s:%u (%lld cents) — requires confirmation\n",
+                                 outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
+                        continue;
+                    }
                     LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetTotalDDBalance counting trusted unconfirmed DD UTXO %s:%u (%lld cents)\n",
                              outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
                 }
@@ -3196,12 +3204,18 @@ CAmount DigiDollarWallet::GetPendingDDBalance() const {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
             if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
-                // Unconfirmed — only count UNtrusted as pending (trusted is in main balance)
                 if (!wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
+                    // Untrusted unconfirmed — always pending
                     pending += dd_amount;
                     LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetPendingDDBalance counting untrusted unconfirmed UTXO %s:%u (%lld cents)\n",
                              outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
+                } else if (DigiDollar::GetDigiDollarTxType(*wtx->tx) == DD_TX_MINT) {
+                    // Trusted unconfirmed MINT — excluded from spendable, so count as pending
+                    pending += dd_amount;
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetPendingDDBalance counting unconfirmed MINT UTXO %s:%u (%lld cents) — awaiting confirmation\n",
+                             outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
                 }
+                // Trusted unconfirmed TRANSFER change: already in spendable balance, skip here
             }
         }
 
@@ -3283,6 +3297,14 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
                     LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping untrusted unconfirmed DD UTXO %s:%u in coin selection\n",
                              outpoint.hash.ToString(), outpoint.n);
                     continue;  // Skip untrusted unconfirmed UTXOs
+                }
+                // Mint outputs must be confirmed before spending — DD consensus requires it.
+                // Mints create new DD that doesn't exist until confirmed in a block.
+                // Only transfer change (type 2) should be spendable while unconfirmed.
+                if (DigiDollar::GetDigiDollarTxType(*wtx->tx) == DD_TX_MINT) {
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Skipping unconfirmed MINT DD UTXO %s:%u (%lld cents) — requires confirmation\n",
+                             outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
+                    continue;
                 }
                 LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Including trusted unconfirmed DD UTXO %s:%u in coin selection\n",
                          outpoint.hash.ToString(), outpoint.n);

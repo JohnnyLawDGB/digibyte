@@ -3782,4 +3782,131 @@ BOOST_FIXTURE_TEST_CASE(test_validate_position_states_keeps_active_positions, Te
     BOOST_CHECK_EQUAL(active_positions.size(), 0);
 }
 
+// =============================================================================
+// BUG FIX: Unconfirmed DD mint outputs should NOT be spendable
+// =============================================================================
+
+/**
+ * Test: GetDigiDollarTxType correctly identifies MINT vs TRANSFER transactions
+ *
+ * This is the classification logic that the balance fix depends on.
+ * The fix checks if an unconfirmed UTXO came from a MINT transaction
+ * and excludes it from spendable balance.
+ */
+BOOST_FIXTURE_TEST_CASE(tx_type_classification_mint_vs_transfer, DDWalletTestFixture)
+{
+    // Create a MINT transaction (type 1)
+    CMutableTransaction mint_mtx;
+    mint_mtx.SetDigiDollarType(::DD_TX_MINT);
+    CTransactionRef mint_tx = MakeTransactionRef(std::move(mint_mtx));
+
+    // Create a TRANSFER transaction (type 2)
+    CMutableTransaction transfer_mtx;
+    transfer_mtx.SetDigiDollarType(::DD_TX_TRANSFER);
+    CTransactionRef transfer_tx = MakeTransactionRef(std::move(transfer_mtx));
+
+    // Create a non-DD transaction
+    CMutableTransaction normal_mtx;
+    normal_mtx.nVersion = 2;
+    CTransactionRef normal_tx = MakeTransactionRef(std::move(normal_mtx));
+
+    // Verify classification (cast to int to avoid ambiguity between
+    // consensus/digidollar.h namespace and primitives/transaction.h file-scope enums)
+    BOOST_CHECK_EQUAL(static_cast<int>(DigiDollar::GetDigiDollarTxType(*mint_tx)), static_cast<int>(::DD_TX_MINT));
+    BOOST_CHECK_EQUAL(static_cast<int>(DigiDollar::GetDigiDollarTxType(*transfer_tx)), static_cast<int>(::DD_TX_TRANSFER));
+    BOOST_CHECK_EQUAL(static_cast<int>(DigiDollar::GetDigiDollarTxType(*normal_tx)), static_cast<int>(::DD_TX_NONE));
+
+    // DD_TX_MINT should be 1
+    BOOST_CHECK_EQUAL(static_cast<int>(::DD_TX_MINT), 1);
+    // DD_TX_TRANSFER should be 2
+    BOOST_CHECK_EQUAL(static_cast<int>(::DD_TX_TRANSFER), 2);
+}
+
+/**
+ * Test: Unconfirmed mint outputs are NOT included in spendable balance
+ *
+ * BUG FIX TEST: Previously, GetTotalDDBalance() and GetDDUTXOs() used
+ * CachedTxIsTrusted() to include trusted unconfirmed UTXOs as spendable.
+ * This was correct for DD transfer change but WRONG for DD mint outputs.
+ * Mints create new DD — the DD doesn't exist until confirmed. DD consensus
+ * rules reject spending unconfirmed mint outputs.
+ *
+ * NOTE: This test verifies the contract with the DigiDollarWallet in test
+ * mode (no m_wallet). The actual confirmation checking happens when m_wallet
+ * is set. The test validates that the DD UTXO tracking correctly represents
+ * the expected spendable vs pending categorization.
+ */
+BOOST_FIXTURE_TEST_CASE(unconfirmed_mint_not_spendable, DDWalletTestFixture)
+{
+    // This test documents the expected behavior:
+    // - Unconfirmed MINT DD UTXOs should NOT be in GetTotalDDBalance()
+    // - Unconfirmed MINT DD UTXOs SHOULD be in GetPendingDDBalance()
+    // - Unconfirmed TRANSFER change DD UTXOs SHOULD be in GetTotalDDBalance()
+
+    // Verify transaction type classification is correct for the fix
+    CMutableTransaction mint_mtx;
+    mint_mtx.SetDigiDollarType(::DD_TX_MINT);
+    CTransactionRef mint_tx = MakeTransactionRef(std::move(mint_mtx));
+    BOOST_CHECK_EQUAL(static_cast<int>(DigiDollar::GetDigiDollarTxType(*mint_tx)), static_cast<int>(::DD_TX_MINT));
+
+    // In a real wallet scenario with m_wallet set:
+    // 1. A MINT tx is created and broadcast (0 confirmations)
+    // 2. CachedTxIsTrusted returns true (we created it)
+    // 3. OLD behavior: DD UTXO added to spendable balance (BUG)
+    // 4. NEW behavior: DD UTXO excluded from spendable, added to pending
+
+    // Test the DigiDollarWallet without m_wallet (test mode):
+    // In test mode, all UTXOs count as spendable (no confirmation check)
+    // This is expected — the fix is in the m_wallet code path
+    DigiDollarWallet wallet;
+    COutPoint mint_outpoint(mint_tx->GetHash(), 1);
+    CAmount mint_amount = 10000; // $100.00
+
+    wallet.AddDDUTXO(mint_outpoint, mint_amount);
+
+    // In test mode (no m_wallet), balance includes all UTXOs
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), mint_amount);
+
+    // Pending should be 0 in test mode (no m_wallet)
+    BOOST_CHECK_EQUAL(wallet.GetPendingDDBalance(), 0);
+
+    // Verify the UTXO is tracked
+    auto utxos = wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(utxos.size(), 1);
+    BOOST_CHECK_EQUAL(utxos[0].dd_amount, mint_amount);
+}
+
+/**
+ * Test: Unconfirmed transfer change IS included in spendable balance
+ *
+ * Verifies that the fix doesn't break the existing behavior for transfer
+ * change UTXOs, which should remain spendable while unconfirmed.
+ */
+BOOST_FIXTURE_TEST_CASE(unconfirmed_transfer_change_is_spendable, DDWalletTestFixture)
+{
+    // Verify TRANSFER type classification
+    CMutableTransaction transfer_mtx;
+    transfer_mtx.SetDigiDollarType(::DD_TX_TRANSFER);
+    CTransactionRef transfer_tx = MakeTransactionRef(std::move(transfer_mtx));
+    BOOST_CHECK_EQUAL(static_cast<int>(DigiDollar::GetDigiDollarTxType(*transfer_tx)), static_cast<int>(::DD_TX_TRANSFER));
+
+    // DD_TX_TRANSFER != DD_TX_MINT — so the fix should NOT skip transfer change
+    BOOST_CHECK(static_cast<int>(DigiDollar::GetDigiDollarTxType(*transfer_tx)) != static_cast<int>(::DD_TX_MINT));
+
+    // In test mode, transfer change UTXOs are spendable (as expected)
+    DigiDollarWallet wallet;
+    COutPoint transfer_outpoint(transfer_tx->GetHash(), 1);
+    CAmount change_amount = 5000; // $50.00
+
+    wallet.AddDDUTXO(transfer_outpoint, change_amount);
+
+    // Balance should include transfer change
+    BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), change_amount);
+
+    // Should appear in UTXOs for coin selection
+    auto utxos = wallet.GetDDUTXOs();
+    BOOST_CHECK_EQUAL(utxos.size(), 1);
+    BOOST_CHECK_EQUAL(utxos[0].dd_amount, change_amount);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

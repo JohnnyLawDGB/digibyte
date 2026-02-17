@@ -1043,6 +1043,31 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("transactions", transactions);
     result.pushKV("coinbaseaux", aux);
+
+    // Serve full pre-built coinbase transaction when oracle data is present.
+    // Serialized WITHOUT witness so miners compute the correct txid for the
+    // merkle root. The witness nonce is re-added by UpdateUncommittedBlockStructures
+    // when the block is submitted. This ensures oracle bundle data (Phase 2
+    // multi-oracle Schnorr signatures) reaches mined blocks without requiring
+    // any mining software changes — miners that support coinbasetxn (BIP 22)
+    // use it as-is instead of building their own coinbase.
+    {
+        bool has_oracle = false;
+        for (const auto& out : pblock->vtx[0]->vout) {
+            if (out.scriptPubKey.size() >= 2 &&
+                out.scriptPubKey[0] == OP_RETURN &&
+                out.scriptPubKey[1] == OP_ORACLE) {
+                has_oracle = true;
+                break;
+            }
+        }
+        if (has_oracle) {
+            UniValue coinbasetxn(UniValue::VOBJ);
+            coinbasetxn.pushKV("data", EncodeHexTx(*pblock->vtx[0], SERIALIZE_TRANSACTION_NO_WITNESS));
+            result.pushKV("coinbasetxn", coinbasetxn);
+        }
+    }
+
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     result.pushKV("longpollid", active_chain.Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
@@ -1081,6 +1106,16 @@ static RPCHelpMan getblocktemplate()
 
     if (!pblocktemplate->vchCoinbaseCommitment.empty()) {
         result.pushKV("default_witness_commitment", HexStr(pblocktemplate->vchCoinbaseCommitment));
+    }
+
+    // Oracle bundle commitment for DigiDollar-aware miners
+    for (const auto& out : pblock->vtx[0]->vout) {
+        if (out.scriptPubKey.size() >= 2 &&
+            out.scriptPubKey[0] == OP_RETURN &&
+            out.scriptPubKey[1] == OP_ORACLE) {
+            result.pushKV("default_oracle_commitment", HexStr(out.scriptPubKey));
+            break;
+        }
     }
 
     return result;

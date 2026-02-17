@@ -2765,6 +2765,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle price: %llu micro-USD ($%.6f) — deterministic\n",
                      pindex->nHeight, extractedBundle.median_price_micro_usd,
                      extractedBundle.median_price_micro_usd / 1000000.0);
+
+            // Clear pending messages/attestations now that bundle is confirmed on-chain.
+            // This prevents stale data reuse while NOT draining messages during template
+            // creation (AddOracleBundleToBlock), which fires every ~15 sec for all blocks.
+            oracleManager.ClearPendingMessages();
         }
     }
 

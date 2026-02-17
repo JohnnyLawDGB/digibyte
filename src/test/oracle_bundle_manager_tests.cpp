@@ -726,4 +726,107 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_msg_serialization)
     }
 }
 
+/**
+ * Test: Pending messages survive bundle creation (AddOracleBundleToBlock)
+ *
+ * BUG FIX TEST: Previously, AddOracleBundleToBlock() called pending_messages.clear()
+ * after building each block template. CreateNewBlock() fires every ~15 seconds but
+ * oracle messages broadcast every 60 seconds, draining messages 4x faster than
+ * replenished. Messages now expire naturally via ORACLE_MAX_AGE_SECONDS purge.
+ */
+BOOST_AUTO_TEST_CASE(pending_messages_survive_bundle_creation)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1); // Phase One: 1-of-1
+
+    // Create and add an oracle message
+    CKey oracle_key;
+    oracle_key.MakeNewKey(true);
+
+    COraclePriceMessage msg(0, 6000, GetTime());
+    msg.SignPhase2(oracle_key);
+    BOOST_CHECK(manager.AddOracleMessage(msg));
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
+
+    // Create a minimal block and call AddOracleBundleToBlock
+    CBlock block;
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 0;
+    coinbase.vout[0].scriptPubKey = CScript();
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+
+    manager.AddOracleBundleToBlock(block, 1000);
+
+    // CRITICAL: Pending messages must NOT be cleared after bundle creation.
+    // They should still be available for subsequent block template builds.
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
+
+    // Second call should also find the messages still present
+    CBlock block2;
+    CMutableTransaction coinbase2;
+    coinbase2.vin.resize(1);
+    coinbase2.vin[0].prevout.SetNull();
+    coinbase2.vout.resize(1);
+    coinbase2.vout[0].nValue = 0;
+    coinbase2.vout[0].scriptPubKey = CScript();
+    block2.vtx.push_back(MakeTransactionRef(std::move(coinbase2)));
+
+    manager.AddOracleBundleToBlock(block2, 1001);
+
+    // Messages should STILL survive
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
+
+    LogPrintf("Test: pending_messages_survive_bundle_creation PASSED\n");
+}
+
+/**
+ * Test: Stale messages are purged naturally by AddOracleMessage
+ *
+ * Messages older than ORACLE_MAX_AGE_SECONDS (3600s) should be purged
+ * when a new message arrives, without needing explicit clear().
+ */
+BOOST_AUTO_TEST_CASE(stale_messages_purged_naturally)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(1);
+
+    CKey oracle_key1;
+    oracle_key1.MakeNewKey(true);
+    CKey oracle_key2;
+    oracle_key2.MakeNewKey(true);
+
+    int64_t now = GetTime();
+
+    // Add a message from oracle 0 that is STALE (older than ORACLE_MAX_AGE_SECONDS)
+    COraclePriceMessage stale_msg(0, 6000, now - ORACLE_MAX_AGE_SECONDS - 10);
+    stale_msg.SignPhase2(oracle_key1);
+    // Use InjectTestMessage to bypass IsValid timestamp check
+    manager.InjectTestMessage(stale_msg);
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
+
+    // Add a fresh message from oracle 1 — this should trigger purge of stale messages
+    COraclePriceMessage fresh_msg(1, 7000, now);
+    fresh_msg.SignPhase2(oracle_key2);
+    BOOST_CHECK(manager.AddOracleMessage(fresh_msg));
+
+    // The stale message from oracle 0 should have been purged,
+    // leaving only the fresh message from oracle 1
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
+
+    // Verify it's the fresh message that remains
+    auto pending = manager.GetPendingMessages();
+    BOOST_REQUIRE_EQUAL(pending.size(), 1);
+    BOOST_CHECK_EQUAL(pending[0].oracle_id, 1u);
+    BOOST_CHECK_EQUAL(pending[0].price_micro_usd, 7000ULL);
+
+    LogPrintf("Test: stale_messages_purged_naturally PASSED\n");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

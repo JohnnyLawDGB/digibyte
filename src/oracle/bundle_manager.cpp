@@ -489,9 +489,11 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             bundle.median_price_micro_usd = pending[0].price_micro_usd;
             LogPrintf("Oracle: Phase One - Using %zu pending message(s) for block %d\n",
                      pending.size(), block_height);
-            // Clear pending messages after consuming them into a bundle
-            pending_messages.clear();
-            LogPrintf("Oracle: Phase One - Cleared pending messages after bundle creation\n");
+            // NOTE: Do NOT clear pending_messages here. CreateNewBlock() fires every
+            // ~15 seconds but oracle messages broadcast every ~60 seconds. Clearing
+            // here drains messages 4x faster than replenished, resulting in zero
+            // oracle data in blocks. Messages expire naturally via the stale purge
+            // in AddOracleMessage() after ORACLE_MAX_AGE_SECONDS (3600s).
         } else {
             LogPrintf("Oracle: Phase One - No pending messages available!\n");
         }
@@ -605,9 +607,11 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
                 bundle.median_price_micro_usd = consensus_price;
                 bundle.timestamp = consensus_timestamp;
 
-                // Clear both individual messages and attestations after consuming
-                pending_messages.clear();
-                pending_attestations.clear();
+                // NOTE: Do NOT clear pending_messages or pending_attestations here.
+                // CreateNewBlock() fires every ~15 seconds but oracle messages broadcast
+                // every ~60 seconds. Clearing here drains messages 4x faster than
+                // replenished. Messages expire naturally via the stale purge in
+                // AddOracleMessage() after ORACLE_MAX_AGE_SECONDS (3600s).
 
                 LogPrintf("Oracle: Phase Two - Created bundle with %zu consensus attestations, price=%llu\n",
                          valid_attestations.size(), consensus_price);
@@ -1555,33 +1559,32 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
             return true;
         }
     }
-    if (coinbase.vout.size() < 2) {
+    // Scan all coinbase outputs for OP_ORACLE marker (oracle output position varies:
+    // may be vout[1] without witness commitment, or vout[2] with witness commitment)
+    int oracle_output_count = 0;
+    for (const auto& output : coinbase.vout) {
+        if (output.scriptPubKey.size() >= 2 &&
+            output.scriptPubKey[0] == OP_RETURN &&
+            output.scriptPubKey[1] == OP_ORACLE) {
+            oracle_output_count++;
+        }
+    }
+
+    // SECURITY: Reject blocks with multiple oracle outputs (prevents confusion attacks)
+    if (oracle_output_count > 1) {
+        LogPrintf("Oracle: Block %d has %d oracle outputs (expected at most 1)\n",
+                 block_height, oracle_output_count);
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-multiple-outputs",
+            strprintf("Block contains %d oracle outputs, expected at most 1", oracle_output_count));
+    }
+
+    if (oracle_output_count == 0) {
         // Allow blocks without oracle data during transition
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: No oracle bundle in block %d (transition period)\n", block_height);
         return true;
     }
 
-    // Check for oracle bundle in output 1 (OP_RETURN)
-    const CTxOut& oracle_output = coinbase.vout[1];
-    if (!oracle_output.scriptPubKey.IsUnspendable()) {
-        // Not an OP_RETURN, allow during transition
-        return true;
-    }
-
-    // Extract and validate oracle bundle
-    if (oracle_output.scriptPubKey.size() <= 2) {
-        // Empty OP_RETURN, allow during transition
-        return true;
-    }
-
-    // Check for OP_ORACLE opcode at byte 1
-    if (oracle_output.scriptPubKey.size() >= 2 && oracle_output.scriptPubKey[1] != OP_ORACLE) {
-        // Not an oracle output, allow during transition
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d output is OP_RETURN but not OP_ORACLE (transition period)\n", block_height);
-        return true;
-    }
-
-    // Extract oracle bundle using OracleBundleManager's parser (handles compact Phase One format)
+    // Extract oracle bundle using OracleBundleManager's parser (scans all outputs for OP_ORACLE)
     COracleBundle bundle;
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     if (!manager.ExtractOracleBundle(coinbase, bundle)) {

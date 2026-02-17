@@ -14861,28 +14861,17 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02e_compromised_oracle_median_manipulation)
 
 BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation)
 {
-    // DESIGN OBSERVATION: AddOracleBundleToBlock clears pending_messages
-    // after consuming them into a bundle for a new block.
+    // UPDATED DESIGN: AddOracleBundleToBlock NO LONGER clears pending_messages.
+    // Messages persist for multiple template creations and expire naturally via
+    // ORACLE_MAX_AGE_SECONDS stale purge. P2P oracle broadcasts replace stale
+    // entries via oracle_id key.
     //
-    // src/oracle/bundle_manager.cpp line ~340 (Phase One):
-    //   pending_messages.clear();
-    // src/oracle/bundle_manager.cpp line ~370 (Phase Two):
-    //   pending_messages.clear();
+    // This prevents the "bundle drain" problem where mining a block would wipe
+    // oracle data, causing subsequent blocks to have empty oracle outputs until
+    // P2P re-broadcasts repopulate (up to 60s gap with 15s block time).
     //
-    // EFFECT: After mining a block, the mining node has NO oracle data in memory.
-    // If the same miner mines the next block within the oracle re-broadcast
-    // interval (~60s), that block contains NO oracle data.
-    //
-    // With 15s block time, the same miner will often mine blocks 15-30s apart.
-    // These subsequent blocks will have empty oracle data.
-    //
-    // DEFENSE: This is BY DESIGN — prevents stale oracle data reuse.
-    // P2P re-broadcasts repopulate pending_messages within seconds.
-    // Non-mining nodes are unaffected (their pending_messages are not cleared).
-    // ValidateBlockOracleData allows blocks without oracle data (transition period).
-    //
-    // However, combined with T7-02 Design Gap 1 (permanent transition-period
-    // leniency), this means oracle data in blocks is ALWAYS optional.
+    // Now: messages remain available across block templates. Stale data is purged
+    // by age, not by block creation.
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -14916,10 +14905,11 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
     bool added = manager.AddOracleBundleToBlock(block, 1000);
     BOOST_CHECK(added);
 
-    // After AddOracleBundleToBlock, pending_messages should be CLEARED
-    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0);
+    // After AddOracleBundleToBlock, pending_messages should PERSIST
+    // (messages expire via ORACLE_MAX_AGE_SECONDS stale purge, not bundle creation)
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
 
-    // Next block from same miner: no oracle data available
+    // Next block from same miner: oracle data IS still available (messages persist)
     CMutableTransaction coinbase2;
     coinbase2.vin.resize(1);
     coinbase2.vin[0].prevout.SetNull();
@@ -14930,21 +14920,18 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
     block2.vtx.push_back(MakeTransactionRef(std::move(coinbase2)));
 
     bool added2 = manager.AddOracleBundleToBlock(block2, 1001);
-    BOOST_CHECK(added2); // Succeeds (empty oracle data is valid)
+    BOOST_CHECK(added2);
 
-    // Verify block2 has no oracle output (or minimal oracle output)
-    // Block2's coinbase should only have the original 1 output
-    BOOST_CHECK_EQUAL(block2.vtx[0]->vout.size(), 1); // No oracle output added
+    // Block2 WILL have oracle output now since messages persist
+    BOOST_CHECK_EQUAL(block2.vtx[0]->vout.size(), 2); // Oracle output included
 
-    BOOST_TEST_MESSAGE("T8-02f: pending_messages cleared after bundle creation ⚠️ — "
-        "AddOracleBundleToBlock clears ALL pending messages after consuming into bundle. "
-        "Mining node: next block has no oracle data (pending empty). "
-        "With 15s block time, consecutive blocks from same miner lack oracle data. "
-        "DEFENSE: By design (prevents stale data reuse). P2P re-broadcasts refill "
-        "within seconds. Non-mining nodes unaffected. Combined with permanent "
-        "transition-period leniency (T7-02), oracle data in blocks is always optional. "
+    BOOST_TEST_MESSAGE("T8-02f: pending_messages persist after bundle creation — "
+        "Messages persist for multiple template creations, expire naturally via "
+        "ORACLE_MAX_AGE_SECONDS stale purge. P2P oracle broadcasts replace stale "
+        "entries via oracle_id key. This eliminates the bundle drain problem where "
+        "consecutive blocks from the same miner would lack oracle data. "
         "NOT a vulnerability — oracle price comes from P2P gossip, not block data. "
-        "Block-embedded oracle data is a BACKUP mechanism (currently only used on testnet/regtest).");
+        "Block-embedded oracle data is a BACKUP mechanism.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t8_02g_net_processing_static_rate_limit_map_growth)

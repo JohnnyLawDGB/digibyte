@@ -784,7 +784,7 @@ static std::vector<CKey> InjectConsensusAttestations(
 }
 
 // Test: Pending messages and attestations are cleared after Phase Two bundle creation
-BOOST_FIXTURE_TEST_CASE(pending_messages_cleared_after_bundle, BasicTestingSetup)
+BOOST_FIXTURE_TEST_CASE(pending_messages_survive_after_bundle, BasicTestingSetup)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 
@@ -804,22 +804,25 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_cleared_after_bundle, BasicTestingSetup
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 8);
     BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 8);
 
-    // Create a block — this should consume and clear pending messages + attestations
+    // Create a block — messages are consumed into the bundle but NOT cleared
+    // (they persist for future template creation, expire via stale purge)
     CBlock block;
     block.nTime = GetTime();
     manager.AddOracleBundleToBlock(block, 200);
 
-    // After bundle creation, both pending messages and attestations should be cleared
+    // After bundle creation, pending messages and attestations should STILL EXIST
+    // They are available for the next block template; expiry is handled by
+    // ORACLE_MAX_AGE_SECONDS stale purge, not by bundle creation
     BOOST_CHECK_MESSAGE(
-        manager.GetPendingMessageCount() == 0,
-        strprintf("Pending messages should be 0 after bundle creation, got %zu", manager.GetPendingMessageCount())
+        manager.GetPendingMessageCount() == 8,
+        strprintf("Pending messages should survive bundle creation (got %zu, expected 8)", manager.GetPendingMessageCount())
     );
     BOOST_CHECK_MESSAGE(
-        manager.GetPendingAttestationCount() == 0,
-        strprintf("Attestations should be 0 after bundle creation, got %zu", manager.GetPendingAttestationCount())
+        manager.GetPendingAttestationCount() == 8,
+        strprintf("Attestations should survive bundle creation (got %zu, expected 8)", manager.GetPendingAttestationCount())
     );
 
-    LogPrintf("Test PASSED: Pending messages and attestations cleared after Phase Two bundle creation\n");
+    LogPrintf("Test PASSED: Pending messages and attestations persist after Phase Two bundle creation\n");
 }
 
 // Test: With fewer than required messages, pending messages should NOT be cleared
@@ -865,7 +868,12 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
     block1.nTime = GetTime();
     manager.AddOracleBundleToBlock(block1, 200);
 
-    // Pending should be cleared after consuming into bundle
+    // Explicitly clear pending between rounds to test no-carryover concept.
+    // In production, messages persist after bundle creation and expire via
+    // ORACLE_MAX_AGE_SECONDS stale purge. For this test, we clear explicitly
+    // to verify fresh messages are needed for each epoch/round.
+    manager.ClearPendingMessages();
+    manager.ClearPendingAttestations();
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0);
     BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 0);
 
@@ -1102,9 +1110,10 @@ BOOST_AUTO_TEST_CASE(phase2_full_pipeline)
 
     BOOST_CHECK(manager.AddOracleBundleToBlock(block, 200));
 
-    // Step 5: Verify bundle was embedded
-    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0); // Consumed
-    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 0); // Consumed
+    // Step 5: Verify bundle was embedded — messages/attestations persist after
+    // bundle creation (available for next template, expire via stale purge)
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 5); // Persist after bundle
+    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 5); // Persist after bundle
     BOOST_CHECK(block.vtx[0]->vout.size() >= 2); // Oracle output added
 
     // Step 6: Extract and validate (simulating block validation on receiving node)

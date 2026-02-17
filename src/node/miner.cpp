@@ -51,11 +51,23 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 void RegenerateCommitments(CBlock& block, ChainstateManager& chainman)
 {
     CMutableTransaction tx{*block.vtx.at(0)};
-    tx.vout.erase(tx.vout.begin() + GetWitnessCommitmentIndex(block));
+    tx.vout.erase(
+        std::remove_if(tx.vout.begin(), tx.vout.end(),
+            [](const CTxOut& txout) { return txout.scriptPubKey.IsUnspendable(); }),
+        tx.vout.end());
     block.vtx.at(0) = MakeTransactionRef(tx);
 
     const CBlockIndex* prev_block = WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock));
     chainman.GenerateCoinbaseCommitment(block, prev_block);
+
+    // Re-add oracle bundle (was stripped with other OP_RETURN outputs above)
+    if (prev_block) {
+        if (DigiDollar::IsDigiDollarEnabled(prev_block, chainman)) {
+            OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+            int32_t nHeight = prev_block->nHeight + 1;
+            oracle_manager.AddOracleBundleToBlock(block, nHeight);
+        }
+    }
 
     block.hashMerkleRoot = BlockMerkleRoot(block);
 }

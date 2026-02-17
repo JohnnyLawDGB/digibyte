@@ -818,14 +818,10 @@ BOOST_AUTO_TEST_CASE(test_cached_price_requires_consensus)
     CAmount price_after_consensus = manager.GetLatestPrice();
     BOOST_CHECK_EQUAL(price_after_consensus, 10000);
 
-    // Consume into block to clear pending
-    CBlock dummy_block;
-    CMutableTransaction coinbase;
-    coinbase.vin.resize(1);
-    coinbase.vout.resize(1);
-    coinbase.vout[0].nValue = 0;
-    dummy_block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
-    manager.AddOracleBundleToBlock(dummy_block, 700);
+    // Clear pending messages between rounds (messages persist after bundle creation,
+    // so use explicit ClearPendingMessages() to reset pending state for testing
+    // price consensus logic — this preserves the cached price from Round 1)
+    manager.ClearPendingMessages();
 
     // Round 2: Only 3 oracles send $0.02 — below threshold
     for (int i = 0; i < 3; i++) {

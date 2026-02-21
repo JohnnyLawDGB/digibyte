@@ -329,11 +329,9 @@ RPCHelpMan getdigidollarstats()
             // micro-USD / 10 = millicents (e.g., 6310 micro-USD / 10 = 631 millicents = $0.00631)
             CAmount oraclePriceMillicents = oraclePriceMicroUSD / 10;
 
-            // Also calculate cents for display (rounded)
+            // Calculate cents for display (rounded). Allow 0 for sub-cent prices —
+            // oracle_price_micro_usd and price_usd fields have full precision.
             CAmount oraclePriceCents = (oraclePriceMicroUSD + 5000) / 10000;
-            if (oraclePriceCents == 0 && oraclePriceMicroUSD > 0) {
-                oraclePriceCents = 1; // Minimum 1 cent for any non-zero price
-            }
 
             // Calculate system health
             // IMPORTANT: Return 0% if no DD minted network-wide (instead of default 30000%)
@@ -363,7 +361,23 @@ RPCHelpMan getdigidollarstats()
             // Add fields expected by tests
             result.pushKV("system_collateral_ratio", systemHealth);
             result.pushKV("total_collateral_locked", ValueFromAmount(totalCollateral));
-            result.pushKV("active_positions", 0); // TODO: Count positions from UTXO scan
+            // Get active position count from the DigiDollar stats index.
+            // The stats index tracks vault_count (incremented on mint,
+            // decremented on redeem) so this reflects real network state.
+            // Falls back to 0 if the stats index isn't available yet.
+            uint64_t activePositions = 0;
+            if (g_digidollar_stats_index) {
+                ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                LOCK(cs_main);
+                const CBlockIndex* pindex = chainman.ActiveChain().Tip();
+                if (pindex) {
+                    auto ddstats = g_digidollar_stats_index->LookUpStats(*pindex);
+                    if (ddstats) {
+                        activePositions = ddstats->vault_count;
+                    }
+                }
+            }
+            result.pushKV("active_positions", int64_t{activePositions});
             result.pushKV("oracle_price_age", 0); // TODO: Calculate age
 
             UniValue dcaTier(UniValue::VOBJ);
@@ -2209,9 +2223,23 @@ static RPCHelpMan estimatecollateral()
             int lockDays = GetLockDaysForTier(lockTier);
             int baseRatio = GetMinCollateralRatio(lockTier);
 
-            // Get current system health and DCA multiplier
-            int systemHealth = 150; // TODO: Get real system health
-            double dcaMultiplier = 1.0; // TODO: Get real DCA multiplier
+            // Get real system health and DCA multiplier from chain state
+            // Previously hardcoded to 150/1.0 — caused wrong collateral
+            // estimates when system health degrades (DCA multiplier increases)
+            DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+            CAmount totalCollateral_est = metrics.totalCollateral;
+            CAmount totalDD_est = metrics.totalDDSupply;
+            CAmount oraclePriceMillicents_est = oraclePriceMicroUSD / 10;
+
+            int systemHealth;
+            if (totalDD_est == 0) {
+                systemHealth = 0;
+            } else {
+                systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                    totalCollateral_est, totalDD_est, oraclePriceMillicents_est);
+            }
+            auto healthTier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
+            double dcaMultiplier = healthTier.multiplier;
             int effectiveRatio = static_cast<int>(baseRatio * dcaMultiplier);
 
             // Calculate required DGB using micro-USD precision
@@ -2245,8 +2273,12 @@ static RPCHelpMan estimatecollateral()
             result.pushKV("oracle_price_micro_usd", int64_t{oraclePriceMicroUSD});
             result.pushKV("oracle_price_usd", oraclePriceMicroUSD / 1000000.0);
             result.pushKV("system_health", systemHealth);
-            result.pushKV("health_tier", "healthy");
-            result.pushKV("usd_value", ValueFromAmount(usdValueCents));
+            result.pushKV("health_tier", healthTier.status);
+            // Fix: ddAmount is in cents, so USD value = ddAmount / 100.0
+            // Previously used ValueFromAmount(usdValueCents) which divides by
+            // COIN (100,000,000) — treating cents as satoshis, producing a
+            // value ~100,000x too small (e.g., $0.001 instead of $100).
+            result.pushKV("usd_value", ddAmount / 100.0);
 
             return result;
         },
@@ -2531,8 +2563,9 @@ static RPCHelpMan getoracleprice()
                         usingMockOracle = true;
                         priceMicroUSD = mockPrice;
                         // Convert micro-USD to cents: cents = micro-USD / 10,000
+                        // Convert micro-USD to cents (rounded). Allow 0 for sub-cent
+                        // prices — price_usd and price_micro_usd have full precision.
                         priceCents = (priceMicroUSD + 5000) / 10000;
-                        if (priceCents == 0) priceCents = 1; // Minimum 1 cent
                         priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
                         // Mock oracle is always "current" - use current time
                         lastBundleTime = GetTime();
@@ -2550,8 +2583,9 @@ static RPCHelpMan getoracleprice()
                 priceMicroUSD = oracle_manager.GetLatestPrice();
                 // Derive cents from the same micro-USD source for consistency
                 // cents = micro-USD / 10,000 (rounded)
+                // Convert micro-USD to cents (rounded). Allow 0 for sub-cent
+                // prices — price_usd and price_micro_usd have full precision.
                 priceCents = (priceMicroUSD + 5000) / 10000;
-                if (priceCents == 0 && priceMicroUSD > 0) priceCents = 1; // Minimum 1 cent if price exists
                 // Calculate true USD price from micro-USD (full precision)
                 priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
 

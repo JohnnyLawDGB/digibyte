@@ -3668,6 +3668,17 @@ static RPCHelpMan stoporacle()
                         oracle->Stop();
                         success = !oracle->IsRunning();
                         status_message = success ? "Oracle stopped successfully" : "Failed to stop oracle";
+
+                        // Clear stale oracle messaging state to break potential deadlocks.
+                        // The seen_message_hashes, pending_messages, and pending_attestations
+                        // can hold stale entries that prevent consensus recovery after restart.
+                        // ClearPendingMessages() resets the duplicate filter, allowing fresh
+                        // messages to be accepted when the oracle is restarted.
+                        if (success) {
+                            OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+                            bundleManager.ClearPendingMessages();
+                            status_message += " (messaging state cleared)";
+                        }
                     } else {
                         status_message = "Oracle not found in manager";
                     }

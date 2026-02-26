@@ -88,6 +88,28 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         }
     }
 
+    // Periodic cleanup of seen message hashes to prevent deadlock.
+    // When the oracle consensus round stalls (e.g., due to rapid block production
+    // or network partition), messages with the same Phase2 hash keep getting
+    // rejected as duplicates, preventing recovery. Clearing the set periodically
+    // allows fresh consensus rounds to form. The 300-second interval is shorter
+    // than any network's epoch length (testnet=750s, mainnet=1500s), ensuring at
+    // least one cleanup per epoch. The pending_messages map (keyed by oracle_id)
+    // provides the authoritative dedup — seen_message_hashes is best-effort P2P
+    // optimization only.
+    {
+        static int64_t last_seen_cleanup = 0;
+        int64_t now_cleanup = GetTime();
+        if (now_cleanup - last_seen_cleanup > 300) {
+            size_t old_size = seen_message_hashes.size();
+            seen_message_hashes.clear();
+            last_seen_cleanup = now_cleanup;
+            if (old_size > 0) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Periodic cleanup cleared %zu seen message hashes\n", old_size);
+            }
+        }
+    }
+
     // Calculate message hash for duplicate detection.
     // Use Phase2 hash (oracle_id + price + timestamp) for Phase2-signed messages.
     // GetSignatureHash() includes block_height+nonce which are NOT covered by

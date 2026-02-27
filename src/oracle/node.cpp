@@ -320,7 +320,7 @@ void OracleNode::FetchAndUpdatePrice()
         current_price = median_price;
         last_update_time = GetTime();
 
-        LogPrintf("Oracle: Updated price for oracle %d: %d satoshis/USD\n", oracle_id, median_price);
+        LogPrintf("Oracle: Updated price for oracle %d: %d micro-USD\n", oracle_id, median_price);
     } else {
         LogPrintf("Oracle: Failed to fetch valid price for oracle %d\n", oracle_id);
     }

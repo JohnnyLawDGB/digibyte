@@ -189,8 +189,8 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
             std::lock_guard<std::mutex> price_lock(mtx_bundles);
             cached_price = static_cast<CAmount>(median_price);
             last_update_time = GetTime();
-            LogPrintf("Oracle: Updated cached price with %d-of-%d consensus: %llu micro-USD ($%.6f)\n",
-                     fresh_count, min_oracle_count,
+            LogPrintf("Oracle: Updated cached price with %d/%d oracles in consensus (min %d required): %llu micro-USD ($%.6f)\n",
+                     fresh_count, (int)pending_messages.size(), min_oracle_count,
                      median_price, median_price / 1000000.0);
 
             // T5-03: When consensus is reached from individual messages, try to generate
@@ -1761,7 +1761,7 @@ bool OracleDataValidator::ValidateOracleBundle(const COracleBundle& bundle, int3
 
     // Check consensus requirement using chainparams threshold
     if (!bundle.HasConsensus(params.nOracleRequiredMessages)) {
-        LogPrintf("Oracle: Bundle does not have required consensus (%zu of %d messages)\n",
+        LogPrintf("Oracle: Bundle does not have required consensus (%zu messages, %d required)\n",
                   bundle.messages.size(), params.nOracleRequiredMessages);
         return false;
     }

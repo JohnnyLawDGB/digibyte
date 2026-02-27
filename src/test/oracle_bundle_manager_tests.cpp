@@ -829,4 +829,29 @@ BOOST_AUTO_TEST_CASE(stale_messages_purged_naturally)
     LogPrintf("Test: stale_messages_purged_naturally PASSED\n");
 }
 
+/**
+ * Test for Bug 1: Oracle Consensus Log Message Format
+ * 
+ * This test demonstrates the problematic "8-of-5 consensus" log message format.
+ * The fix is in bundle_manager.cpp where log messages should show:
+ * "%d/%d oracles in consensus (min %d required)" instead of "%d-of-%d"
+ */
+BOOST_AUTO_TEST_CASE(consensus_log_message_format)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(5); // Require 5 oracles for consensus
+    
+    // Just verify the basic scenario setup for now
+    // The real test will be observing the log output when 8 messages meet a 5-oracle requirement
+    BOOST_CHECK_EQUAL(manager.GetMinOracleCount(), 5);
+    BOOST_CHECK(manager.IsEnabled());
+    
+    LogPrintf("Test: consensus_log_message_format setup PASSED\n");
+    LogPrintf("When 8 oracle messages meet a 5-oracle consensus requirement,\n");
+    LogPrintf("the log should show '8/8 oracles in consensus (min 5 required)'\n");
+    LogPrintf("NOT the confusing '8-of-5' format.\n");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

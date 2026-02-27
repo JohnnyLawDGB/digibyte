@@ -216,6 +216,13 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
                     att_consensus_timestamp = (ts.size() % 2 == 0) ?
                         (ts[tmid - 1] + ts[tmid]) / 2 : ts[tmid];
 
+                    // Proactive broadcast: send consensus proposal when quorum is reached
+                    // This ensures remote oracles get the proposal BEFORE any block template is needed
+                    // Use cached_epoch, or fallback to a conservative estimate if not set
+                    int32_t epoch_for_broadcast = (cached_epoch >= 0) ? cached_epoch : 
+                                                   static_cast<int32_t>(GetTime() / (1440 * 15));  // 1440 blocks * 15 seconds/block
+                    BroadcastConsensusProposal(epoch_for_broadcast, att_consensus_price, att_consensus_timestamp);
+
                     // Ask local oracle nodes to sign consensus values
                     OracleManager& om = OracleManager::GetInstance();
                     for (const auto& [oid, omsg] : pending_messages) {
@@ -1092,7 +1099,17 @@ bool OracleBundleManager::BroadcastConsensusProposal(int32_t epoch, uint64_t con
     {
         std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
-        // Don't spam: only broadcast once per epoch
+        // Rate limit: only broadcast once per 30 seconds for recovery
+        static int64_t last_broadcast_time = 0;
+        int64_t now = GetTime();
+        if (now - last_broadcast_time < 30) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Consensus proposal rate limited, last broadcast %d seconds ago\n", 
+                     (int)(now - last_broadcast_time));
+            return false;
+        }
+        last_broadcast_time = now;
+
+        // Still track epochs to avoid redundant broadcasts within same epoch
         if (broadcast_proposal_epochs.count(epoch)) {
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Consensus proposal already broadcast for epoch %d\n", epoch);
             return false;

@@ -3609,8 +3609,9 @@ RPCHelpMan startoracle()
                                         }
                                     }
                                 }
-                            } catch (...) {
-                                // No wallet context available — fall through to error message
+                            } catch (const std::exception& e) {
+                                // No wallet context available — include error in status_message for debugging
+                                status_message = strprintf("Wallet access error: %s", e.what());
                             }
                             if (!loaded_from_wallet && !success) {
                                 status_message = "Oracle not configured. Provide private_key parameter or run createoraclekey first.";

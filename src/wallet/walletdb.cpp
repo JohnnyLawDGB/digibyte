@@ -785,10 +785,15 @@ bool WalletBatch::ReadOracleKey(uint32_t oracle_id, CKey& key)
     if (!m_batch->Read(std::make_pair(DBKeys::ORACLE_KEY, oracle_id), privkey)) {
         return false;
     }
-
-    CPubKey pubkey;
-    if (!key.Load(privkey, pubkey, true /* fSkipCheck */)) {
+    CKey temp_key;
+    CPubKey dummy_pubkey;
+    if (!temp_key.Load(privkey, dummy_pubkey, true)) {
         LogPrint(BCLog::WALLETDB, "Oracle: Failed to load oracle key for oracle_id %u from database\n", oracle_id);
+        return false;
+    }
+    key.Set(temp_key.begin(), temp_key.end(), true);
+    if (!key.IsValid()) {
+        LogPrint(BCLog::WALLETDB, "Oracle: Invalid oracle key after compression fix for oracle_id %u\n", oracle_id);
         return false;
     }
 

@@ -360,23 +360,36 @@ void OracleNode::BroadcastCurrentPrice()
         int64_t consensus_timestamp = 0;
 
         if (bm.GetMinOracleCount() > 1 && bm.ComputeConsensusValues(consensus_price, consensus_timestamp)) {
-            // Consensus exists — create attestation over consensus values
-            COraclePriceMessage attestation = CreateConsensusAttestation(consensus_price, consensus_timestamp);
-            if (!attestation.schnorr_sig.empty()) {
-                // Submit as consensus attestation (for block construction)
-                bm.AddConsensusAttestation(attestation);
+            // DEADLOCK PREVENTION: If the consensus timestamp is stale (>5 minutes
+            // old), the consensus round is frozen. All oracles are creating
+            // attestations with the same (price, timestamp) tuple, producing
+            // identical Phase2 hashes that get rejected by the duplicate filter.
+            // Fall through to individual price broadcast with a fresh timestamp
+            // to break the cycle and allow a new consensus round to form.
+            int64_t consensus_age = timestamp - consensus_timestamp;
+            if (consensus_age > 300) {
+                LogPrintf("Oracle: Consensus timestamp is %lld seconds stale, broadcasting individual price to break deadlock\n", consensus_age);
+                // Clear stale state so fresh messages can form a new consensus
+                bm.ClearPendingMessages();
+            } else {
+                // Consensus exists and is fresh — create attestation over consensus values
+                COraclePriceMessage attestation = CreateConsensusAttestation(consensus_price, consensus_timestamp);
+                if (!attestation.schnorr_sig.empty()) {
+                    // Submit as consensus attestation (for block construction)
+                    bm.AddConsensusAttestation(attestation);
 
-                // Also broadcast via P2P so other nodes receive our attestation
-                if (BroadcastPriceMessage(attestation)) {
-                    std::lock_guard<std::mutex> lock(mtx_price);
-                    last_broadcast_price = price;
-                    last_broadcast_timestamp = timestamp;
+                    // Also broadcast via P2P so other nodes receive our attestation
+                    if (BroadcastPriceMessage(attestation)) {
+                        std::lock_guard<std::mutex> lock(mtx_price);
+                        last_broadcast_price = price;
+                        last_broadcast_timestamp = timestamp;
+                    }
+                    return;
                 }
-                return;
             }
         }
 
-        // No consensus yet or Phase 1 — broadcast individual price as before
+        // No consensus yet, Phase 1, or stale consensus — broadcast individual price
         COraclePriceMessage message = CreatePriceMessage(price, timestamp);
         if (BroadcastPriceMessage(message)) {
             std::lock_guard<std::mutex> lock(mtx_price);

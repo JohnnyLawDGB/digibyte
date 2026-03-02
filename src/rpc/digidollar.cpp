@@ -377,7 +377,7 @@ RPCHelpMan getdigidollarstats()
                     }
                 }
             }
-            result.pushKV("active_positions", int64_t{activePositions});
+            result.pushKV("active_positions", static_cast<int64_t>(activePositions));
             result.pushKV("oracle_price_age", 0); // TODO: Calculate age
 
             UniValue dcaTier(UniValue::VOBJ);

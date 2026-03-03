@@ -2068,6 +2068,24 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
     } else {
         WalletLogPrintf("Rescan completed in %15dms\n", Ticks<std::chrono::milliseconds>(reserver.now() - start_time));
     }
+
+    // BUG FIX: Validate DigiDollar position states after ANY rescan.
+    //
+    // ScanForDDUTXOs() -> ValidatePositionStates() cross-checks every active position
+    // against the actual UTXO set. If a collateral output was spent (redeemed), the
+    // position is marked is_active=false. This is critical for wallet restore via
+    // importdescriptors where ProcessDDTxForRescan may miss REDEEM transactions
+    // (e.g., full redemptions with no OP_RETURN, or blocks skipped by the fast filter).
+    //
+    // Previously this only ran at wallet startup (postInitProcess), so importdescriptors
+    // and rescanblockchain never got this validation — causing Bug #8 where restored
+    // wallets show active "Redeem" buttons for already-redeemed positions.
+    if (result.status == ScanResult::SUCCESS && m_dd_wallet) {
+        WalletLogPrintf("DigiDollar: Running post-rescan position validation...\n");
+        size_t dd_utxo_count = m_dd_wallet->ScanForDDUTXOs();
+        WalletLogPrintf("DigiDollar: Post-rescan validation complete - %d DD UTXOs\n", dd_utxo_count);
+    }
+
     return result;
 }
 

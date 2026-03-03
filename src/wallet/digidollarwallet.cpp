@@ -1852,8 +1852,19 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
     LogPrintf("DigiDollar: ProcessDDTxForRescan called for tx %s at height %d\n",
               tx.GetHash().GetHex(), block_height);
 
-    // Parse OP_RETURN to determine DD transaction type
-    uint8_t ddTxType = 0;
+    // Determine DD transaction type from the VERSION FIELD (primary) and OP_RETURN (supplementary).
+    //
+    // BUG FIX: Previously this relied SOLELY on OP_RETURN parsing to detect the tx type.
+    // Full-redemption REDEEM txs (ddChange == 0) have NO OP_RETURN, so they were invisible
+    // to the rescan parser — positions were never marked as redeemed after wallet restore.
+    //
+    // The tx version field ALWAYS encodes the type correctly via SetDigiDollarType().
+    // Use GetDigiDollarTxType() as the authoritative source; OP_RETURN is only needed
+    // for supplementary data (DD amounts for change outputs).
+    uint8_t ddTxType = static_cast<uint8_t>(GetDigiDollarTxType(tx));
+
+    // Also try OP_RETURN for supplementary data / backward compat validation
+    uint8_t opReturnTxType = 0;
     for (const CTxOut& txout : tx.vout) {
         if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
             const CScript& script = txout.scriptPubKey;
@@ -1877,12 +1888,19 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
 
             try {
                 CScriptNum txTypeNum(data, false);
-                ddTxType = static_cast<uint8_t>(txTypeNum.getint());
+                opReturnTxType = static_cast<uint8_t>(txTypeNum.getint());
                 break;
             } catch (const scriptnum_error&) {
                 continue;
             }
         }
+    }
+
+    // Log when version field detects a type that OP_RETURN missed (the bug case)
+    if (ddTxType != 0 && opReturnTxType == 0) {
+        LogPrintf("DigiDollar: ProcessDDTxForRescan - tx %s type %d detected via version field "
+                  "(no OP_RETURN DD marker — full redemption with no DD change)\n",
+                  tx.GetHash().GetHex(), ddTxType);
     }
 
     if (ddTxType == 1) {  // MINT transaction

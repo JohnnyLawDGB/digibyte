@@ -1425,17 +1425,37 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         "-rpcbind",
         "-torcontrol",
         "-whitebind",
-        "-zmqpubhashblock",
-        "-zmqpubhashtx",
-        "-zmqpubrawblock",
-        "-zmqpubrawtx",
-        "-zmqpubsequence",
     }) {
         for (const std::string& socket_addr : args.GetArgs(port_option)) {
             std::string host_out;
             uint16_t port_out{0};
             if (!SplitHostPort(socket_addr, port_out, host_out)) {
                 return InitError(InvalidPortErrMsg(port_option, socket_addr));
+            }
+        }
+    }
+
+    // ZMQ options support both TCP (tcp://host:port) and Unix domain sockets
+    // (ipc:///path/to/socket). Skip port validation for ipc:// addresses since
+    // they use filesystem paths, not host:port format. This restores support
+    // that was inadvertently broken when port validation was added.
+    // See: https://github.com/DigiByte-Core/digibyte/issues/340
+    for (const std::string zmq_option : {
+        "-zmqpubhashblock",
+        "-zmqpubhashtx",
+        "-zmqpubrawblock",
+        "-zmqpubrawtx",
+        "-zmqpubsequence",
+    }) {
+        for (const std::string& socket_addr : args.GetArgs(zmq_option)) {
+            // libzmq natively supports ipc:// for Unix domain sockets
+            if (socket_addr.substr(0, 6) == "ipc://") {
+                continue;
+            }
+            std::string host_out;
+            uint16_t port_out{0};
+            if (!SplitHostPort(socket_addr, port_out, host_out)) {
+                return InitError(InvalidPortErrMsg(zmq_option, socket_addr));
             }
         }
     }

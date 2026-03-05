@@ -166,3 +166,4 @@ testnet_miner.sh
 # Audit files
 audit/
 CERT_FIX_ORACLE.md
+Z_PROMPTS.md

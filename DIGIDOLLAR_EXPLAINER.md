@@ -175,7 +175,7 @@ Efficient script execution with Merkleized Alternative Script Trees. The collate
 
 Both paths **require the timelock to expire first** - there is no early redemption, no forced liquidation, and no exceptions.
 
-**Implementation Note**: Partial redemption has wallet-level code (`CloseCollateralPosition()`), but consensus rules enforce FULL redemption only. Each collateral UTXO must be fully redeemed in a single transaction - partial redemption is validated as INVALID at the consensus layer (digidollar.cpp:ValidateRedemption).
+**Implementation Note**: Partial redemption has wallet-level code (`CloseCollateralPosition()`), but consensus rules enforce FULL redemption only. Each collateral UTXO must be fully redeemed in a single transaction - partial redemption is validated as INVALID at the consensus layer (validation.cpp:ValidateCollateralReleaseAmount, security check T2-03).
 
 ### Key Features
 
@@ -196,7 +196,7 @@ DigiDollar leverages advanced Bitcoin Script opcodes and DigiByte's unique capab
 Enforces time-based collateral lock periods (30 days to 10 years)
 
 #### OP_CHECKSEQUENCEVERIFY (CSV)
-Enables relative time locks for redemption windows
+⚠️ Not yet implemented: Listed as a capability but not currently used in DigiDollar scripts. Only CLTV (absolute timelocks) is used.
 
 #### nLockTime
 Prevents transactions from being mined until specified block height
@@ -227,7 +227,7 @@ After time lock expires (verified by CLTV), user can redeem DigiDollars to unloc
 
 ---
 
-## Four-Layer Protection System
+## Five-Layer Protection System
 
 ### The Time-Lock Challenge
 
@@ -282,7 +282,7 @@ Automatic freezes during extreme market volatility:
 | 24-hour | 30% | Freeze all DD operations |
 | 7-day | 50% | Emergency mode |
 
-Cooldown period: 144 blocks (~36 hours) after volatility subsides. Oracle override available with 8-of-15 consensus.
+Cooldown period: 144 blocks (~36 minutes at 15s blocks) after volatility subsides. Oracle override available with 8-of-15 consensus.
 
 ### 5️⃣ Supply & Demand Dynamics (Natural Defense)
 
@@ -371,15 +371,15 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 | Feature | Document Spec | Code Status | Notes |
 |---------|---------------|-------------|-------|
-| 2 MAST Paths | Normal + ERR only | ✅ Correct | Only 2 paths in MAST tree (scripts.cpp:133-193) |
+| 2 MAST Paths | Normal + ERR only | ✅ Correct | Only 2 paths in MAST tree (scripts.cpp:113-173) |
 | Emergency Path | Not used | ✅ Removed | `CreateEmergencyPath()` was dead code and removed |
 | Partial Redemption | Consensus: FULL only | ⚠️ Clarified | Wallet code exists, but consensus enforces full redemption |
 | ERR Returns | 100% collateral, burns more DD | ✅ Correct | `GetRequiredDDBurn()` increases burn, `GetAdjustedRedemption()` returns 100% |
 | Minting Blocked During ERR | Yes | ✅ Correct | `ShouldBlockMinting()` returns true when health < 100% |
 | Timelock Required | Both paths need CLTV | ✅ Correct | Both Normal and ERR paths start with CLTV check |
-| Collateral Tiers | 10 tiers (1hr→10yr) | ✅ Correct | 2-year tier (275%) verified in collateral.cpp |
-| DCA Multipliers | 1.0x/1.2x/1.5x/2.0x | ✅ Correct | dca.cpp:GetMultiplier() matches documentation |
-| ERR Ratios | 0.95/0.90/0.85/0.80 | ✅ Correct | err.cpp:GetERRRatio() matches documentation |
+| Collateral Tiers | 10 tiers (1hr→10yr) | ✅ Correct | 2-year tier (275%) verified in consensus/digidollar.h |
+| DCA Multipliers | 1.0x/1.2x/1.5x/2.0x | ✅ Correct | dca.cpp:GetDCAMultiplier() matches documentation |
+| ERR Ratios | 0.95/0.90/0.85/0.80 | ✅ Correct | err.cpp:CalculateERRAdjustment() matches documentation |
 
 **Code Verification Complete** (2026-02-01):
 - MAST tree contains exactly 2 paths (Normal + ERR) - verified in `CreateCollateralP2TR()`
@@ -396,10 +396,10 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 | Issue | Location | Impact |
 |-------|----------|--------|
-| System health hardcoded 150% | txbuilder.cpp:29,268 | ERR/DCA can never activate in production |
-| MockOracleManager in non-regtest | err.cpp:356 | Test mock leaks into mainnet code path |
-| Mainnet validation disabled | bundle_manager.cpp:1103 | Returns `true` without validating on mainnet |
-| GetBestHeight() stub | bundle_manager.cpp:28-31 | Returns hardcoded 1000 instead of actual height |
+| System health hardcoded 150% | txbuilder.cpp:29,270 | ERR/DCA can never activate in production (validation.cpp has partial fix, txbuilder still uses constant) |
+| MockOracleManager in non-regtest | ~~err.cpp:356~~ | **FIXED**: All MockOracleManager calls are now guarded by REGTEST checks |
+| Mainnet validation disabled | bundle_manager.cpp:1563 | Returns `true` without validating on mainnet |
+| GetBestHeight() stub | bundle_manager.cpp:30-34 | Returns hardcoded 0 instead of actual height |
 | Tests use DD_TX_ERR=5 | test files | Transaction type 5 doesn't exist (only 0-3) |
 
 **What This Means**:

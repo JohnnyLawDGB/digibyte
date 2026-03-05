@@ -768,7 +768,7 @@
 - `MAX_BLOCK_WEIGHT` → 4M weight units maximum block weight
 - `MAX_BLOCK_SIGOPS_COST` → maximum signature operations per block (80,000)
 - `WITNESS_SCALE_FACTOR` → witness discount factor (4x)
-- `COINBASE_MATURITY` → blocks before coinbase outputs can be spent (100)
+- `COINBASE_MATURITY` → blocks before coinbase outputs can be spent (8 on DigiByte; `COINBASE_MATURITY_2` = 100 after certain height)
 
 ### src/consensus/merkle.cpp / .h
 - `ComputeMerkleRoot()` → builds Merkle tree from transaction hashes, returns root hash
@@ -811,23 +811,28 @@
 - `GetWitnessCommitmentIndex()` → finds the SegWit commitment output in coinbase transaction
 
 ### src/consensus/dca.cpp / .h
-- ⚠️ `DynamicCollateralAdjustment` (class) → DigiDollar DCA consensus logic — calculates required DGB collateral for minting DigiDollars based on volatility-adjusted ratios
-  - `CalculateRequiredCollateral()` → computes DGB collateral needed for a DD mint at current oracle price
-  - `ValidateCollateral()` → validates that a DD mint transaction has sufficient collateral
-  - `GetTierForAmount()` → determines which of the 4 collateral tiers applies to a mint amount
+- ⚠️ `DigiDollar::DCA::DynamicCollateralAdjustment` (class) → adjusts collateral requirements based on system health
+  - `CalculateSystemHealth(totalCollateral, totalDD, oraclePrice)` → returns health % (0–30000)
+  - `GetDCAMultiplier(systemHealth)` → returns multiplier: >150%: 1.0×, 120–150%: 1.2×, 100–120%: 1.5×, <100%: 2.0×
+  - `ApplyDCA(baseRatio, systemHealth)` → baseRatio × multiplier
+  - `GetCurrentTier(systemHealth)` → returns HealthTier for current health level
+  - `IsSystemEmergency(systemHealth)` → true if health < 100%
 
 ### src/consensus/err.cpp / .h
-- ⚠️ `EmergencyRedemptionRatio` (class) → DigiDollar ERR consensus logic — manages emergency redemption when DGB/USD price drops significantly
-  - `CalculateRedemptionAmount()` → computes DGB returned when redeeming DigiDollars under ERR conditions
-  - `ValidateRedemption()` → validates a DD redemption transaction against ERR rules
-  - `IsEmergencyActive()` → checks if emergency redemption mode is triggered based on price deviation
+- ⚠️ `DigiDollar::ERR::EmergencyRedemptionRatio` (class) → emergency protection when system < 100% collateralized
+  - `ShouldActivateERR(systemHealth)` → true if health < 100%
+  - `CalculateERRAdjustment(systemHealth)` → tiered ratio: 95–100%: 0.95, 90–95%: 0.90, 85–90%: 0.85, <85%: 0.80
+  - `GetRequiredDDBurn(originalDDMinted, systemHealth)` → originalDD / ERRRatio
+  - `ShouldBlockMinting()` → returns true during ERR to prevent destabilization
 
 ### src/consensus/volatility.cpp / .h
-- ⚠️ `VolatilityMonitor` (class) → tracks DGB/USD price volatility from oracle data for collateral tier adjustments
-  - `AddPricePoint()` → records a new oracle price observation
-  - `GetCurrentVolatility()` → calculates current annualized volatility from recent price history
-  - `GetVolatilityTier()` → maps current volatility to a collateral multiplier tier
-  - `IsHighVolatility()` → checks if volatility exceeds the high-risk threshold
+- ⚠️ `DigiDollar::Volatility::VolatilityMonitor` (class) → monitors price volatility and manages freeze mechanisms
+  - `RecordPrice(price, timestamp, height)` → adds price point to history deque
+  - `CalculateVolatility(timeWindow)` → standard deviation-based volatility for time window in seconds
+  - `GetCurrentState()` → returns current VolatilityState (hourly/daily/weekly volatility, freeze flags)
+  - `UpdateState(currentHeight)` → recalculates all volatility metrics, triggers/clears freezes
+  - `ShouldFreezeMinting()` → true if 1-hour volatility > 20%
+  - `ShouldFreezeAll()` → true if 24-hour volatility > 30%
 - `FormatVolatility()` → formats volatility as human-readable percentage string
 - `CalculatePercentageChange()` → computes percentage change between two prices
 - `ExceedsThreshold()` → checks if price change exceeds a given percentage threshold

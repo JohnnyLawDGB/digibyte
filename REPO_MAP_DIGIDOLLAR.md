@@ -137,7 +137,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - MAX_TX_INPUTS = 400 prevents exceeding MAX_STANDARD_TX_WEIGHT
 
 ### src/digidollar/validation.h
-- `DigiDollar::DD_TX_VERSION` → 0x44440000 marker in transaction version field
+- `DigiDollar::DD_TX_VERSION` → 0x44440000 (defined but unused; actual marker is 0x0D1D0770 with lower 16-bit mask 0x0770 in `consensus/digidollar.cpp`)
 - `DigiDollar::ScriptType` (enum) → NOT_DIGIDOLLAR, COLLATERAL_LOCK, DD_TOKEN_OUTPUT
 - `DigiDollar::RedemptionPath` (enum) → NORMAL (health ≥ 100%), ERR (health < 100%)
 - `DigiDollar::TxLookupFn` (typedef) → function type for looking up transactions from block database by txid + coin height
@@ -498,7 +498,6 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `ORACLE_ACTIVE_COUNT` = 15
   - `ORACLE_TOTAL_COUNT` = 30
   - `ORACLE_MAX_AGE_SECONDS` = 3600 (1 hour)
-  - `ORACLE_OUTLIER_THRESHOLD_PCT` = 10 (10%)
   - `ORACLE_MIN_PRICE_MICRO_USD` = 100 ($0.0001)
   - `ORACLE_MAX_PRICE_MICRO_USD` = 100000000 ($100.00)
 - `COraclePriceMessage` (class) → individual oracle price report with BIP-340 Schnorr signatures
@@ -512,14 +511,11 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `CheckForConflictingMessages(messages)` → detects duplicate/conflicting oracle submissions
 - `COracleBundle` (class) → collection of oracle messages for consensus
   - Fields: messages vector, epoch, median_price_micro_usd, timestamp
-  - `IsValid(reference_time, min_required)` → validates bundle structure and signatures
+  - `IsValid(min_required, reference_time)` → validates bundle structure and signatures (min_required first, reference_time defaults to 0)
   - `AddMessage(message)` → adds validated message to bundle
   - `HasConsensus(min_required)` → checks if ≥ min_required valid messages exist
   - `GetConsensusPrice(min_required)` → calculates median price from valid messages
   - `ValidateEpoch(current_epoch)` → checks epoch consistency
-  - `FilterOutliers()` → basic median ± threshold filtering
-  - `FilterOutliersAdvanced()` → Modified Z-Score (MAD-based) outlier detection
-  - `FilterOutliersIQR()` → Interquartile Range (1.5× IQR) outlier detection
 - `OracleNodeInfo` (struct) → oracle node definition: id, pubkey, endpoint, is_active
 - `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of 15 active oracles for epoch
 - `GetCurrentEpoch(block_height)` → calculates epoch from block height
@@ -729,18 +725,18 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ Handles `-digidollaractivationheight` CLI arg for regtest, sets BIP9 DEPLOYMENT_DIGIDOLLAR parameters
 
 ### src/validation.cpp / src/validation.h
-- ⚠️ `AcceptToMemoryPoolWorker` → checks `DigiDollar::HasDigiDollarMarker()`, verifies BIP9 activation via `IsDigiDollarEnabled()`, creates `ValidationContext` with oracle price from `GetOraclePriceForDD()`, calls `ValidateDigiDollarTransaction()`
+- ⚠️ `MemPoolAccept::PreChecks` → checks `DigiDollar::HasDigiDollarMarker()`, verifies BIP9 activation via `IsDigiDollarEnabled()`, creates `ValidationContext` with oracle price from `GetOraclePriceForTransaction()`, calls `ValidateDigiDollarTransaction()`
 - ⚠️ `ConnectBlock` → same DD validation during block connection with `skipOracleValidation` for historical blocks, includes `txLookup` callback for block-db DD amount extraction
 - ⚠️ `GetBlockScriptFlags` → sets `SCRIPT_VERIFY_DIGIDOLLAR` flag when DEPLOYMENT_DIGIDOLLAR is active
 - ⚠️ `DisconnectBlock` → calls `RemovePriceCache()` to revert oracle price data
-- ⚠️ `GetOraclePriceForDD()` → helper: queries oracle bundle manager, falls back to mock oracle for regtest
+- ⚠️ `GetOraclePriceForTransaction()` → helper: queries oracle bundle manager, falls back to mock oracle for regtest
 
 ### src/init.cpp
 - ⚠️ Registers `-digidollar`, `-digidollaractivationheight`, `-digidollarstatsindex` and all DD RPC args under OptionsCategory::DIGIDOLLAR
 - ⚠️ Manages `g_digidollar_stats_index` lifecycle (init, interrupt, stop)
 
 ### src/script/script.h / src/script/script.cpp
-- ⚠️ Defines `OP_DIGIDOLLAR` (0xbb), `OP_DDVERIFY` (0xbc), `OP_CHECKCOLLATERAL` (0xbd), `OP_CHECKPRICE` (0xbe) opcodes
+- ⚠️ Defines `OP_DIGIDOLLAR` (0xbb), `OP_DDVERIFY` (0xbc), `OP_CHECKPRICE` (0xbd), `OP_CHECKCOLLATERAL` (0xbe) opcodes
 - ⚠️ Opcode name mapping in `GetOpName()`
 
 ### src/script/interpreter.h / src/script/interpreter.cpp
@@ -752,7 +748,11 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 
 ### src/primitives/transaction.h / src/primitives/transaction.cpp
 - ⚠️ `CMutableTransaction::SetDigiDollarType(type)` → encodes DD type into nVersion field (bits 24-31 = type, bits 0-15 = 0x0770)
-- ⚠️ `CTransaction::IsDigiDollar()` → checks version for DD marker
+- ⚠️ `CMutableTransaction::IsDigiDollar()` → checks version for DD marker (member function)
+- ⚠️ `IsDigiDollarTransaction(tx)` → free function checking DD marker on CTransaction
+- ⚠️ `GetDigiDollarTxType(tx)` → extracts DD type from version bits
+- ⚠️ `MakeDigiDollarVersion(type, flags)` → constructs DD version field
+- ⚠️ `GetDigiDollarTxTypeName(type)` → human-readable DD type name
 - ⚠️ DD version constants and helper methods
 
 ### src/node/miner.cpp
@@ -905,8 +905,12 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_validation_tests.cpp` | ValidateMintTransaction, ValidateTransferTransaction, ValidateRedemptionTransaction with full context |
 | `digidollar_volatility_tests.cpp` | Volatility monitoring, freeze triggers, cooldown periods, price history, threshold checks |
 | `digidollar_wallet_tests.cpp` | DigiDollarWallet: balance tracking, UTXO management, signing, commit, confirmation tracking |
+| `digidollar_t2_05_tests.cpp` | T2-05 task-specific tests for DD validation edge cases |
+| `digidollar_key_encryption_tests.cpp` | DD owner key and address key encryption/decryption with wallet encryption |
+| `digidollar_skip_oracle_tests.cpp` | DD validation with skipOracleValidation flag for historical block processing |
 | `oracle_block_validation_tests.cpp` | Oracle data validation during block processing, bundle extraction from coinbase |
 | `oracle_bundle_manager_tests.cpp` | Bundle creation, message aggregation, epoch management, consensus price calculation |
+| `oracle_consensus_threshold_tests.cpp` | Oracle consensus threshold validation, minimum message requirements |
 | `oracle_config_tests.cpp` | Oracle configuration validation, parameter bounds, consensus thresholds |
 | `oracle_exchange_tests.cpp` | Exchange fetcher HTTP/JSON parsing, multi-exchange aggregation, outlier filtering |
 | `oracle_integration_tests.cpp` | End-to-end oracle → DD integration: price feed through to collateral calculation |
@@ -966,6 +970,8 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_transfer.py` | DD transfer: single/multi recipient, conservation, change outputs |
 | `digidollar_tx_amounts_debug.py` | Debugging tool for DD amount extraction and validation |
 | `digidollar_wallet.py` | Wallet DD integration: balance, history, UTXO management |
+| `digidollar_watchonly_rescan.py` | Watch-only wallet DD rescan and position detection |
+| `digidollar_rpc_display_bugs.py` | RPC display formatting bug regression tests |
 | `wallet_digidollar_backup.py` | DD wallet backup and restore from backup file |
 | `wallet_digidollar_descriptors.py` | Descriptor wallet compatibility with DD keys |
 | `wallet_digidollar_encryption.py` | Wallet encryption impact on DD operations |

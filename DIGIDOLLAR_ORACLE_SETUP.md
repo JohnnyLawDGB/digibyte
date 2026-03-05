@@ -84,7 +84,7 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned oracle ID (0–7 for testnet) — contact the maintainer.
+For first-time oracle operators. You need an assigned oracle ID (0–8 for testnet) — contact the maintainer.
 
 ```bash
 # 1. Start your node
@@ -108,7 +108,7 @@ digibyte-cli -testnet getoracles true
 
 **Qt wallet users:** Create wallet via **File → Create Wallet**, name it `oracle`. Then **Help → Debug Window → Console** to run `createoraclekey` and `startoracle`.
 
-> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet13/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
+> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet19/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
 
 ---
 
@@ -163,7 +163,7 @@ Once running, the oracle automatically:
 
 ### Exchange Sources (no API keys required)
 
-Binance, CoinGecko, KuCoin, Crypto.com, Gate.io, HTX
+Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari, KuCoin, Crypto.com, Gate.io, HTX
 
 ### Price Format
 
@@ -171,7 +171,7 @@ Binance, CoinGecko, KuCoin, Crypto.com, Gate.io, HTX
 |--------|------|---------|
 | Internal (wire) | micro-USD | `50000` = $0.05 |
 | RPC input | USD | `0.05` |
-| Valid range | $0.0001 – $10.00 | 100 – 10,000,000 micro-USD |
+| Valid range | $0.0001 – $100.00 | 100 – 100,000,000 micro-USD |
 
 ---
 
@@ -179,8 +179,8 @@ Binance, CoinGecko, KuCoin, Crypto.com, Gate.io, HTX
 
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| Active Oracles | 8 | 7 | 15 |
-| Consensus Required | 5-of-8 | 4-of-7 | 8-of-15 |
+| Active Oracles | 9 | 7 | 15 |
+| Consensus Required | 5-of-9 | 4-of-7 | 8-of-15 |
 | Activation Height | 600 | 650 | BIP9 (TBD) |
 | Epoch Length (`nDDOracleEpochBlocks`) | 50 blocks | 10 blocks | 100 blocks |
 | Price Update Interval | 2 blocks | 1 block | 4 blocks |
@@ -195,7 +195,7 @@ Total oracle slots: 30 (defined in `src/primitives/oracle.h`).
 
 ```bash
 # Watch oracle activity in real-time
-tail -f ~/.digibyte/testnet13/debug.log | grep -i "oracle\|digidollar"
+tail -f ~/.digibyte/testnet19/debug.log | grep -i "oracle\|digidollar"
 
 # Check current oracle price
 digibyte-cli -testnet getoracleprice
@@ -203,8 +203,8 @@ digibyte-cli -testnet getoracleprice
 # List all oracles and their status
 digibyte-cli -testnet getoracles true
 
-# Check specific oracle details
-digibyte-cli -testnet listoracle <oracle_id>
+# Check local oracle status
+digibyte-cli -testnet listoracle
 
 # Get your oracle's public key and status
 digibyte-cli -testnet getoraclepubkey <oracle_id>
@@ -270,10 +270,10 @@ digibyte-cli -testnet getoracles [active_only]
 Returns array with: `oracle_id`, `pubkey`, `endpoint`, `is_active`, `is_running`, `last_price`, `last_update`, `selected_for_epoch`.
 
 #### `listoracle`
-Get detailed info for a specific oracle.
+Show the status of the oracle running on this local node (no parameters).
 
 ```
-digibyte-cli -testnet listoracle <oracle_id>
+digibyte-cli -testnet listoracle
 ```
 
 #### `getalloracleprices`
@@ -295,7 +295,7 @@ Example: `sendoracleprice 0.05 1` broadcasts $0.05 as oracle 1.
 Submit a Phase 2 oracle price for testing consensus.
 
 ```
-digibyte-cli -regtest submitoracleprice <oracle_id> <price_usd>
+digibyte-cli -regtest submitoracleprice <oracle_id> <price_micro_usd>
 ```
 
 ### DigiDollar RPCs
@@ -326,7 +326,7 @@ digibyte-cli -testnet -rpcwallet=<wallet> senddigidollar <address> <amount>
 Redeem DigiDollars to unlock collateral (after lock period expires).
 
 ```
-digibyte-cli -testnet -rpcwallet=<wallet> redeemdigidollar <position_txid> [amount]
+digibyte-cli -testnet -rpcwallet=<wallet> redeemdigidollar <position_txid> <dd_amount>
 ```
 
 #### `getdigidollarbalance` *(wallet RPC)*
@@ -444,7 +444,7 @@ When an operator sends their `pubkey` (33-byte compressed, e.g. `0398720f...eb7b
 
 **1. `vOracleNodes`** — use the full 33-byte compressed key:
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12030", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12033", true},
 ```
 
 **2. `consensus.vOraclePublicKeys`** — strip the `02`/`03` prefix to get the 32-byte x-only key:
@@ -464,7 +464,7 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12030 (testnet P2P) | Open inbound + outbound |
+| Ports | 12033 (testnet P2P) | Open inbound + outbound |
 
 ---
 
@@ -473,10 +473,10 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 | Component | Path |
 |-----------|------|
 | Config | `~/.digibyte/digibyte.conf` |
-| Testnet data | `~/.digibyte/testnet13/` |
-| Debug log | `~/.digibyte/testnet13/debug.log` |
-| Wallets | `~/.digibyte/testnet13/wallets/` |
-| RPC cookie | `~/.digibyte/testnet13/.cookie` |
+| Testnet data | `~/.digibyte/testnet19/` |
+| Debug log | `~/.digibyte/testnet19/debug.log` |
+| Wallets | `~/.digibyte/testnet19/wallets/` |
+| RPC cookie | `~/.digibyte/testnet19/.cookie` |
 
 ---
 
@@ -486,7 +486,7 @@ If `getwalletinfo` shows the full path as wallet name:
 
 ```bash
 # Unload with the wrong name
-digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet13/wallets/oracle/"
+digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet19/wallets/oracle/"
 
 # Reload with just the name
 digibyte-cli -testnet loadwallet "oracle"

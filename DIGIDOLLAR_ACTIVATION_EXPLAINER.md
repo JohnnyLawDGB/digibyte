@@ -14,13 +14,13 @@ DigiDollar activates on the DigiByte blockchain through **BIP9 version bit signa
 | Parameter | Value |
 |-----------|-------|
 | Bit | 23 |
-| Start Time | Jan 1, 2026 (epoch 1767225600) |
-| Timeout | Jan 1, 2028 (epoch 1830297600) |
+| Start Time | May 1, 2026 (epoch 1777593600) |
+| Timeout | May 1, 2028 (epoch 1840752000) |
 | Min Activation Height | 22,014,720 |
 | Confirmation Window | 40,320 blocks (~1 week) |
 | Threshold | 70% (28,224 of 40,320) |
 
-### Testnet (testnet17)
+### Testnet (testnet19)
 | Parameter | Value |
 |-----------|-------|
 | Bit | 23 |
@@ -116,27 +116,29 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - `createoraclekey` — Generate oracle key in wallet
 - `startoracle` — Start oracle service
 - `stoporacle` — Stop oracle service
-- `sendoracleprice` — Submit oracle price (testnet)
-- `submitoracleprice` — Submit price via P2P
-- `simulatepricevolatility` — Simulate price changes (testnet)
+- `sendoracleprice` — Submit oracle price (testnet/regtest only)
+- `submitoracleprice` — Submit price via P2P (regtest only)
+- `simulatepricevolatility` — Simulate price changes (regtest only)
 
 **Gate pattern:** Each RPC checks `DigiDollar::IsDigiDollarEnabled(tip, chainman)` which calls `DeploymentActiveAfter()` — the BIP9 status check.
 
-### P2P Message Handlers (3 total — all gated)
+### P2P Message Handlers (5 total — all gated)
 
 | Message | Handler | Gate |
 |---------|---------|------|
-| `ORACLEPRICE` | Line 5374 | `IsOracleActive()` — height-based (nOracleActivationHeight=600) |
-| `ORACLEBUNDLE` | Line 5535 | `IsOracleActive()` — height-based |
-| `GETORACLES` | Line 5654 | `IsOracleActive()` — height-based |
+| `ORACLEPRICE` | Line ~5375 | `IsOracleActive()` — height-based (nOracleActivationHeight=600) |
+| `ORACLEBUNDLE` | Line ~5542 | `IsOracleActive()` — height-based |
+| `ORACLECONSENSUS` | Line ~5697 | `IsOracleActive()` — height-based |
+| `ORACLEATTESTATION` | Line ~5827 | `IsOracleActive()` — height-based |
+| `GETORACLES` | Line ~5926 | `IsOracleActive()` — height-based |
 
-**Note:** P2P handlers use `Consensus::IsOracleActive()` which is height-based (`nHeight >= nOracleActivationHeight`), not BIP9. On testnet, `nOracleActivationHeight=600` matches `min_activation_height=600`, so they align in practice. On mainnet, both are set to the same height. A malicious node sending oracle messages before activation gets silently ignored (no ban, no penalty — just dropped).
+**Note:** P2P handlers use `Consensus::IsOracleActive()` which is height-based (`nHeight >= nOracleActivationHeight`), not BIP9. On testnet, `nOracleActivationHeight=600` matches `min_activation_height=600`, so they align in practice. On mainnet, `nOracleActivationHeight` is currently set to `INT_MAX` (oracle system disabled until Phase Two). A malicious node sending oracle messages before activation gets silently ignored (no ban, no penalty — just dropped).
 
 ### Consensus Validation (all BIP9-gated)
 
-1. **Mempool acceptance** (`validation.cpp:728`): `DigiDollar::HasDigiDollarMarker(tx)` + `IsDigiDollarEnabled()` → rejects DD TXs with `TX_CONSENSUS "digidollar-not-active"`
-2. **Block validation** (`validation.cpp:2737`): Same check during `ConnectBlock()` → rejects blocks containing DD TXs before activation
-3. **Script verification** (`validation.cpp:2474`): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true → DD opcodes are NOPs before activation
+1. **Mempool acceptance** (`validation.cpp:~731`): `DigiDollar::HasDigiDollarMarker(tx)` + `IsDigiDollarEnabled()` → rejects DD TXs with `TX_CONSENSUS "digidollar-not-active"`
+2. **Block validation** (`validation.cpp:~2823`): Same check during `ConnectBlock()` → rejects blocks containing DD TXs before activation
+3. **Script verification** (`validation.cpp:~2519`): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true → DD opcodes are NOPs before activation
 
 ### Qt GUI
 
@@ -161,12 +163,12 @@ The `VBDeploymentInfo` for DigiDollar has `gbt_force = true` (in `src/deployment
 
 ```
 Base version:  0x20000000 (BIP9 base)
-+ SegWit bit:  0x00000002 (bit 1)
++ Taproot bit: 0x00000004 (bit 2)
 + DD bit:      0x00800000 (bit 23)
-= Combined:    0x20800002
+= Combined:    0x20800004
 ```
 
-During STARTED/LOCKED_IN, blocks should have version `0x20800002` or similar (with bit 23 set).
+During STARTED/LOCKED_IN, blocks should have version `0x20800004` or similar (with bit 23 set). Note: SegWit is a buried deployment in DigiByte (activated at a fixed height), not a version bits deployment, so it does not set any bit.
 
 ---
 
@@ -213,14 +215,14 @@ After activation (block 600+):
 On mainnet, the process is:
 
 1. **Release:** Publish binaries with DigiDollar code and BIP9 deployment
-2. **Upgrade period:** Miners and nodes upgrade (BIP9 start time: Jan 1, 2026)
-3. **Signaling begins:** After start time, miners signal bit 23 in blocks
+2. **Upgrade period:** Miners and nodes upgrade (BIP9 start time: May 1, 2026)
+3. **Signaling begins:** After start time (May 1, 2026), miners signal bit 23 in blocks
 4. **Threshold reached:** 70% of blocks in a 40,320-block window (~1 week) signal support
 5. **Lock-in period:** One more 40,320-block window for remaining nodes to upgrade
 6. **Activation:** Block height reaches `min_activation_height` (22,014,720) and BIP9 is ACTIVE
 7. **DigiDollar live:** All DD functionality enabled across the network
 
-**Timeout:** If 70% signaling is not reached by Jan 1, 2028, the deployment transitions to FAILED. A new deployment with different parameters would be needed.
+**Timeout:** If 70% signaling is not reached by May 1, 2028, the deployment transitions to FAILED. A new deployment with different parameters would be needed.
 
 ---
 
@@ -246,10 +248,10 @@ On mainnet, the process is:
 | BIP9 state machine | `src/versionbits.cpp` | `ThresholdConditionChecker` |
 | Deployment info | `src/deploymentinfo.cpp` | `VersionBitsDeploymentInfo[]` |
 | RPC activation gate | `src/rpc/digidollar.cpp` | `IsDigiDollarEnabled()` check in each RPC |
-| P2P activation gate | `src/net_processing.cpp` | `IsOracleActive()` in ORACLEPRICE/BUNDLE/GETORACLES |
-| Mempool gate | `src/validation.cpp:728` | `IsDigiDollarEnabled()` in `AcceptToMemoryPool` |
-| Block validation gate | `src/validation.cpp:2737` | `IsDigiDollarEnabled()` in `ConnectBlock` |
-| Script flags | `src/validation.cpp:2474` | `SCRIPT_VERIFY_DIGIDOLLAR` flag |
+| P2P activation gate | `src/net_processing.cpp` | `IsOracleActive()` in ORACLEPRICE/BUNDLE/CONSENSUS/ATTESTATION/GETORACLES |
+| Mempool gate | `src/validation.cpp:~731` | `IsDigiDollarEnabled()` in `AcceptToMemoryPool` |
+| Block validation gate | `src/validation.cpp:~2823` | `IsDigiDollarEnabled()` in `ConnectBlock` |
+| Script flags | `src/validation.cpp:~2519` | `SCRIPT_VERIFY_DIGIDOLLAR` flag |
 | Qt activation overlay | `src/qt/digidollartab.cpp` | `checkActivationStatus()` timer |
 | Qt widget polling guard | `src/qt/digidollar*widget.cpp` | `if (!isVisible()) return;` |
 | Oracle height gate | `src/consensus/params.h:234` | `IsOracleActive()` |

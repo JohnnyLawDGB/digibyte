@@ -382,10 +382,10 @@
 
 ### src/pow.cpp / .h
 - `GetNextWorkRequired()` → dispatches to correct difficulty algorithm version based on block height (V1→V4 progression)
-- `GetNextWorkRequiredV1()` → original difficulty adjustment (pre-DigiShield, Bitcoin-inherited)
-- `GetNextWorkRequiredV2()` → DigiShield v1 — per-algo difficulty with asymmetric response (faster decrease)
-- `GetNextWorkRequiredV3()` → MultiShield (DigiShield v3) — improved per-algo real-time difficulty adjustment
-- `GetNextWorkRequiredV4()` → MultiAlgo v2 — current difficulty algorithm with 5-algo MultiShield balancing
+- `GetNextWorkRequiredv1()` → original difficulty adjustment (pre-DigiShield, Bitcoin-inherited)
+- `GetNextWorkRequiredv2()` → DigiShield v1 — per-algo difficulty with asymmetric response (faster decrease)
+- `GetNextWorkRequiredv3()` → MultiShield (DigiShield v3) — improved per-algo real-time difficulty adjustment
+- `GetNextWorkRequiredv4()` → MultiAlgo v2 — current difficulty algorithm with 5-algo MultiShield balancing
 - `CalculateNextWorkRequired()` → core difficulty calculation: adjusts target based on actual vs expected timespan
 - `InitialDifficulty()` → returns genesis difficulty target for each algo
 - `CheckProofOfWork()` → validates that a block hash meets the required difficulty target

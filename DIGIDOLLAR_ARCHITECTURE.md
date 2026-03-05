@@ -407,7 +407,7 @@ double GetDCAMultiplier(int systemHealth) {
 - ✅ Proper fee estimation and change handling
 - ✅ Dual P2TR output creation: collateral with MAST, DD token with key-path only
 
-**Transaction Output Structure (Lines 283-291):**
+**Transaction Output Structure (~lines 335-363):**
 ```cpp
 // Output 0: Collateral vault (P2TR with CLTV timelock)
 CScript collateralScript = CreateCollateralScript(params);  // MAST structure
@@ -579,7 +579,7 @@ flowchart TD
 
 ### 6.1 Oracle System Status Overview
 
-**CURRENT STATUS: Phase One (Testnet) 95% Complete** - The oracle system has a complete framework with 7 real exchange APIs via libcurl. Phase One uses 1-of-1 single oracle consensus for testnet. Phase Two (8-of-15 mainnet) is planned but not implemented.
+**CURRENT STATUS: Phase One (Testnet) 95% Complete** - The oracle system has a complete framework with 11 real exchange API fetchers via libcurl. Phase One uses 1-of-1 single oracle consensus for testnet. Phase Two (8-of-15 mainnet) is planned but not implemented.
 
 **Price Format**: Micro-USD (1,000,000 = $1.00 DGB). Example: 6,500 micro-USD = $0.0065/DGB
 
@@ -986,9 +986,9 @@ CKey GetHDKeyForDigiDollar(wallet::CWallet* pwallet, const std::string& label)
 
 | Operation | Label | Called From |
 |-----------|-------|-------------|
-| Mint DigiDollars | `"dd-owner"` | `mintdigidollar` RPC (line 747) |
-| Redeem DigiDollars | `"dd-redeem"` | `redeemdigidollar` RPC (line 1124) |
-| Generate DD Address | `"dd-address"` | `getdigidollaraddress` RPC (line 1519) |
+| Mint DigiDollars | `"dd-owner"` | `mintdigidollar` RPC (~line 870) |
+| Redeem DigiDollars | `"dd-redeem"` | `redeemdigidollar` RPC (~line 1140) |
+| Generate DD Address | `"dd-address"` | `getdigidollaraddress` RPC (~line 1720) |
 
 ### 8.5.4 Wallet Restore Implications
 
@@ -1006,7 +1006,7 @@ Because DD keys are derived from the wallet seed (when using descriptor wallets)
 
 When a wallet is restored via descriptors and rescanned, DD positions must be reconstructed from blockchain data.
 
-**Implementation Location**: `src/wallet/digidollarwallet.cpp` (lines 1136-1264)
+**Implementation Location**: `src/wallet/digidollarwallet.cpp` (~line 1847)
 
 ### 8.6.2 ProcessDDTxForRescan() Function
 
@@ -1056,24 +1056,25 @@ All position data is extracted from on-chain OP_RETURN metadata:
 
 ### 8.6.5 Tier Derivation with Tolerance
 
-**Implementation**: `DeriveLockTierFromHeight()` at lines 1055-1096
+**Implementation**: `DeriveLockTierFromHeight()` at ~line 1738
 
 ```cpp
 uint32_t DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height) {
     int64_t blocks = unlock_height - mint_height;
-    // Uses -1 tolerance to handle TX timing variance
-    // (TX created at block N but included at N+1)
-    if (blocks >= 15770879) return 6;  // 15,770,880 - 1
-    if (blocks >= 4204799) return 5;   // 4,204,800 - 1
-    if (blocks >= 2102399) return 4;   // 2,102,400 - 1
-    if (blocks >= 1036799) return 3;   // 1,036,800 - 1
-    if (blocks >= 518399) return 2;    // 518,400 - 1
-    if (blocks >= 172799) return 1;    // 172,800 - 1
-    return 0;
+    // Uses exact block thresholds (no tolerance)
+    if (blocks >= 21024000) return 8;  // 10 years
+    if (blocks >= 14716800) return 7;  // 7 years
+    if (blocks >= 10512000) return 6;  // 5 years
+    if (blocks >= 6307200) return 5;   // 3 years
+    if (blocks >= 2102400) return 4;   // 1 year
+    if (blocks >= 1036800) return 3;   // 180 days
+    if (blocks >= 518400) return 2;    // 90 days
+    if (blocks >= 172800) return 1;    // 30 days
+    return 0;                          // Testing tier (<30 days)
 }
 ```
 
-**Why -1 tolerance?** A transaction created at block height N may be included in block N+1, making the block difference one less than the exact tier threshold.
+**Note**: This DEPRECATED function skips the 2-year tier (730 days). New mint transactions store the tier explicitly in OP_RETURN via `ExtractTierFromOpReturn()`. The 2-year tier exists in consensus collateral ratios but is not derived by this backward-compat function.
 
 ---
 
@@ -1413,7 +1414,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         ├─────────────────────────────────────────────────────────────┤
         │ ⚠️  Transfer transactions set LOCKTIME = 0 (no timelock)    │
         │                                                             │
-        │ SIGNING PROCESS (Lines 2653-2714 in SignDDInputs):         │
+        │ SIGNING PROCESS (SignDDInputs, ~line 5032):                │
         │                                                             │
         │ 1. Sign DGB Fee Inputs FIRST:                               │
         │    → wallet's SignTransaction() creates ECDSA signatures    │
@@ -1444,7 +1445,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         │ (collateral) which requires complex script-path signing.    │
         │                                                             │
         │ CODE: /src/wallet/digidollarwallet.cpp - SignDDInputs       │
-        │       Lines 2653-2714 contain the vout index check logic    │
+        │       ~Line 5032+ contains the vout index check logic      │
         └─────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -2181,7 +2182,7 @@ Comprehensive test suite across 46 unit test files + 42 functional test files (8
 - **DCA** (Dynamic Collateral Adjustment): Fully implemented and tested
 - **ERR** (Emergency Redemption Ratio): Fully implemented and tested
 - **Volatility Protection**: Fully implemented and tested
-- Total: 1,470 lines of protection system code
+- Total: 3,048 lines of protection system code (across 6 files: dca.cpp/h, err.cpp/h, volatility.cpp/h)
 
 ✅ **User Interface** (Fully functional):
 - 7 complete widgets: Overview, Send, Receive, Mint, Redeem, Positions, Transactions
@@ -2262,4 +2263,4 @@ Removed all partial redemption and emergency oracle override code:
 
 ---
 
-*This architecture document accurately reflects the DigiDollar implementation state as of 2025-12-23, based on comprehensive analysis of the actual codebase, functional test verification, and direct code inspection. All claims have been verified against source code. Updated with code-verified corrections for: MAST paths (2 functional, Emergency defined but unused), transaction version encoding (0x0D1D0770), descriptor wallet fix (e4c7e2bc43), fee requirements (0.1 DGB minimum), IBD behavior fix, oracle system (real libcurl + mock fallback), and test count (18 functional tests).*
+*This architecture document accurately reflects the DigiDollar implementation state as of 2025-12-23, based on comprehensive analysis of the actual codebase, functional test verification, and direct code inspection. All claims have been verified against source code. Updated with code-verified corrections for: MAST paths (2 functional, Emergency defined but unused), transaction version encoding (0x0D1D0770), descriptor wallet fix (e4c7e2bc43), fee requirements (0.1 DGB minimum), IBD behavior fix, oracle system (real libcurl + mock fallback), and test count (42 functional tests).*

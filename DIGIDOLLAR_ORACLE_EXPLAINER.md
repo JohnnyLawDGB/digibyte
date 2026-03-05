@@ -196,7 +196,7 @@ Oracle Node
      │  Each peer validates:                          │
      │  ✓ Schnorr signature correct?                  │
      │  ✓ Price in range (100-100M micro-USD)?         │
-     │  ✓ Timestamp fresh (<5 min old)?               │
+     │  ✓ Timestamp fresh (<1 hour old)?               │
      │  ✓ Not duplicate?                              │
      │                                                 │
      ├──────┴──────┴──────┼──────┴──────┴──────┴──────┤
@@ -260,8 +260,8 @@ New Block Received
          ▼
 ┌────────────────────────────────┐
 │ 3. Find Oracle Data            │
-│    Look for OP_RETURN OP_ORACLE│
-│    in coinbase vout[1]         │
+│    Scan ALL coinbase outputs   │
+│    for OP_RETURN OP_ORACLE     │
 └────────┬───────────────────────┘
          │
          ▼
@@ -321,7 +321,7 @@ New Block Received
 ┌─────────────────────────────────┐
 │ ConnectBlock()                  │
 │ Update price cache:             │
-│ height_to_price[700] = 5 cents  │
+│ height_to_price[700] = 50200    │
 └─────────────────────────────────┘
 ```
 
@@ -526,12 +526,13 @@ Bytes 14-21: <Timestamp, 8 bytes>
 
 **Example (hex format)**:
 ```
-6a bf 01 01 11 00 05 00 00 00 00 00 00 00 00 2f 50 65 00 00 00 00 00
-│  │  │  │  │  └─────────────┘ └─────────────────┘
-│  │  │  │  │   Price: 6500 micro-USD  Timestamp: 1,700,000,000
-│  │  │  │  Oracle ID: 0
+6a bf 01 01 11 00 64 19 00 00 00 00 00 00 00 2f 50 65 00 00 00 00
+│  │  │  │  │  │  └────────────────┘ └────────────────┘
+│  │  │  │  │  │   Price: 6500 micro-USD  Timestamp: 1,700,000,000
+│  │  │  │  │  Oracle ID: 0
+│  │  │  │  Push 17 bytes
 │  │  │  Version: 1
-│  │  Push 18 bytes
+│  │  Push 1 byte
 │  OP_ORACLE
 OP_RETURN
 ```
@@ -569,7 +570,7 @@ Every node validates incoming blocks. When a block contains oracle data, the val
 
 1. ✅ **Network check**: Only validate on testnet/regtest (skip on mainnet)
 2. ✅ **Activation height**: Block height ≥ 600 (testnet) or ≥ 650 (regtest)
-3. ✅ **Find OP_ORACLE output**: Look for `OP_RETURN OP_ORACLE` in coinbase vout[1]
+3. ✅ **Find OP_ORACLE output**: Scan ALL coinbase outputs for `OP_RETURN OP_ORACLE` (typically vout[1], but position varies with witness commitment)
 4. ✅ **Extract compact data**: Parse the 22-byte format
 5. ✅ **Validate structure**: Version byte = 0x01, Oracle ID = 0
 6. ✅ **Validate price range**: 100-100,000,000 micro-USD ($0.0001-$100.00 per DGB)
@@ -856,7 +857,7 @@ $100.00      →  100,000,000        →  100,000,000 (maximum)
 
 ---
 
-## The Compact 21-Byte On-Chain Storage Format
+## The Compact 22-Byte On-Chain Storage Format
 
 ### Why Compact Format?
 
@@ -966,7 +967,7 @@ Every node validates the block:
     ┌────────────────────────────────────────────┐
     │ Oracle Validation (validation.cpp:4313)    │
     ├────────────────────────────────────────────┤
-    │ 1. Find OP_ORACLE in coinbase vout[1]     │ ◄── Looks for 0x6a 0xbf
+    │ 1. Scan ALL coinbase outputs for OP_ORACLE │ ◄── Looks for 0x6a 0xbf
     │ 2. Extract 22-byte compact data            │
     │ 3. Parse: version, oracle_id, price, time  │
     │ 4. Validate:                               │
@@ -1119,7 +1120,7 @@ Byte-by-byte parsing:
 [3]  0x01 = Version 1    ← "Phase One format"
 [4]  0x11 = PUSH 17      ← "Next 17 bytes are data"
 [5]  0x00 = Oracle ID 0  ← "Oracle #0"
-[6-13]    = Price        ← "6500 micro-USD = $0.0065/DGB"
+[6-13]    = Price        ← "50000 micro-USD = $0.05/DGB"
 [14-21]   = Timestamp    ← "Unix time when price was set"
 ```
 
@@ -1203,7 +1204,7 @@ FIELD-BY-FIELD EXPLANATION
 ┃ BYTES 6-13: Price (8 bytes, little-endian uint64)           ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
 ┃ Format:  Micro-USD (1,000,000 = $1.00)                     ┃
-┃ Example: 62 19 00 00 00 00 00 00 (LE) = 6,500 = $0.0065    ┃
+┃ Example: 64 19 00 00 00 00 00 00 (LE) = 6,500 = $0.0065    ┃
 ┃ Range:   100 to 100,000,000 ($0.0001 to $100.00 per DGB)   ┃
 ┃ Endian:  Little-endian (LSB first, Intel/AMD byte order)   ┃
 ┃ Type:    uint64_t (unsigned 64-bit integer)                ┃
@@ -1287,21 +1288,21 @@ Timestamp:  1,700,000,000 (Unix timestamp)
 
 ```cpp
 CScript script;
-script << OP_RETURN;           // Byte 0: 0x6a
-script << OP_ORACLE;           // Byte 1: 0xbf
-script << std::vector<uchar>{  // Bytes 2+ (17 bytes of data):
-    0x01,                      // Version
-    0x00,                      // Oracle ID
-    0x62, 0x19, 0x00, 0x00,   // Price (6500 micro-USD, little-endian)
+script << OP_RETURN;                          // Byte 0: 0x6a
+script << OP_ORACLE;                          // Byte 1: 0xbf
+script << std::vector<uchar>{0x01};           // Bytes 2-3: PUSH 1 + Version (0x01)
+script << std::vector<uchar>{                 // Bytes 4-21: PUSH 17 + 17 bytes data
+    0x00,                                     // Oracle ID
+    0x64, 0x19, 0x00, 0x00,                  // Price (6500 micro-USD, little-endian)
     0x00, 0x00, 0x00, 0x00,
-    0x00, 0x2f, 0x50, 0x65,   // Timestamp (little-endian)
+    0x00, 0x2f, 0x50, 0x65,                  // Timestamp (little-endian)
     0x00, 0x00, 0x00, 0x00
 };
 ```
 
 **Resulting hex bytes**:
 ```
-6a bf 11 01 00 05 00 00 00 00 00 00 00 00 2f 50 65 00 00 00 00 00
+6a bf 01 01 11 00 64 19 00 00 00 00 00 00 00 2f 50 65 00 00 00 00
 ```
 
 **Decoding process**:
@@ -1332,8 +1333,8 @@ if (scriptPubKey[0] == OP_RETURN && scriptPubKey[1] == OP_ORACLE) {
 
 **Verification**:
 ```
-Price bytes (little-endian): 62 19 00 00 00 00 00 00
-  = 0x62 + (0x19 << 8) = 98 + 6400 = 6500 micro-USD ✓
+Price bytes (little-endian): 64 19 00 00 00 00 00 00
+  = 0x64 + (0x19 << 8) = 100 + 6400 = 6500 micro-USD ✓
 
 Timestamp bytes (little-endian): 00 2f 50 65 00 00 00 00
   = 0x00 + (0x2f << 8) + (0x50 << 16) + (0x65 << 24)
@@ -1398,16 +1399,19 @@ if (block_height < nOracleActivationHeight) {
 
 #### 3. Extract Oracle Bundle
 ```cpp
-// Look for OP_RETURN OP_ORACLE in coinbase vout[1]
-if (coinbase.vout[1].scriptPubKey[0] == OP_RETURN &&
-    coinbase.vout[1].scriptPubKey[1] == OP_ORACLE) {
-
-    // Extract compact data
-    ExtractOracleBundle(coinbase, bundle);
+// Scan ALL coinbase outputs for OP_RETURN OP_ORACLE
+// (position varies: vout[1] without witness, vout[2] with)
+for (const auto& output : coinbase.vout) {
+    if (output.scriptPubKey.size() >= 2 &&
+        output.scriptPubKey[0] == OP_RETURN &&
+        output.scriptPubKey[1] == OP_ORACLE) {
+        ExtractOracleBundle(coinbase, bundle);
+        break;
+    }
 }
 ```
 
-**Purpose**: Find and parse the 22-byte compact oracle data.
+**Purpose**: Find and parse the 22-byte compact oracle data from any coinbase output.
 
 #### 4. Validate Bundle Structure
 ```cpp
@@ -1474,7 +1478,7 @@ if (!info || !info->is_active) {
 
 ### ConnectBlock() Price Cache Update
 
-**Location**: `validation.cpp` line 2826
+**Location**: `validation.cpp` line ~2748
 
 **What happens**:
 
@@ -1485,10 +1489,10 @@ if (ExtractOracleBundle(coinbase_tx, bundle)) {
 
     // Update price cache
     OracleBundleManager::GetInstance()
-        .UpdatePriceCache(block_height, bundle.median_price);
+        .UpdatePriceCache(block_height, bundle.median_price_micro_usd);
 
-    LogPrint("Oracle: Updated price cache at height %d: %llu cents\n",
-             block_height, bundle.median_price);
+    LogPrint("Oracle: Updated price cache at height %d: %llu micro-USD\n",
+             block_height, bundle.median_price_micro_usd);
 }
 ```
 
@@ -1496,11 +1500,11 @@ if (ExtractOracleBundle(coinbase_tx, bundle)) {
 ```cpp
 std::map<int, uint64_t> height_to_price;
 
-// Example:
-height_to_price[697] = 5;  // Block 697: 5 cents
-height_to_price[698] = 5;  // Block 698: 5 cents
-height_to_price[699] = 5;  // Block 699: 5 cents
-height_to_price[700] = 5;  // Block 700: 5 cents (current)
+// Example (values in micro-USD, 1,000,000 = $1.00):
+height_to_price[697] = 6500;  // Block 697: 6500 micro-USD ($0.0065)
+height_to_price[698] = 6500;  // Block 698: 6500 micro-USD ($0.0065)
+height_to_price[699] = 6500;  // Block 699: 6500 micro-USD ($0.0065)
+height_to_price[700] = 6500;  // Block 700: 6500 micro-USD ($0.0065) (current)
 ```
 
 **Cache management**:
@@ -1603,7 +1607,7 @@ Bitcoin P2P Header (24 bytes):
 
 COraclePriceMessage Payload (128 bytes):
   oracle_id:        0 (4 bytes)
-  price:            5 cents (8 bytes)
+  price:            6500 micro-USD (8 bytes)
   timestamp:        1732204800 (8 bytes)
   block_height:     700 (4 bytes)
   nonce:            0x123... (8 bytes)
@@ -1634,7 +1638,7 @@ if (msg_type == NetMsgType::ORACLEPRICE) {
 
     // Step 3: Verify Schnorr signature
     if (!msg.Verify()) {
-        Misbehavior(peer, 100, "invalid oracle signature");
+        Misbehavior(peer, 20, "invalid oracle signature");
         return;
     }
 
@@ -1646,7 +1650,7 @@ if (msg_type == NetMsgType::ORACLEPRICE) {
 
     // Step 5: Check timestamp freshness
     int64_t age = GetTime() - msg.timestamp;
-    if (age > 300 || age < -60) {  // 5 min old, or 1 min future
+    if (age > 3600 || age < -60) {  // 1 hour old, or 1 min future
         return;  // Silently ignore stale/future messages
     }
 
@@ -1950,7 +1954,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
    - Backup plans if oracle fails
 
 2. **Price Data Quality**
-   - Verify 5+ exchanges working consistently
+   - Verify 6 active exchanges working consistently
    - Monitor for price outliers
    - Test MAD filtering with real market data
 

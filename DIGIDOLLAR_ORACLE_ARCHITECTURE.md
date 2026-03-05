@@ -207,12 +207,12 @@ Exchange APIs (6 working exchanges, parallel fetching - 5 broken/removed not sho
 └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
        └─────────────────┴────────────┬────────────────────┘
                                       │
-      ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-      │ Crypto.com  │  │  CoinGecko  │  │CoinMarketCap│
-      │  DGB/USD    │  │ (aggregator)│  │ (optional)  │
-      │ $0.05020    │  │  $0.05022   │  │  $0.05024   │
-      └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-             └────────────────┴────────────────┘
+      ┌─────────────┐  ┌─────────────┐
+      │ Crypto.com  │  │  CoinGecko  │
+      │  DGB/USD    │  │ (aggregator)│
+      │ $0.05020    │  │  $0.05022   │
+      └──────┬──────┘  └──────┬──────┘
+             └────────────────┘
                                       │
                                       ▼
                     MultiExchangeAggregator
@@ -317,7 +317,7 @@ CheckBlock(block, state, params)  [validation.cpp:4313]
 │     │
 │     ├─► STEP 2: Validate bundle structure
 │     │     - bundle.IsValid() checks:
-│     │       • Price range: 100 - 10,000,000 micro-USD ✓
+│     │       • Price range: 100 - 100,000,000 micro-USD ✓
 │     │       • Timestamp not in future (+60s tolerance) ✓
 │     │       • Signature verification (skip for compact format) ✓
 │     │
@@ -886,7 +886,7 @@ PHASE 2: P2P VALIDATION (All Nodes - net_processing.cpp)
 │ ✓ msg.IsValid() → Structural validation                      │
 │ ✓ msg.Verify() → BIP-340 Schnorr signature verification      │
 │ ✓ oracle_id == 0? (Phase One requirement)                    │
-│ ✓ Timestamp fresh? (age < 5 min, not > 1 min future)         │
+│ ✓ Timestamp fresh? (age < 1 hour, not > 1 min future)        │
 │ ✓ Rate limit: max 3600 messages/hour from this peer           │
 │ ✓ Duplicate check: msg.GetHash() not in seen_messages        │
 │                                                               │
@@ -895,8 +895,8 @@ PHASE 2: P2P VALIDATION (All Nodes - net_processing.cpp)
 │   → RelayOracleMessage(msg, exclude_peer_id)                 │
 │                                                               │
 │ If INVALID:                                                   │
-│   → Misbehavior(peer, 10-100 points)                         │
-│   → Drop message                                              │
+│   → Misbehavior(peer, 2-20 points depending on violation)    │
+│   → Drop message (rate limit: silently dropped, no penalty)  │
 └───────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -1216,13 +1216,14 @@ timestamp:        1700000000 (0x65502F00 in hex)
 ```
 6a          - OP_RETURN
 bf          - OP_ORACLE
-12          - OP_PUSHDATA (18 bytes following)
-01          - Version (0x01)
+01          - PUSH 1 byte (version follows)
+01          - Version (0x01 = Phase One)
+11          - PUSH 17 bytes (compact data follows)
 00          - Oracle ID (0)
 64 19 00 00 00 00 00 00  - Price (6500 micro-USD = $0.0065/DGB in little-endian)
 00 2f 50 65 00 00 00 00  - Timestamp (1,700,000,000 in little-endian)
 
-Total: 22 bytes (including OP_RETURN and OP_PUSHDATA opcodes)
+Total: 22 bytes (2 opcodes + 2 push headers + 18 data bytes)
 ```
 
 **Verification (Little-Endian)**:
@@ -1377,7 +1378,7 @@ Phase Two (15 oracles):
 
 **Location**: `/home/jared/Code/digibyte/src/validation.cpp` (CheckBlock calls ValidateBlockOracleData at line 4313)
 
-**Integration Point (line 4127)**:
+**Integration Point (line 4313)**:
 ```cpp
 // Validate oracle data (if present and after activation)
 if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams, state)) {
@@ -1397,11 +1398,11 @@ CheckBlock() Validation Sequence:
 ├─► All transaction validation              [lines 4002-4100]
 ├─► Signature operation count               [lines 4102-4125]
 │
-├─► ★ ORACLE VALIDATION ★                   [line 4127]
-│     OracleDataValidator::ValidateBlockOracleData()
+├─► Mark block as checked                   [line 4308]
+│     block.fChecked = true;
 │
-└─► Mark block as checked                   [line 4130]
-      block.fChecked = true;
+└─► ★ ORACLE VALIDATION ★                   [line 4313]
+      OracleDataValidator::ValidateBlockOracleData()
 ```
 
 ### 5.2 ValidateBlockOracleData() - Complete Flow
@@ -1449,40 +1450,47 @@ bool OracleDataValidator::ValidateBlockOracleData(
     }
 
     //═══════════════════════════════════════════════════════════════════
-    // STEP 3: ACTIVATION HEIGHT ENFORCEMENT (lines 833-835)
+    // STEP 3: BIP9 ACTIVATION CHECK (lines 1590-1599)
     //═══════════════════════════════════════════════════════════════════
-    if (block_height < params.nDDActivationHeight) {
-        return true; // Oracle validation not required before activation
+    // Primary: BIP9 deployment check (when pindex_prev available)
+    // Fallback: Height-based check (when no chain context)
+    if (pindex_prev) {
+        if (!DigiDollar::IsDigiDollarEnabled(pindex_prev, params)) {
+            return true; // Oracle validation not required before BIP9 activation
+        }
+    } else {
+        if (block_height < params.nDDActivationHeight) {
+            return true;
+        }
     }
 
     //═══════════════════════════════════════════════════════════════════
-    // STEP 4: TRANSITION PERIOD LENIENCY (lines 836-860)
+    // STEP 4: SCAN ALL COINBASE OUTPUTS FOR OP_ORACLE (lines 1601-1624)
     //═══════════════════════════════════════════════════════════════════
     const CTransaction& coinbase = *block.vtx[0];
 
-    if (coinbase.vout.size() < 2) {
+    // Scan ALL coinbase outputs for OP_ORACLE marker (oracle output position
+    // varies: may be vout[1] without witness commitment, or vout[2] with it)
+    int oracle_output_count = 0;
+    for (const auto& output : coinbase.vout) {
+        if (output.scriptPubKey.size() >= 2 &&
+            output.scriptPubKey[0] == OP_RETURN &&
+            output.scriptPubKey[1] == OP_ORACLE) {
+            oracle_output_count++;
+        }
+    }
+
+    // SECURITY: Reject blocks with multiple oracle outputs (prevents confusion attacks)
+    if (oracle_output_count > 1) {
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+            "bad-oracle-multiple-outputs",
+            strprintf("Block contains %d oracle outputs, expected at most 1",
+                       oracle_output_count));
+    }
+
+    if (oracle_output_count == 0) {
         // Allow blocks without oracle data during transition
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: No oracle bundle in block %d (transition)\n",
-                 block_height);
-        return true;
-    }
-
-    // Check for oracle bundle in output 1 (OP_RETURN)
-    const CTxOut& oracle_output = coinbase.vout[1];
-    if (!oracle_output.scriptPubKey.IsUnspendable()) {
-        // Not an OP_RETURN, allow during transition
-        return true;
-    }
-
-    // Empty OP_RETURN, allow during transition
-    if (oracle_output.scriptPubKey.size() <= 2) {
-        return true;
-    }
-
-    // Check for OP_ORACLE opcode at byte 1
-    if (oracle_output.scriptPubKey.size() >= 2 &&
-        oracle_output.scriptPubKey[1] != OP_ORACLE) {
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d OP_RETURN but not OP_ORACLE (transition)\n",
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: No oracle bundle in block %d (transition period)\n",
                  block_height);
         return true;
     }
@@ -1687,7 +1695,7 @@ void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd)
 
 ### 5.5 DisconnectBlock() Integration
 
-**Location**: `/home/jared/Code/digibyte/src/validation.cpp:2327-2352`
+**Location**: `/home/jared/Code/digibyte/src/validation.cpp:2411-2435`
 
 ```cpp
 bool Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex,
@@ -1695,28 +1703,28 @@ bool Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex,
 {
     // ... existing disconnect logic ...
 
-    // Revert oracle price cache if this block had oracle data
-    auto chain_type = Params().GetChainType();
-    if (chain_type == ChainType::TESTNET || chain_type == ChainType::REGTEST) {
-        if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
-            const CTxOut& oracle_output = block.vtx[0]->vout[1];
-            if (oracle_output.scriptPubKey.IsUnspendable() &&
-                oracle_output.scriptPubKey.size() > 2) {
-                // This block had oracle data, need to revert the cache
-                OracleBundleManager& manager = OracleBundleManager::GetInstance();
-                manager.RemovePriceCache(pindex->nHeight);
+    // T8-03: Revert oracle price cache for ALL networks (not just testnet/regtest)
+    // Mainnet needs deterministic oracle pricing too.
+    if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
+        const CTxOut& oracle_output = block.vtx[0]->vout[1];
+        if (oracle_output.scriptPubKey.IsUnspendable() &&
+            oracle_output.scriptPubKey.size() > 2) {
+            // This block had oracle data, need to revert the cache
+            OracleBundleManager& manager = OracleBundleManager::GetInstance();
+            manager.RemovePriceCache(pindex->nHeight);
 
-                // In RegTest mode, also revert MockOracleManager
-                if (chain_type == ChainType::REGTEST && pindex->pprev) {
-                    // Reset to previous height's price or default
-                    uint64_t prevPrice = manager.GetOraclePriceForHeight(pindex->pprev->nHeight);
-                    if (prevPrice > 0) {
-                        MockOracleManager::GetInstance().SetMockPrice(prevPrice);
-                    } else {
-                        // Reset to default if no previous price
-                        MockOracleManager::GetInstance().Reset();
-                    }
+            // In RegTest mode, also revert MockOracleManager
+            auto chain_type = Params().GetChainType();
+            if (chain_type == ChainType::REGTEST && pindex->pprev) {
+                // Reset to previous height's price or default
+                uint64_t prevPrice = manager.GetOraclePriceForHeight(pindex->pprev->nHeight);
+                if (prevPrice > 0) {
+                    MockOracleManager::GetInstance().SetMockPrice(prevPrice);
+                } else {
+                    // Reset to default if no previous price
+                    MockOracleManager::GetInstance().Reset();
                 }
+            }
 
                 LogPrint(BCLog::DIGIDOLLAR,
                         "Oracle: Reverted price cache at height %d during block disconnect\n",
@@ -1770,7 +1778,7 @@ int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet:
 > This means mainnet will accept ANY oracle data without verification.
 > Phase Two infrastructure exists but cannot be enabled until mainnet validation is fixed.
 
-### 14.3 Testnet Oracle Keys (All 10 Defined)
+### 14.3 Testnet Oracle Keys (All 9 Defined)
 
 **Location**: `src/kernel/chainparams.cpp` (lines 540-574)
 

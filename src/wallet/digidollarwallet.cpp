@@ -1502,6 +1502,16 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(txid);
             if (wtx) {
+                // Set block height from the transaction state
+                if (auto* conf = wtx->state<wallet::TxStateConfirmed>()) {
+                    ddtx.blockheight = conf->confirmed_block_height;
+                    ddtx.blockhash = conf->confirmed_block_hash.GetHex();
+                } else {
+                    // Transaction is not confirmed, keep default -1
+                    ddtx.blockheight = -1;
+                    ddtx.blockhash = "";
+                }
+                
                 if (wtx->isAbandoned()) {
                     // Directly abandoned
                     ddtx.abandoned = true;

@@ -790,6 +790,24 @@ RPCHelpMan mintdigidollar()
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DigiDollar amount must be positive");
             }
+            
+            // Get consensus parameters for mint amount validation
+            const auto& params = Params();
+            const auto& ddParams = params.GetDigiDollarParams();
+            
+            // Validate against consensus mint limits
+            if (!DigiDollar::IsValidMintAmount(ddAmount, ddParams)) {
+                if (ddAmount < ddParams.minMintAmount) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, 
+                        strprintf("Minimum mint amount is $%d (%d cents)", 
+                            ddParams.minMintAmount / 100, ddParams.minMintAmount));
+                } else {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, 
+                        strprintf("Maximum mint amount is $%d (%d cents)", 
+                            ddParams.maxMintAmount / 100, ddParams.maxMintAmount));
+                }
+            }
+            
             if (lockTier < 0 || lockTier > 9) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
             }

@@ -1948,30 +1948,126 @@ static RPCHelpMan listdigidollaraddresses()
             bool includeWatchOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
             CAmount minBalance = request.params.size() > 1 ? AmountFromValue(request.params[1]) : 0;
 
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded");
+
+            // Get DD wallet
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
             UniValue result(UniValue::VARR);
 
-            // Mock addresses - in real implementation would get from wallet
-            std::vector<std::tuple<std::string, std::string, CAmount, bool, bool>> mockAddresses = {
-                {"DDmockaddress123456789abcdef1", "primary", 10000, true, false},
-                {"DDmockaddress123456789abcdef2", "savings", 25000, true, false},
-                {"DDwatchonly123456789abcdef3", "watch1", 5000, false, true}
-            };
-
-            for (const auto& [addr, label, balance, isMine, isWatchOnly] : mockAddresses) {
-                // Apply filters
-                if (!includeWatchOnly && isWatchOnly) continue;
+            // Lock both wallets for thread safety
+            LOCK2(pwallet->cs_wallet, dd_wallet->cs_dd_wallet);
+            
+            // Get DD positions to find owned addresses
+            std::vector<WalletCollateralPosition> positions = dd_wallet->GetDDTimeLocks(false); // Get all positions
+            
+            // Map to aggregate data by address
+            std::map<std::string, std::tuple<CAmount, int, int64_t, int64_t, std::string>> addressData;
+            // address -> (balance, txcount, created_time, last_used_time, label)
+            
+            // Process positions to get DD addresses
+            for (const auto& pos : positions) {
+                if (pos.dd_minted > 0) {
+                    // Try to get the DD token output (usually vout[1])
+                    const wallet::CWalletTx* wtx = pwallet->GetWalletTx(pos.dd_timelock_id);
+                    if (wtx && wtx->tx->vout.size() > 1) {
+                        const CTxOut& ddOut = wtx->tx->vout[1];
+                        
+                        // Extract destination
+                        CTxDestination dest;
+                        if (ExtractDestination(ddOut.scriptPubKey, dest)) {
+                            // Convert to DD address
+                            std::string addrStr = EncodeDestination(dest);
+                            
+                            // DD addresses on regtest start with "dgbrt1"
+                            if (!addrStr.empty() && addrStr.substr(0, 6) == "dgbrt1") {
+                                // Convert to DD format with RD prefix
+                                // The DD address is essentially the same as the DGB bech32m address
+                                // but displayed with DD prefix for clarity
+                                std::string ddAddr = "RD" + addrStr.substr(6); // Replace dgbrt1 with RD
+                                
+                                // Initialize or update address data
+                                if (addressData.find(ddAddr) == addressData.end()) {
+                                    addressData[ddAddr] = std::make_tuple(0, 0, wtx->GetTxTime(), wtx->GetTxTime(), "");
+                                }
+                                
+                                // Update balance (only for active positions)
+                                if (pos.is_active) {
+                                    std::get<0>(addressData[ddAddr]) += pos.dd_minted;
+                                }
+                                
+                                // Update transaction count
+                                std::get<1>(addressData[ddAddr])++;
+                                
+                                // Update time range
+                                int64_t txTime = wtx->GetTxTime();
+                                std::get<2>(addressData[ddAddr]) = std::min(std::get<2>(addressData[ddAddr]), txTime);
+                                std::get<3>(addressData[ddAddr]) = std::max(std::get<3>(addressData[ddAddr]), txTime);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Also process transaction history to capture transfer addresses
+            std::vector<DDTransaction> history = dd_wallet->GetDDTransactionHistory();
+            for (const auto& tx : history) {
+                if (!tx.address.empty() && tx.address.substr(0, 2) == "RD") {
+                    if (addressData.find(tx.address) == addressData.end()) {
+                        addressData[tx.address] = std::make_tuple(0, 0, tx.timestamp, tx.timestamp, "");
+                    }
+                    
+                    // Update transaction count
+                    std::get<1>(addressData[tx.address])++;
+                    
+                    // Update time range
+                    std::get<2>(addressData[tx.address]) = std::min(std::get<2>(addressData[tx.address]), (int64_t)tx.timestamp);
+                    std::get<3>(addressData[tx.address]) = std::max(std::get<3>(addressData[tx.address]), (int64_t)tx.timestamp);
+                    
+                    // Update balance if this is an incoming transaction
+                    if (tx.incoming && tx.confirmations > 0) {
+                        std::get<0>(addressData[tx.address]) += tx.amount;
+                    }
+                }
+            }
+            
+            // Get current DD balance for addresses using the wallet's balance tracking
+            CAmount totalBalance = dd_wallet->GetTotalDDBalance();
+            
+            // Build result array
+            for (const auto& [address, data] : addressData) {
+                CAmount balance = std::get<0>(data);
+                int txcount = std::get<1>(data);
+                int64_t created = std::get<2>(data);
+                int64_t lastUsed = std::get<3>(data);
+                std::string label = std::get<4>(data);
+                
+                // Apply balance filter
                 if (balance < minBalance) continue;
-
+                
+                // For now, assume all addresses we have are "mine" and not watch-only
+                // TODO: Implement proper watch-only detection
+                bool isMine = true;
+                bool isWatchOnly = false;
+                
+                // Skip watch-only if not requested
+                if (!includeWatchOnly && isWatchOnly) continue;
+                
                 UniValue addrInfo(UniValue::VOBJ);
-                addrInfo.pushKV("address", addr);
-                addrInfo.pushKV("label", label);
+                addrInfo.pushKV("address", address);
+                addrInfo.pushKV("label", label.empty() ? "" : label);
                 addrInfo.pushKV("balance", balance);
                 addrInfo.pushKV("ismine", isMine);
                 addrInfo.pushKV("iswatchonly", isWatchOnly);
-                addrInfo.pushKV("txcount", 5); // Mock transaction count
-                addrInfo.pushKV("created_date", "2024-01-01T00:00:00Z");
-                addrInfo.pushKV("last_used", "2024-03-15T12:30:00Z");
-
+                addrInfo.pushKV("txcount", txcount);
+                addrInfo.pushKV("created_date", created > 0 ? FormatISO8601DateTime(created) : "");
+                addrInfo.pushKV("last_used", lastUsed > 0 ? FormatISO8601DateTime(lastUsed) : "");
+                
                 result.push_back(addrInfo);
             }
 

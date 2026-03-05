@@ -370,6 +370,11 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         # Cleanup: disconnect Dandelion nodes
         self.disconnect_nodes(3, 4)
+        # Give Dandelion++ threads time to drain pending state before shutdown.
+        # Without this, the stempool thread may leave the RPC HTTP connection in
+        # a Request-sent state, causing CannotSendRequest when stop_nodes() is
+        # called during teardown — reproducible on slow macOS ARM64 CI runners.
+        time.sleep(5)
 
 
 if __name__ == '__main__':

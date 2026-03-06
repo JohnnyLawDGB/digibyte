@@ -55,6 +55,9 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         self.test_list_addresses_with_balance()
         self.test_list_addresses_include_watchonly()
 
+        self.log.info("=== Bug #12 regression test ===")
+        self.test_no_mock_addresses_bug12()
+
         self.log.info("=== importdigidollaraddress tests ===")
         self.test_import_valid_address()
         self.test_import_with_label()
@@ -279,6 +282,34 @@ class DigiDollarAddressTest(DigiByteTestFramework):
                 self.log.info(f"Watch-only address: {addr_info.get('address', 'N/A')}")
 
         self.log.info("Include watchonly test passed")
+
+    # === Bug #12 regression: no hardcoded mock addresses ===
+
+    def test_no_mock_addresses_bug12(self):
+        """Regression test for Bug #12: listdigidollaraddresses must not return
+        hardcoded mock data. Verify that no address starts with 'DDmock' and
+        that addresses use the correct network prefix (RD for regtest)."""
+        self.log.info("Bug #12 regression: verifying no mock addresses returned...")
+
+        result = self.nodes[0].listdigidollaraddresses()
+        assert isinstance(result, list)
+
+        for addr_info in result:
+            addr = addr_info.get('address', '')
+            # Must not contain hardcoded mock strings
+            assert 'DDmock' not in addr, f"Bug #12: found mock address '{addr}'"
+            assert 'DDwatchonly' not in addr, f"Bug #12: found mock address '{addr}'"
+            # Regtest addresses must start with 'RD', not 'DD'
+            assert addr.startswith('RD'), \
+                f"Bug #12: regtest address '{addr}' should start with 'RD'"
+            # Balance must be a real integer, not hardcoded 10000/25000/5000
+            assert isinstance(addr_info.get('balance', 0), int)
+
+        # On a fresh node with no DD activity, list should be empty
+        result_node1 = self.nodes[1].listdigidollaraddresses()
+        assert_equal(len(result_node1), 0)
+
+        self.log.info("Bug #12 regression test passed: no mock addresses found")
 
     # === importdigidollaraddress tests ===
 

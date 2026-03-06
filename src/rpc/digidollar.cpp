@@ -1944,33 +1944,69 @@ static RPCHelpMan listdigidollaraddresses()
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
                 }
             }
+
+            // Get wallet
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded");
+            }
+
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not available");
+            }
+
             // Parse parameters
             bool includeWatchOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
             CAmount minBalance = request.params.size() > 1 ? AmountFromValue(request.params[1]) : 0;
 
             UniValue result(UniValue::VARR);
 
-            // Mock addresses - in real implementation would get from wallet
-            std::vector<std::tuple<std::string, std::string, CAmount, bool, bool>> mockAddresses = {
-                {"DDmockaddress123456789abcdef1", "primary", 10000, true, false},
-                {"DDmockaddress123456789abcdef2", "savings", 25000, true, false},
-                {"DDwatchonly123456789abcdef3", "watch1", 5000, false, true}
-            };
+            LOCK2(pwallet->cs_wallet, dd_wallet->cs_dd_wallet);
 
-            for (const auto& [addr, label, balance, isMine, isWatchOnly] : mockAddresses) {
-                // Apply filters
-                if (!includeWatchOnly && isWatchOnly) continue;
+            // Build address→balance map from DD UTXOs
+            std::map<std::string, CAmount> addressBalances;
+            std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs();
+            for (const auto& utxo : utxos) {
+                // Look up the prevout to get the scriptPubKey
+                const wallet::CWalletTx* wtx = pwallet->GetWalletTx(utxo.outpoint.hash);
+                if (!wtx || utxo.outpoint.n >= wtx->tx->vout.size()) continue;
+
+                const CTxOut& txout = wtx->tx->vout[utxo.outpoint.n];
+                CTxDestination dest;
+                if (!ExtractDestination(txout.scriptPubKey, dest)) continue;
+
+                // Encode as network-aware DD address (DD/TD/RD prefix)
+                std::string ddAddr = EncodeDigiDollarAddress(dest);
+                if (ddAddr.empty()) continue;
+
+                addressBalances[ddAddr] += utxo.dd_amount;
+            }
+
+            // Also include DD address keys that may have zero balance
+            // (addresses generated but not yet received on)
+            // dd_address_keys is keyed by XOnlyPubKey bytes
+            // We access them indirectly through the UTXOs already collected above.
+            // Any address with a stored key but no UTXO will not appear (no balance).
+
+            for (const auto& [addr, balance] : addressBalances) {
                 if (balance < minBalance) continue;
+
+                // All UTXO-tracked addresses are owned by this wallet
+                bool isMine = true;
+                bool isWatchOnly = false;
+
+                if (!includeWatchOnly && isWatchOnly) continue;
 
                 UniValue addrInfo(UniValue::VOBJ);
                 addrInfo.pushKV("address", addr);
-                addrInfo.pushKV("label", label);
+                addrInfo.pushKV("label", "");
                 addrInfo.pushKV("balance", balance);
                 addrInfo.pushKV("ismine", isMine);
                 addrInfo.pushKV("iswatchonly", isWatchOnly);
-                addrInfo.pushKV("txcount", 5); // Mock transaction count
-                addrInfo.pushKV("created_date", "2024-01-01T00:00:00Z");
-                addrInfo.pushKV("last_used", "2024-03-15T12:30:00Z");
+                addrInfo.pushKV("txcount", 0);
+                addrInfo.pushKV("created_date", "");
+                addrInfo.pushKV("last_used", "");
 
                 result.push_back(addrInfo);
             }

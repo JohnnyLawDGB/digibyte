@@ -2378,7 +2378,7 @@ static RPCHelpMan estimatecollateral()
     };
 }
 
-static RPCHelpMan getredemptioninfo()
+RPCHelpMan getredemptioninfo()
 {
     return RPCHelpMan{"getredemptioninfo",
                 "\nGet redemption information for a specific DigiDollar position.\n"
@@ -2410,21 +2410,28 @@ static RPCHelpMan getredemptioninfo()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
+            // Get wallet (needed for position lookup and activation check)
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Wallet not found");
+
+            // Check DigiDollar activation via wallet's chain context
             {
-                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
-                ChainstateManager& chainman = EnsureChainman(node);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+                node::NodeContext* node_ctx = pwallet->chain().context();
+                if (node_ctx) {
+                    ChainstateManager& chainman = *node_ctx->chainman;
+                    const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                    if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                        throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+                    }
                 }
             }
+
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
             CAmount ddAmount = request.params.size() > 1 && !request.params[1].isNull() ?
                               AmountFromValue(request.params[1]) : 0;
 
-            // Validate position ID
+            // Validate position ID format
             if (!IsHex(positionIdStr) || positionIdStr.length() != 64) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid position ID format");
             }
@@ -2432,29 +2439,91 @@ static RPCHelpMan getredemptioninfo()
             uint256 positionId;
             positionId.SetHex(positionIdStr);
 
-            // Mock position data - in real implementation would lookup from wallet/blockchain
-            bool canRedeem = true;
-            CAmount totalDDMinted = 10000; // $100
-            CAmount redeemableDD = ddAmount > 0 ? std::min(ddAmount, totalDDMinted) : totalDDMinted;
-            CAmount dgbReturn = 150 * COIN; // Mock return amount
-            int unlockHeight = 1000000;
-            int currentHeight = 900000;
-            int blocksRemaining = std::max(0, unlockHeight - currentHeight);
+            // Get DD wallet and look up the real position
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+
+            LOCK(pwallet->cs_wallet);
+            WalletCollateralPosition foundPosition;
+            bool found = false;
+
+            for (const auto& pos : dd_wallet->GetDDTimeLocks(false)) {
+                if (pos.dd_timelock_id == positionId) {
+                    foundPosition = pos;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Position %s not found in wallet", positionIdStr));
+            }
+
+            int currentHeight = pwallet->GetLastBlockHeight();
+            int blocksRemaining = std::max(0, static_cast<int>(foundPosition.unlock_height - currentHeight));
+
+            // Determine status
+            std::string status;
+            if (!foundPosition.is_active) {
+                status = "redeemed";
+            } else if (blocksRemaining == 0) {
+                status = "unlocked";
+            } else {
+                status = "active";
+            }
+
+            // Determine redemption path based on system health
+            std::string redemptionPath = "normal";
             CAmount penaltyAmount = 0;
-            std::string status = "active";
+            auto errState = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
+            if (errState.isActive) {
+                redemptionPath = "emergency";
+                // ERR penalty: user must burn more DD than minted
+                // adjustmentRatio < 1.0 means burn (1/adjustmentRatio) * dd_minted
+                if (errState.adjustmentRatio > 0 && errState.adjustmentRatio < 1.0) {
+                    CAmount requiredBurn = static_cast<CAmount>(foundPosition.dd_minted / errState.adjustmentRatio);
+                    penaltyAmount = requiredBurn - foundPosition.dd_minted;
+                }
+            }
+
+            // Determine if position can be redeemed
+            // Requires: active, unlocked, and has collateral (received DD has dgb_collateral=0)
+            bool canRedeem = foundPosition.is_active && blocksRemaining == 0 && foundPosition.dgb_collateral > 0;
+
+            // Redeemable amount (exact-amount required, no partial)
+            CAmount redeemableDD = ddAmount > 0 ? std::min(ddAmount, foundPosition.dd_minted) : foundPosition.dd_minted;
+
+            // Estimate DGB return: the locked collateral minus estimated fees
+            CAmount estimatedFee = dd_wallet->EstimateRedemptionFee(
+                COutPoint(positionId, 0), DigiDollar::RedemptionPath::NORMAL);
+            CAmount dgbReturn = std::max(CAmount(0), foundPosition.dgb_collateral - estimatedFee);
+
+            // Compute dates from block heights using 15-second block time
+            int64_t now = GetTime();
+            // Unlock date
+            std::string unlockDateStr;
+            if (blocksRemaining > 0) {
+                int64_t unlockTimestamp = now + static_cast<int64_t>(blocksRemaining) * 15;
+                unlockDateStr = FormatISO8601DateTime(unlockTimestamp);
+            } else {
+                // Already unlocked — compute when it unlocked
+                int64_t unlockTimestamp = now - (static_cast<int64_t>(currentHeight) - foundPosition.unlock_height) * 15;
+                unlockDateStr = FormatISO8601DateTime(unlockTimestamp);
+            }
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("position_id", positionIdStr);
             result.pushKV("can_redeem", canRedeem);
-            result.pushKV("redemption_path", "normal");
-            result.pushKV("total_dd_minted", int64_t{totalDDMinted});
+            result.pushKV("redemption_path", redemptionPath);
+            result.pushKV("total_dd_minted", int64_t{foundPosition.dd_minted});
             result.pushKV("redeemable_dd", int64_t{redeemableDD});
             result.pushKV("dgb_return", ValueFromAmount(dgbReturn));
-            result.pushKV("unlock_height", unlockHeight);
+            result.pushKV("unlock_height", static_cast<int>(foundPosition.unlock_height));
             result.pushKV("timelock_remaining", blocksRemaining);
             result.pushKV("penalty_amount", int64_t{penaltyAmount});
             result.pushKV("status", status);
-            result.pushKV("unlock_date", "2024-12-31T23:59:59Z");
+            result.pushKV("unlock_date", unlockDateStr);
 
             return result;
         },
@@ -4309,7 +4378,8 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         // Utility commands (moved to wallet RPC table)
         // {"digidollar", &getdigidollarbalance},
         {"digidollar", &estimatecollateral},
-        {"digidollar", &getredemptioninfo},
+        // {"digidollar", &getredemptioninfo},  // Moved to wallet RPC table for proper wallet context
+
         // {"digidollar", &listdigidollartxs},
         {"digidollar", &getoracleprice},
         {"oracle", &getalloracleprices},

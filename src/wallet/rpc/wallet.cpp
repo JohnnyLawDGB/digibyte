@@ -964,6 +964,7 @@ Span<const CRPCCommand> GetWalletRPCCommands()
         {"digidollar", &redeemdigidollar},
         {"digidollar", &listdigidollarpositions},
         {"digidollar", &listdigidollaraddresses},
+        {"digidollar", &getredemptioninfo},
         {"digidollar", &getdigidollarbalance},
         {"digidollar", &getdigidollaraddress},
         {"digidollar", &listdigidollartxs},

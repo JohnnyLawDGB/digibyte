@@ -4500,10 +4500,12 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
                   exclude_utxos.size(), params.ddUtxos.size());
 
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, nullptr, &exclude_utxos)) {
+        std::vector<CAmount> fee_amounts;
+        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_utxos)) {
             LogPrintf("DigiDollar: Insufficient DGB balance for fees\n");
             return false;
         }
+        params.feeAmounts = fee_amounts;  // TxBuilder needs per-UTXO amounts for fee inputs
 
         LogPrintf("DigiDollar: CALLING BuildRedemptionTransaction now...\n");
         auto result = builder.BuildRedemptionTransaction(params);

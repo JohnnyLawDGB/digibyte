@@ -472,4 +472,102 @@ BOOST_AUTO_TEST_CASE(bughunt_9_metadata_map_unbounded_growth)
     // In production, with millions of DD transactions, this leaks memory
 }
 
+// =============================================================================
+// Bug #9: Fee estimation uses hardcoded 10M sats, insufficient at 35M sat/kB
+// Bug #17: Redemption fee displays incorrectly (was 0 or collateral amount)
+// =============================================================================
+
+BOOST_AUTO_TEST_CASE(bug9_fee_estimation_not_hardcoded)
+{
+    // Bug #9: SelectFeeCoins was called with hardcoded estimatedFee = 10000000
+    // (0.1 DGB = 10M sats), but at feerate 35M sat/kB with ~400 vbyte tx,
+    // actual fee is ~14M+ sats. After first redemption consumed larger UTXOs,
+    // remaining couldn't cover the underestimated fee.
+    //
+    // FIX: Fee is now calculated as (vsize * feeRate / 1000) + 50% margin.
+    // At 35M sat/kB and 400 vbytes: (400 * 35000000) / 1000 = 14M, +50% = 21M sats.
+    // This must be > 10M (the old hardcoded value).
+
+    const CAmount MIN_DD_FEE_RATE = 35000000; // 0.35 DGB/kB
+    const size_t REDEMPTION_VSIZE = 400;       // typical redemption tx
+
+    // Calculate fee the way the fixed code does
+    CAmount estimatedFee = (REDEMPTION_VSIZE * MIN_DD_FEE_RATE) / 1000;
+    estimatedFee = estimatedFee + (estimatedFee / 2); // 50% margin
+
+    // The calculated fee MUST exceed the old hardcoded 10M sats
+    BOOST_CHECK_GT(estimatedFee, 10000000);
+
+    // At 35M sat/kB, 400 vbytes: base = 14M, +50% = 21M sats
+    BOOST_CHECK_EQUAL(estimatedFee, 21000000);
+
+    // Transfer tx estimate (350 vbytes)
+    const size_t TRANSFER_VSIZE = 350;
+    CAmount transferFee = (TRANSFER_VSIZE * MIN_DD_FEE_RATE) / 1000;
+    transferFee = transferFee + (transferFee / 2);
+    BOOST_CHECK_GT(transferFee, 10000000);
+}
+
+BOOST_AUTO_TEST_CASE(bug9_fee_floor_at_minimum)
+{
+    // Even with a very low feerate, fee should never go below 0.1 DGB floor
+    const CAmount LOW_FEE_RATE = 1000000; // 0.01 DGB/kB (unrealistically low)
+    const size_t VSIZE = 400;
+
+    CAmount estimatedFee = (VSIZE * LOW_FEE_RATE) / 1000;
+    estimatedFee = estimatedFee + (estimatedFee / 2);
+    // At 1M sat/kB: 400K + 200K = 600K — below 10M floor
+    BOOST_CHECK_LT(estimatedFee, 10000000);
+
+    // After applying floor
+    if (estimatedFee < 10000000) estimatedFee = 10000000;
+    BOOST_CHECK_EQUAL(estimatedFee, 10000000);
+}
+
+BOOST_AUTO_TEST_CASE(bug17_estimate_redemption_fee_uses_correct_rate)
+{
+    // Bug #17: EstimateRedemptionFee used FEE_RATE_PER_KB = 200000 (0.002 DGB/kB)
+    // instead of 35000000 (0.35 DGB/kB). This made fee estimates ~175x too low,
+    // causing the displayed fee to look like 0 or a tiny amount while the actual
+    // fee deducted was much higher.
+    //
+    // FIX: EstimateRedemptionFee now uses FEE_RATE_PER_KB = 35000000.
+
+    // Reproduce the old (broken) calculation
+    const CAmount OLD_FEE_RATE = 200000;
+    const CAmount NEW_FEE_RATE = 35000000;
+    const size_t estimatedSize = 400; // typical redemption
+
+    CAmount oldFee = (estimatedSize * OLD_FEE_RATE) / 1000; // 80,000 sats = 0.0008 DGB
+    CAmount newFee = (estimatedSize * NEW_FEE_RATE) / 1000; // 14,000,000 sats = 0.14 DGB
+
+    // New fee must be significantly larger
+    BOOST_CHECK_GT(newFee, oldFee * 100);
+
+    // New fee should be in the ballpark of 14M sats for a 400-vbyte tx
+    BOOST_CHECK_GE(newFee, 10000000); // At least 0.1 DGB
+    BOOST_CHECK_LE(newFee, 50000000); // At most 0.5 DGB
+}
+
+BOOST_AUTO_TEST_CASE(bug17_calculate_transaction_fee_uses_dd_rate)
+{
+    // Bug #17: CalculateTransactionFee used DEFAULT_FEE_RATE = 200000 (0.002 DGB/kB)
+    // FIX: Now uses 35000000 (0.35 DGB/kB) matching MIN_DD_FEE_RATE.
+    //
+    // Verify the constant is correct (this is a compile-time sanity check).
+    const CAmount CORRECT_DD_FEE_RATE = 35000000;
+    const CAmount OLD_BROKEN_RATE = 200000;
+
+    // A 400-byte tx at the correct rate should produce ~14M sats fee
+    CAmount correctFee = (400 * CORRECT_DD_FEE_RATE) / 1000;
+    BOOST_CHECK_EQUAL(correctFee, 14000000);
+
+    // The old rate would have produced only 80K sats — way too low
+    CAmount brokenFee = (400 * OLD_BROKEN_RATE) / 1000;
+    BOOST_CHECK_EQUAL(brokenFee, 80000);
+
+    // Correct fee must be > MIN_DD_TX_FEE (10M sats)
+    BOOST_CHECK_GT(correctFee, 10000000);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

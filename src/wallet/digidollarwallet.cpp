@@ -1064,8 +1064,15 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // Select DGB UTXOs for fees (estimated)
         // CRITICAL: Exclude DD UTXOs from fee selection to prevent double-spend
         std::vector<COutPoint> exclude_dd_utxos = params.ddUtxos;
-        // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
-        CAmount estimatedFee = 10000000; // 0.1 DGB minimum fee
+        // Bug #9 fix: Calculate fee from feeRate and estimated tx size instead of hardcoding.
+        // Transfer tx: ~2-3 inputs (DD + fee), ~2-3 outputs → ~350 vbytes.
+        // Use MIN_DD_FEE_RATE (35M sat/kB) with 50% safety margin.
+        static const CAmount MIN_DD_FEE_RATE = 35000000;
+        CAmount estimatedFee = (350 * MIN_DD_FEE_RATE) / 1000; // vsize * feeRate / 1000
+        estimatedFee = estimatedFee + (estimatedFee / 2); // 50% safety margin
+        if (estimatedFee < 10000000) estimatedFee = 10000000; // Floor at 0.1 DGB
+        LogPrintf("DigiDollar: Estimated transfer fee: %lld sats (%.8f DGB)\n",
+                  static_cast<long long>(estimatedFee), estimatedFee / 100000000.0);
         std::vector<CAmount> fee_amounts;
         CAmount selectedFeeTotal = 0;
         if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_dd_utxos)) {
@@ -2699,20 +2706,21 @@ std::vector<DDTransaction> DigiDollarWallet::GetRedemptionHistory() const {
 
 CAmount DigiDollarWallet::EstimateRedemptionFee(const COutPoint& position, DigiDollar::RedemptionPath path) const {
     auto locks = LockDDWallet();
-    // DigiDollar transactions must pay at least 0.1 DGB fee to miners
+    // Bug #9/#17 fix: Use actual DD fee rate for estimation
     static const CAmount MIN_DD_TX_FEE = 10000000;       // 0.1 DGB minimum
-    static const CAmount FEE_RATE_PER_KB = 200000;       // 0.002 DGB/kB
+    static const CAmount FEE_RATE_PER_KB = 35000000;     // 0.35 DGB/kB (matches MIN_DD_FEE_RATE)
 
-    // Estimate transaction size based on redemption path
-    // NOTE: Only 2 paths exist - NORMAL and ERR
-    size_t estimatedSize = 250; // Base size
+    // Estimate transaction vsize based on redemption path
+    // Redemption tx: 3 inputs (collateral + DD + fee), 2-3 outputs
+    // With Taproot script-path spending, ~400 vbytes typical
+    size_t estimatedSize = 350; // Base vsize for redemption
 
     switch (path) {
         case DigiDollar::RedemptionPath::NORMAL:
-            estimatedSize += 50; // Basic script path
+            estimatedSize += 50; // Script path overhead
             break;
         case DigiDollar::RedemptionPath::ERR:
-            estimatedSize += 75; // ERR validation
+            estimatedSize += 75; // ERR script path overhead
             break;
         default:
             estimatedSize += 50; // Fallback to NORMAL
@@ -4573,6 +4581,7 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         ddtx.incoming = true;  // Receiving DGB back
         ddtx.address = "";
         ddtx.category = "redeem";
+        ddtx.fee = result.totalFees;  // Bug #17 fix: record actual fee paid
         ddtx.lock_tier = static_cast<int>(it->second.lock_tier);  // Set lock tier from redeemed position
 
         wallet::WalletBatch batch(m_wallet->GetDatabase());
@@ -5020,7 +5029,9 @@ CAmount DigiDollarWallet::CalculateTransactionFee(const CMutableTransaction& tx)
     // DigiByte uses KvB (kilobyte), not vB (virtual bytes)
     // DEFAULT_MIN_RELAY_TX_FEE in policy.h is 100000 satoshis/kB (0.001 DGB/kB)
     static const CAmount MIN_RELAY_FEE_PER_KB = 100000;  // 0.001 DGB/kB (matches network min relay fee)
-    static const CAmount DEFAULT_FEE_RATE = 200000;      // 0.002 DGB/kB (2x min for faster confirmation)
+    // Bug #9 fix: Use the actual DD fee rate (35M sat/kB) instead of the generic 200K sat/kB.
+    // DD transactions require higher fees to ensure relay at the DD minimum fee rate.
+    static const CAmount DEFAULT_FEE_RATE = 35000000;    // 0.35 DGB/kB (matches MIN_DD_FEE_RATE)
 
     // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
     static const CAmount MIN_DD_TX_FEE = 10000000;       // 0.1 DGB minimum for DigiDollar transactions

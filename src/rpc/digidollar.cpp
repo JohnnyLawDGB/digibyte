@@ -1404,7 +1404,14 @@ RPCHelpMan redeemdigidollar()
             LogPrintf("DigiDollar: Building exclude list with %d UTXOs (1 collateral + %d DD)\n",
                       exclude_utxos.size(), redeemParams.ddUtxos.size());
 
-            CAmount estimatedFee = 10000000; // 0.1 DGB minimum for redemption tx fees
+            // Bug #9 fix: Calculate fee from feeRate and estimated tx size instead of hardcoding.
+            // Redemption tx: ~3 inputs (collateral + DD + fee), ~2-3 outputs → ~400 vbytes.
+            // Apply 50% safety margin for script-path spending variance.
+            CAmount estimatedFee = (400 * redeemParams.feeRate) / 1000; // vsize * feeRate / 1000
+            estimatedFee = estimatedFee + (estimatedFee / 2); // 50% safety margin
+            if (estimatedFee < 10000000) estimatedFee = 10000000; // Floor at 0.1 DGB
+            LogPrintf("DigiDollar: Estimated redemption fee: %lld sats (%.8f DGB)\n",
+                      static_cast<long long>(estimatedFee), estimatedFee / 100000000.0);
             CAmount selectedFeeTotal = 0;
             std::vector<CAmount> feeAmounts;
 
@@ -1531,6 +1538,7 @@ RPCHelpMan redeemdigidollar()
             redeemTxHistory.incoming = false;    // Redemption = outgoing DD (burning)
             redeemTxHistory.address = redeemAddress.empty() ? "self" : redeemAddress;
             redeemTxHistory.category = "redeem";
+            redeemTxHistory.fee = redeemResult.totalFees;  // Bug #17 fix: record actual fee, not 0
 
             // Add to history using proper method
             if (!dd_wallet->AddRedemptionToHistory(redeemTxHistory)) {

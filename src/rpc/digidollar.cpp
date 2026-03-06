@@ -793,8 +793,8 @@ RPCHelpMan mintdigidollar()
             }
             
             // Get consensus parameters for mint amount validation
-            const auto& params = Params();
-            const auto& ddParams = params.GetDigiDollarParams();
+            const auto& chainParams = Params();
+            const auto& ddParams = chainParams.GetDigiDollarParams();
             
             // Validate against consensus mint limits
             if (!DigiDollar::IsValidMintAmount(ddAmount, ddParams)) {

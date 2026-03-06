@@ -44,6 +44,7 @@
 #include <deploymentstatus.h>
 #include <key_io.h>
 
+#include <util/time.h>
 #include <univalue.h>
 
 using namespace DigiDollar;
@@ -1648,9 +1649,24 @@ RPCHelpMan listdigidollarpositions()
                 std::string status = pos.is_active ? (blocksRemaining == 0 ? "unlocked" : "active") : "redeemed";
                 position.pushKV("status", status);
 
-                // Health ratio (simple calculation)
-                int healthRatio = (pos.dgb_collateral > 0) ?
-                    ((pos.dd_minted * 100) / pos.dgb_collateral) : 0;
+                // Health ratio: (dgb_collateral_value_in_usd / dd_minted_value_in_usd) * 100
+                // dd_minted is in cents (100 = $1), so dd_minted_micro_usd = dd_minted * 10000
+                // dgb_collateral is in satoshis, oracle price is micro-USD per 1 DGB (COIN satoshis)
+                // collateral_value_micro_usd = (dgb_collateral * oraclePriceMicroUSD) / COIN
+                // health = (collateral_value / dd_value) * 100
+                int healthRatio = 0;
+                if (pos.dgb_collateral > 0 && pos.dd_minted > 0) {
+                    CAmount oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
+                    if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                        oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+                    }
+                    if (oraclePriceMicroUSD > 0) {
+                        // Use __int128 to prevent overflow: collateral can be large
+                        __int128 collateralMicroUSD = (static_cast<__int128>(pos.dgb_collateral) * oraclePriceMicroUSD) / COIN;
+                        __int128 ddMicroUSD = static_cast<__int128>(pos.dd_minted) * 10000; // cents to micro-USD
+                        healthRatio = static_cast<int>((collateralMicroUSD * 100) / ddMicroUSD);
+                    }
+                }
                 position.pushKV("health_ratio", healthRatio);
 
                 // can_redeem requires: unlocked, active, AND has collateral
@@ -1658,9 +1674,22 @@ RPCHelpMan listdigidollarpositions()
                 bool canRedeem = blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0;
                 position.pushKV("can_redeem", canRedeem);
 
-                // Dates (simple conversion)
-                position.pushKV("created_date", "N/A"); // TODO: Add creation timestamp
-                position.pushKV("unlock_date", "N/A"); // TODO: Calculate from unlock_height
+                // Dates: estimate from block heights using 15-second block time
+                int64_t now = GetTime();
+                int lockDays = GetLockDaysForTier(pos.lock_tier);
+                int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
+                int64_t createdHeight = pos.unlock_height - lockBlocks;
+                // created_date: current_time - (currentHeight - createdHeight) * 15
+                int64_t createdTimestamp = now - (static_cast<int64_t>(currentHeight) - createdHeight) * 15;
+                position.pushKV("created_date", FormatISO8601DateTime(createdTimestamp));
+                // unlock_date: if already unlocked, show the past unlock time; otherwise future
+                if (blocksRemaining == 0) {
+                    int64_t unlockTimestamp = now - (static_cast<int64_t>(currentHeight) - pos.unlock_height) * 15;
+                    position.pushKV("unlock_date", FormatISO8601DateTime(unlockTimestamp));
+                } else {
+                    int64_t unlockTimestamp = now + static_cast<int64_t>(blocksRemaining) * 15;
+                    position.pushKV("unlock_date", FormatISO8601DateTime(unlockTimestamp));
+                }
 
                 result.push_back(position);
             }

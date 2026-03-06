@@ -2872,6 +2872,128 @@ static RPCHelpMan getprotectionstatus()
     };
 }
 
+// ---------- Shared oracle-data scanning helper (Bug #15) ----------
+// Used by both getalloracleprices and getoracles so they report
+// identical prices, timestamps, and statuses for every oracle.
+struct ScannedOracleData {
+    uint64_t price_micro_usd = 0;
+    int64_t  timestamp = 0;
+    int32_t  block_height = 0;   // 0 = not yet on-chain (pending/local)
+    bool     signature_valid = false;
+    bool     has_data = false;
+    std::string price_source;    // "local", "on-chain", "pending", "none"
+};
+
+struct OracleScanResult {
+    std::map<uint32_t, ScannedOracleData> oracle_data;
+    int      last_bundle_height = 0;
+    int64_t  last_bundle_time = 0;
+    uint64_t consensus_price = 0;  // from most-recent bundle
+};
+
+/** Scan recent blocks + pending P2P + local runtime for oracle data.
+ *  Both RPCs call this with the same parameters so results are identical. */
+static OracleScanResult ScanOracleDataFromChain(
+    const ChainstateManager& chainman,
+    OracleBundleManager& bundle_manager,
+    OracleManager& oracle_manager,
+    int scan_blocks)
+{
+    OracleScanResult res;
+
+    int tip_height = chainman.ActiveChain().Height();
+
+    // 1. On-chain: scan recent blocks for oracle bundles
+    {
+        LOCK(cs_main);
+        for (int h = tip_height; h >= std::max(0, tip_height - scan_blocks + 1); --h) {
+            CBlockIndex* pindex = chainman.ActiveChain()[h];
+            if (!pindex) continue;
+
+            CBlock block;
+            if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+            if (block.vtx.empty()) continue;
+
+            COracleBundle bundle;
+            if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                if (h > res.last_bundle_height) {
+                    res.last_bundle_height = h;
+                    res.last_bundle_time = bundle.timestamp;
+                    res.consensus_price = bundle.median_price_micro_usd;
+                }
+
+                for (const auto& msg : bundle.messages) {
+                    if (res.oracle_data.find(msg.oracle_id) == res.oracle_data.end() ||
+                        !res.oracle_data[msg.oracle_id].has_data) {
+                        auto& od = res.oracle_data[msg.oracle_id];
+                        od.price_micro_usd = msg.price_micro_usd;
+                        od.timestamp = msg.timestamp;
+                        od.block_height = h;
+                        od.signature_valid = msg.VerifyPhase2();
+                        od.has_data = true;
+                        od.price_source = "on-chain";
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Pending P2P messages (for oracles not yet on-chain)
+    {
+        int64_t now = GetTime();
+        std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
+        for (const auto& msg : pending) {
+            // Skip stale pending messages
+            if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
+
+            if (res.oracle_data.find(msg.oracle_id) == res.oracle_data.end() ||
+                !res.oracle_data[msg.oracle_id].has_data) {
+                auto& od = res.oracle_data[msg.oracle_id];
+                od.price_micro_usd = msg.price_micro_usd;
+                od.timestamp = msg.timestamp;
+                od.block_height = 0;
+                od.signature_valid = msg.VerifyPhase2();
+                od.has_data = true;
+                od.price_source = "pending";
+            }
+        }
+    }
+
+    // 3. Local runtime oracle nodes (highest priority — override if available)
+    {
+        const std::vector<OracleNodeInfo>& all_oracles = Params().GetOracleNodes();
+        for (const auto& oc : all_oracles) {
+            OracleNode* runtime = oracle_manager.GetOracleNode(oc.id);
+            if (runtime && runtime->HasValidPrice()) {
+                auto& od = res.oracle_data[oc.id];
+                od.price_micro_usd = runtime->GetCurrentPrice();
+                od.timestamp = runtime->GetLastUpdateTime();
+                od.block_height = 0;
+                od.signature_valid = true;
+                od.has_data = true;
+                od.price_source = "local";
+            }
+        }
+    }
+
+    return res;
+}
+
+/** Return a consistent status string for an oracle given scan results. */
+static std::string GetOracleStatus(const ScannedOracleData& od, uint64_t consensus_price)
+{
+    if (!od.has_data) return "no_data";
+    // Outlier: deviation > 10% from consensus
+    if (consensus_price > 0 && od.price_micro_usd > 0) {
+        int64_t diff = (int64_t)od.price_micro_usd - (int64_t)consensus_price;
+        if (diff < 0) diff = -diff;
+        // Use integer math: diff * 100 / consensus_price > 10  →  diff * 10 > consensus_price
+        if ((uint64_t)diff * 10 > consensus_price) return "outlier";
+    }
+    return "reporting";
+}
+// ---------- End shared oracle helper ----------
+
 static RPCHelpMan getalloracleprices()
 {
     return RPCHelpMan{"getalloracleprices",
@@ -2932,6 +3054,7 @@ static RPCHelpMan getalloracleprices()
             const ChainstateManager& chainman = EnsureAnyChainman(request.context);
             const Consensus::Params& consensus = Params().GetConsensus();
             OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
+            OracleManager& oracle_manager = OracleManager::GetInstance();
 
             int scan_blocks = request.params.size() > 0 ? request.params[0].getInt<int>() : 20;
             if (scan_blocks < 1) scan_blocks = 1;
@@ -2939,75 +3062,18 @@ static RPCHelpMan getalloracleprices()
 
             int tip_height = chainman.ActiveChain().Height();
 
+            // Use shared scanner (Bug #15: consistent with getoracles)
+            OracleScanResult scan = ScanOracleDataFromChain(chainman, bundle_manager, oracle_manager, scan_blocks);
+
             // Oracle names from chainparams
             const std::vector<OracleNodeInfo>& oracle_nodes = Params().GetOracleNodes();
             std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB"};
 
-            // Track latest price per oracle from on-chain data
-            struct OracleData {
-                uint64_t price_micro_usd = 0;
-                int64_t timestamp = 0;
-                int32_t block_height = 0;
-                bool signature_valid = false;
-                bool has_data = false;
-            };
-            std::map<uint32_t, OracleData> oracle_data;
-
-            // Scan recent blocks for oracle bundles
-            int last_bundle_height = 0;
-            int64_t last_bundle_time = 0;
-            uint64_t consensus_price = 0;
-
-            LOCK(cs_main);
-            for (int h = tip_height; h >= std::max(0, tip_height - scan_blocks + 1); --h) {
-                CBlockIndex* pindex = chainman.ActiveChain()[h];
-                if (!pindex) continue;
-
-                CBlock block;
-                if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
-                if (block.vtx.empty()) continue;
-
-                COracleBundle bundle;
-                if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
-                    // Track last bundle
-                    if (h > last_bundle_height) {
-                        last_bundle_height = h;
-                        last_bundle_time = bundle.timestamp;
-                        consensus_price = bundle.median_price_micro_usd;
-                    }
-
-                    // Record each oracle's price (only keep most recent per oracle)
-                    for (const auto& msg : bundle.messages) {
-                        if (oracle_data.find(msg.oracle_id) == oracle_data.end() || !oracle_data[msg.oracle_id].has_data) {
-                            OracleData& od = oracle_data[msg.oracle_id];
-                            od.price_micro_usd = msg.price_micro_usd;
-                            od.timestamp = msg.timestamp;
-                            od.block_height = h;
-                            od.signature_valid = msg.VerifyPhase2();
-                            od.has_data = true;
-                        }
-                    }
-                }
-            }
-
-            // Also check pending P2P messages for oracles not yet on-chain
-            std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
-            for (const auto& msg : pending) {
-                if (oracle_data.find(msg.oracle_id) == oracle_data.end() || !oracle_data[msg.oracle_id].has_data) {
-                    OracleData& od = oracle_data[msg.oracle_id];
-                    od.price_micro_usd = msg.price_micro_usd;
-                    od.timestamp = msg.timestamp;
-                    od.block_height = 0; // Not yet on-chain
-                    od.signature_valid = msg.VerifyPhase2();
-                    od.has_data = true;
-                }
-            }
-
             // Build result
             UniValue result(UniValue::VOBJ);
             result.pushKV("block_height", tip_height);
-            result.pushKV("consensus_price_micro_usd", (int64_t)consensus_price);
-            result.pushKV("consensus_price_usd", static_cast<double>(consensus_price) / 1000000.0);
+            result.pushKV("consensus_price_micro_usd", (int64_t)scan.consensus_price);
+            result.pushKV("consensus_price_usd", static_cast<double>(scan.consensus_price) / 1000000.0);
 
             int reporting_count = 0;
             UniValue oracles_arr(UniValue::VARR);
@@ -3018,9 +3084,9 @@ static RPCHelpMan getalloracleprices()
                 oracle_obj.pushKV("name", i < oracle_names.size() ? oracle_names[i] : "Unknown");
                 oracle_obj.pushKV("endpoint", oracle_nodes[i].endpoint);
 
-                auto it = oracle_data.find(oracle_nodes[i].id);
-                if (it != oracle_data.end() && it->second.has_data) {
-                    const OracleData& od = it->second;
+                auto it = scan.oracle_data.find(oracle_nodes[i].id);
+                if (it != scan.oracle_data.end() && it->second.has_data) {
+                    const ScannedOracleData& od = it->second;
                     oracle_obj.pushKV("price_micro_usd", (int64_t)od.price_micro_usd);
                     oracle_obj.pushKV("price_usd", static_cast<double>(od.price_micro_usd) / 1000000.0);
                     oracle_obj.pushKV("timestamp", od.timestamp);
@@ -3028,13 +3094,15 @@ static RPCHelpMan getalloracleprices()
 
                     // Calculate deviation from consensus
                     double deviation_pct = 0.0;
-                    if (consensus_price > 0) {
-                        deviation_pct = ((double)od.price_micro_usd - (double)consensus_price) / (double)consensus_price * 100.0;
+                    if (scan.consensus_price > 0) {
+                        deviation_pct = ((double)od.price_micro_usd - (double)scan.consensus_price) / (double)scan.consensus_price * 100.0;
                     }
                     oracle_obj.pushKV("deviation_pct", deviation_pct);
                     oracle_obj.pushKV("signature_valid", od.signature_valid);
-                    oracle_obj.pushKV("status", "reporting");
-                    reporting_count++;
+
+                    std::string status = GetOracleStatus(od, scan.consensus_price);
+                    oracle_obj.pushKV("status", status);
+                    if (status == "reporting") reporting_count++;
                 } else {
                     oracle_obj.pushKV("price_micro_usd", 0);
                     oracle_obj.pushKV("price_usd", 0.0);
@@ -3052,8 +3120,8 @@ static RPCHelpMan getalloracleprices()
             result.pushKV("required", consensus.nOracleRequiredMessages);
             result.pushKV("total_oracles", (int)oracle_nodes.size());
             result.pushKV("oracles", oracles_arr);
-            result.pushKV("last_bundle_height", last_bundle_height);
-            result.pushKV("last_bundle_time", last_bundle_time);
+            result.pushKV("last_bundle_height", scan.last_bundle_height);
+            result.pushKV("last_bundle_time", scan.last_bundle_time);
 
             return result;
         },
@@ -3184,7 +3252,8 @@ static RPCHelpMan getoracles()
                 "Shows what the network sees — prices come from on-chain oracle bundles,\n"
                 "not just the local node. Use this for monitoring all oracle health.\n",
                 {
-                    {"active_only", RPCArg::Type::BOOL, RPCArg::Default{false}, "Only show active oracles"}
+                    {"active_only", RPCArg::Type::BOOL, RPCArg::Default{false}, "Only show active oracles"},
+                    {"blocks", RPCArg::Type::NUM, RPCArg::Default{20}, "Number of recent blocks to scan (default: 20)"},
                 },
                 RPCResult{
                     RPCResult::Type::ARR, "", "",
@@ -3200,7 +3269,7 @@ static RPCHelpMan getoracles()
                                 {RPCResult::Type::NUM, "last_price_usd", "Last reported price in USD"},
                                 {RPCResult::Type::NUM, "last_update", "Timestamp of last price"},
                                 {RPCResult::Type::STR, "price_source", "Where price came from: local/on-chain/pending/none"},
-                                {RPCResult::Type::STR, "status", "Oracle status: reporting/stopped/no_data"},
+                                {RPCResult::Type::STR, "status", "Oracle status: reporting/no_data/outlier"},
                                 {RPCResult::Type::BOOL, "selected_for_epoch", "Whether oracle is selected for current epoch"},
                                 {RPCResult::Type::BOOL, "is_running_locally", "Whether this oracle is running on YOUR node"}
                             }
@@ -3223,7 +3292,11 @@ static RPCHelpMan getoracles()
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
                 }
             }
-            bool activeOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
+            bool activeOnly = !request.params[0].isNull() ? request.params[0].get_bool() : false;
+
+            int scan_blocks = !request.params[1].isNull() ? request.params[1].getInt<int>() : 20;
+            if (scan_blocks < 1) scan_blocks = 1;
+            if (scan_blocks > 1000) scan_blocks = 1000;
 
             const ChainstateManager& chainman = EnsureAnyChainman(request.context);
             const CChainParams& params = Params();
@@ -3241,43 +3314,8 @@ static RPCHelpMan getoracles()
                 selected_ids.insert(oracle.id);
             }
 
-            // Scan last 20 blocks for on-chain oracle prices
-            struct OnChainPrice { uint64_t price = 0; int64_t timestamp = 0; bool found = false; };
-            std::map<uint32_t, OnChainPrice> onchain_prices;
-            {
-                LOCK(cs_main);
-                for (int h = current_height; h >= std::max(0, current_height - 19); --h) {
-                    CBlockIndex* pindex = chainman.ActiveChain()[h];
-                    if (!pindex) continue;
-                    CBlock block;
-                    if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
-                    if (block.vtx.empty()) continue;
-                    COracleBundle bundle;
-                    if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
-                        for (const auto& msg : bundle.messages) {
-                            if (!onchain_prices[msg.oracle_id].found) {
-                                onchain_prices[msg.oracle_id] = {msg.price_micro_usd, msg.timestamp, true};
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Also check pending P2P messages for oracles whose data
-            // hasn't been included in a block yet. This is critical for
-            // showing all oracle data when consensus threshold hasn't been
-            // met or when messages are still propagating.
-            struct PendingPrice { uint64_t price = 0; int64_t timestamp = 0; };
-            std::map<uint32_t, PendingPrice> pending_prices;
-            {
-                int64_t now = GetTime();
-                std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
-                for (const auto& msg : pending) {
-                    // Skip stale pending messages — oracle may have gone offline
-                    if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
-                    pending_prices[msg.oracle_id] = {msg.price_micro_usd, msg.timestamp};
-                }
-            }
+            // Use shared scanner (Bug #15: consistent with getalloracleprices)
+            OracleScanResult scan = ScanOracleDataFromChain(chainman, bundle_manager, oracle_manager, scan_blocks);
 
             UniValue result(UniValue::VARR);
             for (size_t i = 0; i < all_oracles.size(); ++i) {
@@ -3286,7 +3324,6 @@ static RPCHelpMan getoracles()
 
                 bool is_selected = selected_ids.count(oc.id) > 0;
                 bool is_running = oracle_manager.IsOracleRunning(oc.id);
-                OracleNode* runtime = oracle_manager.GetOracleNode(oc.id);
 
                 UniValue info(UniValue::VOBJ);
                 info.pushKV("oracle_id", static_cast<int>(oc.id));
@@ -3295,34 +3332,22 @@ static RPCHelpMan getoracles()
                 info.pushKV("endpoint", oc.endpoint);
                 info.pushKV("is_active", oc.is_active);
 
-                // Price: prefer local runtime, fall back to on-chain, then pending P2P
-                uint64_t price = 0;
-                int64_t update_time = 0;
-                std::string price_source = "none";
-                std::string status = "no_data";
-
-                if (runtime && runtime->HasValidPrice()) {
-                    price = runtime->GetCurrentPrice();
-                    update_time = runtime->GetLastUpdateTime();
-                    price_source = "local";
-                    status = "reporting";
-                } else if (onchain_prices.count(oc.id) && onchain_prices[oc.id].found) {
-                    price = onchain_prices[oc.id].price;
-                    update_time = onchain_prices[oc.id].timestamp;
-                    price_source = "on-chain";
-                    status = "reporting";
-                } else if (pending_prices.count(oc.id)) {
-                    price = pending_prices[oc.id].price;
-                    update_time = pending_prices[oc.id].timestamp;
-                    price_source = "pending";
-                    status = "reporting";
+                auto it = scan.oracle_data.find(oc.id);
+                if (it != scan.oracle_data.end() && it->second.has_data) {
+                    const ScannedOracleData& od = it->second;
+                    info.pushKV("last_price_micro_usd", (int64_t)od.price_micro_usd);
+                    info.pushKV("last_price_usd", static_cast<double>(od.price_micro_usd) / 1000000.0);
+                    info.pushKV("last_update", od.timestamp);
+                    info.pushKV("price_source", od.price_source);
+                    info.pushKV("status", GetOracleStatus(od, scan.consensus_price));
+                } else {
+                    info.pushKV("last_price_micro_usd", (int64_t)0);
+                    info.pushKV("last_price_usd", 0.0);
+                    info.pushKV("last_update", (int64_t)0);
+                    info.pushKV("price_source", "none");
+                    info.pushKV("status", "no_data");
                 }
 
-                info.pushKV("last_price_micro_usd", (int64_t)price);
-                info.pushKV("last_price_usd", static_cast<double>(price) / 1000000.0);
-                info.pushKV("last_update", update_time);
-                info.pushKV("price_source", price_source);
-                info.pushKV("status", status);
                 info.pushKV("selected_for_epoch", is_selected);
                 info.pushKV("is_running_locally", is_running);
 

@@ -1937,7 +1937,7 @@ static RPCHelpMan validateddaddress()
     };
 }
 
-static RPCHelpMan listdigidollaraddresses()
+RPCHelpMan listdigidollaraddresses()
 {
     return RPCHelpMan{"listdigidollaraddresses",
                 "\nList all DigiDollar addresses in the wallet.\n"
@@ -1972,20 +1972,22 @@ static RPCHelpMan listdigidollaraddresses()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
-            {
-                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
-                ChainstateManager& chainman = EnsureChainman(node);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
-                }
-            }
-
-            // Get wallet
+            // Get wallet first (needed for activation check via wallet chain interface)
             std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) {
                 throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded");
+            }
+
+            // Check DigiDollar activation via wallet's chain context
+            {
+                node::NodeContext* node_ctx = pwallet->chain().context();
+                if (node_ctx) {
+                    ChainstateManager& chainman = *node_ctx->chainman;
+                    const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                    if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                        throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+                    }
+                }
             }
 
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
@@ -4301,7 +4303,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         // Address management commands
         // {"digidollar", &getdigidollaraddress},  // Moved to wallet RPC commands for proper wallet context
         {"digidollar", &validateddaddress},
-        {"digidollar", &listdigidollaraddresses},
+        // {"digidollar", &listdigidollaraddresses},  // Moved to wallet RPC commands for proper wallet context (Bug #12)
         {"digidollar", &importdigidollaraddress},
 
         // Utility commands (moved to wallet RPC table)

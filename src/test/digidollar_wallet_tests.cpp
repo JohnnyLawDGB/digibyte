@@ -1686,15 +1686,12 @@ BOOST_FIXTURE_TEST_CASE(test_wallet_redemption_fee_estimation, DDWalletTestFixtu
     // Act: Estimate redemption fees
     CAmount estimatedFee = wallet.EstimateRedemptionFee(position, path);
 
-    // Assert: Should return minimum DD fee (0.1 DGB = 10,000,000 satoshis)
-    // DigiDollar transactions require at least 0.1 DGB fee for network relay
-    BOOST_CHECK_EQUAL(estimatedFee, 10000000);
-
-    // After GREEN phase:
-    // Should return accurate fee estimate
-    // Should consider transaction size
-    // Should account for current fee rates
-    // BOOST_CHECK_GT(estimatedFee, 0);
+    // Bug #9 fix: Fee now calculated from size * feeRate, not hardcoded 10M.
+    // NORMAL path: base 350 + 50 = 400 vbytes, at 35M sat/kB = 14M sats.
+    // Must be at least the 10M floor.
+    BOOST_CHECK_GE(estimatedFee, 10000000);
+    // Should be significantly more than old hardcoded 10M at real feerate
+    BOOST_CHECK_GT(estimatedFee, 10000000);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_wallet_redemption_timelock_validation, DDWalletTestFixture)
@@ -2086,10 +2083,11 @@ BOOST_FIXTURE_TEST_CASE(test_calculate_transaction_fee_large_tx, DDWalletTestFix
     // Calculate fee
     CAmount fee = wallet.CalculateTransactionFee(tx);
 
-    // Fee should be the minimum DD fee (0.1 DGB = 10,000,000 satoshis)
-    // DigiDollar transactions require at least 0.1 DGB fee for network relay
-    // Even for larger transactions, the minimum fee floor applies
-    BOOST_CHECK_EQUAL(fee, 10000000);
+    // Bug #9 fix: Fee now calculated at 35M sat/kB. A 5-in/3-out tx is ~567 vbytes.
+    // (567 * 35000000) / 1000 = 19,845,000 sats — well above the 10M floor.
+    BOOST_CHECK_GE(fee, 10000000);
+    // Large tx should produce a fee higher than the floor
+    BOOST_CHECK_GT(fee, 10000000);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_calculate_transaction_fee_minimum, DDWalletTestFixture)

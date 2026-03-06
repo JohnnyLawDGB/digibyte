@@ -268,13 +268,14 @@ BOOST_FIXTURE_TEST_CASE(test_getprotectionstatus_basic, DigiDollarRPCTestSetup)
     // Should return protection system information
 }
 
-// Test 16: listdigidollaraddresses - Basic Response
+// Test 16: listdigidollaraddresses - requires wallet context (Bug #12 fix)
+// Now queries real wallet data instead of mock data, so without a wallet
+// context it correctly throws. Full functional test coverage is in
+// test/functional/digidollar_rpc_addresses.py
 BOOST_FIXTURE_TEST_CASE(test_listdigidollaraddresses_basic, DigiDollarRPCTestSetup)
 {
-    UniValue result = CallRPC("listdigidollaraddresses");
-
-    // Should return an array
-    BOOST_CHECK(result.isArray());
+    // Without wallet context, the RPC should throw (no longer returns mock data)
+    BOOST_CHECK_THROW(CallRPC("listdigidollaraddresses"), std::runtime_error);
 }
 
 // Test 17: RPC Performance - getdigidollarstats

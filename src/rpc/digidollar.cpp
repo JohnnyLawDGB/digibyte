@@ -1397,10 +1397,32 @@ RPCHelpMan redeemdigidollar()
             LogPrintf("DigiDollar: Selected %d sats in fees from %d UTXOs for redemption\n",
                      selectedFeeTotal, redeemParams.feeUtxos.size());
 
-            DigiDollar::TxBuilderResult redeemResult = redeemBuilder.BuildRedemptionTransaction(redeemParams);
+            DigiDollar::TxBuilderResult redeemResult;
+            for (int attempt = 0; attempt < 3; ++attempt) {
+                redeemResult = redeemBuilder.BuildRedemptionTransaction(redeemParams);
+                LogPrintf("DigiDollar: BuildRedemptionTransaction attempt %d returned success=%d, error='%s'\n",
+                          attempt + 1, redeemResult.success, redeemResult.error.c_str());
+                if (redeemResult.success) break;
 
+                // Only retry on fee shortfall errors
+                if (redeemResult.error.find("Insufficient fee inputs") == std::string::npos) {
+                    throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build redemption transaction: " + redeemResult.error);
+                }
+
+                // Retry with actual fee + 20% margin
+                CAmount retryFee = redeemResult.totalFees + (redeemResult.totalFees * 20 / 100);
+                LogPrintf("DigiDollar: Fee shortfall on attempt %d, retrying with %lld sats (actual %lld + 20%%)\n",
+                          attempt + 1, static_cast<long long>(retryFee), static_cast<long long>(redeemResult.totalFees));
+                redeemParams.feeUtxos.clear();
+                feeAmounts.clear();
+                selectedFeeTotal = 0;
+                if (!dd_wallet->SelectFeeCoins(retryFee, redeemParams.feeUtxos, selectedFeeTotal, &feeAmounts, &exclude_utxos)) {
+                    throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient DGB balance for retry fee");
+                }
+                redeemParams.feeAmounts = feeAmounts;
+            }
             if (!redeemResult.success) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build redemption transaction: " + redeemResult.error);
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build redemption transaction after 3 attempts: " + redeemResult.error);
             }
 
             LogPrintf("DigiDollar: Redemption transaction built with %d inputs:\n", redeemResult.tx.vin.size());

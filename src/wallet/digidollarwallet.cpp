@@ -4482,17 +4482,42 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
                   exclude_utxos.size(), params.ddUtxos.size());
 
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, nullptr, &exclude_utxos)) {
+        std::vector<CAmount> fee_amounts;
+        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_utxos)) {
             LogPrintf("DigiDollar: Insufficient DGB balance for fees\n");
             return false;
         }
+        params.feeAmounts = fee_amounts;
 
         LogPrintf("DigiDollar: CALLING BuildRedemptionTransaction now...\n");
-        auto result = builder.BuildRedemptionTransaction(params);
-        LogPrintf("DigiDollar: BuildRedemptionTransaction returned success=%d, error='%s'\n",
-                  result.success, result.error.c_str());
+        DigiDollar::TxBuilderResult result;
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            result = builder.BuildRedemptionTransaction(params);
+            LogPrintf("DigiDollar: BuildRedemptionTransaction attempt %d returned success=%d, error='%s'\n",
+                      attempt + 1, result.success, result.error.c_str());
+            if (result.success) break;
+
+            // Only retry on fee shortfall errors
+            if (result.error.find("Insufficient fee inputs") == std::string::npos) {
+                LogPrintf("DigiDollar: Redemption transaction build failed (non-fee error) - %s\n", result.error);
+                return false;
+            }
+
+            // Retry with actual fee + 20% margin
+            CAmount retryFee = result.totalFees + (result.totalFees * 20 / 100);
+            LogPrintf("DigiDollar: Fee shortfall on attempt %d, retrying with %lld sats (actual %lld + 20%%)\n",
+                      attempt + 1, static_cast<long long>(retryFee), static_cast<long long>(result.totalFees));
+            params.feeUtxos.clear();
+            fee_amounts.clear();
+            selectedFeeTotal = 0;
+            if (!SelectFeeCoins(retryFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_utxos)) {
+                LogPrintf("DigiDollar: Insufficient DGB balance for retry fee of %lld sats\n", static_cast<long long>(retryFee));
+                return false;
+            }
+            params.feeAmounts = fee_amounts;
+        }
         if (!result.success) {
-            LogPrintf("DigiDollar: Redemption transaction build failed - %s\n", result.error);
+            LogPrintf("DigiDollar: Redemption transaction build failed after 3 attempts - %s\n", result.error);
             return false;
         }
         LogPrintf("DigiDollar: BuildRedemptionTransaction SUCCESS, transaction has %d inputs and %d outputs\n",

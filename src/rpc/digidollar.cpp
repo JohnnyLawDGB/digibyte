@@ -29,6 +29,7 @@
 #include <wallet/context.h>
 #include <wallet/rpc/util.h>
 #include <wallet/spend.h>
+#include <wallet/coincontrol.h>
 #include <wallet/coinselection.h>
 #include <wallet/digidollarwallet.h>
 #include <wallet/walletdb.h>
@@ -745,7 +746,9 @@ RPCHelpMan mintdigidollar()
                         {RPCResult::Type::NUM, "unlock_height", "Block height when collateral becomes unlockable"},
                         {RPCResult::Type::NUM, "collateral_ratio", "Effective collateral ratio percentage"},
                         {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid"},
-                        {RPCResult::Type::STR, "position_id", "Unique position identifier"}
+                        {RPCResult::Type::STR, "position_id", "Unique position identifier"},
+                        {RPCResult::Type::STR_HEX, "consolidation_txid", /*optional=*/true, "TXID of auto-consolidation transaction (only present if UTXOs were consolidated)"},
+                        {RPCResult::Type::BOOL, "utxos_consolidated", /*optional=*/true, "True if wallet UTXOs were auto-consolidated before minting"}
                     }
                 },
                 RPCExamples{
@@ -941,6 +944,82 @@ RPCHelpMan mintdigidollar()
 
             DigiDollar::TxBuilderResult result = builder.BuildMintTransaction(params);
 
+            // Auto-consolidate if mint failed due to UTXO fragmentation
+            std::string consolidation_txid;
+            if (!result.success && result.error.find("Too many small UTXOs") != std::string::npos) {
+                LogPrintf("DigiDollar RPC Mint: UTXO fragmentation detected (%zu UTXOs). Auto-consolidating...\n",
+                          availableUtxos.size());
+
+                // Calculate consolidation target: collateral + fees + 10% margin
+                CAmount consolidationTarget = result.collateralRequired +
+                    (result.collateralRequired / 10) + 10000000; // +10% + 0.1 DGB fee buffer
+
+                // Cap at available balance
+                CAmount totalAvailable = 0;
+                for (const auto& [outpoint, value] : utxoValues) {
+                    totalAvailable += value;
+                }
+                if (consolidationTarget > totalAvailable) {
+                    throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
+                        strprintf("Insufficient funds for collateral. Need %.2f DGB, have %.2f DGB across %zu small UTXOs.",
+                                  result.collateralRequired / 100000000.0,
+                                  totalAvailable / 100000000.0,
+                                  availableUtxos.size()));
+                }
+
+                // Create consolidation transaction using wallet's standard coin selection
+                CTxDestination consolidationDest;
+                {
+                    LOCK(pwallet->cs_wallet);
+                    auto op_dest = pwallet->GetNewChangeDestination(OutputType::BECH32);
+                    if (!op_dest) {
+                        throw JSONRPCError(RPC_WALLET_ERROR, "Failed to get consolidation address");
+                    }
+                    consolidationDest = *op_dest;
+                }
+
+                wallet::CCoinControl coin_control;
+                wallet::CRecipient recipient{consolidationDest, consolidationTarget, false};
+                std::vector<wallet::CRecipient> recipients = {recipient};
+
+                auto consolidation_result = wallet::CreateTransaction(*pwallet, recipients, /*change_pos=*/-1, coin_control, /*sign=*/true);
+                if (!consolidation_result) {
+                    throw JSONRPCError(RPC_WALLET_ERROR,
+                        strprintf("Auto-consolidation failed: %s. Try manually consolidating UTXOs with: "
+                                  "sendtoaddress <your_address> <amount>",
+                                  util::ErrorString(consolidation_result).original));
+                }
+
+                const CTransactionRef& consolidation_tx = consolidation_result->tx;
+                consolidation_txid = consolidation_tx->GetHash().GetHex();
+                {
+                    LOCK(pwallet->cs_wallet);
+                    pwallet->CommitTransaction(consolidation_tx, {}, {});
+                }
+
+                LogPrintf("DigiDollar RPC Mint: Consolidation tx broadcast: %s (%.2f DGB)\n",
+                          consolidation_txid, consolidationTarget / 100000000.0);
+
+                // Re-gather UTXOs (now includes unconfirmed consolidation output)
+                availableUtxos.clear();
+                utxoValues.clear();
+                {
+                    LOCK(pwallet->cs_wallet);
+                    wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
+                    for (const wallet::COutput& coin : coins.All()) {
+                        availableUtxos.push_back(coin.outpoint);
+                        utxoValues[coin.outpoint] = coin.txout.nValue;
+                    }
+                }
+
+                LogPrintf("DigiDollar RPC Mint: After consolidation: %zu UTXOs available\n", availableUtxos.size());
+
+                // Rebuild builder with new UTXO map and retry
+                RpcMintTxBuilder retryBuilder(Params(), currentHeight, oraclePriceMicroUSD, utxoValues);
+                params.utxos = availableUtxos;
+                result = retryBuilder.BuildMintTransaction(params);
+            }
+
             if (!result.success) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Failed to build mint transaction: " + result.error);
             }
@@ -1024,6 +1103,10 @@ RPCHelpMan mintdigidollar()
             resultObj.pushKV("collateral_ratio", collateralRatio);
             resultObj.pushKV("fee_paid", ValueFromAmount(result.totalFees));
             resultObj.pushKV("position_id", tx->GetHash().GetHex());
+            if (!consolidation_txid.empty()) {
+                resultObj.pushKV("consolidation_txid", consolidation_txid);
+                resultObj.pushKV("utxos_consolidated", true);
+            }
 
             return resultObj;
         },

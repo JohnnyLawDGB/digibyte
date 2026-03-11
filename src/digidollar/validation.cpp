@@ -315,8 +315,8 @@ bool ExtractDDAmountFromPrevTx(const COutPoint& prevout, CAmount& amount) {
  * This is the universal fallback — every full node has every block on disk.
  * Uses the coin's creation height to find the right block.
  */
-static bool ExtractDDAmountFromBlockDb(const COutPoint& prevout, uint32_t coinHeight,
-                                       const TxLookupFn& txLookup, CAmount& amount) {
+bool ExtractDDAmountFromBlockDb(const COutPoint& prevout, uint32_t coinHeight,
+                                const TxLookupFn& txLookup, CAmount& amount) {
     amount = 0;
     if (!txLookup) return false;
 

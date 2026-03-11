@@ -144,6 +144,19 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount);
 bool ExtractDDAmountFromPrevTx(const COutPoint& prevout, CAmount& amount);
 
 /**
+ * Extract DD amount from the creating transaction fetched via block database
+ * lookup callback (used when txindex is unavailable).
+ *
+ * @param prevout The outpoint (txid + output index) of the DD UTXO
+ * @param coinHeight Height at which the coin was created
+ * @param txLookup Callback that loads the creating transaction
+ * @param amount Output: The DD amount in cents
+ * @return true if amount was successfully extracted
+ */
+bool ExtractDDAmountFromBlockDb(const COutPoint& prevout, uint32_t coinHeight,
+                                const TxLookupFn& txLookup, CAmount& amount);
+
+/**
  * Check if script is a DigiDollar collateral locking script
  *
  * @param script Script to check

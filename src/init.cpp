@@ -865,7 +865,61 @@ ServiceFlags nLocalServices = ServiceFlags(NODE_NETWORK_LIMITED | NODE_WITNESS);
 int64_t peer_connect_timeout;
 std::set<BlockFilterType> g_enabled_filter_types;
 
+bool HasDigiDollarDeployment(const CChainParams& chainparams)
+{
+    const auto& dd_deployment = chainparams.GetConsensus().vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    return dd_deployment.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
+           dd_deployment.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE;
+}
+
+bool IsRegtestDigiDollarExplicitlyRequested(const ArgsManager& args)
+{
+    return args.IsArgSet("-digidollar") || args.IsArgSet("-digidollaractivationheight");
+}
+
 } // namespace
+
+bool IsDigiDollarTxIndexRequired(const CChainParams& chainparams, const ArgsManager& args)
+{
+    if (!HasDigiDollarDeployment(chainparams)) return false;
+
+    switch (chainparams.GetChainType()) {
+    case ChainType::MAIN:
+    case ChainType::TESTNET:
+        return true;
+    case ChainType::REGTEST:
+        return IsRegtestDigiDollarExplicitlyRequested(args);
+    case ChainType::SIGNET:
+        return false;
+    }
+
+    return false;
+}
+
+std::string GetDigiDollarTxIndexRequirementError(const CChainParams& chainparams)
+{
+    std::string section_name;
+    switch (chainparams.GetChainType()) {
+    case ChainType::MAIN:
+        section_name = "[main]";
+        break;
+    case ChainType::TESTNET:
+        section_name = "[test]";
+        break;
+    case ChainType::REGTEST:
+        section_name = "[regtest]";
+        break;
+    case ChainType::SIGNET:
+        section_name = "[signet]";
+        break;
+    }
+
+    if (!section_name.empty()) {
+        return strprintf("DigiDollar requires -txindex=1. Add txindex=1 to your digibyte.conf under the %s section and restart.",
+                         section_name);
+    }
+    return "DigiDollar requires -txindex=1. Add txindex=1 to your digibyte.conf and restart.";
+}
 
 [[noreturn]] static void new_handler_terminate()
 {
@@ -1225,6 +1279,10 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     auto opt_max_upload = ParseByteUnits(args.GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET), ByteUnit::M);
     if (!opt_max_upload) {
         return InitError(strprintf(_("Unable to parse -maxuploadtarget: '%s'"), args.GetArg("-maxuploadtarget", "")));
+    }
+
+    if (IsDigiDollarTxIndexRequired(chainparams, args) && !args.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
+        return InitError(Untranslated(GetDigiDollarTxIndexRequirementError(chainparams)));
     }
 
     // ********************************************************* Step 4a: application initialization

@@ -106,6 +106,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_change_tests.cpp \
   test/digidollar_txbuilder_tests.cpp \
   test/digidollar_validation_tests.cpp \
+  test/digidollar_txindex_tests.cpp \
   test/digidollar_volatility_tests.cpp \
   test/digidollar_wallet_tests.cpp \
   test/digidollar_utxo_lifecycle_tests.cpp \

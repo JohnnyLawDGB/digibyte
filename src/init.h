@@ -18,6 +18,7 @@ static constexpr bool DEFAULT_DAEMONWAIT = false;
 extern int miningAlgo;
 
 class ArgsManager;
+class CChainParams;
 namespace interfaces {
 struct BlockAndHeaderTipInfo;
 }
@@ -35,6 +36,10 @@ void Shutdown(node::NodeContext& node);
 void InitLogging(const ArgsManager& args);
 //!Parameter interaction: change current parameters depending on various rules
 void InitParameterInteraction(ArgsManager& args);
+/** Returns true when DigiDollar-capable chains must run with txindex enabled. */
+bool IsDigiDollarTxIndexRequired(const CChainParams& chainparams, const ArgsManager& args);
+/** Human-readable startup error for missing txindex on required DigiDollar chains. */
+std::string GetDigiDollarTxIndexRequirementError(const CChainParams& chainparams);
 
 /** Initialize digibyte core: Basic context setup.
  *  @note This can be done before daemonization. Do not call Shutdown() if this function fails.

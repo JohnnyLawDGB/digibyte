@@ -702,6 +702,8 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("listoracle", "List oracle configuration and keys (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
     argsman.AddArg("getoraclepubkey", "Get the public key for an oracle ID (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
     argsman.AddArg("sendoracleprice", "Manually submit an oracle price (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("-oraclebundlewaitms=<n>", "When exactly one oracle message/attestation short of quorum, wait up to <n> milliseconds before mining without oracle data (default: 2000, 0 to disable)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
+    argsman.AddArg("-oraclebundlewaitpollms=<n>", "Polling interval in milliseconds while waiting for near-quorum oracle data (default: 200)", ArgsManager::ALLOW_ANY, OptionsCategory::ORACLE);
 
 #if HAVE_DECL_FORK
     argsman.AddArg("-daemon", strprintf("Run in the background as a daemon and accept commands (default: %d)", DEFAULT_DAEMON), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);

@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 
 #include <chainparams.h>
+#include <common/args.h>
 #include <consensus/consensus.h>
 #include <digidollar/digidollar.h>
 #include <kernel/chainparams.h>
@@ -42,7 +44,18 @@ std::unique_ptr<OracleBundleManager> g_oracle_bundle_manager;
 
 OracleBundleManager::OracleBundleManager()
 {
+    const int64_t configured_wait_ms = std::max<int64_t>(0, gArgs.GetIntArg("-oraclebundlewaitms", 2000));
+    const int64_t configured_poll_ms = std::max<int64_t>(1, gArgs.GetIntArg("-oraclebundlewaitpollms", 200));
+    near_quorum_wait_timeout = std::chrono::milliseconds(configured_wait_ms);
+    near_quorum_wait_poll_interval = std::chrono::milliseconds(configured_poll_ms);
+    if (near_quorum_wait_timeout.count() > 0 && near_quorum_wait_poll_interval > near_quorum_wait_timeout) {
+        near_quorum_wait_poll_interval = near_quorum_wait_timeout;
+    }
+
     LogPrintf("Oracle: Initializing Oracle Bundle Manager\n");
+    LogPrintf("Oracle: Near-quorum wait config: timeout=%lldms poll=%lldms\n",
+             static_cast<long long>(near_quorum_wait_timeout.count()),
+             static_cast<long long>(near_quorum_wait_poll_interval.count()));
 }
 
 OracleBundleManager::~OracleBundleManager()
@@ -246,6 +259,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         }
     }
 
+    m_messages_updated_cv.notify_all();
     return true;
 }
 
@@ -295,6 +309,7 @@ void OracleBundleManager::ClearPendingMessages()
     pending_attestations.clear();
     seen_message_hashes.clear();
     LogPrintf("Oracle: Manually cleared all pending messages and attestations\n");
+    m_messages_updated_cv.notify_all();
 }
 
 void OracleBundleManager::InjectTestMessage(const COraclePriceMessage& message)
@@ -303,6 +318,7 @@ void OracleBundleManager::InjectTestMessage(const COraclePriceMessage& message)
     pending_messages[message.oracle_id] = message;
     LogPrintf("Oracle: Injected test message for oracle %d, price=%llu\n",
              message.oracle_id, message.price_micro_usd);
+    m_messages_updated_cv.notify_all();
 }
 
 bool OracleBundleManager::AddConsensusAttestation(const COraclePriceMessage& attestation)
@@ -355,6 +371,7 @@ bool OracleBundleManager::AddConsensusAttestation(const COraclePriceMessage& att
 
     LogPrintf("Oracle: Added consensus attestation from oracle %d: price=%llu, timestamp=%lld\n",
              attestation.oracle_id, attestation.price_micro_usd, attestation.timestamp);
+    m_messages_updated_cv.notify_all();
     return true;
 }
 
@@ -379,6 +396,7 @@ void OracleBundleManager::ClearPendingAttestations()
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
     pending_attestations.clear();
+    m_messages_updated_cv.notify_all();
 }
 
 bool OracleBundleManager::ComputeConsensusValues(uint64_t& consensus_price, int64_t& consensus_timestamp) const
@@ -534,123 +552,174 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     // the Phase 2 on-chain format (which stores ONE consensus price + N signatures).
     if (!bundle.HasConsensus(min_oracle_count) && min_oracle_count > 1) {
         LogPrintf("Oracle: Phase Two mode - checking for consensus attestations (%d-of-N)\n", min_oracle_count);
-        std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
-        // Step 1: Compute consensus from individual price messages
-        uint64_t consensus_price = 0;
-        int64_t consensus_timestamp = 0;
-        std::vector<COraclePriceMessage> all_individual;
-        all_individual.reserve(pending_messages.size());
-        for (const auto& [id, msg] : pending_messages) {
-            all_individual.push_back(msg);
-        }
+        struct PhaseTwoAttempt {
+            bool has_bundle{false};
+            bool near_quorum{false};
+            size_t individual_count{0};
+            size_t valid_attestation_count{0};
+            uint64_t consensus_price{0};
+            int64_t consensus_timestamp{0};
+            COracleBundle candidate;
+        };
 
-        if (static_cast<int>(all_individual.size()) >= min_oracle_count) {
+        auto try_build_phase_two_bundle_locked = [&]() -> PhaseTwoAttempt {
+            PhaseTwoAttempt result;
+            const size_t near_quorum_threshold = min_oracle_count > 1 ? static_cast<size_t>(min_oracle_count - 1) : 0;
+
+            std::vector<COraclePriceMessage> all_individual;
+            all_individual.reserve(pending_messages.size());
+            for (const auto& pair : pending_messages) {
+                all_individual.push_back(pair.second);
+            }
+            result.individual_count = all_individual.size();
+
+            if (result.individual_count < static_cast<size_t>(min_oracle_count)) {
+                result.near_quorum = result.individual_count >= near_quorum_threshold;
+                return result;
+            }
+
             COracleBundle temp_bundle(epoch);
             temp_bundle.messages = all_individual;
             const Consensus::Params& cparams = Params().GetConsensus();
             CAmount computed_price = CalculateConsensusPrice(temp_bundle, cparams);
-
-            if (computed_price > 0) {
-                consensus_price = static_cast<uint64_t>(computed_price);
-
-                // Consensus timestamp: median of individual message timestamps
-                std::vector<int64_t> timestamps;
-                for (const auto& msg : all_individual) {
-                    timestamps.push_back(msg.timestamp);
-                }
-                std::sort(timestamps.begin(), timestamps.end());
-                size_t tmid = timestamps.size() / 2;
-                if (timestamps.size() % 2 == 0) {
-                    consensus_timestamp = (timestamps[tmid - 1] + timestamps[tmid]) / 2;
-                } else {
-                    consensus_timestamp = timestamps[tmid];
-                }
+            if (computed_price <= 0) {
+                return result;
             }
-        }
 
-        if (consensus_price == 0) {
-            LogPrintf("Oracle: Phase Two - Not enough individual messages for consensus (%zu, need %d)\n",
-                     all_individual.size(), min_oracle_count);
-        } else {
-            LogPrintf("Oracle: Phase Two - Consensus computed: price=%llu, timestamp=%lld from %zu messages\n",
-                     consensus_price, consensus_timestamp, all_individual.size());
+            result.consensus_price = static_cast<uint64_t>(computed_price);
 
-            // Step 2: Collect valid consensus attestations
-            // An attestation is a message whose Phase 2 signature verifies when
-            // the message's price/timestamp are set to the consensus values.
+            // Consensus timestamp: median of individual message timestamps
+            std::vector<int64_t> timestamps;
+            timestamps.reserve(all_individual.size());
+            for (const auto& msg : all_individual) {
+                timestamps.push_back(msg.timestamp);
+            }
+            std::sort(timestamps.begin(), timestamps.end());
+            const size_t tmid = timestamps.size() / 2;
+            result.consensus_timestamp = (timestamps.size() % 2 == 0) ?
+                (timestamps[tmid - 1] + timestamps[tmid]) / 2 : timestamps[tmid];
+
+            // Collect valid consensus attestations.
             std::vector<COraclePriceMessage> valid_attestations;
+            valid_attestations.reserve(std::max(pending_attestations.size(), all_individual.size()));
+            std::set<uint32_t> seen_ids;
 
-            // Check pending_attestations first (explicitly submitted attestations)
-            for (const auto& [id, att] : pending_attestations) {
-                if (att.price_micro_usd == consensus_price && att.timestamp == consensus_timestamp) {
-                    if (att.VerifyPhase2()) {
-                        valid_attestations.push_back(att);
-                        continue;
-                    }
+            for (const auto& pair : pending_attestations) {
+                const COraclePriceMessage& att = pair.second;
+                if (att.price_micro_usd == result.consensus_price &&
+                    att.timestamp == result.consensus_timestamp &&
+                    att.VerifyPhase2()) {
+                    valid_attestations.push_back(att);
+                    seen_ids.insert(att.oracle_id);
                 }
             }
 
-            // Also check pending_messages — an oracle may have already signed consensus values
-            // (e.g., all oracles computed the same consensus independently)
-            std::set<uint32_t> seen_ids;
-            for (const auto& att : valid_attestations) {
-                seen_ids.insert(att.oracle_id);
-            }
+            // Also check pending_messages — an oracle may have already signed consensus values.
             for (const auto& msg : all_individual) {
                 if (seen_ids.count(msg.oracle_id)) continue;
-                // Check if this message's signature verifies with consensus values
                 COraclePriceMessage check_msg = msg;
-                check_msg.price_micro_usd = consensus_price;
-                check_msg.timestamp = consensus_timestamp;
+                check_msg.price_micro_usd = result.consensus_price;
+                check_msg.timestamp = result.consensus_timestamp;
                 if (check_msg.VerifyPhase2()) {
                     valid_attestations.push_back(check_msg);
                     seen_ids.insert(msg.oracle_id);
                 }
             }
 
-            // Step 3: Try to generate attestation from local oracle node (if available)
+            // Try to generate attestation from local oracle node (if available).
             if (static_cast<int>(valid_attestations.size()) < min_oracle_count) {
                 OracleManager& om = OracleManager::GetInstance();
-                for (const auto& [id, msg] : pending_messages) {
+                for (const auto& pair : pending_messages) {
+                    const uint32_t id = pair.first;
                     if (seen_ids.count(id)) continue;
                     OracleNode* node = om.GetOracleNode(id);
                     if (node) {
-                        COraclePriceMessage att = node->CreateConsensusAttestation(consensus_price, consensus_timestamp);
+                        COraclePriceMessage att = node->CreateConsensusAttestation(
+                            result.consensus_price, result.consensus_timestamp);
                         if (!att.schnorr_sig.empty() && att.VerifyPhase2()) {
                             valid_attestations.push_back(att);
                             seen_ids.insert(id);
+                            pending_attestations[id] = att;
                             LogPrintf("Oracle: Phase Two - Generated local consensus attestation for oracle %d\n", id);
                         }
                     }
                 }
             }
 
-            LogPrintf("Oracle: Phase Two - %zu valid consensus attestations (need %d)\n",
-                     valid_attestations.size(), min_oracle_count);
-
-            // Step 4: Build Phase 2 bundle if enough attestations
-            if (static_cast<int>(valid_attestations.size()) >= min_oracle_count) {
-                bundle = COracleBundle(epoch);
-                bundle.messages = valid_attestations;
-                bundle.median_price_micro_usd = consensus_price;
-                bundle.timestamp = consensus_timestamp;
-
-                // NOTE: Do NOT clear pending_messages or pending_attestations here.
-                // CreateNewBlock() fires every ~15 seconds but oracle messages broadcast
-                // every ~60 seconds. Clearing here drains messages 4x faster than
-                // replenished. Messages expire naturally via the stale purge in
-                // AddOracleMessage() after ORACLE_MAX_AGE_SECONDS (3600s).
-
-                LogPrintf("Oracle: Phase Two - Created bundle with %zu consensus attestations, price=%llu\n",
-                         valid_attestations.size(), consensus_price);
-            } else {
-                // Step 5: Not enough attestations — broadcast consensus proposal so
-                // remote oracle nodes can sign and send back attestations (Round 2).
-                // This is non-blocking: the bundle won't be ready for THIS block,
-                // but attestations will accumulate for the next block attempt.
-                BroadcastConsensusProposal(epoch, consensus_price, consensus_timestamp);
+            result.valid_attestation_count = valid_attestations.size();
+            if (result.valid_attestation_count >= static_cast<size_t>(min_oracle_count)) {
+                result.has_bundle = true;
+                result.candidate = COracleBundle(epoch);
+                result.candidate.messages = std::move(valid_attestations);
+                result.candidate.median_price_micro_usd = result.consensus_price;
+                result.candidate.timestamp = result.consensus_timestamp;
+                return result;
             }
+
+            // Once we have enough individual messages for a consensus price, quorum progress
+            // should be measured on attestations rather than raw message count.
+            result.near_quorum = result.valid_attestation_count >= near_quorum_threshold;
+            return result;
+        };
+
+        std::unique_lock<std::recursive_mutex> lock(mtx_messages);
+        PhaseTwoAttempt attempt = try_build_phase_two_bundle_locked();
+
+        if (!attempt.has_bundle && attempt.near_quorum && near_quorum_wait_timeout.count() > 0) {
+            ++near_quorum_wait_attempts;
+            const uint64_t wait_attempt = near_quorum_wait_attempts;
+            const auto wait_started = std::chrono::steady_clock::now();
+            const auto deadline = wait_started + near_quorum_wait_timeout;
+
+            LogPrintf("Oracle: Near-quorum wait triggered for block %d (attempt #%llu): %zu individual, %zu attestations, need %d\n",
+                     block_height, wait_attempt, attempt.individual_count, attempt.valid_attestation_count, min_oracle_count);
+
+            while (!attempt.has_bundle && attempt.near_quorum) {
+                const auto now = std::chrono::steady_clock::now();
+                if (now >= deadline) {
+                    break;
+                }
+                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+                const auto step = std::min(near_quorum_wait_poll_interval, remaining);
+                m_messages_updated_cv.wait_for(lock, step);
+                attempt = try_build_phase_two_bundle_locked();
+            }
+
+            const auto waited_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - wait_started).count();
+            if (attempt.has_bundle) {
+                ++near_quorum_wait_successes;
+                LogPrintf("Oracle: Near-quorum wait succeeded after %lldms (success %llu/%llu)\n",
+                         waited_ms,
+                         static_cast<unsigned long long>(near_quorum_wait_successes),
+                         static_cast<unsigned long long>(near_quorum_wait_attempts));
+            } else {
+                ++near_quorum_wait_timeouts;
+                LogPrintf("Oracle: Near-quorum wait timed out after %lldms (timeouts %llu/%llu)\n",
+                         waited_ms,
+                         static_cast<unsigned long long>(near_quorum_wait_timeouts),
+                         static_cast<unsigned long long>(near_quorum_wait_attempts));
+            }
+        }
+
+        if (attempt.has_bundle) {
+            bundle = std::move(attempt.candidate);
+            LogPrintf("Oracle: Phase Two - Created bundle with %zu consensus attestations, price=%llu\n",
+                     bundle.messages.size(), bundle.median_price_micro_usd);
+        } else if (attempt.consensus_price > 0) {
+            const uint64_t consensus_price = attempt.consensus_price;
+            const int64_t consensus_timestamp = attempt.consensus_timestamp;
+            const size_t valid_attestation_count = attempt.valid_attestation_count;
+            const size_t individual_count = attempt.individual_count;
+            lock.unlock();
+
+            LogPrintf("Oracle: Phase Two - %zu valid consensus attestations from %zu individual messages (need %d), broadcasting proposal\n",
+                     valid_attestation_count, individual_count, min_oracle_count);
+            BroadcastConsensusProposal(epoch, consensus_price, consensus_timestamp);
+        } else {
+            LogPrintf("Oracle: Phase Two - Not enough individual messages for consensus (%zu, need %d)\n",
+                     attempt.individual_count, min_oracle_count);
         }
     }
 
@@ -1190,6 +1259,9 @@ OracleBundleManager::OracleStats OracleBundleManager::GetStats() const
     {
         std::lock_guard<std::recursive_mutex> lock(mtx_messages);
         stats.pending_messages = pending_messages.size();
+        stats.near_quorum_wait_attempts = near_quorum_wait_attempts;
+        stats.near_quorum_wait_successes = near_quorum_wait_successes;
+        stats.near_quorum_wait_timeouts = near_quorum_wait_timeouts;
     }
 
     {
@@ -1335,6 +1407,9 @@ void OracleBundleManager::Clear()
         seen_message_hashes.clear();
         broadcast_proposal_epochs.clear();
         seen_attestation_hashes.clear();
+        near_quorum_wait_attempts = 0;
+        near_quorum_wait_successes = 0;
+        near_quorum_wait_timeouts = 0;
     }
 
     {
@@ -1342,6 +1417,7 @@ void OracleBundleManager::Clear()
         height_to_price.clear();
     }
 
+    m_messages_updated_cv.notify_all();
     LogPrintf("Oracle: Cleared all bundle manager state\n");
 }
 

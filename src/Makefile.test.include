@@ -83,6 +83,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_opcodes_tests.cpp \
   test/digidollar_oracle_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
+  test/oracle_bundle_timing_tests.cpp \
   test/oracle_block_validation_tests.cpp \
   test/oracle_config_tests.cpp \
   test/oracle_exchange_tests.cpp \

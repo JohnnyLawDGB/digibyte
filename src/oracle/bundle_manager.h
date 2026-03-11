@@ -5,6 +5,8 @@
 #ifndef DIGIBYTE_ORACLE_BUNDLE_MANAGER_H
 #define DIGIBYTE_ORACLE_BUNDLE_MANAGER_H
 
+#include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -33,6 +35,7 @@ class OracleBundleManager
 private:
     mutable std::mutex mtx_bundles;
     mutable std::recursive_mutex mtx_messages;
+    mutable std::condition_variable_any m_messages_updated_cv;
 
     // Current oracle bundles by epoch
     std::unordered_map<int32_t, COracleBundle> epoch_bundles;
@@ -52,6 +55,11 @@ private:
     bool enabled{true};
     int32_t min_oracle_count{ORACLE_CONSENSUS_REQUIRED};
     int32_t total_oracle_count{ORACLE_ACTIVE_COUNT};
+    std::chrono::milliseconds near_quorum_wait_timeout{std::chrono::seconds(2)};
+    std::chrono::milliseconds near_quorum_wait_poll_interval{std::chrono::milliseconds(200)};
+    uint64_t near_quorum_wait_attempts{0};
+    uint64_t near_quorum_wait_successes{0};
+    uint64_t near_quorum_wait_timeouts{0};
 
 public:
     OracleBundleManager();
@@ -164,6 +172,9 @@ public:
         int32_t latest_epoch;
         int64_t last_update;
         bool has_consensus;
+        uint64_t near_quorum_wait_attempts;
+        uint64_t near_quorum_wait_successes;
+        uint64_t near_quorum_wait_timeouts;
     };
     OracleStats GetStats() const;
 

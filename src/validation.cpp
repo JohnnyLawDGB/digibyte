@@ -3350,9 +3350,10 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
 
     if (disconnectpool && m_mempool) {
         // Save transactions to re-add to mempool at end of reorg. If any entries are evicted for
-        // exceeding memory limits, remove them and their descendants from the mempool.
+        // exceeding memory limits, remove them and their descendants from the mempool and stempool.
         for (auto&& evicted_tx : disconnectpool->AddTransactionsFromBlock(block.vtx)) {
             m_mempool->removeRecursive(*evicted_tx, MemPoolRemovalReason::REORG);
+            if (m_stempool) m_stempool->removeRecursive(*evicted_tx, MemPoolRemovalReason::REORG);
         }
     }
 
@@ -3482,6 +3483,13 @@ bool Chainstate::ConnectTip(BlockValidationState& state, CBlockIndex* pindexNew,
     if (m_mempool) {
         m_mempool->removeForBlock(blockConnecting.vtx, pindexNew->nHeight);
         disconnectpool.removeForBlock(blockConnecting.vtx);
+    }
+    // CRITICAL FIX: Also remove confirmed transactions from the Dandelion stempool.
+    // Without this, confirmed txs remain as phantom ancestors in the stempool,
+    // inflating ancestor counts until new stempool txs hit the 25-ancestor limit
+    // and get rejected with "too-long-mempool-chain".
+    if (m_stempool) {
+        m_stempool->removeForBlock(blockConnecting.vtx, pindexNew->nHeight);
     }
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);

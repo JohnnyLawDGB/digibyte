@@ -810,20 +810,31 @@ bool ValidateMintTransaction(const CTransaction& tx,
                         // Tier lock days: {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650}
                         static const int TIER_LOCK_DAYS[] = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650};
                         int64_t expectedLockBlocks = DigiDollar::LockDaysToBlocks(TIER_LOCK_DAYS[lockTier]);
-                        int64_t actualLockBlocks = lockTime - ctx.nHeight;
 
-                        // Allow small tolerance (±10 blocks) for timing variance
-                        if (actualLockBlocks < expectedLockBlocks - 10) {
-                            LogPrintf("DigiDollar: SECURITY - Lock height mismatch! "
-                                     "Tier %lld claims %lld blocks but actual lock is only %lld blocks "
-                                     "(lockHeight=%lld, currentHeight=%d). "
-                                     "Possible collateral ratio manipulation attack.\n",
-                                     static_cast<long long>(lockTier),
-                                     static_cast<long long>(expectedLockBlocks),
-                                     static_cast<long long>(actualLockBlocks),
-                                     static_cast<long long>(lockTime), ctx.nHeight);
-                            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-height-mismatch",
-                                               "Lock height does not match claimed lock tier");
+                        // Tier consistency check is only meaningful at acceptance time.
+                        // During rescan/revalidation, nHeight may be ahead of the mint height
+                        // (or lock already matured), so skip this check to avoid false positives.
+                        if (ctx.skipOracleValidation || lockTime <= ctx.nHeight) {
+                            LogPrint(BCLog::DIGIDOLLAR,
+                                     "DigiDollar: Lock height %lld at current height %d (skipOracleValidation=%d) - "
+                                     "historical mint revalidation, skipping lock tier consistency check\n",
+                                     static_cast<long long>(lockTime), ctx.nHeight, ctx.skipOracleValidation ? 1 : 0);
+                        } else {
+                            int64_t actualLockBlocks = lockTime - ctx.nHeight;
+
+                            // Allow small tolerance (±10 blocks) for timing variance
+                            if (actualLockBlocks < expectedLockBlocks - 10) {
+                                LogPrintf("DigiDollar: SECURITY - Lock height mismatch! "
+                                         "Tier %lld claims %lld blocks but actual lock is only %lld blocks "
+                                         "(lockHeight=%lld, currentHeight=%d). "
+                                         "Possible collateral ratio manipulation attack.\n",
+                                         static_cast<long long>(lockTier),
+                                         static_cast<long long>(expectedLockBlocks),
+                                         static_cast<long long>(actualLockBlocks),
+                                         static_cast<long long>(lockTime), ctx.nHeight);
+                                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-height-mismatch",
+                                                   "Lock height does not match claimed lock tier");
+                            }
                         }
                     } catch (const std::exception&) {
                         // If we can't parse lock tier, reject the mint

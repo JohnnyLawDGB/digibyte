@@ -1027,8 +1027,10 @@ public:
     const DigiDollarWallet* GetDDWallet() const { return m_dd_wallet.get(); }
 
     // Oracle key management
+    bool HasOracleKey(uint32_t oracle_id) const;
     bool StoreOracleKey(uint32_t oracle_id, const CKey& key);
     bool GetOracleKey(uint32_t oracle_id, CKey& key_out);
+    void TryAutoStartOracles();
 
     /** Move all records from the BDB database to a new SQLite database for storage.
      * The original BDB file will be deleted and replaced with a new SQLite file.

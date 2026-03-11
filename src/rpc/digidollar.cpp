@@ -194,6 +194,39 @@ namespace {
         key.MakeNewKey(true);
         return key;
     }
+
+    bool TryStartOracleFromPrivateKey(OracleManager& oracle_manager, uint32_t oracle_id, const std::string& private_key_hex, const std::string& key_source, bool allow_initialized_without_running, std::string& status_message)
+    {
+        OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
+        if (!oracle) {
+            if (!oracle_manager.AddOracleNode(oracle_id, private_key_hex)) {
+                status_message = strprintf("Failed to initialize oracle with %s", key_source);
+                return false;
+            }
+            oracle_manager.EnableOracle(oracle_id, true);
+            oracle = oracle_manager.GetOracleNode(oracle_id);
+            if (!oracle) {
+                status_message = strprintf("Oracle initialized with %s but manager returned no oracle instance", key_source);
+                return false;
+            }
+        } else {
+            oracle_manager.EnableOracle(oracle_id, true);
+        }
+
+        oracle->Start();
+        if (oracle->IsRunning()) {
+            status_message = strprintf("Oracle started with %s", key_source);
+            return true;
+        }
+
+        if (allow_initialized_without_running) {
+            status_message = strprintf("Oracle initialized with %s (price thread not active on this network)", key_source);
+            return true;
+        }
+
+        status_message = strprintf("Oracle initialized with %s but failed to start price thread", key_source);
+        return false;
+    }
 }
 
 RPCHelpMan getdigidollarstats()
@@ -3823,24 +3856,7 @@ RPCHelpMan startoracle()
                 } else {
                     // Try to start oracle
                     if (!private_key_hex.empty()) {
-                        // Add oracle with provided private key
-                        success = oracle_manager.AddOracleNode(oracle_id, private_key_hex);
-                        if (success) {
-                            oracle_manager.EnableOracle(oracle_id, true);
-                            // Actually start the oracle's price fetching thread
-                            OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
-                            if (oracle) {
-                                oracle->Start();
-                                if (oracle->IsRunning()) {
-                                    status_message = "Oracle added and started with provided private key";
-                                } else {
-                                    status_message = "Oracle added but failed to start price thread (check key validation)";
-                                    success = false;
-                                }
-                            }
-                        } else {
-                            status_message = "Failed to initialize oracle with provided private key";
-                        }
+                        success = TryStartOracleFromPrivateKey(oracle_manager, oracle_id, private_key_hex, "provided private key", /*allow_initialized_without_running=*/false, status_message);
                     } else {
                         // Try to start existing oracle (if already configured)
                         OracleNode* existing_oracle = oracle_manager.GetOracleNode(oracle_id);
@@ -3858,25 +3874,10 @@ RPCHelpMan startoracle()
                                     wallet::EnsureWalletIsUnlocked(*pwallet);
                                     CKey wallet_key;
                                     if (pwallet->GetOracleKey(oracle_id, wallet_key)) {
-                                        std::string wallet_key_hex = HexStr(Span<const unsigned char>(wallet_key.begin(), wallet_key.end()));
-                                        success = oracle_manager.AddOracleNode(oracle_id, wallet_key_hex);
-                                        if (success) {
-                                            oracle_manager.EnableOracle(oracle_id, true);
-                                            OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
-                                            if (oracle) {
-                                                oracle->Start();
-                                                loaded_from_wallet = true;
-                                                if (oracle->IsRunning()) {
-                                                    status_message = strprintf("Oracle started with key loaded from wallet '%s'", pwallet->GetName());
-                                                } else {
-                                                    // Oracle initialized but price thread not running
-                                                    // (expected on regtest where oracle only runs on testnet)
-                                                    status_message = strprintf("Oracle initialized with key from wallet '%s' (price thread not active on this network)", pwallet->GetName());
-                                                }
-                                            }
-                                        } else {
-                                            status_message = "Failed to initialize oracle with wallet key (key may not match chainparams pubkey)";
-                                        }
+                                        const std::string wallet_key_hex = HexStr(Span<const unsigned char>(wallet_key.begin(), wallet_key.end()));
+                                        const std::string key_source = strprintf("key loaded from wallet '%s'", pwallet->GetName());
+                                        success = TryStartOracleFromPrivateKey(oracle_manager, oracle_id, wallet_key_hex, key_source, /*allow_initialized_without_running=*/true, status_message);
+                                        loaded_from_wallet = success;
                                     }
                                 }
                             } catch (const std::exception& e) {

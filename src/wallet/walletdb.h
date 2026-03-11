@@ -337,6 +337,7 @@ public:
 
     // Oracle key persistence
     bool WriteOracleKey(uint32_t oracle_id, const CKey& key);
+    bool HasOracleKey(uint32_t oracle_id);
     bool ReadOracleKey(uint32_t oracle_id, CKey& key);
     bool EraseOracleKey(uint32_t oracle_id);
 

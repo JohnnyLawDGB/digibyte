@@ -86,6 +86,9 @@ RPCHelpMan walletpassphrase()
         relock_time = pwallet->nRelockTime;
     }
 
+    // Wallet is now unlocked by explicit user action. Safe to attempt oracle auto-start.
+    pwallet->TryAutoStartOracles();
+
     // rpcRunLater must be called without cs_wallet held otherwise a deadlock
     // can occur. The deadlock would happen when RPCRunLater removes the
     // previous timer (and waits for the callback to finish if already running)

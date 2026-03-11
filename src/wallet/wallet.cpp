@@ -20,6 +20,7 @@
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
+#include <digidollar/digidollar.h>
 #include <external_signer.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
@@ -29,6 +30,10 @@
 #include <key.h>
 #include <key_io.h>
 #include <logging.h>
+#include <node/context.h>
+#include <node/chainstate.h>
+#include <validation.h>
+#include <oracle/node.h>
 #include <outputtype.h>
 #include <policy/feerate.h>
 #include <primitives/block.h>
@@ -3284,6 +3289,8 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         walletInstance->WalletLogPrintf("m_address_book.size() = %u\n",  walletInstance->m_address_book.size());
     }
 
+    walletInstance->TryAutoStartOracles();
+
     return walletInstance;
 }
 
@@ -4508,6 +4515,12 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
     return res;
 }
 // Oracle key management
+bool CWallet::HasOracleKey(uint32_t oracle_id) const
+{
+    WalletBatch batch(GetDatabase());
+    return batch.HasOracleKey(oracle_id);
+}
+
 bool CWallet::StoreOracleKey(uint32_t oracle_id, const CKey& key)
 {
     WalletBatch batch(GetDatabase());
@@ -4518,6 +4531,70 @@ bool CWallet::GetOracleKey(uint32_t oracle_id, CKey& key_out)
 {
     WalletBatch batch(GetDatabase());
     return batch.ReadOracleKey(oracle_id, key_out);
+}
+
+void CWallet::TryAutoStartOracles()
+{
+    const std::string wallet_name = GetName().empty() ? "default wallet" : GetName();
+
+    if (HaveChain()) {
+        node::NodeContext* node_ctx = chain().context();
+        if (node_ctx && node_ctx->chainman) {
+            ChainstateManager& chainman = *node_ctx->chainman;
+            const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+            if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: DigiDollar inactive, skipping oracle auto-start for wallet '%s'\n", wallet_name);
+                return;
+            }
+        }
+    }
+
+    if (IsCrypted() && IsLocked()) {
+        for (uint32_t oracle_id = 0; oracle_id < ORACLE_TOTAL_COUNT; ++oracle_id) {
+            if (HasOracleKey(oracle_id)) {
+                LogPrintf("Oracle key found for ID %u but wallet is locked. Run walletpassphrase then startoracle to enable.\n", oracle_id);
+            }
+        }
+        return;
+    }
+
+    OracleManager& oracle_manager = OracleManager::GetInstance();
+    for (uint32_t oracle_id = 0; oracle_id < ORACLE_TOTAL_COUNT; ++oracle_id) {
+        if (!HasOracleKey(oracle_id)) {
+            continue;
+        }
+
+        if (oracle_manager.GetOracleNode(oracle_id) != nullptr) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Oracle %u already initialized in manager. Skipping auto-start.\n", oracle_id);
+            continue;
+        }
+
+        CKey wallet_key;
+        if (!GetOracleKey(oracle_id, wallet_key)) {
+            LogPrintf("Oracle: Failed to load oracle key for ID %u from wallet '%s' during auto-start\n", oracle_id, wallet_name);
+            continue;
+        }
+
+        const std::string key_hex = HexStr(Span<const unsigned char>(wallet_key.begin(), wallet_key.end()));
+        if (!oracle_manager.AddOracleNode(oracle_id, key_hex)) {
+            LogPrintf("Oracle: Failed to initialize oracle %u from wallet '%s' during auto-start\n", oracle_id, wallet_name);
+            continue;
+        }
+
+        oracle_manager.EnableOracle(oracle_id, true);
+        OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
+        if (!oracle) {
+            LogPrintf("Oracle: Oracle %u missing after initialization from wallet '%s'\n", oracle_id, wallet_name);
+            continue;
+        }
+
+        oracle->Start();
+        if (oracle->IsRunning()) {
+            LogPrintf("Oracle: Auto-started oracle %u from wallet '%s'\n", oracle_id, wallet_name);
+        } else {
+            LogPrintf("Oracle: Auto-initialized oracle %u from wallet '%s' (price thread not active on this network)\n", oracle_id, wallet_name);
+        }
+    }
 }
 
 } // namespace wallet

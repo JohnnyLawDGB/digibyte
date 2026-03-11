@@ -779,6 +779,11 @@ bool WalletBatch::WriteOracleKey(uint32_t oracle_id, const CKey& key)
     return success;
 }
 
+bool WalletBatch::HasOracleKey(uint32_t oracle_id)
+{
+    return m_batch->Exists(std::make_pair(DBKeys::ORACLE_KEY, oracle_id));
+}
+
 bool WalletBatch::ReadOracleKey(uint32_t oracle_id, CKey& key)
 {
     CPrivKey privkey;

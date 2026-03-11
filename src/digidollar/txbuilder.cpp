@@ -179,10 +179,19 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     }
     uint64_t requiredCollateral = static_cast<uint64_t>(result128);
 
-    LogPrintf("DigiDollar TxBuilder: - Required collateral: %llu sats (%.8f DGB)\n",
-              requiredCollateral, requiredCollateral / 100000000.0);
+    // Add a fixed 1% safety margin to reduce knife-edge failures from
+    // small oracle price movements between mempool admission and block template checks.
+    __int128 padded128 = (static_cast<__int128>(requiredCollateral) * 101) / 100;
+    if (padded128 > static_cast<__int128>(MAX_MONEY)) {
+        return 0;
+    }
+    uint64_t requiredWithSafetyMargin = static_cast<uint64_t>(padded128);
 
-    return static_cast<CAmount>(requiredCollateral);
+    LogPrintf("DigiDollar TxBuilder: - Required collateral base: %llu sats (%.8f DGB), with 1%% safety margin: %llu sats (%.8f DGB)\n",
+              requiredCollateral, requiredCollateral / 100000000.0,
+              requiredWithSafetyMargin, requiredWithSafetyMargin / 100000000.0);
+
+    return static_cast<CAmount>(requiredWithSafetyMargin);
 }
 
 int64_t MintTxBuilder::LockDaysToBlocks(int days) const {

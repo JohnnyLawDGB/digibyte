@@ -151,6 +151,7 @@ DIGIBYTE_TESTS =\
   test/mempool_tests.cpp \
   test/merkle_tests.cpp \
   test/merkleblock_tests.cpp \
+  test/miner_dd_validation_tests.cpp \
   test/miner_tests.cpp \
   test/miniminer_tests.cpp \
   test/miniscript_tests.cpp \

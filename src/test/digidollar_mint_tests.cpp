@@ -898,7 +898,9 @@ BOOST_AUTO_TEST_CASE(integration_complete_mint_flow)
     // $500 at 300% collateral = $1500 worth of DGB
     // At $0.05/DGB = 30,000 DGB = 30,000 * COIN sats
     CAmount expectedCollateral = 30000 * COIN;
-    BOOST_CHECK(std::abs(result.collateralRequired - expectedCollateral) < COIN);
+    // Account for 1% safety margin added in Bug #16 fix
+    CAmount expectedWithMargin = (expectedCollateral * 101) / 100;
+    BOOST_CHECK(std::abs(result.collateralRequired - expectedWithMargin) < COIN);
 
     // Verify outputs
     BOOST_CHECK(result.tx.vout[0].nValue == result.collateralRequired); // Collateral
@@ -953,7 +955,9 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_healthy_system)
     // Formula: (DD_cents * COIN * ratio * 100) / oracle_micro_usd
     // Expected: (10000 * COIN * 300 * 100) / 50000 = 6000 DGB
     CAmount expectedBaseCollateral = (static_cast<int64_t>(10000) * COIN * 300 * 100) / price;
-    BOOST_CHECK(std::abs(result.collateralRequired - expectedBaseCollateral) < COIN);
+    // Account for 1% safety margin added in Bug #16 fix
+    CAmount expectedWithMargin = (expectedBaseCollateral * 101) / 100;
+    BOOST_CHECK(std::abs(result.collateralRequired - expectedWithMargin) < COIN);
 }
 
 BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)

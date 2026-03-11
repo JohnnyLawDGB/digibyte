@@ -11,6 +11,7 @@
 #include <txmempool.h>
 
 #include <memory>
+#include <functional>
 #include <optional>
 #include <stdint.h>
 
@@ -159,6 +160,8 @@ public:
         CFeeRate blockMinFeeRate{DEFAULT_BLOCK_MIN_TX_FEE};
         // Whether to call TestBlockValidity() at the end of CreateNewBlock().
         bool test_block_validity{true};
+        // Test hook executed immediately before TestBlockValidity().
+        std::function<void()> on_before_test_block_validity{};
     };
 
     explicit BlockAssembler(Chainstate& chainstate, const CTxMemPool* mempool);
@@ -178,6 +181,12 @@ private:
     void resetBlock();
     /** Add a tx to the block */
     void AddToBlock(CTxMemPool::txiter iter);
+    /** Return true if tx is a DigiDollar transaction for miner pre-validation. */
+    bool IsDDTransactionForMiner(const CTransaction& tx) const;
+    /** Validate DD collateral/state against the current chain tip for inclusion. */
+    bool ValidateDDForBlockInclusion(const CTransaction& tx, const CBlockIndex* pindexPrev) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    /** Remove all DigiDollar transactions from current template and rebuild commitments. */
+    bool RemoveDDTransactionsFromBlock(const CBlockIndex* pindexPrev);
 
     // Methods for how to add transactions to a block.
     /** Add transactions based on feerate including unconfirmed ancestors

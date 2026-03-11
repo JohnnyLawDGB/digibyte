@@ -26,8 +26,10 @@
 #include <oracle/bundle_manager.h>
 #include <consensus/digidollar.h>
 #include <digidollar/digidollar.h>
+#include <digidollar/validation.h>
 
 #include <algorithm>
+#include <string_view>
 #include <utility>
 
 namespace node {
@@ -118,6 +120,179 @@ void BlockAssembler::resetBlock()
     nFees = 0;
 }
 
+static bool IsInsufficientCollateralFailure(const BlockValidationState& state, std::string_view what = {})
+{
+    if (state.GetRejectReason() == "insufficient-collateral") {
+        return true;
+    }
+    return !what.empty() && what.find("insufficient-collateral") != std::string_view::npos;
+}
+
+bool BlockAssembler::IsDDTransactionForMiner(const CTransaction& tx) const
+{
+    if (DigiDollar::HasDigiDollarMarker(tx)) {
+        return true;
+    }
+
+    // Backstop: if a tx carries DD OP_RETURN metadata but marker bits are missing,
+    // skip it from templates instead of risking a miner-side validity failure.
+    for (const CTxOut& output : tx.vout) {
+        if (output.scriptPubKey.empty() || output.scriptPubKey[0] != OP_RETURN) {
+            continue;
+        }
+
+        CScript::const_iterator pc = output.scriptPubKey.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        if (!output.scriptPubKey.GetOp(pc, opcode) || opcode != OP_RETURN) {
+            continue;
+        }
+        if (output.scriptPubKey.GetOp(pc, opcode, data) &&
+            data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool BlockAssembler::ValidateDDForBlockInclusion(const CTransaction& tx, const CBlockIndex* pindexPrev)
+{
+    AssertLockHeld(::cs_main);
+    if (!IsDDTransactionForMiner(tx)) {
+        return true;
+    }
+
+    // If the tx has DD-looking metadata but not the canonical marker bits,
+    // keep miner behavior conservative and skip it.
+    if (!DigiDollar::HasDigiDollarMarker(tx)) {
+        return false;
+    }
+
+    if (!DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman)) {
+        return false;
+    }
+
+    auto txLookup = [this](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        AssertLockHeld(::cs_main);
+        const CBlockIndex* pblockindex = m_chainstate.m_chain[coinHeight];
+        if (!pblockindex) return false;
+        CBlock block;
+        if (!m_chainstate.m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
+        for (const auto& btx : block.vtx) {
+            if (btx->GetHash() == txid) {
+                tx_out = btx;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    DigiDollar::ValidationContext dd_context(
+        pindexPrev->nHeight + 1,
+        GetOraclePriceForTransaction(tx, pindexPrev->nHeight + 1),
+        DigiDollar::GetSystemCollateralRatio(),
+        chainparams,
+        &m_chainstate.CoinsTip(),
+        false,
+        txLookup
+    );
+
+    TxValidationState tx_state;
+    if (!DigiDollar::ValidateDigiDollarTransaction(tx, dd_context, tx_state)) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "CreateNewBlock(): skipping DD tx %s during package selection: %s\n",
+                 tx.GetHash().ToString(), tx_state.GetRejectReason());
+        return false;
+    }
+
+    return true;
+}
+
+bool BlockAssembler::RemoveDDTransactionsFromBlock(const CBlockIndex* pindexPrev)
+{
+    CBlock& block = pblocktemplate->block;
+    if (block.vtx.size() <= 1) {
+        return false;
+    }
+
+    std::vector<CTransactionRef> kept_vtx;
+    std::vector<CAmount> kept_fees;
+    std::vector<int64_t> kept_sigops;
+    kept_vtx.reserve(block.vtx.size());
+    kept_fees.reserve(pblocktemplate->vTxFees.size());
+    kept_sigops.reserve(pblocktemplate->vTxSigOpsCost.size());
+
+    kept_vtx.push_back(block.vtx[0]);
+    kept_fees.push_back(pblocktemplate->vTxFees[0]);
+    kept_sigops.push_back(pblocktemplate->vTxSigOpsCost[0]);
+
+    CAmount kept_fee_total{0};
+    size_t removed{0};
+    for (size_t i{1}; i < block.vtx.size(); ++i) {
+        if (IsDDTransactionForMiner(*block.vtx[i])) {
+            ++removed;
+            continue;
+        }
+        kept_vtx.push_back(block.vtx[i]);
+        kept_fees.push_back(pblocktemplate->vTxFees[i]);
+        kept_sigops.push_back(pblocktemplate->vTxSigOpsCost[i]);
+        kept_fee_total += pblocktemplate->vTxFees[i];
+    }
+
+    if (removed == 0) {
+        return false;
+    }
+
+    block.vtx = std::move(kept_vtx);
+    pblocktemplate->vTxFees = std::move(kept_fees);
+    pblocktemplate->vTxSigOpsCost = std::move(kept_sigops);
+
+    nBlockTx = block.vtx.size() - 1;
+    nFees = kept_fee_total;
+
+    CMutableTransaction coinbase_tx{*block.vtx[0]};
+    if (coinbase_tx.vout.empty()) {
+        return false;
+    }
+    coinbase_tx.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
+
+    // Rebuild witness commitment/oracle bundle and merkle root after removing txs.
+    CMutableTransaction stripped_coinbase{*block.vtx[0]};
+    stripped_coinbase.vout.erase(
+        std::remove_if(stripped_coinbase.vout.begin(), stripped_coinbase.vout.end(),
+            [](const CTxOut& txout) { return txout.scriptPubKey.IsUnspendable(); }),
+        stripped_coinbase.vout.end());
+    block.vtx[0] = MakeTransactionRef(std::move(stripped_coinbase));
+    pblocktemplate->vchCoinbaseCommitment = m_chainstate.m_chainman.GenerateCoinbaseCommitment(block, pindexPrev);
+
+    if (DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman)) {
+        OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+        if (!oracle_manager.AddOracleBundleToBlock(block, nHeight)) {
+            LogPrintf("CreateNewBlock(): Warning - Failed to add oracle bundle during DD retry for block %d\n", nHeight);
+        }
+    }
+
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    pblocktemplate->vTxFees[0] = -nFees;
+    pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*block.vtx[0]);
+
+    nBlockWeight = GetBlockWeight(block);
+    nBlockSigOpsCost = 0;
+    for (int64_t sigops : pblocktemplate->vTxSigOpsCost) {
+        if (sigops > 0) {
+            nBlockSigOpsCost += sigops;
+        }
+    }
+
+    m_last_block_num_txs = nBlockTx;
+    m_last_block_weight = nBlockWeight;
+
+    return true;
+}
+
 std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, int algo)
 {
     const auto time_start{SteadyClock::now()};
@@ -198,9 +373,42 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
 
     BlockValidationState state;
-    if (m_options.test_block_validity && !TestBlockValidity(state, chainparams, m_chainstate, *pblock, pindexPrev,
-                                                  GetAdjustedTime, /*fCheckPOW=*/false, /*fCheckMerkleRoot=*/false)) {
-        throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, state.ToString()));
+    if (m_options.test_block_validity) {
+        if (m_options.on_before_test_block_validity) {
+            m_options.on_before_test_block_validity();
+        }
+
+        auto run_block_validity = [&](BlockValidationState& check_state) {
+            return TestBlockValidity(check_state, chainparams, m_chainstate, *pblock, pindexPrev,
+                                     GetAdjustedTime, /*fCheckPOW=*/false, /*fCheckMerkleRoot=*/false);
+        };
+
+        bool needs_dd_retry{false};
+        try {
+            if (!run_block_validity(state)) {
+                needs_dd_retry = IsInsufficientCollateralFailure(state);
+                if (!needs_dd_retry) {
+                    throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, state.ToString()));
+                }
+            }
+        } catch (const std::exception& e) {
+            needs_dd_retry = IsInsufficientCollateralFailure(state, e.what());
+            if (!needs_dd_retry) {
+                throw;
+            }
+        }
+
+        if (needs_dd_retry) {
+            LogPrintf("CreateNewBlock(): DD collateral failure detected, retrying block assembly without DD transactions at height %d\n", nHeight);
+            if (!RemoveDDTransactionsFromBlock(pindexPrev)) {
+                throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, state.ToString()));
+            }
+
+            BlockValidationState retry_state;
+            if (!run_block_validity(retry_state)) {
+                throw std::runtime_error(strprintf("%s: TestBlockValidity failed after DD retry: %s", __func__, retry_state.ToString()));
+            }
+        }
     }
     const auto time_2{SteadyClock::now()};
 
@@ -443,17 +651,30 @@ void BlockAssembler::addPackageTxs(const CTxMemPool& mempool, int& nPackagesSele
         // Package can be added. Sort the entries in a valid order.
         std::vector<CTxMemPool::txiter> sortedEntries;
         SortForBlock(ancestors, sortedEntries);
+        const CBlockIndex* const pindexPrev = m_chainstate.m_chain.Tip();
+        assert(pindexPrev != nullptr);
+        CTxMemPool::setEntries added_ancestors;
 
         for (size_t i = 0; i < sortedEntries.size(); ++i) {
+            const CTransaction& tx = sortedEntries[i]->GetTx();
+            if (IsDDTransactionForMiner(tx) && !ValidateDDForBlockInclusion(tx, pindexPrev)) {
+                failedTx.insert(sortedEntries[i]);
+                continue;
+            }
             AddToBlock(sortedEntries[i]);
+            added_ancestors.insert(sortedEntries[i]);
             // Erase from the modified set, if present
             mapModifiedTx.erase(sortedEntries[i]);
+        }
+
+        if (added_ancestors.empty()) {
+            continue;
         }
 
         ++nPackagesSelected;
 
         // Update transactions that depend on each of these
-        nDescendantsUpdated += UpdatePackagesForAdded(mempool, ancestors, mapModifiedTx);
+        nDescendantsUpdated += UpdatePackagesForAdded(mempool, added_ancestors, mapModifiedTx);
     }
 }
 void IncrementExtraNonce(CBlock* pblock, const CBlockIndex* pindexPrev, unsigned int& nExtraNonce)

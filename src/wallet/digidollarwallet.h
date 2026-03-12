@@ -634,13 +634,17 @@ public:
     bool BurnDigiDollars(CAmount amount, std::vector<COutPoint>& burnedUtxos);
 
     /**
-     * Close or update collateral position after redemption (Task 6b)
+     * Close collateral position after full redemption (Task 6b)
+     *
+     * SECURITY: Only full redemptions are allowed. Partial redemptions are
+     * architecturally impossible in the UTXO model — the entire collateral
+     * UTXO is consumed as vin[0]. The user MUST burn all DD minted against
+     * this collateral to release it (enforced by consensus at validation.cpp).
+     *
      * @param outpoint The collateral position outpoint (dd_timelock_id)
-     * @param partial true for partial redemption, false for full redemption
-     * @param remainingDD Amount of DD remaining after partial redemption (0 for full)
-     * @return true if position updated successfully
+     * @return true if position closed successfully
      */
-    bool CloseCollateralPosition(const COutPoint& outpoint, bool partial = false, CAmount remainingDD = 0);
+    bool CloseCollateralPosition(const COutPoint& outpoint);
 
     // ====================================================================
     // PHASE 5.2: UTXO SET UPDATE FUNCTIONS
@@ -692,7 +696,7 @@ public:
     /**
      * Get DDTimeLock lifecycle status
      * @param dd_timelock_id The DDTimeLock position ID
-     * @return Status string: "active", "partially_redeemed", "fully_redeemed", "not_found"
+     * @return Status string: "active", "fully_redeemed", "not_found"
      */
     std::string GetDDTimeLockStatus(const uint256& dd_timelock_id) const;
 

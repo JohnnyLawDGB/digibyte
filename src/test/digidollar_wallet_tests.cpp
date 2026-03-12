@@ -3381,7 +3381,7 @@ BOOST_AUTO_TEST_CASE(test_close_collateral_position_full) {
     wallet.AddCollateralPosition(pos);
 
     // Act: Close position completely
-    bool result = wallet.CloseCollateralPosition(position_outpoint, false, 0);
+    bool result = wallet.CloseCollateralPosition(position_outpoint);
 
     // Assert: Position closed successfully
     BOOST_CHECK(result);
@@ -3422,7 +3422,7 @@ BOOST_AUTO_TEST_CASE(test_burn_and_close_integration) {
     BOOST_CHECK(burn_result);
 
     // 2. Close position
-    bool close_result = wallet.CloseCollateralPosition(position_outpoint, false, 0);
+    bool close_result = wallet.CloseCollateralPosition(position_outpoint);
     BOOST_CHECK(close_result);
 
     // FIX: BurnDigiDollars no longer erases dd_utxos at TX creation time.

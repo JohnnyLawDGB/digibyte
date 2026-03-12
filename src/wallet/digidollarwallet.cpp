@@ -2842,21 +2842,14 @@ bool DigiDollarWallet::BurnDigiDollars(CAmount amount, std::vector<COutPoint>& b
     return true;
 }
 
-bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool partial, CAmount remainingDD) {
+bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint) {
     LOCK(cs_dd_wallet);
-    LogPrintf("DigiDollar: CloseCollateralPosition - %s closure of position %s:%d\n",
-              partial ? "Partial" : "Full", outpoint.hash.ToString(), outpoint.n);
+    LogPrintf("DigiDollar: CloseCollateralPosition - Full closure of position %s:%d\n",
+              outpoint.hash.ToString(), outpoint.n);
 
     // Validate input
     if (outpoint.IsNull()) {
         LogPrintf("DigiDollar: CloseCollateralPosition - Invalid outpoint (null)\n");
-        return false;
-    }
-
-    // For partial redemptions, validate remaining DD
-    if (partial && remainingDD <= 0) {
-        LogPrintf("DigiDollar: CloseCollateralPosition - Invalid remaining DD for partial redemption: %lld\n",
-                  static_cast<long long>(remainingDD));
         return false;
     }
 
@@ -2874,37 +2867,17 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
     CAmount original_dgb = it->second.dgb_collateral;
     bool originally_active = it->second.is_active;
 
-    // Step 2: Handle full vs partial redemption
-    if (partial) {
-        // Partial redemption: update position
-        CAmount redeemed_dd = it->second.dd_minted - remainingDD;
+    // FULL REDEMPTION ONLY — mark position as inactive.
+    // Partial redemptions are architecturally impossible in the UTXO model:
+    // the entire collateral UTXO is consumed as vin[0], and consensus
+    // validation (validation.cpp:1721) enforces ddBurned >= originalDDMinted.
+    it->second.is_active = false;
 
-        // Calculate proportional DGB release
-        // released_dgb = (redeemed_dd / original_dd) * original_dgb
-        CAmount released_dgb = 0;
-        if (original_dd > 0) {
-            released_dgb = (redeemed_dd * original_dgb) / original_dd;
-        }
+    LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: position marked inactive\n");
+    LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: %lld DD redeemed, %lld DGB released\n",
+              static_cast<long long>(original_dd), static_cast<long long>(original_dgb));
 
-        // Update position
-        it->second.dd_minted = remainingDD;
-        it->second.dgb_collateral -= released_dgb;
-        it->second.is_active = true; // Keep active for partial redemption
-
-        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %lld DD redeemed, %lld DD remaining\n",
-                  static_cast<long long>(redeemed_dd), static_cast<long long>(remainingDD));
-        LogPrintf("DigiDollar: CloseCollateralPosition - Partial redemption: %lld DGB released, %lld DGB remaining\n",
-                  static_cast<long long>(released_dgb), static_cast<long long>(it->second.dgb_collateral));
-    } else {
-        // Full redemption: mark position as inactive
-        it->second.is_active = false;
-
-        LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: position marked inactive\n");
-        LogPrintf("DigiDollar: CloseCollateralPosition - Full redemption: %lld DD redeemed, %lld DGB released\n",
-                  static_cast<long long>(original_dd), static_cast<long long>(original_dgb));
-    }
-
-    // Step 3: Persist changes to wallet database
+    // Step 2: Persist changes to wallet database
     if (m_wallet) {
         wallet::WalletBatch batch(m_wallet->GetDatabase());
 
@@ -2916,14 +2889,10 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
             it->second.is_active = originally_active;
             return false;
         }
-
-        // For full redemptions, also archive the position to history
-        // (Keep in database but marked inactive for accounting/auditing)
-        // This is already handled by is_active = false flag
     }
 
-    // Step 4: Update locked collateral tracking
-    if (it->second.is_active != originally_active || partial) {
+    // Step 3: Update locked collateral tracking
+    if (it->second.is_active != originally_active) {
         CAmount total_locked = 0;
         for (const auto& [id, pos] : collateral_positions) {
             if (pos.is_active) {
@@ -2936,16 +2905,16 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
                   static_cast<long long>(locked_collateral));
     }
 
-    // Step 5: Record closure in transaction history
+    // Step 4: Record closure in transaction history — ALWAYS "redeem" (never "partial_redeem")
     DDTransaction ddtx;
     ddtx.txid = outpoint.hash.ToString();
-    ddtx.amount = partial ? (original_dd - remainingDD) : original_dd;
+    ddtx.amount = original_dd;
     ddtx.timestamp = GetTime();
     ddtx.confirmations = 0;
     ddtx.incoming = false; // Redemption (DD going out, DGB coming in)
     ddtx.address = "";
-    ddtx.category = partial ? "partial_redeem" : "redeem";
-    ddtx.lock_tier = static_cast<int>(it->second.lock_tier);  // Set lock tier from redeemed position
+    ddtx.category = "redeem";  // ONLY valid redemption category
+    ddtx.lock_tier = static_cast<int>(it->second.lock_tier);
 
     if (m_wallet) {
         wallet::WalletBatch batch(m_wallet->GetDatabase());
@@ -2955,8 +2924,8 @@ bool DigiDollarWallet::CloseCollateralPosition(const COutPoint& outpoint, bool p
         }
     }
 
-    LogPrintf("DigiDollar: CloseCollateralPosition - Successfully %s position %s\n",
-              partial ? "updated" : "closed", outpoint.hash.ToString());
+    LogPrintf("DigiDollar: CloseCollateralPosition - Successfully closed position %s\n",
+              outpoint.hash.ToString());
 
     return true;
 }

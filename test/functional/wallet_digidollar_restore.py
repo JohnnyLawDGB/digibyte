@@ -37,6 +37,7 @@ class WalletDigiDollarRestoreTest(DigiByteTestFramework):
         # Enable DigiDollar
         self.extra_args = [[
             "-digidollar=1",
+            "-txindex=1",
             "-acceptnonstdtxn=1",  # Accept non-standard for testing
         ]]
 

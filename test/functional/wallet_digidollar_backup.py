@@ -31,6 +31,7 @@ class DigiDollarBackupTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         self.extra_args = [[
             "-digidollar=1",
+            "-txindex=1",
             "-dandelion=0",
             "-whitelist=noban@127.0.0.1",
         ]]

@@ -28,7 +28,7 @@ class DigiDollarActivationTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # Use -digidollaractivationheight=0 to enable real BIP9 signaling
         # (start_time=0 means STARTED from first period, no min_activation_height delay)
-        self.extra_args = [["-digidollaractivationheight=1"]]
+        self.extra_args = [["-digidollaractivationheight=1", "-txindex=1"]]
 
     def skip_test_if_missing_module(self):
         pass

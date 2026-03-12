@@ -24,7 +24,7 @@ class DigiDollarPositionFieldsTest(DigiByteTestFramework):
         self.num_nodes = 1
         self.setup_clean_chain = True
         self.extra_args = [
-            ["-digidollar=1", "-mocktime=0", "-dandelion=0"],
+            ["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"],
         ]
 
     def skip_test_if_missing_module(self):

@@ -29,9 +29,9 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # Enable DigiDollar features, disable Dandelion for testing
         self.extra_args = [
-            ["-digidollar=1", "-mocktime=0", "-dandelion=0"],
-            ["-digidollar=1", "-mocktime=0", "-dandelion=0"],
-            ["-digidollar=1", "-mocktime=0", "-dandelion=0"]
+            ["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"],
+            ["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"],
+            ["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"]
         ]
 
     def add_options(self, parser):

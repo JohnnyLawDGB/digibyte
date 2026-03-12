@@ -31,8 +31,8 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # Enable DigiDollar features and disable Dandelion for testing
         self.extra_args = [
-            ["-digidollar=1", "-dandelion=0", "-addresstype=bech32"],
-            ["-digidollar=1", "-dandelion=0", "-addresstype=bech32"]
+            ["-digidollar=1", "-txindex=1", "-dandelion=0", "-addresstype=bech32"],
+            ["-digidollar=1", "-txindex=1", "-dandelion=0", "-addresstype=bech32"]
         ]
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:

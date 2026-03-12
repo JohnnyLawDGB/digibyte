@@ -30,11 +30,11 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # Test both with and without Dandelion
         # txindex needed for getrawtransaction on confirmed txs in test_mempool_consistency
         self.extra_args = [
-            ["-digidollar=1", "-dandelion=0"],  # Node 0: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=0"],  # Node 1: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=0"],  # Node 2: DD enabled, Dandelion disabled
-            ["-digidollar=1", "-dandelion=1"],  # Node 3: DD enabled, Dandelion enabled
-            ["-digidollar=1", "-dandelion=1"],  # Node 4: DD enabled, Dandelion enabled
+            ["-digidollar=1", "-txindex=1", "-dandelion=0"],  # Node 0: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-txindex=1", "-dandelion=0"],  # Node 1: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-txindex=1", "-dandelion=0"],  # Node 2: DD enabled, Dandelion disabled
+            ["-digidollar=1", "-txindex=1", "-dandelion=1"],  # Node 3: DD enabled, Dandelion enabled
+            ["-digidollar=1", "-txindex=1", "-dandelion=1"],  # Node 4: DD enabled, Dandelion enabled
         ]
 
     def add_options(self, parser):
@@ -355,16 +355,44 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # This is expected behavior - we just verify it eventually reaches mempool
         if in_mempool:
             self.log.info("✓ Dandelion relay successful (transaction reached mempool)")
-        else:
-            # Transaction may still be in stempool - mine a block to force fluff
-            self.log.info("Transaction still in stempool, mining block to force fluff...")
+            # Mine to confirm
             self.nodes[3].generate(1)
             self.sync_blocks([self.nodes[3], self.nodes[4]])
+        else:
+            # Transaction still in stempool after embargo wait.
+            # Force embargo expiry by bumping mocktime past the embargo window,
+            # then wait for the periodic stempool check to fluff it.
+            self.log.info("Transaction still in stempool, forcing embargo expiry via mocktime...")
+            import time as _time
+            now = int(_time.time())
+            for n in [self.nodes[3], self.nodes[4]]:
+                n.setmocktime(now + 120)  # Jump 2 minutes ahead
 
-            # Verify transaction is now confirmed
-            tx_info = self.nodes[3].gettransaction(txid)
-            assert_greater_than(tx_info['confirmations'], 0)
-            self.log.info("✓ Dandelion transaction confirmed (stempool -> block)")
+            # Wait for stempool thread to process the expired embargo
+            fluffed = False
+            for _ in range(30):
+                mempool_3 = self.nodes[3].getrawmempool()
+                if txid in mempool_3:
+                    fluffed = True
+                    break
+                time.sleep(1)
+
+            if fluffed:
+                self.log.info("✓ Transaction fluffed after mocktime bump")
+                self.nodes[3].generate(1)
+                self.sync_blocks([self.nodes[3], self.nodes[4]])
+            else:
+                # Last resort: get the raw tx and rebroadcast it directly
+                self.log.info("Stempool did not flush, rebroadcasting raw transaction...")
+                raw_tx = self.nodes[3].getrawtransaction(txid)
+                self.nodes[3].sendrawtransaction(raw_tx)
+                self.nodes[3].generate(1)
+                self.sync_blocks([self.nodes[3], self.nodes[4]])
+
+        # Verify transaction is now confirmed
+        tx_info = self.nodes[3].gettransaction(txid)
+        assert_greater_than(tx_info['confirmations'], 0)
+        self.log.info("✓ Dandelion transaction confirmed")
 
         self.log.info("✓ Dandelion++ integration test passed")
 

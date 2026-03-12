@@ -211,8 +211,16 @@ bool OracleNode::HasValidPrice() const
     if (current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS) {
         return true;
     }
-    // Or we successfully broadcast a price (we know what we reported)
-    return last_broadcast_price > 0;
+    // FIX Bug #3: last_broadcast_price must also have a staleness check.
+    // Previously, this returned true indefinitely as long as last_broadcast_price > 0,
+    // even if the broadcast was hours old. This caused oracles to keep broadcasting
+    // stale prices when all exchanges were unreachable, leading to persistent
+    // "Invalid Price" messages on the network.
+    if (last_broadcast_price > 0 && last_broadcast_timestamp > 0 &&
+        (GetTime() - last_broadcast_timestamp) < ORACLE_MAX_AGE_SECONDS) {
+        return true;
+    }
+    return false;
 }
 
 COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timestamp)
@@ -319,10 +327,28 @@ void OracleNode::FetchAndUpdatePrice()
         std::lock_guard<std::mutex> lock(mtx_price);
         current_price = median_price;
         last_update_time = GetTime();
+        consecutive_fetch_failures = 0;
 
         LogPrintf("Oracle: Updated price for oracle %d: %d micro-USD\n", oracle_id, median_price);
     } else {
-        LogPrintf("Oracle: Failed to fetch valid price for oracle %d\n", oracle_id);
+        std::lock_guard<std::mutex> lock(mtx_price);
+        consecutive_fetch_failures++;
+
+        // Log escalating warnings
+        if (consecutive_fetch_failures == 5) {
+            LogPrintf("Oracle: WARNING - 5 consecutive price fetch failures for oracle %d. "
+                      "Check exchange API connectivity.\n", oracle_id);
+        } else if (consecutive_fetch_failures == 15) {
+            LogPrintf("Oracle: ALERT - 15 consecutive price fetch failures for oracle %d. "
+                      "Oracle may be broadcasting stale prices.\n", oracle_id);
+        } else if (consecutive_fetch_failures % 30 == 0) {
+            LogPrintf("Oracle: CRITICAL - %d consecutive price fetch failures for oracle %d. "
+                      "Exchange connectivity appears permanently broken.\n",
+                      consecutive_fetch_failures, oracle_id);
+        } else {
+            LogPrintf("Oracle: Failed to fetch valid price for oracle %d (failure #%d)\n",
+                      oracle_id, consecutive_fetch_failures);
+        }
     }
 }
 

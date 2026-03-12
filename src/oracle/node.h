@@ -41,6 +41,7 @@ private:
     // Last successfully broadcast price (never expires — this is what we reported)
     CAmount last_broadcast_price{0};
     int64_t last_broadcast_timestamp{0};
+    int consecutive_fetch_failures{0};  //!< Tracks consecutive exchange fetch failures for alerting
     int64_t start_time{0};
 
     // Configuration

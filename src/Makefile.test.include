@@ -84,6 +84,8 @@ DIGIBYTE_TESTS =\
   test/digidollar_oracle_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \
+  test/oracle_price_staleness_tests.cpp \
+  test/digidollar_no_partial_redeem_tests.cpp \
   test/oracle_block_validation_tests.cpp \
   test/oracle_config_tests.cpp \
   test/oracle_exchange_tests.cpp \

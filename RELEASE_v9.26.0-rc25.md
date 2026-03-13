@@ -37,176 +37,54 @@ Qt users: **File → Open Wallet → oracle**, then **Help → Debug Window → 
 
 ## What's New in RC25
 
-RC25 is a **stability and reliability release** targeting five bugs reported by testnet operators, plus two community-contributed fixes for Dandelion++ and UTXO management. The headline fix is Bug #16 — a critical block production halt that could stop the entire chain.
+RC25 is a **stability and reliability release** targeting seven bugs reported by testnet operators, plus two community-contributed fixes for Dandelion++ and UTXO management. The headline fix is Bug #16 — a critical block production halt that could stop the entire chain.
 
-**If you experienced block production stalls, wallet rescan errors, oracle restart issues, or UTXO fragmentation preventing mints, upgrade to RC25.**
+**If you experienced block production stalls, oracle restart issues, stale price broadcasts, wallet rescan errors, or UTXO fragmentation preventing mints, upgrade to RC25.**
 
----
+### Bug Fixes
 
-## 🐛 Bug Fix #1: Block Production Halt from Stale DD Transactions (Bug #16 — Critical)
+1. **Block production halt from stale DD transactions (Bug #16 — Critical)** — When a DigiDollar mint sat in the mempool while the oracle price changed, `TestBlockValidity()` threw a fatal error and halted block production entirely. DD transactions are now pre-validated against the current oracle price in `addPackageTxs()`, invalid ones are skipped, and `TestBlockValidity()` retries without offending DD transactions on failure. Mints also include a 1% collateral safety margin to prevent knife-edge invalidation.
 
-**The problem:** When a DigiDollar mint transaction sat in the mempool while the oracle price changed, `TestBlockValidity()` would fail with `insufficient-collateral` and throw a fatal `std::runtime_error` — halting block production entirely. No recovery was possible without restarting the node and manually clearing the mempool.
+2. **Rescan false positive on matured mints (Bug #22)** — Wallet rescans triggered `bad-mint-lock-height-mismatch` for historical mints whose lock period had already expired. The lock-height comparison was checking against current chain tip instead of original confirmation height. Now skips the tier consistency check entirely for matured mints, since it's only relevant at acceptance time.
 
-**Root cause:** Three-stage failure:
-1. `addPackageTxs()` included DD transactions with zero DD-specific validation
-2. `TestBlockValidity()` re-validated with a potentially different oracle price
-3. Failure threw `std::runtime_error` — no recovery, no retry, no skip
+3. **txindex not enforced for DD-enabled nodes (Bug #21)** — DigiDollar requires `txindex=1` but nodes could start without it and fail unpredictably. Startup now checks for txindex when DigiDollar is enabled and exits with a clear error message if missing. Also documents correct config section placement (`[test]` for testnet, `[main]` for mainnet).
 
-**Fix:** Three-part approach:
-- **Part A:** DD transactions are now pre-validated against the current oracle price inside `addPackageTxs()` before block inclusion. Invalid DD transactions are skipped (added to `failedTx`) instead of included.
-- **Part B:** `TestBlockValidity()` now catches `insufficient-collateral` failures, removes the offending DD transactions, and retries block template creation.
-- **Part C:** Mints now include a 1% collateral safety margin at creation time, preventing knife-edge price changes from invalidating transactions.
+4. **Oracle keys not loading after restart (Bug #2)** — Oracle operators had to manually `loadwallet` + `startoracle` after every restart. Unencrypted wallets now auto-start oracles on load. Encrypted wallets auto-start after `walletpassphrase` unlock, with a startup log message guiding operators. Encrypted wallets are never auto-unlocked.
 
-**Effect:** Block production is now resilient to oracle price changes between mint and block inclusion. The chain can no longer be halted by a stale DD transaction.
+5. **Attestation quorum timing failures (Bug #4)** — Block templates could be built before the oracle quorum formed, producing zero-price blocks. A bounded wait window (default 2 seconds, configurable via `-oraclequorumwaitms`) now pauses template creation when quorum is one oracle away. Falls back to previous behavior on timeout.
 
----
+6. **Oracle price staleness tracking (Bug #3)** — `HasValidPrice()` returned true indefinitely as long as any price had been broadcast, even hours-old stale data. Now checks broadcast timestamp against `ORACLE_MAX_AGE_SECONDS`. Added consecutive fetch failure tracking with escalating warnings at 5, 15, and every 30 failures.
 
-## 🐛 Bug Fix #2: Rescan False Positive on Matured Mints (Bug #22)
+7. **Partial redemption code removed (Bug #19)** — Removed dead partial redemption code paths from `CloseCollateralPosition()`. Partial redemptions are architecturally impossible in the UTXO model — the entire collateral UTXO is consumed as `vin[0]`, and consensus enforces `ddBurned >= originalDDMinted`. Eliminates a potential confusion vector.
 
-**The problem:** Running a wallet rescan or revalidation on 3+ testnet nodes triggered `bad-mint-lock-height-mismatch` errors for historical mint transactions, blocking rescan completion.
+### Community Contributions
 
-**Root cause:** The lock-height validation compared `lockTime` against `ctx.nHeight` (the current chain tip during rescan), not the block height when the mint was originally confirmed. For any mint whose lock period had already expired — e.g., `lockTime=104041` vs `currentHeight=123779` — the subtraction produced a negative result, triggering a false rejection.
+- **Dandelion stempool ancestor leak (PR #392 — JohnnyLawDGB)** — Confirmed transactions weren't being purged from the Dandelion stempool on block connect, inflating ancestor counts until new transactions hit the 25-ancestor limit. `removeForBlock()` now cleans both mempool and stempool.
+- **UTXO fragmentation blocks minting (PR #391 — JohnnyLawDGB)** — Wallets with many small UTXOs couldn't mint because no single transaction could cover collateral. `mintdigidollar` now auto-consolidates fragmented UTXOs before retrying the mint.
 
-**Fix:** Added a maturity check before the lock-height comparison. If `lockTime <= currentHeight`, the lock has already expired/matured — the tier consistency check is skipped entirely, since it's only relevant at acceptance time.
+### Other Changes
 
-**Effect:** Wallet rescans and chain revalidations complete successfully for all historical mints.
-
----
-
-## 🐛 Bug Fix #3: txindex Not Enforced for DD-Enabled Nodes (Bug #21)
-
-**The problem:** DigiDollar requires `txindex=1` for correct operation, but nodes could start without it and then fail unpredictably during reindex or initial block download. Some operators had `txindex=1` in their config but placed it in the wrong section (e.g., global instead of `[test]`), causing it to be ignored for testnet.
-
-**Root cause:** No startup check verified that txindex was enabled when DigiDollar was active. The block-db fallback path (`ExtractDDAmountFromBlockDb`) exists but can fail for certain transaction formats on some platforms.
-
-**Fix:** Startup now checks for `txindex=1` when DigiDollar is enabled. If missing, the node exits with a clear error message:
-```
-Error: DigiDollar requires -txindex=1. Please restart with -txindex=1 or add txindex=1 to your config.
-```
-Documentation added for correct config section placement (`[test]` for testnet, `[main]` for mainnet).
-
-**Effect:** No more silent failures from missing txindex. Clear guidance for operators.
-
----
-
-## 🐛 Bug Fix #4: Oracle Keys Not Loading After Restart (Bug #2)
-
-**The problem:** After every node restart, oracle operators had to manually run `loadwallet "oracle"` then `startoracle <id>` before their oracle would begin submitting prices. If they forgot (or the node crashed overnight), their oracle was silently offline until the next manual intervention.
-
-**Root cause:** `startoracle` calls `EnsureWalletIsUnlocked()` before `GetOracleKey()`. After restart with an encrypted wallet, the wallet is locked — the oracle can't read its key. No auto-start hook existed in the wallet load or unlock paths.
-
-**Fix:** Two paths, respecting wallet security:
-- **Unencrypted wallets:** After wallet load completes, `TryAutoStartOracles()` scans for stored oracle keys and auto-starts any that aren't already running. No security risk — unencrypted wallets have keys in plaintext already.
-- **Encrypted wallets:** The `walletpassphrase` RPC success path now calls `TryAutoStartOracles()`. After manual unlock, oracles auto-start. On startup, a log message guides operators: `"Oracle: Key stored for oracle X but wallet is locked. Run 'walletpassphrase' to enable oracle operation."`
-
-**⚠️ Security:** Encrypted wallets are NEVER auto-unlocked. That would defeat the purpose of encryption.
-
-**Effect:** Unencrypted wallet operators have zero-touch oracle restart. Encrypted wallet operators get clear guidance and auto-start after unlock.
-
----
-
-## 🐛 Bug Fix #5: Attestation Quorum Timing Failures (Bug #4)
-
-**The problem:** Block templates could be built before the oracle attestation quorum formed, resulting in zero-price blocks and Emergency status on the network. This was most common during rapid block production or when one oracle was slightly slower than the others.
-
-**Root cause:** `AddOracleBundleToBlock()` checked for quorum exactly once. If the quorum wasn't formed at that instant — even if 4 of 5 required oracles had already reported — the block template was built without an oracle bundle.
-
-**Fix:** A bounded wait window now pauses block template creation for up to 2 seconds when the bundle has ≥ `min_oracle_count - 1` attestations (i.e., quorum is one oracle away). If the final attestation arrives within the window, the block includes the valid bundle. If the timeout expires, it falls back to the previous behavior. Configurable via `-oraclequorumwaitms` (default: 2000ms) and `-oraclequorumminpct` (default: 80%).
-
-**Effect:** Near-quorum situations now resolve correctly instead of producing zero-price blocks.
-
----
-
-## 🔧 Community Contributions
-
-### Dandelion Stempool Ancestor Leak (PR #392 — JohnnyLawDGB)
-
-**The problem:** When a block was connected, `removeForBlock()` was called on the mempool but not the Dandelion stempool. Confirmed transactions remained in the stempool indefinitely as phantom ancestors, inflating ancestor counts for new transactions until they hit the 25-ancestor limit and were rejected.
-
-**Fix:** `removeForBlock()` now also purges confirmed transactions from the Dandelion stempool on block connect.
-
-### UTXO Fragmentation Blocks Minting (PR #391 — JohnnyLawDGB)
-
-**The problem:** Wallets with many small UTXOs (>400) couldn't mint DigiDollar because no single transaction could cover the collateral requirement — the input set exceeded transaction limits.
-
-**Fix:** `mintdigidollar` now detects fragmented wallets and automatically creates a consolidation transaction using standard coin selection, then retries the mint with the consolidated output.
+- **Functional test suite updated for txindex enforcement** — All 30 DigiDollar functional test files updated with `-txindex=1`, plus fixes for collateral tracking values and Dandelion stempool timing in network relay tests. Full suite: 311/311 pass.
 
 ---
 
 ## 🧪 Testing
 
-### New Tests Added in RC25
-
-| Test | What It Verifies |
-|------|-----------------|
-| `block_with_stale_dd_mint_skips_gracefully` | Stale DD mints skipped during block template creation |
-| `block_without_dd_succeeds_after_dd_failure` | Non-DD txs produce valid block after DD removal |
-| `mint_includes_safety_margin` | Mint collateral includes 1% safety margin |
-| `test_block_validity_retry_on_collateral_failure` | TestBlockValidity retries without DD tx on failure |
-| `dd_and_large_dgb_transfer_coexist` | DD mint + large DGB transfer → valid block |
-| `rescan_mature_mint_passes` | Matured mint passes validation during rescan |
-| `rescan_immature_mint_passes` | Immature mint within lock period passes |
-| `fresh_mint_tier_mismatch_fails` | Fresh mint with wrong tier is rejected |
-| `dd_startup_requires_txindex` | DD-enabled node without txindex → startup error |
-| `dd_startup_with_txindex_succeeds` | DD-enabled node with txindex → starts normally |
-| `oracle_autostart_unencrypted_wallet` | Unencrypted wallet → oracle auto-starts on load |
-| `oracle_no_autostart_locked_encrypted_wallet` | Encrypted+locked → oracle not started, guidance logged |
-| `oracle_autostart_after_walletpassphrase` | Encrypted → unlock → oracle auto-starts |
-| `bundle_waits_for_near_quorum` | 4/5 oracles → wait → 5th arrives → bundle created |
-| `bundle_gives_up_after_timeout` | 3/5 oracles → timeout → no bundle |
-| `bundle_immediate_when_quorum_met` | 5/5 oracles → no wait, immediate bundle |
-
 ### Test Results
-- **C++ unit tests** — all passing (25+ new tests for this release)
+- **C++ unit tests** — all passing (55+ new tests for this release)
+- **Python functional tests** — 311/311 passing
 - **DigiDollar functional tests** — all passing
 - **Live testnet verification** — all DigiDollar/Oracle RPCs verified on testnet19
-
----
-
-## 📊 All Changes: RC24 → RC25
-
-| Category | Count | Summary |
-|----------|-------|---------|
-| 🐛 Bug fixes | 5 | Block halt, rescan validation, txindex, oracle auto-start, quorum timing |
-| 🔧 Community | 2 | Dandelion stempool, UTXO consolidation |
-| 🧪 Tests | 16+ | Block template, rescan, txindex, oracle lifecycle, quorum timing |
-| 📦 Version | 1 | Bump to v9.26.0-rc25, update wallet image |
-
----
-
-## Technical Changes
-
-| File | Change |
-|------|--------|
-| `src/node/miner.cpp` | DD pre-validation in `addPackageTxs()`, retry logic in `CreateNewBlock()` |
-| `src/node/miner.h` | DD block validation helpers |
-| `src/digidollar/validation.cpp` | Maturity check before lock-height comparison |
-| `src/digidollar/validation.h` | Maturity check declaration |
-| `src/init.cpp` | txindex enforcement for DD-enabled chains |
-| `src/init.h` | txindex check declaration |
-| `src/wallet/wallet.cpp` | `TryAutoStartOracles()` on wallet load |
-| `src/wallet/wallet.h` | Auto-start declaration |
-| `src/wallet/walletdb.cpp` | Oracle key metadata storage |
-| `src/wallet/walletdb.h` | Oracle key metadata declaration |
-| `src/wallet/rpc/encrypt.cpp` | Hook `TryAutoStartOracles()` into `walletpassphrase` |
-| `src/rpc/digidollar.cpp` | Refactored oracle start logic into reusable function |
-| `src/oracle/bundle_manager.cpp` | Bounded wait window for near-quorum bundles |
-| `src/oracle/bundle_manager.h` | Wait window configuration |
-| `src/digidollar/txbuilder.cpp` | 1% collateral safety margin |
-| `src/test/digidollar_lock_height_tests.cpp` | 4 rescan maturity tests |
-| `src/test/miner_dd_validation_tests.cpp` | 5 block template DD validation tests |
-| `src/test/digidollar_txindex_tests.cpp` | 3 txindex enforcement tests |
-| `src/test/oracle_wallet_autostart_tests.cpp` | 5 oracle auto-start lifecycle tests |
-| `src/test/oracle_bundle_timing_tests.cpp` | 4 quorum wait window tests |
-| `src/test/digidollar_mint_tests.cpp` | Updated for safety margin |
-| `configure.ac` | Version bump RC24 → RC25 |
-| `src/qt/res/icons/digibyte_wallet.png` | Updated wallet splash image |
 
 ---
 
 ## Commits Since RC24
 
 ```
+8b972f3cdd fix: add -txindex=1 to all DigiDollar functional tests
+f549227883 fix: add oracle price staleness tracking (Bug #3)
+6c2b64789c fix: remove partial redemption code, enforce full-only (Bug #19)
+e829517773 version: bump to v9.26.0-rc25, update wallet image and release notes
 fd9135af23 fix: add bounded wait window for near-quorum oracle bundles (Bug #4)
 a927e2e556 fix: auto-start oracles from wallet keys on load/unlock (Bug #2)
 77a4c584ae fix: enforce txindex=1 for DigiDollar-enabled chains at startup (Bug #21)
@@ -388,6 +266,9 @@ Oracle keys now auto-start from the wallet. Unencrypted wallets need zero manual
 
 ### "Zero-price blocks during rapid block production" (FIXED in RC25)
 Near-quorum attestation bundles now wait up to 2 seconds for the final oracle before giving up.
+
+### "Oracle keeps broadcasting stale prices" (FIXED in RC25)
+`HasValidPrice()` now checks broadcast age. Stale prices are rejected and consecutive fetch failures trigger escalating warnings.
 
 ### "Insufficient fee inputs for calculated fee" on redemption (FIXED in RC24)
 ### "listdigidollaraddresses returns mock data" (FIXED in RC24)

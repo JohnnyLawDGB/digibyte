@@ -270,6 +270,7 @@ BASE_SCRIPTS = [
     'digidollar_oracle_price.py',
     'digidollar_protection_status.py',
     'digidollar_send.py',
+    'digidollar_transaction_fees.py',
     'digidollar_transfer.py',
     'digidollar_network_relay.py',
     'digidollar_rpc.py',

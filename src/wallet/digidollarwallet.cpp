@@ -1518,7 +1518,16 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
                     ddtx.blockheight = -1;
                     ddtx.blockhash = "";
                 }
-                
+
+                // Calculate actual fee for send/mint/redeem transactions
+                if (!ddtx.incoming && ddtx.fee == 0 && m_wallet) {
+                    CAmount debit = wallet::CachedTxGetDebit(*m_wallet, *wtx, wallet::ISMINE_ALL);
+                    CAmount credit = wallet::CachedTxGetCredit(*m_wallet, *wtx, wallet::ISMINE_ALL);
+                    if (debit > credit) {
+                        ddtx.fee = debit - credit;
+                    }
+                }
+
                 if (wtx->isAbandoned()) {
                     // Directly abandoned
                     ddtx.abandoned = true;

@@ -271,6 +271,7 @@ BASE_SCRIPTS = [
     'digidollar_protection_status.py',
     'digidollar_send.py',
     'digidollar_transaction_fees.py',
+    'digidollar_validate_address.py',
     'digidollar_transfer.py',
     'digidollar_network_relay.py',
     'digidollar_rpc.py',

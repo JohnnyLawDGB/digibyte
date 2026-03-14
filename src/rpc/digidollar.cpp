@@ -2025,7 +2025,7 @@ RPCHelpMan getdigidollaraddress()
     };
 }
 
-static RPCHelpMan validateddaddress()
+RPCHelpMan validateddaddress()
 {
     return RPCHelpMan{"validateddaddress",
                 "\nValidate a DigiDollar address format and return detailed information.\n"
@@ -2052,13 +2052,16 @@ static RPCHelpMan validateddaddress()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
-            {
-                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
-                ChainstateManager& chainman = EnsureChainman(node);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+            // Check DigiDollar activation via wallet chain context
+            std::shared_ptr<wallet::CWallet> pwallet_check = wallet::GetWalletForJSONRPCRequest(request);
+            if (pwallet_check) {
+                node::NodeContext* node_ctx = pwallet_check->chain().context();
+                if (node_ctx) {
+                    ChainstateManager& chainman = *node_ctx->chainman;
+                    const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                    if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                        throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active");
+                    }
                 }
             }
             std::string addressStr = request.params[0].get_str();
@@ -2088,7 +2091,17 @@ static RPCHelpMan validateddaddress()
             result.pushKV("address", isValid ? addressStr : "");
             result.pushKV("network", network);
             result.pushKV("prefix", prefix);
-            result.pushKV("ismine", false);
+            bool isMine = false;
+            if (isValid) {
+                try {
+                    auto pw = wallet::GetWalletForJSONRPCRequest(request);
+                    if (pw) {
+                        DigiDollarWallet* ddw = pw->GetDDWallet();
+                        if (ddw) isMine = ddw->IsMyDDAddress(addressStr);
+                    }
+                } catch (...) {}
+            }
+            result.pushKV("ismine", isMine);
             result.pushKV("iswatchonly", false);
             result.pushKV("error", error);
 
@@ -4623,7 +4636,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
 
         // Address management commands
         // {"digidollar", &getdigidollaraddress},  // Moved to wallet RPC commands for proper wallet context
-        {"digidollar", &validateddaddress},
+        // {"digidollar", &validateddaddress},  // Moved to wallet RPC table (Bug #17)
         // {"digidollar", &listdigidollaraddresses},  // Moved to wallet RPC commands for proper wallet context (Bug #12)
         {"digidollar", &importdigidollaraddress},
 

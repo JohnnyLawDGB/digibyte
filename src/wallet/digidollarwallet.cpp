@@ -735,6 +735,29 @@ bool DigiDollarWallet::IsDDOutputMine(const COutPoint& outpoint) const
     return false;
 }
 
+bool DigiDollarWallet::IsMyDDAddress(const std::string& addrStr) const
+{
+    auto locks = LockDDWallet();
+    // Check dd_balances (addresses that have received DD)
+    if (dd_balances.count(addrStr) > 0) return true;
+    // Check dd_address_keys via output_key from DD address
+    CDigiDollarAddress dd_addr(addrStr);
+    if (dd_addr.IsValid()) {
+        CTxDestination dest = dd_addr.GetDigiDollarDestination();
+        if (auto* tr = std::get_if<WitnessV1Taproot>(&dest)) {
+            std::array<unsigned char, 32> key_bytes;
+            std::copy(tr->begin(), tr->end(), key_bytes.begin());
+            if (dd_address_keys.count(key_bytes) > 0) return true;
+        }
+        // Fallback: standard wallet IsMine
+        if (m_wallet) {
+            LOCK(m_wallet->cs_wallet);
+            if (m_wallet->IsMine(dest) & wallet::ISMINE_SPENDABLE) return true;
+        }
+    }
+    return false;
+}
+
 void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
 {
     LOCK(cs_dd_wallet);

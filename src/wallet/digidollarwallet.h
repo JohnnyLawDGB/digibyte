@@ -285,6 +285,7 @@ public:
      * @return true if we own this DD output
      */
     bool IsDDOutputMine(const CTxOut& txout, const uint256& txid) const;
+    bool IsMyDDAddress(const std::string& addrStr) const;
 
     /**
      * Check if a DD output belongs to this wallet using COutPoint

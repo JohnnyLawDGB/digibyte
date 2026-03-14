@@ -231,11 +231,9 @@ BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_oracle_price, DigiDollarRPCTest
 // Test 12: validateddaddress - Basic Test
 BOOST_FIXTURE_TEST_CASE(test_validateddaddress_basic, DigiDollarRPCTestSetup)
 {
-    // Test with a valid-looking DD address format
-    UniValue result = CallRPC("validateddaddress DDtestaddress123456789abcdef");
-
-    BOOST_CHECK(result.isObject());
-    BOOST_CHECK(result.exists("isvalid"));
+    // validateddaddress moved to wallet RPC table (Bug #17 fix)
+    // Without wallet context, the RPC should throw "Method not found"
+    BOOST_CHECK_THROW(CallRPC("validateddaddress DDtestaddress123456789abcdef"), std::runtime_error);
 }
 
 // Test 13: estimatecollateral - Basic Response

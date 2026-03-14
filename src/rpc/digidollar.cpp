@@ -3057,43 +3057,132 @@ static RPCHelpMan getprotectionstatus()
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
                 }
             }
-            // Mock protection status - in real implementation would get from protection systems
+            // Compute real system health (same approach as getdigidollarstats)
+            CAmount totalCollateral = 0;
+            CAmount totalDD = 0;
+
+            const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+            ChainstateManager& chainman = EnsureChainman(node);
+
+            if (g_digidollar_stats_index) {
+                if (!g_digidollar_stats_index->BlockUntilSyncedToCurrentChain()) {
+                    const IndexSummary summary{g_digidollar_stats_index->GetSummary()};
+                    throw JSONRPCError(RPC_INTERNAL_ERROR,
+                        strprintf("DigiDollar stats index is syncing. Current height: %d", summary.best_block_height));
+                }
+                const CBlockIndex* pindex;
+                {
+                    LOCK(cs_main);
+                    pindex = chainman.ActiveChain().Tip();
+                }
+                if (pindex) {
+                    auto stats = g_digidollar_stats_index->LookUpStats(*pindex);
+                    if (stats) {
+                        totalDD = stats->total_dd_supply;
+                        totalCollateral = stats->total_collateral;
+                    }
+                }
+            } else {
+                // Fallback: UTXO scanning
+                Chainstate& active_chainstate = chainman.ActiveChainstate();
+                active_chainstate.ForceFlushStateToDisk();
+                CCoinsView* coins_view;
+                node::BlockManager* blockman;
+                const CTxMemPool* mempool = node.mempool.get();
+                {
+                    LOCK(::cs_main);
+                    coins_view = &active_chainstate.CoinsDB();
+                    blockman = &active_chainstate.m_blockman;
+                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+                }
+                DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+                totalCollateral = metrics.totalCollateral;
+                totalDD = metrics.totalDDSupply;
+            }
+
+            // Oracle price
+            OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+            CAmount oraclePriceMicroUSD = oracle_manager.GetLatestPrice();
+            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+            }
+            CAmount oraclePriceMillicents = oraclePriceMicroUSD / 10;
+
+            // System health
+            int systemHealth;
+            if (totalDD == 0) {
+                systemHealth = 0;
+            } else {
+                systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                    totalCollateral, totalDD, oraclePriceMillicents);
+            }
+
+            auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
+            bool isEmergency = DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+
             UniValue result(UniValue::VOBJ);
 
             // DCA status
             UniValue dca(UniValue::VOBJ);
             dca.pushKV("active", true);
-            dca.pushKV("current_multiplier", 1.0);
-            dca.pushKV("tier", "healthy");
-            dca.pushKV("system_health", 150);
+            dca.pushKV("current_multiplier", tier.multiplier);
+            dca.pushKV("tier", tier.status);
+            dca.pushKV("system_health", systemHealth);
             dca.pushKV("trend", "stable");
             result.pushKV("dca", dca);
 
             // ERR status
             UniValue err(UniValue::VOBJ);
-            err.pushKV("active", false);
+            err.pushKV("active", isEmergency);
             err.pushKV("threshold", 100);
-            err.pushKV("current_ratio", 150);
-            err.pushKV("status", "normal");
+            err.pushKV("current_ratio", systemHealth);
+            std::string errStatus;
+            if (systemHealth >= 150) {
+                errStatus = "normal";
+            } else if (systemHealth >= 100) {
+                errStatus = "caution";
+            } else {
+                errStatus = "emergency";
+            }
+            err.pushKV("status", errStatus);
             result.pushKV("err", err);
 
-            // Volatility protection
+            // Volatility protection (no real tracking yet — report honestly)
             UniValue volatility(UniValue::VOBJ);
             volatility.pushKV("protection_active", false);
-            volatility.pushKV("current_volatility", 2.5);
+            volatility.pushKV("current_volatility", 0.0);
             volatility.pushKV("protection_threshold", 10.0);
             volatility.pushKV("minting_restricted", false);
             result.pushKV("volatility", volatility);
 
             // Overall status
             UniValue overall(UniValue::VOBJ);
-            overall.pushKV("status", "secure");
+            std::string overallStatus;
+            if (isEmergency) {
+                overallStatus = "emergency";
+            } else if (systemHealth >= 150) {
+                overallStatus = "secure";
+            } else if (systemHealth >= 100) {
+                overallStatus = "caution";
+            } else {
+                overallStatus = "at_risk";
+            }
+            overall.pushKV("status", overallStatus);
 
             UniValue activeProtections(UniValue::VARR);
             activeProtections.push_back("dca");
+            if (isEmergency) {
+                activeProtections.push_back("err");
+            }
             overall.pushKV("active_protections", activeProtections);
 
             UniValue warnings(UniValue::VARR);
+            if (systemHealth > 0 && systemHealth < 150) {
+                warnings.push_back("System health below optimal threshold");
+            }
+            if (isEmergency) {
+                warnings.push_back("Emergency redemption ratio active");
+            }
             overall.pushKV("warnings", warnings);
 
             result.pushKV("overall", overall);

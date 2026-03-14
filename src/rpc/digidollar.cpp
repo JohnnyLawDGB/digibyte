@@ -47,6 +47,7 @@
 
 #include <util/time.h>
 #include <univalue.h>
+#include <cmath>
 
 using namespace DigiDollar;
 using namespace DigiDollar::DCA;
@@ -2786,7 +2787,7 @@ static RPCHelpMan getoracleprice()
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::NUM, "price_micro_usd", "Current DGB price in micro-USD (1,000,000 = $1.00)"},
-                        {RPCResult::Type::STR_AMOUNT, "price_cents", "Current DGB price in cents per DGB (rounded)"},
+                        {RPCResult::Type::NUM, "price_cents", "Current DGB price in cents per DGB"},
                         {RPCResult::Type::NUM, "price_usd", "Current DGB price in USD (full precision)"},
                         {RPCResult::Type::NUM, "last_update_height", "Block height of last price update"},
                         {RPCResult::Type::NUM, "last_update_time", "Timestamp of last update"},
@@ -2794,8 +2795,8 @@ static RPCHelpMan getoracleprice()
                         {RPCResult::Type::BOOL, "is_stale", "Whether price data is considered stale"},
                         {RPCResult::Type::NUM, "oracle_count", "Number of active oracles"},
                         {RPCResult::Type::STR, "status", "Oracle system status (active/warning/error)"},
-                        {RPCResult::Type::STR_AMOUNT, "24h_high", "24-hour high price"},
-                        {RPCResult::Type::STR_AMOUNT, "24h_low", "24-hour low price"},
+                        {RPCResult::Type::NUM, "24h_high", "24-hour high price in cents"},
+                        {RPCResult::Type::NUM, "24h_low", "24-hour low price in cents"},
                         {RPCResult::Type::NUM, "volatility", "Current price volatility percentage"}
                     }
                 },
@@ -2826,7 +2827,7 @@ static RPCHelpMan getoracleprice()
             // In RegTest mode, check MockOracleManager first
             bool usingMockOracle = false;
             CAmount priceMicroUSD = 0;
-            CAmount priceCents = 0;
+            double priceCents = 0.0;
             double priceUSD = 0.0;
             int lastBundleHeight = 0;
             int64_t lastBundleTime = 0;
@@ -2840,10 +2841,8 @@ static RPCHelpMan getoracleprice()
                     if (mockPrice > 0) {
                         usingMockOracle = true;
                         priceMicroUSD = mockPrice;
-                        // Convert micro-USD to cents: cents = micro-USD / 10,000
-                        // Convert micro-USD to cents (rounded). Allow 0 for sub-cent
-                        // prices — price_usd and price_micro_usd have full precision.
-                        priceCents = (priceMicroUSD + 5000) / 10000;
+                        // Convert micro-USD to cents with full precision
+                        priceCents = static_cast<double>(priceMicroUSD) / 10000.0;
                         priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
                         // Mock oracle is always "current" - use current time
                         lastBundleTime = GetTime();
@@ -2859,11 +2858,8 @@ static RPCHelpMan getoracleprice()
             if (!usingMockOracle) {
                 // Get the raw micro-USD price from the oracle (full precision)
                 priceMicroUSD = oracle_manager.GetLatestPrice();
-                // Derive cents from the same micro-USD source for consistency
-                // cents = micro-USD / 10,000 (rounded)
-                // Convert micro-USD to cents (rounded). Allow 0 for sub-cent
-                // prices — price_usd and price_micro_usd have full precision.
-                priceCents = (priceMicroUSD + 5000) / 10000;
+                // Derive cents from the same micro-USD source with full precision
+                priceCents = static_cast<double>(priceMicroUSD) / 10000.0;
                 // Calculate true USD price from micro-USD (full precision)
                 priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
 
@@ -2931,10 +2927,50 @@ static RPCHelpMan getoracleprice()
             size_t activeOracleCount = reportingOracleIds.size();
             std::string status = stats.has_consensus ? "active" : (activeOracleCount > 0 ? "warning" : "error");
 
-            // Mock 24h data for now - would track historically in production
-            CAmount high24h = priceCents + (priceCents / 20); // +5%
-            CAmount low24h = priceCents - (priceCents / 20);  // -5%
-            double volatility = 2.5; // Mock volatility
+            // Compute real 24h high/low by scanning oracle price history
+            double high24h = priceCents;
+            double low24h = priceCents;
+            double volatility = 0.0;
+            {
+                const int scanBlocks = 5760; // ~24h at 15s blocks
+                int startH = std::max(0, currentHeight - scanBlocks);
+                std::vector<double> samples;
+                double histHigh = 0.0;
+                double histLow = std::numeric_limits<double>::max();
+                bool hasHistory = false;
+
+                for (int h = startH; h <= currentHeight; ++h) {
+                    CAmount hp = oracle_manager.GetOraclePriceForHeight(h);
+                    if (hp > 0) {
+                        double hCents = static_cast<double>(hp) / 10000.0;
+                        if (hCents > histHigh) histHigh = hCents;
+                        if (hCents < histLow) histLow = hCents;
+                        hasHistory = true;
+                        // Sample every ~288 blocks for volatility (up to 20 samples)
+                        if (samples.size() < 20 && (h == startH || (h - startH) % std::max(1, scanBlocks / 20) == 0)) {
+                            samples.push_back(hCents);
+                        }
+                    }
+                }
+
+                if (hasHistory) {
+                    high24h = histHigh;
+                    low24h = histLow;
+                }
+
+                // Compute volatility as coefficient of variation (std-dev/mean * 100)
+                if (samples.size() >= 2) {
+                    double sum = 0.0;
+                    for (double s : samples) sum += s;
+                    double mean = sum / samples.size();
+                    if (mean > 0.0) {
+                        double sqSum = 0.0;
+                        for (double s : samples) sqSum += (s - mean) * (s - mean);
+                        double stddev = std::sqrt(sqSum / samples.size());
+                        volatility = (stddev / mean) * 100.0;
+                    }
+                }
+            }
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("price_micro_usd", priceMicroUSD);

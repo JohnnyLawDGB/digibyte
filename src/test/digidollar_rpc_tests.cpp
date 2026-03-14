@@ -256,7 +256,7 @@ BOOST_FIXTURE_TEST_CASE(test_getoracleprice_basic, DigiDollarRPCTestSetup)
     BOOST_CHECK(result.isObject());
     BOOST_CHECK(result.exists("price_cents"));
     BOOST_CHECK(result.exists("price_usd"));
-    BOOST_CHECK_GE(result["price_cents"].getInt<int64_t>(), 0);
+    BOOST_CHECK_GE(result["price_cents"].get_real(), 0.0);
 }
 
 // Test 15: getprotectionstatus - Basic Response
@@ -409,24 +409,19 @@ BOOST_FIXTURE_TEST_CASE(test_oracle_price_format, DigiDollarRPCTestSetup)
     BOOST_CHECK(result.exists("price_usd"));
 
     // Price in USD should be cents / 100
-    int64_t cents = result["price_cents"].getInt<int64_t>();
+    double cents = result["price_cents"].get_real();
     double usd = result["price_usd"].get_real();
 
     // Both price_cents and price_usd derive from the same micro-USD source.
-    // At sub-cent prices (like DGB at $0.0065), integer cents rounding is lossy:
-    // e.g., 6500 micro-USD = $0.0065 USD but rounds to 1 cent ($0.01).
-    // So we verify: (1) both are non-negative, (2) micro-USD is consistent with USD,
-    // and (3) cents is the correct rounding of micro-USD / 10000.
-    BOOST_CHECK(cents >= 0);
+    // price_cents is now a double with full precision (no integer rounding).
+    BOOST_CHECK(cents >= 0.0);
     BOOST_CHECK(usd >= 0.0);
     if (usd > 0) {
         int64_t micro_usd = result["price_micro_usd"].getInt<int64_t>();
         // USD should match micro-USD exactly
         BOOST_CHECK_CLOSE(usd, static_cast<double>(micro_usd) / 1000000.0, 0.001);
-        // Cents should be micro-USD / 10000 rounded, minimum 1 if price > 0
-        int64_t expected_cents = (micro_usd + 5000) / 10000;
-        if (expected_cents == 0 && micro_usd > 0) expected_cents = 1;
-        BOOST_CHECK_EQUAL(cents, expected_cents);
+        // Cents should be micro-USD / 10000.0 with full precision
+        BOOST_CHECK_CLOSE(cents, static_cast<double>(micro_usd) / 10000.0, 0.001);
     }
 }
 

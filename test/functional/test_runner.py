@@ -267,6 +267,7 @@ BASE_SCRIPTS = [
     'digidollar_wallet.py',
     'digidollar_oracle.py',
     'digidollar_mint.py',
+    'digidollar_oracle_price.py',
     'digidollar_transfer.py',
     'digidollar_network_relay.py',
     'digidollar_rpc.py',

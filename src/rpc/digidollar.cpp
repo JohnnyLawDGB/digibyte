@@ -26,6 +26,8 @@
 #include <validation.h>
 #include <versionbits.h>
 #include <wallet/wallet.h>
+#include <wallet/receive.h>
+#include <cmath>
 #include <wallet/context.h>
 #include <wallet/rpc/util.h>
 #include <wallet/spend.h>
@@ -1164,11 +1166,11 @@ RPCHelpMan senddigidollar()
                     {
                         {RPCResult::Type::STR_HEX, "txid", "Transaction ID"},
                         {RPCResult::Type::STR, "to_address", "Recipient DigiDollar address"},
-                        {RPCResult::Type::STR_AMOUNT, "amount", "Amount sent (in cents)"},
+                        {RPCResult::Type::NUM, "amount", "Amount sent (in cents)"},
                         {RPCResult::Type::STR, "status", "Transaction status (success/pending/failed)"},
                         {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid in DGB (optional)"},
                         {RPCResult::Type::NUM, "inputs_used", "Number of DD inputs consumed (optional)"},
-                        {RPCResult::Type::STR_AMOUNT, "change_amount", "DD change amount if any (optional)"}
+                        {RPCResult::Type::NUM, "change_amount", "DD change amount in cents if any (optional)"}
                     }
                 },
                 RPCExamples{
@@ -1213,7 +1215,33 @@ RPCHelpMan senddigidollar()
 
             // Parse parameters
             std::string addressStr = request.params[0].get_str();
-            CAmount amount = request.params[1].getInt<int64_t>();  // Amount in USD cents
+
+            // Bug #18 fix: Accept both integer cents and decimal dollars.
+            // Integer values (e.g. 5000) are treated as cents.
+            // Fractional values (e.g. 50.00) are treated as dollars and converted to cents.
+            // String values are also handled gracefully.
+            CAmount amount;
+            const UniValue& amountParam = request.params[1];
+            if (amountParam.isStr()) {
+                // String input - try to parse as number
+                double val = std::stod(amountParam.get_str());
+                if (val != std::floor(val)) {
+                    // Fractional → treat as dollars, convert to cents
+                    amount = static_cast<CAmount>(std::round(val * 100));
+                } else {
+                    amount = static_cast<CAmount>(val);
+                }
+            } else if (amountParam.isNum()) {
+                double val = amountParam.get_real();
+                if (val != std::floor(val)) {
+                    // Fractional → treat as dollars, convert to cents
+                    amount = static_cast<CAmount>(std::round(val * 100));
+                } else {
+                    amount = static_cast<CAmount>(val);
+                }
+            } else {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be a number (integer cents or decimal dollars)");
+            }
             std::string comment = request.params.size() > 2 ? request.params[2].get_str() : "";
             LogPrintf("DigiDollar RPC: Parsed params - address=%s, amount=%d\n", addressStr, amount);
 
@@ -1255,13 +1283,28 @@ RPCHelpMan senddigidollar()
             UniValue result(UniValue::VOBJ);
             result.pushKV("txid", txid);
             result.pushKV("to_address", addressStr);
-            result.pushKV("amount", ValueFromAmount(amount));
+            result.pushKV("amount", amount);  // Bug #11/25 fix: raw integer cents, not ValueFromAmount
             result.pushKV("status", "success");
 
-            // Add optional fields (placeholder values for now - TODO: get from TransferDigiDollar result)
-            result.pushKV("fee_paid", ValueFromAmount(0));  // TODO: track actual fee
-            result.pushKV("inputs_used", 0);  // TODO: track DD inputs used
-            result.pushKV("change_amount", ValueFromAmount(0));  // TODO: track DD change
+            // Bug #11/25 fix: Compute actual fee, inputs, and change from the wallet transaction
+            {
+                uint256 hash;
+                hash.SetHex(txid);
+                LOCK(pwallet->cs_wallet);
+                auto it = pwallet->mapWallet.find(hash);
+                if (it != pwallet->mapWallet.end()) {
+                    const wallet::CWalletTx& wtx = it->second;
+                    CAmount debit = wallet::CachedTxGetDebit(*pwallet, wtx, wallet::ISMINE_ALL);
+                    CAmount credit = wallet::CachedTxGetCredit(*pwallet, wtx, wallet::ISMINE_ALL);
+                    CAmount fee = debit - credit;
+                    result.pushKV("fee_paid", ValueFromAmount(fee > 0 ? fee : 0));
+                    result.pushKV("inputs_used", static_cast<int>(wtx.tx->vin.size()));
+                } else {
+                    result.pushKV("fee_paid", ValueFromAmount(0));
+                    result.pushKV("inputs_used", 0);
+                }
+            }
+            result.pushKV("change_amount", (balance > amount) ? (balance - amount) : 0);
 
             // Optional: Add comment to wallet transaction if provided
             if (!comment.empty()) {

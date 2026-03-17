@@ -127,6 +127,10 @@ private:
         NUM_COLUMNS = 8
     };
 
+    // Auto-refresh timer — must be stopped during shutdown (Bug #23)
+    QTimer* m_autoRefreshTimer{nullptr};
+    void stopRefresh();
+
     // Throttling - minimum 5 seconds between updates during sync
     qint64 m_lastUpdateTime{0};
     static constexpr int UPDATE_THROTTLE_MS = 5000;

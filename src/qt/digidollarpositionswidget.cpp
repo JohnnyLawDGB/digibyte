@@ -15,6 +15,7 @@
 #include <oracle/mock_oracle.h>
 #include <oracle/bundle_manager.h>
 #include <chainparams.h>
+#include <shutdown.h>
 #include <algorithm>
 
 #include <QTableWidget>
@@ -52,7 +53,14 @@ DigiDollarPositionsWidget::DigiDollarPositionsWidget(QWidget *parent) :
 
 DigiDollarPositionsWidget::~DigiDollarPositionsWidget()
 {
-    // Qt will handle cleanup of child widgets
+    stopRefresh();
+}
+
+void DigiDollarPositionsWidget::stopRefresh()
+{
+    if (m_autoRefreshTimer) {
+        m_autoRefreshTimer->stop();
+    }
 }
 
 void DigiDollarPositionsWidget::setupUI()
@@ -187,10 +195,10 @@ void DigiDollarPositionsWidget::connectSignals()
             this, &DigiDollarPositionsWidget::showContextMenu);
 
     // Auto-refresh timer (every 60 seconds)
-    QTimer* autoRefreshTimer = new QTimer(this);
-    connect(autoRefreshTimer, &QTimer::timeout,
+    m_autoRefreshTimer = new QTimer(this);
+    connect(m_autoRefreshTimer, &QTimer::timeout,
             this, &DigiDollarPositionsWidget::updatePositions);
-    autoRefreshTimer->start(60000); // 60 seconds
+    m_autoRefreshTimer->start(60000); // 60 seconds
 }
 
 void DigiDollarPositionsWidget::connectWalletSignals()
@@ -225,6 +233,9 @@ void DigiDollarPositionsWidget::setWalletModel(WalletModel* model)
         connectWalletSignals();
         updatePositions();
         // applyTheme(); // REMOVED: Now handled by CSS files
+    } else {
+        // Wallet being torn down — stop refresh to prevent deadlock (Bug #23)
+        stopRefresh();
     }
 }
 
@@ -248,6 +259,11 @@ void DigiDollarPositionsWidget::updateView()
 
 void DigiDollarPositionsWidget::updatePositions()
 {
+    // Bail out during shutdown to prevent deadlock on cs_dd_wallet (Bug #23)
+    if (ShutdownRequested() || !m_walletModel) {
+        return;
+    }
+
     // Skip updates during Initial Block Download - DD data only matters when synced
     if (m_clientModel && m_clientModel->node().isInitialBlockDownload()) {
         return;

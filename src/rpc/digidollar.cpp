@@ -986,24 +986,24 @@ RPCHelpMan mintdigidollar()
                 LogPrintf("DigiDollar RPC Mint: UTXO fragmentation detected (%zu UTXOs). Auto-consolidating...\n",
                           availableUtxos.size());
 
-                // Calculate consolidation target: collateral + fees + 10% margin
-                CAmount consolidationTarget = result.collateralRequired +
-                    (result.collateralRequired / 10) + 10000000; // +10% + 0.1 DGB fee buffer
-
-                // Cap at available balance
+                // Check if total balance covers collateral (ignore margin — the
+                // consolidation itself reduces input count, not total value)
                 CAmount totalAvailable = 0;
                 for (const auto& [outpoint, value] : utxoValues) {
                     totalAvailable += value;
                 }
-                if (consolidationTarget > totalAvailable) {
+                // Need collateral + estimated fees (~0.2 DGB buffer)
+                CAmount minRequired = result.collateralRequired + 20000000;
+                if (totalAvailable < minRequired) {
                     throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
-                        strprintf("Insufficient funds for collateral. Need %.2f DGB, have %.2f DGB across %zu small UTXOs.",
+                        strprintf("Insufficient funds for collateral. Need %.2f DGB, have %.2f DGB.",
                                   result.collateralRequired / 100000000.0,
-                                  totalAvailable / 100000000.0,
-                                  availableUtxos.size()));
+                                  totalAvailable / 100000000.0));
                 }
 
-                // Create consolidation transaction using wallet's standard coin selection
+                // Consolidate: send-to-self sweeping as many UTXOs as possible
+                // into one large output. Use subtractfeefromamount so the
+                // consolidation always succeeds regardless of margin.
                 CTxDestination consolidationDest;
                 {
                     LOCK(pwallet->cs_wallet);
@@ -1014,8 +1014,9 @@ RPCHelpMan mintdigidollar()
                     consolidationDest = *op_dest;
                 }
 
+                // Send entire balance to self, fee subtracted from amount
                 wallet::CCoinControl coin_control;
-                wallet::CRecipient recipient{consolidationDest, consolidationTarget, false};
+                wallet::CRecipient recipient{consolidationDest, totalAvailable, /*subtract_fee=*/true};
                 std::vector<wallet::CRecipient> recipients = {recipient};
 
                 auto consolidation_result = wallet::CreateTransaction(*pwallet, recipients, /*change_pos=*/-1, coin_control, /*sign=*/true);
@@ -1033,8 +1034,8 @@ RPCHelpMan mintdigidollar()
                     pwallet->CommitTransaction(consolidation_tx, {}, {});
                 }
 
-                LogPrintf("DigiDollar RPC Mint: Consolidation tx broadcast: %s (%.2f DGB)\n",
-                          consolidation_txid, consolidationTarget / 100000000.0);
+                LogPrintf("DigiDollar RPC Mint: Consolidation tx broadcast: %s (swept %.2f DGB)\n",
+                          consolidation_txid, totalAvailable / 100000000.0);
 
                 // Re-gather UTXOs (now includes unconfirmed consolidation output)
                 availableUtxos.clear();

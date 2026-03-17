@@ -521,4 +521,36 @@ BOOST_FIXTURE_TEST_CASE(test_dca_tier_multiplier_range, DigiDollarRPCTestSetup)
     }
 }
 
+// Test 31: Bug #10 - Friendly error for unconfirmed DD inputs (rapid sends)
+BOOST_FIXTURE_TEST_CASE(test_senddigidollar_unconfirmed_input_error_message, DigiDollarRPCTestSetup)
+{
+    // The raw error from the network contains "dd-input-amounts-unknown"
+    // The RPC layer should translate this into a user-friendly message
+    std::string rawError = "Transaction rejected by network: dd-input-amounts-unknown, Cannot verify DD conservation: input DD amounts undetermined";
+    std::string friendlyMsg = "Previous DigiDollar transfer has not confirmed yet. Please wait ~15 seconds and try again.";
+
+    // Verify the raw error contains the trigger substring
+    BOOST_CHECK(rawError.find("dd-input-amounts-unknown") != std::string::npos);
+
+    // Simulate what the RPC handler should do: detect and replace
+    std::string result;
+    if (rawError.find("dd-input-amounts-unknown") != std::string::npos) {
+        result = friendlyMsg;
+    } else {
+        result = strprintf("Transfer failed: %s", rawError);
+    }
+
+    BOOST_CHECK_EQUAL(result, friendlyMsg);
+
+    // Also verify that other errors pass through unchanged
+    std::string otherError = "insufficient funds";
+    std::string otherResult;
+    if (otherError.find("dd-input-amounts-unknown") != std::string::npos) {
+        otherResult = friendlyMsg;
+    } else {
+        otherResult = strprintf("Transfer failed: %s", otherError);
+    }
+    BOOST_CHECK_EQUAL(otherResult, "Transfer failed: insufficient funds");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

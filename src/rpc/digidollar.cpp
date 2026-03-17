@@ -1276,6 +1276,11 @@ RPCHelpMan senddigidollar()
             LogPrintf("DigiDollar RPC: TransferDigiDollar() returned success=%d\n", success);
 
             if (!success) {
+                // Bug #10: Provide user-friendly message for unconfirmed DD input errors
+                if (error.find("dd-input-amounts-unknown") != std::string::npos) {
+                    throw JSONRPCError(RPC_WALLET_ERROR,
+                        "Previous DigiDollar transfer has not confirmed yet. Please wait ~15 seconds and try again.");
+                }
                 throw JSONRPCError(RPC_WALLET_ERROR,
                     strprintf("Transfer failed: %s", error));
             }

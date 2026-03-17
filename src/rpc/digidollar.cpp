@@ -768,7 +768,7 @@ RPCHelpMan mintdigidollar()
                 "Creates a new DigiDollar position by locking DGB as collateral.\n"
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
-                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint (in USD cents, e.g., 10000 = $100)", RPCArgOptions{.skip_type_check = true}},
+                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint in cents (min 10000/$100, max 10000000/$100K)", RPCArgOptions{.skip_type_check = true}},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)", RPCArgOptions{.skip_type_check = true}},
                     {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)", RPCArgOptions{.skip_type_check = true}}
                 },
@@ -2423,7 +2423,7 @@ static RPCHelpMan estimatecollateral()
                 "\nEstimate DGB collateral requirement for minting DigiDollar.\n"
                 "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
                 {
-                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint (in cents)"},
+                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint in cents (min 10000/$100, max 10000000/$100K)"},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)"},
                     {"oracle_price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Custom DGB price in micro-USD (1,000,000 = $1.00). Uses current oracle if omitted."}
                 },
@@ -2464,6 +2464,32 @@ static RPCHelpMan estimatecollateral()
             CAmount ddAmount = request.params[0].getInt<int64_t>();
             int lockTier = request.params[1].getInt<int>();
 
+            // Validate parameters early (before oracle fetch)
+            if (ddAmount <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
+            }
+
+            // Validate against consensus mint limits
+            {
+                const auto& chainParams = Params();
+                const auto& ddParams = chainParams.GetDigiDollarParams();
+                if (!DigiDollar::IsValidMintAmount(ddAmount, ddParams)) {
+                    if (ddAmount < ddParams.minMintAmount) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER,
+                            strprintf("Minimum mint amount is $%d (%d cents)",
+                                ddParams.minMintAmount / 100, ddParams.minMintAmount));
+                    } else {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER,
+                            strprintf("Maximum mint amount is $%d (%d cents)",
+                                ddParams.maxMintAmount / 100, ddParams.maxMintAmount));
+                    }
+                }
+            }
+
+            if (lockTier < 0 || lockTier > 9) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
+            }
+
             // Get oracle price in micro-USD: use provided value or fetch from real oracle system
             CAmount oraclePriceMicroUSD;
             if (request.params.size() > 2 && !request.params[2].isNull()) {
@@ -2480,13 +2506,6 @@ static RPCHelpMan estimatecollateral()
                 }
             }
 
-            // Validate parameters
-            if (ddAmount <= 0) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
-            }
-            if (lockTier < 0 || lockTier > 9) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
-            }
             if (oraclePriceMicroUSD <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
             }

@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chainparams.h>
+#include <consensus/digidollar.h>
 #include <digidollar/health.h>
 #include <rpc/server.h>
 #include <rpc/client.h>
@@ -244,6 +246,34 @@ BOOST_FIXTURE_TEST_CASE(test_estimatecollateral_basic, DigiDollarRPCTestSetup)
     BOOST_CHECK(result.isObject());
     // Should have similar fields to calculatecollateralrequirement
     BOOST_CHECK(result.exists("required_dgb"));
+}
+
+// Test 13b: IsValidMintAmount rejects amounts below minimum
+// Regtest: min 1 cent, max 100000 cents ($1000)
+BOOST_FIXTURE_TEST_CASE(test_mint_amount_below_min, DigiDollarRPCTestSetup)
+{
+    const auto& ddParams = Params().GetDigiDollarParams();
+    // 0 cents — below minimum
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(0, ddParams));
+    // -1 — negative
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(-1, ddParams));
+    // Exactly at minimum (1 cent in regtest) — should pass
+    BOOST_CHECK(DigiDollar::IsValidMintAmount(ddParams.minMintAmount, ddParams));
+}
+
+// Test 13c: IsValidMintAmount rejects amounts above maximum
+// Regtest: max 100000 cents ($1000)
+BOOST_FIXTURE_TEST_CASE(test_mint_amount_above_max, DigiDollarRPCTestSetup)
+{
+    const auto& ddParams = Params().GetDigiDollarParams();
+    // Above max — should fail
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(ddParams.maxMintAmount + 1, ddParams));
+    // Way above max
+    BOOST_CHECK(!DigiDollar::IsValidMintAmount(ddParams.maxMintAmount * 2, ddParams));
+    // Exactly at max — should pass
+    BOOST_CHECK(DigiDollar::IsValidMintAmount(ddParams.maxMintAmount, ddParams));
+    // Below max — should pass
+    BOOST_CHECK(DigiDollar::IsValidMintAmount(ddParams.maxMintAmount - 1, ddParams));
 }
 
 // Test 14: getoracleprice - Basic Response

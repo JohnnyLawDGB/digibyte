@@ -122,6 +122,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_redeem_tests.cpp \
   test/digidollar_restore_tests.cpp \
   test/digidollar_timelock_tests.cpp \
+  test/digidollar_lock_height_tests.cpp \
   test/bech32_tests.cpp \
   test/bip32_tests.cpp \
   test/blockchain_tests.cpp \

@@ -603,4 +603,82 @@ BOOST_AUTO_TEST_CASE(oracle_price_usd_calculation)
     BOOST_CHECK_CLOSE(usd4, 1.0, 0.001);
 }
 
+// ============================================================================
+// PART 6: Bug #26 — Local oracle preserves on-chain block_height
+// ============================================================================
+
+BOOST_AUTO_TEST_CASE(local_oracle_preserves_onchain_block_height)
+{
+    // Bug #26: Phase 3 (local oracle) was overwriting Phase 1 on-chain
+    // block_height with 0. After fix, if Phase 1 set block_height > 0,
+    // Phase 3 should preserve it.
+    //
+    // Simulate the ScanOracleDataFromChain logic:
+    // Phase 1 sets block_height = 42000 (from on-chain bundle)
+    // Phase 3 sets local price data but should keep block_height = 42000
+
+    struct TestOracleData {
+        uint64_t price_micro_usd = 0;
+        int64_t timestamp = 0;
+        int32_t block_height = 0;
+        bool signature_valid = false;
+        bool has_data = false;
+        std::string price_source;
+    };
+
+    TestOracleData od;
+
+    // Phase 1: on-chain data
+    od.price_micro_usd = 5000;
+    od.timestamp = 1700000000;
+    od.block_height = 42000;
+    od.signature_valid = true;
+    od.has_data = true;
+    od.price_source = "on-chain";
+
+    // Phase 3: local runtime override — the FIX preserves block_height
+    int32_t existing_height = od.block_height;
+    od.price_micro_usd = 5200; // newer local price
+    od.timestamp = 1700000015;
+    od.block_height = (existing_height > 0) ? existing_height : 0;
+    od.signature_valid = true;
+    od.has_data = true;
+    od.price_source = "local";
+
+    BOOST_CHECK_EQUAL(od.block_height, 42000);
+    BOOST_CHECK_EQUAL(od.price_source, "local");
+    BOOST_CHECK_EQUAL(od.price_micro_usd, 5200u);
+}
+
+BOOST_AUTO_TEST_CASE(local_oracle_no_onchain_data_shows_zero_height)
+{
+    // When there's no on-chain data (Phase 1 never ran for this oracle),
+    // Phase 3 should still show block_height = 0.
+
+    struct TestOracleData {
+        uint64_t price_micro_usd = 0;
+        int64_t timestamp = 0;
+        int32_t block_height = 0;
+        bool signature_valid = false;
+        bool has_data = false;
+        std::string price_source;
+    };
+
+    TestOracleData od;
+
+    // No Phase 1 data — block_height stays at default 0
+
+    // Phase 3: local runtime sets data
+    int32_t existing_height = od.block_height;
+    od.price_micro_usd = 5200;
+    od.timestamp = 1700000015;
+    od.block_height = (existing_height > 0) ? existing_height : 0;
+    od.signature_valid = true;
+    od.has_data = true;
+    od.price_source = "local";
+
+    BOOST_CHECK_EQUAL(od.block_height, 0);
+    BOOST_CHECK_EQUAL(od.price_source, "local");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

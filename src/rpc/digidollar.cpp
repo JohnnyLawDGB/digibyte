@@ -3367,9 +3367,10 @@ static OracleScanResult ScanOracleDataFromChain(
             OracleNode* runtime = oracle_manager.GetOracleNode(oc.id);
             if (runtime && runtime->HasValidPrice()) {
                 auto& od = res.oracle_data[oc.id];
+                int32_t existing_height = od.block_height;
                 od.price_micro_usd = runtime->GetCurrentPrice();
                 od.timestamp = runtime->GetLastUpdateTime();
-                od.block_height = 0;
+                od.block_height = (existing_height > 0) ? existing_height : 0;
                 od.signature_valid = true;
                 od.has_data = true;
                 od.price_source = "local";
@@ -3427,6 +3428,7 @@ static RPCHelpMan getalloracleprices()
                                         {RPCResult::Type::NUM, "block_height", "Block height where price was included"},
                                         {RPCResult::Type::NUM, "deviation_pct", "Deviation from consensus median (%)"},
                                         {RPCResult::Type::BOOL, "signature_valid", "Whether Schnorr signature is valid"},
+                                        {RPCResult::Type::STR, "price_source", "Where price came from: local/on-chain/pending/none"},
                                         {RPCResult::Type::STR, "status", "Oracle status: reporting/no_data/outlier"},
                                     }
                                 }
@@ -3500,6 +3502,7 @@ static RPCHelpMan getalloracleprices()
                     }
                     oracle_obj.pushKV("deviation_pct", deviation_pct);
                     oracle_obj.pushKV("signature_valid", od.signature_valid);
+                    oracle_obj.pushKV("price_source", od.price_source.empty() ? "none" : od.price_source);
 
                     std::string status = GetOracleStatus(od, scan.consensus_price);
                     oracle_obj.pushKV("status", status);
@@ -3511,6 +3514,7 @@ static RPCHelpMan getalloracleprices()
                     oracle_obj.pushKV("block_height", 0);
                     oracle_obj.pushKV("deviation_pct", 0.0);
                     oracle_obj.pushKV("signature_valid", false);
+                    oracle_obj.pushKV("price_source", "none");
                     oracle_obj.pushKV("status", "no_data");
                 }
 

@@ -986,13 +986,10 @@ RPCHelpMan mintdigidollar()
                 LogPrintf("DigiDollar RPC Mint: UTXO fragmentation detected (%zu UTXOs). Auto-consolidating...\n",
                           availableUtxos.size());
 
-                // Check if total balance covers collateral (ignore margin — the
-                // consolidation itself reduces input count, not total value)
                 CAmount totalAvailable = 0;
                 for (const auto& [outpoint, value] : utxoValues) {
                     totalAvailable += value;
                 }
-                // Need collateral + estimated fees (~0.2 DGB buffer)
                 CAmount minRequired = result.collateralRequired + 20000000;
                 if (totalAvailable < minRequired) {
                     throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
@@ -1001,9 +998,6 @@ RPCHelpMan mintdigidollar()
                                   totalAvailable / 100000000.0));
                 }
 
-                // Consolidate: send-to-self sweeping as many UTXOs as possible
-                // into one large output. Use subtractfeefromamount so the
-                // consolidation always succeeds regardless of margin.
                 CTxDestination consolidationDest;
                 {
                     LOCK(pwallet->cs_wallet);
@@ -1014,44 +1008,103 @@ RPCHelpMan mintdigidollar()
                     consolidationDest = *op_dest;
                 }
 
-                // Send entire balance to self, fee subtracted from amount
-                wallet::CCoinControl coin_control;
-                wallet::CRecipient recipient{consolidationDest, totalAvailable, /*subtract_fee=*/true};
-                std::vector<wallet::CRecipient> recipients = {recipient};
+                // Multi-pass consolidation: MAX_STANDARD_TX_WEIGHT is 400k WU.
+                // P2WPKH input ≈ 271 WU. Conservative limit: 1400 inputs per pass.
+                static const size_t MAX_CONSOLIDATION_INPUTS = 1400;
+                static const int MAX_CONSOLIDATION_PASSES = 10;
+                int pass = 0;
 
-                auto consolidation_result = wallet::CreateTransaction(*pwallet, recipients, /*change_pos=*/-1, coin_control, /*sign=*/true);
-                if (!consolidation_result) {
-                    throw JSONRPCError(RPC_WALLET_ERROR,
-                        strprintf("Auto-consolidation failed: %s. Try manually consolidating UTXOs with: "
-                                  "sendtoaddress <your_address> <amount>",
-                                  util::ErrorString(consolidation_result).original));
+                while (availableUtxos.size() > MAX_CONSOLIDATION_INPUTS && pass < MAX_CONSOLIDATION_PASSES) {
+                    ++pass;
+                    size_t batch_size = std::min(availableUtxos.size(), MAX_CONSOLIDATION_INPUTS);
+                    LogPrintf("DigiDollar RPC Mint: Consolidation pass %d — sweeping %zu of %zu UTXOs\n",
+                              pass, batch_size, availableUtxos.size());
+
+                    wallet::CCoinControl coin_control;
+                    CAmount batchTotal = 0;
+                    for (size_t i = 0; i < batch_size; ++i) {
+                        coin_control.Select(availableUtxos[i]);
+                        batchTotal += utxoValues[availableUtxos[i]];
+                    }
+                    coin_control.m_allow_other_inputs = false;
+
+                    wallet::CRecipient recipient{consolidationDest, batchTotal, /*subtract_fee=*/true};
+                    std::vector<wallet::CRecipient> recipients = {recipient};
+
+                    auto consolidation_result = wallet::CreateTransaction(*pwallet, recipients, /*change_pos=*/-1, coin_control, /*sign=*/true);
+                    if (!consolidation_result) {
+                        throw JSONRPCError(RPC_WALLET_ERROR,
+                            strprintf("Auto-consolidation pass %d failed: %s. Try manually consolidating UTXOs.",
+                                      pass, util::ErrorString(consolidation_result).original));
+                    }
+
+                    const CTransactionRef& consolidation_tx = consolidation_result->tx;
+                    consolidation_txid = consolidation_tx->GetHash().GetHex();
+                    {
+                        LOCK(pwallet->cs_wallet);
+                        pwallet->CommitTransaction(consolidation_tx, {}, {});
+                    }
+
+                    LogPrintf("DigiDollar RPC Mint: Consolidation pass %d tx: %s (swept %.2f DGB from %zu inputs)\n",
+                              pass, consolidation_txid, batchTotal / 100000000.0, batch_size);
+
+                    availableUtxos.clear();
+                    utxoValues.clear();
+                    {
+                        LOCK(pwallet->cs_wallet);
+                        wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
+                        for (const wallet::COutput& coin : coins.All()) {
+                            availableUtxos.push_back(coin.outpoint);
+                            utxoValues[coin.outpoint] = coin.txout.nValue;
+                        }
+                    }
+                    LogPrintf("DigiDollar RPC Mint: After pass %d: %zu UTXOs available\n", pass, availableUtxos.size());
                 }
 
-                const CTransactionRef& consolidation_tx = consolidation_result->tx;
-                consolidation_txid = consolidation_tx->GetHash().GetHex();
-                {
-                    LOCK(pwallet->cs_wallet);
-                    pwallet->CommitTransaction(consolidation_tx, {}, {});
-                }
+                if (consolidation_txid.empty() && availableUtxos.size() <= MAX_CONSOLIDATION_INPUTS) {
+                    wallet::CCoinControl coin_control;
+                    CAmount batchTotal = 0;
+                    for (const auto& utxo : availableUtxos) {
+                        coin_control.Select(utxo);
+                        batchTotal += utxoValues[utxo];
+                    }
+                    coin_control.m_allow_other_inputs = false;
 
-                LogPrintf("DigiDollar RPC Mint: Consolidation tx broadcast: %s (swept %.2f DGB)\n",
-                          consolidation_txid, totalAvailable / 100000000.0);
+                    wallet::CRecipient recipient{consolidationDest, batchTotal, /*subtract_fee=*/true};
+                    std::vector<wallet::CRecipient> recipients = {recipient};
 
-                // Re-gather UTXOs (now includes unconfirmed consolidation output)
-                availableUtxos.clear();
-                utxoValues.clear();
-                {
-                    LOCK(pwallet->cs_wallet);
-                    wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
-                    for (const wallet::COutput& coin : coins.All()) {
-                        availableUtxos.push_back(coin.outpoint);
-                        utxoValues[coin.outpoint] = coin.txout.nValue;
+                    auto consolidation_result = wallet::CreateTransaction(*pwallet, recipients, /*change_pos=*/-1, coin_control, /*sign=*/true);
+                    if (!consolidation_result) {
+                        throw JSONRPCError(RPC_WALLET_ERROR,
+                            strprintf("Auto-consolidation failed: %s. Try manually consolidating UTXOs.",
+                                      util::ErrorString(consolidation_result).original));
+                    }
+
+                    const CTransactionRef& consolidation_tx = consolidation_result->tx;
+                    consolidation_txid = consolidation_tx->GetHash().GetHex();
+                    {
+                        LOCK(pwallet->cs_wallet);
+                        pwallet->CommitTransaction(consolidation_tx, {}, {});
+                    }
+
+                    LogPrintf("DigiDollar RPC Mint: Single-pass consolidation tx: %s (swept %.2f DGB from %zu inputs)\n",
+                              consolidation_txid, batchTotal / 100000000.0, availableUtxos.size());
+
+                    availableUtxos.clear();
+                    utxoValues.clear();
+                    {
+                        LOCK(pwallet->cs_wallet);
+                        wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
+                        for (const wallet::COutput& coin : coins.All()) {
+                            availableUtxos.push_back(coin.outpoint);
+                            utxoValues[coin.outpoint] = coin.txout.nValue;
+                        }
                     }
                 }
 
-                LogPrintf("DigiDollar RPC Mint: After consolidation: %zu UTXOs available\n", availableUtxos.size());
+                LogPrintf("DigiDollar RPC Mint: After consolidation: %zu UTXOs available (passes: %d)\n",
+                          availableUtxos.size(), pass);
 
-                // Rebuild builder with new UTXO map and retry
                 RpcMintTxBuilder retryBuilder(Params(), currentHeight, oraclePriceMicroUSD, utxoValues);
                 params.utxos = availableUtxos;
                 result = retryBuilder.BuildMintTransaction(params);

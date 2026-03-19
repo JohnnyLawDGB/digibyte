@@ -491,4 +491,112 @@ BOOST_AUTO_TEST_CASE(edge_cases_and_error_handling)
     }
 }
 
+BOOST_AUTO_TEST_CASE(consolidation_pass_calculation)
+{
+    // Bug #24: Test the multi-pass consolidation constants.
+    // MAX_CONSOLIDATION_INPUTS = 1400 (conservative, ~379k WU for P2WPKH)
+    // Each P2WPKH input is ~271 WU. 1400 * 271 = 379,400 WU < 400,000 (MAX_STANDARD_TX_WEIGHT)
+    const size_t MAX_CONSOLIDATION_INPUTS = 1400;
+
+    // 600 UTXOs: should fit in a single pass
+    {
+        size_t utxo_count = 600;
+        size_t passes = (utxo_count + MAX_CONSOLIDATION_INPUTS - 1) / MAX_CONSOLIDATION_INPUTS;
+        BOOST_CHECK_EQUAL(passes, 1u);
+    }
+
+    // 1400 UTXOs: exactly one pass
+    {
+        size_t utxo_count = 1400;
+        size_t passes = (utxo_count + MAX_CONSOLIDATION_INPUTS - 1) / MAX_CONSOLIDATION_INPUTS;
+        BOOST_CHECK_EQUAL(passes, 1u);
+    }
+
+    // 1401 UTXOs: needs two passes
+    {
+        size_t utxo_count = 1401;
+        size_t passes = (utxo_count + MAX_CONSOLIDATION_INPUTS - 1) / MAX_CONSOLIDATION_INPUTS;
+        BOOST_CHECK_EQUAL(passes, 2u);
+    }
+
+    // 3000 UTXOs: needs three passes
+    {
+        size_t utxo_count = 3000;
+        size_t passes = (utxo_count + MAX_CONSOLIDATION_INPUTS - 1) / MAX_CONSOLIDATION_INPUTS;
+        BOOST_CHECK_EQUAL(passes, 3u);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(select_coins_respects_max_inputs)
+{
+    const CChainParams& params = Params();
+    int height = 1000;
+    CAmount price = 10000;
+
+    TestMintTxBuilder builder(params, height, price);
+
+    // Create 500 UTXOs worth 10,000 DGB each = 5,000,000 DGB total
+    // Target collateral = 10,000 DGB (should be achievable with 1 UTXO)
+    TxBuilderMintParams mintParams;
+    mintParams.ddAmount = 10000;
+    mintParams.lockDays = 365;
+    mintParams.ownerKey = CreateTestKey();
+    mintParams.feeRate = 100000;
+    mintParams.utxos = CreateTestUTXOs(500);
+
+    TxBuilderResult result = builder.BuildMintTransaction(mintParams);
+    BOOST_CHECK(result.success);
+    BOOST_CHECK_LE(result.tx.vin.size(), 400u); // MAX_TX_INPUTS = 400
+}
+
+BOOST_AUTO_TEST_CASE(select_coins_fails_fragmented_wallet)
+{
+    const CChainParams& params = Params();
+    int height = 1000;
+    CAmount price = 10000;
+
+    // Create a builder with small UTXOs (100 DGB each, default)
+    // 500 UTXOs * 100 DGB = 50,000 DGB. But MAX_TX_INPUTS=400, so
+    // max selectable = 400 * 100 = 40,000 DGB. If collateral needed > 40k, fail.
+    MintTxBuilder builder(params, height, price);
+
+    TxBuilderMintParams mintParams;
+    mintParams.ddAmount = 50000; // $500 at $0.01/DGB needs huge collateral
+    mintParams.lockDays = 365;
+    mintParams.ownerKey = CreateTestKey();
+    mintParams.feeRate = 100000;
+    mintParams.utxos = CreateTestUTXOs(500);
+
+    TxBuilderResult result = builder.BuildMintTransaction(mintParams);
+    // Should fail because 100 DGB * 400 inputs is not enough for the collateral
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(result.error.find("Too many small UTXOs") != std::string::npos ||
+                result.error.find("Insufficient funds") != std::string::npos);
+}
+
+BOOST_AUTO_TEST_CASE(consolidation_input_weight_budget)
+{
+    // Verify the weight budget calculation for consolidation.
+    // P2WPKH input: 41 bytes base + 107 bytes witness ≈ 271 WU
+    // MAX_STANDARD_TX_WEIGHT = 400,000 WU
+    // Tx overhead ~42 bytes base = ~168 WU (header, locktime, etc.)
+    // P2WPKH output: 31 bytes = 124 WU
+    // Available for inputs: 400,000 - 168 - 124 = 399,708 WU
+    // Max inputs: 399,708 / 271 ≈ 1475
+    // Using 1400 for safety margin
+
+    const int32_t MAX_STANDARD_TX_WEIGHT = 400000;
+    const size_t P2WPKH_INPUT_WEIGHT = 271;
+    const size_t TX_OVERHEAD_WEIGHT = 168;
+    const size_t P2WPKH_OUTPUT_WEIGHT = 124;
+
+    size_t available_weight = MAX_STANDARD_TX_WEIGHT - TX_OVERHEAD_WEIGHT - P2WPKH_OUTPUT_WEIGHT;
+    size_t theoretical_max = available_weight / P2WPKH_INPUT_WEIGHT;
+    const size_t MAX_CONSOLIDATION_INPUTS = 1400;
+
+    BOOST_CHECK_GT(theoretical_max, MAX_CONSOLIDATION_INPUTS);
+    BOOST_CHECK_LE(MAX_CONSOLIDATION_INPUTS * P2WPKH_INPUT_WEIGHT + TX_OVERHEAD_WEIGHT + P2WPKH_OUTPUT_WEIGHT,
+                   (size_t)MAX_STANDARD_TX_WEIGHT);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

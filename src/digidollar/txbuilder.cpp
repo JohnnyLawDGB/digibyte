@@ -673,43 +673,35 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
         LogPrintf("DigiDollar: Added DD output for %s: %d cents (registered)\n", address, amount);
     }
 
-    // Add DD change output if needed
+    // Add DD change output if needed — EVERY cent of DD must be accounted for.
+    // Unlike DGB dust, DD has real dollar value. No DD may be silently dropped.
     CAmount ddChange = totalDDIn - totalDDOut;
     if (ddChange > 0) {
-        // Only create change if above dust threshold
-        if (ddChange >= minOutput) {
-            // Apply Taproot tweak to change output (same as CreateDigiDollarP2TR)
-            // This ensures SignDDInputs can verify and sign the change output correctly.
-            // The signing code expects tweaked keys for key-path spending.
-            CPubKey changePubkey = params.spenderKey.GetPubKey();
-            XOnlyPubKey xonly(changePubkey);
+        // Apply Taproot tweak to change output (same as CreateDigiDollarP2TR)
+        // This ensures SignDDInputs can verify and sign the change output correctly.
+        // The signing code expects tweaked keys for key-path spending.
+        CPubKey changePubkey = params.spenderKey.GetPubKey();
+        XOnlyPubKey xonly(changePubkey);
 
-            // Apply the standard Taproot tweak (nullptr = no merkle root, key-path only)
-            auto tweaked = xonly.CreateTapTweak(nullptr);
-            if (!tweaked) {
-                result.error = "Failed to create Taproot tweak for DD change output";
-                return result;
-            }
-            XOnlyPubKey tweaked_key = tweaked->first;
-
-            // Create P2TR output with TWEAKED key (matches CreateDigiDollarP2TR)
-            CScript changeScript;
-            changeScript << OP_1 << ToByteVector(tweaked_key);
-            tx.vout.push_back(CTxOut(0, changeScript));
-
-            // CRITICAL FIX: Register change output in metadata registry so future redemptions
-            // can extract the DD amount. Without this, multi-input redemptions fail with
-            // "bad-redeem-dd-not-burned" because ExtractDDAmount can't find the amount.
-            RegisterScriptMetadata(changeScript, ScriptType::DD_TOKEN_OUTPUT, ddChange, 0);
-
-            LogPrintf("DigiDollar: Added DD change output: %d cents (tweaked key, registered)\n", ddChange);
-        } else {
-            // FIXED: Allow sending exact balance by treating dust change as acceptable loss
-            // User is intentionally sending their full balance, so small remainder is expected
-            LogPrintf("DigiDollar: DD change is dust (%d cents < %d cents minimum) - allowing transaction to proceed\n",
-                      ddChange, minOutput);
-            // Note: The dust DD will remain unspent in the UTXO set, but this allows 100% balance sends
+        // Apply the standard Taproot tweak (nullptr = no merkle root, key-path only)
+        auto tweaked = xonly.CreateTapTweak(nullptr);
+        if (!tweaked) {
+            result.error = "Failed to create Taproot tweak for DD change output";
+            return result;
         }
+        XOnlyPubKey tweaked_key = tweaked->first;
+
+        // Create P2TR output with TWEAKED key (matches CreateDigiDollarP2TR)
+        CScript changeScript;
+        changeScript << OP_1 << ToByteVector(tweaked_key);
+        tx.vout.push_back(CTxOut(0, changeScript));
+
+        // Register change output in metadata registry so future transactions
+        // can extract the DD amount. Without this, multi-input operations fail
+        // because ExtractDDAmount can't find the amount.
+        RegisterScriptMetadata(changeScript, ScriptType::DD_TOKEN_OUTPUT, ddChange, 0);
+
+        LogPrintf("DigiDollar: Added DD change output: %d cents (tweaked key, registered)\n", ddChange);
     } else if (ddChange < 0) {
         // This should never happen - SelectDDCoins should ensure enough DD
         result.error = strprintf("Insufficient DD: need %d cents, have %d cents", totalDDOut, totalDDIn);
@@ -753,7 +745,7 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     for (const auto& [address, amount] : params.recipients) {
         ddOutputAmounts.push_back(amount);
     }
-    if (ddChange > 0 && ddChange >= minOutput) {
+    if (ddChange > 0) {
         ddOutputAmounts.push_back(ddChange);
     }
 
@@ -780,18 +772,13 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     LogPrintf("DigiDollar: Conservation check - Input: %d cents, Output: %d cents\n",
               totalDDIn, finalDDOut);
 
-    // FIXED: Allow dust remainder when sending full balance (Task 5 fix)
-    // Instead of strict equality, allow for dust that's below the minimum output
-    CAmount ddDifference = totalDDIn - finalDDOut;
-    if (ddDifference < 0 || ddDifference > minOutput) {
+    // DD conservation is absolute — every cent in must equal every cent out.
+    // DD change outputs are always created (no dust exception), so strict equality holds.
+    if (totalDDIn != finalDDOut) {
         result.error = "DD conservation violation: input=" + std::to_string(totalDDIn) +
                       " output=" + std::to_string(finalDDOut) +
-                      " diff=" + std::to_string(ddDifference);
+                      " diff=" + std::to_string(totalDDIn - finalDDOut);
         return result;
-    }
-    if (ddDifference > 0) {
-        LogPrintf("DigiDollar: Allowing dust remainder of %d cents (< %d minimum)\n",
-                  ddDifference, minOutput);
     }
 
     // Set actual fees (already calculated above)
@@ -839,25 +826,14 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     for (const auto& [addr, amt] : params.recipients) {
         totalDDOutCheck += amt;
     }
-    // Add DD change if exists and was added as output
-    if (ddChange > 0 && ddChange >= minOutput) {
+    // Add DD change if exists — always created for any positive remainder
+    if (ddChange > 0) {
         totalDDOutCheck += ddChange;
     }
 
-    // FIXED: Allow dust remainder when sending full balance
-    // The conservation check should allow for small dust remainder (< minOutput)
-    // This enables users to send 100% of their balance
-
-    if (totalDDInCheck < totalDDOutCheck) {
+    // DD conservation is absolute — every cent must be accounted for
+    if (totalDDInCheck != totalDDOutCheck) {
         result.error = strprintf("DD amount mismatch: in=%d, out=%d", totalDDInCheck, totalDDOutCheck);
-        return result;
-    }
-
-    // Verify that any unaccounted DD is within the dust threshold
-    CAmount unaccountedDD = totalDDInCheck - totalDDOutCheck;
-    if (unaccountedDD > minOutput) {
-        result.error = strprintf("Excessive unaccounted DD: %d cents (max allowed: %d cents)",
-                                 unaccountedDD, minOutput);
         return result;
     }
 

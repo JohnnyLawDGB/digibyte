@@ -284,19 +284,22 @@ BOOST_FIXTURE_TEST_CASE(test_no_dd_change_exact_amount, DDChangeTestFixture)
 
 BOOST_FIXTURE_TEST_CASE(test_dd_change_below_dust, DDChangeTestFixture)
 {
-    // Arrange: DD change would be below dust threshold
+    // Arrange: DD change would be below the $1 minimum send threshold.
+    // Unlike DGB dust, DD has real dollar value — sub-$1 change MUST be
+    // preserved as a change output, not silently dropped. (Bug #27 fix)
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
 
     const auto& ddParams = chainParams.GetDigiDollarParams();
-    CAmount minOutput = DigiDollar::GetMinimumDDOutput(ddParams);
+    CAmount minOutput = DigiDollar::GetMinimumDDOutput(ddParams); // 100 cents = $1
 
-    // Create scenario where change would be below minimum
-    CAmount totalDD = 10000; // 100 DD
-    CAmount sendAmount = totalDD - (minOutput - 1); // Leave dust change
+    // Send 100 DD minus 99 cents → leaves 99 cents change (sub-$1)
+    CAmount totalDD = 10000; // 100 DD ($100.00)
+    CAmount sendAmount = totalDD - (minOutput - 1); // 10000 - 99 = 9901 cents ($99.01)
+    CAmount expectedChange = minOutput - 1; // 99 cents ($0.99)
 
     TxBuilderTransferParams params;
     params.recipients = {{recipientAddr, sendAmount}};
-    params.feeRate = 100000; // 100,000 sat/kB
+    params.feeRate = 100000;
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(totalDD));
     params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
@@ -306,20 +309,156 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_below_dust, DDChangeTestFixture)
     // Act
     TxBuilderResult result = builder.BuildTransferTransaction(params);
 
-    // Assert: Transaction should SUCCEED - dust change is now allowed
-    // This enables users to send their full DD balance (Task 5 fix)
-    // The dust DD will remain unspent in the UTXO set
+    // Assert: Transaction succeeds
     BOOST_CHECK_EQUAL(result.success, true);
-    BOOST_CHECK(result.error.empty());
+    BOOST_CHECK_MESSAGE(result.error.empty(), "Unexpected error: " << result.error);
 
-    // Verify no change output was created (dust is left behind)
+    // Extract DD amounts from OP_RETURN
     std::vector<CAmount> ddAmounts;
-    for (const auto& out : result.tx.vout) {
-        if (out.scriptPubKey[0] == OP_RETURN && out.scriptPubKey.size() > 4) {
-            // Parse DD amounts from OP_RETURN
-            // This is a simplified check - just verify transaction succeeded
+    bool found_opreturn = false;
+    for (const auto& output : result.tx.vout) {
+        if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
+            found_opreturn = ExtractDDAmountsFromOpReturn(output.scriptPubKey, ddAmounts);
+            break;
         }
     }
+
+    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+
+    // Must have 2 DD amounts: recipient + sub-$1 change (NOT dropped as dust)
+    BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
+
+    // Total DD must be perfectly conserved
+    CAmount totalDDOut = 0;
+    for (CAmount amount : ddAmounts) {
+        totalDDOut += amount;
+    }
+    BOOST_CHECK_EQUAL(totalDDOut, totalDD);
+
+    // Verify exact amounts
+    std::sort(ddAmounts.begin(), ddAmounts.end());
+    BOOST_CHECK_EQUAL(ddAmounts[0], expectedChange); // 99 cents change
+    BOOST_CHECK_EQUAL(ddAmounts[1], sendAmount); // 9901 cents recipient
+}
+
+/**
+ * Bug #27 regression test: Many small DD-UTXOs where multi-input aggregation
+ * produces sub-$1 change. This is the exact scenario reported by shenger.
+ *
+ * Previously, the builder silently dropped sub-$1 DD change and excluded it
+ * from the OP_RETURN. The validator then saw inputDD != outputDD and rejected
+ * the transaction with "transfer-dd-conservation-violation, DD not conserved."
+ */
+BOOST_FIXTURE_TEST_CASE(test_bug27_multi_input_dd_conservation, DDChangeTestFixture)
+{
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    // Simulate shenger's wallet: 20 small DD-UTXOs of $5 each = $100 total
+    const int numUtxos = 20;
+    const CAmount perUtxo = 500; // 500 cents = $5.00 each
+    CAmount totalDD = numUtxos * perUtxo; // 10000 cents = $100.00
+
+    TxBuilderTransferParams params;
+    // Send $99.50 — leaves $0.50 change (below old $1 dust threshold)
+    params.recipients = {{recipientAddr, 9950}}; // $99.50
+    params.feeRate = 100000;
+    params.spenderKey = senderKey;
+
+    for (int i = 0; i < numUtxos; i++) {
+        params.ddUtxos.push_back(CreateMockDDUTXO(perUtxo));
+    }
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    // Act
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    // Assert: Must succeed — this was the exact failure scenario
+    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_CHECK_MESSAGE(result.error.empty(), "Bug #27 regression: " << result.error);
+
+    // Extract DD amounts from OP_RETURN
+    std::vector<CAmount> ddAmounts;
+    bool found_opreturn = false;
+    for (const auto& output : result.tx.vout) {
+        if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
+            found_opreturn = ExtractDDAmountsFromOpReturn(output.scriptPubKey, ddAmounts);
+            break;
+        }
+    }
+
+    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+
+    // Must have 2 amounts: $99.50 recipient + $0.50 change
+    BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
+
+    // CRITICAL: Total DD must be perfectly conserved — not one cent lost
+    CAmount totalDDOut = 0;
+    for (CAmount amount : ddAmounts) {
+        totalDDOut += amount;
+    }
+    BOOST_CHECK_EQUAL(totalDDOut, totalDD); // 10000 == 10000
+
+    // Verify exact amounts
+    std::sort(ddAmounts.begin(), ddAmounts.end());
+    BOOST_CHECK_EQUAL(ddAmounts[0], 50); // 50 cents ($0.50) change — was silently dropped before
+    BOOST_CHECK_EQUAL(ddAmounts[1], 9950); // 9950 cents ($99.50) recipient
+
+    // Count P2TR DD outputs (nValue==0, starts with OP_1)
+    int dd_outputs = 0;
+    for (const auto& output : result.tx.vout) {
+        if (output.nValue == 0 && output.scriptPubKey.size() > 1 && output.scriptPubKey[0] == 0x51) {
+            dd_outputs++;
+        }
+    }
+    // Must have 2 DD P2TR outputs: recipient + change (change was missing before)
+    BOOST_CHECK_EQUAL(dd_outputs, 2);
+}
+
+/**
+ * Verify that single-cent DD change is preserved.
+ * Edge case: send $99.99 from $100.00 — $0.01 change must survive.
+ */
+BOOST_FIXTURE_TEST_CASE(test_single_cent_dd_change_preserved, DDChangeTestFixture)
+{
+    std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
+
+    TxBuilderTransferParams params;
+    params.recipients = {{recipientAddr, 9999}}; // $99.99
+    params.feeRate = 100000;
+    params.spenderKey = senderKey;
+    params.ddUtxos.push_back(CreateMockDDUTXO(10000)); // $100.00
+    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+
+    MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
+
+    TxBuilderResult result = builder.BuildTransferTransaction(params);
+
+    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_CHECK_MESSAGE(result.error.empty(), "Unexpected error: " << result.error);
+
+    // Extract DD amounts from OP_RETURN
+    std::vector<CAmount> ddAmounts;
+    for (const auto& output : result.tx.vout) {
+        if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
+            ExtractDDAmountsFromOpReturn(output.scriptPubKey, ddAmounts);
+            break;
+        }
+    }
+
+    // Must have 2 amounts: $99.99 + $0.01 change
+    BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
+
+    CAmount totalDDOut = 0;
+    for (CAmount amount : ddAmounts) {
+        totalDDOut += amount;
+    }
+    BOOST_CHECK_EQUAL(totalDDOut, 10000); // Perfect conservation
+
+    std::sort(ddAmounts.begin(), ddAmounts.end());
+    BOOST_CHECK_EQUAL(ddAmounts[0], 1); // 1 cent change — the absolute minimum
+    BOOST_CHECK_EQUAL(ddAmounts[1], 9999); // $99.99 recipient
 }
 
 BOOST_AUTO_TEST_SUITE_END()

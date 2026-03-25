@@ -100,11 +100,11 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Verify Phase Two: 5-of-9 consensus for testnet
-    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 5);  // 5 signatures required
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 9);     // 9 active oracles
+    // Verify Phase Two: 9-of-15 consensus for testnet
+    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 9);   // 9 signatures required
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 15);    // 15 active oracles
 
-    // Verify ratio is 62.5% (5-of-8, strict majority)
+    // Verify ratio is 60% (9-of-15, strict supermajority)
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
                             ddParams.activeOracles;
     BOOST_CHECK(consensus_ratio > 0.5);  // Must be strict majority
@@ -271,13 +271,13 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 9 active oracles
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 9);
+    // Phase Two: 15 active oracles (9-of-15 consensus)
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 15);
 
     // Verify oracle nodes match configuration
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
 
-    // Count active oracles
+    // Count active oracles (9 real + 6 placeholders with is_active=false)
     int active_count = 0;
     for (const auto& oracle : oracle_nodes) {
         if (oracle.is_active) {
@@ -285,8 +285,9 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
         }
     }
 
-    // Phase Two: All 9 oracles should be active
+    // 9 real oracles active, 6 placeholders inactive — 15 total
     BOOST_CHECK_EQUAL(active_count, 9);
+    BOOST_CHECK_EQUAL((int)oracle_nodes.size(), 15);
 
     LogPrintf("Phase Two oracle count: %d active, %d total\n",
               active_count, oracle_nodes.size());
@@ -308,14 +309,14 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 5-of-9 consensus (strict majority)
-    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 5);
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 9);
+    // Phase Two: 9-of-15 consensus (strict supermajority)
+    BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 9);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 15);
 
     // Verify strict majority (threshold > activeOracles / 2)
     BOOST_CHECK(ddParams.oracleThreshold > ddParams.activeOracles / 2);
 
-    // Calculate consensus percentage (~57%)
+    // Calculate consensus percentage (60%)
     double consensus_pct = 100.0 * ddParams.oracleThreshold / ddParams.activeOracles;
     BOOST_CHECK(consensus_pct > 50.0);
 

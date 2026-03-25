@@ -526,19 +526,19 @@ public:
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
-        digidollarParams.oracleThreshold = 5;                         // 5-of-9 consensus for Phase Two (strict majority)
-        digidollarParams.activeOracles = 9;                           // 9 active oracles
-        digidollarParams.oracleCount = 9;                             // Total 9 oracles defined
+        digidollarParams.oracleThreshold = 9;                         // 9-of-15 consensus for Phase Two (strict supermajority)
+        digidollarParams.activeOracles = 15;                          // 15 active oracles
+        digidollarParams.oracleCount = 15;                            // Total 15 oracles defined
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
 
-        // Oracle system parameters — Testnet 5-of-9 consensus
+        // Oracle system parameters — Testnet 9-of-15 consensus
         // Oracle activation matches DigiDollar BIP9 activation — everything at block 600
         consensus.nOracleActivationHeight = 600;      // Same as nDDActivationHeight
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 5;        // Phase Two: 5-of-9 consensus (strict majority)
-        consensus.nOracleTotalOracles = 9;            // 9 oracles active
+        consensus.nOracleRequiredMessages = 9;        // Phase Two: 9-of-15 consensus (strict supermajority)
+        consensus.nOracleTotalOracles = 15;           // 15 oracles active
         // Multi-oracle activates at same height as DigiDollar (no separate phases)
         // Everything — DD minting, oracle consensus, multi-oracle — activates together
         consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
@@ -554,6 +554,12 @@ public:
         consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // oracle 6 - Aussie (new key RC15)
         consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // oracle 7 - LookInto (new key RC13)
         consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // oracle 8 - JohnnyLawDGB (new RC19)
+        consensus.vOraclePublicKeys.push_back("19feb4347582d94511d5dfb2ddca411d8fa65f424d8eee1a63fb733ca992b379");  // oracle 9 - PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("4ddb60c17baca147ff0ce656fe775a54a1fe6890edadb104c35dcc8338d3775d");  // oracle 10 - PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // oracle 11 - PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // oracle 12 - PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("5d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a");  // oracle 13 - PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // oracle 14 - PLACEHOLDER (reserved)
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
         LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
@@ -561,7 +567,6 @@ public:
                  consensus.nOracleTotalOracles, consensus.nDigiDollarPhase2Height);
 
         // Testnet-specific oracle and activation settings
-        // Activate at block 1 for consistent testnet behavior
         consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
         consensus.nDDOracleUpdateInterval = 2;     // Update price every 2 blocks (~30 seconds)
         consensus.nDDActivationHeight = 600;       // DigiDollar BIP9 activation at block 600 (DEFINED→STARTED→LOCKED_IN→ACTIVE)
@@ -570,18 +575,24 @@ public:
 private:
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // Phase Two: 9 oracles active (5-of-9 consensus)
+        // Phase Two: 15 oracles active (9-of-15 consensus)
         vOracleNodes = {
-            // 9 testnet oracles — compressed pubkeys must match consensus.vOraclePublicKeys (x-only)
-            {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12033", true},  // Jared
-            {1,  ParsePubKey("033dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digibyte.io:12033", true},  // Green Candle
-            {2,  ParsePubKey("03172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digibyte.io:12033", true},  // Bastian
-            {3,  ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12033", true},  // DanGB
-            {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12033", true},  // Shenger
-            {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12033", true},  // Ycagel
-            {6,  ParsePubKey("037a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digibyte.io:12033", true},  // Aussie (new key RC15)
-            {7,  ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12033", true},  // LookInto (new key RC13)
-            {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12033", true},  // JohnnyLawDGB (new RC19)
+            // 15 testnet oracles — compressed pubkeys must match consensus.vOraclePublicKeys (x-only)
+            {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12033", true},   // Jared
+            {1,  ParsePubKey("033dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digibyte.io:12033", true},   // Green Candle
+            {2,  ParsePubKey("03172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digibyte.io:12033", true},   // Bastian
+            {3,  ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12033", true},   // DanGB
+            {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12033", true},   // Shenger
+            {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12033", true},   // Ycagel
+            {6,  ParsePubKey("037a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digibyte.io:12033", true},   // Aussie (new key RC15)
+            {7,  ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12033", true},   // LookInto (new key RC13)
+            {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12033", true},   // JohnnyLawDGB (new RC19)
+            {9,  ParsePubKey("0219feb4347582d94511d5dfb2ddca411d8fa65f424d8eee1a63fb733ca992b379"), "oracle10.digibyte.io:12033", false}, // RESERVED (placeholder)
+            {10, ParsePubKey("024ddb60c17baca147ff0ce656fe775a54a1fe6890edadb104c35dcc8338d3775d"), "oracle11.digibyte.io:12033", false}, // RESERVED (placeholder)
+            {11, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle12.digibyte.io:12033", false}, // RESERVED (placeholder)
+            {12, ParsePubKey("020e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a"), "oracle13.digibyte.io:12033", false}, // RESERVED (placeholder)
+            {13, ParsePubKey("025d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a"), "oracle14.digibyte.io:12033", false}, // RESERVED (placeholder)
+            {14, ParsePubKey("0202e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17"), "oracle15.digibyte.io:12033", false}, // RESERVED (placeholder)
         };
     }
 };

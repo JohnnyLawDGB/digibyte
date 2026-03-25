@@ -479,12 +479,12 @@ BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
 {
-    // Test that testnet has exactly 9 oracle nodes (all active)
+    // Test that testnet has exactly 15 oracle nodes (9-of-15 consensus)
     auto chainparams = CChainParams::TestNet();
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
-    BOOST_CHECK_EQUAL(oracles.size(), 9);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 9);  // Phase Two: 5-of-9 consensus
+    BOOST_CHECK_EQUAL(oracles.size(), 15);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 15);  // Phase Two: 9-of-15 consensus
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)

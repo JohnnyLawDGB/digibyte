@@ -285,8 +285,8 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
         }
     }
 
-    // 9 real oracles active, 6 placeholders inactive — 15 total
-    BOOST_CHECK_EQUAL(active_count, 9);
+    // 10 real oracles active (IDs 0-8 + Ogilvie at 9), 5 placeholders inactive — 15 total
+    BOOST_CHECK_EQUAL(active_count, 10);
     BOOST_CHECK_EQUAL((int)oracle_nodes.size(), 15);
 
     LogPrintf("Phase Two oracle count: %d active, %d total\n",

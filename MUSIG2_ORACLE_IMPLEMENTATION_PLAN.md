@@ -175,13 +175,21 @@ Total data: 17 + (N × 65) bytes
 OP_RETURN OP_ORACLE [push version=0x03] [push data]
 
 Data layout:
-  signer_bitmap:    2 bytes (uint16 LE — which oracles participated, max 16 oracles)
+  bitmap_len:       1 byte (uint8 — length of signer bitmap in bytes)
+  signer_bitmap:    bitmap_len bytes (bit N = 1 means oracle N participated)
   consensus_price:  8 bytes (uint64 LE, micro-USD)
   consensus_time:   8 bytes (int64 LE, Unix timestamp)
   aggregate_sig:    64 bytes (BIP 340 Schnorr signature — MuSig2 aggregate)
 
-Total data: 82 bytes (CONSTANT regardless of oracle count)
+Total data: 81 + bitmap_len bytes
+  15 oracles:  81 + 2 = 83 bytes
+  30 oracles:  81 + 4 = 85 bytes
+  64 oracles:  81 + 8 = 89 bytes
+  100 oracles: 81 + 13 = 94 bytes
+  256 oracles: 81 + 32 = 113 bytes
 ```
+
+The variable-length bitmap (with 1-byte length prefix) means this format **never needs to change** regardless of how many oracles DigiDollar grows to support. The aggregate signature is always exactly 64 bytes — the only variable is the bitmap, which grows at 1 bit per oracle.
 
 ### Signing flow (proposed):
 ```
@@ -545,17 +553,84 @@ An attacker cannot construct a valid aggregate signature for a bitmap they didn'
 
 ---
 
+## Scaling Beyond 15 Oracles
+
+A key advantage of MuSig2 is that on-chain size barely changes as oracle count grows. The only variable-size component is the signer bitmap (1 bit per possible oracle). The aggregate signature is always exactly 64 bytes.
+
+### On-chain size at scale:
+
+```
+Oracle Count | Bitmap | Total On-Chain | Current (individual sigs)
+-------------|--------|----------------|-------------------------
+     15      |  2 B   |     88 B       |    999 B  (11× bigger)
+     30      |  4 B   |     90 B       |  1,974 B  (22× bigger)
+     64      |  8 B   |     94 B       |  4,184 B  (45× bigger)
+    100      | 13 B   |     99 B       |  6,524 B  (66× bigger)
+    256      | 32 B   |    118 B       | 16,657 B (141× bigger)
+```
+
+At 256 oracles, MuSig2 is **118 bytes**. The current approach would be **16,657 bytes** — that's 33.4 GB/year of oracle signatures alone. MuSig2 keeps it at 237 MB/year. The gap only gets wider.
+
+### Aggregate pubkey caching: the combinatorial wall
+
+For M-of-N verification, we need the aggregate pubkey for the specific M-oracle subset that signed. The number of possible subsets is C(N,M):
+
+```
+Config    | Possible Subsets | Cache Size (32B each) | Precompute?
+----------|------------------|-----------------------|------------
+ 9-of-15  |           5,005  |        156 KB         | ✅ YES — precompute all at startup
+ 9-of-16  |          11,440  |        357 KB         | ✅ YES — still fast
+15-of-30  |     155,117,520  |        4.6 GB         | ❌ NO — compute on-demand
+33-of-64  |     1.8 trillion |       impossible       | ❌ NO — compute on-demand
+```
+
+**The solution is simple:** `secp256k1_musig_pubkey_agg()` takes ~0.1ms for any subset size. With 15-second blocks, computing one aggregate pubkey per block validation is negligible. At ≤16 oracles, precompute the full cache. Above 16, compute on-demand with an LRU cache (most blocks will use the same few oracle subsets anyway since the same oracles tend to be online).
+
+### Bitmap encoding for future-proofing
+
+The v0x03 format uses a fixed 2-byte bitmap (uint16, max 16 oracles). To support more than 16 oracles in the future, two options:
+
+**Option A: Variable-length bitmap (recommended)**
+- First byte encodes bitmap length: `bitmap_len(1) + bitmap(bitmap_len) + price(8) + ts(8) + sig(64)`
+- 15 oracles: 1 + 2 + 80 = 83 bytes (only 1 byte more than fixed)
+- 100 oracles: 1 + 13 + 80 = 94 bytes
+- 256 oracles: 1 + 32 + 80 = 113 bytes
+- Unlimited future scaling with negligible overhead
+
+**Option B: Fixed widths with version bumps**
+- v0x03: uint16 bitmap (max 16 oracles)
+- v0x04 (future): uint32 bitmap (max 32 oracles)
+- v0x05 (future): uint64 bitmap (max 64 oracles)
+- Simple but requires consensus changes to scale
+
+**Recommendation:** Use Option A (variable-length bitmap) from the start. The 1-byte length prefix costs almost nothing and means we never need another format change for oracle scaling. Whether we have 15 or 500 oracles, the v0x03 format handles it.
+
+### Coordination protocol at scale
+
+MuSig2 coordination (nonce exchange + partial sig collection) gets harder with more oracles because:
+- More nonces to collect in Round 1
+- More partial sigs to collect in Round 2
+- More P2P messages per block interval
+
+However, each round is just "collect M messages from N possible senders" — the same problem we already solve for oracle price consensus. The timing budget (15-second blocks) is generous. With nonce pre-generation, only Round 2 (partial sigs) is time-critical, and partial signing is sub-millisecond per oracle.
+
+At 100+ oracles, the coordinator might receive 100 partial sigs but only needs 51. This is embarrassingly parallel and easily fits in the block interval. The P2P message volume scales linearly (not exponentially) — 100 nonce messages + 100 partial sig messages = 200 small messages per epoch, trivial for the DigiByte P2P network.
+
+**Bottom line: MuSig2 scales to hundreds of oracles with no on-chain size penalty and manageable coordination overhead. The current approach doesn't scale past ~15 without unacceptable chain bloat.**
+
+---
+
 ## Open Questions
 
 1. **Grace period duration:** How long after Phase 3 activation do we accept v0x02 bundles? Suggest 10,000 blocks (~1.7 days) to allow stragglers to upgrade.
 
-2. **Bitmap size:** Currently uint16 (max 16 oracles). If we ever want >16 oracles, we need uint32 (4 bytes) or variable-length encoding. 16 is sufficient for the foreseeable future.
+2. **Bitmap encoding:** Fixed uint16 (max 16, simpler) vs variable-length with length prefix (unlimited, 1 byte overhead)? **Recommend variable-length for future-proofing.**
 
 3. **Nonce pre-generation depth:** How many epochs ahead should oracles pre-generate nonces? 1 epoch ahead seems sufficient for 15-second blocks.
 
-4. **Aggregate pubkey caching strategy:** Precompute all C(15,9) = 5,005 aggregate pubkeys at startup? Or compute on-demand and cache? Memory: 5,005 × 32 bytes = ~160 KB. Suggest precompute.
+4. **Aggregate pubkey caching strategy:** At ≤16 oracles, precompute all C(N,M) aggregate pubkeys at startup (~160 KB). Above 16, use on-demand computation with LRU cache. `secp256k1_musig_pubkey_agg()` takes ~0.1ms — negligible per block.
 
-5. **FROST vs MuSig2+bitmap:** Should we evaluate FROST (true threshold sigs, no bitmap needed, constant-size output) as an alternative? FROST is less mature but eliminates the bitmap and the need for signer selection. BIP for FROST does not yet exist.
+5. **FROST vs MuSig2+bitmap:** Should we evaluate FROST (true threshold sigs, no bitmap needed, constant-size output) as an alternative? FROST is less mature but eliminates the bitmap and the need for signer selection. BIP for FROST does not yet exist. **Recommend MuSig2 — it's battle-tested and the bitmap overhead is negligible.**
 
 6. **Testnet vs mainnet activation:** Do we deploy Phase 3 on testnet20 (new testnet reset) or activate on existing testnet19? Suggest new testnet reset.
 

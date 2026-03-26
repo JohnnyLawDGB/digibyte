@@ -259,6 +259,37 @@ The variable-length bitmap (with 1-byte length prefix) means this format **never
 
 **Note:** Step 4 can be cached — for a given bitmap, the aggregate pubkey is deterministic. With 15 oracles and C(15,9)=5,005 possible subsets, all aggregate pubkeys can be precomputed at startup.
 
+### ⚠️ CRITICAL DESIGN CHANGE: Signature Message
+
+In Phase 2, each oracle signs a **different message**: `H(oracle_id || price || timestamp)`. This means every oracle's signature is unique — they can't be aggregated because MuSig2 requires all signers to sign the **same message**.
+
+In Phase 3, all participating oracles sign the **same message**: `H(bitmap || price || timestamp)`. The bitmap replaces individual oracle IDs — it encodes which oracles participated. This is what makes aggregation possible.
+
+**Implications:**
+- The bitmap must be agreed upon BEFORE signing (oracles need to know the signer set)
+- The coordinator determines the bitmap after collecting nonces in Round 1
+- If an oracle drops out between Round 1 and Round 2, the bitmap changes and everyone must re-sign (handled by session timeout + retry)
+
+### ⚠️ ARCHITECTURE NOTE: Epoch Rotation and Bitmap Scope
+
+The current oracle system has a **two-tier structure**:
+- **30 total oracle keys** hardcoded in chainparams (`ORACLE_TOTAL_COUNT = 30`)
+- **15 active oracles** selected per epoch via deterministic rotation (`ORACLE_ACTIVE_COUNT = 15`)
+- **9 required** for consensus (`nOracleRequiredMessages = 9` on testnet)
+
+**Decision needed: What does the bitmap reference?**
+
+**Option A: Global bitmap (bit N = oracle ID N from full 30-oracle set)**
+- Pro: Simple, self-describing — validators always know which oracle is which
+- Pro: No need to reconstruct epoch's active set to decode
+- Con: Bitmap must be wide enough for total oracle count (4 bytes for 30)
+- **Recommended for simplicity and future-proofing**
+
+**Option B: Epoch-relative bitmap (bit N = Nth oracle in this epoch's active set)**
+- Pro: Smaller bitmap (2 bytes for 15)
+- Con: Validators must compute `SelectOraclesForEpoch()` to decode bitmap
+- Con: Bitmap meaning changes every epoch — harder to audit/debug
+
 ---
 
 ## Size Comparison

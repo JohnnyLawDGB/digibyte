@@ -32,6 +32,55 @@
 
 ## Problem Statement
 
+### ⚠️ THE CORE PROBLEM: Linear Signature Growth
+
+The current oracle bundle implementation has a **fundamental scaling flaw**: on-chain size grows linearly with the number of oracles. Every oracle that signs adds exactly 65 bytes (1-byte ID + 64-byte Schnorr signature) to the coinbase OP_RETURN output. This means:
+
+- **More decentralization = bigger blocks.** The more oracles we add to strengthen the network, the more we bloat the chain. Security and efficiency are working against each other.
+- **The cost is permanent.** Oracle data is embedded in every single block, every 15 seconds, forever. There is no pruning — this data is part of consensus.
+- **It doesn't scale.** At 15 oracles, we're burning nearly 1 KB per block on signatures alone. At 30 oracles, it would be ~2 KB. At 100 oracles, ~6.5 KB. Per block. Forever.
+
+```
+ON-CHAIN ORACLE SIZE vs. ORACLE COUNT (current implementation)
+
+Bytes
+1100 ┤
+1000 ┤                                                          ●  15 oracles (999 B)
+ 900 ┤
+ 800 ┤
+ 700 ┤                                          ●  11 oracles (739 B)
+ 600 ┤                              ●  9 oracles (609 B)
+ 500 ┤                  ●  7 oracles (479 B)
+ 400 ┤          ●  5 oracles (349 B)
+ 300 ┤  ●  4 oracles (284 B)
+ 200 ┤
+ 100 ┤──────────────────────────────────────────────────────────── MuSig2 (88 B, ANY count)
+   0 ┤
+     └──┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────
+        4      5      7      9     11     13     15     30
+
+     Current: size = 24 + (N × 65) bytes  ← GROWS WITH EVERY ORACLE
+     MuSig2:  size = 88 bytes             ← CONSTANT REGARDLESS OF COUNT
+```
+
+**Annual chain growth from oracle data alone:**
+
+| Oracles | Current Size | Annual Growth | MuSig2 Size | MuSig2 Annual |
+|---------|-------------|---------------|-------------|---------------|
+| 5-of-9 | 349 B/block | **700 MB/year** | 88 B/block | 176 MB/year |
+| 9-of-15 | 609 B/block | **1.22 GB/year** | 88 B/block | 176 MB/year |
+| 15-of-15 | 999 B/block | **2.00 GB/year** | 88 B/block | 176 MB/year |
+| 15-of-30 | 1,974 B/block | **3.96 GB/year** | 90 B/block | 180 MB/year |
+| 30-of-100 | 6,474 B/block | **12.97 GB/year** | 94 B/block | 188 MB/year |
+
+Over 10 years at 9-of-15, the current design adds **12.2 GB** of signature data to the chain. With MuSig2, that same 10 years costs **1.76 GB** — a saving of over 10 GB.
+
+**This is a design flaw, not a feature.** The whitepaper explicitly called for aggregate signatures. The implementation took a shortcut.
+
+---
+
+### Whitepaper Specification (not implemented)
+
 The DigiDollar whitepaper specifies that oracle bundles should use Schnorr threshold/aggregate signatures for efficient on-chain storage:
 
 > *"Threshold Signatures: Schnorr enables the possibility of threshold signatures – multiple oracles could produce a single aggregated signature on the median price. This single signature in the block header is smaller than including several individual signatures, reducing block space usage and simplifying validation."*

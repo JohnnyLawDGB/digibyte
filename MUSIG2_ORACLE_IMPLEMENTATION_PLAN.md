@@ -294,19 +294,36 @@ The current oracle system has a **two-tier structure**:
 
 ## Size Comparison
 
-| Configuration | Current (v0x02) | MuSig2 (v0x03) | Savings |
-|---------------|-----------------|-----------------|---------|
-| 4-of-7 | 284 bytes | 88 bytes | **69%** |
-| 5-of-9 | 349 bytes | 88 bytes | **75%** |
-| 9-of-15 | 609 bytes | 88 bytes | **86%** |
-| 15-of-15 | 999 bytes | 88 bytes | **91%** |
+### Byte-exact validated sizes (verified against CreateOracleScript output + format spec):
 
-| Configuration | Current Annual | MuSig2 Annual | Savings |
-|---------------|----------------|---------------|---------|
-| 9-of-15 | 1,221 MB/year | 176 MB/year | **1,045 MB/year** |
-| 15-of-15 | 2,003 MB/year | 176 MB/year | **1,827 MB/year** |
+| Configuration | Current Script | MuSig2 Script | Savings | Annual Current | Annual MuSig2 |
+|---------------|---------------|---------------|---------|----------------|---------------|
+| 4-of-7 | 285 B | 89 B | **69%** | 571 MB | 178 MB |
+| 5-of-9 | 350 B | 90 B | **74%** | 702 MB | 180 MB |
+| 9-of-15 | 610 B | 90 B | **85%** | 1,223 MB | 180 MB |
+| 15-of-15 | 1,000 B | 90 B | **91%** | 2,005 MB | 180 MB |
+| 15-of-30 | 1,000 B | 92 B | **91%** | 2,005 MB | 184 MB |
+| 26-of-50 | 1,715 B | 95 B | **94%** | 3,439 MB | 190 MB |
+| 51-of-100 | 3,340 B | 101 B | **97%** | 6,697 MB | 202 MB |
+| 129-of-256 | 8,410 B | 120 B | **99%** | 16,862 MB | 241 MB |
+
+**10-year chain growth from oracle data:**
+
+| Scenario | Current | MuSig2 | Saved |
+|----------|---------|--------|-------|
+| Launch (9-of-15) | **11.9 GB** | **1.76 GB** | 10.2 GB |
+| Growth (26-of-50) | **33.6 GB** | **1.86 GB** | 31.7 GB |
+| Scale (51-of-100) | **65.4 GB** | **1.98 GB** | 63.4 GB |
+| Max (129-of-256) | **164.7 GB** | **2.35 GB** | 162.3 GB |
 
 (Based on 15-second block times = 2,102,400 blocks/year)
+
+### Verified: aggregate signature uses standard Schnorr verify
+
+From the official libsecp256k1 MuSig2 documentation:
+> *"The aggregate signature can be verified with `secp256k1_schnorrsig_verify`."*
+
+This means validating nodes do NOT need new cryptographic verification code. The only new code needed for verification is computing the aggregate pubkey from the bitmap + chainparams keys (one call to `secp256k1_musig_pubkey_agg`).
 
 ---
 

@@ -324,6 +324,8 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/descriptor_parse.cpp \
  test/fuzz/digibyte_pow.cpp \
  test/fuzz/deserialize.cpp \
+ test/fuzz/digidollar_consensus.cpp \
+ test/fuzz/digidollar_logic.cpp \
  test/fuzz/digishield.cpp \
  test/fuzz/eval_script.cpp \
  test/fuzz/fee_rate.cpp \
@@ -405,7 +407,10 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/utxo_snapshot.cpp \
  test/fuzz/utxo_total_supply.cpp \
  test/fuzz/validation_load_mempool.cpp \
- test/fuzz/versionbits.cpp
+ test/fuzz/versionbits.cpp \
+ test/fuzz/digidollar_txbuilder.cpp \
+ test/fuzz/digidollar_health.cpp \
+ test/fuzz/digidollar_scripts.cpp
 endif # ENABLE_FUZZ_BINARY
 
 nodist_test_test_digibyte_SOURCES = $(GENERATED_TEST_FILES)

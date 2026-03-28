@@ -84,6 +84,42 @@ const std::vector<std::string> RPC_COMMANDS_NOT_SAFE_FOR_FUZZING{
     "savemempool",           // disabled as a precautionary measure: may take a file path argument in the future
     "setban",                // avoid DNS lookups
     "stop",                  // avoid shutdown state
+    // DigiDollar RPC commands — require DD activation + wallet context
+    "calculatecollateralrequirement",
+    "createoraclekey",
+    "createrawddtransaction",
+    "enablemockoracle",
+    "estimatecollateral",
+    "getalloracleprices",
+    "getdcamultiplier",
+    "getdigidollaraddress",
+    "getdigidollarbalance",
+    "getdigidollardeploymentinfo",
+    "getdigidollarinfo",
+    "getdigidollarstats",
+    "getmockoracleprice",
+    "getoracleprice",
+    "getoraclepubkey",
+    "getoracles",
+    "getprotectionstatus",
+    "getredemptioninfo",
+    "importdigidollaraddress",
+    "listdigidollaraddresses",
+    "listdigidollarpositions",
+    "listdigidollartxs",
+    "listoracle",
+    "listredeemablepositions",
+    "mintdigidollar",
+    "redeemdigidollar",
+    "senddigidollar",
+    "sendoracleprice",
+    "setmockoracleprice",
+    "simulatepricevolatility",
+    "startoracle",
+    "stoporacle",
+    "submitoracleprice",
+    "transferdigidollar",
+    "validateddaddress",
 };
 
 // RPC commands which are safe for fuzzing.
@@ -119,6 +155,7 @@ const std::vector<std::string> RPC_COMMANDS_SAFE_FOR_FUZZING{
     "getblockfrompeer", // when no peers are connected, no p2p message is sent
     "getblockhash",
     "getblockheader",
+    "getblockreward", // DigiByte: current block reward info (read-only)
     "getblockstats",
     "getblocktemplate",
     "getchaintips",

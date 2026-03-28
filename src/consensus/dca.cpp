@@ -55,18 +55,21 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     // oraclePrice is in milli-cents per DGB (e.g., 5000 = $0.05 = 5 cents per DGB)
     // Note: oraclePrice = actual_price_in_dollars * 100,000
     // Convert: (satoshis * millicents/DGB) / satoshis/DGB / 1000 = cents
-    CAmount collateralValueMillicents;
+    //
+    // Use __int128 to prevent signed integer overflow.
+    // Both totalCollateral and oraclePrice can be up to MAX_MONEY (~2.1e18),
+    // and their product (~4.4e36) exceeds int64_t max (~9.2e18).
+    // The previous divide-first fallback also overflowed when both values
+    // were extreme (e.g., (MAX_MONEY / COIN) * MAX_MONEY = ~4.4e28).
+    __int128 collateralValueMillicents128 = static_cast<__int128>(totalCollateral) * static_cast<__int128>(oraclePrice);
+    collateralValueMillicents128 /= COIN;
 
-    // Avoid overflow by checking if we can safely multiply
-    const CAmount maxSafeValue = std::numeric_limits<CAmount>::max() / oraclePrice;
-    if (totalCollateral > maxSafeValue) {
-        LogPrintf("DCA: Potential overflow in collateral calculation, using conservative estimate\n");
-        // Use conservative calculation to avoid overflow
-        // Divide by COIN first, then multiply by price
-        collateralValueMillicents = (totalCollateral / COIN) * oraclePrice;
+    // Clamp to CAmount range before converting back
+    CAmount collateralValueMillicents;
+    if (collateralValueMillicents128 > std::numeric_limits<CAmount>::max()) {
+        collateralValueMillicents = std::numeric_limits<CAmount>::max();
     } else {
-        // Multiply first for precision, then divide
-        collateralValueMillicents = (totalCollateral * oraclePrice) / COIN;
+        collateralValueMillicents = static_cast<CAmount>(collateralValueMillicents128);
     }
 
     // Convert from millicents to cents
@@ -100,7 +103,10 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
     }
 
     // Cap at reasonable maximum (300% = very healthy system)
-    int systemHealth = std::min(static_cast<int>(healthCalculation), 30000);
+    // Clamp healthCalculation BEFORE casting to int to prevent int overflow
+    // when healthCalculation exceeds INT_MAX (e.g., massive collateral with
+    // tiny DD supply).
+    int systemHealth = static_cast<int>(std::min(healthCalculation, static_cast<CAmount>(30000)));
 
     LogPrint(BCLog::DIGIDOLLAR, "DCA: System health calculated: %d%% (collateral: %lld DGB, DD: %lld cents, price: %lld millicents/DGB)\n",
              systemHealth, totalCollateral / COIN, totalDD, oraclePrice);

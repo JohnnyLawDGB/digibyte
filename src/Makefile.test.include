@@ -310,6 +310,7 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/coins_view.cpp \
  test/fuzz/coinscache_sim.cpp \
  test/fuzz/connman.cpp \
+ test/fuzz/dandelion.cpp \
  test/fuzz/crypto.cpp \
  test/fuzz/crypto_aes256.cpp \
  test/fuzz/crypto_aes256cbc.cpp \
@@ -321,7 +322,9 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/cuckoocache.cpp \
  test/fuzz/decode_tx.cpp \
  test/fuzz/descriptor_parse.cpp \
+ test/fuzz/digibyte_pow.cpp \
  test/fuzz/deserialize.cpp \
+ test/fuzz/digishield.cpp \
  test/fuzz/eval_script.cpp \
  test/fuzz/fee_rate.cpp \
  test/fuzz/fees.cpp \
@@ -349,6 +352,7 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/netaddress.cpp \
  test/fuzz/netbase_dns_lookup.cpp \
  test/fuzz/node_eviction.cpp \
+ test/fuzz/odocrypt.cpp \
  test/fuzz/p2p_transport_serialization.cpp \
  test/fuzz/package_eval.cpp \
  test/fuzz/parse_hd_keypath.cpp \

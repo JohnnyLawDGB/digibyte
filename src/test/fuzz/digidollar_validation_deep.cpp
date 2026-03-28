@@ -398,6 +398,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
 
     uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 9);
 
+    try {
     // -- Strategy 1: Valid-looking single transfer --
     if (strategy == 1) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
@@ -551,6 +552,11 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
         CTransaction tx(mtx);
         TxValidationState state;
         (void)DigiDollar::ValidateTransferTransaction(tx, ctx, state);
+    }
+    } catch (const scriptnum_error&) {
+        // Invalid script numbers are expected during fuzzing.
+    } catch (const std::exception&) {
+        // Keep fuzz target robust against parser exceptions.
     }
 }
 

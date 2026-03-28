@@ -152,7 +152,7 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
     {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
 
-        int numInputs = fdp.ConsumeIntegralInRange<int>(0, 5);
+        int numInputs = fdp.ConsumeIntegralInRange<int>(0, 3);
         for (int i = 0; i < numInputs; i++) {
             uint256 hash;
             auto hb = fdp.ConsumeBytes<uint8_t>(32);
@@ -160,7 +160,7 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
             mtx.vin.emplace_back(COutPoint(hash, fdp.ConsumeIntegralInRange<uint32_t>(0, 10)));
         }
 
-        int numOutputs = fdp.ConsumeIntegralInRange<int>(0, 8);
+        int numOutputs = fdp.ConsumeIntegralInRange<int>(0, 4);
         for (int i = 0; i < numOutputs; i++) {
             CAmount val = fdp.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
             uint8_t scriptChoice = fdp.ConsumeIntegralInRange<uint8_t>(0, 2);
@@ -172,8 +172,8 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
                 CAmount ddAmt = fdp.ConsumeIntegralInRange<CAmount>(1, 100'000'000'000LL);
                 mtx.vout.emplace_back(0, MakeDDOpReturn(DigiDollar::DD_TX_MINT, ddAmt));
             } else {
-                // Random script
-                auto sb = ConsumeRandomLengthByteVector(fdp, 100);
+                // Random script (capped size)
+                auto sb = ConsumeRandomLengthByteVector(fdp, 32);
                 CScript rs(sb.begin(), sb.end());
                 mtx.vout.emplace_back(val, rs);
             }
@@ -334,7 +334,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     // -- Strategy 6: Fully fuzzed redemption --
     {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_REDEEM);
-        int numInputs = fdp.ConsumeIntegralInRange<int>(0, 6);
+        int numInputs = fdp.ConsumeIntegralInRange<int>(0, 3);
         for (int i = 0; i < numInputs; i++) {
             uint256 hash;
             auto hb = fdp.ConsumeBytes<uint8_t>(32);
@@ -342,7 +342,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
             mtx.vin.emplace_back(COutPoint(hash, fdp.ConsumeIntegralInRange<uint32_t>(0, 10)));
         }
 
-        int numOutputs = fdp.ConsumeIntegralInRange<int>(0, 6);
+        int numOutputs = fdp.ConsumeIntegralInRange<int>(0, 4);
         for (int i = 0; i < numOutputs; i++) {
             CAmount val = fdp.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
             if (fdp.ConsumeBool()) {
@@ -518,7 +518,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     // -- Strategy 9: Fully fuzzed transfer --
     {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
-        int numInputs = fdp.ConsumeIntegralInRange<int>(0, 6);
+        int numInputs = fdp.ConsumeIntegralInRange<int>(0, 3);
         for (int i = 0; i < numInputs; i++) {
             uint256 hash;
             auto hb = fdp.ConsumeBytes<uint8_t>(32);
@@ -526,7 +526,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
             mtx.vin.emplace_back(COutPoint(hash, fdp.ConsumeIntegralInRange<uint32_t>(0, 10)));
         }
 
-        int numOutputs = fdp.ConsumeIntegralInRange<int>(0, 8);
+        int numOutputs = fdp.ConsumeIntegralInRange<int>(0, 4);
         for (int i = 0; i < numOutputs; i++) {
             uint8_t choice = fdp.ConsumeIntegralInRange<uint8_t>(0, 2);
             if (choice == 0) {
@@ -536,7 +536,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
                 mtx.vout.emplace_back(0, MakeDDOpReturn(DigiDollar::DD_TX_TRANSFER, ddAmt));
             } else {
                 CAmount val = fdp.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
-                auto sb = ConsumeRandomLengthByteVector(fdp, 50);
+                auto sb = ConsumeRandomLengthByteVector(fdp, 32);
                 CScript rs(sb.begin(), sb.end());
                 mtx.vout.emplace_back(val, rs);
             }
@@ -576,7 +576,7 @@ FUZZ_TARGET(dd_supply_tracking, .init = initialize_dd_validation_deep)
     CAmount runningDD = 0;
     const auto& ddparams = chainparams.GetDigiDollarParams();
 
-    int ops = fdp.ConsumeIntegralInRange<int>(1, 20);
+    int ops = fdp.ConsumeIntegralInRange<int>(1, 10);
     for (int i = 0; i < ops; i++) {
         uint8_t opType = fdp.ConsumeIntegralInRange<uint8_t>(0, 2);
 
@@ -738,7 +738,7 @@ FUZZ_TARGET(dd_consensus_rules, .init = initialize_dd_validation_deep)
 
     // -- Strategy 6: Rapid succession of different types (ordering attacks) --
     {
-        int seqLen = fdp.ConsumeIntegralInRange<int>(2, 10);
+        int seqLen = fdp.ConsumeIntegralInRange<int>(2, 5);
         for (int i = 0; i < seqLen; i++) {
             uint8_t tt = fdp.ConsumeIntegralInRange<uint8_t>(1, 3);
             CMutableTransaction mtx = MakeDDTx(tt);

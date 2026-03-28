@@ -85,7 +85,10 @@ protected:
 
 COutPoint MineBlock(const NodeContext& node, std::shared_ptr<CBlock>& block)
 {
-    while (!CheckProofOfWork(block->GetHash(), block->nBits, Params().GetConsensus())) {
+    // DigiByte: Use GetPoWAlgoHash() instead of GetHash() so the PoW check
+    // uses the correct hash function for the block's algorithm (scrypt,
+    // sha256d, skein, etc.) rather than always using SHA256D.
+    while (!CheckProofOfWork(GetPoWAlgoHash(*block), block->nBits, Params().GetConsensus())) {
         ++block->nNonce;
         assert(block->nNonce);
     }
@@ -110,9 +113,13 @@ COutPoint MineBlock(const NodeContext& node, std::shared_ptr<CBlock>& block)
 std::shared_ptr<CBlock> PrepareBlock(const NodeContext& node, const CScript& coinbase_scriptPubKey,
                                      const BlockAssembler::Options& assembler_options)
 {
+    // DigiByte: Pick an algorithm that is active at the current chain height.
+    // ALGO_SCRYPT is always active (pre- and post-multiAlgo fork), so use it
+    // as the default instead of ALGO_SHA256D which is only valid after the
+    // multi-algo activation height (e.g. height 100 in regtest).
     auto block = std::make_shared<CBlock>(
         BlockAssembler{Assert(node.chainman)->ActiveChainstate(), Assert(node.mempool.get()), assembler_options}
-            .CreateNewBlock(coinbase_scriptPubKey, ALGO_SHA256D)
+            .CreateNewBlock(coinbase_scriptPubKey, ALGO_SCRYPT)
             ->block);
 
     LOCK(cs_main);

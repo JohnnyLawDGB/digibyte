@@ -55,6 +55,24 @@ struct ConnmanTestMsg : public CConnman {
 
     bool ReceiveMsgFrom(CNode& node, CSerializedNetMsg&& ser_msg) const;
     void FlushSendBuffer(CNode& node) const;
+
+    // Dandelion test helpers
+    void AddDandelionOutboundTest(CNode* pnode)
+    {
+        LOCK(m_nodes_mutex);
+        vDandelionOutbound.push_back(pnode);
+    }
+
+    void AddDandelionInboundTest(CNode* pnode)
+    {
+        LOCK(m_nodes_mutex);
+        vDandelionInbound.push_back(pnode);
+    }
+
+    void DandelionShuffleTest()
+    {
+        DandelionShuffle();
+    }
 };
 
 constexpr ServiceFlags ALL_SERVICE_FLAGS[]{

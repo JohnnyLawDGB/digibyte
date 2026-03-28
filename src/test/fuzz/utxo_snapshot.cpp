@@ -22,6 +22,10 @@ const std::vector<std::shared_ptr<CBlock>>* g_chain;
 
 void initialize_chain()
 {
+    // DigiByte: SelectParams must be called before CreateBlockChain because
+    // the free function GetPoWAlgoHash() calls Params() internally to get
+    // consensus params for multi-algo PoW hash selection.
+    SelectParams(ChainType::REGTEST);
     const auto params{CreateChainParams(ArgsManager{}, ChainType::REGTEST)};
     static const auto chain{CreateBlockChain(2 * COINBASE_MATURITY, *params)};
     g_chain = &chain;

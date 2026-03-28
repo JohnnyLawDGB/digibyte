@@ -111,8 +111,10 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
     DigiDollar::ValidationContext ctx(height, oraclePrice, systemHealth, chainparams,
                                       /*coins=*/nullptr, /*skip_oracle=*/true);
 
+    uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 5);
+
     // -- Strategy 1: Boundary DD amounts --
-    {
+    if (strategy == 1) {
         const CAmount boundaries[] = {
             0, 1,
             ddparams.minMintAmount - 1, ddparams.minMintAmount, ddparams.minMintAmount + 1,
@@ -149,7 +151,7 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 2: Fully fuzzed mint structure --
-    {
+    if (strategy == 2) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
 
         int numInputs = fdp.ConsumeIntegralInRange<int>(0, 3);
@@ -185,7 +187,7 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 3: Multiple DD outputs (inflation attack surface) --
-    {
+    if (strategy == 3) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
 
@@ -205,7 +207,7 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 4: DD token output with non-zero DGB value (invalid) --
-    {
+    if (strategy == 4) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
 
@@ -223,21 +225,20 @@ FUZZ_TARGET(dd_validate_mint, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 5: Empty/minimal transactions --
-    {
+    if (strategy == 5) {
         // No inputs
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
         CTransaction tx(mtx);
         TxValidationState state;
         (void)DigiDollar::ValidateMintTransaction(tx, ctx, state);
-    }
-    {
+
         // Single output only
-        CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
-        mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
-        mtx.vout.emplace_back(0, MakeP2TR(fdp));
-        CTransaction tx(mtx);
-        TxValidationState state;
-        (void)DigiDollar::ValidateMintTransaction(tx, ctx, state);
+        CMutableTransaction mtx2 = MakeDDTx(DigiDollar::DD_TX_MINT);
+        mtx2.vin.emplace_back(COutPoint(uint256::ONE, 0));
+        mtx2.vout.emplace_back(0, MakeP2TR(fdp));
+        CTransaction tx2(mtx2);
+        TxValidationState state2;
+        (void)DigiDollar::ValidateMintTransaction(tx2, ctx, state2);
     }
 }
 
@@ -259,8 +260,11 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     DigiDollar::ValidationContext ctx(height, oraclePrice, systemHealth, chainparams,
                                       nullptr, /*skip_oracle=*/true);
 
+    // Run only ONE strategy per iteration to control memory under ASan
+    uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 7);
+
     // -- Strategy 1: Basic redemption structure --
-    {
+    if (strategy == 1) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_REDEEM);
 
         // Collateral input (first input)
@@ -278,7 +282,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 2: Zero DD burn (should fail — no DD destroyed) --
-    {
+    if (strategy == 2) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_REDEEM);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 1));
@@ -297,7 +301,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 3: Maximum DD burn --
-    {
+    if (strategy == 3) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_REDEEM);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 1));
@@ -310,7 +314,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 4: Insufficient inputs (only 1 input — needs collateral + DD) --
-    {
+    if (strategy == 4) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_REDEEM);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vout.emplace_back(1'000'000'00LL, MakeP2TR(fdp));
@@ -321,7 +325,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 5: No outputs at all --
-    {
+    if (strategy == 5) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_REDEEM);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 1));
@@ -332,7 +336,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 6: Fully fuzzed redemption --
-    {
+    if (strategy == 6) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_REDEEM);
         int numInputs = fdp.ConsumeIntegralInRange<int>(0, 3);
         for (int i = 0; i < numInputs; i++) {
@@ -359,7 +363,7 @@ FUZZ_TARGET(dd_validate_redeem, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 7: ERR-related redemption edge cases --
-    {
+    if (strategy == 7) {
         // Force ERR active by setting low system health
         DigiDollar::ValidationContext errCtx(height, oraclePrice, 50 /* very low */, chainparams,
                                              nullptr, true);
@@ -392,8 +396,10 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     DigiDollar::ValidationContext ctx(height, oraclePrice, systemHealth, chainparams,
                                       nullptr, /*skip_oracle=*/true);
 
+    uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 9);
+
     // -- Strategy 1: Valid-looking single transfer --
-    {
+    if (strategy == 1) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
 
         // DD input
@@ -412,7 +418,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 2: Zero-amount transfer (should fail) --
-    {
+    if (strategy == 2) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vout.emplace_back(0, MakeP2TR(fdp));
@@ -424,7 +430,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 3: Negative amount transfer --
-    {
+    if (strategy == 3) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vout.emplace_back(0, MakeP2TR(fdp));
@@ -436,7 +442,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 4: Dust-amount transfer (just above/below minOutputAmount) --
-    {
+    if (strategy == 4) {
         const auto& ddp = chainparams.GetDigiDollarParams();
         for (CAmount amt : {CAmount(1), ddp.minOutputAmount - 1, ddp.minOutputAmount, ddp.minOutputAmount + 1}) {
             if (amt <= 0) continue;
@@ -452,7 +458,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 5: Transfer exceeding maximum ($100,000 = 10,000,000 cents) --
-    {
+    if (strategy == 5) {
         CAmount overMax = fdp.ConsumeIntegralInRange<CAmount>(10'000'001, 100'000'000'000LL);
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
@@ -465,7 +471,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 6: No inputs --
-    {
+    if (strategy == 6) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
         mtx.vout.emplace_back(0, MakeP2TR(fdp));
         mtx.vout.emplace_back(0, MakeDDOpReturn(DigiDollar::DD_TX_TRANSFER, 5000));
@@ -476,7 +482,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 7: Multiple DD outputs (split transfer) --
-    {
+    if (strategy == 7) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
 
@@ -503,7 +509,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 8: Non-DD version but transfer-shaped tx (should reject) --
-    {
+    if (strategy == 8) {
         CMutableTransaction mtx;
         mtx.nVersion = 2; // Regular tx version
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
@@ -516,7 +522,7 @@ FUZZ_TARGET(dd_validate_transfer, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 9: Fully fuzzed transfer --
-    {
+    if (strategy == 9) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_TRANSFER);
         int numInputs = fdp.ConsumeIntegralInRange<int>(0, 3);
         for (int i = 0; i < numInputs; i++) {
@@ -567,6 +573,8 @@ FUZZ_TARGET(dd_supply_tracking, .init = initialize_dd_validation_deep)
     DigiDollar::ValidationContext ctx(1000, oraclePrice, systemHealth, chainparams,
                                       nullptr, true);
 
+    uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 3);
+
     // Simulate a sequence of mint/transfer/redeem and track DD amounts.
     // Since we don't have a real UTXO set, we verify:
     // 1. ValidateMintAmount boundaries are consistent across calls
@@ -580,7 +588,7 @@ FUZZ_TARGET(dd_supply_tracking, .init = initialize_dd_validation_deep)
     for (int i = 0; i < ops; i++) {
         uint8_t opType = fdp.ConsumeIntegralInRange<uint8_t>(0, 2);
 
-        if (opType == 0) {
+        if (strategy == 1 && opType == 0) {
             // Mint
             CAmount ddAmt = fdp.ConsumeIntegralInRange<CAmount>(1, 100'000'000LL);
             bool validAmt = DigiDollar::IsValidMintAmount(ddAmt, ddparams);
@@ -601,7 +609,7 @@ FUZZ_TARGET(dd_supply_tracking, .init = initialize_dd_validation_deep)
             bool validOutput2 = DigiDollar::ValidateOutputAmount(ddAmt, chainparams);
             assert(validOutput == validOutput2);
 
-        } else if (opType == 1) {
+        } else if (strategy == 2 && opType == 1) {
             // Transfer (conservation check)
             if (runningDD > 0) {
                 CAmount transferAmt = fdp.ConsumeIntegralInRange<CAmount>(1, runningDD);
@@ -618,7 +626,7 @@ FUZZ_TARGET(dd_supply_tracking, .init = initialize_dd_validation_deep)
                 (void)changeAmt;
             }
 
-        } else {
+        } else if (strategy == 3) {
             // Redeem
             if (runningDD > 0) {
                 CAmount redeemAmt = fdp.ConsumeIntegralInRange<CAmount>(1, runningDD);
@@ -650,8 +658,10 @@ FUZZ_TARGET(dd_consensus_rules, .init = initialize_dd_validation_deep)
     DigiDollar::ValidationContext ctx(height, oraclePrice, systemHealth, chainparams,
                                       nullptr, true);
 
+    uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 6);
+
     // -- Strategy 1: All DD tx types through the dispatcher --
-    {
+    if (strategy == 1) {
         uint8_t txTypes[] = {
             DigiDollar::DD_TX_NONE,
             DigiDollar::DD_TX_MINT,
@@ -677,7 +687,7 @@ FUZZ_TARGET(dd_consensus_rules, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 2: Version field fuzzing (DD marker corruption) --
-    {
+    if (strategy == 2) {
         CMutableTransaction mtx;
         mtx.nVersion = fdp.ConsumeIntegral<int32_t>();
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
@@ -691,7 +701,7 @@ FUZZ_TARGET(dd_consensus_rules, .init = initialize_dd_validation_deep)
 
     // -- Strategy 3: Conflicting DD marker + wrong type --
     // E.g., version says MINT but outputs look like TRANSFER
-    {
+    if (strategy == 3) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         // Transfer-style OP_RETURN in a MINT tx
@@ -704,7 +714,7 @@ FUZZ_TARGET(dd_consensus_rules, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 4: Multiple OP_RETURNs (duplicate DD metadata) --
-    {
+    if (strategy == 4) {
         CMutableTransaction mtx = MakeDDTx(DigiDollar::DD_TX_MINT);
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vout.emplace_back(fdp.ConsumeIntegralInRange<CAmount>(1, MAX_MONEY), MakeP2TR(fdp));
@@ -720,7 +730,7 @@ FUZZ_TARGET(dd_consensus_rules, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 5: Determinism — same tx validated twice must give same result --
-    {
+    if (strategy == 5) {
         CMutableTransaction mtx = MakeDDTx(fdp.ConsumeIntegralInRange<uint8_t>(1, 3));
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
         mtx.vin.emplace_back(COutPoint(uint256::ONE, 1));
@@ -737,7 +747,7 @@ FUZZ_TARGET(dd_consensus_rules, .init = initialize_dd_validation_deep)
     }
 
     // -- Strategy 6: Rapid succession of different types (ordering attacks) --
-    {
+    if (strategy == 6) {
         int seqLen = fdp.ConsumeIntegralInRange<int>(2, 5);
         for (int i = 0; i < seqLen; i++) {
             uint8_t tt = fdp.ConsumeIntegralInRange<uint8_t>(1, 3);

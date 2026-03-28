@@ -217,9 +217,11 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     const auto& chainparams = Params();
     const auto& ddparams = chainparams.GetDigiDollarParams();
 
+    uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 8);
+
     // -- Strategy 1: Extreme DGB prices --
     // $0.001 DGB = 1000 micro-USD, $1000 DGB = 1,000,000,000,000 micro-USD
-    {
+    if (strategy == 1) {
         struct PriceCase {
             CAmount microUSD;
             const char* label;
@@ -244,6 +246,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
         for (const auto& pc : prices) {
             DigiDollar::ValidationContext ctx(1000, pc.microUSD, systemHealth, chainparams,
                                               nullptr, true);
+
             CAmount required = DigiDollar::CalculateRequiredCollateral(ddAmount, lockTime, ctx);
             assert(required >= 0);
             assert(required <= MAX_MONEY);
@@ -259,7 +262,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     }
 
     // -- Strategy 2: Extreme DD amounts --
-    {
+    if (strategy == 2) {
         CAmount extremeAmounts[] = {
             1,                      // 1 cent
             100,                    // $1
@@ -285,7 +288,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     }
 
     // -- Strategy 3: Extreme lock periods --
-    {
+    if (strategy == 3) {
         int64_t lockTimes[] = {
             1,                     // 1 block (~15 seconds)
             5760,                  // 1 day
@@ -317,7 +320,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     // -- Strategy 4: Collateral ratio tiers — verify monotonicity --
     // Longer lock = lower ratio = less collateral needed
     // So: RequiredCollateral(1 day) >= RequiredCollateral(5 years)
-    {
+    if (strategy == 4) {
         CAmount ddAmt = fdp.ConsumeIntegralInRange<CAmount>(1000, 1'000'000);
         CAmount oraclePrice = fdp.ConsumeIntegralInRange<CAmount>(10000, 10000000);
         int systemHealth = fdp.ConsumeIntegralInRange<int>(200, 30000);
@@ -340,7 +343,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
 
     // -- Strategy 5: DCA multiplier impact --
     // Worse system health = higher DCA multiplier = more collateral required
-    {
+    if (strategy == 5) {
         CAmount ddAmt = fdp.ConsumeIntegralInRange<CAmount>(1000, 1'000'000);
         CAmount oraclePrice = fdp.ConsumeIntegralInRange<CAmount>(10000, 10000000);
         int64_t lockTime = 40320; // 7 days
@@ -360,7 +363,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     }
 
     // -- Strategy 6: GetEffectiveCollateralRatio with fuzzed inputs --
-    {
+    if (strategy == 6) {
         int baseRatio = fdp.ConsumeIntegralInRange<int>(200, 1000);
         int fuzzHealth = fdp.ConsumeIntegralInRange<int>(0, 30000);
 
@@ -370,7 +373,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     }
 
     // -- Strategy 7: GetCollateralRatioForLockTime consistency --
-    {
+    if (strategy == 7) {
         int64_t lockBlocks = fdp.ConsumeIntegral<int64_t>();
         int ratio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddparams);
         assert(ratio >= 200 && ratio <= 1000);
@@ -381,7 +384,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     }
 
     // -- Strategy 8: ValidateCollateralRatio with extreme values --
-    {
+    if (strategy == 8) {
         CAmount dgbLocked = fdp.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
         CAmount ddMinted = fdp.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
         int64_t lockTime = fdp.ConsumeIntegralInRange<int64_t>(0, 100'000'000LL);
@@ -407,10 +410,12 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
 {
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
 
+    uint8_t strategy = fdp.ConsumeIntegralInRange<uint8_t>(1, 10);
+
     // -- Path A: CalculateSystemHealth --
     // dca.cpp: Takes totalCollateral (sats), totalDD (cents), oraclePrice (millicents)
     // Returns health percentage (0-30000)
-    {
+    if (strategy == 1) {
         CAmount totalCollateral = fdp.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
         CAmount totalDD = fdp.ConsumeIntegralInRange<CAmount>(0, 100'000'000'000LL);
         CAmount oraclePrice = fdp.ConsumeIntegralInRange<CAmount>(0, 100'000'000'000LL);
@@ -421,7 +426,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
     }
 
     // -- Path B: Full chain: health → DCA multiplier → effective ratio --
-    {
+    if (strategy == 2) {
         int systemHealth = fdp.ConsumeIntegralInRange<int>(0, 30000);
 
         double multiplier = DigiDollar::DCA::DynamicCollateralAdjustment::GetDCAMultiplier(systemHealth);
@@ -443,7 +448,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
     // When totalCollateral is very large and oraclePrice is very large,
     // the product could overflow int64_t. The code handles this with a
     // divide-first path.
-    {
+    if (strategy == 3) {
         // Adversarial: max collateral * max price
         int health = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
             MAX_MONEY, 1, MAX_MONEY);
@@ -471,7 +476,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
 
     // -- Path D: ERR adjustment ratio → DD burn calculation --
     // Test the full ERR math chain with fuzzed system health values
-    {
+    if (strategy == 4) {
         int systemHealth = fdp.ConsumeIntegralInRange<int>(-100, 30000);
 
         double ratio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
@@ -494,7 +499,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
     }
 
     // -- Path E: ERR DD burn with extreme amounts --
-    {
+    if (strategy == 5) {
         CAmount extremeAmounts[] = {
             1,
             100,
@@ -518,7 +523,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
     }
 
     // -- Path F: ERR ShouldActivateERR boundary --
-    {
+    if (strategy == 6) {
         assert(!DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(100));
         assert(!DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(101));
         assert(!DigiDollar::ERR::EmergencyRedemptionRatio::ShouldActivateERR(30000));
@@ -533,7 +538,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
 
     // -- Path G: Volatility math --
     // CalculatePercentageChange and ExceedsThreshold
-    {
+    if (strategy == 7) {
         CAmount oldPrice = fdp.ConsumeIntegralInRange<CAmount>(1, MAX_MONEY);
         CAmount newPrice = fdp.ConsumeIntegralInRange<CAmount>(1, MAX_MONEY);
         double change = DigiDollar::Volatility::CalculatePercentageChange(oldPrice, newPrice);
@@ -555,7 +560,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
 
     // -- Path H: Adversarial price sequences through DCA --
     // Rapidly oscillating prices should produce monotonically-behaving health
-    {
+    if (strategy == 8) {
         int numPrices = fdp.ConsumeIntegralInRange<int>(2, 20);
         CAmount prevHealth = 30000;
 
@@ -579,7 +584,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
     // -- Path I: CalculateSystemHealth DGB-SEC-003 fix --
     // totalDD between 1 and 999: used to cause division by zero in the
     // scaled-down path (totalDD / 1000 == 0).
-    {
+    if (strategy == 9) {
         for (CAmount tdd = 1; tdd < 1000; tdd += 100) {
             // MAX collateral * MAX price to trigger the scaled-down path
             int health = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
@@ -590,7 +595,7 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
     }
 
     // -- Path J: GetAdjustedRedemption (deprecated but still callable) --
-    {
+    if (strategy == 10) {
         CAmount redemption = fdp.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
         int systemHealth = fdp.ConsumeIntegralInRange<int>(0, 30000);
         CAmount adjusted = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(

@@ -149,8 +149,8 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
     outpoints_rbf = outpoints_supply;
 
     // The sum of the values of all spendable outpoints
-    // DigiByte: Using 8000 DGB per block (Period III reward)
-    constexpr CAmount SUPPLY_TOTAL{COINBASE_MATURITY * 8000 * COIN};
+    // DigiByte: Regtest mines at heights < 1440, which is Period I (72000 DGB/block)
+    constexpr CAmount SUPPLY_TOTAL{COINBASE_MATURITY * 72000 * COIN};
 
     SetMempoolConstraints(*node.args, fuzzed_data_provider);
     CTxMemPool tx_pool_{MakeMempool(fuzzed_data_provider, node)};

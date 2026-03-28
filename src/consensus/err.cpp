@@ -98,7 +98,17 @@ CAmount EmergencyRedemptionRatio::GetRequiredDDBurn(CAmount originalDDMinted, in
 
     // Calculate required DD burn (divide by ratio to get MORE DD)
     // Use ceiling to ensure we don't shortchange the system
-    CAmount requiredDD = static_cast<CAmount>(std::ceil(static_cast<double>(originalDDMinted) / adjustmentRatio));
+    // Guard against double→int64 overflow: when originalDDMinted is very large
+    // and adjustmentRatio < 1.0, the result can exceed CAmount (int64_t) range.
+    double requiredDD_d = std::ceil(static_cast<double>(originalDDMinted) / adjustmentRatio);
+    CAmount requiredDD;
+    if (requiredDD_d >= static_cast<double>(std::numeric_limits<CAmount>::max())) {
+        requiredDD = std::numeric_limits<CAmount>::max();
+    } else if (requiredDD_d < 0) {
+        requiredDD = 0;
+    } else {
+        requiredDD = static_cast<CAmount>(requiredDD_d);
+    }
 
     LogPrint(BCLog::DIGIDOLLAR, "ERR: GetRequiredDDBurn - original: %lld, health: %d%%, ratio: %.2f, required: %lld (%.1f%% increase)\n",
              static_cast<long long>(originalDDMinted), systemHealth, adjustmentRatio,

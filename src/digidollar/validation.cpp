@@ -24,6 +24,8 @@ using DigiDollar::GetScriptMetadata;
 #include <sync.h>
 #include <uint256.h>
 
+#include <algorithm>
+#include <limits>
 #include <unordered_map>
 #include <memory>
 
@@ -459,9 +461,17 @@ bool ValidateCollateralRatio(CAmount dgbLocked, CAmount ddMinted,
     // Oracle price is in micro-USD (1,000,000 = $1.00), DD is in cents
     // Convert: (DGB_sats * oracle_micro_usd / COIN) = micro-USD value
     // Then: micro-USD / 10000 = cents
-    CAmount dgbValueMicroUSD = (dgbLocked * ctx.oraclePriceMicroUSD) / COIN;
+    // Use __int128 to prevent overflow when dgbLocked and oraclePrice are both large
+    __int128 dgbValueMicroUSD128 = static_cast<__int128>(dgbLocked) * static_cast<__int128>(ctx.oraclePriceMicroUSD);
+    dgbValueMicroUSD128 /= COIN;
+    CAmount dgbValueMicroUSD = (dgbValueMicroUSD128 > std::numeric_limits<CAmount>::max())
+        ? std::numeric_limits<CAmount>::max()
+        : static_cast<CAmount>(dgbValueMicroUSD128);
     CAmount dgbValueInCents = dgbValueMicroUSD / 10000;  // Convert micro-USD to cents
-    int actualRatio = (dgbValueInCents * 100) / ddMinted;
+    // Clamp before cast to int to avoid int overflow with large ratio values
+    int actualRatio = static_cast<int>(std::min(
+        (ddMinted > 0) ? (dgbValueInCents * 100) / ddMinted : static_cast<CAmount>(0),
+        static_cast<CAmount>(100000)));
 
     // Get expected ratio for comparison
     const auto& ddParams = ctx.params.GetDigiDollarParams();

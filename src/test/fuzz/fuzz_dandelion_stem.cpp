@@ -62,6 +62,7 @@ FUZZ_TARGET(fuzz_dandelion_stem, .init = initialize_fuzz_dandelion_stem)
         (void)connman.insertDandelionEmbargo(hash, embargo);
         (void)connman.isTxDandelionEmbargoed(hash);
 
+        // Restrict to tx inventory types used by stem relay.
         const auto inv_type = static_cast<uint32_t>(fdp.PickValueInArray<int>({MSG_TX, MSG_WTX}));
         CInv inv{inv_type, hash};
         (void)connman.localDandelionDestinationPushInventory(inv);

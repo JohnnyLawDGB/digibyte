@@ -325,6 +325,7 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/digibyte_pow.cpp \
  test/fuzz/deserialize.cpp \
  test/fuzz/fuzz_multishield_v4.cpp \
+ test/fuzz/fuzz_multishield_eras.cpp \
  test/fuzz/digidollar_consensus.cpp \
  test/fuzz/digidollar_integer_math.cpp \
  test/fuzz/digidollar_logic.cpp \

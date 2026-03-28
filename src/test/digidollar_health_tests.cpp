@@ -651,6 +651,29 @@ BOOST_FIXTURE_TEST_CASE(test_health_utilities, DigiDollarHealthTestSetup)
     int perfectHealth = CalculateHealthRatio(0, dgbAmount, dgbPrice);
     BOOST_CHECK_EQUAL(perfectHealth, 300); // Perfect health
 
+    // TDD: Test large values that would overflow int64_t without protection
+    // dgbAmount near MAX_MONEY (2.1e18 satoshis) * dgbPrice (500 = $5.00)
+    // = 1.05e21 which exceeds int64_t max (~9.2e18)
+    // Expected: should NOT overflow, should return a valid health ratio
+    {
+        CAmount largeDgbAmount = 2000000000LL * COIN; // 2 billion DGB in satoshis = 2e17
+        CAmount largeDgbPrice = 500;                   // $5.00 per DGB
+        CAmount largeDdAmount = 100000000;             // $1M DD (in cents)
+        // Correct answer: (2e17 * 500) / 1e8 / 1e8 * 100 = 100,000,000,000 → capped at 300
+        int largeHealth = CalculateHealthRatio(largeDdAmount, largeDgbAmount, largeDgbPrice);
+        BOOST_CHECK_GE(largeHealth, 0);   // Must be non-negative
+        BOOST_CHECK_LE(largeHealth, 300); // Must not exceed cap
+
+        // Even more extreme: near-MAX_MONEY collateral
+        CAmount extremeDgbAmount = 20000000000LL * COIN; // 20 billion DGB (near MAX_MONEY)
+        CAmount extremeDgbPrice = 1000;                   // $10.00 per DGB
+        CAmount extremeDdAmount = 10000;                  // $100 DD
+        // This WILL overflow: 2e18 * 1000 = 2e21 >> int64_t max
+        int extremeHealth = CalculateHealthRatio(extremeDdAmount, extremeDgbAmount, extremeDgbPrice);
+        BOOST_CHECK_GE(extremeHealth, 0);   // Must be non-negative (overflow would go negative)
+        BOOST_CHECK_LE(extremeHealth, 300); // Must not exceed cap
+    }
+
     // Test status formatting
     BOOST_CHECK_EQUAL(FormatHealthStatus(150), "Healthy");
     BOOST_CHECK_EQUAL(FormatHealthStatus(115), "Warning");

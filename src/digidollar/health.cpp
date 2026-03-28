@@ -901,20 +901,34 @@ int GetTierLockDays(int tierIndex)
 
 int CalculateHealthRatio(CAmount ddAmount, CAmount dgbAmount, CAmount dgbPrice)
 {
-    if (ddAmount == 0) {
+    if (ddAmount <= 0) {
         return 300; // Perfect if no DD issued
     }
 
-    // Calculate DGB value in cents
+    if (dgbPrice <= 0 || dgbAmount <= 0) {
+        return 0; // Cannot calculate without valid price/amount
+    }
+
+    // Calculate DGB value in cents using __int128 to prevent overflow.
     // dgbPrice is in cents (100 = $1.00 DGB price)
     // dgbAmount is in satoshis
-    // Formula: (satoshis * price_cents) / COIN = cents
-    CAmount dgbValue = (dgbAmount * dgbPrice) / COIN;
+    // Formula: (satoshis * price_cents) / COIN = value_in_cents
+    // Then health = (value_in_cents * 100) / ddAmount
+    //
+    // Using __int128 is safe here because this is a monitoring/display
+    // function, not consensus-critical code. The consensus equivalent
+    // (CalculateSystemHealth) uses a divide-first pattern, but __int128
+    // is simpler and handles all edge cases without precision loss.
+    __int128 dgbValue128 = static_cast<__int128>(dgbAmount) * static_cast<__int128>(dgbPrice);
+    dgbValue128 /= COIN;
 
     // Health = (Collateral Value / DD Value) * 100
-    int health = static_cast<int>((dgbValue * 100) / ddAmount);
+    __int128 health128 = (dgbValue128 * 100) / static_cast<__int128>(ddAmount);
 
-    return std::min(health, 300); // Cap at 300%
+    // Clamp to [0, 300]
+    if (health128 < 0) return 0;
+    if (health128 > 300) return 300;
+    return static_cast<int>(health128);
 }
 
 std::string FormatHealthStatus(int health)

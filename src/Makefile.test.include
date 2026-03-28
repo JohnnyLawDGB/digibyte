@@ -329,6 +329,7 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/fuzz_algo_selection.cpp \
  test/fuzz/fuzz_algo_work_factor.cpp \
  test/fuzz/fuzz_local_target_adjustment.cpp \
+ test/fuzz/fuzz_pow_all_algos.cpp \
  test/fuzz/digidollar_consensus.cpp \
  test/fuzz/digidollar_integer_math.cpp \
  test/fuzz/digidollar_logic.cpp \

@@ -127,7 +127,7 @@ FUZZ_TARGET(versionbits, .init = initialize)
     const int threshold = fuzzed_data_provider.ConsumeIntegralInRange(1, period);
     assert(0 < threshold && threshold <= period); // must be able to both pass and fail threshold!
 
-    // too many blocks at 10min each might cause uint32_t time to overflow if
+    // too many blocks at 15sec each might cause uint32_t time to overflow if
     // block_start_time is at the end of the range above
     assert(std::numeric_limits<uint32_t>::max() - MAX_START_TIME > interval * max_blocks);
 

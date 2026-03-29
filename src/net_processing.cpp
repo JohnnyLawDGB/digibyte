@@ -31,8 +31,11 @@
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/musig2_session.h>
 #include <oracle/node.h>
 #include <random.h>
+
+#include <secp256k1_musig.h>
 #include <reverse_iterator.h>
 #include <scheduler.h>
 #include <streams.h>
@@ -5920,6 +5923,84 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         LogPrint(BCLog::NET, "Accepted and relayed oracle attestation: oracle=%d, price=%llu, peer=%d\n",
                  att_msg.attestation.oracle_id, att_msg.attestation.price_micro_usd, pfrom.GetId());
+        return;
+    }
+
+    if (msg_type == NetMsgType::ORACLEMUSIGNONCE) {
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
+        OracleMusigNonceMsg nonce_msg;
+        vRecv >> nonce_msg;
+
+        if (!nonce_msg.IsValid()) {
+            Misbehaving(*peer, 10, "invalid MuSig2 nonce message");
+            return;
+        }
+
+        const uint256 nonce_hash = nonce_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        if (bundleManager.HasOracleMessage(nonce_hash)) {
+            return;
+        }
+        bundleManager.RegisterSeenHash(nonce_hash);
+
+        AddKnownOracle(*peer, nonce_hash);
+        m_connman.ForEachNode([this, &pfrom, &nonce_msg, &nonce_hash](CNode* pnode) {
+            if (pnode->GetId() == pfrom.GetId()) return;
+
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
+            if (PeerKnowsOracle(*relay_peer, nonce_hash)) return;
+
+            AddKnownOracle(*relay_peer, nonce_hash);
+            m_connman.PushMessage(pnode,
+                CNetMsgMaker(pnode->GetCommonVersion()).Make(
+                    NetMsgType::ORACLEMUSIGNONCE, nonce_msg));
+        });
+
+        LogPrint(BCLog::NET, "Accepted and relayed MuSig2 nonce: epoch=%d, oracle_id=%u, peer=%d\n",
+                 nonce_msg.epoch, nonce_msg.oracle_id, pfrom.GetId());
+        return;
+    }
+
+    if (msg_type == NetMsgType::ORACLEMUSIGPARTIALSIG) {
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
+        OracleMusigPartialSigMsg partial_sig_msg;
+        vRecv >> partial_sig_msg;
+
+        if (!partial_sig_msg.IsValid()) {
+            Misbehaving(*peer, 10, "invalid MuSig2 partial signature message");
+            return;
+        }
+
+        const uint256 partial_sig_hash = partial_sig_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        if (bundleManager.HasOracleMessage(partial_sig_hash)) {
+            return;
+        }
+        bundleManager.RegisterSeenHash(partial_sig_hash);
+
+        AddKnownOracle(*peer, partial_sig_hash);
+        m_connman.ForEachNode([this, &pfrom, &partial_sig_msg, &partial_sig_hash](CNode* pnode) {
+            if (pnode->GetId() == pfrom.GetId()) return;
+
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
+            if (PeerKnowsOracle(*relay_peer, partial_sig_hash)) return;
+
+            AddKnownOracle(*relay_peer, partial_sig_hash);
+            m_connman.PushMessage(pnode,
+                CNetMsgMaker(pnode->GetCommonVersion()).Make(
+                    NetMsgType::ORACLEMUSIGPARTIALSIG, partial_sig_msg));
+        });
+
+        LogPrint(BCLog::NET, "Accepted and relayed MuSig2 partial signature: epoch=%d, oracle_id=%u, peer=%d\n",
+                 partial_sig_msg.epoch, partial_sig_msg.oracle_id, pfrom.GetId());
         return;
     }
 

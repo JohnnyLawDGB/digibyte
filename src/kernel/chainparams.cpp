@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstring>
 #include <ctime>
+#include <limits>
 #include <type_traits>
 
 // Helper function to parse public key from hex string
@@ -308,6 +309,7 @@ public:
         consensus.nOracleEpochLength = 1440;          // 24 hours (placeholder for Phase Two)
         consensus.nOracleRequiredMessages = 8;        // Phase Two: 8-of-15 consensus
         consensus.nOracleTotalOracles = 15;           // Phase Two: 15 active oracles
+        consensus.nDigiDollarPhase3Height = 9999999;  // Phase Three: TBD after testnet20 validation
 
         // No oracle public keys configured for mainnet (Phase One is testnet-only)
         // vOraclePublicKeys remains empty
@@ -542,6 +544,7 @@ public:
         // Multi-oracle activates at same height as DigiDollar (no separate phases)
         // Everything — DD minting, oracle consensus, multi-oracle — activates together
         consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
+        consensus.nDigiDollarPhase3Height = 50000;  // Phase Three: Early testnet activation for validation
 
         // Testnet oracle public keys (x-only, 32 bytes) — must match vOracleNodes
         consensus.vOraclePublicKeys.clear();
@@ -973,6 +976,7 @@ public:
         consensus.nOracleRequiredMessages = 4;     // Phase Two: 4-of-7 (matches testnet)
         consensus.nOracleTotalOracles = 7;         // Phase Two: 7 oracles (matches testnet)
         consensus.nDigiDollarPhase2Height = 650;   // Same as nDDActivationHeight — everything activates together
+        consensus.nDigiDollarPhase3Height = 1000;  // Phase Three: Very early for unit testing
 
         // RegTest: Oracle public keys for all 5 oracles (match vOracleNodes)
         // Deterministic keys derived from SHA256("digibyte_regtest_oracle_N")

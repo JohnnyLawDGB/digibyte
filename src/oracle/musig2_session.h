@@ -80,6 +80,9 @@ public:
     /** Get the epoch this session is for. */
     int32_t GetEpoch() const;
 
+    /** Initialize passive (non-oracle) session: CREATED -> NONCES_COLLECTING without secnonce. */
+    bool InitializePassive(const secp256k1_musig_keyagg_cache& cache);
+
     /**
      * Round 1a: Generate local nonce pair.
      * Transitions: CREATED → NONCES_COLLECTING.
@@ -168,6 +171,11 @@ public:
      */
     void SetTimeoutBlocks(int32_t blocks);
 
+    /** Get the aggregate signature after COMPLETE state. */
+    std::vector<unsigned char> GetAggregateSig() const;
+    /** Get participation bitmap from partial sig contributors. */
+    std::vector<unsigned char> GetParticipationBitmap() const;
+
 private:
     mutable Mutex m_mutex;
 
@@ -196,6 +204,8 @@ private:
 
     //! Collected partial signatures, keyed by oracle_id
     std::map<uint8_t, secp256k1_musig_partial_sig> m_partial_sigs GUARDED_BY(m_mutex);
+
+    std::vector<unsigned char> m_aggregate_sig GUARDED_BY(m_mutex); //!< Cached agg sig
 
     //! Timeout configuration
     int32_t m_creation_height GUARDED_BY(m_mutex); //!< Height at which session was created (= epoch)

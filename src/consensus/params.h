@@ -8,9 +8,12 @@
 
 #include <uint256.h>
 
+#include <algorithm>
 #include <chrono>
 #include <limits>
 #include <map>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace Consensus {
@@ -188,9 +191,18 @@ struct Params {
     int nOracleEpochLength{1440};               // Blocks per oracle epoch (default: 1440 = 24 hours)
     int nOracleRequiredMessages{1};             // Messages required for consensus (Phase One: 1)
     int nOracleTotalOracles{1};                 // Total active oracles (Phase One: 1)
-    std::vector<std::string> vOraclePublicKeys; // Hardcoded oracle public keys (hex encoded XOnlyPubKey)
+    std::vector<std::string> vOraclePublicKeys; // Hardcoded oracle public keys (hex encoded XOnlyPubKey, sorted)
     int nDigiDollarPhase2Height{std::numeric_limits<int>::max()};  // Height when Phase Two activates (multi-oracle consensus)
     int nDigiDollarPhase3Height{std::numeric_limits<int>::max()};  // Height when Phase Three activates (MuSig2 aggregate signatures)
+
+    /** Phase 3 (MuSig2) oracle configuration */
+    int nOraclePubkeyCount{0};                  // Number of oracle pubkeys for Phase 3 MuSig2
+    int nOracleConsensusRequired{0};            // Minimum oracles required for MuSig2 aggregate signature
+
+    /** Check if Phase Three (MuSig2 aggregate signatures) is active at given height */
+    bool IsPhaseThreeActive(int32_t block_height) const {
+        return block_height >= nDigiDollarPhase3Height;
+    }
 
     /**
      * If true, witness commitments contain a payload equal to a DigiByte Script solution
@@ -228,12 +240,41 @@ struct Params {
 
 /**
  * Check if oracle system is active at given height
- * @param params Consensus parameters
- * @param nHeight Block height to check
- * @return true if oracle system is active
  */
 inline bool IsOracleActive(const Params& params, int nHeight) {
     return nHeight >= params.nOracleActivationHeight;
+}
+
+/**
+ * Check if Phase 3 (MuSig2) is active at given height
+ */
+inline bool IsPhase3Active(const Params& params, int nHeight) {
+    return params.IsPhaseThreeActive(nHeight);
+}
+
+/**
+ * Validate oracle configuration for Phase 3 MuSig2.
+ */
+inline bool ValidateOracleConfiguration(const Params& params) {
+    if (static_cast<int>(params.vOraclePublicKeys.size()) != params.nOraclePubkeyCount) return false;
+    if (params.nOracleConsensusRequired > params.nOraclePubkeyCount) return false;
+    if (params.nOraclePubkeyCount > 0 &&
+        params.nOracleConsensusRequired < (params.nOraclePubkeyCount / 2 + 1)) return false;
+    std::set<std::string> pubkey_set;
+    for (const auto& pk : params.vOraclePublicKeys) {
+        if (!pubkey_set.insert(pk).second) return false;
+    }
+    for (const auto& pk : params.vOraclePublicKeys) {
+        if (pk.size() != 64) return false;
+        for (char c : pk) {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                return false;
+        }
+    }
+    for (size_t i = 1; i < params.vOraclePublicKeys.size(); ++i) {
+        if (params.vOraclePublicKeys[i - 1] >= params.vOraclePublicKeys[i]) return false;
+    }
+    return true;
 }
 
 } // namespace Consensus

@@ -104,6 +104,8 @@ DIGIBYTE_TESTS =\
   test/musig2_bundle_manager_tests.cpp \
   test/musig2_p2p_message_tests.cpp \
   test/musig2_session_tests.cpp \
+  test/musig2_activation_tests.cpp \
+  test/musig2_signing_orchestration_tests.cpp \
   test/redteam_phase2_audit_tests.cpp \
   test/oracle_consensus_threshold_tests.cpp \
   test/digidollar_p2p_tests.cpp \

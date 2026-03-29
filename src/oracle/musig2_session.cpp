@@ -114,6 +114,21 @@ int32_t MuSig2SigningSession::GetEpoch() const
 }
 
 // ============================================================================
+// Passive initialization (non-oracle nodes)
+// ============================================================================
+
+bool MuSig2SigningSession::InitializePassive(const secp256k1_musig_keyagg_cache& cache)
+{
+    LOCK(m_mutex);
+    if (m_state != MuSig2SessionState::CREATED) return false;
+    m_keyagg_cache = cache;
+    m_has_secnonce = false;
+    m_secnonce_used = true;
+    m_state = MuSig2SessionState::NONCES_COLLECTING;
+    return true;
+}
+
+// ============================================================================
 // Round 1a: Generate local nonce
 // ============================================================================
 

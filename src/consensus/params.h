@@ -190,6 +190,7 @@ struct Params {
     int nOracleTotalOracles{1};                 // Total active oracles (Phase One: 1)
     std::vector<std::string> vOraclePublicKeys; // Hardcoded oracle public keys (hex encoded XOnlyPubKey)
     int nDigiDollarPhase2Height{std::numeric_limits<int>::max()};  // Height when Phase Two activates (multi-oracle consensus)
+    int nDigiDollarPhase3Height{std::numeric_limits<int>::max()};  // Height when Phase Three activates (MuSig2 aggregate signatures)
 
     /**
      * If true, witness commitments contain a payload equal to a DigiByte Script solution

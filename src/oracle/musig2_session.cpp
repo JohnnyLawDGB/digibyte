@@ -5,6 +5,7 @@
 #include <oracle/musig2_session.h>
 
 #include <random.h>
+#include <support/cleanse.h>
 
 #include <secp256k1_musig.h>
 
@@ -31,7 +32,7 @@ MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers)
 MuSig2SigningSession::~MuSig2SigningSession()
 {
     // Always zero the secret nonce in destructor as safety net
-    memset(&m_secnonce, 0, sizeof(m_secnonce));
+    memory_cleanse(&m_secnonce, sizeof(m_secnonce));
     if (m_ctx) {
         secp256k1_context_destroy(m_ctx);
         m_ctx = nullptr;
@@ -49,7 +50,7 @@ MuSig2SigningSession::MuSig2SigningSession(MuSig2SigningSession&& other) noexcep
     other.m_ctx = nullptr;
 
     m_secnonce = other.m_secnonce;
-    memset(&other.m_secnonce, 0, sizeof(other.m_secnonce));
+    memory_cleanse(&other.m_secnonce, sizeof(other.m_secnonce));
     m_has_secnonce = other.m_has_secnonce;
     other.m_has_secnonce = false;
     m_secnonce_used = other.m_secnonce_used;
@@ -70,7 +71,7 @@ MuSig2SigningSession& MuSig2SigningSession::operator=(MuSig2SigningSession&& oth
     if (this == &other) return *this;
 
     // Clean up current state
-    memset(&m_secnonce, 0, sizeof(m_secnonce));
+    memory_cleanse(&m_secnonce, sizeof(m_secnonce));
     if (m_ctx) {
         secp256k1_context_destroy(m_ctx);
         m_ctx = nullptr;
@@ -84,7 +85,7 @@ MuSig2SigningSession& MuSig2SigningSession::operator=(MuSig2SigningSession&& oth
     other.m_ctx = nullptr;
 
     m_secnonce = other.m_secnonce;
-    memset(&other.m_secnonce, 0, sizeof(other.m_secnonce));
+    memory_cleanse(&other.m_secnonce, sizeof(other.m_secnonce));
     m_has_secnonce = other.m_has_secnonce;
     other.m_has_secnonce = false;
     m_secnonce_used = other.m_secnonce_used;
@@ -145,7 +146,7 @@ bool MuSig2SigningSession::GenerateNonce(const CKey& signing_key,
                                     nullptr,  // msg32 — not known yet
                                     &m_keyagg_cache,
                                     nullptr)) { // extra_input32
-        memset(&m_secnonce, 0, sizeof(m_secnonce));
+        memory_cleanse(&m_secnonce, sizeof(m_secnonce));
         return false;
     }
 
@@ -258,17 +259,17 @@ bool MuSig2SigningSession::CreatePartialSignature(const CKey& signing_key,
                                             &m_session);
 
     // Zero the keypair regardless of success
-    memset(&keypair, 0, sizeof(keypair));
+    memory_cleanse(&keypair, sizeof(keypair));
 
     if (!ret) {
         // Explicitly zero secnonce on failure too
-        memset(&m_secnonce, 0, sizeof(m_secnonce));
+        memory_cleanse(&m_secnonce, sizeof(m_secnonce));
         m_secnonce_used = true;
         return false;
     }
 
     // secnonce was zeroed by secp256k1_musig_partial_sign, but belt-and-suspenders
-    memset(&m_secnonce, 0, sizeof(m_secnonce));
+    memory_cleanse(&m_secnonce, sizeof(m_secnonce));
     m_secnonce_used = true;
     return true;
 }
@@ -343,7 +344,7 @@ void MuSig2SigningSession::CheckTimeout(int32_t current_height)
     if (current_height >= m_creation_height + m_timeout_blocks) {
         // Zero secnonce if still held
         if (m_has_secnonce && !m_secnonce_used) {
-            memset(&m_secnonce, 0, sizeof(m_secnonce));
+            memory_cleanse(&m_secnonce, sizeof(m_secnonce));
             m_secnonce_used = true;
         }
         m_state = MuSig2SessionState::FAILED;

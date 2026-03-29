@@ -97,6 +97,7 @@ DIGIBYTE_TESTS =\
   test/oracle_wallet_key_tests.cpp \
   test/oracle_wallet_autostart_tests.cpp \
   test/oracle_phase2_tests.cpp \
+  test/musig2_bundle_format_tests.cpp \
   test/redteam_phase2_audit_tests.cpp \
   test/oracle_consensus_threshold_tests.cpp \
   test/digidollar_p2p_tests.cpp \

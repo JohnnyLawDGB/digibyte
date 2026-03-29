@@ -1,0 +1,329 @@
+// Copyright (c) 2024-2026 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+/**
+ * MuSig2 Bundle Format (v0x03) Unit Tests
+ *
+ * Tests for COracleBundle v0x03 data structures:
+ * - New fields: version, aggregate_sig, participation_bitmap
+ * - Helper methods: IsMuSig2(), GetV03PayloadSize(), SerializeV03Data(), DeserializeV03Data()
+ * - Serialization round-trip
+ * - Payload size calculations for various oracle counts
+ * - Backward compatibility with v0x01 and v0x02
+ */
+
+#include <boost/test/unit_test.hpp>
+
+#include <consensus/params.h>
+#include <primitives/oracle.h>
+#include <test/util/setup_common.h>
+
+#include <cstring>
+#include <vector>
+
+BOOST_FIXTURE_TEST_SUITE(musig2_bundle_format_tests, BasicTestingSetup)
+
+// ============================================================================
+// test_v03_bundle_struct_default — new fields default to empty/zero
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_bundle_struct_default)
+{
+    COracleBundle bundle;
+
+    // New v0x03 fields should default correctly
+    BOOST_CHECK_EQUAL(bundle.version, 2);  // Default is v2 for backward compat
+    BOOST_CHECK(bundle.aggregate_sig.empty());
+    BOOST_CHECK(bundle.participation_bitmap.empty());
+
+    // Existing fields should still default correctly
+    BOOST_CHECK_EQUAL(bundle.epoch, 0);
+    BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 0);
+    BOOST_CHECK_EQUAL(bundle.timestamp, 0);
+    BOOST_CHECK(bundle.messages.empty());
+}
+
+// ============================================================================
+// test_v03_bundle_has_aggregate_sig — can set and get aggregate_sig (64 bytes)
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_bundle_has_aggregate_sig)
+{
+    COracleBundle bundle;
+    bundle.version = 3;
+
+    // Set a 64-byte aggregate signature (BIP-340 Schnorr)
+    std::vector<unsigned char> sig(64, 0xAB);
+    bundle.aggregate_sig = sig;
+
+    BOOST_CHECK_EQUAL(bundle.aggregate_sig.size(), 64);
+    BOOST_CHECK(bundle.aggregate_sig == sig);
+
+    // Verify each byte
+    for (size_t i = 0; i < 64; ++i) {
+        BOOST_CHECK_EQUAL(bundle.aggregate_sig[i], 0xAB);
+    }
+}
+
+// ============================================================================
+// test_v03_bundle_has_bitmap — can set and get participation bitmap
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_bundle_has_bitmap)
+{
+    COracleBundle bundle;
+    bundle.version = 3;
+
+    // 9-of-15: bitmap needs 2 bytes (ceil(15/8) = 2)
+    // Oracles 0,1,2,3,4,5,6,7,8 participating = bits 0-8 set
+    // Byte 0: 0xFF (bits 0-7), Byte 1: 0x01 (bit 8)
+    std::vector<unsigned char> bitmap = {0xFF, 0x01};
+    bundle.participation_bitmap = bitmap;
+
+    BOOST_CHECK_EQUAL(bundle.participation_bitmap.size(), 2);
+    BOOST_CHECK_EQUAL(bundle.participation_bitmap[0], 0xFF);
+    BOOST_CHECK_EQUAL(bundle.participation_bitmap[1], 0x01);
+}
+
+// ============================================================================
+// test_v03_bundle_version — version field correctly set to 3
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_bundle_version)
+{
+    COracleBundle bundle;
+
+    // Default version is 2
+    BOOST_CHECK_EQUAL(bundle.version, 2);
+    BOOST_CHECK(!bundle.IsMuSig2());
+
+    // Set to v3
+    bundle.version = 3;
+    BOOST_CHECK_EQUAL(bundle.version, 3);
+    BOOST_CHECK(bundle.IsMuSig2());
+
+    // Version 1 is not MuSig2
+    bundle.version = 1;
+    BOOST_CHECK(!bundle.IsMuSig2());
+}
+
+// ============================================================================
+// test_v03_bundle_serialization_roundtrip — serialize, deserialize, compare
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_bundle_serialization_roundtrip)
+{
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.median_price_micro_usd = 1234567;  // ~$1.23
+    bundle.timestamp = 1700000000;
+
+    // 9-of-15 bitmap: oracles 0-8 participating
+    bundle.participation_bitmap = {0xFF, 0x01};
+
+    // 64-byte aggregate signature
+    bundle.aggregate_sig.resize(64);
+    for (size_t i = 0; i < 64; ++i) {
+        bundle.aggregate_sig[i] = static_cast<unsigned char>(i);
+    }
+
+    // Serialize
+    std::vector<unsigned char> serialized = bundle.SerializeV03Data();
+    BOOST_CHECK(!serialized.empty());
+
+    // Deserialize into a new bundle
+    COracleBundle deserialized;
+    bool ok = COracleBundle::DeserializeV03Data(serialized, deserialized);
+    BOOST_CHECK(ok);
+
+    // Compare all v0x03 fields
+    BOOST_CHECK_EQUAL(deserialized.median_price_micro_usd, bundle.median_price_micro_usd);
+    BOOST_CHECK_EQUAL(deserialized.timestamp, bundle.timestamp);
+    BOOST_CHECK(deserialized.participation_bitmap == bundle.participation_bitmap);
+    BOOST_CHECK(deserialized.aggregate_sig == bundle.aggregate_sig);
+}
+
+// ============================================================================
+// test_v03_data_payload_size_9_of_15 — verify exactly 83 bytes for 9-of-15
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_9_of_15)
+{
+    // v0x03 on-chain: bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
+    // For 15 oracles: bitmap = ceil(15/8) = 2 bytes
+    // Total: 1 + 2 + 8 + 8 + 64 = 83 bytes
+
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.median_price_micro_usd = 50000;
+    bundle.timestamp = 1700000000;
+    bundle.participation_bitmap = {0xFF, 0x01};  // 2 bytes for 15 oracles
+    bundle.aggregate_sig.resize(64, 0xAA);
+
+    size_t payload_size = bundle.GetV03PayloadSize();
+    BOOST_CHECK_EQUAL(payload_size, 83);
+
+    // Also verify the serialized data is exactly this size
+    std::vector<unsigned char> serialized = bundle.SerializeV03Data();
+    BOOST_CHECK_EQUAL(serialized.size(), 83);
+}
+
+// ============================================================================
+// test_v03_data_payload_size_15_of_15 — verify size for full participation
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_15_of_15)
+{
+    // Full participation: all 15 oracles
+    // bitmap = ceil(15/8) = 2 bytes (same as 9-of-15)
+    // Total: 1 + 2 + 8 + 8 + 64 = 83 bytes
+
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.median_price_micro_usd = 50000;
+    bundle.timestamp = 1700000000;
+    bundle.participation_bitmap = {0xFF, 0x7F};  // All 15 bits set
+    bundle.aggregate_sig.resize(64, 0xBB);
+
+    size_t payload_size = bundle.GetV03PayloadSize();
+    BOOST_CHECK_EQUAL(payload_size, 83);
+}
+
+// ============================================================================
+// test_v03_data_payload_size_9_of_30 — verify with 30 oracles
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_9_of_30)
+{
+    // For 30 oracles: bitmap = ceil(30/8) = 4 bytes
+    // Total: 1 + 4 + 8 + 8 + 64 = 85 bytes
+
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.median_price_micro_usd = 50000;
+    bundle.timestamp = 1700000000;
+    bundle.participation_bitmap = {0xFF, 0x01, 0x00, 0x00};  // 4 bytes for 30 oracles
+    bundle.aggregate_sig.resize(64, 0xCC);
+
+    size_t payload_size = bundle.GetV03PayloadSize();
+    BOOST_CHECK_EQUAL(payload_size, 85);
+
+    std::vector<unsigned char> serialized = bundle.SerializeV03Data();
+    BOOST_CHECK_EQUAL(serialized.size(), 85);
+}
+
+// ============================================================================
+// test_v02_bundle_unchanged — existing v0x02 bundle fields still work
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v02_bundle_unchanged)
+{
+    COracleBundle bundle;
+
+    // v0x02 uses messages vector, epoch, median_price, timestamp
+    bundle.epoch = 42;
+    bundle.median_price_micro_usd = 50000;
+    bundle.timestamp = 1700000000;
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 50000;
+    msg.timestamp = 1700000000;
+    bundle.messages.push_back(msg);
+
+    // Verify all v0x02 fields are intact
+    BOOST_CHECK_EQUAL(bundle.epoch, 42);
+    BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 50000);
+    BOOST_CHECK_EQUAL(bundle.timestamp, 1700000000);
+    BOOST_CHECK_EQUAL(bundle.messages.size(), 1);
+    BOOST_CHECK_EQUAL(bundle.messages[0].oracle_id, 0);
+
+    // Default version should be 2
+    BOOST_CHECK_EQUAL(bundle.version, 2);
+    BOOST_CHECK(!bundle.IsMuSig2());
+
+    // HasConsensus still works
+    BOOST_CHECK(bundle.HasConsensus(1));
+    BOOST_CHECK(!bundle.HasConsensus(2));
+}
+
+// ============================================================================
+// test_v01_bundle_unchanged — existing v0x01 bundle fields still work
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v01_bundle_unchanged)
+{
+    COracleBundle bundle;
+
+    // v0x01 is Phase 1: single oracle, 1-of-1 consensus
+    bundle.epoch = 10;
+    bundle.median_price_micro_usd = 100000;
+    bundle.timestamp = 1600000000;
+
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 100000;
+    msg.timestamp = 1600000000;
+    bundle.messages.push_back(msg);
+
+    // v0x01 functionality: single-oracle consensus
+    BOOST_CHECK(bundle.HasConsensus(1));
+    BOOST_CHECK_EQUAL(bundle.GetConsensusPrice(1), 100000);
+
+    // The epoch constructor still works
+    COracleBundle epoch_bundle(5);
+    BOOST_CHECK_EQUAL(epoch_bundle.epoch, 5);
+
+    // Messages vector still works correctly
+    BOOST_CHECK(bundle.AddMessage(COraclePriceMessage(1, 50000, 1600000000)));
+    BOOST_CHECK_EQUAL(bundle.messages.size(), 2);
+}
+
+// ============================================================================
+// Additional edge case: deserialize with invalid data
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_deserialize_invalid_data)
+{
+    COracleBundle bundle;
+
+    // Empty data
+    std::vector<unsigned char> empty;
+    BOOST_CHECK(!COracleBundle::DeserializeV03Data(empty, bundle));
+
+    // Too short (only bitmap_len byte)
+    std::vector<unsigned char> too_short = {0x02};
+    BOOST_CHECK(!COracleBundle::DeserializeV03Data(too_short, bundle));
+
+    // bitmap_len says 2 but only 1 byte of bitmap follows
+    std::vector<unsigned char> truncated = {0x02, 0xFF};
+    BOOST_CHECK(!COracleBundle::DeserializeV03Data(truncated, bundle));
+
+    // bitmap_len=0 is invalid (must have at least 1 byte)
+    std::vector<unsigned char> zero_bitmap(1 + 0 + 8 + 8 + 64, 0x00);
+    zero_bitmap[0] = 0;  // bitmap_len = 0
+    BOOST_CHECK(!COracleBundle::DeserializeV03Data(zero_bitmap, bundle));
+}
+
+// ============================================================================
+// Additional: aggregate_sig must be exactly 64 bytes for serialization
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_v03_aggregate_sig_size_enforcement)
+{
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.median_price_micro_usd = 50000;
+    bundle.timestamp = 1700000000;
+    bundle.participation_bitmap = {0xFF, 0x01};
+
+    // Wrong size aggregate_sig (32 bytes instead of 64)
+    bundle.aggregate_sig.resize(32, 0xAA);
+    std::vector<unsigned char> serialized = bundle.SerializeV03Data();
+    BOOST_CHECK(serialized.empty());  // Should fail: wrong sig size
+
+    // Correct size
+    bundle.aggregate_sig.resize(64, 0xAA);
+    serialized = bundle.SerializeV03Data();
+    BOOST_CHECK(!serialized.empty());
+}
+
+// ============================================================================
+// nDigiDollarPhase3Height defaults to max int
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_phase3_height_default)
+{
+    Consensus::Params params;
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, std::numeric_limits<int>::max());
+}
+
+BOOST_AUTO_TEST_SUITE_END()

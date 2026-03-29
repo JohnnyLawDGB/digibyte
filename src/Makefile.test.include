@@ -97,7 +97,9 @@ DIGIBYTE_TESTS =\
   test/oracle_wallet_key_tests.cpp \
   test/oracle_wallet_autostart_tests.cpp \
   test/oracle_phase2_tests.cpp \
+  test/musig2_basic_tests.cpp \
   test/musig2_bundle_format_tests.cpp \
+  test/musig2_p2p_message_tests.cpp \
   test/redteam_phase2_audit_tests.cpp \
   test/oracle_consensus_threshold_tests.cpp \
   test/digidollar_p2p_tests.cpp \
@@ -420,7 +422,13 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/versionbits.cpp \
  test/fuzz/digidollar_txbuilder.cpp \
  test/fuzz/digidollar_health.cpp \
- test/fuzz/digidollar_scripts.cpp
+ test/fuzz/digidollar_scripts.cpp \
+ test/fuzz/oracle_musig2_nonce_msg.cpp \
+ test/fuzz/oracle_musig2_partialsig_msg.cpp \
+ test/fuzz/oracle_musig2_bundle.cpp \
+ test/fuzz/oracle_musig2_bitmap.cpp \
+ test/fuzz/oracle_musig2_aggregation.cpp \
+ test/fuzz/oracle_musig2_session_state.cpp
 endif # ENABLE_FUZZ_BINARY
 
 nodist_test_test_digibyte_SOURCES = $(GENERATED_TEST_FILES)

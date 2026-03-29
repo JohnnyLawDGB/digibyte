@@ -1239,30 +1239,6 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
 
                         return true;
                     }
-                    else if (data[0] == 0x03) {
-                        // Phase Three (MuSig2) format
-                        // Layout: version(1) + bitmap_len(1) + bitmap(var) + price(8) + timestamp(8) + aggregate_sig(64)
-                        std::vector<unsigned char> v03_data(data.begin() + 1, data.end());
-
-                        COracleBundle v03_bundle;
-                        if (!COracleBundle::DeserializeV03Data(v03_data, v03_bundle)) {
-                            LogPrintf("Oracle: Failed to deserialize v0x03 bundle payload (size=%zu)\n",
-                                     v03_data.size());
-                            return false;
-                        }
-
-                        bundle = std::move(v03_bundle);
-                        bundle.version = 3;
-                        bundle.messages.clear(); // v0x03 stores aggregate signature, not per-oracle sig list
-                        bundle.epoch = 0;
-
-                        LogPrint(BCLog::DIGIDOLLAR,
-                                 "Oracle: Extracted Phase Three (v0x03) bundle: bitmap_bytes=%zu, price=%llu micro-USD\n",
-                                 bundle.participation_bitmap.size(),
-                                 static_cast<unsigned long long>(bundle.median_price_micro_usd));
-
-                        return true;
-                    }
 
                     return false;
                 }
@@ -1271,6 +1247,84 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                 }
             }
         }
+    }
+
+    return false;
+}
+
+bool OracleBundleManager::ValidateV03BundleFormat(const CScript& script, uint8_t& version)
+{
+    version = 0;
+
+    // Minimum script: OP_RETURN(1) + OP_ORACLE(1) + push(1) + version(1) = 4 bytes
+    if (script.size() < 4) return false;
+
+    // Check OP_RETURN + OP_ORACLE marker
+    if (script[0] != OP_RETURN || script[1] != OP_ORACLE) return false;
+
+    // Extract data chunks (same logic as ExtractOracleBundle)
+    std::vector<unsigned char> data;
+    auto it = script.begin() + 2;
+    while (it < script.end()) {
+        if (*it <= 75) {
+            unsigned char chunk_size = *it;
+            ++it;
+            if (it + chunk_size <= script.end()) {
+                data.insert(data.end(), it, it + chunk_size);
+                it += chunk_size;
+            } else {
+                return false;
+            }
+        } else if (*it == 0x4c) { // OP_PUSHDATA1
+            ++it;
+            if (it >= script.end()) return false;
+            unsigned int chunk_size = *it;
+            ++it;
+            if (it + chunk_size <= script.end()) {
+                data.insert(data.end(), it, it + chunk_size);
+                it += chunk_size;
+            } else {
+                return false;
+            }
+        } else if (*it == 0x4d) { // OP_PUSHDATA2
+            ++it;
+            if (it + 2 > script.end()) return false;
+            unsigned int chunk_size = *it | (*(it + 1) << 8);
+            it += 2;
+            if (it + chunk_size <= script.end()) {
+                data.insert(data.end(), it, it + chunk_size);
+                it += chunk_size;
+            } else {
+                return false;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (data.empty()) return false;
+
+    version = data[0];
+
+    // Validate format based on version
+    if (version == 0x03) {
+        // v0x03: version(1) + bitmap_len(1) + bitmap(>=1) + price(8) + timestamp(8) + sig(64) >= 83
+        if (data.size() < 83) return false;
+        uint8_t bitmap_len = data[1];
+        if (bitmap_len == 0) return false;
+        // Check total data size: 1(version) + 1(bitmap_len) + bitmap_len + 8 + 8 + 64
+        size_t expected = 1 + 1 + bitmap_len + 8 + 8 + 64;
+        if (data.size() < expected) return false;
+        return true;
+    } else if (version == 0x02) {
+        // v0x02: version(1) + num_msgs(1) + price(8) + timestamp(8) = 18 minimum
+        if (data.size() < 18) return false;
+        uint8_t num_msgs = data[1];
+        size_t expected = 1 + 1 + 8 + 8 + num_msgs * 65;
+        return data.size() >= expected;
+    } else if (version == 0x01) {
+        // v0x01: version(1) + oracle_id(1) + price(8) + timestamp(8) = 18
+        return data.size() >= 18;
     }
 
     return false;

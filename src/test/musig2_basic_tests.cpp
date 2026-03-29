@@ -399,18 +399,19 @@ BOOST_AUTO_TEST_CASE(test_existing_schnorr_still_works)
 
     // Sign a message with Schnorr (BIP-340) via the CKey API
     uint256 msg_hash = Hash("schnorr regression test");
+    uint256 aux_rand;
+    GetStrongRandBytes(aux_rand);
 
-    std::vector<unsigned char> schnorr_sig;
-    BOOST_CHECK(key.SignSchnorr(msg_hash, schnorr_sig));
-    BOOST_CHECK_EQUAL(schnorr_sig.size(), 64u);
+    unsigned char schnorr_sig[64];
+    BOOST_CHECK(key.SignSchnorr(msg_hash, schnorr_sig, nullptr, aux_rand));
 
     // Verify with XOnlyPubKey
     XOnlyPubKey xonly_pk{pubkey};
-    BOOST_CHECK(xonly_pk.VerifySchnorr(msg_hash, Span<const unsigned char>{schnorr_sig}));
+    BOOST_CHECK(xonly_pk.VerifySchnorr(msg_hash, Span<const unsigned char>{schnorr_sig, 64}));
 
     // Verify flipped bit fails
     schnorr_sig[0] ^= 0x01;
-    BOOST_CHECK(!xonly_pk.VerifySchnorr(msg_hash, Span<const unsigned char>{schnorr_sig}));
+    BOOST_CHECK(!xonly_pk.VerifySchnorr(msg_hash, Span<const unsigned char>{schnorr_sig, 64}));
 }
 
 // ============================================================================

@@ -118,6 +118,11 @@ public:
     uint64_t median_price_micro_usd{0};      // Median price in DigiDollar cents (100 = $1.00) - field name kept for compatibility
     int64_t timestamp{0};                     // Unix timestamp of bundle creation
 
+    //! v0x03 MuSig2 fields (Phase 3)
+    uint8_t version{2};                                  // 1=Phase1, 2=Phase2, 3=MuSig2
+    std::vector<unsigned char> aggregate_sig;             // 64 bytes BIP-340 Schnorr for v0x03
+    std::vector<unsigned char> participation_bitmap;      // variable-length bitmap for v0x03
+
     //! Constructors
     COracleBundle() = default;
     explicit COracleBundle(int32_t epoch_in);
@@ -130,6 +135,18 @@ public:
         READWRITE(obj.median_price_micro_usd);
         READWRITE(obj.timestamp);
     }
+
+    //! v0x03 MuSig2 helpers
+    bool IsMuSig2() const { return version == 3; }
+
+    //! Get v0x03 on-chain payload size: bitmap_len(1) + bitmap + price(8) + timestamp(8) + sig(64)
+    size_t GetV03PayloadSize() const;
+
+    //! Serialize v0x03 on-chain data (standalone, no bundle_manager dependency)
+    std::vector<unsigned char> SerializeV03Data() const;
+
+    //! Deserialize v0x03 on-chain data into a COracleBundle
+    static bool DeserializeV03Data(const std::vector<unsigned char>& data, COracleBundle& bundle);
 
     //! Validation
     //! @param min_required  Number of oracle messages required for consensus (from chainparams.nOracleRequiredMessages)

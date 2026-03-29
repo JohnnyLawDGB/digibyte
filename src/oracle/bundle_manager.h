@@ -107,6 +107,10 @@ public:
     bool ExtractOracleBundle(const CTransaction& coinbase_tx, COracleBundle& bundle) const;
     bool TryCreateBundle(int32_t epoch);  // Explicitly create bundle for given epoch
 
+    //! MuSig2 Phase 3 session lifecycle
+    bool StartMuSig2Session(int32_t block_height);
+    bool CompleteMuSig2Session(int32_t block_height);
+
     //! Price functions
     CAmount GetConsensusPrice(int32_t epoch) const;
     CAmount GetLatestPrice() const;
@@ -189,6 +193,10 @@ public:
 
     //! Clear all state (for testing)
     void Clear();
+
+    //! Phase 3 MuSig2 block-tick orchestration
+    bool StartMuSig2Session(int32_t block_height);
+    bool CompleteMuSig2Session(int32_t block_height);
 
     //! Configuration validation
     bool ValidateConfiguration() const;

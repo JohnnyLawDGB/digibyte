@@ -32,6 +32,10 @@
 // Forward declaration for missing functions
 extern int32_t GetBestHeight();
 
+// MuSig2 global signing session store (defined in musig2_session.cpp)
+extern std::map<int32_t, MuSig2SigningSession> g_oracle_signing_sessions;
+extern Mutex g_oracle_signing_sessions_mutex;
+
 // Get current chain height - used by oracle bundle manager
 int32_t GetBestHeight() {
     // TODO: Wire up to ChainstateManager properly
@@ -516,6 +520,10 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     if (block_height >= cparams_phase3.nDigiDollarPhase3Height) {
         LogPrintf("Oracle: Phase 3 active at height %d (activation=%d), using MuSig2 bundling\n",
                  block_height, cparams_phase3.nDigiDollarPhase3Height);
+
+        // Trigger MuSig2 orchestration on each block tick.
+        StartMuSig2Session(block_height);
+        CompleteMuSig2Session(block_height);
 
         COracleBundle bundle(epoch);
         bundle.version = 3;
@@ -1486,6 +1494,140 @@ bool OracleBundleManager::HasBroadcastConsensusProposal(int32_t epoch) const
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
     return broadcast_proposal_epochs.count(epoch) > 0;
+}
+
+bool OracleBundleManager::StartMuSig2Session(int32_t block_height)
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    if (!consensus.IsPhaseThreeActive(block_height)) return false;
+
+    OracleManager& om = OracleManager::GetInstance();
+    const std::vector<uint32_t> active_ids = om.GetActiveOracleIds();
+    if (active_ids.empty()) return false;
+
+    const uint8_t local_oracle_id = static_cast<uint8_t>(active_ids.front());
+    OracleNode* local_node = om.GetOracleNode(local_oracle_id);
+    if (!local_node) return false;
+
+    const int32_t epoch = GetCurrentEpoch(block_height);
+
+    MuSig2SigningSession* session_ptr = nullptr;
+    {
+        LOCK(g_oracle_signing_sessions_mutex);
+        if (g_oracle_signing_sessions.count(epoch)) return false;
+
+        auto [it, ok] = g_oracle_signing_sessions.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(epoch),
+            std::forward_as_tuple(epoch, static_cast<uint8_t>(consensus.nOracleRequiredMessages)));
+        if (!ok) return false;
+        session_ptr = &it->second;
+    }
+
+    MuSig2OracleAggregator aggregator;
+    secp256k1_xonly_pubkey agg_pk;
+    secp256k1_musig_keyagg_cache keyagg_cache;
+    if (!aggregator.ComputeAggregatePubkey(active_ids, agg_pk, keyagg_cache)) return false;
+
+    const CKey signing_key = local_node->GetOraclePrivateKey();
+    if (!signing_key.IsValid()) return false;
+
+    const CPubKey pubkey = local_node->GetPublicKey();
+    if (!pubkey.IsFullyValid()) return false;
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    secp256k1_pubkey secp_pubkey;
+    if (!secp256k1_ec_pubkey_parse(ctx, &secp_pubkey, pubkey.data(), pubkey.size())) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    secp256k1_musig_pubnonce pubnonce;
+    if (!session_ptr->GenerateNonce(signing_key, secp_pubkey, keyagg_cache, pubnonce)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+    session_ptr->AddPubnonce(local_oracle_id, pubnonce);
+
+    OracleMusigNonceMsg msg;
+    msg.epoch = epoch;
+    msg.oracle_id = local_oracle_id;
+    msg.pubnonce.resize(66);
+    if (!secp256k1_musig_pubnonce_serialize(ctx, msg.pubnonce.data(), &pubnonce)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+    secp256k1_context_destroy(ctx);
+
+    if (m_connman) {
+        m_connman->ForEachNode([this, &msg](CNode* node) {
+            m_connman->PushMessage(node,
+                CNetMsgMaker(node->GetCommonVersion()).Make(NetMsgType::ORACLEMUSIGNONCE, msg));
+        });
+    }
+
+    return true;
+}
+
+bool OracleBundleManager::CompleteMuSig2Session(int32_t block_height)
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    if (!consensus.IsPhaseThreeActive(block_height)) return false;
+
+    OracleManager& om = OracleManager::GetInstance();
+    const std::vector<uint32_t> active_ids = om.GetActiveOracleIds();
+    if (active_ids.empty()) return false;
+
+    const uint8_t local_oracle_id = static_cast<uint8_t>(active_ids.front());
+    OracleNode* local_node = om.GetOracleNode(local_oracle_id);
+    if (!local_node) return false;
+
+    const int32_t epoch = GetCurrentEpoch(block_height);
+    LOCK(g_oracle_signing_sessions_mutex);
+    auto it = g_oracle_signing_sessions.find(epoch);
+    if (it == g_oracle_signing_sessions.end()) return false;
+
+    MuSig2SigningSession& session = it->second;
+    if (!session.HasEnoughNonces()) return false;
+
+    unsigned char msg32[32] = {0};
+    std::memcpy(msg32, &epoch, std::min(sizeof(epoch), sizeof(msg32)));
+
+    if (session.GetState() == MuSig2SessionState::NONCES_COMPLETE && !session.AggregateNonces(msg32)) {
+        return false;
+    }
+    if (session.GetState() != MuSig2SessionState::SIGNING) return false;
+
+    const CKey signing_key = local_node->GetOraclePrivateKey();
+    if (!signing_key.IsValid()) return false;
+
+    secp256k1_musig_partial_sig partial_sig;
+    if (!session.CreatePartialSignature(signing_key, partial_sig)) return false;
+    session.AddPartialSignature(local_oracle_id, partial_sig);
+
+    OracleMusigPartialSigMsg msg;
+    msg.epoch = epoch;
+    msg.oracle_id = local_oracle_id;
+    msg.partial_sig.resize(32);
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+    if (!secp256k1_musig_partial_sig_serialize(ctx, msg.partial_sig.data(), &partial_sig)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+    secp256k1_context_destroy(ctx);
+
+    if (m_connman) {
+        m_connman->ForEachNode([this, &msg](CNode* node) {
+            m_connman->PushMessage(node,
+                CNetMsgMaker(node->GetCommonVersion()).Make(NetMsgType::ORACLEMUSIGPARTIALSIG, msg));
+        });
+    }
+
+    return true;
 }
 
 bool OracleBundleManager::RegisterSeenAttestation(const uint256& hash)

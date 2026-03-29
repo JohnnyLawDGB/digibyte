@@ -67,14 +67,14 @@ extern "C" {
  *
  *  Returns: 1 when the signature could be parsed, 0 otherwise.
  *  Args: ctx:      a secp256k1 context object
- *  Out:  sig:      a pointer to a signature object
- *  In:   input:    a pointer to the signature to be parsed
+ *  Out:  sig:      pointer to a signature object
+ *  In:   input:    pointer to the signature to be parsed
  *        inputlen: the length of the array pointed to be input
  *
  *  This function will accept any valid DER encoded signature, even if the
  *  encoded numbers are out of range. In addition, it will accept signatures
  *  which violate the DER spec in various ways. Its purpose is to allow
- *  validation of the DigiByte blockchain, which includes non-DER signatures
+ *  validation of the Bitcoin blockchain, which includes non-DER signatures
  *  from before the network rules were updated to enforce DER. Note that
  *  the set of supported violations is a strict subset of what OpenSSL will
  *  accept.

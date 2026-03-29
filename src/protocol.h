@@ -299,6 +299,8 @@ extern const char* ORACLECONSENSUS;
  * Part of the DigiDollar Oracle System — Phase 2 Round 2 protocol.
  */
 extern const char* ORACLEATTESTATION;
+extern const char* ORACLEMUSIGNONCE;
+extern const char* ORACLEMUSIGPARTIALSIG;
 }; // namespace NetMsgType
 
 /* Get a vector of all valid message types (see above) */
@@ -527,6 +529,8 @@ enum GetDataMsg : uint32_t {
     MSG_GET_ORACLE_DATA = 0x40000002,
     MSG_ORACLE_CONSENSUS = 0x40000003,
     MSG_ORACLE_ATTESTATION = 0x40000004,
+    MSG_ORACLE_MUSIG_NONCE = 0x40000005,
+    MSG_ORACLE_MUSIG_PARTIALSIG = 0x40000006,
 };
 
 /** inv message data */
@@ -567,7 +571,8 @@ public:
     bool IsOracleMsg() const
     {
         return type == MSG_ORACLE_PRICE || type == MSG_ORACLE_BUNDLE || type == MSG_GET_ORACLE_DATA ||
-               type == MSG_ORACLE_CONSENSUS || type == MSG_ORACLE_ATTESTATION;
+               type == MSG_ORACLE_CONSENSUS || type == MSG_ORACLE_ATTESTATION ||
+               type == MSG_ORACLE_MUSIG_NONCE || type == MSG_ORACLE_MUSIG_PARTIALSIG;
     }
 
     uint32_t type;

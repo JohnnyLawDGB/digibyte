@@ -81,6 +81,7 @@ public:
 
 private:
     secp256k1_context* m_ctx;  //!< secp256k1 context for EC operations
+    size_t m_max_cache_entries{1024};  //!< Maximum LRU cache size
 
     //! Cache: bitmap_hash -> (aggregate_xonly_pk, keyagg_cache)
     std::map<uint256, std::pair<secp256k1_xonly_pubkey, secp256k1_musig_keyagg_cache>> m_cache GUARDED_BY(m_cache_mutex);

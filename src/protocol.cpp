@@ -277,3 +277,21 @@ uint256 OracleBundleMsg::GetHash() const
     hasher << bundle << block_hash;
     return hasher.GetHash();
 }
+
+uint256 OracleMusigNonceMsg::GetHash() const
+{
+    CHashWriter hasher(0);
+    hasher << epoch;
+    hasher << oracle_id;
+    hasher << pubnonce;
+    return hasher.GetHash();
+}
+
+uint256 OracleMusigPartialSigMsg::GetHash() const
+{
+    CHashWriter hasher(0);
+    hasher << epoch;
+    hasher << oracle_id;
+    hasher << partial_sig;
+    return hasher.GetHash();
+}

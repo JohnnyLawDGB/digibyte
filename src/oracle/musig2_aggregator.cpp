@@ -18,6 +18,13 @@ MuSig2OracleAggregator::MuSig2OracleAggregator()
     assert(m_ctx != nullptr);
 }
 
+MuSig2OracleAggregator::MuSig2OracleAggregator(size_t max_cache_entries)
+    : m_max_cache_entries(max_cache_entries)
+{
+    m_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    assert(m_ctx != nullptr);
+}
+
 MuSig2OracleAggregator::~MuSig2OracleAggregator()
 {
     if (m_ctx) {

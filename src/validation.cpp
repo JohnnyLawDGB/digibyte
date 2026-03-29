@@ -111,6 +111,50 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
 
+static bool CheckPhase3OracleBundleVersion(const CBlock& block, const CBlockIndex* pindex_prev, const Consensus::Params& params, BlockValidationState& state)
+{
+    if (block.vtx.empty() || !block.vtx[0] || !block.vtx[0]->IsCoinBase()) return true;
+
+    int32_t block_height = pindex_prev ? (pindex_prev->nHeight + 1) : 0;
+    if (!pindex_prev && !block.vtx[0]->vin.empty() && block.vtx[0]->vin[0].scriptSig.size() >= 1) {
+        CScript::const_iterator pc = block.vtx[0]->vin[0].scriptSig.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        if (block.vtx[0]->vin[0].scriptSig.GetOp(pc, opcode, data) && !data.empty()) {
+            block_height = CScriptNum(data, true).getint();
+        }
+    }
+
+    if (pindex_prev) {
+        if (!DigiDollar::IsDigiDollarEnabled(pindex_prev, params)) return true;
+    } else if (block_height < params.nDDActivationHeight) {
+        return true;
+    }
+
+    COracleBundle bundle;
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    if (!manager.ExtractOracleBundle(*block.vtx[0], bundle)) return true;
+
+    const bool phase3_active = block_height >= params.nDigiDollarPhase3Height;
+    if (phase3_active) {
+        if (bundle.version != 3) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
+                                 strprintf("Phase3 requires v0x03 bundles at height %d, got v0x%02x", block_height, bundle.version));
+        }
+    } else {
+        if (bundle.version == 3) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
+                                 strprintf("v0x03 bundle not allowed before Phase3 at height %d", block_height));
+        }
+        if (bundle.version != 1 && bundle.version != 2) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
+                                 strprintf("Unsupported pre-Phase3 bundle version v0x%02x", bundle.version));
+        }
+    }
+
+    return true;
+}
+
 GlobalMutex g_best_block_mutex;
 std::condition_variable g_best_block_cv;
 uint256 g_best_block;
@@ -2572,6 +2616,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return error("%s: Consensus::CheckBlock: %s", __func__, state.ToString());
     }
 
+    if (!CheckPhase3OracleBundleVersion(block, pindex->pprev, params.GetConsensus(), state)) {
+        return error("%s: Consensus::CheckPhase3OracleBundleVersion: %s", __func__, state.ToString());
+    }
+
     // verify that the view's current state corresponds to the previous block
     uint256 hashPrevBlock = pindex->pprev == nullptr ? uint256() : pindex->pprev->GetBlockHash();
     assert(hashPrevBlock == view.GetBestBlock());
@@ -4320,6 +4368,10 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     // Full oracle validation is performed in ContextualCheckBlock
     if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams, state)) {
         return false; // State already set by ValidateBlockOracleData
+    }
+
+    if (!CheckPhase3OracleBundleVersion(block, nullptr, consensusParams, state)) {
+        return false;
     }
 
     return true;

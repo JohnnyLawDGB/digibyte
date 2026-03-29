@@ -82,6 +82,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_t2_05_tests.cpp \
   test/digidollar_opcodes_tests.cpp \
   test/digidollar_oracle_tests.cpp \
+  test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \
   test/oracle_price_staleness_tests.cpp \
@@ -100,6 +101,7 @@ DIGIBYTE_TESTS =\
   test/musig2_basic_tests.cpp \
   test/musig2_bundle_format_tests.cpp \
   test/musig2_p2p_message_tests.cpp \
+  test/musig2_session_tests.cpp \
   test/redteam_phase2_audit_tests.cpp \
   test/oracle_consensus_threshold_tests.cpp \
   test/digidollar_p2p_tests.cpp \

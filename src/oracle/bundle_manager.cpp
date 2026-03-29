@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <optional>
 
 #include <chainparams.h>
 #include <common/args.h>
@@ -17,10 +18,13 @@
 #include <net.h>
 #include <netmessagemaker.h>
 #include <oracle/mock_oracle.h>
+#include <oracle/musig2_aggregator.h>
+#include <oracle/musig2_session.h>
 #include <oracle/node.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <protocol.h>
+#include <script/script.h>
 #include <script/standard.h>
 #include <util/time.h>
 #include <validation.h>
@@ -507,6 +511,70 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     int32_t epoch = GetCurrentEpoch(block_height);
     LogPrintf("Oracle: Current epoch=%d for height %d\n", epoch, block_height);
 
+    // Phase 3 gate: use MuSig2 aggregate signatures when activated
+    const Consensus::Params& cparams_phase3 = Params().GetConsensus();
+    if (block_height >= cparams_phase3.nDigiDollarPhase3Height) {
+        LogPrintf("Oracle: Phase 3 active at height %d (activation=%d), using MuSig2 bundling\n",
+                 block_height, cparams_phase3.nDigiDollarPhase3Height);
+
+        COracleBundle bundle(epoch);
+        bundle.version = 3;
+
+        // Look up the MuSig2 signing session for this epoch
+        bool session_ready = false;
+        {
+            LOCK(g_oracle_signing_sessions_mutex);
+            auto it = g_oracle_signing_sessions.find(epoch);
+            if (it != g_oracle_signing_sessions.end()) {
+                MuSig2SigningSession& session = it->second;
+                if (session.HasEnoughPartialSigs() &&
+                    session.GetState() == MuSig2SessionState::COMPLETE) {
+                    // Session is complete — extract aggregate sig and bitmap
+                    bundle.aggregate_sig = session.GetAggregateSig();
+                    bundle.participation_bitmap = session.GetParticipationBitmap();
+                    session_ready = true;
+                    LogPrintf("Oracle: MuSig2 session for epoch %d is COMPLETE, sig=%zu bytes, bitmap=%zu bytes\n",
+                             epoch, bundle.aggregate_sig.size(), bundle.participation_bitmap.size());
+                } else {
+                    LogPrintf("Oracle: MuSig2 session for epoch %d not ready (state=%d, enough_sigs=%d)\n",
+                             epoch, static_cast<int>(session.GetState()), session.HasEnoughPartialSigs());
+                }
+            } else {
+                LogPrintf("Oracle: No MuSig2 session found for epoch %d\n", epoch);
+            }
+        }
+
+        if (!session_ready) {
+            LogPrintf("Oracle: Phase 3 MuSig2 session not ready for epoch %d, skipping bundle\n", epoch);
+            return false;
+        }
+
+        // Set bundle price and timestamp from cached consensus values
+        bundle.median_price_micro_usd = cached_price > 0 ? static_cast<uint64_t>(cached_price) : 0;
+        bundle.timestamp = GetTime();
+
+        // Create oracle script and add to coinbase
+        CScript oracle_script = CreateOracleScript(bundle);
+        LogPrintf("Oracle: Phase 3 CreateOracleScript returned script of size %zu\n", oracle_script.size());
+
+        if (oracle_script.empty()) {
+            LogPrintf("Oracle: Phase 3 script is empty, returning true without adding bundle\n");
+            return true;
+        }
+
+        CMutableTransaction coinbase_tx(*block.vtx[0]);
+        CTxOut oracle_output;
+        oracle_output.nValue = 0;
+        oracle_output.scriptPubKey = oracle_script;
+        coinbase_tx.vout.push_back(oracle_output);
+        block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
+
+        LogPrintf("Oracle: Phase 3 added MuSig2 oracle bundle to block %d (epoch %d)\n",
+                 block_height, epoch);
+        return true;
+    }
+
+    // Phase 1/2 bundling (existing logic below)
     COracleBundle bundle = GetCurrentBundle(epoch);
     LogPrintf("Oracle: GetCurrentBundle(epoch=%d) returned bundle with %zu messages, HasConsensus=%d\n",
              epoch, bundle.messages.size(), bundle.HasConsensus(min_oracle_count));
@@ -729,6 +797,72 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         bundle = COracleBundle(epoch);
     }
 
+    const Consensus::Params& consensus_params = Params().GetConsensus();
+    if (consensus_params.IsPhaseThreeActive(block_height)) {
+        LogPrintf("Oracle: Phase Three active at height %d, checking MuSig2 session for epoch %d\n", block_height, epoch);
+
+        std::optional<std::vector<unsigned char>> phase3_sig;
+        std::optional<std::vector<unsigned char>> phase3_bitmap;
+
+        {
+            LOCK(g_oracle_signing_sessions_mutex);
+            auto it = g_oracle_signing_sessions.find(epoch);
+            if (it != g_oracle_signing_sessions.end()) {
+                MuSig2SigningSession& session = it->second;
+                std::vector<unsigned char> sig64;
+
+                if (session.GetState() == MuSig2SessionState::COMPLETE) {
+                    sig64 = session.GetAggregateSig();
+                } else if (session.HasEnoughPartialSigs() && session.AggregateSignature(sig64)) {
+                    LogPrintf("Oracle: Aggregated MuSig2 signature for epoch %d at block build\n", epoch);
+                }
+
+                if (sig64.size() == 64) {
+                    auto bitmap = session.GetParticipationBitmap();
+                    if (!bitmap.empty()) {
+                        phase3_sig = std::move(sig64);
+                        phase3_bitmap = std::move(bitmap);
+                    }
+                }
+            }
+        }
+
+        if (phase3_sig && phase3_bitmap) {
+            const uint16_t total_oracles = static_cast<uint16_t>(std::max(1, consensus_params.nOracleTotalOracles));
+            std::vector<uint8_t> participating_ids = MuSig2OracleAggregator::DecodeBitmap(*phase3_bitmap, total_oracles);
+            if (participating_ids.size() >= ORACLE_CONSENSUS_REQUIRED) {
+                MuSig2OracleAggregator aggregator;
+                secp256k1_xonly_pubkey agg_pk;
+                secp256k1_musig_keyagg_cache cache;
+                if (aggregator.ComputeAggregatePubkey(participating_ids, agg_pk, cache)) {
+                    COracleBundle v03_bundle = bundle;
+                    v03_bundle.version = 3;
+                    v03_bundle.aggregate_sig = *phase3_sig;
+                    v03_bundle.participation_bitmap = *phase3_bitmap;
+
+                    std::vector<unsigned char> v03_payload = v03_bundle.SerializeV03Data();
+                    if (!v03_payload.empty() && v03_payload.size() <= MAX_SCRIPT_ELEMENT_SIZE) {
+                        bundle = std::move(v03_bundle);
+                        LOCK(g_oracle_signing_sessions_mutex);
+                        g_oracle_signing_sessions.erase(epoch);
+                        LogPrintf("Oracle: Using v0x03 MuSig2 bundle at height %d, participants=%zu payload=%zu bytes\n",
+                                  block_height, participating_ids.size(), v03_payload.size());
+                    } else {
+                        LogPrintf("Oracle: Rejecting v0x03 payload size=%zu (max=%d)\n",
+                                  v03_payload.size(), MAX_SCRIPT_ELEMENT_SIZE);
+                    }
+                } else {
+                    LogPrintf("Oracle: Failed ComputeAggregatePubkey for %zu participants\n", participating_ids.size());
+                }
+            } else {
+                LogPrintf("Oracle: MuSig2 participant threshold not met (%zu < %d)\n",
+                          participating_ids.size(), ORACLE_CONSENSUS_REQUIRED);
+            }
+        } else {
+            LogPrintf("Oracle: No complete MuSig2 session available for epoch %d, falling back to legacy bundle\n", epoch);
+        }
+    }
+
     LogPrintf("Oracle: Final bundle has %zu messages before CreateOracleScript\n", bundle.messages.size());
 
     // Create oracle script and add to coinbase
@@ -757,6 +891,39 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
 CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) const
 {
+    // Phase Three (v0x03): MuSig2 aggregate signature + participation bitmap
+    // Format: OP_RETURN OP_ORACLE <version=0x03> <v03_data>
+    // v03_data: bitmap_len(1) + bitmap(var) + price(8) + timestamp(8) + aggregate_sig(64)
+    if (bundle.version == 3) {
+        if (bundle.aggregate_sig.size() != 64) {
+            LogPrintf("Oracle: CreateOracleScript v0x03 error: aggregate_sig size %zu != 64\n",
+                     bundle.aggregate_sig.size());
+            return CScript();
+        }
+
+        if (bundle.participation_bitmap.empty()) {
+            LogPrintf("Oracle: CreateOracleScript v0x03 error: empty participation_bitmap\n");
+            return CScript();
+        }
+
+        std::vector<unsigned char> v03_data = bundle.SerializeV03Data();
+        if (v03_data.empty()) {
+            LogPrintf("Oracle: CreateOracleScript v0x03 error: SerializeV03Data failed\n");
+            return CScript();
+        }
+
+        CScript script;
+        script << OP_RETURN << OP_ORACLE;
+        script << std::vector<unsigned char>{0x03};
+        script << v03_data;
+
+        LogPrintf("Oracle: Created Phase Three (v0x03) script with bitmap_bytes=%zu, payload=%zu, price=%llu\n",
+                 bundle.participation_bitmap.size(),
+                 v03_data.size(),
+                 static_cast<unsigned long long>(bundle.median_price_micro_usd));
+        return script;
+    }
+
     if (bundle.messages.empty()) {
         return CScript(); // Empty script for no oracle data
     }
@@ -932,7 +1099,29 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                     }
 
                     // Check version byte
-                    if (data[0] == 0x01) {
+                    if (data[0] == 0x03) {
+                        // v0x03 MuSig2 format: aggregate sig + participation bitmap
+                        // Data layout (after version byte):
+                        //   bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
+                        std::vector<unsigned char> v03_data(data.begin() + 1, data.end());
+
+                        if (!COracleBundle::DeserializeV03Data(v03_data, bundle)) {
+                            LogPrintf("Oracle: Failed to deserialize v0x03 MuSig2 bundle data (%zu bytes)\n",
+                                     v03_data.size());
+                            return false;
+                        }
+
+                        bundle.version = 3;
+                        bundle.epoch = 0; // Epoch is not stored on-chain; set by caller
+
+                        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted v0x03 MuSig2 bundle: "
+                                 "bitmap=%zu bytes, price=%llu micro-USD, sig=%zu bytes\n",
+                                 bundle.participation_bitmap.size(),
+                                 static_cast<unsigned long long>(bundle.median_price_micro_usd),
+                                 bundle.aggregate_sig.size());
+                        return true;
+                    }
+                    else if (data[0] == 0x01) {
                         // Phase One compact format: oracle_id (1) + price (8) + timestamp (8) = 17 bytes
                         if (data.size() < 18) { // 1 (version) + 17 (data)
                             LogPrintf("Oracle: Invalid Phase One bundle size: %d\n", data.size());
@@ -987,9 +1176,9 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         if (data.size() < 18) { // minimum: version + num_msgs + price + timestamp
                             return false;
                         }
-                        
+
                         uint8_t num_messages = data[1];
-                        
+
                         // Validate we have enough data for all messages
                         size_t expected_size = 1 + 1 + 8 + 8 + num_messages * 65; // version + header + per-msg
                         if (data.size() < expected_size) {
@@ -997,54 +1186,81 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                                      data.size(), expected_size, num_messages);
                             return false;
                         }
-                        
+
                         // Parse consensus price (uint64, little-endian)
                         uint64_t price = 0;
                         for (int i = 0; i < 8; ++i) {
                             price |= (static_cast<uint64_t>(data[2 + i]) << (i * 8));
                         }
-                        
+
                         // Parse consensus timestamp (int64, little-endian)
                         int64_t timestamp = 0;
                         for (int i = 0; i < 8; ++i) {
                             timestamp |= (static_cast<int64_t>(data[10 + i]) << (i * 8));
                         }
-                        
+
+                        bundle.version = 2;
+                        bundle.aggregate_sig.clear();
+                        bundle.participation_bitmap.clear();
                         bundle.messages.clear();
                         const CChainParams& chainparams = Params();
-                        
+
                         // Parse each oracle message (oracle_id + schnorr_sig)
                         size_t offset = 18; // past version + num_msgs + price + timestamp
                         for (uint8_t m = 0; m < num_messages; m++) {
                             COraclePriceMessage msg;
                             msg.oracle_id = data[offset];
                             offset += 1;
-                            
+
                             msg.schnorr_sig.assign(data.begin() + offset, data.begin() + offset + 64);
                             offset += 64;
-                            
+
                             // All oracles in the bundle attested to the same consensus price
                             msg.price_micro_usd = price;
                             msg.timestamp = timestamp;
                             msg.block_height = 0;
                             msg.nonce = 0;
-                            
+
                             // Get oracle pubkey from chainparams for verification
                             const OracleNodeInfo* oracle_info = chainparams.GetOracleNode(msg.oracle_id);
                             if (oracle_info) {
                                 msg.oracle_pubkey = XOnlyPubKey(oracle_info->pubkey);
                             }
-                            
+
                             bundle.messages.push_back(msg);
                         }
-                        
+
                         bundle.median_price_micro_usd = price;
                         bundle.timestamp = timestamp;
                         bundle.epoch = 0;
-                        
+
                         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted Phase Two bundle: %d oracles with signatures, price=%llu micro-USD\n",
                                  num_messages, price);
-                        
+
+                        return true;
+                    }
+                    else if (data[0] == 0x03) {
+                        // Phase Three (MuSig2) format
+                        // Layout: version(1) + bitmap_len(1) + bitmap(var) + price(8) + timestamp(8) + aggregate_sig(64)
+                        std::vector<unsigned char> v03_data(data.begin() + 1, data.end());
+
+                        COracleBundle v03_bundle;
+                        if (!COracleBundle::DeserializeV03Data(v03_data, v03_bundle)) {
+                            LogPrintf("Oracle: Failed to deserialize v0x03 bundle payload (size=%zu)\n",
+                                     v03_data.size());
+                            return false;
+                        }
+
+                        bundle = std::move(v03_bundle);
+                        bundle.version = 3;
+                        bundle.messages.clear(); // v0x03 stores aggregate signature, not per-oracle sig list
+                        bundle.epoch = 0;
+
+                        LogPrint(BCLog::DIGIDOLLAR,
+                                 "Oracle: Extracted Phase Three (v0x03) bundle: bitmap_bytes=%zu, price=%llu micro-USD\n",
+                                 bundle.participation_bitmap.size(),
+                                 static_cast<unsigned long long>(bundle.median_price_micro_usd));
+
                         return true;
                     }
 

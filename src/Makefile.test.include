@@ -99,6 +99,7 @@ DIGIBYTE_TESTS =\
   test/oracle_wallet_autostart_tests.cpp \
   test/oracle_phase2_tests.cpp \
   test/musig2_basic_tests.cpp \
+  test/musig2_bundle_creation_tests.cpp \
   test/musig2_bundle_format_tests.cpp \
   test/musig2_bundle_manager_tests.cpp \
   test/musig2_p2p_message_tests.cpp \

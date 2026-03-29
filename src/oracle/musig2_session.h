@@ -1,0 +1,205 @@
+// Copyright (c) 2024-2026 The DigiByte Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#ifndef DIGIBYTE_ORACLE_MUSIG2_SESSION_H
+#define DIGIBYTE_ORACLE_MUSIG2_SESSION_H
+
+#include <key.h>
+#include <sync.h>
+
+#include <secp256k1.h>
+#include <secp256k1_extrakeys.h>
+#include <secp256k1_musig.h>
+
+#include <cstdint>
+#include <map>
+#include <vector>
+
+/**
+ * MuSig2 signing session state.
+ *
+ * Lifecycle:
+ *   CREATED → NONCES_COLLECTING → NONCES_COMPLETE → SIGNING → COMPLETE
+ *   Any state may transition to FAILED (timeout or error).
+ */
+enum class MuSig2SessionState {
+    CREATED,              //!< Session constructed, no nonce generated yet
+    NONCES_COLLECTING,    //!< Local nonce generated, collecting peer pubnonces
+    NONCES_COMPLETE,      //!< Enough pubnonces received (>= min_signers)
+    SIGNING,              //!< Nonces aggregated, ready for partial signatures
+    COMPLETE,             //!< Final aggregate signature produced
+    FAILED                //!< Session failed (timeout, error, etc.)
+};
+
+/**
+ * MuSig2 Signing Session — in-process state machine
+ *
+ * Manages the two-round MuSig2 (BIP-327) signing protocol for a single epoch.
+ * Each session tracks one local signer's secret nonce and collects pubnonces
+ * and partial signatures from all participating signers.
+ *
+ * Protocol flow:
+ *   1. GenerateNonce()          — create local secnonce + pubnonce
+ *   2. AddPubnonce() × N        — collect pubnonces from all signers
+ *   3. AggregateNonces(msg32)   — aggregate nonces + bind to message
+ *   4. CreatePartialSignature() — produce local partial sig (zeroes secnonce)
+ *   5. AddPartialSignature() × N — collect partial sigs from all signers
+ *   6. AggregateSignature()     — produce final 64-byte BIP-340 Schnorr sig
+ *
+ * SECURITY:
+ *   - secp256k1_musig_secnonce is NEVER copied. It lives solely in this object.
+ *   - secnonce is zeroed by secp256k1_musig_partial_sign on success, and
+ *     explicitly zeroed via memset in the destructor as a safety net.
+ *   - GenerateNonce() can only be called once per session.
+ *   - CreatePartialSignature() can only be called once per session.
+ *
+ * Thread safety: all public methods are guarded by m_mutex.
+ * This class has NO P2P dependencies — purely in-process.
+ */
+class MuSig2SigningSession {
+public:
+    /**
+     * @param[in] epoch       The epoch this session is signing for.
+     * @param[in] min_signers Minimum number of signers required (e.g., 9 for 9-of-15).
+     */
+    MuSig2SigningSession(int32_t epoch, uint8_t min_signers);
+    ~MuSig2SigningSession();
+
+    // Non-copyable (secnonce must not be copied)
+    MuSig2SigningSession(const MuSig2SigningSession&) = delete;
+    MuSig2SigningSession& operator=(const MuSig2SigningSession&) = delete;
+
+    // Movable
+    MuSig2SigningSession(MuSig2SigningSession&& other) noexcept;
+    MuSig2SigningSession& operator=(MuSig2SigningSession&& other) noexcept;
+
+    /** Get current session state. */
+    MuSig2SessionState GetState() const;
+
+    /** Get the epoch this session is for. */
+    int32_t GetEpoch() const;
+
+    /**
+     * Round 1a: Generate local nonce pair.
+     * Transitions: CREATED → NONCES_COLLECTING.
+     * Can only be called once.
+     *
+     * @param[in]  signing_key  Local signer's private key
+     * @param[in]  pubkey       Local signer's public key (secp256k1 format)
+     * @param[in]  cache        Key aggregation cache for this signer set
+     * @param[out] pubnonce_out Generated public nonce to share with peers
+     * @return true on success
+     */
+    bool GenerateNonce(const CKey& signing_key,
+                       const secp256k1_pubkey& pubkey,
+                       const secp256k1_musig_keyagg_cache& cache,
+                       secp256k1_musig_pubnonce& pubnonce_out);
+
+    /**
+     * Round 1b: Add a peer's public nonce.
+     * Transitions: NONCES_COLLECTING → NONCES_COMPLETE when count >= min_signers.
+     *
+     * @param[in] oracle_id  Unique signer ID (0-255)
+     * @param[in] pubnonce   The signer's public nonce
+     * @return true if accepted (false if duplicate ID, wrong state, or invalid)
+     */
+    bool AddPubnonce(uint8_t oracle_id, const secp256k1_musig_pubnonce& pubnonce);
+
+    /** Check if enough pubnonces have been collected. */
+    bool HasEnoughNonces() const;
+
+    /**
+     * Aggregate collected pubnonces and initialize signing session.
+     * Transitions: NONCES_COMPLETE → SIGNING.
+     *
+     * @param[in] msg32 The 32-byte message to sign
+     * @return true on success
+     */
+    bool AggregateNonces(const unsigned char* msg32);
+
+    /**
+     * Round 2a: Create local partial signature.
+     * Consumes and zeroes the secret nonce — can only be called once.
+     * Requires state == SIGNING.
+     *
+     * @param[in]  signing_key     Local signer's private key
+     * @param[out] partial_sig_out The produced partial signature
+     * @return true on success
+     */
+    bool CreatePartialSignature(const CKey& signing_key,
+                                secp256k1_musig_partial_sig& partial_sig_out);
+
+    /**
+     * Round 2b: Add a peer's partial signature.
+     *
+     * @param[in] oracle_id   Unique signer ID (0-255)
+     * @param[in] partial_sig The signer's partial signature
+     * @return true if accepted (false if duplicate ID or wrong state)
+     */
+    bool AddPartialSignature(uint8_t oracle_id,
+                             const secp256k1_musig_partial_sig& partial_sig);
+
+    /** Check if enough partial signatures have been collected. */
+    bool HasEnoughPartialSigs() const;
+
+    /**
+     * Aggregate partial signatures into final 64-byte BIP-340 Schnorr signature.
+     * Transitions: SIGNING → COMPLETE.
+     *
+     * @param[out] sig64_out The 64-byte aggregate signature
+     * @return true on success
+     */
+    bool AggregateSignature(std::vector<unsigned char>& sig64_out);
+
+    /**
+     * Check if this session has timed out based on block height.
+     * If current_height >= creation_height + timeout_blocks, state → FAILED.
+     *
+     * @param[in] current_height Current block height
+     */
+    void CheckTimeout(int32_t current_height);
+
+    /**
+     * Set the timeout in blocks from creation height.
+     * Default timeout is 20 blocks.
+     *
+     * @param[in] blocks Number of blocks before timeout
+     */
+    void SetTimeoutBlocks(int32_t blocks);
+
+private:
+    mutable Mutex m_mutex;
+
+    int32_t m_epoch;                          //!< Epoch this session is signing for
+    uint8_t m_min_signers;                    //!< Minimum signers required
+    MuSig2SessionState m_state GUARDED_BY(m_mutex);
+
+    secp256k1_context* m_ctx;                 //!< secp256k1 context (owned)
+
+    //! Local signer's secret nonce — MUST NOT be copied, zeroed after signing
+    secp256k1_musig_secnonce m_secnonce GUARDED_BY(m_mutex);
+    bool m_has_secnonce GUARDED_BY(m_mutex);  //!< Whether secnonce has been generated
+    bool m_secnonce_used GUARDED_BY(m_mutex); //!< Whether secnonce has been consumed
+
+    //! Key aggregation cache (set during GenerateNonce)
+    secp256k1_musig_keyagg_cache m_keyagg_cache GUARDED_BY(m_mutex);
+
+    //! Collected public nonces, keyed by oracle_id
+    std::map<uint8_t, secp256k1_musig_pubnonce> m_pubnonces GUARDED_BY(m_mutex);
+
+    //! Aggregate nonce (computed from collected pubnonces)
+    secp256k1_musig_aggnonce m_aggnonce GUARDED_BY(m_mutex);
+
+    //! secp256k1 MuSig2 session state (after nonce_process)
+    secp256k1_musig_session m_session GUARDED_BY(m_mutex);
+
+    //! Collected partial signatures, keyed by oracle_id
+    std::map<uint8_t, secp256k1_musig_partial_sig> m_partial_sigs GUARDED_BY(m_mutex);
+
+    //! Timeout configuration
+    int32_t m_creation_height GUARDED_BY(m_mutex); //!< Height at which session was created (= epoch)
+    int32_t m_timeout_blocks GUARDED_BY(m_mutex);  //!< Blocks before timeout (default 20)
+};
+
+#endif // DIGIBYTE_ORACLE_MUSIG2_SESSION_H

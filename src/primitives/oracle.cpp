@@ -200,6 +200,89 @@ COracleBundle::COracleBundle(int32_t epoch_in) : epoch(epoch_in)
 {
 }
 
+size_t COracleBundle::GetV03PayloadSize() const
+{
+    // v0x03 on-chain format: bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
+    return 1 + participation_bitmap.size() + 8 + 8 + 64;
+}
+
+std::vector<unsigned char> COracleBundle::SerializeV03Data() const
+{
+    // Validate: aggregate_sig must be exactly 64 bytes
+    if (aggregate_sig.size() != 64) return {};
+
+    // Validate: bitmap must not be empty
+    if (participation_bitmap.empty()) return {};
+
+    std::vector<unsigned char> data;
+    data.reserve(GetV03PayloadSize());
+
+    // bitmap_len (1 byte)
+    data.push_back(static_cast<unsigned char>(participation_bitmap.size()));
+
+    // bitmap (variable)
+    data.insert(data.end(), participation_bitmap.begin(), participation_bitmap.end());
+
+    // price (8 bytes, little-endian)
+    uint64_t price = median_price_micro_usd;
+    for (int i = 0; i < 8; ++i) {
+        data.push_back(static_cast<unsigned char>(price & 0xFF));
+        price >>= 8;
+    }
+
+    // timestamp (8 bytes, little-endian)
+    uint64_t ts = static_cast<uint64_t>(timestamp);
+    for (int i = 0; i < 8; ++i) {
+        data.push_back(static_cast<unsigned char>(ts & 0xFF));
+        ts >>= 8;
+    }
+
+    // aggregate_sig (64 bytes)
+    data.insert(data.end(), aggregate_sig.begin(), aggregate_sig.end());
+
+    return data;
+}
+
+bool COracleBundle::DeserializeV03Data(const std::vector<unsigned char>& data, COracleBundle& bundle)
+{
+    // Minimum: bitmap_len(1) + bitmap(>=1) + price(8) + timestamp(8) + sig(64) = 82
+    if (data.size() < 82) return false;
+
+    size_t pos = 0;
+
+    // bitmap_len (1 byte)
+    uint8_t bitmap_len = data[pos++];
+    if (bitmap_len == 0) return false;
+
+    // Check remaining data is sufficient
+    // Need: bitmap_len + 8 (price) + 8 (timestamp) + 64 (sig) bytes after bitmap_len byte
+    if (data.size() < 1 + bitmap_len + 8 + 8 + 64) return false;
+
+    // bitmap (variable)
+    bundle.participation_bitmap.assign(data.begin() + pos, data.begin() + pos + bitmap_len);
+    pos += bitmap_len;
+
+    // price (8 bytes, little-endian)
+    uint64_t price = 0;
+    for (int i = 0; i < 8; ++i) {
+        price |= static_cast<uint64_t>(data[pos++]) << (i * 8);
+    }
+    bundle.median_price_micro_usd = price;
+
+    // timestamp (8 bytes, little-endian)
+    uint64_t ts = 0;
+    for (int i = 0; i < 8; ++i) {
+        ts |= static_cast<uint64_t>(data[pos++]) << (i * 8);
+    }
+    bundle.timestamp = static_cast<int64_t>(ts);
+
+    // aggregate_sig (64 bytes)
+    bundle.aggregate_sig.assign(data.begin() + pos, data.begin() + pos + 64);
+    pos += 64;
+
+    return true;
+}
+
 bool COracleBundle::IsValid(int min_required, int64_t reference_time) const
 {
     // Check if bundle has messages

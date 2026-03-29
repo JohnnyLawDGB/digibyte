@@ -172,10 +172,11 @@ bool MuSig2SigningSession::AddPubnonce(uint8_t oracle_id,
     // Reject duplicate oracle ID
     if (m_pubnonces.count(oracle_id)) return false;
 
-    // Validate pubnonce by attempting to serialize it
-    // A zeroed/invalid pubnonce will fail serialization
-    unsigned char ser[66];
-    if (!secp256k1_musig_pubnonce_serialize(m_ctx, ser, &pubnonce)) {
+    // Validate pubnonce by checking secp256k1 internal magic bytes.
+    // secp256k1_musig_pubnonce_serialize calls abort() via ARG_CHECK on
+    // invalid data instead of returning false, so check magic directly.
+    static const unsigned char pubnonce_magic[4] = {0xf5, 0x7a, 0x3d, 0xa0};
+    if (memcmp(pubnonce.data, pubnonce_magic, 4) != 0) {
         return false;
     }
 

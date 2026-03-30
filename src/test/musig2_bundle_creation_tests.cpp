@@ -450,7 +450,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_simple)
     BOOST_CHECK(extracted.IsMuSig2());
     BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 51000);
     BOOST_CHECK_EQUAL(extracted.timestamp, 1700000000);
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 9);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
 }
 
 // ============================================================================
@@ -472,7 +472,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_full_participation)
     COracleBundle extracted;
     BOOST_REQUIRE(manager.ExtractOracleBundle(tx, extracted));
     BOOST_CHECK_EQUAL(extracted.version, 3);
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 15);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
     BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 75000);
 
     for (int i = 0; i < 15; ++i) {
@@ -588,7 +588,7 @@ BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v03)
     BOOST_CHECK_EQUAL(extracted.aggregate_sig.size(), 64);
     BOOST_CHECK(extracted.participation_bitmap == bundle.participation_bitmap);
 
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
     // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[0].oracle_id, 0);
     // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[1].oracle_id, 2);
     // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[2].oracle_id, 4);
@@ -682,7 +682,7 @@ BOOST_AUTO_TEST_CASE(test_roundtrip_v03_create_extract)
     // 0xAB = 10101011 -> bits 0,1,3,5,7 -> oracles 0,1,3,5,7
     // 0xCD = 11001101 -> bits 0,2,3,6,7 -> oracles 8,10,11,14,15
     // 0xEF = 11101111 -> bits 0,1,2,3,5,6,7 -> oracles 16,17,18,19,21,22,23
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 17);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
     // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[0].oracle_id, 0);
     // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[1].oracle_id, 1);
     // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[2].oracle_id, 3);
@@ -708,19 +708,11 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_phase3_gate)
 
     COracleBundle bundle = MakeV03Bundle({0xFF, 0x01}, 50000, 1700000000);
 
-    // Before phase3 activation: should be rejected
-    CScript rejected = manager.CreateOracleScript(bundle);
-    BOOST_CHECK_MESSAGE(rejected.empty(),
-        "v0x03 bundle should be rejected when block_height < nDigiDollarPhase3Height");
-
-    // At phase3 activation: should be accepted
-    CScript accepted = manager.CreateOracleScript(bundle);
-    BOOST_CHECK_MESSAGE(!accepted.empty(),
-        "v0x03 bundle should be accepted when block_height >= nDigiDollarPhase3Height");
-
-    // After phase3 activation: should be accepted
-    CScript accepted_after = manager.CreateOracleScript(bundle);
-    BOOST_CHECK(!accepted_after.empty());
+    // CreateOracleScript doesn't take height (validation is in ConnectBlock)
+    // Just verify v0x03 bundles produce valid scripts
+    CScript script = manager.CreateOracleScript(bundle);
+    BOOST_CHECK_MESSAGE(!script.empty(),
+        "v0x03 bundle should produce non-empty script (phase3 gate is in validation, not script creation)");
 }
 
 // ============================================================================

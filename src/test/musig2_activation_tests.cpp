@@ -58,7 +58,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
     const auto& params = Params().GetConsensus();
     // Mainnet Phase 3 is not yet activated — stays at default max
     // until testnet validation is complete. Oracle config is pre-staged.
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, std::numeric_limits<int>::max());
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 9999999);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
     // Testnet Phase 3 activates at block 1000 (early for integration testing)
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 1000);
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 50000);
     BOOST_CHECK_GE(params.nDigiDollarPhase3Height, params.nDigiDollarPhase2Height);
 }
 
@@ -75,7 +75,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
     // Regtest Phase 3 activates at block 10 (very low for unit tests)
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 10);
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 1000);
 }
 
 // ============================================================================

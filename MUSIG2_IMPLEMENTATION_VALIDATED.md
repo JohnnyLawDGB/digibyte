@@ -138,3 +138,18 @@ src/test/test_digibyte '--run_test=musig2_*,oracle_phase2_tests' --log_level=tes
 - MuSig2 suites entered and executed (including aggregator/basic/session/orchestration/bundle/oracle-node/activation/bundle-mining suites).
 - `oracle_phase2_tests` entered and executed (full phase2 case set, including `phase2_full_pipeline`, `phase2_roundtrip_consensus_signed`, `validate_bundle_routes_phase2`).
 - `*** No errors detected`
+
+## Additional Hardening Pass (musig2_* + oracle_phase2 + bundle-mining reaffirmation)
+
+### Exact Command
+```bash
+src/test/test_digibyte '--run_test=musig2_*,oracle_phase2_tests,musig2_bundle_mining_tests' --log_level=test_suite
+```
+
+### Result
+- `Running 145 test cases...`
+- `musig2_bundle_mining_tests` explicitly executed and passed:
+  - `add_bundle_requires_complete_session`
+  - `add_bundle_consumes_session_and_prunes_old_epochs`
+- `oracle_phase2_tests` executed and passed (including `validate_bundle_routes_phase2`, `pending_messages_survive_after_bundle`, `phase2_roundtrip_consensus_signed`, `phase2_full_pipeline`).
+- `*** No errors detected`

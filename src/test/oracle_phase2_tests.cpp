@@ -100,6 +100,22 @@ static std::vector<CKey> GetRegtestOracleKeys(size_t count)
 }
 
 /**
+ * Minimal valid block template helper: ensure block has a coinbase tx.
+ * AddOracleBundleToBlock() assumes block.vtx[0] exists.
+ */
+static void AddDummyCoinbase(CBlock& block)
+{
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 0;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+    block.vtx.clear();
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+}
+
+/**
  * Create Phase 2 consensus params for testing
  */
 static Consensus::Params CreatePhase2Params(int required_messages, int total_oracles)
@@ -807,6 +823,7 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_survive_after_bundle, BasicTestingSetup
     // Create a block — messages are consumed into the bundle but NOT cleared
     // (they persist for future template creation, expire via stale purge)
     CBlock block;
+    AddDummyCoinbase(block);
     block.nTime = GetTime();
     manager.AddOracleBundleToBlock(block, 200);
 
@@ -840,6 +857,7 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_preserved_when_insufficient, BasicTesti
 
     // Try to create block — should NOT form consensus
     CBlock block;
+    AddDummyCoinbase(block);
     block.nTime = GetTime();
     manager.AddOracleBundleToBlock(block, 200);
 
@@ -865,6 +883,7 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
     InjectConsensusAttestations(manager, 8, 10000, ts1);
 
     CBlock block1;
+    AddDummyCoinbase(block1);
     block1.nTime = GetTime();
     manager.AddOracleBundleToBlock(block1, 200);
 
@@ -885,6 +904,7 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 2);
 
     CBlock block2;
+    AddDummyCoinbase(block2);
     block2.nTime = GetTime();
     manager.AddOracleBundleToBlock(block2, 201);
 

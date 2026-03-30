@@ -72,8 +72,8 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    // Regtest Phase 3 activates at block 10 (very low for unit tests)
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 100000);
+    // Regtest now uses MuSig2 immediately, too.
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
 }
 
 // ============================================================================
@@ -146,17 +146,13 @@ BOOST_AUTO_TEST_CASE(test_oracle_config_sorted_by_pubkey)
 // PART 3: Phase Transition Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_phase2_still_works_before_phase3)
+BOOST_AUTO_TEST_CASE(test_phase3_is_active_from_genesis)
 {
-    // Regtest still has a delayed Phase 3 height for compatibility testing.
+    // All active networks now have Phase 3 (MuSig2) from genesis.
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    BOOST_CHECK_LT(params.nDigiDollarPhase2Height, params.nDigiDollarPhase3Height);
-    // At Phase 2 height: oracle active, Phase 3 NOT
-    BOOST_CHECK(Consensus::IsOracleActive(params, params.nDigiDollarPhase2Height));
-    BOOST_CHECK(!Consensus::IsPhase3Active(params, params.nDigiDollarPhase2Height));
-    // One block before Phase 3: still Phase 2 only
-    BOOST_CHECK(!Consensus::IsPhase3Active(params, params.nDigiDollarPhase3Height - 1));
+    BOOST_CHECK(params.IsPhaseThreeActive(0));
+    BOOST_CHECK(!params.IsPhaseThreeActive(-1));
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_active_after_height)
@@ -255,9 +251,10 @@ BOOST_AUTO_TEST_CASE(test_regtest_earliest_activation)
     int32_t testnet = Params().GetConsensus().nDigiDollarPhase3Height;
     SelectParams(ChainType::MAIN);
     int32_t mainnet = Params().GetConsensus().nDigiDollarPhase3Height;
-    // Regtest Phase3 is intentionally high (100000) to avoid Phase2 test interference
-    // Only enforce testnet < mainnet ordering
-    BOOST_CHECK_LE(testnet, mainnet);
+    // All RC27 networks should use MuSig2 immediately; avoid legacy-phase ordering assumptions.
+    BOOST_CHECK_EQUAL(regtest, 0);
+    BOOST_CHECK_EQUAL(testnet, 0);
+    BOOST_CHECK_EQUAL(mainnet, 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

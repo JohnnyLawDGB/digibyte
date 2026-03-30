@@ -95,3 +95,25 @@ src/test/test_digibyte --run_test=musig2_session_tests,musig2_orchestration_test
 
 ### Observation
 - No concrete edge-case failures surfaced in this sweep; no code changes were required.
+
+## Targeted Sprint Pass (v0x03 bundle + oracle_phase2 touchpoints)
+
+### Exact Command
+```bash
+src/test/test_digibyte --run_test=musig2_session_tests,musig2_orchestration_tests,musig2_signing_orchestration_tests,musig2_bundle_creation_tests,musig2_bundle_mining_tests,oracle_phase2_tests --log_level=test_suite
+```
+
+### Result
+- `Running 29 test cases...`
+- `*** No errors detected`
+
+### Evidence captured in this pass
+- `oracle_phase2_tests` executed and passed, including integration touchpoints:
+  - `validate_bundle_routes_phase2`
+  - `pending_messages_survive_after_bundle`
+  - `phase2_roundtrip_consensus_signed`
+  - `phase2_full_pipeline`
+
+### Important harness note
+- In this local compiled `src/test/test_digibyte` binary, MuSig2 suites are currently not present in `--list_content`, so the `musig2_*` selectors in the command did not execute in this run.
+- No runtime failures were observed in the suites that did execute.

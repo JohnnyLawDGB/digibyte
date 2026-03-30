@@ -153,3 +153,18 @@ src/test/test_digibyte '--run_test=musig2_*,oracle_phase2_tests,musig2_bundle_mi
   - `add_bundle_consumes_session_and_prunes_old_epochs`
 - `oracle_phase2_tests` executed and passed (including `validate_bundle_routes_phase2`, `pending_messages_survive_after_bundle`, `phase2_roundtrip_consensus_signed`, `phase2_full_pipeline`).
 - `*** No errors detected`
+
+## Targeted Validation Pass (musig2_* + oracle_phase2 + bundle-mining/session lifecycle)
+
+### Exact Command
+```bash
+src/test/test_digibyte '--run_test=musig2_*,oracle_phase2_tests,musig2_bundle_mining_tests,musig2_session_tests' --log_level=test_suite
+```
+
+### Result
+- `Running 145 test cases...`
+- Explicit lifecycle/bundle evidence in this run:
+  - `musig2_session_tests`: `test_session_state_machine_transitions`, `test_session_timeout_transitions_to_failed`, `test_session_full_roundtrip_in_process`
+  - `musig2_bundle_mining_tests`: `add_bundle_requires_complete_session`, `add_bundle_consumes_session_and_prunes_old_epochs`
+- `oracle_phase2_tests` executed and passed (including `validate_bundle_routes_phase2`, `pending_messages_survive_after_bundle`, `phase2_roundtrip_consensus_signed`, `phase2_full_pipeline`).
+- `*** No errors detected`

@@ -75,3 +75,23 @@ src/test/test_digibyte --run_test=musig2_bundle_mining_tests --log_level=test_su
 ### Result
 - Session suite: `Running 14 test cases...` then `*** No errors detected`
 - Bundle mining suite: `Running 2 test cases...` then `*** No errors detected`
+
+## Focused Validation Sweep (v0x03 aggregate bundle flow: session → orchestration → extraction → block insertion)
+
+### Exact Command
+```bash
+src/test/test_digibyte --run_test=musig2_session_tests,musig2_orchestration_tests,musig2_signing_orchestration_tests,musig2_bundle_creation_tests,musig2_bundle_mining_tests --log_level=test_suite
+```
+
+### Result
+- `Running 47 test cases...`
+- `*** No errors detected`
+
+### Evidence highlights (flow coverage)
+- **Session:** `test_session_full_roundtrip_in_process`, `test_session_partial_sig_aggregation`
+- **Orchestration:** `test_session_completes_on_aggregate`, `test_check_and_advance_signing`
+- **Extraction (v0x03):** `test_extract_oracle_bundle_v03_basic`, `test_extract_oracle_bundle_v03`, `test_roundtrip_v03_create_extract`
+- **Block insertion:** `add_bundle_requires_complete_session`, `add_bundle_consumes_session_and_prunes_old_epochs`
+
+### Observation
+- No concrete edge-case failures surfaced in this sweep; no code changes were required.

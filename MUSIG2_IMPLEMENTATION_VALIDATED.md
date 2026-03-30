@@ -114,6 +114,27 @@ src/test/test_digibyte --run_test=musig2_session_tests,musig2_orchestration_test
   - `phase2_roundtrip_consensus_signed`
   - `phase2_full_pipeline`
 
-### Important harness note
-- In this local compiled `src/test/test_digibyte` binary, MuSig2 suites are currently not present in `--list_content`, so the `musig2_*` selectors in the command did not execute in this run.
-- No runtime failures were observed in the suites that did execute.
+### Harness consistency resolution (rebuild + selector verification)
+
+#### Rebuild command
+```bash
+make -C src -j$(nproc) test/test_digibyte
+```
+
+#### Post-rebuild selector presence check
+```bash
+src/test/test_digibyte --list_content | grep -E "musig2_|oracle_phase2_tests"
+```
+
+Result: MuSig2 suites are now present in `--list_content` (e.g. `musig2_aggregator_tests`, `musig2_basic_tests`, `musig2_session_tests`, `musig2_orchestration_tests`, `musig2_bundle_creation_tests`, etc.) along with `oracle_phase2_tests`.
+
+#### Focused execution command (actually runs MuSig2 + oracle phase2)
+```bash
+src/test/test_digibyte '--run_test=musig2_*,oracle_phase2_tests' --log_level=test_suite
+```
+
+#### Result
+- `Running 145 test cases...`
+- MuSig2 suites entered and executed (including aggregator/basic/session/orchestration/bundle/oracle-node/activation/bundle-mining suites).
+- `oracle_phase2_tests` entered and executed (full phase2 case set, including `phase2_full_pipeline`, `phase2_roundtrip_consensus_signed`, `validate_bundle_routes_phase2`).
+- `*** No errors detected`

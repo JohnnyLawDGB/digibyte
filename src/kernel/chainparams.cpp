@@ -296,7 +296,7 @@ public:
         digidollarParams = DigiDollar::ConsensusParams();
         // Use default values from struct initialization for mainnet
 
-        // Initialize DigiDollar Oracle Nodes (30 total, 15 active per epoch)
+        // Initialize DigiDollar Oracle Nodes (30 total, historical Phase One/Two providers)
         InitializeOracleNodes();
 
         // Mainnet-specific oracle and activation settings
@@ -308,32 +308,28 @@ public:
         // Mainnet skips Phase 1 (single-oracle); goes directly to Phase 3 (MuSig2)
         consensus.nOracleActivationHeight = 3000000;
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 8;        // Phase Two compat: 8-of-15 consensus
-        consensus.nOracleTotalOracles = 15;
+        consensus.nOracleRequiredMessages = 6;        // Phase Two (pre-MuSig2): 6-of-11 consensus
+        consensus.nOracleTotalOracles = 11;
         consensus.nDigiDollarPhase2Height = 3000000;  // Phase Two and Three activate together
         consensus.nDigiDollarPhase3Height = 9999999;  // Phase Three: TBD after testnet20 validation
 
-        // Phase 3 MuSig2 oracle configuration — 9-of-15 quorum
+        // Phase 3 MuSig2 oracle configuration — 6-of-11 quorum
         // Same oracle operator set as testnet. To add/replace operators:
         //   1. Generate keypair via `digibyte-cli generateoraclekey <id>`
         //   2. Add x-only pubkey to vOraclePublicKeys in sorted order
         //   3. Add OracleNodeInfo to vOracleNodes
         //   4. Update nOraclePubkeyCount/nOracleConsensusRequired
         //   5. Deploy via coordinated software upgrade
-        consensus.nOraclePubkeyCount = 15;
-        consensus.nOracleConsensusRequired = 9;
+        consensus.nOraclePubkeyCount = 11;
+        consensus.nOracleConsensusRequired = 6;
 
         // Oracle public keys (x-only, 32 bytes) — sorted lexicographically
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // Brian Oakes
-        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // PLACEHOLDER (reserved)
-        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // PLACEHOLDER (reserved)
         consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // Bastian
-        consensus.vOraclePublicKeys.push_back("19feb4347582d94511d5dfb2ddca411d8fa65f424d8eee1a63fb733ca992b379");  // PLACEHOLDER (reserved)
         consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // LookInto
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // Green Candle
         consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // DanGB
-        consensus.vOraclePublicKeys.push_back("5d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a");  // PLACEHOLDER (reserved)
         consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // Aussie
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // Ycagel
         consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // JohnnyLawDGB
@@ -557,40 +553,36 @@ public:
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
-        digidollarParams.oracleThreshold = 9;                         // 9-of-15 consensus for Phase Two (strict supermajority)
-        digidollarParams.activeOracles = 15;                          // 15 active oracles
-        digidollarParams.oracleCount = 15;                            // Total 15 oracles defined
+        digidollarParams.oracleThreshold = 6;                         // 6-of-11 consensus for Phase Two (strict majority)
+        digidollarParams.activeOracles = 11;                          // 11 active oracles
+        digidollarParams.oracleCount = 11;                            // Total 11 oracles defined
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
 
-        // Oracle system parameters — Testnet 9-of-15 consensus
+        // Oracle system parameters — Testnet 6-of-11 consensus
         // Oracle activation matches DigiDollar BIP9 activation — everything at block 600
         consensus.nOracleActivationHeight = 600;      // Same as nDDActivationHeight
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 9;        // Phase Two: 9-of-15 consensus (strict supermajority)
-        consensus.nOracleTotalOracles = 15;           // 15 oracles active
+        consensus.nOracleRequiredMessages = 6;        // Phase Two: 6-of-11 consensus
+        consensus.nOracleTotalOracles = 11;           // 11 oracles active
         // Multi-oracle activates at same height as DigiDollar (no separate phases)
         // Everything — DD minting, oracle consensus, multi-oracle — activates together
         consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
         consensus.nDigiDollarPhase3Height = 50000;  // Phase Three: Early testnet activation for validation
 
-        // Phase 3 MuSig2 oracle configuration — 9-of-15 quorum
-        consensus.nOraclePubkeyCount = 15;
-        consensus.nOracleConsensusRequired = 9;
+        // Phase 3 MuSig2 oracle configuration — 6-of-11 quorum
+        consensus.nOraclePubkeyCount = 11;
+        consensus.nOracleConsensusRequired = 6;
 
         // Testnet oracle public keys (x-only, 32 bytes) — sorted lexicographically
         // for deterministic MuSig2 key aggregation
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // Brian Oakes
-        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // PLACEHOLDER (reserved)
-        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // PLACEHOLDER (reserved)
         consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // Bastian
-        consensus.vOraclePublicKeys.push_back("19feb4347582d94511d5dfb2ddca411d8fa65f424d8eee1a63fb733ca992b379");  // PLACEHOLDER (reserved)
         consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // LookInto
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // Green Candle
         consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // DanGB
-        consensus.vOraclePublicKeys.push_back("5d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a");  // PLACEHOLDER (reserved)
         consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // Aussie
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // Ycagel
         consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // JohnnyLawDGB

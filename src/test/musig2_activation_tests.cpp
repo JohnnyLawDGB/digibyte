@@ -82,21 +82,21 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
 // PART 2: Oracle Configuration Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_is_15)
+BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_is_11)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // 15 oracle pubkeys configured for Phase 3 MuSig2
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 15);
+    // 11 oracle pubkeys configured for Phase 3 MuSig2
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 11);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
 
-BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_9)
+BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_6)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // 9-of-15 MuSig2 quorum for Phase 3
-    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 9);
+    // 6-of-11 MuSig2 quorum for Phase 3
+    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 6);
     BOOST_CHECK_GT(params.nOracleConsensusRequired, params.nOraclePubkeyCount / 2);
     BOOST_CHECK_LE(params.nOracleConsensusRequired, params.nOraclePubkeyCount);
 }

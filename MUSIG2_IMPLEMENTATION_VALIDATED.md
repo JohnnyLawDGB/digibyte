@@ -2,23 +2,26 @@
 
 ## Branch / Scope
 - Branch: `feature/musig2-oracle-phase3`
-- Scope validated: Wave 3 completion items (v0x03 participant decode, session lifecycle cleanup coverage, regtest/phase2 test stability fixes)
+- Scope validated: Wave 3 completion items plus final bitmap-width alignment fix (`82e91744ae`) for completed-session participant bitmap encoding.
 
 ## Validated State (Concise)
 - ✅ `ExtractOracleBundle` decodes v0x03 signer bitmap into bundle message identities.
 - ✅ `AddOracleBundleToBlock` session lifecycle behavior is covered for consume + old epoch pruning.
-- ✅ Activation/ordering and phase2 pending-message test stability fixes are in place.
-- ✅ Quick sanity rerun for key MuSig2/oracle suites passed with no errors.
+- ✅ Completed-session participation bitmap is padded to network oracle width before bundle serialization.
+- ✅ Activation/ordering and phase2 pending-message test stability fixes remain in place.
+- ✅ Post-fix targeted sanity rerun for orchestration + bundle extraction paths passed with no errors.
 
 ## Exact Passing Test Command
 ```bash
-src/test/test_digibyte --run_test=musig2_bundle_creation_tests,musig2_bundle_manager_tests,musig2_bundle_mining_tests,musig2_activation_tests,oracle_phase2_tests --log_level=test_suite
+src/test/test_digibyte --run_test=musig2_orchestration_tests,musig2_bundle_creation_tests,oracle_phase2_tests --log_level=test_suite
 ```
 
 ## Result
-- `Running 72 test cases...`
+- `Running 59 test cases...`
+- Includes orchestration bitmap-width check: `test_completed_bitmap_is_padded_to_network_oracle_count`
+- Includes bundle extraction checks: `test_extract_oracle_bundle_v03_basic`, `test_extract_oracle_bundle_v03`, `phase2_roundtrip_consensus_signed`
 - `*** No errors detected`
 
 ## Notes
-- This is a targeted sanity rerun focused on Wave 3 touch points and adjacent oracle consensus paths.
+- This targeted rerun directly covers the new bitmap-width fix and the extraction path that consumes signer bitmaps.
 - Baseline full-suite status remains tracked in sprint status docs.

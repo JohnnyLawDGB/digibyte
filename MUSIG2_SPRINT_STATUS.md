@@ -29,7 +29,7 @@
 | Irene | Session lifecycle integration coverage (`AddOracleBundleToBlock` consume + prune old epochs) | ✅ DONE | 1 | feature/musig2-oracle-phase3 |
 | Irene | Regtest activation-ordering fix + Phase2 pending-message seed hardening | ✅ DONE | 2 | feature/musig2-oracle-phase3 |
 
-**Totals to date: 45 commits on branch, baseline full pass previously at 2129 tests (1 pre-existing segfault investigated separately).**
+**Totals to date: 46 commits on branch, baseline full pass previously at 2129 tests (1 pre-existing segfault investigated separately).**
 
 ### Wave Gates
 - [x] Wave 1 complete — all 5 agents done, 17 commits
@@ -41,8 +41,10 @@
 - [x] `AddOracleBundleToBlock`: session lifecycle integration tests for consume + pruning
 - [x] Session cleanup on epoch boundary (covered by mining/session lifecycle tests)
 - [x] Regression stabilization updates for `musig2_activation_tests` and `oracle_phase2_tests`
+- [x] Final bitmap-width alignment fix: completed participation bitmap padded to network oracle width
 
 ### Most Recent Wave 3 Commits
+- `82e91744ae` — musig2: pad participation bitmap to network oracle width
 - `43802ba4d7` — musig2 wave3: decode v03 participants and add lifecycle cleanup tests
 - `7c00520813` — fix: remove regtest<=testnet ordering check (regtest Phase3 intentionally high)
 - `16fa01adb3` — test: seed coinbase in oracle phase2 pending-message tests

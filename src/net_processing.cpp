@@ -31,6 +31,7 @@
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/musig2_messages.h>
 #include <oracle/musig2_session.h>
 #include <oracle/node.h>
 #include <random.h>

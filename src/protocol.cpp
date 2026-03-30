@@ -55,6 +55,8 @@ const char* ORACLEBUNDLE = "oraclebundle";
 const char* GETORACLES = "getoracles";
 const char* ORACLECONSENSUS = "oracleconsns";
 const char* ORACLEATTESTATION = "oracleattest";
+const char* ORACLEMUSIGNONCE = "oramusignonce";
+const char* ORACLEMUSIGPARTIALSIG = "oramusigpsig";
 } // namespace NetMsgType
 
 /** All known message types. Keep this in the same order as the list of

@@ -34,6 +34,7 @@
 class MuSig2OracleAggregator {
 public:
     MuSig2OracleAggregator();
+    explicit MuSig2OracleAggregator(size_t max_cache_entries);
     ~MuSig2OracleAggregator();
 
     MuSig2OracleAggregator(const MuSig2OracleAggregator&) = delete;

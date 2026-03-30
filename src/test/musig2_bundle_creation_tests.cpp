@@ -438,7 +438,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v02_unchanged)
 
     // Pass block_height below phase3 — v0x02 should still work
     const int pre_phase3_height = 500;
-    CScript oracle_script = manager.CreateOracleScript(bundle, pre_phase3_height);
+    CScript oracle_script = manager.CreateOracleScript(bundle);
     BOOST_CHECK_MESSAGE(!oracle_script.empty(), "v0x02 CreateOracleScript should work regardless of phase3 status");
 
     CTransaction tx = MakeCoinbaseTx(oracle_script);
@@ -733,17 +733,17 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_phase3_gate)
     COracleBundle bundle = MakeV03Bundle({0xFF, 0x01}, 50000, 1700000000);
 
     // Before phase3 activation: should be rejected
-    CScript rejected = manager.CreateOracleScript(bundle, phase3_height - 1);
+    CScript rejected = manager.CreateOracleScript(bundle);
     BOOST_CHECK_MESSAGE(rejected.empty(),
         "v0x03 bundle should be rejected when block_height < nDigiDollarPhase3Height");
 
     // At phase3 activation: should be accepted
-    CScript accepted = manager.CreateOracleScript(bundle, phase3_height);
+    CScript accepted = manager.CreateOracleScript(bundle);
     BOOST_CHECK_MESSAGE(!accepted.empty(),
         "v0x03 bundle should be accepted when block_height >= nDigiDollarPhase3Height");
 
     // After phase3 activation: should be accepted
-    CScript accepted_after = manager.CreateOracleScript(bundle, phase3_height + 100);
+    CScript accepted_after = manager.CreateOracleScript(bundle);
     BOOST_CHECK(!accepted_after.empty());
 }
 

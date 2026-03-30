@@ -25,6 +25,7 @@
 #include <oracle/musig2_messages.h>
 #include <oracle/musig2_oracle_participation.h>
 #include <oracle/musig2_session.h>
+#include <protocol.h>
 #include <primitives/oracle.h>
 #include <random.h>
 #include <streams.h>

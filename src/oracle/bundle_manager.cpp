@@ -20,6 +20,7 @@
 #include <netmessagemaker.h>
 #include <oracle/mock_oracle.h>
 #include <oracle/musig2_aggregator.h>
+#include <oracle/musig2_orchestrator.h>
 #include <oracle/musig2_messages.h>
 #include <oracle/musig2_session.h>
 #include <oracle/node.h>
@@ -28,6 +29,8 @@
 #include <protocol.h>
 #include <script/script.h>
 #include <script/standard.h>
+#include <secp256k1.h>
+#include <secp256k1_schnorrsig.h>
 #include <util/time.h>
 #include <validation.h>
 
@@ -551,26 +554,6 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
                 }
             } else {
                 LogPrintf("Oracle: No MuSig2 session found for epoch %d\n", epoch);
-            }
-        }
-
-        if (!session_ready) {
-            // Try OracleNode's per-node MuSig2 session as fallback
-            OracleManager& om_fallback = OracleManager::GetInstance();
-            const std::vector<uint32_t> fallback_ids = om_fallback.GetActiveOracleIds();
-            for (uint32_t oid : fallback_ids) {
-                OracleNode* onode = om_fallback.GetOracleNode(oid);
-                if (!onode) continue;
-                COracleBundle node_bundle = onode->GetCurrentBundle(block_height);
-                if (node_bundle.IsMuSig2() && !node_bundle.aggregate_sig.empty()) {
-                    bundle.aggregate_sig = node_bundle.aggregate_sig;
-                    bundle.participation_bitmap = node_bundle.participation_bitmap;
-                    bundle.median_price_micro_usd = node_bundle.median_price_micro_usd;
-                    bundle.timestamp = node_bundle.timestamp;
-                    session_ready = true;
-                    LogPrintf("Oracle: Phase 3 using OracleNode MuSig2 bundle for epoch %d\n", epoch);
-                    break;
-                }
             }
         }
 
@@ -1562,7 +1545,11 @@ bool OracleBundleManager::StartMuSig2Session(int32_t block_height)
     MuSig2OracleAggregator aggregator;
     secp256k1_xonly_pubkey agg_pk;
     secp256k1_musig_keyagg_cache keyagg_cache;
-    if (!aggregator.ComputeAggregatePubkey(active_ids, agg_pk, keyagg_cache)) return false;
+    // Convert uint32_t oracle IDs to uint8_t for aggregator
+    std::vector<uint8_t> oracle_ids_u8;
+    oracle_ids_u8.reserve(active_ids.size());
+    for (uint32_t id : active_ids) oracle_ids_u8.push_back(static_cast<uint8_t>(id));
+    if (!aggregator.ComputeAggregatePubkey(oracle_ids_u8, agg_pk, keyagg_cache)) return false;
 
     const CKey signing_key = local_node->GetOraclePrivateKey();
     if (!signing_key.IsValid()) return false;
@@ -2223,16 +2210,18 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     }
 
     // Use first message for remaining validation checks
-    const COraclePriceMessage& msg = bundle.messages[0];
+    {
+        const COraclePriceMessage& msg = bundle.messages[0];
 
-    // Phase 1: Verify Schnorr signature (Phase 2 signatures verified in ValidatePhaseTwoBundle)
-    if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
-        if (!msg.schnorr_sig.empty()) {
-            if (!msg.VerifyPhase2()) {
-                LogPrintf("Oracle: Invalid Schnorr signature in oracle message (oracle_id=%d, block=%d)\n",
-                         msg.oracle_id, block_height);
-                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-signature",
-                    "Invalid oracle Schnorr signature");
+        // Phase 1: Verify Schnorr signature (Phase 2 signatures verified in ValidatePhaseTwoBundle)
+        if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
+            if (!msg.schnorr_sig.empty()) {
+                if (!msg.VerifyPhase2()) {
+                    LogPrintf("Oracle: Invalid Schnorr signature in oracle message (oracle_id=%d, block=%d)\n",
+                             msg.oracle_id, block_height);
+                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-signature",
+                        "Invalid oracle Schnorr signature");
+                }
             }
         }
     }
@@ -2255,14 +2244,15 @@ oracle_post_validation:
             "Oracle timestamp is in the future");
     }
 
-    // Verify oracle is authorized (skip in REGTEST for unit testing)
-    if (Params().GetChainType() != ChainType::REGTEST) {
+    // Verify oracle is authorized (skip in REGTEST for unit testing, skip Phase 3 — uses bitmap)
+    if (bundle.version < 3 && !bundle.messages.empty() && Params().GetChainType() != ChainType::REGTEST) {
         const CChainParams& chainparams = Params();
-        const OracleNodeInfo* oracle_config = chainparams.GetOracleNode(msg.oracle_id);
+        const COraclePriceMessage& auth_msg = bundle.messages[0];
+        const OracleNodeInfo* oracle_config = chainparams.GetOracleNode(auth_msg.oracle_id);
         if (!oracle_config || !oracle_config->is_active) {
-            LogPrintf("Oracle: Unauthorized oracle ID %d in block %d\n", msg.oracle_id, block_height);
+            LogPrintf("Oracle: Unauthorized oracle ID %d in block %d\n", auth_msg.oracle_id, block_height);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-unauthorized",
-                strprintf("Unauthorized oracle ID %d", msg.oracle_id));
+                strprintf("Unauthorized oracle ID %d", auth_msg.oracle_id));
         }
     }
 

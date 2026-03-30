@@ -385,7 +385,7 @@ void OracleSigningOrchestrator::ComputeOracleMessageHash(
     int32_t epoch, uint64_t price, int64_t timestamp,
     unsigned char hash32[32])
 {
-    CHashWriter hasher(SER_GETHASH, 0);
+    CHashWriter hasher(0);
     hasher << epoch;
     hasher << price;
     hasher << timestamp;

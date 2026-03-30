@@ -22,6 +22,7 @@
 #include <consensus/params.h>
 #include <key.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/musig2_orchestrator.h>
 #include <oracle/musig2_session.h>
 #include <primitives/block.h>
 #include <primitives/oracle.h>
@@ -113,7 +114,7 @@ static std::unique_ptr<MuSig2SigningSession> MakeCompletedSession(
     // Compute key aggregation cache
     secp256k1_musig_keyagg_cache cache;
     secp256k1_xonly_pubkey agg_pk;
-    BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, nullptr, &agg_pk, &cache,
+    BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache,
                                               pubkey_ptrs.data(), pubkey_ptrs.size()));
 
     // Round 1: Generate nonces

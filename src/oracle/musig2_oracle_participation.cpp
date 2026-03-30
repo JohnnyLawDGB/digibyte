@@ -13,6 +13,7 @@
 #include <secp256k1_musig.h>
 
 #include <cassert>
+#include <protocol.h>
 #include <cstring>
 
 MuSig2OracleParticipation::MuSig2OracleParticipation() = default;
@@ -294,7 +295,8 @@ void MuSig2OracleParticipation::BroadcastNonce(const secp256k1_musig_pubnonce& p
 
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << msg;
-    std::vector<unsigned char> payload(ss.begin(), ss.end());
+    std::vector<unsigned char> payload(reinterpret_cast<const unsigned char*>(ss.data()),
+                                       reinterpret_cast<const unsigned char*>(ss.data()) + ss.size());
     m_relay(NetMsgType::ORACLEMUSIGNONCE, payload);
 }
 
@@ -310,6 +312,7 @@ void MuSig2OracleParticipation::BroadcastPartialSig(const secp256k1_musig_partia
 
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << msg;
-    std::vector<unsigned char> payload(ss.begin(), ss.end());
+    std::vector<unsigned char> payload(reinterpret_cast<const unsigned char*>(ss.data()),
+                                       reinterpret_cast<const unsigned char*>(ss.data()) + ss.size());
     m_relay(NetMsgType::ORACLEMUSIGPARTIALSIG, payload);
 }

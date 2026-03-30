@@ -369,8 +369,6 @@ std::vector<unsigned char> MuSig2SigningSession::GetParticipationBitmap() const
     return bitmap;
 }
 
-std::map<int32_t, MuSig2SigningSession> g_oracle_signing_sessions;
-Mutex g_oracle_signing_sessions_mutex;
 
 // ============================================================================
 // Timeout management

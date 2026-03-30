@@ -16,6 +16,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <chainparams.h>
 #include <key.h>
 #include <oracle/musig2_orchestrator.h>
 #include <oracle/musig2_session.h>
@@ -538,6 +539,57 @@ BOOST_AUTO_TEST_CASE(test_check_and_advance_signing)
     BOOST_CHECK(!manager.TryAdvanceToSigning(EPOCH, msg));
 
     secp256k1_context_destroy(ctx);
+}
+
+// ============================================================================
+// test_completed_bitmap_is_padded_to_network_oracle_count
+// Completed-session bitmap width must match network oracle count for decoding
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_completed_bitmap_is_padded_to_network_oracle_count)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+
+    constexpr int32_t EPOCH = 401;
+
+    unsigned char seckey[32];
+    secp256k1_keypair kp;
+    secp256k1_pubkey pk;
+    BOOST_REQUIRE(MakeRandomKeypair(ctx, seckey, &kp, &pk));
+
+    const secp256k1_pubkey* pk_ptr = &pk;
+    secp256k1_xonly_pubkey agg_pk;
+    secp256k1_musig_keyagg_cache cache;
+    BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, &pk_ptr, 1));
+
+    MuSig2SessionManager manager;
+    BOOST_REQUIRE(manager.CreateSessionForEpoch(EPOCH, 1));
+
+    CKey ckey = MakeCKey(seckey);
+    secp256k1_musig_pubnonce pubnonce;
+    BOOST_REQUIRE(manager.GenerateNonceForEpoch(EPOCH, ckey, pk, cache, pubnonce));
+    BOOST_REQUIRE(manager.AddNonceForEpoch(EPOCH, 0, pubnonce));
+
+    unsigned char msg[32];
+    GetStrongRandBytes(Span{msg, 32});
+    BOOST_REQUIRE(manager.AdvanceToSigning(EPOCH, msg));
+
+    auto* session = manager.GetSession(EPOCH);
+    BOOST_REQUIRE(session != nullptr);
+
+    secp256k1_musig_partial_sig psig;
+    BOOST_REQUIRE(session->CreatePartialSignature(ckey, psig));
+    BOOST_REQUIRE(manager.AddPartialSigForEpoch(EPOCH, 0, psig));
+
+    std::vector<unsigned char> sig64;
+    BOOST_REQUIRE(manager.AggregateForEpoch(EPOCH, sig64));
+
+    std::vector<unsigned char> out_sig, out_bitmap;
+    BOOST_REQUIRE(manager.GetCompletedSessionData(EPOCH, out_sig, out_bitmap));
+
+    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
+    const size_t expected_bitmap_bytes = (total_oracles + 7) / 8;
+    BOOST_CHECK_EQUAL(out_bitmap.size(), expected_bitmap_bytes);
+    BOOST_CHECK_EQUAL(out_bitmap[0], 0x01);
 }
 
 // ============================================================================

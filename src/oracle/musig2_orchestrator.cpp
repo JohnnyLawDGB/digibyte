@@ -4,6 +4,8 @@
 
 #include <oracle/musig2_orchestrator.h>
 
+#include <chainparams.h>
+
 /** Global MuSig2 signing sessions indexed by epoch */
 std::map<int32_t, MuSig2SigningSession> g_oracle_signing_sessions;
 Mutex g_oracle_signing_sessions_mutex;
@@ -157,10 +159,14 @@ uint8_t MuSig2SessionManager::GetLocalOracleId() const
 std::vector<unsigned char> MuSig2SessionManager::BuildBitmap(const std::set<uint8_t>& oracle_ids) const
 {
     if (oracle_ids.empty()) return {};
-    uint8_t max_id = *oracle_ids.rbegin();
-    size_t bitmap_bytes = (max_id / 8) + 1;
+
+    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
+    if (total_oracles == 0 || total_oracles > 256) return {};
+
+    const size_t bitmap_bytes = (total_oracles + 7) / 8;
     std::vector<unsigned char> bitmap(bitmap_bytes, 0);
     for (uint8_t id : oracle_ids) {
+        if (id >= total_oracles) return {};
         bitmap[id / 8] |= (1 << (id % 8));
     }
     return bitmap;

@@ -75,7 +75,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
     // Regtest Phase 3 activates at block 10 (very low for unit tests)
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 1000);
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 100000);
 }
 
 // ============================================================================

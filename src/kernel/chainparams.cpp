@@ -1010,7 +1010,7 @@ public:
         consensus.nOracleRequiredMessages = 4;     // Phase Two: 4-of-7 (matches testnet)
         consensus.nOracleTotalOracles = 7;         // Phase Two: 7 oracles (matches testnet)
         consensus.nDigiDollarPhase2Height = 650;   // Same as nDDActivationHeight — everything activates together
-        consensus.nDigiDollarPhase3Height = 1000;  // Phase Three: Very early for unit testing
+        consensus.nDigiDollarPhase3Height = 100000;  // Phase Three: High enough to not interfere with Phase 2 tests
 
         // Phase 3 MuSig2 oracle configuration — 4-of-7 quorum (lower for testing)
         consensus.nOraclePubkeyCount = 7;

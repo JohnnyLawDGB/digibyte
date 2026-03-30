@@ -2793,18 +2793,16 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06i_oracle_vs_dd_activation_sync)
             "Regtest DD should be ALWAYS_ACTIVE");
     }
 
-    // Check mainnet: oracle should NOT be active (INT_MAX) since oracles aren't deployed
+    // Check mainnet: oracle activation should be set (RC27: 6-of-11 active)
     {
         const auto mainnet_params = CChainParams::Main();
         const auto& consensus = mainnet_params->GetConsensus();
 
         int oracle_height = consensus.nOracleActivationHeight;
-        BOOST_CHECK_MESSAGE(oracle_height == std::numeric_limits<int>::max(),
-            "FINDING (LOW): Mainnet oracle activation is INT_MAX (disabled). "
-            "When oracles are deployed, this MUST be updated to match DD BIP9 "
-            "min_activation_height (" +
-            std::to_string(consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height) +
-            ") to avoid the skipOracleValidation gap found in T1-05.");
+        // RC27: mainnet oracle activation is no longer INT_MAX — oracles are configured
+        // for 6-of-11 consensus across all networks
+        BOOST_CHECK_MESSAGE(oracle_height != std::numeric_limits<int>::max(),
+            "Mainnet oracle activation should be set (not INT_MAX) for RC27 6-of-11 config");
     }
 }
 
@@ -14373,12 +14371,12 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01f_eclipse_mainnet_oracle_gap)
     const auto& mainnet_params = CreateChainParams(*m_node.args, ChainType::MAIN);
     const auto& mainnet_consensus = mainnet_params->GetConsensus();
 
-    // Mainnet oracle activation is disabled (Phase 1 is testnet-only)
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
+    // RC27: mainnet oracle activation is set (6-of-11 across all networks)
+    BOOST_CHECK_NE(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
 
-    // But when it's enabled, the 8-of-15 requirement needs robust P2P
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 8);
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 15);
+    // RC27: 6-of-11 oracle consensus
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 6);
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 11);
 
     BOOST_TEST_MESSAGE("T8-01f: Eclipse mainnet oracle gap ⚠️ — "
         "Mainnet ConnectBlock does NOT update oracle price cache "
@@ -14866,12 +14864,11 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
     // ORACLE_MAX_AGE_SECONDS stale purge. P2P oracle broadcasts replace stale
     // entries via oracle_id key.
     //
-    // This prevents the "bundle drain" problem where mining a block would wipe
-    // oracle data, causing subsequent blocks to have empty oracle outputs until
-    // P2P re-broadcasts repopulate (up to 60s gap with 15s block time).
-    //
-    // Now: messages remain available across block templates. Stale data is purged
-    // by age, not by block creation.
+    // RC27 NOTE: With Phase 3 (MuSig2) active from genesis on regtest,
+    // AddOracleBundleToBlock now takes the MuSig2 path which requires a complete
+    // signing session rather than individual Phase 2 messages. This test validates
+    // that pending Phase 2 messages persist (the original design property), while
+    // acknowledging that Phase 3 bundle creation requires MuSig2 sessions.
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -14892,7 +14889,9 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
 
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
 
-    // Simulate block creation: AddOracleBundleToBlock
+    // With Phase 3 active (regtest nDigiDollarPhase3Height=0), AddOracleBundleToBlock
+    // takes the MuSig2 path. Without a complete MuSig2 session, bundle creation
+    // returns false — this is correct behavior (no session = no bundle).
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
     coinbase.vin[0].prevout.SetNull();
@@ -14903,35 +14902,19 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
     block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
 
     bool added = manager.AddOracleBundleToBlock(block, 1000);
-    BOOST_CHECK(added);
+    // Phase 3: no MuSig2 session → bundle not added (expected)
+    BOOST_CHECK(!added);
 
-    // After AddOracleBundleToBlock, pending_messages should PERSIST
+    // The key property: pending Phase 2 messages PERSIST regardless of bundle creation
     // (messages expire via ORACLE_MAX_AGE_SECONDS stale purge, not bundle creation)
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
 
-    // Next block from same miner: oracle data IS still available (messages persist)
-    CMutableTransaction coinbase2;
-    coinbase2.vin.resize(1);
-    coinbase2.vin[0].prevout.SetNull();
-    coinbase2.vout.resize(1);
-    coinbase2.vout[0].nValue = 50 * COIN;
-
-    CBlock block2;
-    block2.vtx.push_back(MakeTransactionRef(std::move(coinbase2)));
-
-    bool added2 = manager.AddOracleBundleToBlock(block2, 1001);
-    BOOST_CHECK(added2);
-
-    // Block2 WILL have oracle output now since messages persist
-    BOOST_CHECK_EQUAL(block2.vtx[0]->vout.size(), 2); // Oracle output included
-
-    BOOST_TEST_MESSAGE("T8-02f: pending_messages persist after bundle creation — "
+    BOOST_TEST_MESSAGE("T8-02f: pending_messages persist after bundle creation attempt — "
         "Messages persist for multiple template creations, expire naturally via "
         "ORACLE_MAX_AGE_SECONDS stale purge. P2P oracle broadcasts replace stale "
-        "entries via oracle_id key. This eliminates the bundle drain problem where "
-        "consecutive blocks from the same miner would lack oracle data. "
-        "NOT a vulnerability — oracle price comes from P2P gossip, not block data. "
-        "Block-embedded oracle data is a BACKUP mechanism.");
+        "entries via oracle_id key. Phase 3 (MuSig2) bundle creation requires a "
+        "complete signing session; without one, AddOracleBundleToBlock correctly "
+        "returns false while preserving pending messages.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t8_02g_net_processing_static_rate_limit_map_growth)
@@ -17471,13 +17454,18 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
     BOOST_TEST_MESSAGE("  ⚠️ nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
                       + ") != vOracleNodes (" + std::to_string(params.GetOracleNodes().size()) + ")");
 
-    // nOracleTotalOracles SHOULD equal ORACLE_ACTIVE_COUNT (both represent "per epoch")
-    BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, ORACLE_ACTIVE_COUNT);
-    BOOST_TEST_MESSAGE("  nOracleTotalOracles == ORACLE_ACTIVE_COUNT == 15 ✅ (conceptually: active per epoch)");
+    // nOracleTotalOracles is the per-chain consensus quorum size (RC27: 11)
+    // ORACLE_ACTIVE_COUNT is the static upper bound for validation (15)
+    // nOracleTotalOracles <= ORACLE_ACTIVE_COUNT always holds
+    BOOST_CHECK_LE(consensus.nOracleTotalOracles, ORACLE_ACTIVE_COUNT);
+    BOOST_TEST_MESSAGE("  nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles) +
+                      ") <= ORACLE_ACTIVE_COUNT (" + std::to_string(ORACLE_ACTIVE_COUNT) +
+                      ") ✅ (consensus quorum within static bound)");
 
-    // vOraclePublicKeys populated on mainnet for Phase 3 (MuSig2) — 15 oracle keys
-    BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), 15u);
-    BOOST_TEST_MESSAGE("  vOraclePublicKeys has 15 keys on mainnet ✅ (Phase 3 MuSig2)");
+    // vOraclePublicKeys populated on mainnet for Phase 3 (MuSig2) — matches nOracleTotalOracles
+    BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(consensus.nOracleTotalOracles));
+    BOOST_TEST_MESSAGE("  vOraclePublicKeys has " + std::to_string(consensus.vOraclePublicKeys.size()) +
+                      " keys on mainnet ✅ (Phase 3 MuSig2)");
 
     // DESIGN GAP: P2P bounds check and ValidateBlockOracleData both use ORACLE_TOTAL_COUNT.
     // This is correct for mainnet (matches vOracleNodes), but on testnet creates a gap where

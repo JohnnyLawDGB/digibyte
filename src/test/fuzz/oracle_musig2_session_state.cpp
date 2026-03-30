@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <oracle/musig2_messages.h>
+#include <primitives/oracle.h>
 #include <protocol.h>
 #include <serialize.h>
 #include <streams.h>

@@ -146,11 +146,14 @@ BOOST_AUTO_TEST_CASE(test_oracle_config_sorted_by_pubkey)
 // PART 3: Phase Transition Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_phase3_is_active_from_genesis)
+BOOST_AUTO_TEST_CASE(test_phase2_and_phase3_can_be_active_together_on_regtest)
 {
-    // All active networks now have Phase 3 (MuSig2) from genesis.
+    // With RC27 cleanup, regtest also has immediate Phase 3 activation.
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
+    BOOST_CHECK(Consensus::IsOracleActive(params, params.nDigiDollarPhase2Height));
+    BOOST_CHECK(Consensus::IsPhase3Active(params, params.nDigiDollarPhase2Height));
+    BOOST_CHECK(Consensus::IsPhase3Active(params, params.nDigiDollarPhase2Height - 1));
     BOOST_CHECK(params.IsPhaseThreeActive(0));
     BOOST_CHECK(!params.IsPhaseThreeActive(-1));
 }
@@ -251,7 +254,7 @@ BOOST_AUTO_TEST_CASE(test_regtest_earliest_activation)
     int32_t testnet = Params().GetConsensus().nDigiDollarPhase3Height;
     SelectParams(ChainType::MAIN);
     int32_t mainnet = Params().GetConsensus().nDigiDollarPhase3Height;
-    // All RC27 networks should use MuSig2 immediately; avoid legacy-phase ordering assumptions.
+    // All RC27 networks should use MuSig2 immediately.
     BOOST_CHECK_EQUAL(regtest, 0);
     BOOST_CHECK_EQUAL(testnet, 0);
     BOOST_CHECK_EQUAL(mainnet, 0);

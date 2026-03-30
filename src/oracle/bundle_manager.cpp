@@ -864,8 +864,9 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
         if (phase3_sig && phase3_bitmap) {
             const uint16_t total_oracles = static_cast<uint16_t>(std::max(1, consensus_params.nOracleTotalOracles));
+            const int phase3_required = std::max(1, consensus_params.nOracleConsensusRequired);
             std::vector<uint8_t> participating_ids = MuSig2OracleAggregator::DecodeBitmap(*phase3_bitmap, total_oracles);
-            if (participating_ids.size() >= ORACLE_CONSENSUS_REQUIRED) {
+            if (participating_ids.size() >= static_cast<size_t>(phase3_required)) {
                 MuSig2OracleAggregator aggregator;
                 secp256k1_xonly_pubkey agg_pk;
                 secp256k1_musig_keyagg_cache cache;
@@ -891,7 +892,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
                 }
             } else {
                 LogPrintf("Oracle: MuSig2 participant threshold not met (%zu < %d)\n",
-                          participating_ids.size(), ORACLE_CONSENSUS_REQUIRED);
+                          participating_ids.size(), phase3_required);
             }
         } else {
             LogPrintf("Oracle: No complete MuSig2 session available for epoch %d, falling back to legacy bundle\n", epoch);

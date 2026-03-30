@@ -17,6 +17,7 @@
 
 #include <secp256k1.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 
@@ -149,8 +150,10 @@ MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32
         return it->second.get();
     }
 
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
     auto session = std::make_unique<MuSig2SigningSession>(
-        epoch, static_cast<uint8_t>(ORACLE_CONSENSUS_REQUIRED));
+        epoch, min_signers);
     session->SetTimeoutBlocks(50);
 
     MuSig2SigningSession* ptr = session.get();

@@ -294,7 +294,9 @@ public:
 
         // DigiDollar consensus parameters (mainnet)
         digidollarParams = DigiDollar::ConsensusParams();
-        // Use default values from struct initialization for mainnet
+        digidollarParams.oracleThreshold = 6;
+        digidollarParams.activeOracles = 11;
+        digidollarParams.oracleCount = 11;
 
         // Initialize DigiDollar Oracle Nodes (30 total, historical Phase One/Two providers)
         InitializeOracleNodes();
@@ -311,7 +313,7 @@ public:
         consensus.nOracleRequiredMessages = 6;        // Phase Two (pre-MuSig2): 6-of-11 consensus
         consensus.nOracleTotalOracles = 11;
         consensus.nDigiDollarPhase2Height = 3000000;  // Phase Two and Three activate together
-        consensus.nDigiDollarPhase3Height = 9999999;  // Phase Three: TBD after testnet20 validation
+        consensus.nDigiDollarPhase3Height = 0;  // Phase Three (MuSig2): active immediately on mainnet
 
         // Phase 3 MuSig2 oracle configuration — 6-of-11 quorum
         // Same oracle operator set as testnet. To add/replace operators:
@@ -569,7 +571,7 @@ public:
         // Multi-oracle activates at same height as DigiDollar (no separate phases)
         // Everything — DD minting, oracle consensus, multi-oracle — activates together
         consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
-        consensus.nDigiDollarPhase3Height = 50000;  // Phase Three: Early testnet activation for validation
+        consensus.nDigiDollarPhase3Height = 0;  // Phase Three (MuSig2): active immediately on testnet
 
         // Phase 3 MuSig2 oracle configuration — 6-of-11 quorum
         consensus.nOraclePubkeyCount = 11;

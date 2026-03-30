@@ -474,7 +474,7 @@ BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 30);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 15);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 11);
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
@@ -484,7 +484,7 @@ BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 15);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 15);  // Phase Two: 9-of-15 consensus
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 11);  // Phase Two/MuSig2: 6-of-11 consensus
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
@@ -785,12 +785,12 @@ BOOST_AUTO_TEST_CASE(oracle_block_integration)
     coinbase.vout[0].nValue = 5000000000; // 50 DGB
     test_block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
 
-    // Test adding oracle bundle to block
+    // Test adding oracle bundle to block. In this deterministic unit context,
+    // no MuSig2 session or sufficient attestation quorum is prepared.
     int32_t test_height = 1000;
     bool result = manager.AddOracleBundleToBlock(test_block, test_height);
 
-    // Should succeed (graceful degradation if no oracle data)
-    BOOST_CHECK(result);
+    BOOST_CHECK(!result);
 
     // Test oracle script creation with empty bundle
     COracleBundle empty_bundle;
@@ -801,9 +801,9 @@ BOOST_AUTO_TEST_CASE(oracle_block_integration)
 
     // Test with valid bundle
     COracleBundle valid_bundle(10);
-    COraclePriceMessage msg(1, 6000, GetTime());  // $0.006 (realistic price)
-    msg.schnorr_sig = {0x01, 0x02, 0x03}; // Mock signature
-    valid_bundle.AddMessage(msg);
+    COraclePriceMessage msg2(1, 6000, GetTime());  // $0.006 (realistic price)
+    msg2.schnorr_sig = {0x01, 0x02, 0x03}; // Mock signature
+    valid_bundle.AddMessage(msg2);
 
     oracle_script = manager.CreateOracleScript(valid_bundle);
     BOOST_CHECK(!oracle_script.empty());

@@ -56,18 +56,16 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
 {
     SelectParams(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
-    // Mainnet Phase 3 is not yet activated — stays at default max
-    // until testnet validation is complete. Oracle config is pre-staged.
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 9999999);
+    // Mainnet uses MuSig2 immediately on top of 6-of-11 oracle consensus.
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet Phase 3 activates at block 1000 (early for integration testing)
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 50000);
-    BOOST_CHECK_GE(params.nDigiDollarPhase3Height, params.nDigiDollarPhase2Height);
+    // Testnet also switches immediately to MuSig2 (6-of-11).
+    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
@@ -150,8 +148,8 @@ BOOST_AUTO_TEST_CASE(test_oracle_config_sorted_by_pubkey)
 
 BOOST_AUTO_TEST_CASE(test_phase2_still_works_before_phase3)
 {
-    // Use testnet where Phase 2 < Phase 3
-    SelectParams(ChainType::TESTNET);
+    // Regtest still has a delayed Phase 3 height for compatibility testing.
+    SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
     BOOST_CHECK_LT(params.nDigiDollarPhase2Height, params.nDigiDollarPhase3Height);
     // At Phase 2 height: oracle active, Phase 3 NOT
@@ -163,14 +161,14 @@ BOOST_AUTO_TEST_CASE(test_phase2_still_works_before_phase3)
 
 BOOST_AUTO_TEST_CASE(test_phase3_active_after_height)
 {
-    SelectParams(ChainType::TESTNET);
+    SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
     int phase3 = params.nDigiDollarPhase3Height;
     BOOST_CHECK(Consensus::IsPhase3Active(params, phase3));
     BOOST_CHECK(Consensus::IsPhase3Active(params, phase3 + 1));
     BOOST_CHECK(Consensus::IsPhase3Active(params, phase3 + 10000));
     BOOST_CHECK(!Consensus::IsPhase3Active(params, phase3 - 1));
-    BOOST_CHECK(!Consensus::IsPhase3Active(params, 0));
+    BOOST_CHECK(!Consensus::IsPhase3Active(params, phase3 - 1000));
 }
 
 // ============================================================================

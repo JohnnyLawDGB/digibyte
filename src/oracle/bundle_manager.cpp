@@ -1137,6 +1137,12 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
 
                     // Check version byte
                     if (data[0] == 0x03) {
+                        // Phase Three version gate: reject v0x03 if Phase 3 is not activated
+                        const Consensus::Params& extract_cparams = Params().GetConsensus();
+                        if (extract_cparams.nDigiDollarPhase3Height == std::numeric_limits<int>::max()) {
+                            LogPrintf("Oracle: Phase Three not activated, rejecting v0x03 bundle extraction\n");
+                            return false;
+                        }
                         // v0x03 MuSig2 format: aggregate sig + participation bitmap
                         // Data layout (after version byte):
                         //   bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
@@ -2155,6 +2161,21 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     // STEP 7: PHASE-AWARE CONSENSUS VALIDATION
     const Consensus::Params& consensusParams_ref = Params().GetConsensus();
 
+    // Phase 3 (MuSig2): v0x03 bundles use aggregate signatures instead of individual oracle sigs
+    if (bundle.version == 3) {
+        std::string phase3_error;
+        if (!OracleBundleManager::ValidatePhaseThreeBundle(bundle, block_height, consensusParams_ref, phase3_error)) {
+            LogPrintf("Oracle: Phase Three bundle validation failed at block %d: %s\n",
+                     block_height, phase3_error);
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                "bad-oracle-phase3",
+                                strprintf("Phase Three oracle bundle validation failed: %s", phase3_error));
+        }
+        // Phase 3 validation complete — skip Phase 1/2 checks below
+        // (v0x03 bundles don't have individual oracle messages)
+        goto oracle_post_validation;
+    }
+
     // Phase 1: Use generic bundle.IsValid() which checks Phase 1 signatures
     // Phase 2: Skip generic IsValid() — ValidatePhaseTwoBundle does Phase 2-specific validation
     if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
@@ -2216,6 +2237,7 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
         }
     }
 
+oracle_post_validation:
     // Verify oracle timestamp is not too old (max 1 hour = 3600 seconds)
     int64_t oracle_age = block.nTime - bundle.timestamp;
     if (oracle_age > ORACLE_MAX_AGE_SECONDS) {
@@ -2393,70 +2415,6 @@ bool OracleBundleManager::ValidatePhaseOneBundle(const COracleBundle& bundle, co
         return false;
     }
 
-    return true;
-}
-
-bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle, const Consensus::Params& params)
-{
-    // Phase 3: Validate MuSig2 aggregate signature bundle (v0x03)
-    // Must have version 3
-    if (bundle.version != 3) {
-        LogPrintf("Oracle: Phase Three bundle validation failed: version=%d (expected 3)\n", bundle.version);
-        return false;
-    }
-
-    // Must have 64-byte aggregate signature
-    if (bundle.aggregate_sig.size() != 64) {
-        LogPrintf("Oracle: Phase Three bundle validation failed: aggregate_sig size=%zu (expected 64)\n",
-                 bundle.aggregate_sig.size());
-        return false;
-    }
-
-    // Must have non-empty participation bitmap
-    if (bundle.participation_bitmap.empty()) {
-        LogPrintf("Oracle: Phase Three bundle validation failed: empty participation bitmap\n");
-        return false;
-    }
-
-    // Count participating oracles from bitmap
-    int participating = 0;
-    for (unsigned char byte : bundle.participation_bitmap) {
-        for (int bit = 0; bit < 8; ++bit) {
-            if (byte & (1 << bit)) {
-                participating++;
-            }
-        }
-    }
-
-    // Must meet minimum consensus threshold
-    if (participating < params.nOracleRequiredMessages) {
-        LogPrintf("Oracle: Phase Three bundle validation failed: %d participating (minimum %d)\n",
-                 participating, params.nOracleRequiredMessages);
-        return false;
-    }
-
-    // Price validation
-    if (bundle.median_price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
-        bundle.median_price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
-        LogPrintf("Oracle: Phase Three bundle validation failed: price %llu out of range\n",
-                 bundle.median_price_micro_usd);
-        return false;
-    }
-
-    // Timestamp must be non-zero
-    if (bundle.timestamp <= 0) {
-        LogPrintf("Oracle: Phase Three bundle validation failed: invalid timestamp %lld\n",
-                 bundle.timestamp);
-        return false;
-    }
-
-    // TODO: Verify MuSig2 aggregate Schnorr signature against aggregated pubkey
-    // This requires computing the aggregate public key from the participation bitmap
-    // and verifying bundle.aggregate_sig over the consensus message hash.
-    // Full implementation will be added when MuSig2OracleAggregator is wired up.
-
-    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Phase Three bundle validated: %d participants, price=%llu\n",
-             participating, bundle.median_price_micro_usd);
     return true;
 }
 

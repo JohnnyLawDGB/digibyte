@@ -120,8 +120,12 @@ public:
     bool ValidateOracleBundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params) const;
     bool ValidateOracleDataInBlock(const CBlock& block, int32_t block_height, const Consensus::Params& params) const;
 
-    //! Phase Two validation (static for reuse in consensus code)
+    //! V0x03 script format validation
+    bool ValidateV03BundleFormat(const CScript& script, uint8_t& version);
+
+    //! Phase validation (static for reuse in consensus code)
     static bool ValidatePhaseTwoBundle(const COracleBundle& bundle, const Consensus::Params& params);
+    static bool ValidatePhaseThreeBundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params, std::string& error);
     static bool ValidatePhaseOneBundle(const COracleBundle& bundle, const Consensus::Params& params);
     static bool ValidateBundle(const COracleBundle& bundle, int block_height, const Consensus::Params& params);
     static int GetRequiredConsensus(int block_height, const Consensus::Params& params);
@@ -193,10 +197,6 @@ public:
 
     //! Clear all state (for testing)
     void Clear();
-
-    //! Phase 3 MuSig2 block-tick orchestration
-    bool StartMuSig2Session(int32_t block_height);
-    bool CompleteMuSig2Session(int32_t block_height);
 
     //! Configuration validation
     bool ValidateConfiguration() const;
@@ -275,6 +275,10 @@ private:
 
 //! Global oracle bundle manager instance
 extern std::unique_ptr<OracleBundleManager> g_oracle_bundle_manager;
+
+//! Compute deterministic hash of oracle bundle consensus data (price + timestamp).
+//! Used as the message for MuSig2 aggregate signature verification.
+uint256 ComputeOracleBundleHash(const COracleBundle& bundle);
 
 //! Utility functions for integration with existing code
 namespace OracleIntegration {

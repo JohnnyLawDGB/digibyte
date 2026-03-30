@@ -304,17 +304,46 @@ public:
         consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)
         consensus.nDDActivationHeight = 22014720;   // DigiDollar activation height — aligned with BIP9 min_activation_height
 
-        // Oracle system (Phase One: DISABLED on mainnet)
-        consensus.nOracleActivationHeight = std::numeric_limits<int>::max();  // Never activates
-        consensus.nOracleEpochLength = 1440;          // 24 hours (placeholder for Phase Two)
-        consensus.nOracleRequiredMessages = 8;        // Phase Two: 8-of-15 consensus
-        consensus.nOracleTotalOracles = 15;           // Phase Two: 15 active oracles
+        // Oracle system — mainnet activates all phases at block 3,000,000
+        // Mainnet skips Phase 1 (single-oracle); goes directly to Phase 3 (MuSig2)
+        consensus.nOracleActivationHeight = 3000000;
+        consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
+        consensus.nOracleRequiredMessages = 8;        // Phase Two compat: 8-of-15 consensus
+        consensus.nOracleTotalOracles = 15;
+        consensus.nDigiDollarPhase2Height = 3000000;  // Phase Two and Three activate together
         consensus.nDigiDollarPhase3Height = 9999999;  // Phase Three: TBD after testnet20 validation
 
-        // No oracle public keys configured for mainnet (Phase One is testnet-only)
-        // vOraclePublicKeys remains empty
+        // Phase 3 MuSig2 oracle configuration — 9-of-15 quorum
+        // Same oracle operator set as testnet. To add/replace operators:
+        //   1. Generate keypair via `digibyte-cli generateoraclekey <id>`
+        //   2. Add x-only pubkey to vOraclePublicKeys in sorted order
+        //   3. Add OracleNodeInfo to vOracleNodes
+        //   4. Update nOraclePubkeyCount/nOracleConsensusRequired
+        //   5. Deploy via coordinated software upgrade
+        consensus.nOraclePubkeyCount = 15;
+        consensus.nOracleConsensusRequired = 9;
 
-        LogPrintf("Oracle: Mainnet oracle system DISABLED (Phase One is testnet-only)\n");
+        // Oracle public keys (x-only, 32 bytes) — sorted lexicographically
+        consensus.vOraclePublicKeys.clear();
+        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // Brian Oakes
+        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // Bastian
+        consensus.vOraclePublicKeys.push_back("19feb4347582d94511d5dfb2ddca411d8fa65f424d8eee1a63fb733ca992b379");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // LookInto
+        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // Green Candle
+        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // DanGB
+        consensus.vOraclePublicKeys.push_back("5d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // Aussie
+        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // Ycagel
+        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // JohnnyLawDGB
+        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // Shenger
+        consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // Ogilvie
+        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // Jared
+
+        LogPrintf("Oracle: Mainnet Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
+                 consensus.nDigiDollarPhase3Height, consensus.nOracleConsensusRequired,
+                 consensus.nOraclePubkeyCount);
     }
 
 private:
@@ -546,23 +575,28 @@ public:
         consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
         consensus.nDigiDollarPhase3Height = 50000;  // Phase Three: Early testnet activation for validation
 
-        // Testnet oracle public keys (x-only, 32 bytes) — must match vOracleNodes
+        // Phase 3 MuSig2 oracle configuration — 9-of-15 quorum
+        consensus.nOraclePubkeyCount = 15;
+        consensus.nOracleConsensusRequired = 9;
+
+        // Testnet oracle public keys (x-only, 32 bytes) — sorted lexicographically
+        // for deterministic MuSig2 key aggregation
         consensus.vOraclePublicKeys.clear();
-        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // oracle 0 - Jared
-        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // oracle 1 - Green Candle
-        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // oracle 2 - Bastian
-        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // oracle 3 - DanGB
-        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // oracle 4 - Shenger
-        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // oracle 5 - Ycagel
-        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // oracle 6 - Aussie (new key RC15)
-        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // oracle 7 - LookInto (new key RC13)
-        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // oracle 8 - JohnnyLawDGB (new RC19)
-        consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // oracle 9 - Ogilvie (new RC27)
-        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // oracle 10 - Brian Oakes (new RC27)
-        consensus.vOraclePublicKeys.push_back("19feb4347582d94511d5dfb2ddca411d8fa65f424d8eee1a63fb733ca992b379");  // oracle 11 - PLACEHOLDER (reserved)
-        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // oracle 12 - PLACEHOLDER (reserved)
-        consensus.vOraclePublicKeys.push_back("5d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a");  // oracle 13 - PLACEHOLDER (reserved)
-        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // oracle 14 - PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // Brian Oakes
+        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // Bastian
+        consensus.vOraclePublicKeys.push_back("19feb4347582d94511d5dfb2ddca411d8fa65f424d8eee1a63fb733ca992b379");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // LookInto
+        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // Green Candle
+        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // DanGB
+        consensus.vOraclePublicKeys.push_back("5d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a");  // PLACEHOLDER (reserved)
+        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // Aussie
+        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // Ycagel
+        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // JohnnyLawDGB
+        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // Shenger
+        consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // Ogilvie
+        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // Jared
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
         LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
@@ -978,32 +1012,25 @@ public:
         consensus.nDigiDollarPhase2Height = 650;   // Same as nDDActivationHeight — everything activates together
         consensus.nDigiDollarPhase3Height = 1000;  // Phase Three: Very early for unit testing
 
-        // RegTest: Oracle public keys for all 5 oracles (match vOracleNodes)
+        // Phase 3 MuSig2 oracle configuration — 4-of-7 quorum (lower for testing)
+        consensus.nOraclePubkeyCount = 7;
+        consensus.nOracleConsensusRequired = 4;
+
+        // RegTest: Oracle public keys for all 7 oracles — sorted lexicographically
         // Deterministic keys derived from SHA256("digibyte_regtest_oracle_N")
         // Matching private keys are in MockOracleManager for test signing
-        consensus.vOraclePublicKeys.push_back(
-            "8849d466503c5bb3875ada6bff3d6eec6299265b7b0a4e31bb58b7cecf6dd08f"  // oracle 0
-        );
-        consensus.vOraclePublicKeys.push_back(
-            "9991f9e0c61dfe10896ee797f271f2f6d4e2545daf9a22732622c02ce39f43f0"  // oracle 1
-        );
-        consensus.vOraclePublicKeys.push_back(
-            "d2292678e5c549e90420dc4c6311ef01bf014fb0f4b34d07e02b7b98bbc35e9a"  // oracle 2
-        );
-        consensus.vOraclePublicKeys.push_back(
-            "f24df57d6ab29241f0f00dd87d7ce1418852684dc41d186650a452179618234f"  // oracle 3
-        );
-        consensus.vOraclePublicKeys.push_back(
-            "aa1ebe314382eb820a040acf604a6617db3d063e9ee0640780774650649aaf47"  // oracle 4
-        );
-        consensus.vOraclePublicKeys.push_back(
-            "be6ad50e0bf26af3798af09a2824142fa79ff37f8730b7a54ba34c9fe6f1e8ec"  // oracle 5
-        );
-        consensus.vOraclePublicKeys.push_back(
-            "584d30f3650d998b0b5f8be52f46164aee5f10d332421e63f070da8a38693a96"  // oracle 6
-        );
+        consensus.vOraclePublicKeys.clear();
+        consensus.vOraclePublicKeys.push_back("584d30f3650d998b0b5f8be52f46164aee5f10d332421e63f070da8a38693a96");  // oracle 6
+        consensus.vOraclePublicKeys.push_back("8849d466503c5bb3875ada6bff3d6eec6299265b7b0a4e31bb58b7cecf6dd08f");  // oracle 0
+        consensus.vOraclePublicKeys.push_back("9991f9e0c61dfe10896ee797f271f2f6d4e2545daf9a22732622c02ce39f43f0");  // oracle 1
+        consensus.vOraclePublicKeys.push_back("aa1ebe314382eb820a040acf604a6617db3d063e9ee0640780774650649aaf47");  // oracle 4
+        consensus.vOraclePublicKeys.push_back("be6ad50e0bf26af3798af09a2824142fa79ff37f8730b7a54ba34c9fe6f1e8ec");  // oracle 5
+        consensus.vOraclePublicKeys.push_back("d2292678e5c549e90420dc4c6311ef01bf014fb0f4b34d07e02b7b98bbc35e9a");  // oracle 2
+        consensus.vOraclePublicKeys.push_back("f24df57d6ab29241f0f00dd87d7ce1418852684dc41d186650a452179618234f");  // oracle 3
 
-        LogPrintf("Oracle: RegTest Phase Two - 4-of-7 consensus, activates at height %d\n", consensus.nDigiDollarPhase2Height);
+        LogPrintf("Oracle: RegTest Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
+                 consensus.nDigiDollarPhase3Height, consensus.nOracleConsensusRequired,
+                 consensus.nOraclePubkeyCount);
     }
 
 private:

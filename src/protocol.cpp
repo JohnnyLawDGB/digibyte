@@ -5,6 +5,7 @@
 #include <protocol.h>
 
 #include <common/system.h>
+#include <oracle/musig2_messages.h>
 #include <primitives/oracle.h>
 #include <hash.h>
 

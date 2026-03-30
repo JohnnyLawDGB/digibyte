@@ -766,8 +766,12 @@ libdigibyte_common_a_SOURCES = \
   oracle/mock_oracle.h \
   oracle/musig2_aggregator.cpp \
   oracle/musig2_aggregator.h \
+  oracle/musig2_orchestrator.cpp \
+  oracle/musig2_orchestrator.h \
   oracle/musig2_session.cpp \
   oracle/musig2_session.h \
+  oracle/musig2_session_manager.cpp \
+  oracle/musig2_session_manager.h \
   oracle/node.cpp \
   oracle/node.h \
   outputtype.cpp \

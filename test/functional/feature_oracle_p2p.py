@@ -35,10 +35,10 @@ class OracleP2PTest(DigiByteTestFramework):
         # Node 0: Oracle node
         # Node 1-3: Regular nodes for P2P testing
         self.extra_args = [
-            ['-digidollar=1', '-oracle=1', '-debug=oracle', '-debug=net'],
-            ['-digidollar=1', '-debug=oracle', '-debug=net'],
-            ['-digidollar=1', '-debug=oracle', '-debug=net'],
-            ['-digidollar=1', '-debug=oracle', '-debug=net'],
+            ['-digidollar=1', '-txindex=1', '-debug=net'],
+            ['-digidollar=1', '-txindex=1', '-debug=net'],
+            ['-digidollar=1', '-txindex=1', '-debug=net'],
+            ['-digidollar=1', '-txindex=1', '-debug=net'],
         ]
 
     def add_options(self, parser):

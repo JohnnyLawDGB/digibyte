@@ -25,7 +25,7 @@ class GetOraclesPendingTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-digidollar=1", "-mocktime=0", "-dandelion=0"]]
+        self.extra_args = [["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"]]
 
     def add_options(self, parser):
         self.add_wallet_options(parser)

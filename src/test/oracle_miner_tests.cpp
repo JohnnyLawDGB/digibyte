@@ -45,6 +45,18 @@ using node::CBlockTemplate;
 
 BOOST_FIXTURE_TEST_SUITE(oracle_miner_tests, TestChain100Setup)
 
+namespace {
+bool SkipPhase2MinerTest()
+{
+    const auto& params = Params().GetConsensus();
+    if (params.nDigiDollarPhase3Height <= 0) {
+        BOOST_TEST_MESSAGE("SKIPPED: Phase 3 active from genesis — Phase 2 miner test not applicable");
+        return true;
+    }
+    return false;
+}
+} // namespace
+
 //
 // CATEGORY 1: AddOracleBundleToBlock() TESTS (3 tests)
 //
@@ -64,9 +76,11 @@ BOOST_FIXTURE_TEST_SUITE(oracle_miner_tests, TestChain100Setup)
  */
 BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
 {
+    if (SkipPhase2MinerTest()) return;
     // Create oracle bundle with valid message
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
-    manager.SetEnabled(true);  // Ensure oracles are enabled
+    manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
 
     // Generate oracle keypair
@@ -130,6 +144,7 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
  */
 BOOST_AUTO_TEST_CASE(oracle_bundle_serialization_format)
 {
+    if (SkipPhase2MinerTest()) return;
     // Create oracle message and bundle
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
@@ -191,6 +206,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_serialization_format)
  */
 BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
 {
+    if (SkipPhase2MinerTest()) return;
     // Create oracle message
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
@@ -213,7 +229,8 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
 
     // Use CreateOracleScript to create compact format
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
-    manager.SetEnabled(true);  // Ensure oracles are enabled
+    manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
 
     CScript oracle_script = manager.CreateOracleScript(bundle);
@@ -263,6 +280,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
  */
 BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
 {
+    if (SkipPhase2MinerTest()) return;
     // Add oracle message to bundle manager
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 
@@ -330,6 +348,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
  */
 BOOST_AUTO_TEST_CASE(create_new_block_no_oracle_if_unavailable)
 {
+    if (SkipPhase2MinerTest()) return;
     // Ensure no oracle messages are pending
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     // Clear any existing messages (if Clear() method exists)
@@ -371,9 +390,11 @@ BOOST_AUTO_TEST_CASE(create_new_block_no_oracle_if_unavailable)
  */
 BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 {
+    if (SkipPhase2MinerTest()) return;
     // Add EXACTLY ONE oracle message (Phase One requirement)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
     manager.ClearPendingMessages();
 

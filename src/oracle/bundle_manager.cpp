@@ -538,7 +538,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
     // Phase 3 gate: use MuSig2 aggregate signatures when activated
     const Consensus::Params& cparams_phase3 = Params().GetConsensus();
-    if (block_height >= cparams_phase3.nDigiDollarPhase3Height) {
+    if (!force_phase2 && block_height >= cparams_phase3.nDigiDollarPhase3Height) {
         LogPrintf("Oracle: Phase 3 active at height %d (activation=%d), using MuSig2 bundling\n",
                  block_height, cparams_phase3.nDigiDollarPhase3Height);
 
@@ -1892,6 +1892,7 @@ void OracleBundleManager::Clear()
         near_quorum_wait_attempts = 0;
         near_quorum_wait_successes = 0;
         near_quorum_wait_timeouts = 0;
+        force_phase2 = false;
     }
 
     {

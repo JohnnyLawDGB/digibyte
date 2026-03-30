@@ -773,6 +773,8 @@ BOOST_AUTO_TEST_CASE(oracle_integration_system_readiness)
 BOOST_AUTO_TEST_CASE(oracle_block_integration)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
 
     // Create test block
     CBlock test_block;

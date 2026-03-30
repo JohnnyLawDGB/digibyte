@@ -44,6 +44,21 @@ using node::CBlockTemplate;
 
 BOOST_FIXTURE_TEST_SUITE(oracle_integration_tests, TestChain100Setup)
 
+namespace {
+/** Phase 2 integration tests require Phase 3 to NOT be active from genesis,
+ *  because they construct v0x02 bundles that are rejected by block validation
+ *  when Phase 3 is active. Skip when nDigiDollarPhase3Height == 0. */
+bool SkipPhase2Test()
+{
+    const auto& params = Params().GetConsensus();
+    if (params.nDigiDollarPhase3Height <= 0) {
+        BOOST_TEST_MESSAGE("SKIPPED: Phase 3 active from genesis — Phase 2 integration test not applicable");
+        return true;
+    }
+    return false;
+}
+} // namespace
+
 /**
  * TEST: Complete End-to-End Oracle Flow
  *
@@ -60,6 +75,7 @@ BOOST_FIXTURE_TEST_SUITE(oracle_integration_tests, TestChain100Setup)
  */
 BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
 {
+    if (SkipPhase2Test()) return;
     LogPrintf("=== Oracle Integration Test: Complete Flow ===\n");
 
     // STEP 1: Initialize Oracle System
@@ -67,6 +83,7 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();  // Reset singleton state from previous tests
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);  // Phase One: 1-of-1 consensus
 
     // STEP 2: Simulate Exchange API Price Fetching
@@ -239,6 +256,7 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
  */
 BOOST_AUTO_TEST_CASE(oracle_graceful_degradation)
 {
+    if (SkipPhase2Test()) return;
     LogPrintf("=== Oracle Integration Test: Graceful Degradation ===\n");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
@@ -272,6 +290,7 @@ BOOST_AUTO_TEST_CASE(oracle_graceful_degradation)
 
     // Re-enable oracle system
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
 
     LogPrintf("=== Oracle Integration Test: Graceful Degradation PASSED ===\n");
 }
@@ -283,6 +302,7 @@ BOOST_AUTO_TEST_CASE(oracle_graceful_degradation)
  */
 BOOST_AUTO_TEST_CASE(verify_integration_points)
 {
+    if (SkipPhase2Test()) return;
     LogPrintf("=== Oracle Integration Test: Integration Points Verification ===\n");
 
     int passed = 0;
@@ -304,6 +324,7 @@ BOOST_AUTO_TEST_CASE(verify_integration_points)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();  // Reset singleton state from previous tests
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);  // Phase One: 1-of-1 consensus
     BOOST_CHECK(manager.IsEnabled());
     LogPrintf("   ✓ Oracle Node → Bundle Manager: VERIFIED\n");
@@ -393,11 +414,13 @@ BOOST_AUTO_TEST_CASE(verify_integration_points)
  */
 BOOST_AUTO_TEST_CASE(oracle_bundles_survive_template_creation_for_mining)
 {
+    if (SkipPhase2Test()) return;
     LogPrintf("=== Oracle Integration Test: Bundles Survive Template Creation ===\n");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1
 
     // --- Step 1: Add oracle messages to pending ---
@@ -550,11 +573,13 @@ BOOST_AUTO_TEST_CASE(oracle_bundles_survive_template_creation_for_mining)
  */
 BOOST_AUTO_TEST_CASE(oracle_bundle_survives_regenerate_commitments)
 {
+    if (SkipPhase2Test()) return;
     LogPrintf("=== Oracle Integration Test: Bundle Survives RegenerateCommitments ===\n");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);
 
     // Step 1: Create oracle message and add to manager
@@ -699,6 +724,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_survives_regenerate_commitments)
 
 BOOST_AUTO_TEST_CASE(reject_multiple_oracle_outputs_in_coinbase)
 {
+    if (SkipPhase2Test()) return;
     LogPrintf("\n=== Oracle Integration Test: Reject Multiple Oracle Outputs ===\n");
 
     // SECURITY TEST: A malicious miner could try to inject multiple OP_ORACLE outputs
@@ -708,6 +734,7 @@ BOOST_AUTO_TEST_CASE(reject_multiple_oracle_outputs_in_coinbase)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);
 
     // Create a properly signed oracle message

@@ -55,6 +55,7 @@ BOOST_AUTO_TEST_CASE(bundle_immediate_when_quorum_met)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(5);
 
     const uint64_t price = 7000;
@@ -82,6 +83,7 @@ BOOST_AUTO_TEST_CASE(bundle_waits_for_near_quorum)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(5);
 
     const uint64_t price = 7000;
@@ -117,6 +119,7 @@ BOOST_AUTO_TEST_CASE(bundle_gives_up_after_timeout)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(5);
 
     const uint64_t price = 7000;
@@ -146,6 +149,7 @@ BOOST_AUTO_TEST_CASE(bundle_no_wait_when_far_from_quorum)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(5);
 
     const uint64_t price = 7000;
@@ -173,6 +177,7 @@ BOOST_AUTO_TEST_CASE(bundle_wait_does_not_block_too_long)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(5);
 
     const uint64_t price = 7000;

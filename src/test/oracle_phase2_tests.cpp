@@ -1086,6 +1086,7 @@ BOOST_AUTO_TEST_CASE(phase2_full_pipeline)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(4); // Phase Two: 4-of-7 (regtest)
 
     // Use regtest oracle keys (match chainparams pubkeys for extraction binding)

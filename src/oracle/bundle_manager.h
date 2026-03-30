@@ -53,6 +53,7 @@ private:
 
     // Configuration
     bool enabled{true};
+    bool force_phase2{false};  // Test-only: bypass Phase 3 gate in AddOracleBundleToBlock
     int32_t min_oracle_count{ORACLE_CONSENSUS_REQUIRED};
     int32_t total_oracle_count{ORACLE_ACTIVE_COUNT};
     std::chrono::milliseconds near_quorum_wait_timeout{std::chrono::seconds(2)};
@@ -70,6 +71,7 @@ public:
     bool IsEnabled() const { return enabled; }
     void SetMinOracleCount(int32_t min_count) { min_oracle_count = min_count; }
     int32_t GetMinOracleCount() const { return min_oracle_count; }
+    void SetForcePhase2(bool force) { force_phase2 = force; }  // Test-only
 
     //! Message management
     bool AddOracleMessage(const COraclePriceMessage& message);

@@ -302,6 +302,11 @@ TestChain100Setup::TestChain100Setup(
     // Initialize OracleBundleManager before creating blocks
     // This is needed because DigiDollar activates at height 100 in regtest
     OracleBundleManager::Initialize();
+    // Clear any stale state and disable oracle bundling during chain setup
+    // to avoid Phase 2 vs Phase 3 version conflicts in block validation.
+    // Individual tests re-enable and configure the manager as needed.
+    OracleBundleManager::GetInstance().Clear();
+    OracleBundleManager::GetInstance().SetEnabled(false);
 
     // Generate a 100-block chain:
     this->mineBlocks(100);

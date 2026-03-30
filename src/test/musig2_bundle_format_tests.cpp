@@ -133,6 +133,8 @@ BOOST_AUTO_TEST_CASE(test_v03_bundle_serialization_roundtrip)
     BOOST_CHECK(ok);
 
     // Compare all v0x03 fields
+    BOOST_CHECK_EQUAL(deserialized.version, 3);
+    BOOST_CHECK(deserialized.IsMuSig2());
     BOOST_CHECK_EQUAL(deserialized.median_price_micro_usd, bundle.median_price_micro_usd);
     BOOST_CHECK_EQUAL(deserialized.timestamp, bundle.timestamp);
     BOOST_CHECK(deserialized.participation_bitmap == bundle.participation_bitmap);

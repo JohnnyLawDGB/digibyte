@@ -248,6 +248,9 @@ bool COracleBundle::DeserializeV03Data(const std::vector<unsigned char>& data, C
     // Minimum: bitmap_len(1) + bitmap(>=1) + price(8) + timestamp(8) + sig(64) = 82
     if (data.size() < 82) return false;
 
+    // Ensure bundle is marked as v0x03 when decoding this payload type.
+    bundle.version = 3;
+
     size_t pos = 0;
 
     // bitmap_len (1 byte)

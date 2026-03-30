@@ -371,10 +371,10 @@ BOOST_AUTO_TEST_CASE(test_v02_still_works)
     BOOST_CHECK_EQUAL(extracted.messages.size(), 3);
     BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 50000);
 
-    // Verify individual oracle IDs survived
+    // Verify individual oracle IDs/signatures survived
     for (int i = 0; i < 3; ++i) {
-    // TODO(Wave3):         BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, i);
-    // TODO(Wave3):         BOOST_CHECK_EQUAL(extracted.messages[i].schnorr_sig.size(), 64);
+        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, static_cast<uint32_t>(i));
+        BOOST_CHECK_EQUAL(extracted.messages[i].schnorr_sig.size(), 64);
     }
 }
 
@@ -555,9 +555,9 @@ BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v02)
     BOOST_CHECK_EQUAL(extracted.timestamp, 1700002000);
 
     for (int i = 0; i < 4; ++i) {
-    // TODO(Wave3):         BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, static_cast<uint32_t>(i));
-    // TODO(Wave3):         BOOST_CHECK_EQUAL(extracted.messages[i].schnorr_sig.size(), 64);
-    // TODO(Wave3):         BOOST_CHECK_EQUAL(extracted.messages[i].price_micro_usd, 88000);
+        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, static_cast<uint32_t>(i));
+        BOOST_CHECK_EQUAL(extracted.messages[i].schnorr_sig.size(), 64);
+        BOOST_CHECK_EQUAL(extracted.messages[i].price_micro_usd, 88000);
     }
 }
 

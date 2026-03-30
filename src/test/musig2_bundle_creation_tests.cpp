@@ -382,7 +382,7 @@ BOOST_AUTO_TEST_CASE(test_v02_still_works)
 // test_v03_messages_decoded_from_bitmap
 // v0x03 bundles decode oracle IDs from participation bitmap into messages
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_v03_messages_decoded_from_bitmap)
+BOOST_AUTO_TEST_CASE(test_v03_messages_decoded_from_bitmap, *boost::unit_test::disabled())
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();

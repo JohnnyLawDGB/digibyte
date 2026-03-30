@@ -520,6 +520,22 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     int32_t epoch = GetCurrentEpoch(block_height);
     LogPrintf("Oracle: Current epoch=%d for height %d\n", epoch, block_height);
 
+    // Cleanup stale MuSig2 sessions at epoch boundary (keep current epoch only).
+    // This prevents unbounded growth of the global session map when epoch advances.
+    {
+        LOCK(g_oracle_signing_sessions_mutex);
+        auto it = g_oracle_signing_sessions.begin();
+        while (it != g_oracle_signing_sessions.end()) {
+            if (it->first < epoch) {
+                LogPrintf("Oracle: Pruning stale MuSig2 session for epoch %d (current epoch=%d)\n",
+                          it->first, epoch);
+                it = g_oracle_signing_sessions.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     // Phase 3 gate: use MuSig2 aggregate signatures when activated
     const Consensus::Params& cparams_phase3 = Params().GetConsensus();
     if (block_height >= cparams_phase3.nDigiDollarPhase3Height) {
@@ -581,6 +597,12 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         oracle_output.scriptPubKey = oracle_script;
         coinbase_tx.vout.push_back(oracle_output);
         block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
+
+        // Session lifecycle: once consumed into a block, clear the epoch session.
+        {
+            LOCK(g_oracle_signing_sessions_mutex);
+            g_oracle_signing_sessions.erase(epoch);
+        }
 
         LogPrintf("Oracle: Phase 3 added MuSig2 oracle bundle to block %d (epoch %d)\n",
                  block_height, epoch);
@@ -1140,9 +1162,34 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         bundle.version = 3;
                         bundle.epoch = 0; // Epoch is not stored on-chain; set by caller
 
+                        // Wave 3: decode participation bitmap into synthetic oracle messages.
+                        // v0x03 stores one aggregate signature, so per-oracle schnorr_sig is empty.
+                        bundle.messages.clear();
+                        const Consensus::Params& params = Params().GetConsensus();
+                        const uint16_t total_oracles = static_cast<uint16_t>(std::max<size_t>(
+                            bundle.participation_bitmap.size() * 8,
+                            static_cast<size_t>(std::max(1, params.nOracleTotalOracles))));
+                        std::vector<uint8_t> oracle_ids = MuSig2OracleAggregator::DecodeBitmap(
+                            bundle.participation_bitmap, total_oracles);
+                        const CChainParams& chainparams = Params();
+                        for (uint8_t oracle_id : oracle_ids) {
+                            COraclePriceMessage msg;
+                            msg.oracle_id = oracle_id;
+                            msg.price_micro_usd = bundle.median_price_micro_usd;
+                            msg.timestamp = bundle.timestamp;
+                            msg.block_height = 0;
+                            msg.nonce = 0;
+                            const OracleNodeInfo* oracle_info = chainparams.GetOracleNode(msg.oracle_id);
+                            if (oracle_info) {
+                                msg.oracle_pubkey = XOnlyPubKey(oracle_info->pubkey);
+                            }
+                            bundle.messages.push_back(std::move(msg));
+                        }
+
                         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted v0x03 MuSig2 bundle: "
-                                 "bitmap=%zu bytes, price=%llu micro-USD, sig=%zu bytes\n",
+                                 "bitmap=%zu bytes, participants=%zu, price=%llu micro-USD, sig=%zu bytes\n",
                                  bundle.participation_bitmap.size(),
+                                 bundle.messages.size(),
                                  static_cast<unsigned long long>(bundle.median_price_micro_usd),
                                  bundle.aggregate_sig.size());
                         return true;

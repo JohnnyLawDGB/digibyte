@@ -450,7 +450,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_simple)
     BOOST_CHECK(extracted.IsMuSig2());
     BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 51000);
     BOOST_CHECK_EQUAL(extracted.timestamp, 1700000000);
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 9);
 }
 
 // ============================================================================
@@ -472,11 +472,11 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_full_participation)
     COracleBundle extracted;
     BOOST_REQUIRE(manager.ExtractOracleBundle(tx, extracted));
     BOOST_CHECK_EQUAL(extracted.version, 3);
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 15);
     BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 75000);
 
     for (int i = 0; i < 15; ++i) {
-    // TODO(Wave3):         BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, static_cast<uint32_t>(i));
+        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, static_cast<uint32_t>(i));
     }
 }
 
@@ -588,12 +588,12 @@ BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v03)
     BOOST_CHECK_EQUAL(extracted.aggregate_sig.size(), 64);
     BOOST_CHECK(extracted.participation_bitmap == bundle.participation_bitmap);
 
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[0].oracle_id, 0);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[1].oracle_id, 2);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[2].oracle_id, 4);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[3].oracle_id, 6);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[4].oracle_id, 9);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
+    BOOST_CHECK_EQUAL(extracted.messages[0].oracle_id, 0);
+    BOOST_CHECK_EQUAL(extracted.messages[1].oracle_id, 2);
+    BOOST_CHECK_EQUAL(extracted.messages[2].oracle_id, 4);
+    BOOST_CHECK_EQUAL(extracted.messages[3].oracle_id, 6);
+    BOOST_CHECK_EQUAL(extracted.messages[4].oracle_id, 9);
 }
 
 // ============================================================================
@@ -682,10 +682,11 @@ BOOST_AUTO_TEST_CASE(test_roundtrip_v03_create_extract)
     // 0xAB = 10101011 -> bits 0,1,3,5,7 -> oracles 0,1,3,5,7
     // 0xCD = 11001101 -> bits 0,2,3,6,7 -> oracles 8,10,11,14,15
     // 0xEF = 11101111 -> bits 0,1,2,3,5,6,7 -> oracles 16,17,18,19,21,22,23
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 0 /* Wave3: bitmap->messages */);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[0].oracle_id, 0);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[1].oracle_id, 1);
-    // TODO(Wave3):     BOOST_CHECK_EQUAL(extracted.messages[2].oracle_id, 3);
+    const std::vector<uint32_t> expected_ids = {0,1,3,5,7,8,10,11,14,15,16,17,18,19,21,22,23};
+    BOOST_CHECK_EQUAL(extracted.messages.size(), expected_ids.size());
+    for (size_t i = 0; i < expected_ids.size(); ++i) {
+        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, expected_ids[i]);
+    }
 
     for (const auto& msg : extracted.messages) {
         BOOST_CHECK_EQUAL(msg.price_micro_usd, price);

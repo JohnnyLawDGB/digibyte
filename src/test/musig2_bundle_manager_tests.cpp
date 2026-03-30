@@ -85,7 +85,9 @@ BOOST_AUTO_TEST_CASE(extract_oracle_bundle_v03)
 
     BOOST_CHECK_EQUAL(extracted.version, 3);
     BOOST_CHECK(extracted.IsMuSig2());
-    BOOST_CHECK(extracted.messages.empty());
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 9);
+    BOOST_CHECK_EQUAL(extracted.messages.front().oracle_id, 0);
+    BOOST_CHECK_EQUAL(extracted.messages.back().oracle_id, 8);
     BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, bundle.median_price_micro_usd);
     BOOST_CHECK_EQUAL(extracted.timestamp, bundle.timestamp);
     BOOST_CHECK(extracted.participation_bitmap == bundle.participation_bitmap);

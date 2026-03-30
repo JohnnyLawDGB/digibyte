@@ -555,6 +555,26 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         }
 
         if (!session_ready) {
+            // Try OracleNode's per-node MuSig2 session as fallback
+            OracleManager& om_fallback = OracleManager::GetInstance();
+            const std::vector<uint32_t> fallback_ids = om_fallback.GetActiveOracleIds();
+            for (uint32_t oid : fallback_ids) {
+                OracleNode* onode = om_fallback.GetOracleNode(oid);
+                if (!onode) continue;
+                COracleBundle node_bundle = onode->GetCurrentBundle(block_height);
+                if (node_bundle.IsMuSig2() && !node_bundle.aggregate_sig.empty()) {
+                    bundle.aggregate_sig = node_bundle.aggregate_sig;
+                    bundle.participation_bitmap = node_bundle.participation_bitmap;
+                    bundle.median_price_micro_usd = node_bundle.median_price_micro_usd;
+                    bundle.timestamp = node_bundle.timestamp;
+                    session_ready = true;
+                    LogPrintf("Oracle: Phase 3 using OracleNode MuSig2 bundle for epoch %d\n", epoch);
+                    break;
+                }
+            }
+        }
+
+        if (!session_ready) {
             LogPrintf("Oracle: Phase 3 MuSig2 session not ready for epoch %d, skipping bundle\n", epoch);
             return false;
         }

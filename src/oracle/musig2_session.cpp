@@ -340,9 +340,37 @@ bool MuSig2SigningSession::AggregateSignature(std::vector<unsigned char>& sig64_
         return false;
     }
 
+    m_aggregate_sig = sig64_out;
     m_state = MuSig2SessionState::COMPLETE;
     return true;
 }
+
+std::vector<unsigned char> MuSig2SigningSession::GetAggregateSig() const
+{
+    LOCK(m_mutex);
+    if (m_state != MuSig2SessionState::COMPLETE) return {};
+    return m_aggregate_sig;
+}
+
+std::vector<unsigned char> MuSig2SigningSession::GetParticipationBitmap() const
+{
+    LOCK(m_mutex);
+    if (m_state != MuSig2SessionState::COMPLETE) return {};
+    if (m_partial_sigs.empty()) return {};
+    uint8_t max_id = 0;
+    for (const auto& [id, sig] : m_partial_sigs) {
+        if (id > max_id) max_id = id;
+    }
+    size_t bitmap_bytes = (max_id / 8) + 1;
+    std::vector<unsigned char> bitmap(bitmap_bytes, 0);
+    for (const auto& [id, sig] : m_partial_sigs) {
+        bitmap[id / 8] |= (1 << (id % 8));
+    }
+    return bitmap;
+}
+
+std::map<int32_t, MuSig2SigningSession> g_oracle_signing_sessions;
+Mutex g_oracle_signing_sessions_mutex;
 
 // ============================================================================
 // Timeout management

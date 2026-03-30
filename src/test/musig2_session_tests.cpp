@@ -17,6 +17,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <chainparams.h>
 #include <key.h>
 #include <random.h>
 #include <test/util/setup_common.h>
@@ -702,6 +703,60 @@ BOOST_AUTO_TEST_CASE(test_session_invalid_partial_sig_rejected)
 
     // Duplicate oracle_id should be rejected
     BOOST_CHECK(!session.AddPartialSignature(0, psig));
+
+    secp256k1_context_destroy(ctx);
+}
+
+// ============================================================================
+// test_session_rejects_out_of_range_oracle_ids
+// Oracle IDs outside configured range are rejected in nonce/partial rounds
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_session_rejects_out_of_range_oracle_ids)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+
+    unsigned char seckey[32];
+    secp256k1_keypair kp;
+    secp256k1_pubkey pk;
+    BOOST_REQUIRE(MakeRandomKeypair(ctx, seckey, &kp, &pk));
+
+    const secp256k1_pubkey* pk_ptr = &pk;
+    secp256k1_xonly_pubkey agg_pk;
+    secp256k1_musig_keyagg_cache cache;
+    BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, &pk_ptr, 1));
+
+    MuSig2SigningSession session(1, 1);
+    CKey ckey = MakeCKey(seckey);
+    secp256k1_musig_pubnonce pubnonce;
+    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+
+    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
+    BOOST_REQUIRE(total_oracles > 0);
+    const uint8_t out_of_range_id = static_cast<uint8_t>(total_oracles);
+
+    // Round 1 hardening: reject out-of-range nonce contributor.
+    BOOST_CHECK(!session.AddPubnonce(out_of_range_id, pubnonce));
+    BOOST_CHECK(session.GetState() == MuSig2SessionState::NONCES_COLLECTING);
+
+    BOOST_CHECK(session.AddPubnonce(0, pubnonce));
+    BOOST_CHECK(session.GetState() == MuSig2SessionState::NONCES_COMPLETE);
+
+    unsigned char msg[32];
+    GetStrongRandBytes(Span{msg, 32});
+    BOOST_CHECK(session.AggregateNonces(msg));
+    BOOST_CHECK(session.GetState() == MuSig2SessionState::SIGNING);
+
+    secp256k1_musig_partial_sig psig;
+    BOOST_CHECK(session.CreatePartialSignature(ckey, psig));
+
+    // Round 2 hardening: reject out-of-range partial signature contributor.
+    BOOST_CHECK(!session.AddPartialSignature(out_of_range_id, psig));
+    BOOST_CHECK(session.GetState() == MuSig2SessionState::SIGNING);
+
+    BOOST_CHECK(session.AddPartialSignature(0, psig));
+    std::vector<unsigned char> sig64;
+    BOOST_CHECK(session.AggregateSignature(sig64));
+    BOOST_CHECK_EQUAL(sig64.size(), 64u);
 
     secp256k1_context_destroy(ctx);
 }

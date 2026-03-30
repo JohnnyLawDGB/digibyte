@@ -58,3 +58,20 @@ src/test/test_digibyte --run_test=musig2_orchestration_tests,musig2_bundle_creat
 ### Observation
 - No new edge-case failures surfaced in this pass, so no code fix was required.
 - `oracle_block_validation_tests` and some deeper node/session suites remain compile-present but currently marked disabled in this unit-test configuration.
+
+## Additional Hardening Pass (v0x03 aggregate bundle/session transition)
+
+### Code hardening
+- `MuSig2SigningSession::AddPubnonce` now rejects oracle IDs outside `Params().GetConsensus().nOracleTotalOracles`.
+- `MuSig2SigningSession::AddPartialSignature` now rejects oracle IDs outside `Params().GetConsensus().nOracleTotalOracles`.
+- Added unit coverage: `musig2_session_tests/test_session_rejects_out_of_range_oracle_ids`.
+
+### Exact Commands
+```bash
+src/test/test_digibyte --run_test=musig2_session_tests --log_level=test_suite
+src/test/test_digibyte --run_test=musig2_bundle_mining_tests --log_level=test_suite
+```
+
+### Result
+- Session suite: `Running 14 test cases...` then `*** No errors detected`
+- Bundle mining suite: `Running 2 test cases...` then `*** No errors detected`

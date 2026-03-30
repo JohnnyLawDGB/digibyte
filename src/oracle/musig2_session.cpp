@@ -4,6 +4,7 @@
 
 #include <oracle/musig2_session.h>
 
+#include <chainparams.h>
 #include <random.h>
 #include <support/cleanse.h>
 
@@ -187,6 +188,11 @@ bool MuSig2SigningSession::AddPubnonce(uint8_t oracle_id,
     // Reject duplicate oracle ID
     if (m_pubnonces.count(oracle_id)) return false;
 
+    // Reject oracle IDs outside configured active set to prevent malformed
+    // participation bitmaps and invalid signer transitions.
+    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
+    if (total_oracles == 0 || oracle_id >= total_oracles) return false;
+
     // Validate pubnonce by checking secp256k1 internal magic bytes.
     // secp256k1_musig_pubnonce_serialize calls abort() via ARG_CHECK on
     // invalid data instead of returning false, so check magic directly.
@@ -303,6 +309,11 @@ bool MuSig2SigningSession::AddPartialSignature(uint8_t oracle_id,
 
     // Reject duplicate oracle ID
     if (m_partial_sigs.count(oracle_id)) return false;
+
+    // Reject oracle IDs outside configured active set to keep signer-set
+    // transitions aligned with on-chain v0x03 bitmap semantics.
+    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
+    if (total_oracles == 0 || oracle_id >= total_oracles) return false;
 
     m_partial_sigs[oracle_id] = partial_sig;
     return true;

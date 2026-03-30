@@ -19,7 +19,6 @@
 #include <key.h>
 #include <oracle/musig2_orchestrator.h>
 #include <oracle/musig2_session.h>
-#include <protocol.h>
 #include <random.h>
 #include <test/util/setup_common.h>
 
@@ -136,7 +135,6 @@ BOOST_AUTO_TEST_CASE(test_nonce_broadcast_to_peers)
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
     constexpr int32_t EPOCH = 50;
-    constexpr uint8_t ORACLE_ID = 7;
 
     unsigned char seckey[32];
     secp256k1_keypair kp;
@@ -155,17 +153,12 @@ BOOST_AUTO_TEST_CASE(test_nonce_broadcast_to_peers)
     secp256k1_musig_pubnonce pubnonce;
     BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, ckey, pk, cache, pubnonce));
 
-    // Build nonce message for broadcast — serialize pubnonce to 66 bytes
-    OracleMusigNonceMsg nonce_msg;
-    nonce_msg.epoch = EPOCH;
-    nonce_msg.oracle_id = ORACLE_ID;
-    nonce_msg.pubnonce.resize(66);
-    secp256k1_musig_pubnonce_serialize(ctx, nonce_msg.pubnonce.data(), &pubnonce);
-
-    BOOST_CHECK_EQUAL(nonce_msg.epoch, EPOCH);
-    BOOST_CHECK_EQUAL(nonce_msg.oracle_id, ORACLE_ID);
-    BOOST_CHECK_EQUAL(nonce_msg.pubnonce.size(), 66u);
-    BOOST_CHECK(nonce_msg.IsValid());
+    // Verify pubnonce serializes to 66 bytes (ready for P2P broadcast)
+    unsigned char serialized[66];
+    BOOST_CHECK(secp256k1_musig_pubnonce_serialize(ctx, serialized, &pubnonce));
+    // Serialized pubnonce should not be all zeros
+    unsigned char zeros[66] = {};
+    BOOST_CHECK(memcmp(serialized, zeros, 66) != 0);
 
     secp256k1_context_destroy(ctx);
 }

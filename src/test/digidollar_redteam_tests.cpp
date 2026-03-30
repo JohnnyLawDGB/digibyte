@@ -17475,9 +17475,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
     BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, ORACLE_ACTIVE_COUNT);
     BOOST_TEST_MESSAGE("  nOracleTotalOracles == ORACLE_ACTIVE_COUNT == 15 ✅ (conceptually: active per epoch)");
 
-    // vOraclePublicKeys is empty on mainnet — Phase One is testnet-only
-    BOOST_CHECK(consensus.vOraclePublicKeys.empty());
-    BOOST_TEST_MESSAGE("  vOraclePublicKeys empty on mainnet ✅ (Phase One disabled)");
+    // vOraclePublicKeys populated on mainnet for Phase 3 (MuSig2) — 15 oracle keys
+    BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), 15u);
+    BOOST_TEST_MESSAGE("  vOraclePublicKeys has 15 keys on mainnet ✅ (Phase 3 MuSig2)");
 
     // DESIGN GAP: P2P bounds check and ValidateBlockOracleData both use ORACLE_TOTAL_COUNT.
     // This is correct for mainnet (matches vOracleNodes), but on testnet creates a gap where

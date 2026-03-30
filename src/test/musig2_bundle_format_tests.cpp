@@ -293,6 +293,13 @@ BOOST_AUTO_TEST_CASE(test_v03_deserialize_invalid_data)
     std::vector<unsigned char> zero_bitmap(1 + 0 + 8 + 8 + 64, 0x00);
     zero_bitmap[0] = 0;  // bitmap_len = 0
     BOOST_CHECK(!COracleBundle::DeserializeV03Data(zero_bitmap, bundle));
+
+    // Trailing bytes are invalid (must be exact size for declared bitmap_len)
+    std::vector<unsigned char> with_trailing(1 + 2 + 8 + 8 + 64 + 1, 0x00);
+    with_trailing[0] = 2;  // bitmap_len
+    with_trailing[1] = 0x01;
+    with_trailing[2] = 0x00;
+    BOOST_CHECK(!COracleBundle::DeserializeV03Data(with_trailing, bundle));
 }
 
 // ============================================================================

@@ -254,9 +254,10 @@ bool COracleBundle::DeserializeV03Data(const std::vector<unsigned char>& data, C
     uint8_t bitmap_len = data[pos++];
     if (bitmap_len == 0) return false;
 
-    // Check remaining data is sufficient
-    // Need: bitmap_len + 8 (price) + 8 (timestamp) + 64 (sig) bytes after bitmap_len byte
-    if (data.size() < 1 + bitmap_len + 8 + 8 + 64) return false;
+    // Enforce exact payload size to avoid trailing-byte ambiguity/malleability.
+    // Need exactly: bitmap_len + 8 (price) + 8 (timestamp) + 64 (sig) bytes after bitmap_len byte
+    const size_t expected_size = 1 + bitmap_len + 8 + 8 + 64;
+    if (data.size() != expected_size) return false;
 
     // bitmap (variable)
     bundle.participation_bitmap.assign(data.begin() + pos, data.begin() + pos + bitmap_len);

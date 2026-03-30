@@ -188,6 +188,8 @@ BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)
         BOOST_CHECK_EQUAL(extracted.version, 3);
         BOOST_CHECK(extracted.IsMuSig2());
         BOOST_CHECK_EQUAL(extracted.aggregate_sig.size(), 64);
+        BOOST_CHECK(!extracted.participation_bitmap.empty());
+        BOOST_CHECK((extracted.participation_bitmap[0] & 0x01) != 0);
         BOOST_CHECK_EQUAL(extracted.messages.size(), 1);
         BOOST_CHECK_EQUAL(extracted.messages[0].oracle_id, 0);
 

@@ -1,5 +1,5 @@
 # DigiByte & DigiDollar Post-Quantum Cryptography Plan
-**Version:** 1.0 — March 31, 2026  
+**Version:** 2.0 — March 31, 2026  
 **Author:** Irene (DigiByte PQC Research)  
 **Catalyst:** [Google Quantum AI Paper](https://quantumai.google/static/site-assets/downloads/cryptocurrency-whitepaper.pdf) — March 30, 2026  
 **Status:** DRAFT — Requires Jared's review before any implementation begins
@@ -18,6 +18,10 @@ Google demonstrated that **500,000 physical qubits** can break secp256k1 ECDSA i
 
 ---
 
+**Companion doc:** [`DGB_PQC_LANDSCAPE.md`](DGB_PQC_LANDSCAPE.md) — Full industry landscape (7 Bitcoin proposals, Ethereum/Solana/QRL/XRP analysis, burn-vs-steal debate, algorithm deep dive, migration pathways)
+
+---
+
 ## Table of Contents
 
 1. [The Threat](#1-the-threat)
@@ -25,7 +29,7 @@ Google demonstrated that **500,000 physical qubits** can break secp256k1 ECDSA i
 3. [Algorithm Selection](#3-algorithm-selection)
 4. [DigiDollar: The Lockup Problem](#4-digidollar-the-lockup-problem)
 5. [DigiDollar: PQC from Day One](#5-digidollar-pqc-from-day-one)
-6. [DigiByte Core: Soft Fork Plan](#6-digibyte-core-soft-fork-plan)
+6. [DigiByte Core: Revised Two-Phase Soft Fork Plan](#6-digibyte-core-soft-fork-plan)
 7. [Transaction Size Impact](#7-transaction-size-impact)
 8. [Implementation Roadmap](#8-implementation-roadmap)
 9. [Mining Impact](#9-mining-impact)
@@ -262,68 +266,108 @@ Oracle Price Feeds:
 
 ---
 
-## 6. DigiByte Core: Soft Fork Plan
+## 6. DigiByte Core: Revised Two-Phase Soft Fork Plan
 
-### Architecture: P2QRH (Pay to Quantum Resistant Hash)
+### REVISED STRATEGY (v2.0) — BIP-360 Two-Phase Approach
 
-Following Bitcoin's BIP-360 pattern, adapted for DigiByte:
+After reviewing BIP-360's latest design, the Chaincode Labs report, and 7 distinct Bitcoin proposals, the optimal strategy is a **two-phase approach** rather than jumping straight to PQC signatures.
 
-**New SegWit witness version** (v2 or v3):
+### Phase 1: P2MR — Remove the Attack Surface (FAST)
+
+**Concept:** Adapted from BIP-360 (P2MR). Remove the quantum-vulnerable public key from outputs. No new cryptography needed.
+
+**SegWit witness version 2:**
 ```
-scriptPubKey: OP_2 <32-byte commitment hash>
+scriptPubKey: OP_2 <32-byte merkle_root_hash>
 ```
 
-The 32-byte commitment is HASH256(sorted_pubkeys) — a hash of all signer pubkeys (ECDSA + PQC).
+The 32-byte value is the Merkle root of a script tree. No internal public key. No exposed pubkey.
 
 **Address format:**
 ```
-dgb1z<bech32m payload>    (witness v2, 'z' prefix character TBD)
+dgb1z<bech32m payload>    (witness v2, 'z' prefix)
 ```
 
-**Witness stack (when spending):**
+**Spending (script-path only):**
 ```
-Item 0: <key_type_bitmask> (indicates which algorithms present)
-Item 1: <secp256k1 compressed pubkey>    (33 bytes)
-Item 2: <ML-DSA-44 pubkey>              (1,312 bytes)
-Item 3: <secp256k1 DER signature>        (72 bytes)
-Item 4: <ML-DSA-44 signature>            (2,420 bytes)
+Witness: <script> <merkle_proof> <signature> <pubkey>
 ```
 
-**Soft fork mechanics (identical to Taproot deployment):**
-- Old nodes see witness v2 outputs as "unknown version" → valid (anyone-can-spend semantics)
-- New nodes enforce P2QRH rules: both signatures must verify
-- Standard relay policy prevents old nodes from mining spends
-- Activated via miner signaling (BIP 9 versionbits)
+Public key only revealed at spend time (15-second window). At-rest attack eliminated.
 
-### Implementation in DigiByte Core C++
+**Size overhead:** 103 bytes witness (vs 66 bytes P2TR keypath) — only 37 bytes more. **Negligible.**
 
-**Library**: Vendor `libbitcoinpqc` (MIT license) or stripped `liboqs` into `src/crypto/pqc/`
+**Code change:** Minimal — reuse existing tapscript infrastructure, remove keypath spend logic.
+
+**Why Phase 1 first:**
+- No new crypto libraries
+- No signature size bloat  
+- No block capacity crisis
+- Ships in months, not years
+- Buys time for PQC algorithm maturity
+- DigiDollar can use P2MR immediately for collateral scripts
+
+### Phase 2: PQC Signatures — Add Quantum-Proof Verification (LATER)
+
+**Concept:** Add PQC signature opcodes via new tapscript leaf versions (OP_SUCCESSx upgrade path built into Phase 1).
+
+**New leaf version in P2MR script tree:**
+```
+Leaf script: <pqc_pubkey_hash> OP_PQC_CHECKSIG_ML_DSA_44
+```
+
+**Supported algorithms (initially):**
+1. **ML-DSA-44** (CRYSTALS-Dilithium, FIPS 204) — primary
+2. **FN-DSA-512** (Falcon, FIPS 206) — compact option
+3. **SLH-DSA-128s** (SPHINCS+, FIPS 205) — hash-based backup
+
+**Library:** Vendor `libbitcoinpqc` (MIT) or `liboqs` into `src/crypto/pqc/`
+
+**Hybrid mode (transition period):**
+```
+Witness: <ecdsa_sig> <ecdsa_pubkey> <ml_dsa_sig> <ml_dsa_pubkey>
+```
+Both must verify. If either breaks, the other protects.
 
 **Key code changes:**
 ```cpp
-// src/script/interpreter.cpp — add witness v2 handling
-case 2: // SegWit v2 = P2QRH
-    return VerifyP2QRHWitness(program, witness, flags, serror);
+// src/script/interpreter.cpp — P2MR witness handling (Phase 1)
+case 2: // SegWit v2 = P2MR
+    return VerifyP2MRWitness(program, witness, flags, serror);
 
-// src/crypto/pqc/ml_dsa44.h — new verification function  
+// src/crypto/pqc/ml_dsa44.h — PQC verification (Phase 2)
 bool ML_DSA44_Verify(const std::vector<uint8_t>& pubkey,
                      const uint256& hash,
                      const std::vector<uint8_t>& signature);
 
-// src/wallet/wallet.cpp — new address type
-case OutputType::P2QRH:
+// src/wallet/wallet.cpp — new address types
+case OutputType::P2MR:
+    return GetNewP2MRAddress(label);
+case OutputType::P2MR_PQC:
     return GetNewPQCAddress(label);
 ```
 
-**Build system**: Add CMake target for PQC library, static linking only.
+### Additional Protective Measures (from Bitcoin proposals)
 
-### Transition Phases
+These can be implemented alongside or between the two phases:
 
-| Phase | Period | Rules |
-|-------|--------|-------|
-| **Phase 1: Coexistence** | Fork activation → +5 years | P2QRH (hybrid) + all existing types valid. Users opt into PQC. |
-| **Phase 2: Deprecation** | +5 years → +7 years | Wallets warn when sending to ECDSA-only addresses. |
-| **Phase 3: Sunset** | +7 years+ | Community decision: freeze/burn ECDSA-only UTXOs, or extend coexistence. |
+| Measure | Description | Effort | Priority |
+|---------|-------------|--------|----------|
+| **Quantum canaries** | On-chain bounties behind progressively harder quantum challenges. Early warning system. | Trivial | HIGH |
+| **Hourglass throttle** | Rate-limit P2PK spends to 1 per block. Slow quantum theft to a crawl. | Soft fork | MEDIUM |
+| **Commit-reveal for high-value** | Two-step spending for high-value UTXOs. Prevents mempool front-running. | Soft fork | MEDIUM |
+| **Pre-signed recovery trees** | Users commit Merkle roots of recovery txs in OP_RETURN today. Zero protocol changes. | None | LOW (user-side) |
+
+### Transition Phases (Revised)
+
+| Phase | Period | What Happens |
+|-------|--------|-------------|
+| **Phase 1a: P2MR** | Months 1-6 | SegWit v2 with Merkle root commitment. No pubkey exposure. `dgb1z` addresses. |
+| **Phase 1b: Quantum canaries** | Months 3-6 | On-chain bounties as early warning. Simple OP_RETURN outputs. |
+| **Phase 1c: Hourglass** | Months 6-12 | Rate-limit vulnerable output types. Soft fork alongside or after P2MR. |
+| **Phase 2: PQC signatures** | Months 12-24 | ML-DSA-44 + FN-DSA-512 via new tapscript leaf version. |
+| **Phase 3: Deprecation** | Year 3-5 | Wallets warn when sending to ECDSA-only addresses. |
+| **Phase 4: Sunset** | Year 5-7+ | Community decision on legacy UTXOs (burn/throttle/extend). |
 
 ---
 

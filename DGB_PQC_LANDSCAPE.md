@@ -503,7 +503,8 @@ Ethan Heilman's argument (echoed by Chaincode Labs):
 |---------|-------------|-----------|-------------|
 | **15-second blocks** | 40× smaller on-spend attack window | Better | Comparable (12s) |
 | **UTXO model** | Pubkeys hidden behind hashes | Same | Far better |
-| **P2PKH standard** | No Taproot keypath exposure | Better (no P2TR) | Far better |
+| **P2PKH standard** | Hash-protected by default | Same | Far better |
+| **Taproot deployed** | P2TR outputs ARE vulnerable (same as BTC) — P2MR fixes this | Same risk | Far better |
 | **Multi-algo PoW** | Mining unaffected + ASIC diversity | Same | N/A (PoS) |
 | **No smart contracts** | No admin key risk | Same | Far better |
 | **No PoS** | No validator key exposure | Same | Far better |

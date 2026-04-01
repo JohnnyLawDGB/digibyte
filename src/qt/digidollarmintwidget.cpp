@@ -97,8 +97,9 @@ void DigiDollarMintWidget::setupUI()
     m_mainLayout->setSpacing(0);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
-    // Create validators
-    m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
+    // Create validators — DD amounts are in dollars with max 2 decimal places (cents)
+    // Mint limits: $100 minimum, $100,000 maximum (from consensus params)
+    m_amountValidator = new AmountValidator(100.00, 100000.00, 2, this);
 
     // Create horizontal layout for mint amount and lock period side-by-side
     QHBoxLayout* topLayout = new QHBoxLayout();
@@ -158,8 +159,8 @@ void DigiDollarMintWidget::setupMintAmountSection()
     m_amountEdit = new QLineEdit(this);
     m_amountEdit->setObjectName("amountEdit");
     m_amountEdit->setValidator(m_amountValidator);
-    m_amountEdit->setPlaceholderText("0.00000000");
-    m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\nSupported formats:\n• 0.00000001 (minimum)\n• Up to 8 decimal places\n• Maximum: 999,999,999.99999999"));
+    m_amountEdit->setPlaceholderText("0.00");
+    m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\n• Minimum: $100.00\n• Maximum: $100,000.00\n• Up to 2 decimal places (cents)"));
     m_amountEdit->setFocusPolicy(Qt::StrongFocus);
     m_amountEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
     QFont monospaceFont = GUIUtil::fixedPitchFont();
@@ -759,8 +760,8 @@ void DigiDollarMintWidget::onMintClicked()
             return;
         }
 
-        // Convert amount from double to CAmount (cents)
-        CAmount ddAmountCents = static_cast<CAmount>(m_mintAmount * 100);
+        // Convert amount from double to CAmount (cents) — use llround to avoid truncation
+        CAmount ddAmountCents = static_cast<CAmount>(std::llround(m_mintAmount * 100));
 
         // Call the wallet model to mint DigiDollar
         WalletModel::DigiDollarMintResult result = m_walletModel->mintDigiDollar(ddAmountCents, m_selectedTier);
@@ -905,7 +906,7 @@ bool DigiDollarMintWidget::validateCollateral() const
 
 QString DigiDollarMintWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 8) + " DD";
+    return QString::number(amount, 'f', 2) + " DD";
 }
 
 QString DigiDollarMintWidget::formatDGBAmount(double amount) const

@@ -101,7 +101,8 @@ void DigiDollarRedeemWidget::setupUI()
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // Create validators
-    m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
+    // DD amounts are in dollars with max 2 decimal places (cents precision)
+    m_amountValidator = new AmountValidator(1.00, 100000.00, 2, this);
 
     // Setup sections
     setupCoinControlSection();
@@ -539,18 +540,18 @@ void DigiDollarRedeemWidget::onRedeemClicked()
                          "Required: %2 DD\n\n"
                          "System health is below 100%, requiring additional DD to redeem.\n"
                          "You need %3 DD more to complete this redemption.")
-                .arg(QString::number(ddBalance, 'f', 8))
-                .arg(QString::number(requiredDDBurn, 'f', 8))
-                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 8));
+                .arg(QString::number(ddBalance, 'f', 2))
+                .arg(QString::number(requiredDDBurn, 'f', 2))
+                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 2));
         } else {
             // Normal redemption
             errorMsg = tr("Insufficient DigiDollars.\n\n"
                          "You have: %1 DD\n"
                          "Required: %2 DD\n\n"
                          "You need %3 DD more to redeem this position.")
-                .arg(QString::number(ddBalance, 'f', 8))
-                .arg(QString::number(requiredDDBurn, 'f', 8))
-                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 8));
+                .arg(QString::number(ddBalance, 'f', 2))
+                .arg(QString::number(requiredDDBurn, 'f', 2))
+                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 2));
         }
 
         Q_EMIT message(tr("Insufficient DigiDollar Balance"), errorMsg, QMessageBox::Warning);
@@ -569,7 +570,7 @@ void DigiDollarRedeemWidget::onRedeemClicked()
                         "Required DD burn: %3 DD")
             .arg(m_selectedPositionId)
             .arg(formatDDAmount(m_positionDDMinted))
-            .arg(QString::number(requiredDDBurn, 'f', 8));
+            .arg(QString::number(requiredDDBurn, 'f', 2));
     } else {
         confirmText = tr("Close vault %1 and redeem %2?")
             .arg(m_selectedPositionId)
@@ -594,8 +595,8 @@ void DigiDollarRedeemWidget::onRedeemClicked()
             return;
         }
 
-        // Convert amount from double to CAmount (cents)
-        CAmount amountCents = static_cast<CAmount>(amount * 100);
+        // Convert amount from double to CAmount (cents) — use llround to avoid truncation
+        CAmount amountCents = static_cast<CAmount>(std::llround(amount * 100));
 
         // Call the wallet model to redeem DigiDollar
         WalletModel::DigiDollarRedeemResult result = m_walletModel->redeemDigiDollar(m_selectedPositionId, amountCents, "");
@@ -807,7 +808,7 @@ void DigiDollarRedeemWidget::loadPositionDetails()
                     m_positionHealth = pos.find_value("health_ratio").get_real();
                     m_redeemableAmount = m_positionDDMinted; // Can redeem full amount
                     // Auto-fill the exact amount in the amount edit field
-                    m_amountEdit->setText(QString::number(m_positionDDMinted, 'f', 8));
+                    m_amountEdit->setText(QString::number(m_positionDDMinted, 'f', 2));
                     break;
                 }
             }
@@ -926,7 +927,7 @@ bool DigiDollarRedeemWidget::validateDDBalance() const
 
 QString DigiDollarRedeemWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 8) + " DD";
+    return QString::number(amount, 'f', 2) + " DD";
 }
 
 QString DigiDollarRedeemWidget::formatDGBAmount(double amount) const

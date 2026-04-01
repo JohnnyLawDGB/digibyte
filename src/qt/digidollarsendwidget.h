@@ -216,13 +216,14 @@ class AmountValidator : public QValidator
     Q_OBJECT
 
 public:
-    explicit AmountValidator(double min = 0.00000001, double max = 999999999.99999999, QObject* parent = nullptr);
+    explicit AmountValidator(double min = 0.00000001, double max = 999999999.99999999, int maxDecimals = 8, QObject* parent = nullptr);
 
     QValidator::State validate(QString& input, int& pos) const override;
 
 private:
     double m_min;
     double m_max;
+    int m_maxDecimals;
 };
 
 /**

@@ -955,7 +955,7 @@ QWidget* DigiDollarPositionsWidget::createHealthWidget(double health) const
 
 QString DigiDollarPositionsWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 8) + " DD";
+    return QString::number(amount, 'f', 2) + " DD";
 }
 
 QString DigiDollarPositionsWidget::formatDGBAmount(double amount) const

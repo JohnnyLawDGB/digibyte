@@ -21,6 +21,7 @@
 #include <univalue.h>
 
 #include <chrono>
+#include <cmath>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -112,7 +113,9 @@ void DigiDollarSendWidget::setupUI()
 
     // Create validators
     m_addressValidator = new DigiDollarAddressValidator(this);
-    m_amountValidator = new AmountValidator(0.00000001, 999999999.99999999, this);
+    // DD amounts are in dollars with max 2 decimal places (cents precision)
+    // Send limits: $1 minimum (dust threshold), $100,000 maximum
+    m_amountValidator = new AmountValidator(1.00, 100000.00, 2, this);
 
     // Setup sections
     setupCoinControlSection();
@@ -255,8 +258,8 @@ void DigiDollarSendWidget::setupAmountSection()
     m_amountEdit = new QLineEdit(this);
     m_amountEdit->setObjectName("amountEdit");
     m_amountEdit->setValidator(m_amountValidator);
-    m_amountEdit->setPlaceholderText("0.00000000");
-    m_amountEdit->setToolTip(tr("The amount to send in DigiDollar.\n\nSupported formats:\n• 0.00000001 (minimum)\n• Up to 8 decimal places\n• Maximum: 999,999,999.99999999"));
+    m_amountEdit->setPlaceholderText("0.00");
+    m_amountEdit->setToolTip(tr("The amount of DigiDollar to send.\n\n• Minimum: $1.00\n• Maximum: $100,000.00\n• Up to 2 decimal places (cents)"));
     m_amountEdit->setFocusPolicy(Qt::StrongFocus);
     m_amountEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
     QFont monospaceFont = GUIUtil::fixedPitchFont();
@@ -660,7 +663,7 @@ void DigiDollarSendWidget::onUseAvailableBalanceClicked()
     // Users can send their ENTIRE DD balance without any deduction
     if (m_availableBalance > 0) {
         // Set amount to full available balance (fees are paid separately in DGB)
-        m_amountEdit->setText(QString::number(m_availableBalance, 'f', 8));
+        m_amountEdit->setText(QString::number(m_availableBalance, 'f', 2));
         onAmountChanged();
     }
 }
@@ -763,7 +766,7 @@ bool DigiDollarSendWidget::validateBalance() const
 
 QString DigiDollarSendWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 8) + " DD";
+    return QString::number(amount, 'f', 2) + " DD";
 }
 
 QString DigiDollarSendWidget::formatUSDAmount(double amount) const
@@ -916,7 +919,7 @@ void DigiDollarSendWidget::executeTransfer(const QString& address, double amount
     m_clearButton->setEnabled(false);
     m_useAvailableBalanceButton->setEnabled(false);
 
-    CAmount amountCents = static_cast<CAmount>(amount * 100);
+    CAmount amountCents = static_cast<CAmount>(std::llround(amount * 100));
     QString note = m_noteEdit ? m_noteEdit->text().trimmed() : QString();
 
     WalletModel::DigiDollarSendResult result = m_walletModel->sendDigiDollar(address, amountCents, note);
@@ -1310,8 +1313,8 @@ QString DigiDollarSendWidget::maskValue(const QString& value) const
 }
 
 // AmountValidator implementation
-AmountValidator::AmountValidator(double min, double max, QObject* parent) :
-    QValidator(parent), m_min(min), m_max(max)
+AmountValidator::AmountValidator(double min, double max, int maxDecimals, QObject* parent) :
+    QValidator(parent), m_min(min), m_max(max), m_maxDecimals(maxDecimals)
 {
 }
 
@@ -1334,10 +1337,10 @@ QValidator::State AmountValidator::validate(QString& input, int& pos) const
         return QValidator::Invalid;
     }
 
-    // Check decimal places (max 8)
+    // Check decimal places (max m_maxDecimals, default 8)
     int decimalPos = input.indexOf('.');
     if (decimalPos != -1) {
-        if (input.length() - decimalPos - 1 > 8) {
+        if (input.length() - decimalPos - 1 > m_maxDecimals) {
             return QValidator::Invalid;
         }
     }

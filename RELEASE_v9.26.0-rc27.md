@@ -94,7 +94,17 @@ That means:
 - signatures are aggregated into a single compact Schnorr signature
 - bundle validation follows the aggregate-signature path for `v0x03` oracle bundles
 
-### 4. Oracle bundle / consensus hardening
+### 4. Bug fixes
+
+**Bug #29 — Dandelion++ ABBA deadlock (PR #394, JohnnyLawDGB)**
+
+A classic ABBA mutex deadlock in `CheckDandelionEmbargoes` could cause the node to hang under sustained transaction relay load. Thread A held `m_dandelion_embargo_mutex` and tried to acquire `m_nodes_mutex`, while Thread B held `m_nodes_mutex` and tried to acquire `m_dandelion_embargo_mutex`. Fixed by eliminating the lock-order inversion.
+
+**Bug #33 — Mint tooltip limits and silent decimal truncation**
+
+The Qt wallet mint dialog showed incorrect tooltip limits for the mint amount field, and amounts with more than 2 decimal places were silently truncated rather than rejected with a clear error message. Both issues are now corrected.
+
+### 5. Oracle bundle / consensus hardening
 
 The RC27 line also carries the broader MuSig2 implementation work:
 - secp256k1 MuSig2 module integration
@@ -102,15 +112,34 @@ The RC27 line also carries the broader MuSig2 implementation work:
 - oracle bundle serialization/deserialization support for `v0x03`
 - expanded unit coverage for activation, bundle handling, aggregation, mining, net processing, and orchestration
 
+### 6. Post-Quantum Cryptography plan
+
+RC27 includes documentation for DigiByte's post-quantum cryptography roadmap:
+- Full industry PQC landscape analysis (NIST standards, other chains' approaches)
+- Two-phase migration strategy for DigiByte and DigiDollar
+- Assessment of Taproot/P2TR output vulnerability to quantum key recovery
+
+These are documentation-only commits — no consensus changes.
+
 ### Test Suite
 
-Final RC27 validation is being run on the combined `feature/digidollar-v1` branch state before release/tagging.
+Full RC27 validation: unit tests, 290 functional tests, and 208 fuzz targets all passing.
 
 ---
 
 ## Commits Since RC26
 
 ```text
+216fb8c364 fix: resolve Dandelion++ ABBA deadlock in CheckDandelionEmbargoes (Bug #29)
+8c92bfdd63 fix: Bug #33 — wrong mint tooltip limits + silent decimal truncation
+11cca7de0f Fix PQC landscape: DGB HAS Taproot deployed, P2TR outputs are vulnerable
+458b0fe9de PQC Plan v2.0: Add full industry landscape and revised two-phase strategy
+eec83c39c0 Add Post-Quantum Cryptography plan for DigiByte and DigiDollar
+bb929f5d86 test: fix Phase 2 test compatibility with RC27 Phase 3 active from genesis
+f605fcd476 fix: add missing musig2 headers to fuzz targets and update redteam tests for RC27 6-of-11
+1efb39d5d0 RC27: Make regtest MuSig2 active and remove staged Phase3 gating
+ecd86c0abc migrate regtest musig2 phase3 to genesis
+74f5a60313 doc: add RC27 release notes for testnet20, 6-of-11 and MuSig2
 3281f9a3f0 net: bump testnet directory and P2P port for reset
 fa830acdf6 Remove phase3 gate for MuSig2 on main/test and update 6-of-11 oracle assumptions
 a5cda93a73 Set main/test oracle consensus to 6-of-11 before Musig2 merge

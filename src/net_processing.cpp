@@ -1627,70 +1627,130 @@ void PeerManagerImpl::RelayDandelionTransaction(const CTransaction& tx, CNode* p
 
 void PeerManagerImpl::CheckDandelionEmbargoes()
 {
-    LOCK(m_connman.m_dandelion_embargo_mutex);
-    auto current_time = GetTime<std::chrono::milliseconds>();
-    
-    // Log embargo checks (debug level only — this fires every second)
-    if (!m_connman.mDandelionEmbargo.empty()) {
-        LogPrint(BCLog::DANDELION, "CheckDandelionEmbargoes: Checking %d embargoed transactions (stempool=%d, mempool=%d)\n",
-                 m_connman.mDandelionEmbargo.size(), m_stempool.size(), m_mempool.size());
-    }
-    
-    // Check if we now have Dandelion destinations available for stuck transactions
+    // =========================================================================
+    // Bug #29 fix: ABBA deadlock between m_nodes_mutex and m_dandelion_embargo_mutex
+    //
+    // The established lock ordering throughout the Dandelion++ code is:
+    //   m_nodes_mutex FIRST, then m_dandelion_embargo_mutex SECOND
+    //
+    // This ordering is used by:
+    //   - DandelionShuffle()            (dandelion.cpp:344 → 357)
+    //   - CloseDandelionConnections()   (dandelion.cpp:211 → 292)
+    //   - DisconnectNodes()             (net.cpp:1952 → CloseDandelionConnections)
+    //
+    // Before this fix, CheckDandelionEmbargoes() violated that ordering:
+    //   it held m_dandelion_embargo_mutex, then called usingDandelion() and
+    //   localDandelionDestinationPushInventory(), both of which acquire
+    //   m_nodes_mutex internally. This created a classic ABBA deadlock:
+    //
+    //   Thread A (shuffle timer):  LOCK(m_nodes_mutex) → LOCK(m_dandelion_embargo_mutex)
+    //   Thread B (embargo timer):  LOCK(m_dandelion_embargo_mutex) → LOCK(m_nodes_mutex)
+    //
+    //   When both fire concurrently, each thread holds the lock the other needs.
+    //   Result: sendtoaddress hangs forever at "Processing Dandelion relay",
+    //   shutdown hangs on threadDandelionShuffle.join(), RPC times out.
+    //   (Reported by DanGB on Windows 11, RC26, reproducible after ~1 week uptime.)
+    //
+    // Fix: restructure this function into two phases:
+    //   Phase 1 — under m_dandelion_embargo_mutex: scan the embargo map, handle
+    //             expired/mempool entries, collect txids that need stem routing.
+    //   Phase 2 — after releasing m_dandelion_embargo_mutex: perform the stem
+    //             routing (which needs m_nodes_mutex), then briefly re-acquire
+    //             m_dandelion_embargo_mutex to mark them as routed.
+    //
+    // usingDandelion() is also moved before the embargo lock for the same reason.
+    // The bool may be momentarily stale, but that only means we skip one routing
+    // cycle (~1 second) — no correctness impact.
+    // =========================================================================
+
+    // Phase 0: query Dandelion destination availability WITHOUT holding the
+    // embargo lock.  usingDandelion() acquires m_nodes_mutex internally.
     bool hasDandelionDestinations = m_connman.usingDandelion();
-    
-    for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
-        if (m_mempool.exists(iter->first)) {
-            LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
-            m_connman.m_dandelion_stem_routed.erase(iter->first);
-            iter = m_connman.mDandelionEmbargo.erase(iter);
-        } else if (iter->second < current_time) {
-            LogPrintf("CheckDandelionEmbargoes: dandeliontx %s embargo expired\n", iter->first.ToString());
-            CTransactionRef ptx = m_stempool.get(iter->first);
-            if (ptx) {
-                LogPrintf("CheckDandelionEmbargoes: Moving transaction %s from stempool to mempool for broadcast\n", iter->first.ToString());
-                {
-                    LOCK(cs_main);
-                    const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
-                    if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
-                        LogPrintf("CheckDandelionEmbargoes: Successfully moved tx %s to mempool\n", iter->first.ToString());
-                        LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
-                                                 iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
-                        RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
-                    } else {
-                        LogPrintf("CheckDandelionEmbargoes: Failed to move tx %s to mempool: %s\n", 
-                                 iter->first.ToString(), result.m_state.ToString());
-                    }
-                }
-            } else {
-                LogPrintf("CheckDandelionEmbargoes: Transaction %s not found in stempool!\n", iter->first.ToString());
-            }
-            m_connman.m_dandelion_stem_routed.erase(iter->first);
-            iter = m_connman.mDandelionEmbargo.erase(iter);
-        } else {
-            // Embargo not yet expired — attempt Dandelion stem routing only if:
-            // 1. We have Dandelion destinations available
-            // 2. This TX has NOT already been successfully routed
-            //    (prevents the spam bug where we re-send every second)
-            // 3. OR the previous Dandelion destination disconnected (destination changed)
-            if (hasDandelionDestinations && m_connman.m_dandelion_stem_routed.count(iter->first) == 0) {
+
+    // Transactions collected during Phase 1 that need stem routing in Phase 2.
+    std::vector<uint256> txidsNeedingStemRoute;
+
+    // Phase 1: scan embargo map under m_dandelion_embargo_mutex.
+    // Everything in this block touches only embargo-protected state (plus
+    // cs_main for AcceptToMemoryPool, which has no ordering conflict here).
+    {
+        LOCK(m_connman.m_dandelion_embargo_mutex);
+        auto current_time = GetTime<std::chrono::milliseconds>();
+
+        // Log embargo checks (debug level only — this fires every second)
+        if (!m_connman.mDandelionEmbargo.empty()) {
+            LogPrint(BCLog::DANDELION, "CheckDandelionEmbargoes: Checking %d embargoed transactions (stempool=%d, mempool=%d)\n",
+                     m_connman.mDandelionEmbargo.size(), m_stempool.size(), m_mempool.size());
+        }
+
+        for (auto iter = m_connman.mDandelionEmbargo.begin(); iter != m_connman.mDandelionEmbargo.end();) {
+            if (m_mempool.exists(iter->first)) {
+                LogPrint(BCLog::DANDELION, "Embargoed dandeliontx %s found in mempool; removing from embargo map\n", iter->first.ToString());
+                m_connman.m_dandelion_stem_routed.erase(iter->first);
+                iter = m_connman.mDandelionEmbargo.erase(iter);
+            } else if (iter->second < current_time) {
+                LogPrintf("CheckDandelionEmbargoes: dandeliontx %s embargo expired\n", iter->first.ToString());
                 CTransactionRef ptx = m_stempool.get(iter->first);
                 if (ptx) {
-                    CInv inv(MSG_DANDELION_TX, iter->first);
-                    bool pushed = m_connman.localDandelionDestinationPushInventory(inv);
-                    if (pushed) {
-                        LogPrint(BCLog::DANDELION, "CheckDandelionEmbargoes: Routed Dandelion transaction %s via stem\n", iter->first.ToString());
-                        PushDandelionTransaction(iter->first);
-                        // Mark as routed so we don't re-send every second
-                        m_connman.m_dandelion_stem_routed.insert(iter->first);
+                    LogPrintf("CheckDandelionEmbargoes: Moving transaction %s from stempool to mempool for broadcast\n", iter->first.ToString());
+                    {
+                        LOCK(cs_main);
+                        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
+                        if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+                            LogPrintf("CheckDandelionEmbargoes: Successfully moved tx %s to mempool\n", iter->first.ToString());
+                            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
+                                                     iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
+                            RelayTransaction(ptx->GetHash(), ptx->GetWitnessHash());
+                        } else {
+                            LogPrintf("CheckDandelionEmbargoes: Failed to move tx %s to mempool: %s\n",
+                                     iter->first.ToString(), result.m_state.ToString());
+                        }
+                    }
+                } else {
+                    LogPrintf("CheckDandelionEmbargoes: Transaction %s not found in stempool!\n", iter->first.ToString());
+                }
+                m_connman.m_dandelion_stem_routed.erase(iter->first);
+                iter = m_connman.mDandelionEmbargo.erase(iter);
+            } else {
+                // Embargo not yet expired — check if this TX needs stem routing:
+                // 1. We have Dandelion destinations available
+                // 2. This TX has NOT already been successfully routed
+                //    (prevents the spam bug where we re-send every second)
+                // 3. OR the previous Dandelion destination disconnected (destination changed)
+                //
+                // We only COLLECT the txid here.  The actual push happens in Phase 2,
+                // after we release m_dandelion_embargo_mutex, because
+                // localDandelionDestinationPushInventory() acquires m_nodes_mutex.
+                if (hasDandelionDestinations && m_connman.m_dandelion_stem_routed.count(iter->first) == 0) {
+                    if (m_stempool.exists(iter->first)) {
+                        txidsNeedingStemRoute.push_back(iter->first);
                     }
                 }
+
+                // Log remaining time
+                auto remaining = std::chrono::duration_cast<std::chrono::seconds>(iter->second - current_time).count();
+                LogPrint(BCLog::DANDELION, "Transaction %s embargo expires in %d seconds\n", iter->first.ToString(), remaining);
+                iter++;
             }
-            
-            // Log remaining time
-            auto remaining = std::chrono::duration_cast<std::chrono::seconds>(iter->second - current_time).count();
-            LogPrint(BCLog::DANDELION, "Transaction %s embargo expires in %d seconds\n", iter->first.ToString(), remaining);
-            iter++;
+        }
+    } // m_dandelion_embargo_mutex released here — safe to touch m_nodes_mutex now.
+
+    // Phase 2: perform stem routing WITHOUT holding m_dandelion_embargo_mutex.
+    // localDandelionDestinationPushInventory() acquires m_nodes_mutex, which is
+    // now safe because we no longer hold the embargo lock.
+    for (const auto& txid : txidsNeedingStemRoute) {
+        CTransactionRef ptx = m_stempool.get(txid);
+        if (!ptx) continue;  // raced with expiry/mempool promotion — harmless
+
+        CInv inv(MSG_DANDELION_TX, txid);
+        bool pushed = m_connman.localDandelionDestinationPushInventory(inv);
+        if (pushed) {
+            LogPrint(BCLog::DANDELION, "CheckDandelionEmbargoes: Routed Dandelion transaction %s via stem\n", txid.ToString());
+            PushDandelionTransaction(txid);
+            // Re-acquire embargo lock briefly to mark this TX as routed, so we
+            // don't re-send it every cycle.
+            LOCK(m_connman.m_dandelion_embargo_mutex);
+            m_connman.m_dandelion_stem_routed.insert(txid);
         }
     }
 }

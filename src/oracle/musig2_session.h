@@ -111,6 +111,7 @@ public:
 
     /** Check if enough pubnonces have been collected. */
     bool HasEnoughNonces() const;
+    size_t GetNonceCount() const;
 
     /**
      * Aggregate collected pubnonces and initialize signing session.
@@ -145,6 +146,7 @@ public:
 
     /** Check if enough partial signatures have been collected. */
     bool HasEnoughPartialSigs() const;
+    size_t GetPartialSigCount() const;
 
     /**
      * Aggregate partial signatures into final 64-byte BIP-340 Schnorr signature.

@@ -556,6 +556,20 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             auto it = g_oracle_signing_sessions.find(epoch);
             if (it != g_oracle_signing_sessions.end()) {
                 MuSig2SigningSession& session = it->second;
+
+                // Try to aggregate if we have enough partial sigs but haven't
+                // aggregated yet (state is SIGNING, not yet COMPLETE).
+                if (session.HasEnoughPartialSigs() &&
+                    session.GetState() == MuSig2SessionState::SIGNING) {
+                    std::vector<unsigned char> sig64;
+                    if (session.AggregateSignature(sig64)) {
+                        LogPrintf("Oracle: MuSig2 signature aggregated for epoch %d (%zu bytes)\n",
+                                 epoch, sig64.size());
+                    } else {
+                        LogPrintf("Oracle: MuSig2 signature aggregation FAILED for epoch %d\n", epoch);
+                    }
+                }
+
                 if (session.HasEnoughPartialSigs() &&
                     session.GetState() == MuSig2SessionState::COMPLETE) {
                     // Session is complete — extract aggregate sig and bitmap
@@ -1695,6 +1709,100 @@ bool OracleBundleManager::CompleteMuSig2Session(int32_t block_height)
             m_connman->PushMessage(node,
                 CNetMsgMaker(node->GetCommonVersion()).Make(NetMsgType::ORACLEMUSIGPARTIALSIG, msg));
         });
+    }
+
+    return true;
+}
+
+// ============================================================================
+// MuSig2 P2P ingestion — feed remote nonces/partial-sigs into
+// g_oracle_signing_sessions so the local node can aggregate them.
+// Called by net_processing on ORACLEMUSIGNONCE / ORACLEMUSIGPARTIALSIG.
+// ============================================================================
+
+bool OracleBundleManager::ProcessRemoteMusigNonce(const OracleMusigNonceMsg& msg)
+{
+    if (!msg.IsValid()) return false;
+
+    LOCK(g_oracle_signing_sessions_mutex);
+    auto it = g_oracle_signing_sessions.find(msg.epoch);
+    if (it == g_oracle_signing_sessions.end()) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Received MuSig2 nonce for unknown epoch %d from oracle %u\n",
+                 msg.epoch, msg.oracle_id);
+        return false;
+    }
+
+    MuSig2SigningSession& session = it->second;
+
+    // Deserialize the 66-byte pubnonce
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    secp256k1_musig_pubnonce pubnonce;
+    bool parsed = secp256k1_musig_pubnonce_parse(ctx, &pubnonce, msg.pubnonce.data());
+    secp256k1_context_destroy(ctx);
+
+    if (!parsed) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Failed to parse MuSig2 pubnonce from oracle %u epoch %d\n",
+                 msg.oracle_id, msg.epoch);
+        return false;
+    }
+
+    if (!session.AddPubnonce(msg.oracle_id, pubnonce)) {
+        // Duplicate or wrong state — not an error, just skip
+        return false;
+    }
+
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ingested remote MuSig2 nonce: epoch=%d, oracle_id=%u, nonces_now=%zu\n",
+             msg.epoch, msg.oracle_id, session.GetNonceCount());
+    return true;
+}
+
+bool OracleBundleManager::ProcessRemoteMusigPartialSig(const OracleMusigPartialSigMsg& msg)
+{
+    if (!msg.IsValid()) return false;
+
+    LOCK(g_oracle_signing_sessions_mutex);
+    auto it = g_oracle_signing_sessions.find(msg.epoch);
+    if (it == g_oracle_signing_sessions.end()) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Received MuSig2 partial sig for unknown epoch %d from oracle %u\n",
+                 msg.epoch, msg.oracle_id);
+        return false;
+    }
+
+    MuSig2SigningSession& session = it->second;
+
+    // Deserialize the 32-byte partial sig
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    secp256k1_musig_partial_sig psig;
+    bool parsed = secp256k1_musig_partial_sig_parse(ctx, &psig, msg.partial_sig.data());
+    secp256k1_context_destroy(ctx);
+
+    if (!parsed) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Failed to parse MuSig2 partial sig from oracle %u epoch %d\n",
+                 msg.oracle_id, msg.epoch);
+        return false;
+    }
+
+    if (!session.AddPartialSignature(msg.oracle_id, psig)) {
+        // Duplicate or wrong state — not an error, just skip
+        return false;
+    }
+
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ingested remote MuSig2 partial sig: epoch=%d, oracle_id=%u, sigs_now=%zu\n",
+             msg.epoch, msg.oracle_id, session.GetPartialSigCount());
+
+    // Eagerly try to aggregate when we have enough partial sigs.
+    // This avoids waiting for the next AddOracleBundleToBlock() call.
+    if (session.HasEnoughPartialSigs() &&
+        session.GetState() == MuSig2SessionState::SIGNING) {
+        std::vector<unsigned char> sig64;
+        if (session.AggregateSignature(sig64)) {
+            LogPrintf("Oracle: MuSig2 signature eagerly aggregated for epoch %d (%zu bytes)\n",
+                     msg.epoch, sig64.size());
+        }
     }
 
     return true;

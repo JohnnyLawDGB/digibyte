@@ -23,6 +23,8 @@ class CBlockIndex;
 class BlockValidationState;
 class CConnman;
 class ChainstateManager;
+class OracleMusigNonceMsg;
+class OracleMusigPartialSigMsg;
 
 namespace Consensus { struct Params; }
 
@@ -112,6 +114,13 @@ public:
     //! MuSig2 Phase 3 session lifecycle
     bool StartMuSig2Session(int32_t block_height);
     bool CompleteMuSig2Session(int32_t block_height);
+
+    //! MuSig2 P2P message ingestion — called by net_processing when
+    //! receiving ORACLEMUSIGNONCE / ORACLEMUSIGPARTIALSIG from peers.
+    //! These feed remote nonces/partial-sigs into g_oracle_signing_sessions
+    //! so the local miner can aggregate them into v0x03 bundles.
+    bool ProcessRemoteMusigNonce(const OracleMusigNonceMsg& msg);
+    bool ProcessRemoteMusigPartialSig(const OracleMusigPartialSigMsg& msg);
 
     //! Price functions
     CAmount GetConsensusPrice(int32_t epoch) const;

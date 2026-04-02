@@ -104,6 +104,7 @@ DIGIBYTE_TESTS =\
   test/musig2_bundle_manager_tests.cpp \
   test/musig2_p2p_collection_tests.cpp \
   test/musig2_p2p_handling_tests.cpp \
+  test/musig2_p2p_ingestion_tests.cpp \
   test/musig2_p2p_message_tests.cpp \
   test/musig2_oracle_node_tests.cpp \
   test/musig2_session_tests.cpp \

@@ -217,6 +217,12 @@ bool MuSig2SigningSession::HasEnoughNonces() const
     return m_pubnonces.size() >= m_min_signers;
 }
 
+size_t MuSig2SigningSession::GetNonceCount() const
+{
+    LOCK(m_mutex);
+    return m_pubnonces.size();
+}
+
 // ============================================================================
 // Aggregate nonces + initialize signing session
 // ============================================================================
@@ -323,6 +329,12 @@ bool MuSig2SigningSession::HasEnoughPartialSigs() const
 {
     LOCK(m_mutex);
     return m_partial_sigs.size() >= m_min_signers;
+}
+
+size_t MuSig2SigningSession::GetPartialSigCount() const
+{
+    LOCK(m_mutex);
+    return m_partial_sigs.size();
 }
 
 // ============================================================================

@@ -380,14 +380,17 @@ std::vector<unsigned char> MuSig2SigningSession::GetParticipationBitmap() const
     LOCK(m_mutex);
     if (m_state != MuSig2SessionState::COMPLETE) return {};
     if (m_partial_sigs.empty()) return {};
-    uint8_t max_id = 0;
-    for (const auto& [id, sig] : m_partial_sigs) {
-        if (id > max_id) max_id = id;
-    }
-    size_t bitmap_bytes = (max_id / 8) + 1;
+
+    // Bitmap must be sized for total oracle count, not just max participating ID.
+    // DecodeBitmap expects exactly (nOracleTotalOracles + 7) / 8 bytes.
+    const uint16_t total_oracles = static_cast<uint16_t>(
+        std::max(1, Params().GetConsensus().nOracleTotalOracles));
+    size_t bitmap_bytes = (total_oracles + 7) / 8;
     std::vector<unsigned char> bitmap(bitmap_bytes, 0);
     for (const auto& [id, sig] : m_partial_sigs) {
-        bitmap[id / 8] |= (1 << (id % 8));
+        if (id < total_oracles) {
+            bitmap[id / 8] |= (1 << (id % 8));
+        }
     }
     return bitmap;
 }

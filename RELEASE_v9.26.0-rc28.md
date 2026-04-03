@@ -193,6 +193,7 @@ Documentation for DigiByte's post-quantum cryptography roadmap:
 
 ```text
 469d330c7a qt: update wallet splash image to v9.26.0-rc28
+032598ec0c consensus: mine testnet21 genesis block and hardcode hash
 ed2799cdc0 build: bump version to v9.26.0-rc28
 35ed2bbbab consensus: reset testnet to testnet21 with new genesis and magic bytes
 88285ec2ad rpc: add Ogilvie and ChopperBrian to getoracles name list
@@ -366,7 +367,7 @@ addnode=oracle1.digibyte.io
 
 - This is a fresh DigiDollar testnet reset. Operators should migrate wallets from `testnet20` (or `testnet19`) as described above.
 - As the network warms up, make sure enough oracle operators are online for **6-of-11** participation.
-- Genesis block hash is pending — will be updated after first mining run.
+- Genesis block hash: `af94bc0b267965d39faab989bd7cf5a59f641dd02ccd40b0f43cbb0bf62c6122`
 
 ---
 

@@ -499,14 +499,13 @@ public:
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
 
-        // NEW TESTNET GENESIS (2026) - DigiDollar testnet21 Reset
-        // TODO: Mine new genesis block and update hashes
+        // DigiDollar testnet21 genesis (2026) — 6-of-11 MuSig2 oracle consensus
         const char* pszTimestamp = "DigiDollar: 6-of-11 MuSig2 Oracle Consensus on The DigiByte Blockchain";
         const CScript genesisOutputScript = CScript() << 0x0 << OP_CHECKSIG;
-        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1743710400, 0, 0x1e0ffff0, 1, 8000 * COIN);
+        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1743710400, 124240, 0x1e0ffff0, 1, 8000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        //assert(consensus.hashGenesisBlock == uint256S("0xb1bde539fa2e0f45837a6639ea3f384ce5440a7f3e41eaeea8add9f86a28301a"));
-        //assert(genesis.hashMerkleRoot == uint256S("0x2d81b8c3153f2e4e29c2ad9fc85b525d0cdcf327ac102318901816e3cdf6576d"));
+        assert(consensus.hashGenesisBlock == uint256S("0xaf94bc0b267965d39faab989bd7cf5a59f641dd02ccd40b0f43cbb0bf62c6122"));
+        assert(genesis.hashMerkleRoot == uint256S("0xef66d6c3094772321cfe7217b57899df05ed1142f0b62547070c362b5c2eb870"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -531,7 +530,7 @@ public:
 
         checkpointData = {
             {
-                {   546, uint256S("0x08fa50178f4b4f9fe1bbaed3b0a2ee58d1c51cc8185f70c8089e4b95763d9cdb")},
+                // testnet21: fresh chain, no checkpoints yet
             }
         };
 

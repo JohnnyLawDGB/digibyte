@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <vector>
 
 /**
@@ -84,17 +85,19 @@ public:
     bool InitializePassive(const secp256k1_musig_keyagg_cache& cache);
 
     /**
-     * Round 1a: Generate local nonce pair.
-     * Transitions: CREATED → NONCES_COLLECTING.
-     * Can only be called once.
+     * Round 1a: Generate local nonce pair for a specific oracle ID.
+     * Transitions: CREATED → NONCES_COLLECTING on first call.
+     * Can be called multiple times for different oracle IDs on the same node.
      *
+     * @param[in]  oracle_id    Oracle ID this nonce is for
      * @param[in]  signing_key  Local signer's private key
      * @param[in]  pubkey       Local signer's public key (secp256k1 format)
      * @param[in]  cache        Key aggregation cache for this signer set
      * @param[out] pubnonce_out Generated public nonce to share with peers
      * @return true on success
      */
-    bool GenerateNonce(const CKey& signing_key,
+    bool GenerateNonce(uint8_t oracle_id,
+                       const CKey& signing_key,
                        const secp256k1_pubkey& pubkey,
                        const secp256k1_musig_keyagg_cache& cache,
                        secp256k1_musig_pubnonce& pubnonce_out);
@@ -123,15 +126,17 @@ public:
     bool AggregateNonces(const unsigned char* msg32);
 
     /**
-     * Round 2a: Create local partial signature.
-     * Consumes and zeroes the secret nonce — can only be called once.
-     * Requires state == SIGNING.
+     * Round 2a: Create local partial signature for a specific oracle ID.
+     * Consumes and zeroes that oracle's secret nonce.
+     * Can be called once per oracle ID. Requires state == SIGNING.
      *
+     * @param[in]  oracle_id       Oracle ID to sign for
      * @param[in]  signing_key     Local signer's private key
      * @param[out] partial_sig_out The produced partial signature
      * @return true on success
      */
-    bool CreatePartialSignature(const CKey& signing_key,
+    bool CreatePartialSignature(uint8_t oracle_id,
+                                const CKey& signing_key,
                                 secp256k1_musig_partial_sig& partial_sig_out);
 
     /**
@@ -187,10 +192,10 @@ private:
 
     secp256k1_context* m_ctx;                 //!< secp256k1 context (owned)
 
-    //! Local signer's secret nonce — MUST NOT be copied, zeroed after signing
-    secp256k1_musig_secnonce m_secnonce GUARDED_BY(m_mutex);
-    bool m_has_secnonce GUARDED_BY(m_mutex);  //!< Whether secnonce has been generated
-    bool m_secnonce_used GUARDED_BY(m_mutex); //!< Whether secnonce has been consumed
+    //! Local signer secret nonces — one per oracle ID on this node.
+    //! Each secnonce MUST NOT be copied and is zeroed after signing.
+    std::map<uint8_t, secp256k1_musig_secnonce> m_secnonces GUARDED_BY(m_mutex);
+    std::set<uint8_t> m_secnonces_used GUARDED_BY(m_mutex); //!< Oracle IDs whose nonces are consumed
 
     //! Key aggregation cache (set during GenerateNonce)
     secp256k1_musig_keyagg_cache m_keyagg_cache GUARDED_BY(m_mutex);

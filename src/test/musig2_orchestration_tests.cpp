@@ -115,7 +115,7 @@ BOOST_AUTO_TEST_CASE(test_nonce_generated_on_epoch_start)
     // Generate nonce
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, ckey, pk, cache, pubnonce));
+    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, 0, ckey, pk, cache, pubnonce));
 
     // Session should now be in NONCES_COLLECTING
     BOOST_CHECK(session->GetState() == MuSig2SessionState::NONCES_COLLECTING);
@@ -152,7 +152,7 @@ BOOST_AUTO_TEST_CASE(test_nonce_broadcast_to_peers)
 
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, ckey, pk, cache, pubnonce));
+    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, 0, ckey, pk, cache, pubnonce));
 
     // Verify pubnonce serializes to 66 bytes (ready for P2P broadcast)
     unsigned char serialized[66];
@@ -195,7 +195,7 @@ BOOST_AUTO_TEST_CASE(test_session_advances_to_signing)
     // Generate our local nonce (signer 0)
     CKey ckey0 = MakeCKey(seckeys[0]);
     secp256k1_musig_pubnonce pubnonce0;
-    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, ckey0, pubkeys[0], cache, pubnonce0));
+    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, 0, ckey0, pubkeys[0], cache, pubnonce0));
 
     // Generate and add external nonces
     secp256k1_musig_secnonce ext_secnonces[N];
@@ -260,7 +260,7 @@ BOOST_AUTO_TEST_CASE(test_session_completes_on_aggregate)
 
     // Generate our local nonce (signer 0)
     secp256k1_musig_pubnonce pubnonce0;
-    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, ckeys[0], pubkeys[0], cache, pubnonce0));
+    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, 0, ckeys[0], pubkeys[0], cache, pubnonce0));
 
     // Generate and add all nonces
     secp256k1_musig_secnonce ext_secnonces[N];
@@ -287,7 +287,7 @@ BOOST_AUTO_TEST_CASE(test_session_completes_on_aggregate)
     secp256k1_musig_partial_sig psig0;
     auto* session = manager.GetSession(EPOCH);
     BOOST_REQUIRE(session != nullptr);
-    BOOST_CHECK(session->CreatePartialSignature(ckeys[0], psig0));
+    BOOST_CHECK(session->CreatePartialSignature(0, ckeys[0], psig0));
     BOOST_CHECK(manager.AddPartialSigForEpoch(EPOCH, 0, psig0));
 
     // External signers create partial sigs via raw API
@@ -412,8 +412,8 @@ BOOST_AUTO_TEST_CASE(test_concurrent_epochs_no_crosstalk)
     CKey ckey_a = MakeCKey(seckey_a);
     CKey ckey_b = MakeCKey(seckey_b);
     secp256k1_musig_pubnonce pn_a, pn_b;
-    BOOST_CHECK(manager.GenerateNonceForEpoch(100, ckey_a, pk_a, cache_a, pn_a));
-    BOOST_CHECK(manager.GenerateNonceForEpoch(101, ckey_b, pk_b, cache_b, pn_b));
+    BOOST_CHECK(manager.GenerateNonceForEpoch(100, 0, ckey_a, pk_a, cache_a, pn_a));
+    BOOST_CHECK(manager.GenerateNonceForEpoch(101, 0, ckey_b, pk_b, cache_b, pn_b));
 
     // Add nonces to their respective sessions
     BOOST_CHECK(manager.AddNonceForEpoch(100, 0, pn_a));
@@ -435,7 +435,7 @@ BOOST_AUTO_TEST_CASE(test_concurrent_epochs_no_crosstalk)
 
     // Complete epoch 100 but not 101
     secp256k1_musig_partial_sig psig_a;
-    BOOST_CHECK(session_a->CreatePartialSignature(ckey_a, psig_a));
+    BOOST_CHECK(session_a->CreatePartialSignature(0, ckey_a, psig_a));
     BOOST_CHECK(manager.AddPartialSigForEpoch(100, 0, psig_a));
     std::vector<unsigned char> sig_a;
     BOOST_CHECK(manager.AggregateForEpoch(100, sig_a));
@@ -509,7 +509,7 @@ BOOST_AUTO_TEST_CASE(test_check_and_advance_signing)
     // Generate nonce for signer 0
     CKey ckey0 = MakeCKey(seckeys[0]);
     secp256k1_musig_pubnonce pubnonce0;
-    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, ckey0, pubkeys[0], cache, pubnonce0));
+    BOOST_CHECK(manager.GenerateNonceForEpoch(EPOCH, 0, ckey0, pubkeys[0], cache, pubnonce0));
 
     // Not ready yet — only 0 nonces added
     unsigned char msg[32];
@@ -566,7 +566,7 @@ BOOST_AUTO_TEST_CASE(test_completed_bitmap_is_padded_to_network_oracle_count)
 
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_REQUIRE(manager.GenerateNonceForEpoch(EPOCH, ckey, pk, cache, pubnonce));
+    BOOST_REQUIRE(manager.GenerateNonceForEpoch(EPOCH, 0, ckey, pk, cache, pubnonce));
     BOOST_REQUIRE(manager.AddNonceForEpoch(EPOCH, 0, pubnonce));
 
     unsigned char msg[32];
@@ -577,7 +577,7 @@ BOOST_AUTO_TEST_CASE(test_completed_bitmap_is_padded_to_network_oracle_count)
     BOOST_REQUIRE(session != nullptr);
 
     secp256k1_musig_partial_sig psig;
-    BOOST_REQUIRE(session->CreatePartialSignature(ckey, psig));
+    BOOST_REQUIRE(session->CreatePartialSignature(0, ckey, psig));
     BOOST_REQUIRE(manager.AddPartialSigForEpoch(EPOCH, 0, psig));
 
     std::vector<unsigned char> sig64;
@@ -619,7 +619,7 @@ BOOST_AUTO_TEST_CASE(test_nonexistent_epoch_operations_fail)
     std::vector<unsigned char> sig64;
 
     // All operations should fail gracefully for non-existent epoch
-    BOOST_CHECK(!manager.GenerateNonceForEpoch(999, ckey, pk, cache, pubnonce));
+    BOOST_CHECK(!manager.GenerateNonceForEpoch(999, 0, ckey, pk, cache, pubnonce));
     BOOST_CHECK(!manager.AddNonceForEpoch(999, 0, pubnonce));
     BOOST_CHECK(!manager.AdvanceToSigning(999, msg));
     BOOST_CHECK(!manager.TryAdvanceToSigning(999, msg));

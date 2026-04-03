@@ -22,6 +22,7 @@
 #include <oracle/musig2_aggregator.h>
 #include <oracle/musig2_orchestrator.h>
 #include <oracle/musig2_messages.h>
+#include <oracle/signing_orchestrator.h>
 #include <oracle/musig2_session.h>
 #include <oracle/node.h>
 #include <primitives/block.h>
@@ -537,54 +538,31 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     }
 
     // Phase 3 gate: use MuSig2 aggregate signatures when activated
+    // The OracleSigningOrchestrator drives the MuSig2 protocol asynchronously
+    // via BlockConnected callbacks.  AddOracleBundleToBlock only *queries*
+    // the orchestrator for a completed session — it never starts/completes
+    // sessions synchronously (that would deadlock under cs_main).
     const Consensus::Params& cparams_phase3 = Params().GetConsensus();
     if (!force_phase2 && block_height >= cparams_phase3.nDigiDollarPhase3Height) {
         LogPrintf("Oracle: Phase 3 active at height %d (activation=%d), using MuSig2 bundling\n",
                  block_height, cparams_phase3.nDigiDollarPhase3Height);
 
-        // Trigger MuSig2 orchestration on each block tick.
-        StartMuSig2Session(block_height);
-        CompleteMuSig2Session(block_height);
-
         COracleBundle bundle(epoch);
         bundle.version = 3;
 
-        // Look up the MuSig2 signing session for this epoch
+        // Query the orchestrator for a completed MuSig2 session
         bool session_ready = false;
-        {
-            LOCK(g_oracle_signing_sessions_mutex);
-            auto it = g_oracle_signing_sessions.find(epoch);
-            if (it != g_oracle_signing_sessions.end()) {
-                MuSig2SigningSession& session = it->second;
-
-                // Try to aggregate if we have enough partial sigs but haven't
-                // aggregated yet (state is SIGNING, not yet COMPLETE).
-                if (session.HasEnoughPartialSigs() &&
-                    session.GetState() == MuSig2SessionState::SIGNING) {
-                    std::vector<unsigned char> sig64;
-                    if (session.AggregateSignature(sig64)) {
-                        LogPrintf("Oracle: MuSig2 signature aggregated for epoch %d (%zu bytes)\n",
-                                 epoch, sig64.size());
-                    } else {
-                        LogPrintf("Oracle: MuSig2 signature aggregation FAILED for epoch %d\n", epoch);
-                    }
-                }
-
-                if (session.HasEnoughPartialSigs() &&
-                    session.GetState() == MuSig2SessionState::COMPLETE) {
-                    // Session is complete — extract aggregate sig and bitmap
-                    bundle.aggregate_sig = session.GetAggregateSig();
-                    bundle.participation_bitmap = session.GetParticipationBitmap();
-                    session_ready = true;
-                    LogPrintf("Oracle: MuSig2 session for epoch %d is COMPLETE, sig=%zu bytes, bitmap=%zu bytes\n",
-                             epoch, bundle.aggregate_sig.size(), bundle.participation_bitmap.size());
-                } else {
-                    LogPrintf("Oracle: MuSig2 session for epoch %d not ready (state=%d, enough_sigs=%d)\n",
-                             epoch, static_cast<int>(session.GetState()), session.HasEnoughPartialSigs());
-                }
+        if (g_signing_orchestrator) {
+            session_ready = g_signing_orchestrator->GetCompletedSession(
+                epoch, bundle.aggregate_sig, bundle.participation_bitmap);
+            if (session_ready) {
+                LogPrintf("Oracle: MuSig2 session for epoch %d is COMPLETE, sig=%zu bytes, bitmap=%zu bytes\n",
+                         epoch, bundle.aggregate_sig.size(), bundle.participation_bitmap.size());
             } else {
-                LogPrintf("Oracle: No MuSig2 session found for epoch %d\n", epoch);
+                LogPrintf("Oracle: MuSig2 session for epoch %d not ready in orchestrator\n", epoch);
             }
+        } else {
+            LogPrintf("Oracle: No signing orchestrator available for epoch %d\n", epoch);
         }
 
         if (!session_ready) {
@@ -611,12 +589,6 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         oracle_output.scriptPubKey = oracle_script;
         coinbase_tx.vout.push_back(oracle_output);
         block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
-
-        // Session lifecycle: once consumed into a block, clear the epoch session.
-        {
-            LOCK(g_oracle_signing_sessions_mutex);
-            g_oracle_signing_sessions.erase(epoch);
-        }
 
         LogPrintf("Oracle: Phase 3 added MuSig2 oracle bundle to block %d (epoch %d)\n",
                  block_height, epoch);
@@ -1629,7 +1601,7 @@ bool OracleBundleManager::StartMuSig2Session(int32_t block_height)
     }
 
     secp256k1_musig_pubnonce pubnonce;
-    if (!session_ptr->GenerateNonce(signing_key, secp_pubkey, keyagg_cache, pubnonce)) {
+    if (!session_ptr->GenerateNonce(local_oracle_id, signing_key, secp_pubkey, keyagg_cache, pubnonce)) {
         secp256k1_context_destroy(ctx);
         return false;
     }
@@ -1688,7 +1660,7 @@ bool OracleBundleManager::CompleteMuSig2Session(int32_t block_height)
     if (!signing_key.IsValid()) return false;
 
     secp256k1_musig_partial_sig partial_sig;
-    if (!session.CreatePartialSignature(signing_key, partial_sig)) return false;
+    if (!session.CreatePartialSignature(local_oracle_id, signing_key, partial_sig)) return false;
     session.AddPartialSignature(local_oracle_id, partial_sig);
 
     OracleMusigPartialSigMsg msg;

@@ -174,7 +174,7 @@ BOOST_AUTO_TEST_CASE(nonce_ingestion_round_trip)
     {
         LOCK(g_oracle_signing_sessions_mutex);
         auto& session = g_oracle_signing_sessions.at(epoch);
-        BOOST_REQUIRE(session.GenerateNonce(keys[0], secp_pubkeys[0], keyagg_cache, local_nonce));
+        BOOST_REQUIRE(session.GenerateNonce(0, keys[0], secp_pubkeys[0], keyagg_cache, local_nonce));
         BOOST_REQUIRE(session.AddPubnonce(0, local_nonce));
     }
 
@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_CASE(nonce_ingestion_round_trip)
         // Generate nonce in a temporary session
         MuSig2SigningSession temp_session(epoch, min_signers);
         secp256k1_musig_pubnonce remote_nonce;
-        BOOST_REQUIRE(temp_session.GenerateNonce(keys[i], secp_pubkeys[i], keyagg_cache, remote_nonce));
+        BOOST_REQUIRE(temp_session.GenerateNonce(static_cast<uint8_t>(i), keys[i], secp_pubkeys[i], keyagg_cache, remote_nonce));
 
         // Serialize to P2P message format
         OracleMusigNonceMsg nonce_msg;
@@ -258,14 +258,14 @@ BOOST_AUTO_TEST_CASE(duplicate_nonce_rejected)
         // (simulating the local oracle starting its round)
         auto& session = g_oracle_signing_sessions.at(epoch);
         secp256k1_musig_pubnonce local_nonce;
-        BOOST_REQUIRE(session.GenerateNonce(key0, spk0, keyagg_cache, local_nonce));
+        BOOST_REQUIRE(session.GenerateNonce(0, key0, spk0, keyagg_cache, local_nonce));
         BOOST_REQUIRE(session.AddPubnonce(0, local_nonce));
     }
 
     // Generate nonce for oracle 1 in a temporary session
     MuSig2SigningSession temp_session(epoch, min_signers);
     secp256k1_musig_pubnonce nonce1;
-    BOOST_REQUIRE(temp_session.GenerateNonce(key1, spk1, keyagg_cache, nonce1));
+    BOOST_REQUIRE(temp_session.GenerateNonce(1, key1, spk1, keyagg_cache, nonce1));
 
     OracleMusigNonceMsg msg;
     msg.epoch = epoch;

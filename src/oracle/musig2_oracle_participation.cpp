@@ -93,7 +93,7 @@ void MuSig2OracleParticipation::OnBlockConnected(int32_t height)
 
     // Generate our nonce
     secp256k1_musig_pubnonce pubnonce;
-    if (!m_session->GenerateNonce(m_oracle_key, m_pubkeys[m_oracle_id], m_cache, pubnonce)) {
+    if (!m_session->GenerateNonce(m_oracle_id, m_oracle_key, m_pubkeys[m_oracle_id], m_cache, pubnonce)) {
         LogPrintf("Oracle MuSig2: Failed to generate nonce for epoch %d\n", new_epoch);
         m_session.reset();
         return;
@@ -205,7 +205,7 @@ void MuSig2OracleParticipation::TryAdvanceToSigning()
 
     // Create our partial signature
     secp256k1_musig_partial_sig psig;
-    if (!m_session->CreatePartialSignature(m_oracle_key, psig)) {
+    if (!m_session->CreatePartialSignature(m_oracle_id, m_oracle_key, psig)) {
         LogPrintf("Oracle MuSig2: Failed to create partial signature for epoch %d\n", m_epoch);
         return;
     }

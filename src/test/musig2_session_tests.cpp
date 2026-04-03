@@ -88,7 +88,7 @@ BOOST_AUTO_TEST_CASE(test_session_state_machine_transitions)
     // Generate nonce for signer 0 → should transition to NONCES_COLLECTING
     CKey ckey0 = MakeCKey(seckeys[0]);
     secp256k1_musig_pubnonce pubnonce0;
-    BOOST_CHECK(session.GenerateNonce(ckey0, pubkeys[0], cache, pubnonce0));
+    BOOST_CHECK(session.GenerateNonce(0, ckey0, pubkeys[0], cache, pubnonce0));
     BOOST_CHECK(session.GetState() == MuSig2SessionState::NONCES_COLLECTING);
 
     // Add all 9 pubnonces (including signer 0's own)
@@ -120,7 +120,7 @@ BOOST_AUTO_TEST_CASE(test_session_state_machine_transitions)
 
     // Create partial signature for our signer (0)
     secp256k1_musig_partial_sig psig0;
-    BOOST_CHECK(session.CreatePartialSignature(ckey0, psig0));
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey0, psig0));
 
     // Add partial sigs for all 9 signers (0's was just created, do externally for 1-8)
     BOOST_CHECK(session.AddPartialSignature(0, psig0));
@@ -185,7 +185,7 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_generation)
 
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce));
     BOOST_CHECK(session.GetState() == MuSig2SessionState::NONCES_COLLECTING);
 
     // Pubnonce should serialize to 66 bytes and be non-zero
@@ -196,7 +196,7 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_generation)
 
     // Cannot generate nonce twice
     secp256k1_musig_pubnonce pubnonce2;
-    BOOST_CHECK(!session.GenerateNonce(ckey, pk, cache, pubnonce2));
+    BOOST_CHECK(!session.GenerateNonce(0, ckey, pk, cache, pubnonce2));
 
     secp256k1_context_destroy(ctx);
 }
@@ -229,7 +229,7 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_collection_9_of_15)
     // Generate our local nonce first
     CKey ckey0 = MakeCKey(seckeys[0]);
     secp256k1_musig_pubnonce pubnonce0;
-    BOOST_CHECK(session.GenerateNonce(ckey0, pubkeys[0], cache, pubnonce0));
+    BOOST_CHECK(session.GenerateNonce(0, ckey0, pubkeys[0], cache, pubnonce0));
 
     // Generate external nonces
     secp256k1_musig_secnonce secnonces[N];
@@ -283,7 +283,7 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_collection_below_threshold)
 
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce0;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce0));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce0));
 
     // Add 8 nonces (unique oracle IDs, but re-using same pubnonce data for simplicity)
     for (uint8_t i = 0; i < 8; i++) {
@@ -325,7 +325,7 @@ BOOST_AUTO_TEST_CASE(test_session_partial_sig_generation)
     MuSig2SigningSession session(50, 1);
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce));
 
     BOOST_CHECK(session.AddPubnonce(0, pubnonce));
     BOOST_CHECK(session.HasEnoughNonces());
@@ -336,7 +336,7 @@ BOOST_AUTO_TEST_CASE(test_session_partial_sig_generation)
     BOOST_CHECK(session.GetState() == MuSig2SessionState::SIGNING);
 
     secp256k1_musig_partial_sig psig;
-    BOOST_CHECK(session.CreatePartialSignature(ckey, psig));
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey, psig));
 
     // Partial sig should serialize to 32 bytes
     unsigned char ser[32];
@@ -374,7 +374,7 @@ BOOST_AUTO_TEST_CASE(test_session_partial_sig_aggregation)
     // Signer 0 generates via session
     CKey ckey0 = MakeCKey(seckeys[0]);
     secp256k1_musig_pubnonce pubnonce0;
-    BOOST_CHECK(session.GenerateNonce(ckey0, pubkeys[0], cache, pubnonce0));
+    BOOST_CHECK(session.GenerateNonce(0, ckey0, pubkeys[0], cache, pubnonce0));
 
     // Generate external nonces for signers 1-8
     secp256k1_musig_secnonce ext_secnonces[N];
@@ -398,7 +398,7 @@ BOOST_AUTO_TEST_CASE(test_session_partial_sig_aggregation)
 
     // Create partial sig for signer 0 via session
     secp256k1_musig_partial_sig psig0;
-    BOOST_CHECK(session.CreatePartialSignature(ckey0, psig0));
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey0, psig0));
     BOOST_CHECK(session.AddPartialSignature(0, psig0));
 
     // Create partial sigs externally for signers 1-8
@@ -465,7 +465,7 @@ BOOST_AUTO_TEST_CASE(test_session_full_roundtrip_in_process)
     // Round 1: Each signer generates a nonce
     std::vector<secp256k1_musig_pubnonce> pubnonces(N);
     for (size_t i = 0; i < N; i++) {
-        BOOST_CHECK(sessions[i].GenerateNonce(ckeys[i], pubkeys[i], cache, pubnonces[i]));
+        BOOST_CHECK(sessions[i].GenerateNonce(static_cast<uint8_t>(i), ckeys[i], pubkeys[i], cache, pubnonces[i]));
     }
 
     // Distribute all pubnonces to all sessions
@@ -487,7 +487,7 @@ BOOST_AUTO_TEST_CASE(test_session_full_roundtrip_in_process)
     // Round 2: Each signer creates a partial signature
     std::vector<secp256k1_musig_partial_sig> partial_sigs(N);
     for (size_t i = 0; i < N; i++) {
-        BOOST_CHECK(sessions[i].CreatePartialSignature(ckeys[i], partial_sigs[i]));
+        BOOST_CHECK(sessions[i].CreatePartialSignature(static_cast<uint8_t>(i), ckeys[i], partial_sigs[i]));
     }
 
     // Distribute all partial sigs to all sessions
@@ -566,7 +566,7 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_zeroed_after_signing)
     MuSig2SigningSession session(1, 1);
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce));
     BOOST_CHECK(session.AddPubnonce(0, pubnonce));
 
     unsigned char msg[32];
@@ -574,11 +574,11 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_zeroed_after_signing)
     BOOST_CHECK(session.AggregateNonces(msg));
 
     secp256k1_musig_partial_sig psig;
-    BOOST_CHECK(session.CreatePartialSignature(ckey, psig));
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey, psig));
 
     // Attempting to sign again should fail (secnonce is consumed/zeroed)
     secp256k1_musig_partial_sig psig2;
-    BOOST_CHECK(!session.CreatePartialSignature(ckey, psig2));
+    BOOST_CHECK(!session.CreatePartialSignature(0, ckey, psig2));
 
     secp256k1_context_destroy(ctx);
 }
@@ -604,7 +604,7 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_reuse_prevention)
     MuSig2SigningSession session(5, 1);
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce));
     BOOST_CHECK(session.AddPubnonce(0, pubnonce));
 
     unsigned char msg[32];
@@ -613,11 +613,11 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_reuse_prevention)
 
     // First partial sign should succeed
     secp256k1_musig_partial_sig psig;
-    BOOST_CHECK(session.CreatePartialSignature(ckey, psig));
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey, psig));
 
     // Second partial sign should fail — nonce consumed
     secp256k1_musig_partial_sig psig2;
-    BOOST_CHECK(!session.CreatePartialSignature(ckey, psig2));
+    BOOST_CHECK(!session.CreatePartialSignature(0, ckey, psig2));
 
     // Complete the session
     BOOST_CHECK(session.AddPartialSignature(0, psig));
@@ -626,7 +626,7 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_reuse_prevention)
 
     // After COMPLETE, cannot sign again
     secp256k1_musig_partial_sig psig3;
-    BOOST_CHECK(!session.CreatePartialSignature(ckey, psig3));
+    BOOST_CHECK(!session.CreatePartialSignature(0, ckey, psig3));
 
     secp256k1_context_destroy(ctx);
 }
@@ -652,7 +652,7 @@ BOOST_AUTO_TEST_CASE(test_session_invalid_nonce_rejected)
     MuSig2SigningSession session(1, 2);
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce));
 
     // An all-zero pubnonce should be rejected (invalid internal state)
     secp256k1_musig_pubnonce bad_nonce;
@@ -687,7 +687,7 @@ BOOST_AUTO_TEST_CASE(test_session_invalid_partial_sig_rejected)
     MuSig2SigningSession session(1, 1);
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce));
     BOOST_CHECK(session.AddPubnonce(0, pubnonce));
 
     unsigned char msg[32];
@@ -698,7 +698,7 @@ BOOST_AUTO_TEST_CASE(test_session_invalid_partial_sig_rejected)
     // different session — but this session IS in SIGNING state, so test
     // duplicate oracle_id rejection after adding a valid one
     secp256k1_musig_partial_sig psig;
-    BOOST_CHECK(session.CreatePartialSignature(ckey, psig));
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey, psig));
     BOOST_CHECK(session.AddPartialSignature(0, psig));
 
     // Duplicate oracle_id should be rejected
@@ -728,7 +728,7 @@ BOOST_AUTO_TEST_CASE(test_session_rejects_out_of_range_oracle_ids)
     MuSig2SigningSession session(1, 1);
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;
-    BOOST_CHECK(session.GenerateNonce(ckey, pk, cache, pubnonce));
+    BOOST_CHECK(session.GenerateNonce(0, ckey, pk, cache, pubnonce));
 
     const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
     BOOST_REQUIRE(total_oracles > 0);
@@ -747,7 +747,7 @@ BOOST_AUTO_TEST_CASE(test_session_rejects_out_of_range_oracle_ids)
     BOOST_CHECK(session.GetState() == MuSig2SessionState::SIGNING);
 
     secp256k1_musig_partial_sig psig;
-    BOOST_CHECK(session.CreatePartialSignature(ckey, psig));
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey, psig));
 
     // Round 2 hardening: reject out-of-range partial signature contributor.
     BOOST_CHECK(!session.AddPartialSignature(out_of_range_id, psig));
@@ -798,8 +798,8 @@ BOOST_AUTO_TEST_CASE(test_session_concurrent_epochs)
     CKey ckey1 = MakeCKey(seckey1);
     CKey ckey2 = MakeCKey(seckey2);
     secp256k1_musig_pubnonce pnA, pnB;
-    BOOST_CHECK(sessionA.GenerateNonce(ckey1, pk1, cache1, pnA));
-    BOOST_CHECK(sessionB.GenerateNonce(ckey2, pk2, cache2, pnB));
+    BOOST_CHECK(sessionA.GenerateNonce(0, ckey1, pk1, cache1, pnA));
+    BOOST_CHECK(sessionB.GenerateNonce(0, ckey2, pk2, cache2, pnB));
 
     // Advance sessionA but not sessionB
     BOOST_CHECK(sessionA.AddPubnonce(0, pnA));
@@ -815,7 +815,7 @@ BOOST_AUTO_TEST_CASE(test_session_concurrent_epochs)
 
     // Complete sessionA
     secp256k1_musig_partial_sig psigA;
-    BOOST_CHECK(sessionA.CreatePartialSignature(ckey1, psigA));
+    BOOST_CHECK(sessionA.CreatePartialSignature(0, ckey1, psigA));
     BOOST_CHECK(sessionA.AddPartialSignature(0, psigA));
     std::vector<unsigned char> sigA;
     BOOST_CHECK(sessionA.AggregateSignature(sigA));
@@ -830,7 +830,7 @@ BOOST_AUTO_TEST_CASE(test_session_concurrent_epochs)
     GetStrongRandBytes(Span{msgB, 32});
     BOOST_CHECK(sessionB.AggregateNonces(msgB));
     secp256k1_musig_partial_sig psigB;
-    BOOST_CHECK(sessionB.CreatePartialSignature(ckey2, psigB));
+    BOOST_CHECK(sessionB.CreatePartialSignature(0, ckey2, psigB));
     BOOST_CHECK(sessionB.AddPartialSignature(0, psigB));
     std::vector<unsigned char> sigB;
     BOOST_CHECK(sessionB.AggregateSignature(sigB));

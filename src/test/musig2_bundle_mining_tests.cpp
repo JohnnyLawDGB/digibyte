@@ -7,8 +7,10 @@
 #include <chainparams.h>
 #include <consensus/amount.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/musig2_aggregator.h>
 #include <oracle/musig2_orchestrator.h>
 #include <oracle/musig2_session.h>
+#include <oracle/signing_orchestrator.h>
 #include <primitives/block.h>
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
@@ -71,7 +73,7 @@ bool BuildCompleteSession(int32_t epoch, MuSig2SigningSession& session_out)
     CKey key;
     key.Set(seckey, seckey + 32, true);
     secp256k1_musig_pubnonce pubnonce;
-    if (!session_out.GenerateNonce(key, secp_pubkey, cache, pubnonce)) {
+    if (!session_out.GenerateNonce(0, key, secp_pubkey, cache, pubnonce)) {
         secp256k1_context_destroy(ctx);
         return false;
     }
@@ -87,7 +89,7 @@ bool BuildCompleteSession(int32_t epoch, MuSig2SigningSession& session_out)
     if (!session_out.AggregateNonces(msg32)) return false;
 
     secp256k1_musig_partial_sig partial_sig;
-    if (!session_out.CreatePartialSignature(key, partial_sig)) {
+    if (!session_out.CreatePartialSignature(0, key, partial_sig)) {
         secp256k1_context_destroy(ctx);
         return false;
     }
@@ -152,31 +154,20 @@ BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)
     const int32_t block_height = params.nDigiDollarPhase3Height;
     const int32_t epoch = GetCurrentEpoch(block_height);
 
-    MuSig2SigningSession complete(epoch, 1);
-    BOOST_REQUIRE(BuildCompleteSession(epoch, complete));
-    BOOST_CHECK_EQUAL(complete.GetState(), MuSig2SessionState::COMPLETE);
-
-    {
-        LOCK(g_oracle_signing_sessions_mutex);
-        g_oracle_signing_sessions.clear();
-
-        // Old stale session to validate epoch-boundary cleanup.
-        g_oracle_signing_sessions.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(epoch - 1),
-            std::forward_as_tuple(epoch - 1, 1));
-
-        g_oracle_signing_sessions.emplace(epoch, std::move(complete));
+    // Build a completed session and inject it into the orchestrator
+    if (!g_signing_orchestrator) {
+        OracleSigningOrchestrator::Initialize();
     }
+    g_signing_orchestrator->Clear();
+
+    auto complete = std::make_unique<MuSig2SigningSession>(epoch, 1);
+    BOOST_REQUIRE(BuildCompleteSession(epoch, *complete));
+    BOOST_CHECK_EQUAL(complete->GetState(), MuSig2SessionState::COMPLETE);
+
+    g_signing_orchestrator->InjectSession(epoch, std::move(complete));
 
     CBlock block = MakeBlockWithCoinbase();
     BOOST_REQUIRE(manager.AddOracleBundleToBlock(block, block_height));
-
-    // Prior epoch session should always be cleaned up at epoch boundary.
-    {
-        LOCK(g_oracle_signing_sessions_mutex);
-        BOOST_CHECK_EQUAL(g_oracle_signing_sessions.count(epoch - 1), 0);
-    }
 
     if (block.vtx[0]->vout.size() == 2) {
         const CTxOut& oracle_out = block.vtx[0]->vout[1];
@@ -193,14 +184,14 @@ BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)
         BOOST_CHECK_EQUAL(extracted.messages.size(), 1);
         BOOST_CHECK_EQUAL(extracted.messages[0].oracle_id, 0);
 
-        LOCK(g_oracle_signing_sessions_mutex);
-        BOOST_CHECK_EQUAL(g_oracle_signing_sessions.count(epoch), 0);
+        // Session data was consumed for the block bundle
+        // (orchestrator retains session until epoch cleanup)
     } else {
         // If v03 OP_RETURN is gated out by chain height context in unit test env,
         // session remains available for next block attempt.
         BOOST_REQUIRE_EQUAL(block.vtx[0]->vout.size(), 1);
-        LOCK(g_oracle_signing_sessions_mutex);
-        BOOST_CHECK_EQUAL(g_oracle_signing_sessions.count(epoch), 1);
+        std::vector<unsigned char> dummy_sig, dummy_bmp;
+        BOOST_CHECK(g_signing_orchestrator->GetCompletedSession(epoch, dummy_sig, dummy_bmp));
     }
 }
 

@@ -62,6 +62,12 @@ void OracleSigningOrchestrator::Clear()
     m_oracle_key_cached = false;
 }
 
+void OracleSigningOrchestrator::InjectSession(int32_t epoch, std::unique_ptr<MuSig2SigningSession> session)
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    m_signing_sessions[epoch] = std::move(session);
+}
+
 OracleSigningOrchestrator& OracleSigningOrchestrator::GetInstance()
 {
     assert(g_signing_orchestrator);
@@ -225,100 +231,115 @@ void OracleSigningOrchestrator::OnBlockConnected(
         m_aggregator = std::make_unique<MuSig2OracleAggregator>();
     }
 
-    // ── Step 1: Oracle generates nonce on new epoch ──
-    if (is_oracle && state == MuSig2SessionState::CREATED) {
-        const CKey* our_key = GetOracleSigningKey();
-        uint8_t our_id = GetOracleId();
+    // ── Step 1: Oracle generates nonces for ALL local oracle IDs on new epoch ──
+    if (is_oracle && (state == MuSig2SessionState::CREATED || state == MuSig2SessionState::NONCES_COLLECTING)) {
+        OracleManager& om = OracleManager::GetInstance();
+        const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
 
-        if (our_key && our_key->IsValid()) {
-            std::vector<uint8_t> oracle_ids;
-            const auto& nodes = Params().GetOracleNodes();
-            for (size_t i = 0; i < nodes.size() && i < ORACLE_ACTIVE_COUNT; ++i) {
-                oracle_ids.push_back(static_cast<uint8_t>(i));
-            }
+        // Build full oracle ID list for key aggregation
+        std::vector<uint8_t> all_oracle_ids;
+        const auto& nodes = Params().GetOracleNodes();
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            if (nodes[i].is_active) all_oracle_ids.push_back(static_cast<uint8_t>(i));
+        }
 
-            secp256k1_xonly_pubkey agg_pk;
-            secp256k1_musig_keyagg_cache cache;
-            if (m_aggregator->ComputeAggregatePubkey(oracle_ids, agg_pk, cache)) {
-                CPubKey cpk = our_key->GetPubKey();
-                secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-                secp256k1_pubkey our_pubkey;
-                bool parsed = secp256k1_ec_pubkey_parse(ctx, &our_pubkey, cpk.data(), cpk.size());
+        secp256k1_xonly_pubkey agg_pk;
+        secp256k1_musig_keyagg_cache cache;
+        if (m_aggregator->ComputeAggregatePubkey(all_oracle_ids, agg_pk, cache)) {
+            secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
-                if (parsed) {
-                    secp256k1_musig_pubnonce pubnonce;
-                    if (session->GenerateNonce(*our_key, our_pubkey, cache, pubnonce)) {
-                        session->AddPubnonce(our_id, pubnonce);
+            for (uint32_t oid : local_ids) {
+                uint8_t oid8 = static_cast<uint8_t>(oid);
+                // Skip if already generated nonce for this oracle
+                if (m_nonce_broadcast_tracker[current_epoch].count(oid8)) continue;
 
-                        unsigned char ser_nonce[66];
-                        if (secp256k1_musig_pubnonce_serialize(ctx, ser_nonce, &pubnonce)) {
-                            OracleMusigNonceMsg nonce_msg;
-                            nonce_msg.epoch = current_epoch;
-                            nonce_msg.oracle_id = our_id;
-                            nonce_msg.pubnonce.assign(ser_nonce, ser_nonce + 66);
+                OracleNode* onode = om.GetOracleNode(oid);
+                if (!onode) continue;
+                CKey key = onode->GetOraclePrivateKey();
+                if (!key.IsValid()) continue;
+                CPubKey cpk = key.GetPubKey();
 
-                            BroadcastMusigNonce(nonce_msg);
-                            m_nonce_broadcast_tracker[current_epoch].insert(our_id);
+                secp256k1_pubkey secp_pk;
+                if (!secp256k1_ec_pubkey_parse(ctx, &secp_pk, cpk.data(), cpk.size())) continue;
 
-                            LogPrintf("Oracle: Generated and broadcast nonce for epoch %d (oracle_id=%d)\n",
-                                     current_epoch, our_id);
-                        }
+                secp256k1_musig_pubnonce pubnonce;
+                if (session->GenerateNonce(oid8, key, secp_pk, cache, pubnonce)) {
+                    session->AddPubnonce(oid8, pubnonce);
+
+                    unsigned char ser_nonce[66];
+                    if (secp256k1_musig_pubnonce_serialize(ctx, ser_nonce, &pubnonce)) {
+                        OracleMusigNonceMsg nonce_msg;
+                        nonce_msg.epoch = current_epoch;
+                        nonce_msg.oracle_id = oid8;
+                        nonce_msg.pubnonce.assign(ser_nonce, ser_nonce + 66);
+
+                        BroadcastMusigNonce(nonce_msg);
+                        m_nonce_broadcast_tracker[current_epoch].insert(oid8);
+
+                        LogPrintf("Oracle: Generated and broadcast nonce for epoch %d (oracle_id=%d)\n",
+                                 current_epoch, oid8);
                     }
                 }
-                secp256k1_context_destroy(ctx);
-            } else {
-                LogPrintf("Oracle: Failed to compute aggregate pubkey for epoch %d\n", current_epoch);
             }
+            secp256k1_context_destroy(ctx);
+        } else {
+            LogPrintf("Oracle: Failed to compute aggregate pubkey for epoch %d\n", current_epoch);
         }
     }
 
     state = session->GetState();
 
-    // ── Step 2: Oracle creates partial sig when nonces complete ──
+    // ── Step 2: Oracle creates partial sigs for ALL local oracle IDs when nonces complete ──
     if (is_oracle && state == MuSig2SessionState::NONCES_COMPLETE) {
-        const CKey* our_key = GetOracleSigningKey();
-        uint8_t our_id = GetOracleId();
+        uint64_t consensus_price = 0;
+        int64_t consensus_timestamp = 0;
+        bool have_consensus = false;
 
-        if (our_key && our_key->IsValid() &&
-            m_partialsig_broadcast_tracker[current_epoch].count(our_id) == 0) {
+        if (g_oracle_bundle_manager) {
+            have_consensus = OracleBundleManager::GetInstance().ComputeConsensusValues(
+                consensus_price, consensus_timestamp);
+        }
 
-            uint64_t consensus_price = 0;
-            int64_t consensus_timestamp = 0;
-            bool have_consensus = false;
+        if (have_consensus) {
+            unsigned char msg32[32];
+            ComputeOracleMessageHash(current_epoch, consensus_price, consensus_timestamp, msg32);
 
-            if (g_oracle_bundle_manager) {
-                have_consensus = OracleBundleManager::GetInstance().ComputeConsensusValues(
-                    consensus_price, consensus_timestamp);
-            }
+            if (session->AggregateNonces(msg32)) {
+                LogPrintf("Oracle: Nonces aggregated for epoch %d, SIGNING\n", current_epoch);
 
-            if (have_consensus) {
-                unsigned char msg32[32];
-                ComputeOracleMessageHash(current_epoch, consensus_price, consensus_timestamp, msg32);
+                OracleManager& om = OracleManager::GetInstance();
+                const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
+                secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
-                if (session->AggregateNonces(msg32)) {
-                    LogPrintf("Oracle: Nonces aggregated for epoch %d, SIGNING\n", current_epoch);
+                for (uint32_t oid : local_ids) {
+                    uint8_t oid8 = static_cast<uint8_t>(oid);
+                    if (m_partialsig_broadcast_tracker[current_epoch].count(oid8)) continue;
+
+                    OracleNode* onode = om.GetOracleNode(oid);
+                    if (!onode) continue;
+                    CKey key = onode->GetOraclePrivateKey();
+                    if (!key.IsValid()) continue;
 
                     secp256k1_musig_partial_sig partial_sig;
-                    if (session->CreatePartialSignature(*our_key, partial_sig)) {
-                        session->AddPartialSignature(our_id, partial_sig);
+                    if (session->CreatePartialSignature(oid8, key, partial_sig)) {
+                        session->AddPartialSignature(oid8, partial_sig);
 
-                        secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
                         unsigned char ser_psig[32];
                         if (secp256k1_musig_partial_sig_serialize(ctx, ser_psig, &partial_sig)) {
                             OracleMusigPartialSigMsg psig_msg;
                             psig_msg.epoch = current_epoch;
-                            psig_msg.oracle_id = our_id;
+                            psig_msg.oracle_id = oid8;
                             psig_msg.partial_sig.assign(ser_psig, ser_psig + 32);
 
                             BroadcastMusigPartialSig(psig_msg);
-                            m_partialsig_broadcast_tracker[current_epoch].insert(our_id);
+                            m_partialsig_broadcast_tracker[current_epoch].insert(oid8);
 
                             LogPrintf("Oracle: Broadcast partial sig for epoch %d (oracle_id=%d)\n",
-                                     current_epoch, our_id);
+                                     current_epoch, oid8);
                         }
-                        secp256k1_context_destroy(ctx);
                     }
                 }
+                secp256k1_context_destroy(ctx);
             }
         }
     }
@@ -372,6 +393,27 @@ bool OracleSigningOrchestrator::BroadcastMusigPartialSig(const OracleMusigPartia
     });
 
     return true;
+}
+
+// ============================================================================
+// Query completed session for block assembly
+// ============================================================================
+
+bool OracleSigningOrchestrator::GetCompletedSession(
+    int32_t epoch,
+    std::vector<unsigned char>& aggregate_sig_out,
+    std::vector<unsigned char>& participation_bitmap_out) const
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    auto it = m_signing_sessions.find(epoch);
+    if (it == m_signing_sessions.end()) return false;
+
+    const MuSig2SigningSession& session = *it->second;
+    if (session.GetState() != MuSig2SessionState::COMPLETE) return false;
+
+    aggregate_sig_out = session.GetAggregateSig();
+    participation_bitmap_out = session.GetParticipationBitmap();
+    return !aggregate_sig_out.empty();
 }
 
 // ============================================================================

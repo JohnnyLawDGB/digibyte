@@ -56,6 +56,11 @@ public:
     bool BroadcastMusigPartialSig(const OracleMusigPartialSigMsg& msg);
     void SetConnman(CConnman* connman) { m_connman = connman; }
 
+    // Query completed session for block assembly
+    bool GetCompletedSession(int32_t epoch,
+                             std::vector<unsigned char>& aggregate_sig_out,
+                             std::vector<unsigned char>& participation_bitmap_out) const;
+
     // Utilities
     static int32_t ComputeEpoch(int32_t block_height, int32_t epoch_length);
     static void ComputeOracleMessageHash(int32_t epoch, uint64_t price,
@@ -66,6 +71,9 @@ public:
     void Start();
     void Stop();
     void Clear();
+
+    /** Inject a pre-built session (test use only). Takes ownership. */
+    void InjectSession(int32_t epoch, std::unique_ptr<MuSig2SigningSession> session);
 
     static OracleSigningOrchestrator& GetInstance();
     static void Initialize();

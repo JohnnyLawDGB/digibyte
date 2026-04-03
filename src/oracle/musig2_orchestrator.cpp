@@ -47,6 +47,7 @@ void MuSig2SessionManager::PruneOldSessions(int32_t current_epoch)
 }
 
 bool MuSig2SessionManager::GenerateNonceForEpoch(int32_t epoch,
+                                                   uint8_t oracle_id,
                                                    const CKey& signing_key,
                                                    const secp256k1_pubkey& pubkey,
                                                    const secp256k1_musig_keyagg_cache& cache,
@@ -55,7 +56,7 @@ bool MuSig2SessionManager::GenerateNonceForEpoch(int32_t epoch,
     LOCK(m_mutex);
     auto it = m_sessions.find(epoch);
     if (it == m_sessions.end()) return false;
-    return it->second.GenerateNonce(signing_key, pubkey, cache, pubnonce_out);
+    return it->second.GenerateNonce(oracle_id, signing_key, pubkey, cache, pubnonce_out);
 }
 
 bool MuSig2SessionManager::AddNonceForEpoch(int32_t epoch, uint8_t oracle_id,

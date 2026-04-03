@@ -67,6 +67,7 @@ public:
     // ---- Round 1: Nonce generation and collection ----
 
     bool GenerateNonceForEpoch(int32_t epoch,
+                               uint8_t oracle_id,
                                const CKey& signing_key,
                                const secp256k1_pubkey& pubkey,
                                const secp256k1_musig_keyagg_cache& cache,

@@ -17,14 +17,11 @@ MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers)
     : m_epoch(epoch),
       m_min_signers(min_signers),
       m_state(MuSig2SessionState::CREATED),
-      m_has_secnonce(false),
-      m_secnonce_used(false),
       m_creation_height(epoch),
       m_timeout_blocks(20)
 {
     m_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
     assert(m_ctx != nullptr);
-    memset(&m_secnonce, 0, sizeof(m_secnonce));
     memset(&m_keyagg_cache, 0, sizeof(m_keyagg_cache));
     memset(&m_aggnonce, 0, sizeof(m_aggnonce));
     memset(&m_session, 0, sizeof(m_session));
@@ -32,8 +29,10 @@ MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers)
 
 MuSig2SigningSession::~MuSig2SigningSession()
 {
-    // Always zero the secret nonce in destructor as safety net
-    memory_cleanse(&m_secnonce, sizeof(m_secnonce));
+    // Zero all secret nonces in destructor as safety net
+    for (auto& [id, nonce] : m_secnonces) {
+        memory_cleanse(&nonce, sizeof(nonce));
+    }
     if (m_ctx) {
         secp256k1_context_destroy(m_ctx);
         m_ctx = nullptr;
@@ -50,11 +49,8 @@ MuSig2SigningSession::MuSig2SigningSession(MuSig2SigningSession&& other) noexcep
     m_ctx = other.m_ctx;
     other.m_ctx = nullptr;
 
-    m_secnonce = other.m_secnonce;
-    memory_cleanse(&other.m_secnonce, sizeof(other.m_secnonce));
-    m_has_secnonce = other.m_has_secnonce;
-    other.m_has_secnonce = false;
-    m_secnonce_used = other.m_secnonce_used;
+    m_secnonces = std::move(other.m_secnonces);
+    m_secnonces_used = std::move(other.m_secnonces_used);
 
     m_keyagg_cache = other.m_keyagg_cache;
     m_pubnonces = std::move(other.m_pubnonces);
@@ -72,7 +68,11 @@ MuSig2SigningSession& MuSig2SigningSession::operator=(MuSig2SigningSession&& oth
     if (this == &other) return *this;
 
     // Clean up current state
-    memory_cleanse(&m_secnonce, sizeof(m_secnonce));
+    for (auto& [id, nonce] : m_secnonces) {
+        memory_cleanse(&nonce, sizeof(nonce));
+    }
+    m_secnonces.clear();
+    m_secnonces_used.clear();
     if (m_ctx) {
         secp256k1_context_destroy(m_ctx);
         m_ctx = nullptr;
@@ -85,11 +85,8 @@ MuSig2SigningSession& MuSig2SigningSession::operator=(MuSig2SigningSession&& oth
     m_ctx = other.m_ctx;
     other.m_ctx = nullptr;
 
-    m_secnonce = other.m_secnonce;
-    memory_cleanse(&other.m_secnonce, sizeof(other.m_secnonce));
-    m_has_secnonce = other.m_has_secnonce;
-    other.m_has_secnonce = false;
-    m_secnonce_used = other.m_secnonce_used;
+    m_secnonces = std::move(other.m_secnonces);
+    m_secnonces_used = std::move(other.m_secnonces_used);
 
     m_keyagg_cache = other.m_keyagg_cache;
     m_pubnonces = std::move(other.m_pubnonces);
@@ -123,8 +120,7 @@ bool MuSig2SigningSession::InitializePassive(const secp256k1_musig_keyagg_cache&
     LOCK(m_mutex);
     if (m_state != MuSig2SessionState::CREATED) return false;
     m_keyagg_cache = cache;
-    m_has_secnonce = false;
-    m_secnonce_used = true;
+    // Passive nodes have no local secret nonces
     m_state = MuSig2SessionState::NONCES_COLLECTING;
     return true;
 }
@@ -133,18 +129,21 @@ bool MuSig2SigningSession::InitializePassive(const secp256k1_musig_keyagg_cache&
 // Round 1a: Generate local nonce
 // ============================================================================
 
-bool MuSig2SigningSession::GenerateNonce(const CKey& signing_key,
+bool MuSig2SigningSession::GenerateNonce(uint8_t oracle_id,
+                                         const CKey& signing_key,
                                          const secp256k1_pubkey& pubkey,
                                          const secp256k1_musig_keyagg_cache& cache,
                                          secp256k1_musig_pubnonce& pubnonce_out)
 {
     LOCK(m_mutex);
 
-    if (m_state != MuSig2SessionState::CREATED) return false;
+    // Allow CREATED (first call) or NONCES_COLLECTING (subsequent local oracles)
+    if (m_state != MuSig2SessionState::CREATED &&
+        m_state != MuSig2SessionState::NONCES_COLLECTING) return false;
     if (!signing_key.IsValid()) return false;
-    if (m_has_secnonce) return false; // already generated
+    if (m_secnonces.count(oracle_id)) return false; // already generated for this oracle
 
-    // Store the key aggregation cache for later use
+    // Store the key aggregation cache (same for all local oracles)
     m_keyagg_cache = cache;
 
     // Generate session randomness
@@ -152,21 +151,22 @@ bool MuSig2SigningSession::GenerateNonce(const CKey& signing_key,
     GetStrongRandBytes(Span{session_secrand, 32});
 
     // Generate secnonce + pubnonce
-    // Passing seckey provides "misuse resistance" per secp256k1 docs
+    secp256k1_musig_secnonce secnonce;
     if (!secp256k1_musig_nonce_gen(m_ctx,
-                                    &m_secnonce,
+                                    &secnonce,
                                     &pubnonce_out,
                                     session_secrand,
-                                    signing_key.begin(), // 32-byte raw secret key
+                                    signing_key.begin(),
                                     &pubkey,
                                     nullptr,  // msg32 — not known yet
                                     &m_keyagg_cache,
-                                    nullptr)) { // extra_input32
-        memory_cleanse(&m_secnonce, sizeof(m_secnonce));
+                                    nullptr)) {
+        memory_cleanse(&secnonce, sizeof(secnonce));
         return false;
     }
 
-    m_has_secnonce = true;
+    m_secnonces[oracle_id] = secnonce;
+    memory_cleanse(&secnonce, sizeof(secnonce)); // clear stack copy
     m_state = MuSig2SessionState::NONCES_COLLECTING;
     return true;
 }
@@ -263,14 +263,19 @@ bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
 // Round 2a: Create local partial signature
 // ============================================================================
 
-bool MuSig2SigningSession::CreatePartialSignature(const CKey& signing_key,
+bool MuSig2SigningSession::CreatePartialSignature(uint8_t oracle_id,
+                                                   const CKey& signing_key,
                                                    secp256k1_musig_partial_sig& partial_sig_out)
 {
     LOCK(m_mutex);
 
     if (m_state != MuSig2SessionState::SIGNING) return false;
     if (!signing_key.IsValid()) return false;
-    if (!m_has_secnonce || m_secnonce_used) return false;
+
+    // Check we have a secnonce for this oracle and it hasn't been used
+    auto nonce_it = m_secnonces.find(oracle_id);
+    if (nonce_it == m_secnonces.end()) return false;
+    if (m_secnonces_used.count(oracle_id)) return false;
 
     // Create keypair from CKey for secp256k1_musig_partial_sign
     secp256k1_keypair keypair;
@@ -278,10 +283,10 @@ bool MuSig2SigningSession::CreatePartialSignature(const CKey& signing_key,
         return false;
     }
 
-    // Sign — this ZEROES m_secnonce on success (secp256k1 guarantee)
+    // Sign — this ZEROES the secnonce on success (secp256k1 guarantee)
     int ret = secp256k1_musig_partial_sign(m_ctx,
                                             &partial_sig_out,
-                                            &m_secnonce,
+                                            &nonce_it->second,
                                             &keypair,
                                             &m_keyagg_cache,
                                             &m_session);
@@ -289,17 +294,12 @@ bool MuSig2SigningSession::CreatePartialSignature(const CKey& signing_key,
     // Zero the keypair regardless of success
     memory_cleanse(&keypair, sizeof(keypair));
 
-    if (!ret) {
-        // Explicitly zero secnonce on failure too
-        memory_cleanse(&m_secnonce, sizeof(m_secnonce));
-        m_secnonce_used = true;
-        return false;
-    }
+    // Mark this oracle's nonce as consumed and cleanse
+    memory_cleanse(&nonce_it->second, sizeof(nonce_it->second));
+    m_secnonces.erase(nonce_it);
+    m_secnonces_used.insert(oracle_id);
 
-    // secnonce was zeroed by secp256k1_musig_partial_sign, but belt-and-suspenders
-    memory_cleanse(&m_secnonce, sizeof(m_secnonce));
-    m_secnonce_used = true;
-    return true;
+    return ret != 0;
 }
 
 // ============================================================================
@@ -407,11 +407,11 @@ void MuSig2SigningSession::CheckTimeout(int32_t current_height)
     }
 
     if (current_height >= m_creation_height + m_timeout_blocks) {
-        // Zero secnonce if still held
-        if (m_has_secnonce && !m_secnonce_used) {
-            memory_cleanse(&m_secnonce, sizeof(m_secnonce));
-            m_secnonce_used = true;
+        // Zero all held secret nonces on timeout
+        for (auto& [id, nonce] : m_secnonces) {
+            memory_cleanse(&nonce, sizeof(nonce));
         }
+        m_secnonces.clear();
         m_state = MuSig2SessionState::FAILED;
     }
 }

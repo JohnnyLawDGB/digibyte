@@ -314,28 +314,50 @@ sync_all_nodes() {
     return 1
 }
 
+# Oracle distribution across nodes:
+#   Bob:     oracles 0, 1        (2 oracles)
+#   Alice:   oracles 2, 3        (2 oracles)
+#   Charlie: oracles 4, 5        (2 oracles)
+#   Dave:    oracles 6, 7, 8     (3 oracles)
+#   Eve:     oracles 9, 10       (2 oracles)
+# Total: 11 oracles across 5 nodes — MuSig2 nonces flow over real P2P
+
 refresh_oracle_prices() {
     local price=${1:-0.01}
-    for oid in $(seq 0 10); do
-        $BOB_CLI sendoracleprice $price $oid 2>/dev/null || true
-    done
+    # Send prices from each oracle on its host node
+    $BOB_CLI sendoracleprice $price 0 2>/dev/null || true
+    $BOB_CLI sendoracleprice $price 1 2>/dev/null || true
+    $ALICE_CLI sendoracleprice $price 2 2>/dev/null || true
+    $ALICE_CLI sendoracleprice $price 3 2>/dev/null || true
+    $CHARLIE_CLI sendoracleprice $price 4 2>/dev/null || true
+    $CHARLIE_CLI sendoracleprice $price 5 2>/dev/null || true
+    $DAVE_CLI sendoracleprice $price 6 2>/dev/null || true
+    $DAVE_CLI sendoracleprice $price 7 2>/dev/null || true
+    $DAVE_CLI sendoracleprice $price 8 2>/dev/null || true
+    $EVE_CLI sendoracleprice $price 9 2>/dev/null || true
+    $EVE_CLI sendoracleprice $price 10 2>/dev/null || true
     $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
     sleep 2
 }
 
 start_all_oracles() {
-    # Start all 11 oracles on Bob's node (6-of-11 threshold)
+    # Distribute 11 oracles across all 5 nodes (6-of-11 threshold)
+    # Bob: oracles 0, 1
     $BOB_CLI startoracle 0 "$ORACLE_KEY_0" 2>/dev/null || true
     $BOB_CLI startoracle 1 "$ORACLE_KEY_1" 2>/dev/null || true
-    $BOB_CLI startoracle 2 "$ORACLE_KEY_2" 2>/dev/null || true
-    $BOB_CLI startoracle 3 "$ORACLE_KEY_3" 2>/dev/null || true
-    $BOB_CLI startoracle 4 "$ORACLE_KEY_4" 2>/dev/null || true
-    $BOB_CLI startoracle 5 "$ORACLE_KEY_5" 2>/dev/null || true
-    $BOB_CLI startoracle 6 "$ORACLE_KEY_6" 2>/dev/null || true
-    $BOB_CLI startoracle 7 "$ORACLE_KEY_7" 2>/dev/null || true
-    $BOB_CLI startoracle 8 "$ORACLE_KEY_8" 2>/dev/null || true
-    $BOB_CLI startoracle 9 "$ORACLE_KEY_9" 2>/dev/null || true
-    $BOB_CLI startoracle 10 "$ORACLE_KEY_10" 2>/dev/null || true
+    # Alice: oracles 2, 3
+    $ALICE_CLI startoracle 2 "$ORACLE_KEY_2" 2>/dev/null || true
+    $ALICE_CLI startoracle 3 "$ORACLE_KEY_3" 2>/dev/null || true
+    # Charlie: oracles 4, 5
+    $CHARLIE_CLI startoracle 4 "$ORACLE_KEY_4" 2>/dev/null || true
+    $CHARLIE_CLI startoracle 5 "$ORACLE_KEY_5" 2>/dev/null || true
+    # Dave: oracles 6, 7, 8
+    $DAVE_CLI startoracle 6 "$ORACLE_KEY_6" 2>/dev/null || true
+    $DAVE_CLI startoracle 7 "$ORACLE_KEY_7" 2>/dev/null || true
+    $DAVE_CLI startoracle 8 "$ORACLE_KEY_8" 2>/dev/null || true
+    # Eve: oracles 9, 10
+    $EVE_CLI startoracle 9 "$ORACLE_KEY_9" 2>/dev/null || true
+    $EVE_CLI startoracle 10 "$ORACLE_KEY_10" 2>/dev/null || true
 }
 
 # Tier descriptions (9 tiers: 0-8)
@@ -1544,9 +1566,12 @@ PRICE_BEFORE_27B=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N
 echo "Price BEFORE 5-oracle update: \$$PRICE_BEFORE_27B"
 
 # Send $0.02 from only 5 oracles (indices 0-4) — below 6-of-11 threshold
-for oid in 0 1 2 3 4; do
-    $BOB_CLI sendoracleprice 0.02 $oid 2>/dev/null || true
-done
+# Each oracle sends from its host node
+$BOB_CLI sendoracleprice 0.02 0 2>/dev/null || true
+$BOB_CLI sendoracleprice 0.02 1 2>/dev/null || true
+$ALICE_CLI sendoracleprice 0.02 2 2>/dev/null || true
+$ALICE_CLI sendoracleprice 0.02 3 2>/dev/null || true
+$CHARLIE_CLI sendoracleprice 0.02 4 2>/dev/null || true
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 2
 
@@ -1568,10 +1593,18 @@ echo "Sending \$0.01 from 10 oracles and \$0.05 from 1 oracle (outlier)..."
 echo "Median should filter the outlier and converge on \$0.01."
 echo ""
 
-for oid in 0 1 2 3 4 5 6 7 8 9; do
-    $BOB_CLI sendoracleprice 0.01 $oid 2>/dev/null || true
-done
-$BOB_CLI sendoracleprice 0.05 10 2>/dev/null || true
+# Send $0.01 from 10 oracles on their host nodes
+$BOB_CLI sendoracleprice 0.01 0 2>/dev/null || true
+$BOB_CLI sendoracleprice 0.01 1 2>/dev/null || true
+$ALICE_CLI sendoracleprice 0.01 2 2>/dev/null || true
+$ALICE_CLI sendoracleprice 0.01 3 2>/dev/null || true
+$CHARLIE_CLI sendoracleprice 0.01 4 2>/dev/null || true
+$CHARLIE_CLI sendoracleprice 0.01 5 2>/dev/null || true
+$DAVE_CLI sendoracleprice 0.01 6 2>/dev/null || true
+$DAVE_CLI sendoracleprice 0.01 7 2>/dev/null || true
+$DAVE_CLI sendoracleprice 0.01 8 2>/dev/null || true
+# Oracle 10 on Eve sends the outlier
+$EVE_CLI sendoracleprice 0.05 10 2>/dev/null || true
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 2
 

@@ -22,6 +22,7 @@
 #include <random.h>
 #include <test/util/setup_common.h>
 #include <oracle/musig2_session.h>
+#include <oracle/musig2_session_manager.h>
 
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
@@ -845,6 +846,186 @@ BOOST_AUTO_TEST_CASE(test_session_concurrent_epochs)
     BOOST_CHECK(sigA != sigB);
 
     secp256k1_context_destroy(ctx);
+}
+
+// ============================================================================
+// test_session_rejects_invalid_partial_sig_content [RH-02]
+// A malicious oracle submitting garbage partial signatures should be detected
+// and rejected BEFORE they can burn honest signers' one-time nonces.
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_session_rejects_invalid_partial_sig_content)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+
+    constexpr size_t N = 2;
+    constexpr uint8_t MIN_SIGNERS = 2;
+    constexpr int32_t EPOCH = 200;
+
+    // Generate 2 keypairs
+    unsigned char seckeys[N][32];
+    secp256k1_keypair keypairs[N];
+    secp256k1_pubkey pubkeys[N];
+    for (size_t i = 0; i < N; i++) {
+        BOOST_REQUIRE(MakeRandomKeypair(ctx, seckeys[i], &keypairs[i], &pubkeys[i]));
+    }
+
+    // Key aggregation
+    std::vector<const secp256k1_pubkey*> pubkey_ptrs(N);
+    for (size_t i = 0; i < N; i++) pubkey_ptrs[i] = &pubkeys[i];
+    secp256k1_xonly_pubkey agg_pk;
+    secp256k1_musig_keyagg_cache cache;
+    BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), N));
+
+    // Create session, generate nonce for signer 0
+    MuSig2SigningSession session(EPOCH, MIN_SIGNERS);
+    CKey ckey0 = MakeCKey(seckeys[0]);
+    secp256k1_musig_pubnonce pubnonce0;
+    BOOST_CHECK(session.GenerateNonce(0, ckey0, pubkeys[0], cache, pubnonce0));
+
+    // Generate nonce for signer 1 externally
+    secp256k1_musig_secnonce secnonce1;
+    secp256k1_musig_pubnonce pubnonce1;
+    unsigned char rand1[32];
+    GetStrongRandBytes(Span{rand1, 32});
+    BOOST_REQUIRE(secp256k1_musig_nonce_gen(ctx, &secnonce1, &pubnonce1,
+                                             rand1, seckeys[1], &pubkeys[1],
+                                             nullptr, &cache, nullptr));
+
+    // Collect pubnonces
+    BOOST_CHECK(session.AddPubnonce(0, pubnonce0));
+    BOOST_CHECK(session.AddPubnonce(1, pubnonce1));
+    BOOST_CHECK(session.HasEnoughNonces());
+
+    // Aggregate nonces with message
+    unsigned char msg[32];
+    GetStrongRandBytes(Span{msg, 32});
+    BOOST_CHECK(session.AggregateNonces(msg));
+    BOOST_CHECK(session.GetState() == MuSig2SessionState::SIGNING);
+
+    // Signer 0 creates honest partial sig
+    secp256k1_musig_partial_sig psig0;
+    BOOST_CHECK(session.CreatePartialSignature(0, ckey0, psig0));
+    BOOST_CHECK(session.AddPartialSignature(0, psig0));
+
+    // ATTACK: signer 1 submits a GARBAGE partial signature
+    // (random bytes that parse as a valid partial_sig struct but are wrong)
+    secp256k1_musig_partial_sig garbage_psig;
+    unsigned char garbage_bytes[32];
+    GetStrongRandBytes(Span{garbage_bytes, 32});
+    // Set the magic bytes so it looks valid to secp256k1
+    memcpy(garbage_psig.data, "\xeb\xfb\xce\x86", 4); // partial_sig magic
+    memcpy(garbage_psig.data + 4, garbage_bytes, 32);
+
+    // This is the critical test: AddPartialSignature should REJECT
+    // a partial sig that doesn't verify against signer 1's pubnonce.
+    //
+    // NOTE: The partial sig verification fix in AddPartialSignature only
+    // works when pubkeys were passed to AddPubnonce. If pubkeys were NOT
+    // provided (as in most P2P code paths via OnNonceReceived), the
+    // verification is silently skipped and garbage sigs are accepted.
+    //
+    // Test the WITHOUT-pubkey path (simulating P2P/OnNonceReceived):
+    bool accepted = session.AddPartialSignature(1, garbage_psig);
+
+    if (accepted) {
+        // BUG CONFIRMED: garbage partial sig was accepted via the
+        // no-pubkey code path. This means any P2P-received nonce
+        // (which doesn't include a pubkey) allows garbage partial
+        // sigs to burn honest signers' nonces.
+        std::vector<unsigned char> sig64;
+        bool agg_ok = session.AggregateSignature(sig64);
+        if (agg_ok) {
+            bool verify_ok = secp256k1_schnorrsig_verify(ctx, sig64.data(), msg, 32, &agg_pk);
+            BOOST_CHECK_MESSAGE(!verify_ok,
+                "CRITICAL: garbage partial sig produced a valid aggregate signature!");
+            BOOST_CHECK_MESSAGE(false,
+                "BUG [RH-02]: AddPartialSignature accepts unverified partial sigs "
+                "when pubkeys were not provided to AddPubnonce (the P2P path). "
+                "A malicious oracle can submit garbage to burn honest signers' nonces.");
+        }
+    } else {
+        // DEFENSE HOLDS: garbage partial sig was rejected
+        BOOST_CHECK(!accepted);
+    }
+
+    // Now test the WITH-pubkey path (verifying the fix works when pubkey IS provided):
+    {
+        MuSig2SigningSession session2(EPOCH + 1, MIN_SIGNERS);
+        CKey ckey0_2 = MakeCKey(seckeys[0]);
+        secp256k1_musig_pubnonce pn0_2;
+        BOOST_CHECK(session2.GenerateNonce(0, ckey0_2, pubkeys[0], cache, pn0_2));
+
+        secp256k1_musig_secnonce secnonce1_2;
+        secp256k1_musig_pubnonce pn1_2;
+        unsigned char rand1_2[32];
+        GetStrongRandBytes(Span{rand1_2, 32});
+        BOOST_REQUIRE(secp256k1_musig_nonce_gen(ctx, &secnonce1_2, &pn1_2,
+                                                 rand1_2, seckeys[1], &pubkeys[1],
+                                                 nullptr, &cache, nullptr));
+
+        // Pass pubkeys this time
+        BOOST_CHECK(session2.AddPubnonce(0, pn0_2, &pubkeys[0]));
+        BOOST_CHECK(session2.AddPubnonce(1, pn1_2, &pubkeys[1]));
+
+        unsigned char msg2[32];
+        GetStrongRandBytes(Span{msg2, 32});
+        BOOST_CHECK(session2.AggregateNonces(msg2));
+
+        secp256k1_musig_partial_sig psig0_2;
+        BOOST_CHECK(session2.CreatePartialSignature(0, ckey0_2, psig0_2));
+        BOOST_CHECK(session2.AddPartialSignature(0, psig0_2));
+
+        // Garbage should be rejected when pubkey IS available
+        secp256k1_musig_partial_sig garbage2;
+        memcpy(garbage2.data, "\xeb\xfb\xce\x86", 4);
+        unsigned char gb2[32];
+        GetStrongRandBytes(Span{gb2, 32});
+        memcpy(garbage2.data + 4, gb2, 32);
+        BOOST_CHECK_MESSAGE(!session2.AddPartialSignature(1, garbage2),
+            "Garbage partial sig should be rejected when pubkey is available");
+    }
+
+    secp256k1_context_destroy(ctx);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+// ============================================================================
+// Separate suite for session manager tests (needs manager header)
+// ============================================================================
+BOOST_FIXTURE_TEST_SUITE(musig2_session_manager_tests, BasicTestingSetup)
+
+// ============================================================================
+// test_session_manager_seen_sets_cleanup [RH-02]
+// m_seen_nonces and m_seen_partial_sigs must be pruned during cleanup
+// to prevent unbounded memory growth
+// ============================================================================
+BOOST_AUTO_TEST_CASE(test_session_manager_seen_sets_cleanup)
+{
+    MuSig2SessionManager manager(9, 100);
+
+    // Register some seen hashes
+    uint256 hash1, hash2;
+    GetStrongRandBytes(Span{hash1.begin(), 32});
+    GetStrongRandBytes(Span{hash2.begin(), 32});
+    BOOST_CHECK(manager.RegisterSeenNonce(hash1));
+    BOOST_CHECK(manager.RegisterSeenPartialSig(hash2));
+    BOOST_CHECK(manager.HasSeenNonce(hash1));
+    BOOST_CHECK(manager.HasSeenPartialSig(hash2));
+
+    // After CleanupOldSessions, the seen sets should ideally be bounded.
+    // Currently they are NOT pruned — this documents the gap.
+    // CleanupOldSessions only removes terminal sessions, not seen hashes.
+    manager.CleanupOldSessions(1000);
+
+    // The seen hashes survive cleanup — this is the memory leak:
+    bool nonce_survives = manager.HasSeenNonce(hash1);
+    bool psig_survives = manager.HasSeenPartialSig(hash2);
+    // This test documents current behavior. After the fix, these should
+    // be cleared or bounded.
+    BOOST_CHECK_MESSAGE(!nonce_survives || !psig_survives,
+        "LOW [RH-02]: m_seen_nonces/m_seen_partial_sigs grow unbounded. "
+        "CleanupOldSessions should prune stale entries.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

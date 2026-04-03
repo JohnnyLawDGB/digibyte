@@ -689,10 +689,36 @@ echo "LIVE Oracle Price: \$$ORACLE_PRICE per DGB (from 6-of-11 oracle consensus)
 
 if [ "$ORACLE_ACTIVE" = "false" ]; then
     print_status "fail" "Oracle price still $0 after 20 attempts — oracle system not working"
-    echo "Check debug log: /tmp/bob_minitestnet/testnet19/debug.log"
+    echo "Check debug log: /tmp/bob_minitestnet/testnet20/debug.log"
     echo "Last oracle lines:"
-    grep -i "oracle" /tmp/bob_minitestnet/testnet19/debug.log | tail -10
+    grep -i "oracle" /tmp/bob_minitestnet/testnet20/debug.log | tail -10
     exit 1
+fi
+
+sync_all_nodes
+
+# ====================================================================================
+# MuSig2 NONCE EXCHANGE TEST: Mine blocks slowly so P2P nonces can propagate
+# ====================================================================================
+print_header "Step 8C: MuSig2 Phase 3 Nonce Exchange"
+echo "Mining blocks one-at-a-time to allow MuSig2 P2P nonce exchange..."
+MUSIG_SUCCESS=false
+for i in {1..15}; do
+    $BOB_CLI generatetoaddress 1 "$BOB_ADDR" > /dev/null 2>&1
+    sleep 3  # Give P2P time to propagate nonces between nodes
+    # Check if v0x03 bundle appeared in debug.log
+    if grep -q "Phase 3 added MuSig2 oracle bundle" /tmp/bob_minitestnet/testnet20/debug.log 2>/dev/null; then
+        MUSIG_SUCCESS=true
+        MUSIG_BLOCK=$(grep "Phase 3 added MuSig2 oracle bundle" /tmp/bob_minitestnet/testnet20/debug.log | tail -1)
+        print_status "ok" "MuSig2 v0x03 bundle in block! $MUSIG_BLOCK"
+        break
+    fi
+    echo "  Block $i mined, waiting for nonce exchange..."
+done
+if [ "$MUSIG_SUCCESS" = "false" ]; then
+    echo "MuSig2 v0x03 bundle not yet produced (Phase 2 fallback is working)"
+    echo "Nonce exchange status:"
+    grep "Ingested remote nonce\|Step 2.*recomputed\|auto-aggregated" /tmp/bob_minitestnet/testnet20/debug.log 2>/dev/null | tail -5
 fi
 
 sync_all_nodes

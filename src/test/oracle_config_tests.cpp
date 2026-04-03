@@ -285,9 +285,9 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
         }
     }
 
-    // TEMPORARY: All 11 test oracles are active (no placeholders with test keys)
+    // 11 active oracles + 4 reserved placeholders = 15 total entries
     BOOST_CHECK_EQUAL(active_count, 11);
-    BOOST_CHECK_EQUAL((int)oracle_nodes.size(), 11);
+    BOOST_CHECK_EQUAL((int)oracle_nodes.size(), 15);
 
     LogPrintf("Phase Two oracle count: %d active, %d total\n",
               active_count, oracle_nodes.size());

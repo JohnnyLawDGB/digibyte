@@ -46,14 +46,21 @@ echo "=========================================="
 echo "Test started: $(date)"
 echo ""
 
-# Configuration - Multi-Oracle Keys (5-of-9 threshold)
+# Configuration - Multi-Oracle Keys (6-of-11 threshold)
+# Deterministic keys derived from SHA256("digibyte_testnet_oracle_N")
 ORACLE_KEY_0="952f219b8442ac40e5d356c0dbf7a76d81904d196e859a75b63dfb02346501fe"
 ORACLE_KEY_1="7ede2d9b28569bcca3576e7982ce778cd3be4a6a0f1c99472c057e81cdebb0d8"
 ORACLE_KEY_2="dc025fb2dab1cb3bbb3a6763e53b32e7d6fa8c39c16465e3aae80dcaf684adfe"
 ORACLE_KEY_3="2e2e060fdcd5e26f9c5dc1ba422d9b1a7b33356c156fd128da453719e466e7ac"
 ORACLE_KEY_4="8d347622f08b18341a8edb94e6420e2c916fbacc43f7325219026734849a1d28"
+ORACLE_KEY_5="f97bf972b029ebbecf6bb80cc484dc9aa99675301d6fa8d73415d7f5a0c46b2b"
+ORACLE_KEY_6="fad9aa44fe6b6203637c21f72ef74364bb1aefeace9fc1ef78182a7ce48daac0"
+ORACLE_KEY_7="1ce799b137d7b6fb95393d2b71f5595ba3b37a805cb9e52ec6475f12011b9700"
+ORACLE_KEY_8="767219a4c4d33be59322ecaa0b6593db2256b9c0151597f04d08a75b1b469eee"
+ORACLE_KEY_9="6f4fdc8ef95905436175cd9048c182aa0d1dc797711ff262916de0c31420bd66"
+ORACLE_KEY_10="058ef136fd30f2946697ca8f0c9a44fa4edec180a660eb7bb49e8548d91df5f9"
 
-# Mini Testnet ports (5 nodes for multi-oracle testing — 5-of-9 consensus)
+# Mini Testnet ports (5 nodes for multi-oracle testing — 6-of-11 consensus)
 BOB_PORT=12027
 BOB_RPC=14027
 ALICE_PORT=12029
@@ -309,21 +316,26 @@ sync_all_nodes() {
 
 refresh_oracle_prices() {
     local price=${1:-0.01}
-    $BOB_CLI sendoracleprice $price 0 2>/dev/null || true
-    $BOB_CLI sendoracleprice $price 1 2>/dev/null || true
-    $BOB_CLI sendoracleprice $price 2 2>/dev/null || true
-    $BOB_CLI sendoracleprice $price 3 2>/dev/null || true
-    $BOB_CLI sendoracleprice $price 4 2>/dev/null || true
+    for oid in $(seq 0 10); do
+        $BOB_CLI sendoracleprice $price $oid 2>/dev/null || true
+    done
     $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
     sleep 2
 }
 
 start_all_oracles() {
+    # Start all 11 oracles on Bob's node (6-of-11 threshold)
     $BOB_CLI startoracle 0 "$ORACLE_KEY_0" 2>/dev/null || true
     $BOB_CLI startoracle 1 "$ORACLE_KEY_1" 2>/dev/null || true
     $BOB_CLI startoracle 2 "$ORACLE_KEY_2" 2>/dev/null || true
     $BOB_CLI startoracle 3 "$ORACLE_KEY_3" 2>/dev/null || true
     $BOB_CLI startoracle 4 "$ORACLE_KEY_4" 2>/dev/null || true
+    $BOB_CLI startoracle 5 "$ORACLE_KEY_5" 2>/dev/null || true
+    $BOB_CLI startoracle 6 "$ORACLE_KEY_6" 2>/dev/null || true
+    $BOB_CLI startoracle 7 "$ORACLE_KEY_7" 2>/dev/null || true
+    $BOB_CLI startoracle 8 "$ORACLE_KEY_8" 2>/dev/null || true
+    $BOB_CLI startoracle 9 "$ORACLE_KEY_9" 2>/dev/null || true
+    $BOB_CLI startoracle 10 "$ORACLE_KEY_10" 2>/dev/null || true
 }
 
 # Tier descriptions (9 tiers: 0-8)
@@ -548,7 +560,7 @@ $DAVE_CLI createwallet "dave" 2>/dev/null || true
 DAVE_ADDR=$($DAVE_CLI -rpcwallet=dave getnewaddress "receive" "bech32")
 echo "Dave's address: $DAVE_ADDR"
 
-# Step 6C: Start Eve's Qt node (5th oracle operator — meets 5-of-9 threshold)
+# Step 6C: Start Eve's Qt node (5th oracle operator — meets 6-of-11 threshold)
 print_header "Step 6C: Starting Eve's Qt node (Oracle 4)"
 env -i \
     DISPLAY="${DISPLAY}" \
@@ -621,7 +633,7 @@ sync_all_nodes
 print_status "ok" "All nodes synced"
 
 # Step 8B: Start oracles NOW (BIP9 is active, height > 600)
-print_header "Step 8B: Starting 5 Live Oracles (BIP9 now active)"
+print_header "Step 8B: Starting 11 Live Oracles (BIP9 now active)"
 HEIGHT_8B=$($BOB_CLI getblockcount)
 echo "Current height: $HEIGHT_8B (BIP9 activates at 600)"
 
@@ -632,7 +644,7 @@ echo "DigiDollar BIP9 status: $DD_STATUS"
 start_all_oracles
 sleep 2
 
-# Send initial prices from all 5 oracles
+# Send initial prices from all 11 oracles
 echo "Sending initial oracle prices..."
 refresh_oracle_prices 0.01
 
@@ -641,7 +653,7 @@ ORACLE_ACTIVE=false
 for i in {1..20}; do
     ORACLE_PRICE_CHECK=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "0"')
     if [ "$ORACLE_PRICE_CHECK" != "0" ] && [ "$ORACLE_PRICE_CHECK" != "N/A" ]; then
-        print_status "ok" "5 Live Oracles are active (5-of-9 threshold met)"
+        print_status "ok" "11 Live Oracles are active (6-of-11 threshold met)"
         ORACLE_ACTIVE=true
         break
     fi
@@ -651,7 +663,7 @@ for i in {1..20}; do
 done
 
 ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "LIVE Oracle Price: \$$ORACLE_PRICE per DGB (from 5-of-9 oracle consensus)"
+echo "LIVE Oracle Price: \$$ORACLE_PRICE per DGB (from 6-of-11 oracle consensus)"
 
 if [ "$ORACLE_ACTIVE" = "false" ]; then
     print_status "fail" "Oracle price still $0 after 20 attempts — oracle system not working"
@@ -1499,21 +1511,21 @@ list_dd_positions "$ALICE_CLI" "alice" "Alice"
 list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 
 # ====================================================================================
-# Step 27A: 5-of-9 Oracle Consensus Verification
+# Step 27A: 6-of-11 Oracle Consensus Verification
 # ====================================================================================
-print_header "Step 27A: 5-of-9 Oracle Consensus Verification"
+print_header "Step 27A: 6-of-11 Oracle Consensus Verification"
 echo ""
-echo "Verifying that 5 oracles sending the same price produces consensus..."
-echo "All 5 oracles send \$0.01, mine blocks, verify price is \$0.01"
+echo "Verifying that 11 oracles sending the same price produces consensus..."
+echo "All 11 oracles send \$0.01, mine blocks, verify price is \$0.01"
 echo ""
 
 refresh_oracle_prices 0.01
 
 ORACLE_PRICE_27A=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "Oracle price after 5-of-9 consensus: \$$ORACLE_PRICE_27A"
+echo "Oracle price after 6-of-11 consensus: \$$ORACLE_PRICE_27A"
 
 if [ "$ORACLE_PRICE_27A" = "0.01000000" ] || [ "$ORACLE_PRICE_27A" = "0.01" ]; then
-    print_status "ok" "5-of-9 oracle consensus verified: price is \$0.01"
+    print_status "ok" "6-of-11 oracle consensus verified: price is \$0.01"
 else
     print_status "warn" "Oracle price is \$$ORACLE_PRICE_27A (expected \$0.01 - may differ by format)"
 fi
@@ -1521,31 +1533,30 @@ fi
 # ====================================================================================
 # Step 27B: Below Threshold (4-of-9) - Should NOT change price
 # ====================================================================================
-print_header "Step 27B: Below Threshold Test (4-of-9 - should NOT change price)"
+print_header "Step 27B: Below Threshold Test (5-of-11 - should NOT change price)"
 echo ""
-echo "Sending a DIFFERENT price (\$0.02) from only 4 oracles..."
-echo "With 5-of-9 threshold, 4 oracles should NOT be enough to change the price."
+echo "Sending a DIFFERENT price (\$0.02) from only 5 oracles..."
+echo "With 6-of-11 threshold, 5 oracles should NOT be enough to change the price."
 echo ""
 
 # Record current price
 PRICE_BEFORE_27B=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "Price BEFORE 4-oracle update: \$$PRICE_BEFORE_27B"
+echo "Price BEFORE 5-oracle update: \$$PRICE_BEFORE_27B"
 
-# Send $0.02 from only 4 oracles (indices 0-3) — below 5-of-9 threshold
-$BOB_CLI sendoracleprice 0.02 0 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.02 1 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.02 2 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.02 3 2>/dev/null || true
+# Send $0.02 from only 5 oracles (indices 0-4) — below 6-of-11 threshold
+for oid in 0 1 2 3 4; do
+    $BOB_CLI sendoracleprice 0.02 $oid 2>/dev/null || true
+done
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 2
 
 PRICE_AFTER_27B=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "Price AFTER 4-oracle update: \$$PRICE_AFTER_27B"
+echo "Price AFTER 5-oracle update: \$$PRICE_AFTER_27B"
 
 if [ "$PRICE_AFTER_27B" != "0.02000000" ] && [ "$PRICE_AFTER_27B" != "0.02" ]; then
-    print_status "ok" "4-of-9 below threshold: price did NOT change to \$0.02 (still \$$PRICE_AFTER_27B)"
+    print_status "ok" "5-of-11 below threshold: price did NOT change to \$0.02 (still \$$PRICE_AFTER_27B)"
 else
-    print_status "fail" "4-of-9 should NOT reach consensus, but price changed to \$0.02!"
+    print_status "fail" "5-of-11 should NOT reach consensus, but price changed to \$0.02!"
 fi
 
 # ====================================================================================
@@ -1553,15 +1564,14 @@ fi
 # ====================================================================================
 print_header "Step 27C: Price Disagreement with Outlier (Median Filter Test)"
 echo ""
-echo "Sending \$0.01 from 4 oracles and \$0.05 from 1 oracle..."
+echo "Sending \$0.01 from 10 oracles and \$0.05 from 1 oracle (outlier)..."
 echo "Median should filter the outlier and converge on \$0.01."
 echo ""
 
-$BOB_CLI sendoracleprice 0.01 0 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.01 1 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.01 2 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.01 3 2>/dev/null || true
-$BOB_CLI sendoracleprice 0.05 4 2>/dev/null || true
+for oid in 0 1 2 3 4 5 6 7 8 9; do
+    $BOB_CLI sendoracleprice 0.01 $oid 2>/dev/null || true
+done
+$BOB_CLI sendoracleprice 0.05 10 2>/dev/null || true
 $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
 sleep 2
 
@@ -1579,7 +1589,7 @@ fi
 # ====================================================================================
 print_header "Step 27D: Oracle Recovery Test"
 echo ""
-echo "All 5 oracles send \$0.01 to verify recovery after disagreement..."
+echo "All 11 oracles send \$0.01 to verify recovery after disagreement..."
 echo ""
 
 refresh_oracle_prices 0.01
@@ -1714,7 +1724,7 @@ else
 fi
 
 # Start all oracles on restarted node
-echo "Restarting all 5 oracles on Bob's node..."
+echo "Restarting all 11 oracles on Bob's node..."
 start_all_oracles
 sleep 2
 refresh_oracle_prices
@@ -2959,9 +2969,9 @@ echo "  [x] Network DD supply verification at every step"
 echo "  [x] Balance verification at every step"
 echo ""
 echo "MULTI-ORACLE COVERAGE:"
-echo "  [x] 5 oracles started (5-of-9 threshold)"
+echo "  [x] 11 oracles started (6-of-11 threshold)"
 echo "  [x] Oracle prices refreshed before every mint"
-echo "  [x] 5-of-9 consensus verification (Step 27A)"
+echo "  [x] 6-of-11 consensus verification (Step 27A)"
 echo "  [x] Below threshold rejection - 3-of-7 (Step 27B)"
 echo "  [x] Median filter with outlier (Step 27C)"
 echo "  [x] Oracle recovery after disagreement (Step 27D)"

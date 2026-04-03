@@ -529,12 +529,13 @@ BOOST_AUTO_TEST_CASE(test_session_timeout_transitions_to_failed)
     MuSig2SigningSession session(100, 9);
     BOOST_CHECK(session.GetState() == MuSig2SessionState::CREATED);
 
-    // Default timeout: session should not be failed at creation height
+    // Set creation height and timeout for this test
+    session.SetCreationHeight(100);
+    session.SetTimeoutBlocks(10);
+
+    // Should not be failed at creation height
     session.CheckTimeout(100);
     BOOST_CHECK(session.GetState() == MuSig2SessionState::CREATED);
-
-    // Set a timeout of 10 blocks
-    session.SetTimeoutBlocks(10);
 
     // Still within timeout
     session.CheckTimeout(109);

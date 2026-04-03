@@ -17,8 +17,8 @@ MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers)
     : m_epoch(epoch),
       m_min_signers(min_signers),
       m_state(MuSig2SessionState::CREATED),
-      m_creation_height(epoch),
-      m_timeout_blocks(20)
+      m_creation_height(0),
+      m_timeout_blocks(100)
 {
     m_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
     assert(m_ctx != nullptr);

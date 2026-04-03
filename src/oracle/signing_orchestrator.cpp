@@ -202,7 +202,7 @@ uint8_t OracleSigningOrchestrator::GetOracleId() const
 // Session management
 // ============================================================================
 
-MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32_t epoch)
+MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32_t epoch, int32_t block_height)
 {
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
 
@@ -215,12 +215,14 @@ MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32
     const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
     auto session = std::make_unique<MuSig2SigningSession>(
         epoch, min_signers);
-    session->SetTimeoutBlocks(50);
+    session->SetCreationHeight(block_height > 0 ? block_height : epoch * 50);
+    session->SetTimeoutBlocks(100);
 
     MuSig2SigningSession* ptr = session.get();
     m_signing_sessions[epoch] = std::move(session);
 
-    LogPrintf("Oracle: Created MuSig2 signing session for epoch %d\n", epoch);
+    LogPrintf("Oracle: Created MuSig2 signing session for epoch %d (creation_height=%d)\n",
+             epoch, block_height);
     return ptr;
 }
 
@@ -276,11 +278,14 @@ void OracleSigningOrchestrator::OnBlockConnected(
 
     CleanupOldSessions(current_epoch);
 
-    MuSig2SigningSession* session = GetOrCreateSigningSession(current_epoch);
+    MuSig2SigningSession* session = GetOrCreateSigningSession(current_epoch, block_height);
     if (!session) return;
 
     MuSig2SessionState state = session->GetState();
     bool is_oracle = IsOracleNode();
+
+    LogPrintf("Oracle: OnBlockConnected h=%d epoch=%d state=%d is_oracle=%d\n",
+             block_height, current_epoch, static_cast<int>(state), is_oracle);
 
     if (!m_aggregator) {
         m_aggregator = std::make_unique<MuSig2OracleAggregator>();
@@ -291,6 +296,8 @@ void OracleSigningOrchestrator::OnBlockConnected(
         OracleManager& om = OracleManager::GetInstance();
         const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
 
+        LogPrintf("Oracle: Step 1 - local_ids.size()=%zu for epoch %d\n", local_ids.size(), current_epoch);
+
         // Build full oracle ID list for key aggregation
         std::vector<uint8_t> all_oracle_ids;
         const auto& nodes = Params().GetOracleNodes();
@@ -298,24 +305,40 @@ void OracleSigningOrchestrator::OnBlockConnected(
             if (nodes[i].is_active) all_oracle_ids.push_back(static_cast<uint8_t>(i));
         }
 
+        LogPrintf("Oracle: Step 1 - all_oracle_ids.size()=%zu\n", all_oracle_ids.size());
+
         secp256k1_xonly_pubkey agg_pk;
         secp256k1_musig_keyagg_cache cache;
         if (m_aggregator->ComputeAggregatePubkey(all_oracle_ids, agg_pk, cache)) {
+            LogPrintf("Oracle: Step 1 - key aggregation succeeded for %zu oracle IDs\n", all_oracle_ids.size());
             secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
             for (uint32_t oid : local_ids) {
                 uint8_t oid8 = static_cast<uint8_t>(oid);
                 // Skip if already generated nonce for this oracle
-                if (m_nonce_broadcast_tracker[current_epoch].count(oid8)) continue;
+                if (m_nonce_broadcast_tracker[current_epoch].count(oid8)) {
+                    LogPrintf("Oracle: Skipping oracle %d epoch %d - already broadcast\n", oid8, current_epoch);
+                    continue;
+                }
 
                 OracleNode* onode = om.GetOracleNode(oid);
-                if (!onode) continue;
+                if (!onode) {
+                    LogPrintf("Oracle: Skipping oracle %d - GetOracleNode returned null\n", oid8);
+                    continue;
+                }
                 CKey key = onode->GetOraclePrivateKey();
-                if (!key.IsValid()) continue;
+                if (!key.IsValid()) {
+                    LogPrintf("Oracle: Skipping oracle %d - invalid private key\n", oid8);
+                    continue;
+                }
                 CPubKey cpk = key.GetPubKey();
+                LogPrintf("Oracle: oracle %d pubkey size=%d hex=%s\n", oid8, cpk.size(), HexStr(cpk));
 
                 secp256k1_pubkey secp_pk;
-                if (!secp256k1_ec_pubkey_parse(ctx, &secp_pk, cpk.data(), cpk.size())) continue;
+                if (!secp256k1_ec_pubkey_parse(ctx, &secp_pk, cpk.data(), cpk.size())) {
+                    LogPrintf("Oracle: Skipping oracle %d - secp256k1_ec_pubkey_parse failed\n", oid8);
+                    continue;
+                }
 
                 secp256k1_musig_pubnonce pubnonce;
                 if (session->GenerateNonce(oid8, key, secp_pk, cache, pubnonce)) {
@@ -334,6 +357,8 @@ void OracleSigningOrchestrator::OnBlockConnected(
                         LogPrintf("Oracle: Generated and broadcast nonce for epoch %d (oracle_id=%d)\n",
                                  current_epoch, oid8);
                     }
+                } else {
+                    LogPrintf("Oracle: GenerateNonce FAILED for oracle %d epoch %d\n", oid8, current_epoch);
                 }
             }
             secp256k1_context_destroy(ctx);

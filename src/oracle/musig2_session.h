@@ -177,6 +177,8 @@ public:
      * @param[in] blocks Number of blocks before timeout
      */
     void SetTimeoutBlocks(int32_t blocks);
+    /** TEST ONLY: Set creation height for timeout testing. */
+    void SetCreationHeight(int32_t height) { m_creation_height = height; }
 
     /** Get the aggregate signature after COMPLETE state. */
     std::vector<unsigned char> GetAggregateSig() const;

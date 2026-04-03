@@ -45,7 +45,7 @@ public:
     uint8_t GetOracleId() const;
 
     // Session management
-    MuSig2SigningSession* GetOrCreateSigningSession(int32_t epoch);
+    MuSig2SigningSession* GetOrCreateSigningSession(int32_t epoch, int32_t block_height = 0);
     void CleanupOldSessions(int32_t current_epoch);
 
     // Block-tick orchestration

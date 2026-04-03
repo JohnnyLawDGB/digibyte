@@ -537,74 +537,43 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         }
     }
 
-    // Phase 3 gate: use MuSig2 aggregate signatures when activated
-    // The OracleSigningOrchestrator drives the MuSig2 protocol asynchronously
-    // via BlockConnected callbacks.  AddOracleBundleToBlock only *queries*
-    // the orchestrator for a completed session — it never starts/completes
-    // sessions synchronously (that would deadlock under cs_main).
-    const Consensus::Params& cparams_phase3 = Params().GetConsensus();
-    if (!force_phase2 && block_height >= cparams_phase3.nDigiDollarPhase3Height) {
-        LogPrintf("Oracle: Phase 3 active at height %d (activation=%d), using MuSig2 bundling\n",
-                 block_height, cparams_phase3.nDigiDollarPhase3Height);
-
+    // Try MuSig2 (v0x03) first — the OracleSigningOrchestrator drives the
+    // MuSig2 protocol asynchronously via BlockConnected callbacks.
+    // AddOracleBundleToBlock only *queries* for a completed session.
+    if (!force_phase2 && g_signing_orchestrator) {
         COracleBundle bundle(epoch);
         bundle.version = 3;
 
-        // Query the orchestrator for a completed MuSig2 session
-        bool session_ready = false;
         uint64_t signed_price = 0;
         int64_t signed_timestamp = 0;
-        if (g_signing_orchestrator) {
-            session_ready = g_signing_orchestrator->GetCompletedSession(
-                epoch, bundle.aggregate_sig, bundle.participation_bitmap,
-                signed_price, signed_timestamp);
-            if (session_ready) {
-                LogPrintf("Oracle: MuSig2 session for epoch %d is COMPLETE, sig=%zu bytes, bitmap=%zu bytes\n",
-                         epoch, bundle.aggregate_sig.size(), bundle.participation_bitmap.size());
-            } else {
-                LogPrintf("Oracle: MuSig2 session for epoch %d not ready in orchestrator\n", epoch);
+        bool session_ready = g_signing_orchestrator->GetCompletedSession(
+            epoch, bundle.aggregate_sig, bundle.participation_bitmap,
+            signed_price, signed_timestamp);
+
+        if (session_ready) {
+            LogPrintf("Oracle: MuSig2 session for epoch %d is COMPLETE, sig=%zu bytes, bitmap=%zu bytes\n",
+                     epoch, bundle.aggregate_sig.size(), bundle.participation_bitmap.size());
+
+            // Use the EXACT values signed by the MuSig2 ceremony
+            bundle.median_price_micro_usd = signed_price;
+            bundle.timestamp = signed_timestamp;
+
+            CScript oracle_script = CreateOracleScript(bundle);
+            if (!oracle_script.empty()) {
+                CMutableTransaction coinbase_tx(*block.vtx[0]);
+                CTxOut oracle_output;
+                oracle_output.nValue = 0;
+                oracle_output.scriptPubKey = oracle_script;
+                coinbase_tx.vout.push_back(oracle_output);
+                block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
+
+                LogPrintf("Oracle: Added MuSig2 v0x03 bundle to block %d (epoch %d)\n",
+                         block_height, epoch);
+                return true;
             }
-        } else {
-            LogPrintf("Oracle: No signing orchestrator available for epoch %d\n", epoch);
         }
-
-        if (!session_ready) {
-            // Phase 3 is active but MuSig2 session not ready. The validation
-            // layer requires v0x03 bundles during Phase 3, so we can't fall
-            // back to Phase 2. Instead, produce a block with NO oracle bundle.
-            // This is valid — blocks without oracle data are always accepted.
-            // The MuSig2 session will complete after enough nonce exchange
-            // rounds and a future block will include the v0x03 bundle.
-            LogPrintf("Oracle: Phase 3 MuSig2 session not ready for epoch %d, "
-                     "producing block without oracle bundle\n", epoch);
-            return true;  // success — no bundle, block proceeds
-        }
-
-        // Session is ready — build a v0x03 MuSig2 bundle.
-        // Use the EXACT values that were signed by the MuSig2 ceremony.
-        // Using different values would produce a hash mismatch and fail
-        // Schnorr verification.
-        bundle.median_price_micro_usd = signed_price;
-        bundle.timestamp = signed_timestamp;
-
-        CScript oracle_script = CreateOracleScript(bundle);
-        LogPrintf("Oracle: Phase 3 CreateOracleScript returned script of size %zu\n", oracle_script.size());
-
-        if (oracle_script.empty()) {
-            LogPrintf("Oracle: Phase 3 script creation failed, producing block without oracle bundle\n");
-            return true;
-        }
-
-        CMutableTransaction coinbase_tx(*block.vtx[0]);
-        CTxOut oracle_output;
-        oracle_output.nValue = 0;
-        oracle_output.scriptPubKey = oracle_script;
-        coinbase_tx.vout.push_back(oracle_output);
-        block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
-
-        LogPrintf("Oracle: Phase 3 added MuSig2 oracle bundle to block %d (epoch %d)\n",
-                 block_height, epoch);
-        return true;
+        // MuSig2 not ready — fall through to v0x02 individual-sig bundling
+        LogPrintf("Oracle: MuSig2 not ready for epoch %d, using v0x02 fallback\n", epoch);
     }
 
     // Phase 1/2 bundling (existing logic below)
@@ -929,13 +898,6 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
     // Format: OP_RETURN OP_ORACLE <version=0x03> <v03_data>
     // v03_data: bitmap_len(1) + bitmap(var) + price(8) + timestamp(8) + aggregate_sig(64)
     if (bundle.version == 3) {
-        // Phase Three version gate: reject v0x03 if Phase 3 is not activated on this network
-        const Consensus::Params& cparams = Params().GetConsensus();
-        if (cparams.nDigiDollarPhase3Height == std::numeric_limits<int>::max()) {
-            LogPrintf("Oracle: Phase Three not activated on this network, rejecting v0x03 bundle creation\n");
-            return CScript();
-        }
-
         if (bundle.aggregate_sig.size() != 64) {
             LogPrintf("Oracle: CreateOracleScript v0x03 error: aggregate_sig size %zu != 64\n",
                      bundle.aggregate_sig.size());
@@ -1141,12 +1103,6 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
 
                     // Check version byte
                     if (data[0] == 0x03) {
-                        // Phase Three version gate: reject v0x03 if Phase 3 is not activated
-                        const Consensus::Params& extract_cparams = Params().GetConsensus();
-                        if (extract_cparams.nDigiDollarPhase3Height == std::numeric_limits<int>::max()) {
-                            LogPrintf("Oracle: Phase Three not activated, rejecting v0x03 bundle extraction\n");
-                            return false;
-                        }
                         // v0x03 MuSig2 format: aggregate sig + participation bitmap
                         // Data layout (after version byte):
                         //   bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
@@ -2490,15 +2446,8 @@ bool OracleDataValidator::CheckOracleConsensus(const COracleBundle& bundle, cons
 
 bool OracleBundleManager::ValidateBundle(const COracleBundle& bundle, int block_height, const Consensus::Params& params)
 {
-    // Phase Three version gate: v0x03 MuSig2 bundles require Phase 3 activation height
+    // v0x03 MuSig2 bundles — structural validation
     if (bundle.version == 3 || bundle.IsMuSig2()) {
-        if (block_height < params.nDigiDollarPhase3Height) {
-            LogPrintf("Oracle: v0x03 MuSig2 bundle rejected at height %d (Phase 3 activates at %d)\n",
-                     block_height, params.nDigiDollarPhase3Height);
-            return false;
-        }
-        // Phase Three MuSig2 validation -- full aggregate signature verification deferred to Wave 3
-        // For now, accept v0x03 bundles at/above Phase 3 height (structural checks only)
         return true;
     }
 
@@ -2665,11 +2614,6 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
                                                     std::string& error)
 {
     // Pre-condition: Phase 3 must be active
-    if (block_height < params.nDigiDollarPhase3Height) {
-        error = "v0x03 bundle not active before Phase 3 activation height";
-        return false;
-    }
-
     // Pre-condition: must be a v0x03 bundle
     if (bundle.version != 3) {
         error = "ValidatePhaseThreeBundle called with non-v0x03 bundle (version=" + std::to_string(bundle.version) + ")";
@@ -2709,6 +2653,18 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
     MuSig2OracleAggregator aggregator;
     secp256k1_xonly_pubkey agg_pk;
     secp256k1_musig_keyagg_cache cache;
+
+    LogPrintf("Oracle: ValidatePhaseThreeBundle: bitmap=%s, total_oracles=%d, oracle_ids=[%s]\n",
+             HexStr(bundle.participation_bitmap),
+             params.nOracleTotalOracles,
+             [&]() -> std::string {
+                 std::string s;
+                 for (size_t i = 0; i < oracle_ids.size(); ++i) {
+                     if (i > 0) s += ",";
+                     s += std::to_string(oracle_ids[i]);
+                 }
+                 return s;
+             }());
 
     if (!aggregator.ComputeAggregatePubkeyFromBitmap(bundle.participation_bitmap,
                                                       static_cast<uint16_t>(params.nOracleTotalOracles),

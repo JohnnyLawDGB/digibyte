@@ -268,12 +268,6 @@ void OracleSigningOrchestrator::OnBlockConnected(
     const std::shared_ptr<const CBlock>& block,
     int32_t block_height)
 {
-    const Consensus::Params& consensus = Params().GetConsensus();
-
-    if (block_height < consensus.nDigiDollarPhase3Height) {
-        return;
-    }
-
     int32_t current_epoch = GetCurrentEpoch(block_height);
 
     CleanupOldSessions(current_epoch);

@@ -135,21 +135,11 @@ static bool CheckPhase3OracleBundleVersion(const CBlock& block, const CBlockInde
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     if (!manager.ExtractOracleBundle(*block.vtx[0], bundle)) return true;
 
-    const bool phase3_active = block_height >= params.nDigiDollarPhase3Height;
-    if (phase3_active) {
-        if (bundle.version != 3) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
-                                 strprintf("Phase3 requires v0x03 bundles at height %d, got v0x%02x", block_height, bundle.version));
-        }
-    } else {
-        if (bundle.version == 3) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
-                                 strprintf("v0x03 bundle not allowed before Phase3 at height %d", block_height));
-        }
-        if (bundle.version != 1 && bundle.version != 2) {
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
-                                 strprintf("Unsupported pre-Phase3 bundle version v0x%02x", bundle.version));
-        }
+    // Accept v0x02 (individual oracle sigs) and v0x03 (MuSig2 aggregate).
+    // MuSig2 is the target but v0x02 is valid during session warm-up.
+    if (bundle.version != 2 && bundle.version != 3) {
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
+                             strprintf("Unsupported oracle bundle version v0x%02x at height %d", bundle.version, block_height));
     }
 
     return true;

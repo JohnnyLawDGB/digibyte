@@ -128,6 +128,12 @@ public:
     void SetKeyAggCache(const secp256k1_musig_keyagg_cache& cache);
     /** Return sorted oracle IDs that contributed nonces. */
     std::vector<uint8_t> GetNonceParticipants() const;
+    /**
+     * Trim nonces to exactly m_min_signers. Keeps the lowest oracle IDs.
+     * Must be called BEFORE AggregateNonces so the session is bound to
+     * exactly the threshold number of participants.
+     */
+    void TrimNoncesToThreshold();
     bool AggregateNonces(const unsigned char* msg32);
 
     /**
@@ -190,6 +196,11 @@ public:
     /** Get participation bitmap from partial sig contributors. */
     std::vector<unsigned char> GetParticipationBitmap() const;
 
+    /** Store the exact values that were signed so the miner can embed them. */
+    void SetSignedValues(uint64_t price, int64_t timestamp);
+    uint64_t GetSignedPrice() const;
+    int64_t GetSignedTimestamp() const;
+
 private:
     mutable Mutex m_mutex;
 
@@ -220,6 +231,8 @@ private:
     std::map<uint8_t, secp256k1_musig_partial_sig> m_partial_sigs GUARDED_BY(m_mutex);
 
     std::vector<unsigned char> m_aggregate_sig GUARDED_BY(m_mutex); //!< Cached agg sig
+    uint64_t m_signed_price{0};     //!< The exact price that was signed
+    int64_t m_signed_timestamp{0};  //!< The exact timestamp that was signed
 
     //! Timeout configuration
     int32_t m_creation_height GUARDED_BY(m_mutex); //!< Height at which session was created (= epoch)

@@ -245,6 +245,21 @@ std::vector<uint8_t> MuSig2SigningSession::GetNonceParticipants() const
     return ids; // already sorted (std::map)
 }
 
+void MuSig2SigningSession::TrimNoncesToThreshold()
+{
+    LOCK(m_mutex);
+    if (m_pubnonces.size() <= m_min_signers) return;
+
+    // Keep only the first m_min_signers nonces (lowest oracle IDs).
+    // std::map is sorted by key, so we keep the lowest IDs.
+    auto it = m_pubnonces.begin();
+    std::advance(it, m_min_signers);
+    size_t removed = std::distance(it, m_pubnonces.end());
+    m_pubnonces.erase(it, m_pubnonces.end());
+    LogPrintf("Oracle: Trimmed nonces from %zu to %zu (threshold=%zu)\n",
+             m_pubnonces.size() + removed, m_pubnonces.size(), m_min_signers);
+}
+
 bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
 {
     LOCK(m_mutex);
@@ -336,10 +351,11 @@ bool MuSig2SigningSession::AddPartialSignature(uint8_t oracle_id,
     // Reject duplicate oracle ID
     if (m_partial_sigs.count(oracle_id)) return false;
 
-    // Reject oracle IDs outside configured active set to keep signer-set
-    // transitions aligned with on-chain v0x03 bitmap semantics.
-    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
-    if (total_oracles == 0 || oracle_id >= total_oracles) return false;
+    // Only accept sigs from oracles in the nonce participant set.
+    // After TrimNoncesToThreshold(), m_pubnonces contains exactly the
+    // threshold oracles whose keys were aggregated. Sigs from other
+    // oracles would not verify against the aggregate key.
+    if (m_pubnonces.find(oracle_id) == m_pubnonces.end()) return false;
 
     m_partial_sigs[oracle_id] = partial_sig;
     return true;
@@ -415,6 +431,24 @@ std::vector<unsigned char> MuSig2SigningSession::GetParticipationBitmap() const
     return bitmap;
 }
 
+void MuSig2SigningSession::SetSignedValues(uint64_t price, int64_t timestamp)
+{
+    LOCK(m_mutex);
+    m_signed_price = price;
+    m_signed_timestamp = timestamp;
+}
+
+uint64_t MuSig2SigningSession::GetSignedPrice() const
+{
+    LOCK(m_mutex);
+    return m_signed_price;
+}
+
+int64_t MuSig2SigningSession::GetSignedTimestamp() const
+{
+    LOCK(m_mutex);
+    return m_signed_timestamp;
+}
 
 // ============================================================================
 // Timeout management

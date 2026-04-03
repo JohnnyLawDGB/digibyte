@@ -59,7 +59,9 @@ public:
     // Query completed session for block assembly
     bool GetCompletedSession(int32_t epoch,
                              std::vector<unsigned char>& aggregate_sig_out,
-                             std::vector<unsigned char>& participation_bitmap_out) const;
+                             std::vector<unsigned char>& participation_bitmap_out,
+                             uint64_t& signed_price_out,
+                             int64_t& signed_timestamp_out) const;
 
     // Utilities
     static int32_t ComputeEpoch(int32_t block_height, int32_t epoch_length);

@@ -384,9 +384,16 @@ void OracleSigningOrchestrator::OnBlockConnected(
             unsigned char msg32[32];
             ComputeOracleMessageHash(current_epoch, consensus_price, consensus_timestamp, msg32);
 
-            // Threshold MuSig2: recompute key aggregation for ONLY the oracles
-            // that provided nonces. The signing session, partial sigs, and
-            // aggregate signature are all bound to this participants-only key.
+            // Store the exact values we're signing so the miner embeds
+            // them in the bundle (must match for verification).
+            session->SetSignedValues(consensus_price, consensus_timestamp);
+
+            // Threshold MuSig2: trim to exactly threshold nonces, then
+            // recompute key aggregation for ONLY those oracles. The session,
+            // partial sigs, and aggregate signature are all bound to this
+            // threshold-sized participant set. This ensures the validator can
+            // reconstruct the same aggregate key from the bitmap.
+            session->TrimNoncesToThreshold();
             std::vector<uint8_t> participant_ids = session->GetNonceParticipants();
             secp256k1_xonly_pubkey part_agg_pk;
             secp256k1_musig_keyagg_cache part_cache;
@@ -497,7 +504,9 @@ bool OracleSigningOrchestrator::BroadcastMusigPartialSig(const OracleMusigPartia
 bool OracleSigningOrchestrator::GetCompletedSession(
     int32_t epoch,
     std::vector<unsigned char>& aggregate_sig_out,
-    std::vector<unsigned char>& participation_bitmap_out) const
+    std::vector<unsigned char>& participation_bitmap_out,
+    uint64_t& signed_price_out,
+    int64_t& signed_timestamp_out) const
 {
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
     auto it = m_signing_sessions.find(epoch);
@@ -508,6 +517,8 @@ bool OracleSigningOrchestrator::GetCompletedSession(
 
     aggregate_sig_out = session.GetAggregateSig();
     participation_bitmap_out = session.GetParticipationBitmap();
+    signed_price_out = session.GetSignedPrice();
+    signed_timestamp_out = session.GetSignedTimestamp();
     return !aggregate_sig_out.empty();
 }
 

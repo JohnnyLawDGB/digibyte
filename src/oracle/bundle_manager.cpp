@@ -552,9 +552,12 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
         // Query the orchestrator for a completed MuSig2 session
         bool session_ready = false;
+        uint64_t signed_price = 0;
+        int64_t signed_timestamp = 0;
         if (g_signing_orchestrator) {
             session_ready = g_signing_orchestrator->GetCompletedSession(
-                epoch, bundle.aggregate_sig, bundle.participation_bitmap);
+                epoch, bundle.aggregate_sig, bundle.participation_bitmap,
+                signed_price, signed_timestamp);
             if (session_ready) {
                 LogPrintf("Oracle: MuSig2 session for epoch %d is COMPLETE, sig=%zu bytes, bitmap=%zu bytes\n",
                          epoch, bundle.aggregate_sig.size(), bundle.participation_bitmap.size());
@@ -577,9 +580,12 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             return true;  // success — no bundle, block proceeds
         }
 
-        // Session is ready — build a v0x03 MuSig2 bundle
-        bundle.median_price_micro_usd = cached_price > 0 ? static_cast<uint64_t>(cached_price) : 0;
-        bundle.timestamp = GetTime();
+        // Session is ready — build a v0x03 MuSig2 bundle.
+        // Use the EXACT values that were signed by the MuSig2 ceremony.
+        // Using different values would produce a hash mismatch and fail
+        // Schnorr verification.
+        bundle.median_price_micro_usd = signed_price;
+        bundle.timestamp = signed_timestamp;
 
         CScript oracle_script = CreateOracleScript(bundle);
         LogPrintf("Oracle: Phase 3 CreateOracleScript returned script of size %zu\n", oracle_script.size());
@@ -2628,7 +2634,10 @@ bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle, co
  */
 uint256 ComputeOracleBundleHash(const COracleBundle& bundle)
 {
+    // Must match OracleSigningOrchestrator::ComputeOracleMessageHash
+    // which hashes (epoch, price, timestamp).
     CHashWriter ss(0);
+    ss << bundle.epoch;
     ss << bundle.median_price_micro_usd;
     ss << bundle.timestamp;
     return ss.GetHash();

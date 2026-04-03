@@ -194,7 +194,8 @@ BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)
         // session remains available for next block attempt.
         BOOST_REQUIRE_EQUAL(block.vtx[0]->vout.size(), 1);
         std::vector<unsigned char> dummy_sig, dummy_bmp;
-        BOOST_CHECK(g_signing_orchestrator->GetCompletedSession(epoch, dummy_sig, dummy_bmp));
+        uint64_t dummy_price; int64_t dummy_ts;
+        BOOST_CHECK(g_signing_orchestrator->GetCompletedSession(epoch, dummy_sig, dummy_bmp, dummy_price, dummy_ts));
     }
 }
 

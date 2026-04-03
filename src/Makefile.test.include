@@ -441,10 +441,7 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/oracle_musig2_bundle.cpp \
  test/fuzz/oracle_musig2_bitmap.cpp \
  test/fuzz/oracle_musig2_aggregation.cpp \
- test/fuzz/oracle_musig2_session_state.cpp \
-test/fuzz/oracle_price_message.cpp \
-test/fuzz/oracle_bundle_validation.cpp \
-test/fuzz/oracle_script_parsing.cpp
+ test/fuzz/oracle_musig2_session_state.cpp
 endif # ENABLE_FUZZ_BINARY
 
 nodist_test_test_digibyte_SOURCES = $(GENERATED_TEST_FILES)

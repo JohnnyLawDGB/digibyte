@@ -61,6 +61,7 @@
 #include <node/ui_interface.h>
 #include <node/validation_cache_args.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/signing_orchestrator.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/fees_args.h>
@@ -270,6 +271,9 @@ void Shutdown(NodeContext& node)
     util::ThreadRename("shutoff");
     if (node.mempool) node.mempool->AddTransactionsUpdated(1);
     if (node.stempool) node.stempool->AddTransactionsUpdated(1);
+
+    // Shut down MuSig2 signing orchestrator before network
+    OracleSigningOrchestrator::Shutdown();
 
     StopHTTPRPC();
     StopREST();
@@ -2175,6 +2179,9 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // Initialize Oracle Bundle Manager with consensus parameters
     OracleBundleManager::Initialize();
+    // Initialize MuSig2 signing orchestrator for Phase 3 oracle bundles
+    OracleSigningOrchestrator::Initialize();
+    g_signing_orchestrator->SetConnman(node.connman.get());
     // Initialize oracle P2P connection for broadcasting
     OracleBundleManager::GetInstance().SetConnman(node.connman.get());
     // Load oracle prices from blockchain (must be after chainstate is loaded)

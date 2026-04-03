@@ -336,7 +336,7 @@ refresh_oracle_prices() {
     $DAVE_CLI sendoracleprice $price 8 2>/dev/null || true
     $EVE_CLI sendoracleprice $price 9 2>/dev/null || true
     $EVE_CLI sendoracleprice $price 10 2>/dev/null || true
-    $BOB_CLI generatetoaddress 2 "$BOB_ADDR" > /dev/null 2>&1
+    $BOB_CLI generatetoaddress 6 "$BOB_ADDR" > /dev/null 2>&1
     sleep 2
 }
 
@@ -1157,6 +1157,18 @@ print_header "Step 19: Charlie Mints \$100 at Tier 8 (10 years)"
 
 CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
 echo "Charlie's DGB balance: $CHARLIE_DGB DGB"
+
+# Top up Charlie if balance is low (collateral at low oracle EMA price can be huge)
+CHARLIE_BAL_INT=$(echo "$CHARLIE_DGB" | cut -d. -f1)
+if [ "$CHARLIE_BAL_INT" -lt 80000 ] 2>/dev/null; then
+    echo "Charlie balance low ($CHARLIE_DGB DGB) — sending 50000 DGB from Bob..."
+    CHARLIE_TOP=$($CHARLIE_CLI -rpcwallet=charlie getnewaddress "" "legacy" 2>/dev/null)
+    $BOB_CLI -rpcwallet=bob sendtoaddress "$CHARLIE_TOP" 50000 > /dev/null 2>&1
+    $BOB_CLI generatetoaddress 1 "$BOB_ADDR" > /dev/null 2>&1
+    sync_all_nodes
+    CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
+    echo "Charlie new balance: $CHARLIE_DGB DGB"
+fi
 
 echo "Refreshing oracle prices before Charlie's mint..."
 refresh_oracle_prices

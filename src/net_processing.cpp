@@ -31,6 +31,7 @@
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/signing_orchestrator.h>
 #include <oracle/musig2_messages.h>
 #include <oracle/musig2_session.h>
 #include <oracle/node.h>
@@ -6025,6 +6026,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // miner can aggregate nonces from all oracle peers.
         bundleManager.ProcessRemoteMusigNonce(nonce_msg);
 
+        // Also feed into the signing orchestrator (Phase 3 async path)
+        if (g_signing_orchestrator) {
+            g_signing_orchestrator->IngestRemoteNonce(nonce_msg);
+        }
+
         LogPrint(BCLog::NET, "Accepted and relayed MuSig2 nonce: epoch=%d, oracle_id=%u, peer=%d\n",
                  nonce_msg.epoch, nonce_msg.oracle_id, pfrom.GetId());
         return;
@@ -6067,6 +6073,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // Feed the partial sig into the local MuSig2 signing session so the
         // miner can aggregate signatures from all oracle peers.
         bundleManager.ProcessRemoteMusigPartialSig(partial_sig_msg);
+
+        // Also feed into the signing orchestrator (Phase 3 async path)
+        if (g_signing_orchestrator) {
+            g_signing_orchestrator->IngestRemotePartialSig(partial_sig_msg);
+        }
 
         LogPrint(BCLog::NET, "Accepted and relayed MuSig2 partial signature: epoch=%d, oracle_id=%u, peer=%d\n",
                  partial_sig_msg.epoch, partial_sig_msg.oracle_id, pfrom.GetId());

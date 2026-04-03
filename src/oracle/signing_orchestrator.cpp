@@ -68,6 +68,59 @@ void OracleSigningOrchestrator::InjectSession(int32_t epoch, std::unique_ptr<MuS
     m_signing_sessions[epoch] = std::move(session);
 }
 
+void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg)
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    auto it = m_signing_sessions.find(msg.epoch);
+    if (it == m_signing_sessions.end() || !it->second) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring remote nonce for unknown epoch %d\n", msg.epoch);
+        return;
+    }
+
+    // Deserialize pubnonce
+    if (msg.pubnonce.size() != 66) return;
+    secp256k1_musig_pubnonce pubnonce;
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (secp256k1_musig_pubnonce_parse(ctx, &pubnonce, msg.pubnonce.data())) {
+        if (it->second->AddPubnonce(msg.oracle_id, pubnonce)) {
+            LogPrintf("Oracle: Ingested remote nonce for epoch %d from oracle %d\n",
+                     msg.epoch, msg.oracle_id);
+        }
+    }
+    secp256k1_context_destroy(ctx);
+}
+
+void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialSigMsg& msg)
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    auto it = m_signing_sessions.find(msg.epoch);
+    if (it == m_signing_sessions.end() || !it->second) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring remote partial sig for unknown epoch %d\n", msg.epoch);
+        return;
+    }
+
+    // Deserialize partial sig
+    if (msg.partial_sig.size() != 32) return;
+    secp256k1_musig_partial_sig partial_sig;
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (secp256k1_musig_partial_sig_parse(ctx, &partial_sig, msg.partial_sig.data())) {
+        if (it->second->AddPartialSignature(msg.oracle_id, partial_sig)) {
+            LogPrintf("Oracle: Ingested remote partial sig for epoch %d from oracle %d\n",
+                     msg.epoch, msg.oracle_id);
+
+            // Auto-aggregate if threshold met
+            if (it->second->HasEnoughPartialSigs()) {
+                std::vector<unsigned char> final_sig;
+                if (it->second->AggregateSignature(final_sig)) {
+                    LogPrintf("Oracle: MuSig2 auto-aggregated for epoch %d after remote partial sig, sig size=%zu\n",
+                             msg.epoch, final_sig.size());
+                }
+            }
+        }
+    }
+    secp256k1_context_destroy(ctx);
+}
+
 OracleSigningOrchestrator& OracleSigningOrchestrator::GetInstance()
 {
     assert(g_signing_orchestrator);
@@ -78,6 +131,8 @@ void OracleSigningOrchestrator::Initialize()
 {
     assert(!g_signing_orchestrator);
     g_signing_orchestrator = std::make_unique<OracleSigningOrchestrator>();
+    g_signing_orchestrator->Start();
+    LogPrintf("Oracle: MuSig2 signing orchestrator initialized and started\n");
 }
 
 void OracleSigningOrchestrator::Shutdown()

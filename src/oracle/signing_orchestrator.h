@@ -75,6 +75,11 @@ public:
     /** Inject a pre-built session (test use only). Takes ownership. */
     void InjectSession(int32_t epoch, std::unique_ptr<MuSig2SigningSession> session);
 
+    /** Ingest remote nonce from P2P (called from net_processing). */
+    void IngestRemoteNonce(const OracleMusigNonceMsg& msg);
+    /** Ingest remote partial sig from P2P (called from net_processing). */
+    void IngestRemotePartialSig(const OracleMusigPartialSigMsg& msg);
+
     static OracleSigningOrchestrator& GetInstance();
     static void Initialize();
     static void Shutdown();

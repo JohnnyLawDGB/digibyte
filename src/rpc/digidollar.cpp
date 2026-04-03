@@ -3523,7 +3523,7 @@ static RPCHelpMan getalloracleprices()
 
             // Oracle names from chainparams
             const std::vector<OracleNodeInfo>& oracle_nodes = Params().GetOracleNodes();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian"};
 
             // Build result
             UniValue result(UniValue::VOBJ);
@@ -3651,7 +3651,7 @@ static RPCHelpMan getoracles()
             OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
             OracleManager& oracle_manager = OracleManager::GetInstance();
 
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian"};
 
             int32_t current_height = chainman.ActiveChain().Height();
             int32_t current_epoch = GetCurrentEpoch(current_height);
@@ -3741,7 +3741,7 @@ static RPCHelpMan listoracle()
                 }
             }
             OracleManager& oracle_manager = OracleManager::GetInstance();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian"};
 
             UniValue result(UniValue::VOBJ);
 

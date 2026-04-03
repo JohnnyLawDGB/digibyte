@@ -323,21 +323,12 @@ sync_all_nodes() {
 # Total: 11 oracles across 5 nodes — MuSig2 nonces flow over real P2P
 
 refresh_oracle_prices() {
-    local price=${1:-0.01}
-    # Send prices from each oracle on its host node
-    $BOB_CLI sendoracleprice $price 0 2>/dev/null || true
-    $BOB_CLI sendoracleprice $price 1 2>/dev/null || true
-    $ALICE_CLI sendoracleprice $price 2 2>/dev/null || true
-    $ALICE_CLI sendoracleprice $price 3 2>/dev/null || true
-    $CHARLIE_CLI sendoracleprice $price 4 2>/dev/null || true
-    $CHARLIE_CLI sendoracleprice $price 5 2>/dev/null || true
-    $DAVE_CLI sendoracleprice $price 6 2>/dev/null || true
-    $DAVE_CLI sendoracleprice $price 7 2>/dev/null || true
-    $DAVE_CLI sendoracleprice $price 8 2>/dev/null || true
-    $EVE_CLI sendoracleprice $price 9 2>/dev/null || true
-    $EVE_CLI sendoracleprice $price 10 2>/dev/null || true
+    # Oracle prices come EXCLUSIVELY from live exchange aggregation.
+    # No fake price injection — oracles fetch from Binance, KuCoin, Gate.io,
+    # Crypto.com, etc. via MultiExchangeAggregator.
+    # Just mine blocks so oracle price threads broadcast and bundles form.
     $BOB_CLI generatetoaddress 6 "$BOB_ADDR" > /dev/null 2>&1
-    sleep 2
+    sleep 3  # Give oracle price threads time to fetch + broadcast
 }
 
 start_all_oracles() {
@@ -666,9 +657,10 @@ echo "DigiDollar BIP9 status: $DD_STATUS"
 start_all_oracles
 sleep 2
 
-# Send initial prices from all 11 oracles
-echo "Sending initial oracle prices..."
-refresh_oracle_prices 0.01
+# Oracle prices come from LIVE exchange feeds (Binance, KuCoin, Gate.io, etc.)
+# Mine blocks so oracle price threads broadcast and bundles form on-chain
+echo "Waiting for live oracle price data from exchanges..."
+refresh_oracle_prices
 
 # Wait for oracle consensus
 ORACLE_ACTIVE=false
@@ -679,9 +671,9 @@ for i in {1..20}; do
         ORACLE_ACTIVE=true
         break
     fi
-    # Resend prices and mine more blocks
-    refresh_oracle_prices 0.01
-    sleep 2
+    # Mine more blocks to give oracle price threads time to broadcast
+    refresh_oracle_prices
+    sleep 3
 done
 
 ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')

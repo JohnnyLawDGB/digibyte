@@ -3586,122 +3586,11 @@ static RPCHelpMan getalloracleprices()
     };
 }
 
-static RPCHelpMan sendoracleprice()
-{
-    return RPCHelpMan{"sendoracleprice",
-                "\nBroadcast an oracle price message to the network (TESTNET ONLY).\n"
-                "This command creates and broadcasts a signed oracle price message.\n"
-                "Only available on testnet/regtest for testing purposes.\n",
-                {
-                    {"price_usd", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price in USD (e.g., 0.05 for $0.05 per DGB)"},
-                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Default{1}, "Oracle ID (1-30) to use for signing"}
-                },
-                RPCResult{
-                    RPCResult::Type::OBJ, "", "",
-                    {
-                        {RPCResult::Type::STR_HEX, "hash", "The message hash"},
-                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID used"},
-                        {RPCResult::Type::STR_AMOUNT, "price_satoshis", "Price in satoshis per USD"},
-                        {RPCResult::Type::NUM, "timestamp", "Message timestamp"},
-                        {RPCResult::Type::BOOL, "broadcasted", "Whether message was broadcasted to network"}
-                    }
-                },
-                RPCExamples{
-                    HelpExampleCli("sendoracleprice", "0.05") +
-                    HelpExampleCli("sendoracleprice", "0.05 1") +
-                    HelpExampleRpc("sendoracleprice", "0.05, 1")
-                },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-        {
-            // Check DigiDollar activation
-            {
-                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
-                ChainstateManager& chainman = EnsureChainman(node);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
-                }
-            }
-            // Only allow on testnet/regtest
-            if (Params().GetChainType() != ChainType::TESTNET &&
-                Params().GetChainType() != ChainType::REGTEST) {
-                throw JSONRPCError(RPC_INVALID_REQUEST, "sendoracleprice only available on testnet/regtest");
-            }
 
-            // Parse parameters
-            double price_usd = request.params[0].get_real();
-            uint32_t oracle_id = request.params.size() > 1 ? request.params[1].getInt<int>() : 1;
-
-            // Validate price
-            if (price_usd <= 0 || price_usd > 100) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Price must be between 0 and $100 per DGB");
-            }
-
-            // Validate oracle ID
-            if (oracle_id >= (uint32_t)ORACLE_TOTAL_COUNT) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle ID must be between 0 and %d", ORACLE_TOTAL_COUNT - 1));
-            }
-
-            // Get oracle config
-            const CChainParams& params = Params();
-            const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
-            if (!oracle_config) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle ID %d not found in configuration", oracle_id));
-            }
-
-            // Convert price to micro-USD
-            // Micro-USD format: 1,000,000 = $1.00
-            uint64_t price_micro_usd = static_cast<uint64_t>(price_usd * 1000000);
-
-            // Get the oracle's private key from the running oracle node
-            OracleManager& oracleManager = OracleManager::GetInstance();
-            OracleNode* oracleNode = oracleManager.GetOracleNode(oracle_id);
-            if (!oracleNode) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Oracle %d is not running. Use 'startoracle %d <privkey>' first.", oracle_id, oracle_id));
-            }
-            CKey oracle_key = oracleNode->GetOraclePrivateKey();
-            if (!oracle_key.IsValid()) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR, "Oracle private key is not valid");
-            }
-
-            // Create oracle message (Phase 2 format)
-            COraclePriceMessage msg;
-            msg.oracle_id = oracle_id;
-            msg.price_micro_usd = price_micro_usd;
-            msg.timestamp = GetTime();
-            msg.block_height = 0; // Will be set by block creation
-            msg.nonce = GetRand(std::numeric_limits<uint64_t>::max());
-            msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-
-            // Sign using Phase 2 Schnorr signing
-            if (!msg.SignPhase2(oracle_key)) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to sign oracle message");
-            }
-
-            // Store in bundle manager
-            OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
-            if (!bundleManager.AddOracleMessage(msg)) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to add oracle message to bundle manager");
-            }
-
-            // Broadcast to P2P network
-            // TODO: Implement actual P2P broadcasting via network manager
-            LogPrintf("Oracle: Broadcasted price message: oracle_id=%d, price=%llu micro-USD, timestamp=%d\n",
-                     msg.oracle_id, msg.price_micro_usd, msg.timestamp);
-
-            // Return result
-            UniValue result(UniValue::VOBJ);
-            result.pushKV("hash", msg.GetSignatureHash().GetHex());
-            result.pushKV("oracle_id", (uint64_t)msg.oracle_id);
-            result.pushKV("price_micro_usd", (uint64_t)msg.price_micro_usd);
-            result.pushKV("price_usd", price_usd);
-            result.pushKV("timestamp", msg.timestamp);
-            result.pushKV("broadcasted", true);
-
-            return result;
-        },
-    };
-}
+// sendoracleprice RPC REMOVED — Security vulnerability.
+// Oracle operators must NOT be able to inject arbitrary prices.
+// Oracle prices come exclusively from live exchange aggregation.
+// See OracleNode::PriceThreadFunc() and MultiExchangeAggregator.
 
 static RPCHelpMan getoracles()
 {
@@ -4733,7 +4622,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         {"digidollar", &getprotectionstatus},
 
         // Oracle management commands
-        {"oracle", &sendoracleprice},
+        // sendoracleprice REMOVED — security vulnerability (fake price injection)
         {"oracle", &getoracles},
         {"oracle", &listoracle},
         // {"oracle", &startoracle},  // Moved to wallet RPC table for wallet key loading

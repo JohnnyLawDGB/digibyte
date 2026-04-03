@@ -566,33 +566,36 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         }
 
         if (!session_ready) {
-            LogPrintf("Oracle: Phase 3 MuSig2 session not ready for epoch %d, skipping bundle\n", epoch);
-            return false;
+            LogPrintf("Oracle: Phase 3 MuSig2 session not ready for epoch %d, falling back to Phase 2\n", epoch);
+            // Fall through to Phase 2 bundling below — we still need oracle
+            // data in blocks while MuSig2 sessions are being established.
+        } else {
+            // Session is ready — build a v0x03 MuSig2 bundle
+            // Set bundle price and timestamp from cached consensus values
+            bundle.median_price_micro_usd = cached_price > 0 ? static_cast<uint64_t>(cached_price) : 0;
+            bundle.timestamp = GetTime();
+
+            // Create oracle script and add to coinbase
+            CScript oracle_script = CreateOracleScript(bundle);
+            LogPrintf("Oracle: Phase 3 CreateOracleScript returned script of size %zu\n", oracle_script.size());
+
+            if (oracle_script.empty()) {
+                LogPrintf("Oracle: Phase 3 script is empty, falling back to Phase 2\n");
+            } else {
+                CMutableTransaction coinbase_tx(*block.vtx[0]);
+                CTxOut oracle_output;
+                oracle_output.nValue = 0;
+                oracle_output.scriptPubKey = oracle_script;
+                coinbase_tx.vout.push_back(oracle_output);
+                block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
+
+                LogPrintf("Oracle: Phase 3 added MuSig2 oracle bundle to block %d (epoch %d)\n",
+                         block_height, epoch);
+                return true;
+            }
         }
-
-        // Set bundle price and timestamp from cached consensus values
-        bundle.median_price_micro_usd = cached_price > 0 ? static_cast<uint64_t>(cached_price) : 0;
-        bundle.timestamp = GetTime();
-
-        // Create oracle script and add to coinbase
-        CScript oracle_script = CreateOracleScript(bundle);
-        LogPrintf("Oracle: Phase 3 CreateOracleScript returned script of size %zu\n", oracle_script.size());
-
-        if (oracle_script.empty()) {
-            LogPrintf("Oracle: Phase 3 script is empty, returning true without adding bundle\n");
-            return true;
-        }
-
-        CMutableTransaction coinbase_tx(*block.vtx[0]);
-        CTxOut oracle_output;
-        oracle_output.nValue = 0;
-        oracle_output.scriptPubKey = oracle_script;
-        coinbase_tx.vout.push_back(oracle_output);
-        block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
-
-        LogPrintf("Oracle: Phase 3 added MuSig2 oracle bundle to block %d (epoch %d)\n",
-                 block_height, epoch);
-        return true;
+        // If we get here, Phase 3 session wasn't ready or script failed —
+        // fall through to Phase 2 bundling below
     }
 
     // Phase 1/2 bundling (existing logic below)

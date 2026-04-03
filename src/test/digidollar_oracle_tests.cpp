@@ -479,12 +479,12 @@ BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
 {
-    // Test that testnet has exactly 15 oracle nodes (9-of-15 consensus)
+    // Test that testnet has exactly 11 oracle nodes (6-of-11 consensus)
     auto chainparams = CChainParams::TestNet();
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
-    BOOST_CHECK_EQUAL(oracles.size(), 15);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 11);  // Phase Two/MuSig2: 6-of-11 consensus
+    BOOST_CHECK_EQUAL(oracles.size(), 11);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 11);  // 6-of-11 MuSig2 consensus
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
@@ -787,12 +787,13 @@ BOOST_AUTO_TEST_CASE(oracle_block_integration)
     coinbase.vout[0].nValue = 5000000000; // 50 DGB
     test_block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
 
-    // Test adding oracle bundle to block. In this deterministic unit context,
-    // no MuSig2 session or sufficient attestation quorum is prepared.
+    // Test adding oracle bundle to block. Without a MuSig2 session or
+    // oracle messages, AddOracleBundleToBlock returns true (block proceeds
+    // without oracle data — valid behavior).
     int32_t test_height = 1000;
     bool result = manager.AddOracleBundleToBlock(test_block, test_height);
 
-    BOOST_CHECK(!result);
+    BOOST_CHECK(result);  // true = block proceeds (no oracle data is valid)
 
     // Test oracle script creation with empty bundle
     COracleBundle empty_bundle;

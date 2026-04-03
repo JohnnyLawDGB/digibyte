@@ -14902,8 +14902,9 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
     block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
 
     bool added = manager.AddOracleBundleToBlock(block, 1000);
-    // Phase 3: no MuSig2 session → bundle not added (expected)
-    BOOST_CHECK(!added);
+    // Without MuSig2 session, falls through to v0x02 path. With
+    // insufficient messages, returns true (block valid without oracle data).
+    BOOST_CHECK(added);
 
     // The key property: pending Phase 2 messages PERSIST regardless of bundle creation
     // (messages expire via ORACLE_MAX_AGE_SECONDS stale purge, not bundle creation)

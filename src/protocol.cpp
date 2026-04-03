@@ -55,7 +55,7 @@ const char* ORACLEBUNDLE = "oraclebundle";
 const char* GETORACLES = "getoracles";
 const char* ORACLECONSENSUS = "oracleconsns";
 const char* ORACLEATTESTATION = "oracleattest";
-const char* ORACLEMUSIGNONCE = "oramusignonce";
+const char* ORACLEMUSIGNONCE = "oramusnonce";
 const char* ORACLEMUSIGPARTIALSIG = "oramusigpsig";
 } // namespace NetMsgType
 

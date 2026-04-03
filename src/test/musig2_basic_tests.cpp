@@ -27,6 +27,7 @@
 #include <secp256k1_musig.h>
 #include <secp256k1_schnorrsig.h>
 
+#include <array>
 #include <cstring>
 #include <vector>
 
@@ -52,7 +53,7 @@ static bool MuSig2SignFull(secp256k1_context* ctx,
                            unsigned char* sig64,
                            secp256k1_xonly_pubkey* agg_pk_out,
                            const unsigned char msg32[32],
-                           std::vector<unsigned char[32]>& seckeys,
+                           std::vector<std::array<unsigned char, 32>>& seckeys,
                            std::vector<secp256k1_keypair>& keypairs,
                            std::vector<secp256k1_pubkey>& pubkeys,
                            size_t n_signers)
@@ -76,7 +77,7 @@ static bool MuSig2SignFull(secp256k1_context* ctx,
         unsigned char session_secrand[32];
         GetStrongRandBytes(Span{session_secrand, 32});
         if (!secp256k1_musig_nonce_gen(ctx, &secnonces[i], &pubnonces[i],
-                                       session_secrand, seckeys[i], &pubkeys[i],
+                                       session_secrand, seckeys[i].data(), &pubkeys[i],
                                        msg32, &keyagg_cache, nullptr)) {
             return false;
         }
@@ -203,12 +204,12 @@ BOOST_AUTO_TEST_CASE(test_musig2_sign_verify_roundtrip_2_signers)
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
     constexpr size_t N = 2;
-    std::vector<unsigned char[32]> seckeys(N);
+    std::vector<std::array<unsigned char, 32>> seckeys(N);
     std::vector<secp256k1_keypair> keypairs(N);
     std::vector<secp256k1_pubkey> pubkeys(N);
 
     for (size_t i = 0; i < N; i++) {
-        BOOST_REQUIRE(MakeRandomKeypair(ctx, seckeys[i], &keypairs[i], &pubkeys[i]));
+        BOOST_REQUIRE(MakeRandomKeypair(ctx, seckeys[i].data(), &keypairs[i], &pubkeys[i]));
     }
 
     unsigned char msg[32];
@@ -236,21 +237,21 @@ BOOST_AUTO_TEST_CASE(test_musig2_sign_verify_roundtrip_9_of_15)
     constexpr size_t N_SIGNING = 9;
 
     // Generate all 15 key pairs
-    std::vector<unsigned char[32]> all_seckeys(N_TOTAL);
+    std::vector<std::array<unsigned char, 32>> all_seckeys(N_TOTAL);
     std::vector<secp256k1_keypair> all_keypairs(N_TOTAL);
     std::vector<secp256k1_pubkey> all_pubkeys(N_TOTAL);
 
     for (size_t i = 0; i < N_TOTAL; i++) {
-        BOOST_REQUIRE(MakeRandomKeypair(ctx, all_seckeys[i], &all_keypairs[i], &all_pubkeys[i]));
+        BOOST_REQUIRE(MakeRandomKeypair(ctx, all_seckeys[i].data(), &all_keypairs[i], &all_pubkeys[i]));
     }
 
     // Only first 9 signers participate
-    std::vector<unsigned char[32]> signing_seckeys(N_SIGNING);
+    std::vector<std::array<unsigned char, 32>> signing_seckeys(N_SIGNING);
     std::vector<secp256k1_keypair> signing_keypairs(N_SIGNING);
     std::vector<secp256k1_pubkey> signing_pubkeys(N_SIGNING);
 
     for (size_t i = 0; i < N_SIGNING; i++) {
-        memcpy(signing_seckeys[i], all_seckeys[i], 32);
+        memcpy(signing_seckeys[i].data(), all_seckeys[i].data(), 32);
         signing_keypairs[i] = all_keypairs[i];
         signing_pubkeys[i] = all_pubkeys[i];
     }
@@ -314,12 +315,12 @@ BOOST_AUTO_TEST_CASE(test_musig2_verify_with_schnorrsig_verify)
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
     constexpr size_t N = 3;
-    std::vector<unsigned char[32]> seckeys(N);
+    std::vector<std::array<unsigned char, 32>> seckeys(N);
     std::vector<secp256k1_keypair> keypairs(N);
     std::vector<secp256k1_pubkey> pubkeys(N);
 
     for (size_t i = 0; i < N; i++) {
-        BOOST_REQUIRE(MakeRandomKeypair(ctx, seckeys[i], &keypairs[i], &pubkeys[i]));
+        BOOST_REQUIRE(MakeRandomKeypair(ctx, seckeys[i].data(), &keypairs[i], &pubkeys[i]));
     }
 
     unsigned char msg[32] = "MuSig2 BIP-340 compat test msg!";

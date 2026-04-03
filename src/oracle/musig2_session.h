@@ -123,6 +123,11 @@ public:
      * @param[in] msg32 The 32-byte message to sign
      * @return true on success
      */
+    /** Override the key aggregation cache (for threshold MuSig2: set to
+     *  participants-only aggregate BEFORE calling AggregateNonces). */
+    void SetKeyAggCache(const secp256k1_musig_keyagg_cache& cache);
+    /** Return sorted oracle IDs that contributed nonces. */
+    std::vector<uint8_t> GetNonceParticipants() const;
     bool AggregateNonces(const unsigned char* msg32);
 
     /**

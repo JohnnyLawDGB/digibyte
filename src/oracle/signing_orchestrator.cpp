@@ -384,6 +384,21 @@ void OracleSigningOrchestrator::OnBlockConnected(
             unsigned char msg32[32];
             ComputeOracleMessageHash(current_epoch, consensus_price, consensus_timestamp, msg32);
 
+            // Threshold MuSig2: recompute key aggregation for ONLY the oracles
+            // that provided nonces. The signing session, partial sigs, and
+            // aggregate signature are all bound to this participants-only key.
+            std::vector<uint8_t> participant_ids = session->GetNonceParticipants();
+            secp256k1_xonly_pubkey part_agg_pk;
+            secp256k1_musig_keyagg_cache part_cache;
+            if (!m_aggregator->ComputeAggregatePubkey(participant_ids, part_agg_pk, part_cache)) {
+                LogPrintf("Oracle: Step 2 - failed to compute participants-only aggregate for epoch %d (%zu participants)\n",
+                         current_epoch, participant_ids.size());
+            } else {
+                session->SetKeyAggCache(part_cache);
+                LogPrintf("Oracle: Step 2 - recomputed keyagg for %zu participants (epoch %d)\n",
+                         participant_ids.size(), current_epoch);
+            }
+
             if (session->AggregateNonces(msg32)) {
                 LogPrintf("Oracle: Nonces aggregated for epoch %d, SIGNING\n", current_epoch);
 

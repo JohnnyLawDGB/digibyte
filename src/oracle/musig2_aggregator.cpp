@@ -6,8 +6,10 @@
 
 #include <chainparams.h>
 #include <hash.h>
+#include <logging.h>
 #include <primitives/oracle.h>
 #include <pubkey.h>
+#include <util/strencodings.h>
 
 #include <algorithm>
 #include <cassert>
@@ -114,12 +116,20 @@ bool MuSig2OracleAggregator::ComputeAggregatePubkey(
     std::vector<secp256k1_pubkey> pubkeys;
     pubkeys.reserve(sorted_ids.size());
     for (uint8_t id : sorted_ids) {
-        if (id >= nodes.size()) return false;
+        if (id >= nodes.size()) {
+            LogPrintf("Oracle: ComputeAggregatePubkey: oracle id %d >= nodes.size() %zu\n", id, nodes.size());
+            return false;
+        }
         const CPubKey& cpk = nodes[id].pubkey;
-        if (!cpk.IsValid()) return false;
+        if (!cpk.IsValid()) {
+            LogPrintf("Oracle: ComputeAggregatePubkey: oracle %d pubkey invalid, size=%u\n", id, cpk.size());
+            return false;
+        }
 
         secp256k1_pubkey pk;
         if (!secp256k1_ec_pubkey_parse(m_ctx, &pk, cpk.data(), cpk.size())) {
+            LogPrintf("Oracle: ComputeAggregatePubkey: secp256k1_ec_pubkey_parse failed for oracle %d, key=%s\n",
+                     id, HexStr(Span<const unsigned char>(cpk.data(), cpk.size())));
             return false;
         }
         pubkeys.push_back(pk);
@@ -134,8 +144,11 @@ bool MuSig2OracleAggregator::ComputeAggregatePubkey(
     // BIP-327 key aggregation via secp256k1 MuSig2 module
     if (!secp256k1_musig_pubkey_agg(m_ctx, &agg_pk, &cache,
                                      pubkey_ptrs.data(), pubkey_ptrs.size())) {
+        LogPrintf("Oracle: ComputeAggregatePubkey: secp256k1_musig_pubkey_agg failed for %zu keys\n",
+                 pubkey_ptrs.size());
         return false;
     }
+    LogPrintf("Oracle: ComputeAggregatePubkey: SUCCESS for %zu oracles\n", sorted_ids.size());
 
     // Store in cache
     {

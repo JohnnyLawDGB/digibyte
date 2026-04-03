@@ -5,6 +5,7 @@
 #include <oracle/musig2_session.h>
 
 #include <chainparams.h>
+#include <logging.h>
 #include <random.h>
 #include <support/cleanse.h>
 
@@ -227,6 +228,23 @@ size_t MuSig2SigningSession::GetNonceCount() const
 // Aggregate nonces + initialize signing session
 // ============================================================================
 
+void MuSig2SigningSession::SetKeyAggCache(const secp256k1_musig_keyagg_cache& cache)
+{
+    LOCK(m_mutex);
+    m_keyagg_cache = cache;
+}
+
+std::vector<uint8_t> MuSig2SigningSession::GetNonceParticipants() const
+{
+    LOCK(m_mutex);
+    std::vector<uint8_t> ids;
+    ids.reserve(m_pubnonces.size());
+    for (const auto& [id, nonce] : m_pubnonces) {
+        ids.push_back(id);
+    }
+    return ids; // already sorted (std::map)
+}
+
 bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
 {
     LOCK(m_mutex);
@@ -248,7 +266,9 @@ bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
         return false;
     }
 
-    // Initialize the MuSig2 session with the aggregate nonce and message
+    // Initialize the MuSig2 session with the aggregate nonce and message.
+    // m_keyagg_cache MUST have been set to the participants-only aggregate
+    // before this call (via SetKeyAggCache from the orchestrator).
     if (!secp256k1_musig_nonce_process(m_ctx, &m_session, &m_aggnonce,
                                         msg32, &m_keyagg_cache)) {
         m_state = MuSig2SessionState::FAILED;

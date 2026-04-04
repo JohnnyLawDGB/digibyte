@@ -81,7 +81,7 @@
   - `GetBlockHash()` → returns block header hash
   - `GetBlockTime()` → returns block timestamp
   - `GetMedianTimePast()` → returns median of last 11 block timestamps (for time-based locktime)
-  - `GetBlockAlgo()` → returns which of the 5 mining algorithms produced this block
+  - `GetAlgo()` → returns which of the 5 mining algorithms produced this block
 - `CChain` (class) → represents the active chain as an ordered vector of CBlockIndex pointers
   - `SetTip()` → sets chain tip to given block index
   - `FindFork()` → finds most recent common ancestor between this chain and given block
@@ -1339,7 +1339,7 @@
 ### src/primitives/block.cpp / .h
 - `CBlockHeader` (class) → block header: version, prev hash, merkle root, timestamp, nBits (difficulty), nNonce
   - `GetHash()` → double-SHA256 hash of the header (block hash)
-  - `GetPoWAlgo()` → extracts mining algorithm from version field (bits 8-10 encode algo 0-4)
+  - `GetAlgo()` → extracts mining algorithm from version field (bits 8-10 encode algo 0-4)
 - `CBlock` (class extends CBlockHeader) → full block: header + vector of transactions
   - `ToString()` → human-readable block summary
 - `GetAlgoName()` → maps algo number (0-7) to name string ("sha256d", "scrypt", "groestl", "skein", "qubit", "odocrypt")
@@ -1443,7 +1443,7 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 - RPC commands: `stop`, `uptime`, `getmemoryinfo`
 
 ### src/rpc/output_script.cpp
-- RPC commands: `getbestblockhash`, `decodescript` (output script analysis)
+- RPC commands: `validateaddress`, `createmultisig`, `getdescriptorinfo`, `deriveaddresses` (output script analysis and address utilities)
 
 ### src/rpc/protocol.h
 - `RPCErrorCode` enum → all JSON-RPC error codes (INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, etc.)
@@ -1785,4 +1785,6 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 - `BerkeleyDatabaseSanityCheck()` → validates BDB library compatibility
 
 ### src/wallet/coincontrol.cpp / .h
-- `CCoinControl` (class) → user preferences for coin selection: manually selected inputs,
+- `CCoinControl` (class) → user preferences for coin selection: manually selected inputs, change address, fee rate, estimated tx weight, min/max confirmation depth
+
+> **NOTE:** The wallet section of this document is truncated. See `src/wallet/` directory for full wallet source files including `wallet.cpp/.h`, `spend.cpp/.h`, `receive.cpp/.h`, `walletdb.cpp/.h`, `rpc/` wallet RPCs, `scriptpubkeyman.cpp/.h`, `sqlite.cpp/.h`, and DigiDollar wallet integration (`digidollarwallet.cpp/.h`, `ddcoincontrol.h/.cpp`). DigiDollar-specific wallet code is documented in `REPO_MAP_DIGIDOLLAR.md`.

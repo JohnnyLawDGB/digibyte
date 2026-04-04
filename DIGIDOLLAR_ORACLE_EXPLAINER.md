@@ -64,7 +64,7 @@ Phase One implements a **streamlined testnet-ready system**:
 
 **The External Oracle Daemon** (separate from DigiByte Core):
 - Fetches prices from 6 working exchanges every 15 seconds
-- Calculates median with MAD outlier filtering
+- Calculates median with percentage-threshold outlier filtering
 - Creates and signs 128-byte oracle messages
 - Broadcasts to P2P network (which DigiByte Core nodes receive)
 
@@ -111,7 +111,7 @@ Here's exactly what happens when the oracle updates the price:
                             ▼
             ┌───────────────────────────────┐
             │  2. Calculate Median Price    │
-            │     with MAD Outlier Filter   │
+            │   with Outlier Filter         │
             └───────────────┬───────────────┘
                             │
                             ▼
@@ -678,11 +678,11 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 - Miners include real oracle data in blocks
 
 **Key differences from mainnet**:
-- ⚠️ **5-of-9 consensus** (Phase Two ready)
+- ⚠️ **6-of-11 consensus** (Phase Two ready)
 - ⚠️ **Testnet DGB** (free, no value)
 - ⚠️ **Lower security** (acceptable for testing)
 
-**Activation height**: Block 600 (after Odocrypt at 500)
+**Activation height**: Block 600
 
 **Use case**:
 - Testing DigiDollar minting with real prices
@@ -698,7 +698,7 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 
 **How it works**:
 - Oracle validation is **completely disabled**
-- Activation height set to `INT_MAX` (never activates)
+- Activation height set to `22014720` but validation returns true immediately (bypassed)
 - Blocks are **not required** to have oracle data
 - Code has **safety guards** preventing accidental activation
 
@@ -716,7 +716,7 @@ Phase One's single oracle (1-of-1 consensus) is **not secure enough for mainnet*
 - ✅ **Reputation system** (track oracle accuracy over time)
 - ✅ **On-chain signatures** (all 8 signatures verified in blocks)
 
-**Activation height**: `2,147,483,647` (INT_MAX - never)
+**Activation height**: `22014720` (but oracle validation is bypassed on mainnet)
 
 **Use case**: N/A (not active yet)
 
@@ -784,34 +784,49 @@ Sorted:   [$0.05017, $0.05018, $0.05019, $0.05020, $0.05020,
 Median: ($0.05020 + $0.05021) ÷ 2 = $0.050205 ≈ $0.05020
 ```
 
-### Advanced Outlier Filtering (MAD Algorithm)
+### Advanced Outlier Filtering (Two-Layer System)
 
-**MAD = Median Absolute Deviation**
+The oracle system uses **two different outlier filtering algorithms** at different stages:
 
-This statistical method identifies prices that are **too far** from the median:
+**Layer 1: Exchange Aggregator (Percentage-Threshold)**
+
+The `MultiExchangeAggregator::FilterOutliers()` removes exchange prices that deviate more than a configurable percentage from the median:
 
 **Algorithm**:
-1. Calculate median price (M)
-2. Calculate absolute deviations: `|price - M|` for each price
-3. Calculate MAD: median of all absolute deviations
-4. Reject prices where: `|price - M| > 3 × MAD`
+1. Calculate median price (M) from all exchange prices
+2. Calculate threshold: `M * outlier_threshold` (default 10%)
+3. Reject prices where: `|price - M| > threshold`
+
+**Layer 2: Consensus Price (IQR Filtering)**
+
+The `COracleBundle::GetConsensusPrice()` uses **Interquartile Range (IQR)** filtering for deterministic consensus:
+
+**Algorithm**:
+1. Sort all valid prices
+2. Calculate Q1 (25th percentile) and Q3 (75th percentile)
+3. IQR = Q3 - Q1
+4. Lower bound = Q1 - 1.5 * IQR
+5. Upper bound = Q3 + 1.5 * IQR
+6. Reject prices outside [lower_bound, upper_bound]
+7. Return median of remaining prices
+8. If fewer than 4 prices, skip IQR and return simple median
 
 **Example**:
 ```
 Prices: [$0.05, $0.05, $0.05, $0.05, $0.05, $0.05, $0.05, $0.05, $0.05, $0.20]
 
-Step 1: Median (M) = $0.05
-Step 2: Deviations = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.15]
-Step 3: MAD = median([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.15]) = 0
-Step 4: Check $0.20: |0.20 - 0.05| = 0.15 > 3 × 0 → REJECT
+IQR filter: Q1=$0.05, Q3=$0.05, IQR=0
+Lower bound = 0.05 - 0 = $0.05
+Upper bound = 0.05 + 0 = $0.05
+$0.20 is outside bounds → REJECT
 
 Final median: $0.05 (outlier removed)
 ```
 
-**Why MAD?**
-- ✅ **Statistically robust**: Works even with multiple outliers
-- ✅ **Self-adjusting**: Threshold adapts to market volatility
-- ✅ **Industry standard**: Used in professional trading systems
+**Why two layers?**
+- ✅ **Percentage-threshold**: Fast, simple for exchange-level filtering
+- ✅ **IQR**: Statistically robust for consensus, deterministic across all nodes
+- ✅ **Defense in depth**: Outliers caught at multiple stages
 
 ### Micro-USD Format (On-Chain Storage)
 
@@ -1339,7 +1354,7 @@ Price bytes (little-endian): 64 19 00 00 00 00 00 00
 Timestamp bytes (little-endian): 00 2f 50 65 00 00 00 00
   = 0x00 + (0x2f << 8) + (0x50 << 16) + (0x65 << 24)
   = 0 + 12,032 + 5,242,880 + 1,694,498,816
-  = 1,700,000,000 ✓
+  = 1,699,753,728 ✓ (example value, not exactly 1,700,000,000)
 ```
 
 ---
@@ -1392,7 +1407,7 @@ if (network != TESTNET && network != REGTEST) {
 if (block_height < nOracleActivationHeight) {
     return true;  // Not active yet
 }
-// Testnet: 600, Regtest: 650, Mainnet: DISABLED (INT_MAX)
+// Testnet: 600, Regtest: 650, Mainnet: 22014720 (but validation bypassed)
 ```
 
 **Purpose**: Oracle activates at block 600 (testnet) or 650 (regtest). Mainnet is disabled.
@@ -1510,7 +1525,7 @@ height_to_price[700] = 6500;  // Block 700: 6500 micro-USD ($0.0065) (current)
 **Cache management**:
 - ✅ **Thread-safe**: Mutex-protected for multi-threaded access
 - ✅ **Limited size**: Keeps last 1,000 blocks (auto-evicts oldest)
-- ✅ **Fast lookup**: O(1) average case (hash map)
+- ✅ **Fast lookup**: O(log n) access time (ordered map, `std::map<int, uint64_t>`)
 
 **Why cache?**
 
@@ -1907,7 +1922,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 
 ### What It Does
 - ✅ **Fetches** real DGB/USD prices from 6 exchanges every 15 seconds (external daemon)
-- ✅ **Calculates** median price with outlier filtering (MAD algorithm)
+- ✅ **Calculates** median price with outlier filtering (percentage-threshold + IQR)
 - ✅ **Broadcasts** signed messages via P2P network (2-5 second propagation)
 - ✅ **Stores** compact 22-byte format in every block (26.5% of OP_RETURN limit)
 - ✅ **Validates** all oracle data during block verification (CheckBlock)
@@ -1923,7 +1938,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 
 ### Network Modes
 - **RegTest**: Mock oracle (fake prices for testing)
-- **Testnet**: Real oracle, real prices, 1-of-1 consensus
+- **Testnet**: Real oracle, real prices, 6-of-11 consensus
 - **Mainnet**: Disabled (Phase Two required)
 
 ### Current Limitations
@@ -1956,7 +1971,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 2. **Price Data Quality**
    - Verify 6 active exchanges working consistently
    - Monitor for price outliers
-   - Test MAD filtering with real market data
+   - Test outlier filtering with real market data
 
 3. **Network Stability**
    - Ensure P2P propagation works across testnet
@@ -2023,13 +2038,13 @@ Before testnet launch:
 |--------------|-------------------|-------------------------|-------------------------|
 | **Oracle Daemon** | Mock (built-in) | External daemon | 15 external daemons |
 | **Price Source** | Manual (`setmockoracleprice`) | 6 active exchanges | 6 active exchanges |
-| **Consensus Model** | N/A (mock) | 1-of-1 (single oracle) | 8-of-15 (majority) |
+| **Consensus Model** | 4-of-7 | 6-of-11 | 6-of-11 (code current; aspirational: 8-of-15) |
 | **P2P Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Block Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Schnorr Signatures** | ❌ Not used (mock) | ✅ P2P only (not in blocks) | ✅ On-chain (8 signatures) |
 | **Compact Format** | ✅ 22 bytes | ✅ 22 bytes | ~150 bytes (with sigs) |
 | **Price Cache** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
-| **Activation Height** | Block 650 | Block 600 | DISABLED (INT_MAX) |
+| **Activation Height** | Block 650 | Block 600 | Block 22014720 (validation bypassed) |
 | **Economic Incentives** | ❌ None | ❌ None (trust-based) | ✅ Staking/slashing |
 | **Reputation System** | ❌ None | ❌ None | ✅ On-chain metrics |
 | **Status** | ✅ **Working now** | 🚧 **Ready (needs daemon)** | 📋 **Planned (2026)** |
@@ -2070,7 +2085,7 @@ Before testnet launch:
    - 5 broken/removed exchange APIs (Coinbase, Kraken, Messari, Bittrex/Poloniex - APIs changed or defunct; CoinMarketCap removed)
    - Real libcurl implementation when available
    - Mock fallback responses when libcurl unavailable
-   - MultiExchangeAggregator with MAD outlier filtering
+   - MultiExchangeAggregator with percentage-threshold outlier filtering
 
 2. **Oracle Message Creation** (`src/oracle/node.cpp`)
    - Full oracle message creation capability
@@ -2098,8 +2113,8 @@ Before testnet launch:
 
 #### **Mainnet (Phase Two) - 📋 INFRASTRUCTURE READY**
 - [x] Multi-oracle validation functions implemented
-- [x] 30 mainnet oracle nodes defined in chainparams
-- [x] 8-of-15 consensus configured
+- [x] 11 mainnet oracle pubkeys defined in chainparams
+- [x] 6-of-11 consensus configured (aspirational target: 8-of-15)
 - [x] IQR outlier filtering algorithm implemented
 - [x] nDigiDollarPhase2Height parameter ready
 - [ ] 15 oracle operators recruited and active
@@ -2115,27 +2130,28 @@ Before testnet launch:
 ### What's Phase Two?
 
 Phase Two upgrades the oracle system from **1-of-1** to **multi-oracle consensus**:
-- **Testnet**: 5-of-9 (need 5 agreeing oracles from 9 total)
-- **Mainnet**: 8-of-15 (need 8 agreeing oracles from 15 total)
+- **Testnet**: 6-of-11 (need 6 agreeing oracles from 11 total)
+- **Mainnet**: 6-of-11 (need 6 agreeing oracles from 11 total; aspirational target: 8-of-15)
 
 This provides true decentralization - no single oracle can manipulate prices.
 
 ### Phase Two Infrastructure (Already Implemented)
 
-**All 9 testnet oracle keys are defined** in `chainparams.cpp`:
+**All 11 testnet oracle keys are defined** in `chainparams.cpp`:
 ```
-Oracle 0: e1dce189a530c1fb... (Jared - ACTIVE)
-Oracle 1-8: Community operators (keys defined, all active for 5-of-9 consensus)
+ChopperBrian, Bastian, LookInto, Green Candle, DanGB, Aussie, Ycagel,
+JohnnyLawDGB, Shenger, Ogilvie, Jared (all active for 6-of-11 consensus)
 ```
 
 **Validation functions ready** in `bundle_manager.cpp`:
 - `ValidatePhaseTwoBundle()` - Validates multi-oracle bundles
 - `CalculateConsensusPrice()` - Median with IQR outlier filtering
-- `GetRequiredConsensus()` - Returns 1 (Phase One) or 4-8 (Phase Two)
+- `GetRequiredConsensus()` - Returns 1 (Phase One) or 4-6 (Phase Two)
 
 **Activation parameter**:
 ```cpp
-consensus.nDigiDollarPhase2Height = INT_MAX;  // Not activated (current)
+// Default in params.h is INT_MAX, but overridden per-network:
+// Mainnet: 3000000, Testnet: 600, Regtest: 650
 consensus.nDigiDollarPhase2Height = 500000;   // Example: Activate at block 500,000
 ```
 
@@ -2174,8 +2190,8 @@ Median = $0.050 ✓
 
 | Aspect | Phase One (Current) | Phase Two (Ready) |
 |--------|---------------------|-------------------|
-| Consensus | 1-of-1 | 5-of-9 testnet, 8-of-15 mainnet |
-| Oracles Defined | 9 (all active) | 9 testnet, 15 mainnet |
+| Consensus | 1-of-1 | 6-of-11 testnet, 6-of-11 mainnet |
+| Oracles Defined | 11 (all active) | 11 testnet, 11 mainnet |
 | Signature Required | Optional | Required (all messages) |
 | Price Calculation | Direct | IQR-filtered median |
 | Manipulation Risk | Single point of failure | Requires majority collusion |
@@ -2184,16 +2200,16 @@ Median = $0.050 ✓
 ### **Key Takeaway**
 
 **DigiByte Core is ready** to validate and use oracle data. The **Phase One system is active** on testnet with a single oracle. **Phase Two infrastructure is complete** - just awaiting:
-1. Oracle operator recruitment (9 testnet, 15 mainnet)
+1. Oracle operator recruitment (11 testnet, 11 mainnet)
 2. Setting `nDigiDollarPhase2Height` to an activation block
 
 **For RegTest**: Use the built-in mock oracle (`setmockoracleprice`).
 
 **For Testnet Phase One**: Single oracle broadcasting via P2P.
 
-**For Testnet Phase Two**: Set activation height, enable 5-of-9 consensus.
+**For Testnet Phase Two**: Set activation height, enable 6-of-11 consensus.
 
-**For Mainnet**: Requires full 8-of-15 multi-oracle system with operators.
+**For Mainnet**: Requires full multi-oracle system with operators (currently configured as 6-of-11; aspirational target is 8-of-15).
 
 ---
 

@@ -84,7 +84,7 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned oracle ID (0–8 for testnet) — contact the maintainer.
+For first-time oracle operators. You need an assigned oracle ID (0–10 for testnet, 11 oracles total) — contact the maintainer.
 
 ```bash
 # 1. Start your node
@@ -179,15 +179,15 @@ Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari, KuCoin, Crypto
 
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| Active Oracles | 9 | 7 | 15 |
-| Consensus Required | 5-of-9 | 4-of-7 | 8-of-15 |
-| Activation Height | 600 | 650 | BIP9 (TBD) |
+| Active Oracles | 11 | 7 | 11 |
+| Consensus Required | 6-of-11 | 4-of-7 | 6-of-11 |
+| Activation Height | 600 | 650 | BIP9 (22,014,720) |
 | Epoch Length (`nDDOracleEpochBlocks`) | 50 blocks | 10 blocks | 100 blocks |
 | Price Update Interval | 2 blocks | 1 block | 4 blocks |
 | Oracle Broadcast Interval | 60 seconds | 60 seconds | 60 seconds |
 | Max Price Age | 3600 seconds | 3600 seconds | 3600 seconds |
 
-Total oracle slots: 30 (defined in `src/primitives/oracle.h`).
+Total oracle slots: 30 (defined in `src/primitives/oracle.h`). Active oracle pubkey count (`nOraclePubkeyCount`) and consensus threshold (`nOracleConsensusRequired`) are separate from the static constants in `oracle.h` and are configured per-network in `src/kernel/chainparams.cpp`.
 
 ---
 
@@ -265,9 +265,9 @@ Returns: `oracle_id`, `pubkey`, `pubkey_full`, `valid`, `authorized`, `is_runnin
 List all oracles from chainparams with their status.
 
 ```
-digibyte-cli -testnet getoracles [active_only]
+digibyte-cli -testnet getoracles [active_only] [blocks]
 ```
-Returns array with: `oracle_id`, `pubkey`, `endpoint`, `is_active`, `is_running`, `last_price`, `last_update`, `selected_for_epoch`.
+Returns array with: `oracle_id`, `name`, `pubkey`, `endpoint`, `is_active`, `last_price_micro_usd`, `last_price_usd`, `last_update`, `price_source`, `status`, `selected_for_epoch`, `is_running_locally`.
 
 #### `listoracle`
 Show the status of the oracle running on this local node (no parameters).
@@ -283,13 +283,8 @@ Get price data from all active oracles.
 digibyte-cli -testnet getalloracleprices
 ```
 
-#### `sendoracleprice` *(testnet/regtest only)*
-Broadcast a signed oracle price message for testing.
-
-```
-digibyte-cli -testnet sendoracleprice <price_usd> [oracle_id]
-```
-Example: `sendoracleprice 0.05 1` broadcasts $0.05 as oracle 1.
+#### `sendoracleprice` — REMOVED
+> **Security note:** `sendoracleprice` was removed as a security vulnerability. Oracle operators must NOT be able to inject arbitrary prices. Oracle prices come exclusively from live exchange aggregation via `startoracle`.
 
 #### `submitoracleprice` *(regtest only)*
 Submit a Phase 2 oracle price for testing consensus.
@@ -306,7 +301,7 @@ Get the current consensus DGB/USD oracle price.
 ```
 digibyte-cli -testnet getoracleprice
 ```
-Returns: `price_usd`, `price_micro_usd`, `last_update_height`, `is_stale`, `oracle_count`, `24h_high`, `24h_low`.
+Returns: `price_micro_usd`, `price_cents`, `price_usd`, `last_update_height`, `last_update_time`, `validity_blocks`, `is_stale`, `oracle_count`, `status`, `24h_high`, `24h_low`, `volatility`.
 
 #### `mintdigidollar` *(wallet RPC)*
 Mint DigiDollars by locking DGB as collateral.
@@ -357,11 +352,11 @@ Get a new DigiDollar receiving address.
 digibyte-cli -testnet -rpcwallet=<wallet> getdigidollaraddress
 ```
 
-#### `listdigidollaraddresses`
+#### `listdigidollaraddresses` *(wallet RPC)*
 List all DigiDollar addresses in a wallet.
 
 ```
-digibyte-cli -testnet listdigidollaraddresses
+digibyte-cli -testnet -rpcwallet=<wallet> listdigidollaraddresses
 ```
 
 #### `importdigidollaraddress`
@@ -444,7 +439,7 @@ When an operator sends their `pubkey` (33-byte compressed, e.g. `0398720f...eb7b
 
 **1. `vOracleNodes`** — use the full 33-byte compressed key:
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12033", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12035", true},
 ```
 
 **2. `consensus.vOraclePublicKeys`** — strip the `02`/`03` prefix to get the 32-byte x-only key:
@@ -464,7 +459,7 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12033 (testnet P2P) | Open inbound + outbound |
+| Ports | 12035 (testnet P2P) | Open inbound + outbound |
 
 ---
 
@@ -497,4 +492,4 @@ digibyte-cli -testnet -rpcwallet=oracle getwalletinfo
 
 ---
 
-*Verified against DigiByte Core RC16 source code.*
+*Verified against DigiByte Core v9.26.0-rc29 source code.*

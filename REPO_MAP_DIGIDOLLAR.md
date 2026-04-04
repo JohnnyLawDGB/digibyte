@@ -488,6 +488,45 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - Background price thread with configurable intervals
 - Broadcast every 60 seconds (12–25× redundancy per epoch)
 
+### src/oracle/musig2_session.h / .cpp
+- `MuSig2SessionState` (enum) → CREATED, NONCES_COLLECTING, NONCES_COMPLETE, SIGNING, COMPLETE, FAILED
+- `MuSig2SigningSession` (class) → in-process MuSig2 (BIP-327) signing state machine for a single epoch
+  - Manages local signer's secret nonce and collects pubnonces and partial signatures from peers
+  - Two-round protocol: nonce exchange → partial signature exchange → aggregation
+
+### src/oracle/musig2_messages.h
+- `OracleMusigNonceMsg` (class) → Phase 3 Round 1 P2P message: epoch, oracle_id, pubnonce (66 bytes), Schnorr signature (RH-24 authentication)
+  - `GetHash()` → dedup hash; `GetSignatureHash()` → hash of fields signed; `Sign()` / `Verify()` → authentication
+- `OracleMusigPartialSigMsg` (class) → Phase 3 Round 2 P2P message: epoch, oracle_id, partial_sig, Schnorr signature
+
+### src/oracle/musig2_aggregator.h / .cpp
+- `MuSig2OracleAggregator` (class) → BIP-327 compliant oracle key aggregation using secp256k1_musig_pubkey_agg
+  - Variable-length bitmap encoding for oracle participation sets
+  - Thread-safe cache keyed by bitmap hash
+
+### src/oracle/musig2_orchestrator.h / .cpp
+- `MuSig2CompletedResult` (struct) → aggregate_sig (64-byte BIP-340 Schnorr) + participation_bitmap
+- MuSig2 Session Manager — orchestrates per-epoch signing session lifecycle: session creation, nonce generation, peer nonce/sig collection, session advancement, pruning
+
+### src/oracle/musig2_oracle_participation.h / .cpp
+- `MuSig2OracleParticipation` (class) → manages an oracle's participation in the two-round MuSig2 signing protocol for Phase 3 oracle bundles
+  - Per-epoch lifecycle: nonce generation → nonce collection → consensus value signing → partial sig collection → bundle creation
+
+### src/oracle/musig2_session_manager.h / .cpp
+- `MuSig2SessionManager` (class) → manages per-epoch signing sessions for P2P collection
+  - `OnNonceReceived()` / `OnPartialSigReceived()` → process incoming P2P messages
+  - `CheckTimeouts()` → timeout detection per new block tip
+
+### src/oracle/musig2_session_mining.h
+- Bridge header declaring MuSig2SigningSession globals for AddOracleBundleToBlock (Phase 3 v0x03 bundle creation)
+  - `g_oracle_signing_sessions` → global session map keyed by epoch
+  - `g_oracle_signing_sessions_mutex` → protecting mutex
+
+### src/oracle/signing_orchestrator.h / .cpp
+- `OracleSigningOrchestrator` (class, extends CValidationInterface) → drives MuSig2 signing protocol on every BlockConnected
+  - Oracle nodes: generate nonces, create partial sigs, broadcast
+  - Non-oracle nodes: collect nonces/sigs, aggregate final signature
+
 ---
 
 ## Oracle Primitives
@@ -680,7 +719,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - Full implementation of DigiDollarWallet (~2000+ lines)
 - Integrates with wallet database, transaction builders, signing, mempool
 
-### src/wallet/ddcoincontrol.h
+### src/wallet/ddcoincontrol.h / .cpp
 - `wallet::DDCoinControl` (class) → manual DD UTXO selection for transactions
   - `m_allow_other_inputs` → if true, allows adding unselected inputs alongside selected ones
   - `m_min_depth` / `m_max_depth` → chain depth bounds for UTXO availability
@@ -772,7 +811,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ Allows 0-value P2TR outputs for DD token transfers
 
 ### src/protocol.h
-- ⚠️ `MSG_ORACLE_PRICE` (0x40000000), `MSG_ORACLE_BUNDLE` (0x40000001), `MSG_GET_ORACLE_DATA` (0x40000002), `MSG_ORACLE_CONSENSUS` (0x40000003), `MSG_ORACLE_ATTESTATION` (0x40000004) P2P message types for oracle network
+- ⚠️ `MSG_ORACLE_PRICE` (0x40000000), `MSG_ORACLE_BUNDLE` (0x40000001), `MSG_GET_ORACLE_DATA` (0x40000002), `MSG_ORACLE_CONSENSUS` (0x40000003), `MSG_ORACLE_ATTESTATION` (0x40000004), `MSG_ORACLE_MUSIG_NONCE` (0x40000005), `MSG_ORACLE_MUSIG_PARTIALSIG` (0x40000006) P2P message types for oracle network
 - ⚠️ `OracleConsensusMsg` (class) → Phase 2 Round 2 consensus proposal: epoch, consensus_price, consensus_timestamp with `GetHash()` for dedup
 - ⚠️ `OracleAttestationMsg` (class) → Phase 2 Round 2 oracle attestation wrapper: `COraclePriceMessage` signed over consensus values with `GetHash()` for dedup
 
@@ -787,6 +826,10 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 
 ### src/logging.cpp
 - ⚠️ `BCLog::DIGIDOLLAR` log category registration
+
+### src/net_processing.cpp
+- ⚠️ Handles `ORACLEMUSIGNONCE` and `ORACLEMUSIGPARTIALSIG` P2P messages for MuSig2 signing protocol
+- ⚠️ Oracle message validation, rate limiting, Misbehaving scoring for invalid MuSig2 messages
 
 ### src/node/transaction.cpp
 - ⚠️ DD-aware transaction broadcast handling, oracle data relay
@@ -921,12 +964,69 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `redteam_phase2_audit_tests.cpp` | **RED HORNET Phase 2** — 15 exploit tests: Schnorr sig bypass, selective price inclusion, consensus fork vectors, oracle identity attacks, signature replay, version downgrade (Phase 2→1), IQR outlier gaming, consensus price determinism |
 | `oracle_rpc_tests.cpp` | Oracle RPC commands: getoracleprice, createoraclekey, startoracle |
 | `oracle_wallet_key_tests.cpp` | Oracle key generation, storage, validation against chainparams |
+| `oracle_bundle_timing_tests.cpp` | Oracle bundle timing edge cases and epoch boundary behavior |
+| `oracle_price_feed_rh09_tests.cpp` | RH-09 oracle price feed attack vectors and edge cases |
+| `oracle_price_staleness_tests.cpp` | Oracle price staleness detection and stale price rejection |
+| `oracle_wallet_autostart_tests.cpp` | Oracle wallet auto-start behavior on node initialization |
+| `digidollar_err_attack_tests.cpp` | RH-27: ERR path attack tests — calculation exploits, volatility freeze bypass, TOCTOU races |
+| `digidollar_integration_attack_tests.cpp` | Integration-level attack tests across DD subsystems |
+| `digidollar_lock_height_tests.cpp` | Lock height calculation, validation, and edge cases |
+| `digidollar_no_partial_redeem_tests.cpp` | Enforcement of full DD burn requirement — no partial redemption allowed |
+| `digidollar_script_attacks_tests.cpp` | RH-38: Script interpreter DD opcode exploit tests (security audit round 2) |
+| `digidollar_txindex_tests.cpp` | DD transaction index lookups and block-db integration |
+| `digidollar_rh06_mint_attacks_tests.cpp` | RH-06: Mint transaction attack vectors |
+| `digidollar_rh07_redemption_attacks_tests.cpp` | RH-07: Redemption transaction attack vectors |
+| `digidollar_rh11_consensus_tests.cpp` | RH-11: Deep consensus edge cases — adversarial red-team tests |
+| `digidollar_rh12_script_attacks_tests.cpp` | RH-12: Script-level attack vectors for DD opcodes |
+| `digidollar_rh13_economic_tests.cpp` | RH-13: Economic attack vectors (arbitrage, manipulation) |
+| `digidollar_rh16_reorg_attacks_tests.cpp` | RH-16: Reorg attack vectors targeting DD state |
+| `digidollar_rh17_mempool_attacks_tests.cpp` | RH-17: Mempool-level DD attack vectors |
+| `digidollar_rh18_cross_feature_tests.cpp` | RH-18: Cross-feature interaction attack tests |
+| `digidollar_rh19_serialization_tests.cpp` | RH-19: Serialization edge cases and malformed data |
+| `digidollar_rh20_time_ordering_tests.cpp` | RH-20: Time-dependent validation and tx ordering attacks |
+| `digidollar_rh21_boundary_tests.cpp` | RH-21: Boundary value and off-by-one tests |
+| `digidollar_rh25_serialization_cache_tests.cpp` | RH-25: Serialization cache consistency and invalidation |
+| `digidollar_rh26_tests.cpp` | RH-26: Additional red-team tests |
+| `digidollar_rh28_wallet_chains_tests.cpp` | RH-28: Wallet chain interaction and state consistency |
+| `digidollar_rh31_consensus_fork_tests.cpp` | RH-31: Consensus fork attack vectors (testnet/mainnet confusion) |
+| `digidollar_rh32_collateral_dca_tests.cpp` | RH-32: Collateral and DCA interaction edge cases |
+| `digidollar_rh33_mempool_relay_tests.cpp` | RH-33: Mempool relay and propagation attack vectors |
+| `digidollar_rh34_multiblock_state_tests.cpp` | RH-34: Multi-block state transition attacks |
+| `digidollar_rh35_chaos_tests.cpp` | RH-35: Chaos/fuzz-style randomized testing |
+| `digidollar_rh40_regression_tests.cpp` | RH-40: Regression tests for previously found bugs |
+| `digidollar_rh41_timewarp_difficulty_tests.cpp` | RH-41: Time-warp and 5-algo difficulty interaction attacks |
+| `digidollar_rh42_formal_invariant_tests.cpp` | RH-42: Formal invariant verification tests |
+| `digidollar_rh43_digiassets_interaction_tests.cpp` | RH-43: DigiAssets interaction and coexistence tests |
+| `digidollar_rh44_thread_safety_tests.cpp` | RH-44: Thread safety and concurrent access tests |
+| `digidollar_rh46_rpc_input_validation_tests.cpp` | RH-46: RPC input validation and DoS surface tests |
+| `digidollar_rh47_consensus_fork_deep_tests.cpp` | RH-47: Consensus fork scenario deep dive (builds on RH-31) |
+| `digidollar_rh49_find_opreturn_tests.cpp` | RH-49: FindDDOpReturn helper validation and dynamic OP_RETURN detection |
+| `musig2_basic_tests.cpp` | MuSig2 basic key aggregation and signing protocol |
+| `musig2_session_tests.cpp` | MuSig2 signing session state machine lifecycle |
+| `musig2_aggregator_tests.cpp` | MuSig2 oracle key aggregation, bitmap encoding, cache |
+| `musig2_orchestration_tests.cpp` | MuSig2 session orchestrator per-epoch management |
+| `musig2_orchestrator_exploits_tests.cpp` | MuSig2 orchestrator exploit and attack vectors |
+| `musig2_signing_orchestration_tests.cpp` | OracleSigningOrchestrator BlockConnected-driven signing |
+| `musig2_oracle_node_tests.cpp` | MuSig2 oracle node participation and nonce generation |
+| `musig2_activation_tests.cpp` | MuSig2/Phase 3 activation height and feature gating |
+| `musig2_phase3_activation_tests.cpp` | Phase 3 activation boundary and transition tests |
+| `musig2_p2p_message_tests.cpp` | MuSig2 P2P nonce and partial sig message serialization |
+| `musig2_p2p_handling_tests.cpp` | MuSig2 P2P message handling in net_processing |
+| `musig2_p2p_collection_tests.cpp` | MuSig2 nonce/sig collection from P2P peers |
+| `musig2_p2p_ingestion_tests.cpp` | MuSig2 P2P message ingestion and validation |
+| `musig2_p2p_network_attacks_tests.cpp` | MuSig2 P2P network-level attack vectors |
+| `musig2_net_processing_tests.cpp` | MuSig2 net_processing integration tests |
+| `musig2_bundle_creation_tests.cpp` | MuSig2 v0x03 bundle creation from completed sessions |
+| `musig2_bundle_format_tests.cpp` | MuSig2 bundle serialization format and version handling |
+| `musig2_bundle_manager_tests.cpp` | MuSig2 bundle manager integration with signing sessions |
+| `musig2_bundle_mining_tests.cpp` | MuSig2 bundle embedding in coinbase during mining |
 
 ### Wallet Tests (`src/wallet/test/`)
 
 | File | Coverage Area |
 |------|--------------|
 | `digidollar_persistence_wallet_tests.cpp` | Full wallet DD persistence: balances, positions, transactions, keys across restart |
+| `digidollar_wallet_security_tests.cpp` | Wallet-level DD security: key protection, unauthorized access, encryption boundaries |
 
 ### Qt Tests (`src/qt/test/`)
 
@@ -977,6 +1077,15 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `wallet_digidollar_encryption.py` | Wallet encryption impact on DD operations |
 | `wallet_digidollar_persistence_restart.py` | DD data survival across wallet/node restart cycles |
 | `wallet_digidollar_rescan.py` | Wallet rescan reconstructs DD positions from blockchain |
+| `digidollar_bug11_bug13_regression.py` | Bug #11 and #13 regression tests (fee display, listdigidollartxs) |
+| `digidollar_oracle_consistency.py` | Oracle price consistency across multiple nodes |
+| `digidollar_oracle_price.py` | Oracle price feed RPC and integration |
+| `digidollar_protection_status.py` | getprotectionstatus RPC output validation |
+| `digidollar_rpc_position_fields.py` | listdigidollarpositions field completeness and correctness |
+| `digidollar_send.py` | senddigidollar RPC end-to-end testing |
+| `digidollar_transaction_fees.py` | DD transaction fee calculation and display |
+| `digidollar_validate_address.py` | validateddaddress RPC address format validation |
+| `digidollar_wallet_restore_redeem.py` | Wallet restore followed by redemption of restored positions |
 | `wallet_digidollar_restore.py` | Full wallet restore from seed with DD position reconstruction |
 | `feature_oracle_p2p.py` | Oracle P2P networking: message broadcast, relay, validation |
 | `rpc_getoracles_pending.py` | Oracle pending messages RPC query |

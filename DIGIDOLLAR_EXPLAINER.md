@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2026-02-01*
-*Document Version: 3.4 - Code Verified with Subagent Analysis*
+*Updated: 2026-04-04*
+*Document Version: 3.5 - Re-verified against source code*
 
 ## Overview
 
@@ -166,7 +166,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-30 hardcoded oracle nodes with 15 active per epoch. Phase One (testnet): 1-of-1 single oracle. Phase Two (mainnet): 8-of-15 Schnorr threshold signature consensus. Oracle prices use micro-USD format (1,000,000 = $1.00).
+Mainnet/testnet: 11 oracle nodes with 6-of-11 Schnorr threshold consensus. Regtest: 1-of-1 single oracle. Oracle prices use micro-USD format (1,000,000 = $1.00). Note: `primitives/oracle.h` defines legacy constants (30/15/8) but chainparams overrides these per-network.
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees. The collateral vault uses **2 redemption paths**:
@@ -204,7 +204,7 @@ Prevents transactions from being mined until specified block height
 ### Core Script Functions
 
 #### Multi-Sig Oracle Validation
-8-of-15 Schnorr threshold signatures for price consensus
+6-of-11 Schnorr threshold signatures for price consensus (mainnet/testnet; regtest: 1-of-1)
 
 #### Taproot Script Paths
 Multiple redemption conditions in a single P2TR output
@@ -218,7 +218,7 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-15 independent oracles sign price data. Script requires 8-of-15 signatures using Schnorr threshold aggregation, ensuring decentralized price consensus.
+11 independent oracles sign price data. Script requires 6-of-11 signatures using Schnorr threshold aggregation, ensuring decentralized price consensus (mainnet/testnet configuration).
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.
@@ -282,7 +282,7 @@ Automatic freezes during extreme market volatility:
 | 24-hour | 30% | Freeze all DD operations |
 | 7-day | 50% | Emergency mode |
 
-Cooldown period: 144 blocks (~36 minutes at 15s blocks) after volatility subsides. Oracle override available with 8-of-15 consensus.
+Cooldown period: 8640 blocks (~36 hours at 15s blocks) after volatility subsides. Oracle override available with 6-of-11 consensus.
 
 ### 5️⃣ Supply & Demand Dynamics (Natural Defense)
 
@@ -367,7 +367,7 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ## Implementation Status & Code Alignment
 
-**Last Verified**: 2026-02-01
+**Last Verified**: 2026-04-04
 
 | Feature | Document Spec | Code Status | Notes |
 |---------|---------------|-------------|-------|
@@ -378,15 +378,19 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 | Minting Blocked During ERR | Yes | ✅ Correct | `ShouldBlockMinting()` returns true when health < 100% |
 | Timelock Required | Both paths need CLTV | ✅ Correct | Both Normal and ERR paths start with CLTV check |
 | Collateral Tiers | 10 tiers (1hr→10yr) | ✅ Correct | 2-year tier (275%) verified in consensus/digidollar.h |
-| DCA Multipliers | 1.0x/1.2x/1.5x/2.0x | ✅ Correct | dca.cpp:GetDCAMultiplier() matches documentation |
+| DCA Multipliers | 1.0x/1.2x/1.5x/2.0x | ✅ Correct | dca.cpp:GetDCAMultiplier() matches; note: ConsensusParams::dcaLevels uses 125 (1.25x) for warning but DCA class uses 1.2x |
 | ERR Ratios | 0.95/0.90/0.85/0.80 | ✅ Correct | err.cpp:CalculateERRAdjustment() matches documentation |
+| Oracle Config | 6-of-11 (mainnet/testnet) | ⚠️ Updated | primitives/oracle.h has legacy 30/15/8 constants; chainparams overrides to 11/11/6 |
+| Cooldown Period | 8640 blocks (~36 hours) | ✅ Correct | volatility.h:COOLDOWN_BLOCKS = 8640 (was 144, fixed in RH-30a) |
 
-**Code Verification Complete** (2026-02-01):
+**Code Verification Complete** (2026-04-04):
 - MAST tree contains exactly 2 paths (Normal + ERR) - verified in `CreateCollateralP2TR()`
 - Both redemption paths enforce CLTV timelock expiry before collateral can be unlocked
 - Only 4 transaction types: NONE=0, MINT=1, TRANSFER=2, REDEEM=3
 - Partial redemption: wallet code exists but consensus enforces FULL redemption only
 - DD amounts stored in cents (100 = $1.00), oracle prices in micro-USD (1,000,000 = $1.00)
+- Oracle config: mainnet/testnet use 6-of-11 (chainparams overrides default 8-of-15)
+- Cooldown period: 8640 blocks (~36 hours), fixed from original 144 blocks in RH-30a
 
 ---
 
@@ -396,10 +400,10 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 | Issue | Location | Impact |
 |-------|----------|--------|
-| System health hardcoded 150% | txbuilder.cpp:29,270 | ERR/DCA can never activate in production (validation.cpp has partial fix, txbuilder still uses constant) |
-| MockOracleManager in non-regtest | ~~err.cpp:356~~ | **FIXED**: All MockOracleManager calls are now guarded by REGTEST checks |
-| Mainnet validation disabled | bundle_manager.cpp:1563 | Returns `true` without validating on mainnet |
-| GetBestHeight() stub | bundle_manager.cpp:30-34 | Returns hardcoded 0 instead of actual height |
+| System health hardcoded 150% | txbuilder.cpp:29,279 | ERR/DCA can never activate in production (validation.cpp has partial fix, txbuilder still uses constant) |
+| MockOracleManager in non-regtest | ~~err.cpp:397~~ | **FIXED**: All MockOracleManager calls are now guarded by REGTEST checks |
+| Mainnet validation disabled | bundle_manager.cpp:2227 | Returns `true` without validating on mainnet |
+| GetBestHeight() stub | bundle_manager.cpp:47-51 | Returns hardcoded 0 instead of actual height |
 | Tests use DD_TX_ERR=5 | test files | Transaction type 5 doesn't exist (only 0-3) |
 
 **What This Means**:

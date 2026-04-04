@@ -12,10 +12,10 @@ Mutex g_oracle_signing_sessions_mutex;
 
 #include <secp256k1_musig.h>
 
-MuSig2SessionManager::MuSig2SessionManager() = default;
-MuSig2SessionManager::~MuSig2SessionManager() = default;
+MuSig2Orchestrator::MuSig2Orchestrator() = default;
+MuSig2Orchestrator::~MuSig2Orchestrator() = default;
 
-bool MuSig2SessionManager::CreateSessionForEpoch(int32_t epoch, uint8_t min_signers)
+bool MuSig2Orchestrator::CreateSessionForEpoch(int32_t epoch, uint8_t min_signers)
 {
     LOCK(m_mutex);
     if (m_sessions.count(epoch)) return false;
@@ -23,7 +23,7 @@ bool MuSig2SessionManager::CreateSessionForEpoch(int32_t epoch, uint8_t min_sign
     return true;
 }
 
-MuSig2SigningSession* MuSig2SessionManager::GetSession(int32_t epoch)
+MuSig2SigningSession* MuSig2Orchestrator::GetSession(int32_t epoch)
 {
     LOCK(m_mutex);
     auto it = m_sessions.find(epoch);
@@ -31,7 +31,7 @@ MuSig2SigningSession* MuSig2SessionManager::GetSession(int32_t epoch)
     return &it->second;
 }
 
-void MuSig2SessionManager::PruneOldSessions(int32_t current_epoch)
+void MuSig2Orchestrator::PruneOldSessions(int32_t current_epoch)
 {
     LOCK(m_mutex);
     auto it = m_sessions.begin();
@@ -46,7 +46,7 @@ void MuSig2SessionManager::PruneOldSessions(int32_t current_epoch)
     }
 }
 
-bool MuSig2SessionManager::GenerateNonceForEpoch(int32_t epoch,
+bool MuSig2Orchestrator::GenerateNonceForEpoch(int32_t epoch,
                                                    uint8_t oracle_id,
                                                    const CKey& signing_key,
                                                    const secp256k1_pubkey& pubkey,
@@ -59,7 +59,7 @@ bool MuSig2SessionManager::GenerateNonceForEpoch(int32_t epoch,
     return it->second.GenerateNonce(oracle_id, signing_key, pubkey, cache, pubnonce_out);
 }
 
-bool MuSig2SessionManager::AddNonceForEpoch(int32_t epoch, uint8_t oracle_id,
+bool MuSig2Orchestrator::AddNonceForEpoch(int32_t epoch, uint8_t oracle_id,
                                               const secp256k1_musig_pubnonce& pubnonce)
 {
     LOCK(m_mutex);
@@ -68,7 +68,7 @@ bool MuSig2SessionManager::AddNonceForEpoch(int32_t epoch, uint8_t oracle_id,
     return it->second.AddPubnonce(oracle_id, pubnonce);
 }
 
-bool MuSig2SessionManager::AdvanceToSigning(int32_t epoch, const unsigned char* msg32)
+bool MuSig2Orchestrator::AdvanceToSigning(int32_t epoch, const unsigned char* msg32)
 {
     LOCK(m_mutex);
     auto it = m_sessions.find(epoch);
@@ -76,7 +76,7 @@ bool MuSig2SessionManager::AdvanceToSigning(int32_t epoch, const unsigned char* 
     return it->second.AggregateNonces(msg32);
 }
 
-bool MuSig2SessionManager::TryAdvanceToSigning(int32_t epoch, const unsigned char* msg32)
+bool MuSig2Orchestrator::TryAdvanceToSigning(int32_t epoch, const unsigned char* msg32)
 {
     LOCK(m_mutex);
     auto it = m_sessions.find(epoch);
@@ -87,7 +87,7 @@ bool MuSig2SessionManager::TryAdvanceToSigning(int32_t epoch, const unsigned cha
     return session.AggregateNonces(msg32);
 }
 
-bool MuSig2SessionManager::AddPartialSigForEpoch(int32_t epoch, uint8_t oracle_id,
+bool MuSig2Orchestrator::AddPartialSigForEpoch(int32_t epoch, uint8_t oracle_id,
                                                    const secp256k1_musig_partial_sig& partial_sig)
 {
     LOCK(m_mutex);
@@ -98,7 +98,7 @@ bool MuSig2SessionManager::AddPartialSigForEpoch(int32_t epoch, uint8_t oracle_i
     return true;
 }
 
-bool MuSig2SessionManager::AggregateForEpoch(int32_t epoch, std::vector<unsigned char>& sig64_out)
+bool MuSig2Orchestrator::AggregateForEpoch(int32_t epoch, std::vector<unsigned char>& sig64_out)
 {
     LOCK(m_mutex);
     auto it = m_sessions.find(epoch);
@@ -115,7 +115,7 @@ bool MuSig2SessionManager::AggregateForEpoch(int32_t epoch, std::vector<unsigned
     return true;
 }
 
-bool MuSig2SessionManager::GetCompletedSessionData(int32_t epoch,
+bool MuSig2Orchestrator::GetCompletedSessionData(int32_t epoch,
                                                      std::vector<unsigned char>& sig_out,
                                                      std::vector<unsigned char>& bitmap_out)
 {
@@ -129,7 +129,7 @@ bool MuSig2SessionManager::GetCompletedSessionData(int32_t epoch,
     return false;
 }
 
-void MuSig2SessionManager::SetLocalOracle(uint8_t oracle_id, const CKey& signing_key)
+void MuSig2Orchestrator::SetLocalOracle(uint8_t oracle_id, const CKey& signing_key)
 {
     LOCK(m_mutex);
     m_is_oracle = true;
@@ -137,7 +137,7 @@ void MuSig2SessionManager::SetLocalOracle(uint8_t oracle_id, const CKey& signing
     m_signing_key = signing_key;
 }
 
-void MuSig2SessionManager::ClearLocalOracle()
+void MuSig2Orchestrator::ClearLocalOracle()
 {
     LOCK(m_mutex);
     m_is_oracle = false;
@@ -145,19 +145,19 @@ void MuSig2SessionManager::ClearLocalOracle()
     m_signing_key = CKey();
 }
 
-bool MuSig2SessionManager::IsOracleActive() const
+bool MuSig2Orchestrator::IsOracleActive() const
 {
     LOCK(m_mutex);
     return m_is_oracle && m_signing_key.IsValid();
 }
 
-uint8_t MuSig2SessionManager::GetLocalOracleId() const
+uint8_t MuSig2Orchestrator::GetLocalOracleId() const
 {
     LOCK(m_mutex);
     return m_oracle_id;
 }
 
-std::vector<unsigned char> MuSig2SessionManager::BuildBitmap(const std::set<uint8_t>& oracle_ids) const
+std::vector<unsigned char> MuSig2Orchestrator::BuildBitmap(const std::set<uint8_t>& oracle_ids) const
 {
     if (oracle_ids.empty()) return {};
 

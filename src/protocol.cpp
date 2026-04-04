@@ -290,6 +290,36 @@ uint256 OracleMusigNonceMsg::GetHash() const
     return hasher.GetHash();
 }
 
+uint256 OracleMusigNonceMsg::GetSignatureHash() const
+{
+    // Tagged hash for authentication: "DigiDollar/MuSig2Nonce" || epoch || oracle_id || pubnonce
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/MuSig2Nonce");
+    hasher << epoch;
+    hasher << oracle_id;
+    hasher << pubnonce;
+    return hasher.GetHash();
+}
+
+bool OracleMusigNonceMsg::Sign(const CKey& key)
+{
+    uint256 hash = GetSignatureHash();
+    signature.resize(64);
+    if (!key.SignSchnorr(hash, signature, nullptr, uint256())) {
+        signature.clear();
+        return false;
+    }
+    return true;
+}
+
+bool OracleMusigNonceMsg::VerifySignature(const XOnlyPubKey& pubkey) const
+{
+    if (signature.size() != 64) return false;
+    if (!pubkey.IsFullyValid()) return false;
+    uint256 hash = GetSignatureHash();
+    return pubkey.VerifySchnorr(hash, signature);
+}
+
 uint256 OracleMusigPartialSigMsg::GetHash() const
 {
     CHashWriter hasher(0);
@@ -297,4 +327,34 @@ uint256 OracleMusigPartialSigMsg::GetHash() const
     hasher << oracle_id;
     hasher << partial_sig;
     return hasher.GetHash();
+}
+
+uint256 OracleMusigPartialSigMsg::GetSignatureHash() const
+{
+    // Tagged hash for authentication: "DigiDollar/MuSig2PartialSig" || epoch || oracle_id || partial_sig
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/MuSig2PartialSig");
+    hasher << epoch;
+    hasher << oracle_id;
+    hasher << partial_sig;
+    return hasher.GetHash();
+}
+
+bool OracleMusigPartialSigMsg::Sign(const CKey& key)
+{
+    uint256 hash = GetSignatureHash();
+    signature.resize(64);
+    if (!key.SignSchnorr(hash, signature, nullptr, uint256())) {
+        signature.clear();
+        return false;
+    }
+    return true;
+}
+
+bool OracleMusigPartialSigMsg::VerifySignature(const XOnlyPubKey& pubkey) const
+{
+    if (signature.size() != 64) return false;
+    if (!pubkey.IsFullyValid()) return false;
+    uint256 hash = GetSignatureHash();
+    return pubkey.VerifySchnorr(hash, signature);
 }

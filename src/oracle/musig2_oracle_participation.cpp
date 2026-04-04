@@ -293,6 +293,12 @@ void MuSig2OracleParticipation::BroadcastNonce(const secp256k1_musig_pubnonce& p
     msg.pubnonce.resize(66);
     secp256k1_musig_pubnonce_serialize(m_ctx, msg.pubnonce.data(), &pubnonce);
 
+    // RH-24: Sign with oracle private key for P2P authentication
+    if (!msg.Sign(m_oracle_key)) {
+        LogPrintf("Oracle MuSig2: Failed to sign nonce message for epoch %d\n", m_epoch);
+        return;
+    }
+
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << msg;
     std::vector<unsigned char> payload(reinterpret_cast<const unsigned char*>(ss.data()),
@@ -309,6 +315,12 @@ void MuSig2OracleParticipation::BroadcastPartialSig(const secp256k1_musig_partia
     msg.oracle_id = m_oracle_id;
     msg.partial_sig.resize(32);
     secp256k1_musig_partial_sig_serialize(m_ctx, msg.partial_sig.data(), &psig);
+
+    // RH-24: Sign with oracle private key for P2P authentication
+    if (!msg.Sign(m_oracle_key)) {
+        LogPrintf("Oracle MuSig2: Failed to sign partial sig message for epoch %d\n", m_epoch);
+        return;
+    }
 
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss << msg;

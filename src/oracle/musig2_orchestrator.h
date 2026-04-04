@@ -49,14 +49,14 @@ struct MuSig2CompletedResult {
  *   7. Block template requests GetCompletedSessionData()
  *   8. PruneOldSessions() cleans up on epoch boundary
  */
-class MuSig2SessionManager
+class MuSig2Orchestrator
 {
 public:
-    MuSig2SessionManager();
-    ~MuSig2SessionManager();
+    MuSig2Orchestrator();
+    ~MuSig2Orchestrator();
 
-    MuSig2SessionManager(const MuSig2SessionManager&) = delete;
-    MuSig2SessionManager& operator=(const MuSig2SessionManager&) = delete;
+    MuSig2Orchestrator(const MuSig2Orchestrator&) = delete;
+    MuSig2Orchestrator& operator=(const MuSig2Orchestrator&) = delete;
 
     // ---- Session lifecycle ----
 

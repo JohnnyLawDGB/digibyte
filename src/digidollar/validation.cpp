@@ -122,6 +122,14 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
     if (opcode == OP_DIGIDOLLAR) {
         // Read the amount data
         if (script.GetOp(pc, opcode, data) && data.size() == 8) {
+            // Reject trailing data after DD amount (malleability vector)
+            opcodetype trailing_opcode;
+            std::vector<unsigned char> trailing_data;
+            if (script.GetOp(pc, trailing_opcode, trailing_data)) {
+                // Extra data found after DD amount — reject
+                amount = -1;
+                return false;
+            }
             // Parse 8-byte little-endian amount
             amount = 0;
             for (size_t i = 0; i < 8; i++) {
@@ -140,7 +148,8 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
             if (script.GetOp(pc, opcode, data)) {
                 try {
                     // Allow up to 8 bytes for DD amounts (int64_t range)
-                    CScriptNum scriptNum(data, false, 8);
+                    // SECURITY FIX: Require minimal encoding to prevent malleability
+                    CScriptNum scriptNum(data, true, 8);
                     amount = scriptNum.GetInt64();
                     if (amount >= 1 && amount <= 100000000000LL) {
                         return true;
@@ -154,6 +163,33 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
 
     amount = -1;
     return false;
+}
+
+int FindDDOpReturn(const CTransaction& tx) {
+    for (size_t i = 0; i < tx.vout.size(); i++) {
+        const CScript& script = tx.vout[i].scriptPubKey;
+        if (script.size() < 2) continue;
+        if (script[0] != OP_RETURN) continue;
+
+        // Format 1: OP_RETURN OP_DIGIDOLLAR ...
+        if (script.size() >= 2 && script[1] == OP_DIGIDOLLAR) {
+            return static_cast<int>(i);
+        }
+
+        // Format 2: OP_RETURN <pushdata "DD"> ...
+        // After OP_RETURN, the next opcode pushes 2 bytes "DD"
+        auto pc = script.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        // Skip OP_RETURN
+        if (!script.GetOp(pc, opcode, data)) continue;
+        // Get first push
+        if (!script.GetOp(pc, opcode, data)) continue;
+        if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
 }
 
 /**
@@ -2087,7 +2123,7 @@ CAmount GetSystemCollateralRatio() {
     //
     // Formula: health = (totalCollateral_sats * price_cents / COIN * 100) / dd_cents
 
-    const DigiDollar::SystemMetrics& metrics =
+    const DigiDollar::SystemMetrics metrics =
         DigiDollar::SystemHealthMonitor::GetCachedMetrics();
 
     // If no DD in circulation, system is maximally healthy (no liabilities)

@@ -60,7 +60,7 @@ struct VolatilityThresholds {
     static constexpr double FREEZE_ALL_24H = 30.0;      //!< 30% in 24 hours: freeze all operations
     static constexpr double EMERGENCY_7D = 50.0;        //!< 50% in 7 days: emergency mode
 
-    static constexpr uint32_t COOLDOWN_BLOCKS = 144;    //!< Cooldown period in blocks (~36 hours at 15s)
+    static constexpr uint32_t COOLDOWN_BLOCKS = 8640;   //!< Cooldown period in blocks (8640 × 15s = 36 hours)
 };
 
 // ============================================================================

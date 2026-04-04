@@ -12,6 +12,7 @@
 #include <script/script.h>
 #include <uint256.h>
 #include <consensus/amount.h>
+#include <digidollar/digidollar.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -657,11 +658,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     } catch (const scriptnum_error&) {
                         return set_error(serror, SCRIPT_ERR_INVALID_DD_AMOUNT);
                     }
-                    if (amount < 0 || amount.GetInt64() > MAX_MONEY)
+                    if (amount <= 0 || amount.GetInt64() > MAX_DIGIDOLLAR)
                         return set_error(serror, SCRIPT_ERR_INVALID_DD_AMOUNT);
 
-                    // Push validation result (true if amount > 0) onto stack
-                    stack.push_back(amount > 0 ? vchTrue : vchFalse);
+                    // Amount is validated and positive — push true
+                    stack.push_back(vchTrue);
                 }
                 break;
 

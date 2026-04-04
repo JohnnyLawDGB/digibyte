@@ -31,7 +31,8 @@ int GetCollateralRatioForLockTime(int64_t lockBlocks, const ConsensusParams& par
     }
 
     // Use the tier we found (which has lock time >= lockBlocks)
-    // This ensures we use the more conservative (higher) ratio for shorter lock times
+    // Design: intermediate lock durations get the next tier's (better) ratio.
+    // E.g. locking for 15 days gives you the 30-day tier ratio (500%).
     return it->second;
 }
 
@@ -239,7 +240,9 @@ DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx)
     }
     // Extract type from bits 24-31 of version field
     const int32_t DD_TYPE_MASK = 0xFF000000;
-    return static_cast<DigiDollarTxType>((tx.nVersion & DD_TYPE_MASK) >> 24);
+    uint8_t type = static_cast<uint8_t>((tx.nVersion & DD_TYPE_MASK) >> 24);
+    if (type >= DD_TX_MAX) return DD_TX_NONE;
+    return static_cast<DigiDollarTxType>(type);
 }
 
 // Note: IsDDTokenScript() and ExtractDDAmount() are defined in

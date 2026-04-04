@@ -140,4 +140,4 @@ class OracleRPCConsistencyTest(DigiByteTestFramework):
 
 
 if __name__ == '__main__':
-    OracleRPCConsistencyTest(__file__).main()
+    OracleRPCConsistencyTest().main()

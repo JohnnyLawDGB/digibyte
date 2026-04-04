@@ -24,7 +24,9 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
         self.num_nodes = 1
         self.setup_clean_chain = True
         self.extra_args = [[
+            "-digidollar=1",
             "-digidollaractivationheight=200",
+            "-txindex=1",
             "-dandelion=0",
         ]]
 

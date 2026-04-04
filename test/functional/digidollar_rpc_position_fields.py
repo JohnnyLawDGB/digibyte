@@ -88,4 +88,4 @@ class DigiDollarPositionFieldsTest(DigiByteTestFramework):
 
 
 if __name__ == '__main__':
-    DigiDollarPositionFieldsTest(__file__).main()
+    DigiDollarPositionFieldsTest().main()

@@ -2961,7 +2961,7 @@ static RPCHelpMan getoracleprice()
             // In RegTest mode, check MockOracleManager first
             bool usingMockOracle = false;
             CAmount priceMicroUSD = 0;
-            double priceCents = 0.0;
+            int64_t priceCents = 0;
             double priceUSD = 0.0;
             int lastBundleHeight = 0;
             int64_t lastBundleTime = 0;
@@ -2976,7 +2976,7 @@ static RPCHelpMan getoracleprice()
                         usingMockOracle = true;
                         priceMicroUSD = mockPrice;
                         // Convert micro-USD to cents with full precision
-                        priceCents = static_cast<double>(priceMicroUSD) / 10000.0;
+                        priceCents = priceMicroUSD / 10000;  // integer division: micro-USD to cents
                         priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
                         // Mock oracle is always "current" - use current time
                         lastBundleTime = GetTime();
@@ -2992,8 +2992,8 @@ static RPCHelpMan getoracleprice()
             if (!usingMockOracle) {
                 // Get the raw micro-USD price from the oracle (full precision)
                 priceMicroUSD = oracle_manager.GetLatestPrice();
-                // Derive cents from the same micro-USD source with full precision
-                priceCents = static_cast<double>(priceMicroUSD) / 10000.0;
+                // Derive cents from the same micro-USD source (integer division)
+                priceCents = priceMicroUSD / 10000;
                 // Calculate true USD price from micro-USD (full precision)
                 priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
 

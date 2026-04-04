@@ -1352,12 +1352,15 @@ QValidator::State AmountValidator::validate(QString& input, int& pos) const
         return QValidator::Intermediate;
     }
 
-    if (value < m_min) {
+    if (value > m_max) {
         return QValidator::Invalid;
     }
 
-    if (value > m_max) {
-        return QValidator::Invalid;
+    if (value < m_min) {
+        // User may still be typing (e.g. "1" on the way to "100")
+        // Return Intermediate so Qt allows the keystroke but the
+        // submit button stays disabled until the value is in range.
+        return QValidator::Intermediate;
     }
 
     return QValidator::Acceptable;

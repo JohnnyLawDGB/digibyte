@@ -373,6 +373,30 @@ bool DigiDollarWallet::EncryptDDKeys(const wallet::CKeyingMaterial& vMasterKey, 
         }
     }
 
+    // Erase plaintext keys from the DATABASE before clearing memory.
+    // Without this, a forensic attacker could read wallet.dat and find
+    // plaintext DD_OWNER_KEY / DD_ADDRESS_KEY entries alongside encrypted ones.
+    if (m_wallet) {
+        wallet::WalletBatch* erase_batch = use_external_batch ? encrypted_batch : nullptr;
+        std::unique_ptr<wallet::WalletBatch> local_batch;
+        if (!erase_batch) {
+            local_batch = std::make_unique<wallet::WalletBatch>(m_wallet->GetDatabase());
+            erase_batch = local_batch.get();
+        }
+        for (const auto& [timelock_id, key] : dd_owner_keys) {
+            if (!erase_batch->EraseDDOwnerKey(timelock_id)) {
+                LogPrintf("DigiDollarWallet: WARNING - Failed to erase plaintext DD owner key %s from database\n",
+                          timelock_id.ToString());
+            }
+        }
+        for (const auto& [key_bytes, key] : dd_address_keys) {
+            if (!erase_batch->EraseDDAddressKey(key_bytes)) {
+                LogPrintf("DigiDollarWallet: WARNING - Failed to erase plaintext DD address key %s from database\n",
+                          HexStr(key_bytes));
+            }
+        }
+    }
+
     // Clear plaintext keys from memory — they are now encrypted
     dd_owner_keys.clear();
     dd_address_keys.clear();

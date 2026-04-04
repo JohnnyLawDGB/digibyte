@@ -77,22 +77,31 @@ DIGIBYTE_TESTS =\
   test/digidollar_address_tests.cpp \
   test/digidollar_consensus_tests.cpp \
   test/digidollar_dca_tests.cpp \
+  test/digidollar_err_attack_tests.cpp \
+  test/digidollar_rh32_collateral_dca_tests.cpp \
+  test/digidollar_rh33_mempool_relay_tests.cpp \
+  test/digidollar_rh34_multiblock_state_tests.cpp \
   test/digidollar_err_tests.cpp \
   test/digidollar_health_tests.cpp \
   test/digidollar_t2_05_tests.cpp \
   test/digidollar_opcodes_tests.cpp \
+  test/digidollar_script_attacks_tests.cpp \
   test/digidollar_oracle_tests.cpp \
   test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \
   test/oracle_price_staleness_tests.cpp \
   test/digidollar_no_partial_redeem_tests.cpp \
+  test/digidollar_rh07_redemption_attacks_tests.cpp \
+  test/digidollar_rh12_script_attacks_tests.cpp \
   test/oracle_block_validation_tests.cpp \
   test/oracle_config_tests.cpp \
   test/oracle_exchange_tests.cpp \
   test/oracle_integration_tests.cpp \
   test/oracle_message_tests.cpp \
+  test/oracle_price_feed_rh09_tests.cpp \
   test/oracle_miner_tests.cpp \
+  test/rh05_bundle_validation_attacks_tests.cpp \
   test/oracle_p2p_tests.cpp \
   test/oracle_rpc_tests.cpp \
   test/oracle_wallet_key_tests.cpp \
@@ -109,6 +118,8 @@ DIGIBYTE_TESTS =\
   test/musig2_oracle_node_tests.cpp \
   test/musig2_session_tests.cpp \
   test/musig2_orchestration_tests.cpp \
+  test/musig2_orchestrator_exploits_tests.cpp \
+  test/musig2_p2p_network_attacks_tests.cpp \
   test/musig2_activation_tests.cpp \
   test/musig2_phase3_activation_tests.cpp \
   test/musig2_signing_orchestration_tests.cpp \
@@ -116,8 +127,33 @@ DIGIBYTE_TESTS =\
   test/redteam_phase2_audit_tests.cpp \
   test/oracle_consensus_threshold_tests.cpp \
   test/digidollar_p2p_tests.cpp \
+  test/digidollar_rh46_rpc_input_validation_tests.cpp \
   test/digidollar_rpc_tests.cpp \
+  test/digidollar_integration_attack_tests.cpp \
   test/digidollar_redteam_tests.cpp \
+  test/digidollar_rh26_tests.cpp \
+  test/digidollar_rh28_wallet_chains_tests.cpp \
+  test/rh29_coinbase_oracle_manipulation_tests.cpp \
+  test/rh39_eclipse_attack_tests.cpp \
+  test/digidollar_rh21_boundary_tests.cpp \
+  test/digidollar_rh25_serialization_cache_tests.cpp \
+  test/rh15_crypto_primitives_tests.cpp \
+  test/digidollar_rh11_consensus_tests.cpp \
+  test/digidollar_rh31_consensus_fork_tests.cpp \
+  test/digidollar_rh47_consensus_fork_deep_tests.cpp \
+  test/digidollar_rh35_chaos_tests.cpp \
+  test/digidollar_rh42_formal_invariant_tests.cpp \
+  test/digidollar_rh44_thread_safety_tests.cpp \
+  test/digidollar_rh40_regression_tests.cpp \
+  test/digidollar_rh13_economic_tests.cpp \
+  test/digidollar_rh16_reorg_attacks_tests.cpp \
+  test/digidollar_rh19_serialization_tests.cpp \
+  test/digidollar_rh20_time_ordering_tests.cpp \
+  test/digidollar_rh41_timewarp_difficulty_tests.cpp \
+  test/digidollar_rh18_cross_feature_tests.cpp \
+  test/digidollar_rh43_digiassets_interaction_tests.cpp \
+  test/digidollar_rh17_mempool_attacks_tests.cpp \
+  test/digidollar_rh06_mint_attacks_tests.cpp \
   test/digidollar_scripts_tests.cpp \
   test/digidollar_skip_oracle_tests.cpp \
   test/digidollar_structures_tests.cpp \
@@ -252,7 +288,8 @@ DIGIBYTE_TESTS += \
   wallet/test/scriptpubkeyman_tests.cpp \
   wallet/test/walletload_tests.cpp \
   wallet/test/group_outputs_tests.cpp \
-  wallet/test/digidollar_persistence_wallet_tests.cpp
+  wallet/test/digidollar_persistence_wallet_tests.cpp \
+  wallet/test/digidollar_wallet_security_tests.cpp
 
 FUZZ_SUITE_LD_COMMON +=\
  $(SQLITE_LIBS) \

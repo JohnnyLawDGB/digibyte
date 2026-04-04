@@ -78,10 +78,9 @@ BOOST_AUTO_TEST_CASE(op_digidollar_zero_amount)
     CScript script;
     script << OP_DIGIDOLLAR << CScriptNum(0);
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
-    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
-    BOOST_CHECK_EQUAL(stack.size(), 1);
-    BOOST_CHECK(!CastToBool(stack.back())); // Should push false for zero amount
+    // SECURITY FIX: Zero amount now correctly fails instead of pushing false
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
 }
 
 // Test OP_DIGIDOLLAR with negative amount (should fail)

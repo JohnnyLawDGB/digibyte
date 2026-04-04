@@ -210,6 +210,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_collect_remote_nonces)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.pubnonce = h.SerializePubnonce(pn);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigNonce(msg);
     }
 
@@ -238,6 +239,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_partial_sig_generation)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.pubnonce = h.SerializePubnonce(ext_pubnonces[i]);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigNonce(msg);
     }
 
@@ -272,6 +274,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_partial_sig_broadcast)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.pubnonce = h.SerializePubnonce(ext_pubnonces[i]);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigNonce(msg);
     }
 
@@ -308,6 +311,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_collect_remote_partial_sigs)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.pubnonce = h.SerializePubnonce(all_pubnonces[i]);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigNonce(msg);
     }
 
@@ -341,6 +345,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_collect_remote_partial_sigs)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.partial_sig = h.SerializePartialSig(psig);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigPartialSig(msg);
     }
 
@@ -401,6 +406,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_v03_bundle_preference)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.pubnonce = h.SerializePubnonce(all_pubnonces[i]);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigNonce(msg);
     }
 
@@ -430,6 +436,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_v03_bundle_preference)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.partial_sig = h.SerializePartialSig(psig);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigPartialSig(msg);
     }
 
@@ -496,6 +503,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_offline_peer_9_of_15_quorum)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.pubnonce = h.SerializePubnonce(all_pubnonces[i]);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigNonce(msg);
     }
 
@@ -525,6 +533,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_offline_peer_9_of_15_quorum)
         msg.epoch = epoch;
         msg.oracle_id = static_cast<uint8_t>(i);
         msg.partial_sig = h.SerializePartialSig(psig);
+        BOOST_REQUIRE(msg.Sign(h.ckeys[i]));
         node.OnOracleMusigPartialSig(msg);
     }
 

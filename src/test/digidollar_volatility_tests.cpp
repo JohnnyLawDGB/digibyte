@@ -334,8 +334,8 @@ BOOST_FIXTURE_TEST_CASE(cooldown_period_after_freeze, DigiDollarVolatilityTestSe
     // Should be in cooldown period
     BOOST_CHECK(VolatilityMonitor::InCooldownPeriod());
 
-    // Advance beyond cooldown (144 blocks + a few more)
-    AdvanceTime(0, 150); // Advance 150 blocks
+    // Advance beyond cooldown (8640 blocks + a few more)
+    AdvanceTime(0, VolatilityThresholds::COOLDOWN_BLOCKS + 10);
     VolatilityMonitor::UpdateState(mockHeight);
 
     // Check if cooldown expired

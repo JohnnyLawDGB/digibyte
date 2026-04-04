@@ -265,7 +265,7 @@ BOOST_FIXTURE_TEST_CASE(ibd_err_blocks_minting_with_nonzero_supply, BasicTesting
     DigiDollar::SystemHealthMonitor::OnMintConnected(10000, 100 * COIN); // $100 DD, 100 DGB collateral
 
     // Verify supply is non-zero (precondition for the bug)
-    const DigiDollar::SystemMetrics& metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    const DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
     BOOST_CHECK(metrics.totalDDSupply > 0);
     BOOST_TEST_MESSAGE("totalDDSupply after earlier mint: " + std::to_string(metrics.totalDDSupply));
 

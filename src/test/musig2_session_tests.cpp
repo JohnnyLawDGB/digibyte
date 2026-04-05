@@ -992,12 +992,9 @@ BOOST_AUTO_TEST_CASE(test_session_rejects_invalid_partial_sig_content)
     secp256k1_context_destroy(ctx);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
-
 // ============================================================================
-// Separate suite for session manager tests (needs manager header)
+// Session manager tests (previously separate suite, merged for test runner)
 // ============================================================================
-BOOST_FIXTURE_TEST_SUITE(musig2_session_manager_tests, BasicTestingSetup)
 
 // ============================================================================
 // test_session_manager_seen_sets_cleanup [RH-02]

@@ -245,13 +245,9 @@ BOOST_AUTO_TEST_CASE(test_all_5005_subsets_9_of_15)
     BOOST_CHECK_EQUAL(unique_keys.size(), 5005u);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
-
 // ============================================================================
 // RED HORNET RH-01: Adversarial Key Aggregation Tests
 // ============================================================================
-
-BOOST_FIXTURE_TEST_SUITE(musig2_rh01_adversarial_tests, TestnetSetup)
 
 // Attack Vector 1: Rogue key attack is prevented by BIP-327 KeyAgg coefficients
 BOOST_AUTO_TEST_CASE(rh01_rogue_key_prevented_by_keyagg_coefficients)

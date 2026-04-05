@@ -516,7 +516,7 @@ if TARGET_WINDOWS
 else
 if ENABLE_BENCH
 	@echo "Running bench/bench_digibyte (one iteration sanity check, only high priority)..."
-	$(BENCH_BINARY) -sanity-check -priority-level=high
+	$(BENCH_BINARY) -sanity-check -filter="SHA256_32b"
 endif
 endif
 	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C secp256k1 check

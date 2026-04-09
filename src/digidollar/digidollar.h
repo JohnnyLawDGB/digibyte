@@ -16,7 +16,7 @@
 #include <vector>
 
 /** Maximum DigiDollar amount (21 billion DGB equivalent in cents) */
-static const CAmount MAX_DIGIDOLLAR = 21000000000 * 100; // 21B dollars in cents
+static const CAmount MAX_DIGIDOLLAR = 21000000000LL * 100; // 21B dollars in cents
 
 /**
  * DigiDollar Output Structure

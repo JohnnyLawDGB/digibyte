@@ -292,13 +292,12 @@ BOOST_AUTO_TEST_CASE(redteam_system_health_extremes)
     // Maximum health at tier boundary
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(30000), 1.0);  // Healthy
     
-    // NOTE: Health values > 30000 fall through to emergency multiplier (2.0x) because
-    // HEALTH_TIERS has maxCollateral=30000 for the healthy tier. This is NOT exploitable
-    // because CalculateSystemHealth() caps health at 30000 before calling GetDCAMultiplier().
-    // However, this is a defense-in-depth concern: if the cap is ever removed, extreme
-    // health values would paradoxically increase collateral requirements.
-    BOOST_CHECK_MESSAGE(DynamicCollateralAdjustment::GetDCAMultiplier(30001) == 2.0,
-        "NOTE: Health > 30000 returns emergency multiplier due to tier max boundary");
+    // RH-36b fix: GetDCAMultiplier now clamps input to [0, 30000] before tier lookup.
+    // Health > 30000 is clamped to 30000, which falls in the healthy tier (1.0x).
+    // This is defense-in-depth: even if CalculateSystemHealth() fails to cap at 30000,
+    // extreme health values will NOT paradoxically trigger emergency multiplier.
+    BOOST_CHECK_MESSAGE(DynamicCollateralAdjustment::GetDCAMultiplier(30001) == 1.0,
+        "Health > 30000 is clamped to 30000 and returns healthy multiplier (1.0x)");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_int128_edge_cases)
@@ -9953,22 +9952,12 @@ BOOST_AUTO_TEST_CASE(redteam_t5_05a_remove_price_cache_leaves_cached_price)
     // height_to_price[101] is gone
     BOOST_CHECK_EQUAL(manager.GetOraclePriceForHeight(101), 0);
 
-    // BUG: cached_price still holds block 101's price ($0.05) instead of
-    // reverting to block 100's price ($0.10).
-    // GetLatestPrice() returns stale data from the disconnected block.
+    // FIXED [RH-44]: RemovePriceCache now properly reverts cached_price
+    // to the highest remaining height's price when a block is disconnected.
     CAmount latest_after_disconnect = manager.GetLatestPrice();
 
-    // Document the bug: cached_price is NOT reverted
-    BOOST_CHECK_MESSAGE(latest_after_disconnect == static_cast<CAmount>(PRICE_BLOCK_101),
-        "BUG CONFIRMED: RemovePriceCache does not revert cached_price. "
-        "After disconnecting block 101 ($0.05), GetLatestPrice() still returns $0.05 "
-        "instead of reverting to block 100's price ($0.10). "
-        "FIX: RemovePriceCache should update cached_price to the previous block's price.");
-
-    // What it SHOULD return after disconnect:
-    // cached_price should revert to block 100's price ($0.10)
-    BOOST_CHECK_MESSAGE(latest_after_disconnect != static_cast<CAmount>(PRICE_BLOCK_100),
-        "If this fails, the bug has been fixed — RemovePriceCache now properly reverts cached_price.");
+    // After disconnecting block 101, cached_price should revert to block 100's price
+    BOOST_CHECK_EQUAL(latest_after_disconnect, static_cast<CAmount>(PRICE_BLOCK_100));
 
     manager.Clear();
 }
@@ -10218,7 +10207,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_06a_cached_metrics_default_zero_supply)
     DigiDollar::SystemHealthMonitor::Initialize();
 
     // After fresh init, totalDDSupply should be 0 (never scanned)
-    const auto& freshMetrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    auto freshMetrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
     BOOST_CHECK_EQUAL(freshMetrics.totalDDSupply, 0);
     BOOST_CHECK_EQUAL(freshMetrics.totalCollateral, 0);
 
@@ -10311,7 +10300,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_06c_scan_utxo_set_race_condition)
     DigiDollar::SystemHealthMonitor::ScanUTXOSet(nullptr, nullptr, nullptr, nullptr);
 
     // At this point metrics are reset to 0 (scan found nothing with null view)
-    const auto& metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    auto metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
     BOOST_CHECK_EQUAL(metrics.totalDDSupply, 0);
     BOOST_CHECK_EQUAL(metrics.totalCollateral, 0);
 
@@ -10367,7 +10356,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_06d_connectblock_never_updates_health_metrics)
     CBlock emptyBlock;
     DigiDollar::SystemHealthMonitor::UpdateMetrics(emptyBlock);
 
-    const auto& metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    auto metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
     BOOST_CHECK_MESSAGE(metrics.totalDDSupply == 0,
         "UpdateMetrics(block) does NOT update totalDDSupply from block data. "
         "It updates tier metrics, protection status, and oracle status from "

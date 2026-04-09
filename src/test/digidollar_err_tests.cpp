@@ -32,6 +32,9 @@ struct DigiDollarERRTestSetup : public TestingSetup {
     DigiDollarERRTestSetup() : TestingSetup(ChainType::REGTEST),
         validationContext(1000, 50000, 100, Params()) // Initialize in member initializer list
     {
+        // Reset static ERR state so tests don't interfere with each other
+        DigiDollar::ERR::EmergencyRedemptionRatio::ResetForTesting();
+
         // Set up mock oracle price and system state
         mockOraclePrice = 50000; // $500.00 DGB
         mockHeight = 1000;

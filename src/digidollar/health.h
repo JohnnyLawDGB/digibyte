@@ -14,6 +14,7 @@
 #include <string>
 #include <map>
 #include <memory>
+#include <mutex>
 
 // Forward declarations
 class CCoinsView;
@@ -172,9 +173,18 @@ public:
     /**
      * Get cached metrics without triggering updates
      * Use this for lightweight access to current values without expensive operations
-     * @return Const reference to current cached metrics
+     * @return Copy of current cached metrics (thread-safe)
      */
-    static const SystemMetrics& GetCachedMetrics() { return s_currentMetrics; }
+    static SystemMetrics GetCachedMetrics() {
+        std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44
+        return s_currentMetrics;
+    }
+
+    /** Reset metrics to zero (test-only) */
+    static void ResetMetrics() {
+        std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44
+        s_currentMetrics = SystemMetrics();
+    }
 
     /**
      * Incrementally update metrics when a DD mint transaction is connected to a block.
@@ -213,7 +223,9 @@ public:
 private:
     // Internal data structures
     static SystemMetrics s_currentMetrics;
-    static std::map<int64_t, int> s_healthHistory;  // block height -> health ratio
+    static std::mutex s_metricsMutex;  //!< RH-44: Protects s_currentMetrics from concurrent access
+    static std::map<int64_t, int> s_healthHistory;
+    static std::mutex s_historyMutex;  //!< RH-44: Protects s_healthHistory
     static bool s_initialized;
 
     // Internal helper methods

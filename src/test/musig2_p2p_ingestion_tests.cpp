@@ -23,6 +23,7 @@
 #include <oracle/musig2_orchestrator.h>
 #include <oracle/musig2_session.h>
 #include <test/util/setup_common.h>
+#include <chainparams.h>
 
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
@@ -30,7 +31,11 @@
 
 #include <cstring>
 
-BOOST_FIXTURE_TEST_SUITE(musig2_p2p_ingestion_tests, BasicTestingSetup)
+struct MuSig2P2PTestSetup : public BasicTestingSetup {
+    MuSig2P2PTestSetup() : BasicTestingSetup(ChainType::REGTEST) {}
+};
+
+BOOST_FIXTURE_TEST_SUITE(musig2_p2p_ingestion_tests, MuSig2P2PTestSetup)
 
 /**
  * Helper: generate a deterministic oracle key from an index.
@@ -197,6 +202,9 @@ BOOST_AUTO_TEST_CASE(nonce_ingestion_round_trip)
         nonce_msg.pubnonce.resize(66);
         BOOST_REQUIRE(secp256k1_musig_pubnonce_serialize(ctx, nonce_msg.pubnonce.data(), &remote_nonce));
 
+        // RH-24: Sign the nonce message with the oracle's private key
+        BOOST_REQUIRE(nonce_msg.Sign(keys[i]));
+
         // Ingest via ProcessRemoteMusigNonce
         BOOST_CHECK(manager.ProcessRemoteMusigNonce(nonce_msg));
     }
@@ -272,6 +280,9 @@ BOOST_AUTO_TEST_CASE(duplicate_nonce_rejected)
     msg.oracle_id = 1;
     msg.pubnonce.resize(66);
     BOOST_REQUIRE(secp256k1_musig_pubnonce_serialize(ctx, msg.pubnonce.data(), &nonce1));
+
+    // RH-24: Sign the nonce message with oracle 1's private key
+    BOOST_REQUIRE(msg.Sign(key1));
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 

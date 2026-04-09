@@ -245,13 +245,9 @@ BOOST_AUTO_TEST_CASE(test_all_5005_subsets_9_of_15)
     BOOST_CHECK_EQUAL(unique_keys.size(), 5005u);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
-
 // ============================================================================
 // RED HORNET RH-01: Adversarial Key Aggregation Tests
 // ============================================================================
-
-BOOST_FIXTURE_TEST_SUITE(musig2_rh01_adversarial_tests, TestnetSetup)
 
 // Attack Vector 1: Rogue key attack is prevented by BIP-327 KeyAgg coefficients
 BOOST_AUTO_TEST_CASE(rh01_rogue_key_prevented_by_keyagg_coefficients)
@@ -361,151 +357,6 @@ BOOST_AUTO_TEST_CASE(rh01_bitmap_size_mismatch_rejected)
 }
 
 // Attack Vector 7: AggregatePubkeys rejects null/zero inputs
-BOOST_AUTO_TEST_CASE(rh01_aggregate_null_inputs)
-{
-    MuSig2OracleAggregator agg;
-    secp256k1_xonly_pubkey pk{};
-    secp256k1_musig_keyagg_cache cache{};
-
-    BOOST_CHECK(!agg.AggregatePubkeys(nullptr, 0, pk, cache));
-    BOOST_CHECK(!agg.AggregatePubkeys(nullptr, 5, pk, cache));
-}
-
-BOOST_AUTO_TEST_SUITE_END()
-
-// ============================================================================
-// RED HORNET RH-01: Adversarial Key Aggregation Tests
-// ============================================================================
-
-BOOST_FIXTURE_TEST_SUITE(musig2_rh01_adversarial_tests, TestnetSetup)
-
-// Attack Vector 1: Rogue key attack is prevented by BIP-327 KeyAgg coefficients
-// The secp256k1_musig_pubkey_agg function uses a hash-based coefficient for each
-// key, making it impossible to craft a public key that cancels others.
-// Additionally, ComputeAggregatePubkey only uses chainparams-hardcoded keys.
-BOOST_AUTO_TEST_CASE(rh01_rogue_key_prevented_by_keyagg_coefficients)
-{
-    // Even via the raw AggregatePubkeys path, BIP-327 KeyAgg coefficients
-    // prevent rogue key attacks. Verify that adding a "rogue" key always
-    // produces a DIFFERENT aggregate than just the honest keys alone.
-    MuSig2OracleAggregator agg;
-    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-
-    // Generate 3 honest keys
-    std::vector<secp256k1_pubkey> honest_keys(3);
-    for (size_t i = 0; i < 3; ++i) {
-        uint256 seed = Hash(std::string("honest") + std::to_string(i));
-        secp256k1_keypair kp;
-        BOOST_REQUIRE(secp256k1_keypair_create(ctx, &kp, seed.data()));
-        BOOST_REQUIRE(secp256k1_keypair_pub(ctx, &honest_keys[i], &kp));
-    }
-
-    // Aggregate honest keys
-    std::vector<const secp256k1_pubkey*> honest_ptrs = {&honest_keys[0], &honest_keys[1], &honest_keys[2]};
-    secp256k1_xonly_pubkey honest_agg{};
-    secp256k1_musig_keyagg_cache honest_cache{};
-    BOOST_REQUIRE(agg.AggregatePubkeys(honest_ptrs.data(), honest_ptrs.size(), honest_agg, honest_cache));
-
-    // Generate a "rogue" 4th key and add it — aggregate MUST differ
-    uint256 rogue_seed = Hash(std::string("rogue_attacker"));
-    secp256k1_keypair rogue_kp;
-    BOOST_REQUIRE(secp256k1_keypair_create(ctx, &rogue_kp, rogue_seed.data()));
-    secp256k1_pubkey rogue_pk;
-    BOOST_REQUIRE(secp256k1_keypair_pub(ctx, &rogue_pk, &rogue_kp));
-
-    std::vector<const secp256k1_pubkey*> mixed_ptrs = {&honest_keys[0], &honest_keys[1], &honest_keys[2], &rogue_pk};
-    secp256k1_xonly_pubkey mixed_agg{};
-    secp256k1_musig_keyagg_cache mixed_cache{};
-    BOOST_REQUIRE(agg.AggregatePubkeys(mixed_ptrs.data(), mixed_ptrs.size(), mixed_agg, mixed_cache));
-
-    // Rogue key changes the aggregate — attacker cannot cancel honest keys
-    BOOST_CHECK(SerializeXOnly(honest_agg) != SerializeXOnly(mixed_agg));
-
-    secp256k1_context_destroy(ctx);
-}
-
-// Attack Vector 2: Order manipulation — ComputeAggregatePubkey sorts internally
-BOOST_AUTO_TEST_CASE(rh01_order_manipulation_prevented)
-{
-    MuSig2OracleAggregator agg;
-
-    // Shuffled order
-    std::vector<uint8_t> shuffled = {8, 3, 0, 7, 1, 6, 4, 2, 5};
-    std::vector<uint8_t> sorted = {0, 1, 2, 3, 4, 5, 6, 7, 8};
-
-    secp256k1_xonly_pubkey pk1{}, pk2{};
-    secp256k1_musig_keyagg_cache c1{}, c2{};
-
-    BOOST_REQUIRE(agg.ComputeAggregatePubkey(shuffled, pk1, c1));
-    agg.ClearCache();
-    BOOST_REQUIRE(agg.ComputeAggregatePubkey(sorted, pk2, c2));
-
-    BOOST_CHECK(SerializeXOnly(pk1) == SerializeXOnly(pk2));
-}
-
-// Attack Vector 3: Duplicate key injection — deduplicated by sort+unique
-BOOST_AUTO_TEST_CASE(rh01_duplicate_key_injection_deduplicated)
-{
-    MuSig2OracleAggregator agg;
-
-    // Oracle 5 appears 3 times — should be deduplicated to once
-    std::vector<uint8_t> with_dupes = {0, 1, 2, 3, 4, 5, 5, 5, 6, 7, 8};
-    std::vector<uint8_t> no_dupes = {0, 1, 2, 3, 4, 5, 6, 7, 8};
-
-    secp256k1_xonly_pubkey pk1{}, pk2{};
-    secp256k1_musig_keyagg_cache c1{}, c2{};
-
-    BOOST_REQUIRE(agg.ComputeAggregatePubkey(with_dupes, pk1, c1));
-    agg.ClearCache();
-    BOOST_REQUIRE(agg.ComputeAggregatePubkey(no_dupes, pk2, c2));
-
-    // After dedup, same result
-    BOOST_CHECK(SerializeXOnly(pk1) == SerializeXOnly(pk2));
-}
-
-// Attack Vector 4: Below-threshold bitmap rejected at encoding level
-BOOST_AUTO_TEST_CASE(rh01_below_threshold_rejected)
-{
-    // 7 IDs = below ORACLE_CONSENSUS_REQUIRED (8)
-    std::vector<uint8_t> too_few = {0, 1, 2, 3, 4, 5, 6};
-    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(too_few, 15);
-    BOOST_CHECK(bitmap.empty());
-
-    // ComputeAggregatePubkey also rejects via bitmap check
-    MuSig2OracleAggregator agg;
-    secp256k1_xonly_pubkey pk{};
-    secp256k1_musig_keyagg_cache cache{};
-    BOOST_CHECK(!agg.ComputeAggregatePubkey(too_few, pk, cache));
-}
-
-// Attack Vector 5: Out-of-bounds oracle ID
-BOOST_AUTO_TEST_CASE(rh01_out_of_bounds_oracle_id)
-{
-    MuSig2OracleAggregator agg;
-
-    // Oracle ID 250 doesn't exist in 15-oracle testnet
-    std::vector<uint8_t> bad_ids = {0, 1, 2, 3, 4, 5, 6, 7, 250};
-    secp256k1_xonly_pubkey pk{};
-    secp256k1_musig_keyagg_cache cache{};
-
-    // EncodeBitmap rejects ID >= total_oracles
-    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(bad_ids, 15);
-    BOOST_CHECK(bitmap.empty());
-
-    // ComputeAggregatePubkey also rejects
-    BOOST_CHECK(!agg.ComputeAggregatePubkey(bad_ids, pk, cache));
-}
-
-// Attack Vector 6: Bitmap size mismatch
-BOOST_AUTO_TEST_CASE(rh01_bitmap_size_mismatch_rejected)
-{
-    // 3-byte bitmap but total_oracles=15 expects 2 bytes
-    std::vector<unsigned char> bad_bitmap = {0xFF, 0x01, 0x00};
-    auto decoded = MuSig2OracleAggregator::DecodeBitmap(bad_bitmap, 15);
-    BOOST_CHECK(decoded.empty());
-}
-
-// Attack Vector 7: AggregatePubkeys rejects null/zero-count
 BOOST_AUTO_TEST_CASE(rh01_aggregate_null_inputs)
 {
     MuSig2OracleAggregator agg;

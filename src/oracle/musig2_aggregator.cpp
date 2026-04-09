@@ -150,9 +150,24 @@ bool MuSig2OracleAggregator::ComputeAggregatePubkey(
     }
     LogPrintf("Oracle: ComputeAggregatePubkey: SUCCESS for %zu oracles\n", sorted_ids.size());
 
-    // Store in cache
+    // Store in cache with LRU eviction
     {
         LOCK(m_cache_mutex);
+        if (m_cache.size() >= m_max_cache_entries) {
+            // Simple eviction: clear half the cache when full.
+            // A proper LRU would track access order, but for oracle
+            // aggregation the working set is small enough that clearing
+            // half is acceptable. This prevents unbounded memory growth
+            // from an attacker querying many oracle subsets.
+            size_t to_remove = m_cache.size() / 2;
+            auto it = m_cache.begin();
+            while (to_remove > 0 && it != m_cache.end()) {
+                it = m_cache.erase(it);
+                --to_remove;
+            }
+            LogPrintf("Oracle: Aggregate pubkey cache evicted (size was %zu, max %zu)\n",
+                     m_cache.size() + to_remove, m_max_cache_entries);
+        }
         m_cache[hash] = {agg_pk, cache};
     }
 

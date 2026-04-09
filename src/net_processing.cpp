@@ -6001,6 +6001,70 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
+        // ── RH-03 Fix: Validate oracle_id against ORACLE_TOTAL_COUNT ──
+        // IsValid() only checks < 255; we must reject IDs outside the
+        // configured oracle set to prevent sybil/spoofed oracle messages.
+        if (nonce_msg.oracle_id >= ORACLE_TOTAL_COUNT) {
+            Misbehaving(*peer, 10, "MuSig2 nonce oracle_id out of range");
+            return;
+        }
+
+        // ── RH-24 Fix: Schnorr signature verification (SECURITY CRITICAL) ──
+        // Without this, any peer can forge nonce messages for any oracle_id.
+        // Look up the authorized pubkey from chainparams and verify BEFORE
+        // rate limiting (same pattern as ORACLEPRICE handler).
+        {
+            const OracleNodeInfo* oracle_config = m_chainparams.GetOracleNode(nonce_msg.oracle_id);
+            if (!oracle_config) {
+                Misbehaving(*peer, 10, "unknown oracle ID in MuSig2 nonce");
+                return;
+            }
+            XOnlyPubKey oracle_pubkey(oracle_config->pubkey);
+            if (!nonce_msg.VerifySignature(oracle_pubkey)) {
+                LogPrint(BCLog::NET, "MuSig2 nonce signature verification failed oracle=%u peer=%d\n",
+                         nonce_msg.oracle_id, pfrom.GetId());
+                Misbehaving(*peer, 20, "invalid MuSig2 nonce signature");
+                return;
+            }
+        }
+
+        // ── RH-03 Fix: Epoch sanity check ──
+        // Reject messages for non-positive epochs or epochs far in the future.
+        // Current epoch is derived from chain height; allow current + 1 for
+        // race conditions during epoch transitions.
+        {
+            int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
+            if (nonce_msg.epoch <= 0 || nonce_msg.epoch > current_epoch + 1) {
+                LogPrint(BCLog::NET, "MuSig2 nonce epoch out of range (epoch=%d, current=%d) peer=%d\n",
+                         nonce_msg.epoch, current_epoch, pfrom.GetId());
+                Misbehaving(*peer, 5, "MuSig2 nonce epoch out of range");
+                return;
+            }
+        }
+
+        // ── RH-03 Fix: Rate limiting (same pattern as ORACLEPRICE) ──
+        // Without this, an attacker can flood MuSig2 nonce messages.
+        // 30 oracles × 1 nonce per epoch = modest traffic; allow 600/hr headroom.
+        {
+            static constexpr int MUSIG_NONCE_RATE_LIMIT_PER_HOUR = 600;
+            static std::map<NodeId, std::pair<int64_t, int>> musig_nonce_rate_limit;
+            int64_t now_rl = GetTime();
+            if (musig_nonce_rate_limit.size() > 100) {
+                auto it = musig_nonce_rate_limit.begin();
+                while (it != musig_nonce_rate_limit.end()) {
+                    if (now_rl - it->second.first > 3600) it = musig_nonce_rate_limit.erase(it);
+                    else ++it;
+                }
+            }
+            auto& [last_reset, count] = musig_nonce_rate_limit[pfrom.GetId()];
+            if (now_rl - last_reset > 3600) { last_reset = now_rl; count = 0; }
+            if (++count > MUSIG_NONCE_RATE_LIMIT_PER_HOUR) {
+                LogPrint(BCLog::NET, "MuSig2 nonce rate limit reached peer=%d (%d/%d/hr)\n",
+                         pfrom.GetId(), count, MUSIG_NONCE_RATE_LIMIT_PER_HOUR);
+                return;
+            }
+        }
+
         const uint256 nonce_hash = nonce_msg.GetHash();
         OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
         if (bundleManager.HasOracleMessage(nonce_hash)) {
@@ -6047,6 +6111,61 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (!partial_sig_msg.IsValid()) {
             Misbehaving(*peer, 10, "invalid MuSig2 partial signature message");
             return;
+        }
+
+        // ── RH-03 Fix: Validate oracle_id against ORACLE_TOTAL_COUNT ──
+        if (partial_sig_msg.oracle_id >= ORACLE_TOTAL_COUNT) {
+            Misbehaving(*peer, 10, "MuSig2 partial sig oracle_id out of range");
+            return;
+        }
+
+        // ── RH-24 Fix: Schnorr signature verification (SECURITY CRITICAL) ──
+        // Same pattern as nonce handler above — verify before rate limiting.
+        {
+            const OracleNodeInfo* oracle_config = m_chainparams.GetOracleNode(partial_sig_msg.oracle_id);
+            if (!oracle_config) {
+                Misbehaving(*peer, 10, "unknown oracle ID in MuSig2 partial sig");
+                return;
+            }
+            XOnlyPubKey oracle_pubkey(oracle_config->pubkey);
+            if (!partial_sig_msg.VerifySignature(oracle_pubkey)) {
+                LogPrint(BCLog::NET, "MuSig2 partial sig signature verification failed oracle=%u peer=%d\n",
+                         partial_sig_msg.oracle_id, pfrom.GetId());
+                Misbehaving(*peer, 20, "invalid MuSig2 partial sig signature");
+                return;
+            }
+        }
+
+        // ── RH-03 Fix: Epoch sanity check ──
+        {
+            int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
+            if (partial_sig_msg.epoch <= 0 || partial_sig_msg.epoch > current_epoch + 1) {
+                LogPrint(BCLog::NET, "MuSig2 partial sig epoch out of range (epoch=%d, current=%d) peer=%d\n",
+                         partial_sig_msg.epoch, current_epoch, pfrom.GetId());
+                Misbehaving(*peer, 5, "MuSig2 partial sig epoch out of range");
+                return;
+            }
+        }
+
+        // ── RH-03 Fix: Rate limiting ──
+        {
+            static constexpr int MUSIG_PARTIALSIG_RATE_LIMIT_PER_HOUR = 600;
+            static std::map<NodeId, std::pair<int64_t, int>> musig_psig_rate_limit;
+            int64_t now_rl = GetTime();
+            if (musig_psig_rate_limit.size() > 100) {
+                auto it = musig_psig_rate_limit.begin();
+                while (it != musig_psig_rate_limit.end()) {
+                    if (now_rl - it->second.first > 3600) it = musig_psig_rate_limit.erase(it);
+                    else ++it;
+                }
+            }
+            auto& [last_reset, count] = musig_psig_rate_limit[pfrom.GetId()];
+            if (now_rl - last_reset > 3600) { last_reset = now_rl; count = 0; }
+            if (++count > MUSIG_PARTIALSIG_RATE_LIMIT_PER_HOUR) {
+                LogPrint(BCLog::NET, "MuSig2 partial sig rate limit reached peer=%d (%d/%d/hr)\n",
+                         pfrom.GetId(), count, MUSIG_PARTIALSIG_RATE_LIMIT_PER_HOUR);
+                return;
+            }
         }
 
         const uint256 partial_sig_hash = partial_sig_msg.GetHash();

@@ -159,6 +159,7 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
             return false;
         } else if (IsDust(txout, dust_relay_fee)) {
             // Skip dust check for DigiDollar transactions - DD tokens have 0 DGB value
+            // and collateral/change outputs are validated by DD consensus rules
             if (!isDigiDollar) {
                 reason = "dust";
                 return false;

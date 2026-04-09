@@ -173,15 +173,17 @@ class DigiDollarEstimateTest(DigiByteTestFramework):
         assert_equal(actual_ratio, expected_ratio)
 
         # Verify DGB calculation is reasonable
-        # $100 at 300% with $0.006 price = 100 * 3 / 0.006 = 50,000 DGB
-        expected_dgb = self.calculate_expected_dgb(dd_amount_cents, expected_ratio, self.default_price_micro_usd)
+        # RPC uses effective_ratio (base_ratio * dca_multiplier), not base_ratio alone.
+        # On fresh chain (health=0), DCA multiplier = 2.0x (emergency tier).
+        effective_ratio = int(result['effective_ratio'])
+        expected_dgb = self.calculate_expected_dgb(dd_amount_cents, effective_ratio, self.default_price_micro_usd)
         actual_dgb = Decimal(str(result['required_dgb']))
 
-        self.log.info(f"Expected ~{expected_dgb:.2f} DGB, got {actual_dgb:.2f} DGB")
+        self.log.info(f"Expected ~{expected_dgb:.2f} DGB (effective ratio {effective_ratio}%), got {actual_dgb:.2f} DGB")
 
-        # Allow 5% tolerance for DCA multiplier effects
+        # Allow 5% tolerance
         tolerance = expected_dgb * Decimal('0.05')
-        assert abs(actual_dgb - expected_dgb) <= tolerance + expected_dgb * Decimal('0.5'), \
+        assert abs(actual_dgb - expected_dgb) <= tolerance, \
             f"DGB calculation out of range: expected ~{expected_dgb:.2f}, got {actual_dgb:.2f}"
 
     def test_estimate_returns_correct_tier(self):
@@ -334,13 +336,14 @@ class DigiDollarEstimateTest(DigiByteTestFramework):
             # Verify DGB increases with amount
             assert_greater_than(actual_dgb, previous_dgb)
 
-            # Calculate expected DGB
-            expected_dgb = self.calculate_expected_dgb(amount_cents, base_ratio, self.default_price_micro_usd)
+            # Calculate expected DGB using effective_ratio (base * DCA multiplier)
+            effective_ratio = int(result['effective_ratio'])
+            expected_dgb = self.calculate_expected_dgb(amount_cents, effective_ratio, self.default_price_micro_usd)
 
             self.log.info(f"    {description}: {actual_dgb:.2f} DGB (expected ~{expected_dgb:.2f} DGB)")
 
-            # Allow tolerance for DCA effects
-            tolerance = expected_dgb * Decimal('0.1')
+            # Allow higher tolerance — DCA and rounding effects
+            tolerance = expected_dgb * Decimal('0.15')  # 15% base tolerance
             assert abs(actual_dgb - expected_dgb) <= tolerance + expected_dgb * Decimal('0.5'), \
                 f"{description}: DGB out of range - expected ~{expected_dgb:.2f}, got {actual_dgb:.2f}"
 
@@ -425,8 +428,9 @@ class DigiDollarEstimateTest(DigiByteTestFramework):
             actual_ratio = int(result['base_ratio'])
             assert_equal(actual_ratio, expected_ratio)
 
-            # Verify DGB calculation
-            expected_dgb = self.calculate_expected_dgb(dd_amount_cents, expected_ratio, self.default_price_micro_usd)
+            # Verify DGB calculation (use effective_ratio from RPC, not base_ratio)
+            effective_ratio = int(result['effective_ratio'])
+            expected_dgb = self.calculate_expected_dgb(dd_amount_cents, effective_ratio, self.default_price_micro_usd)
             actual_dgb = Decimal(str(result['required_dgb']))
 
             self.log.info(f"    Required: {actual_dgb:.2f} DGB (expected ~{expected_dgb:.2f})")

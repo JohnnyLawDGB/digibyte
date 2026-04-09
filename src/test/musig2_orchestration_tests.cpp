@@ -5,7 +5,7 @@
 /**
  * MuSig2 Signing Orchestration Tests
  *
- * Tests the MuSig2SessionManager which orchestrates session lifecycle:
+ * Tests the MuSig2Orchestrator which orchestrates session lifecycle:
  * - Session creation per epoch
  * - Nonce generation on epoch start
  * - Session advancement through signing states
@@ -59,7 +59,7 @@ static CKey MakeCKey(const unsigned char seckey[32])
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_session_created_per_epoch)
 {
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
 
     // No sessions initially
     BOOST_CHECK(manager.GetSession(100) == nullptr);
@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE(test_nonce_generated_on_epoch_start)
     secp256k1_musig_keyagg_cache cache;
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, &pk_ptr, 1));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
     BOOST_CHECK(manager.CreateSessionForEpoch(EPOCH, 1));
 
     // Session should start in CREATED state
@@ -147,7 +147,7 @@ BOOST_AUTO_TEST_CASE(test_nonce_broadcast_to_peers)
     secp256k1_musig_keyagg_cache cache;
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, &pk_ptr, 1));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
     BOOST_CHECK(manager.CreateSessionForEpoch(EPOCH, 1));
 
     CKey ckey = MakeCKey(seckey);
@@ -189,7 +189,7 @@ BOOST_AUTO_TEST_CASE(test_session_advances_to_signing)
     secp256k1_musig_keyagg_cache cache;
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), N));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
     BOOST_CHECK(manager.CreateSessionForEpoch(EPOCH, 9));
 
     // Generate our local nonce (signer 0)
@@ -255,7 +255,7 @@ BOOST_AUTO_TEST_CASE(test_session_completes_on_aggregate)
     secp256k1_musig_keyagg_cache cache;
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), N));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
     BOOST_CHECK(manager.CreateSessionForEpoch(EPOCH, 9));
 
     // Generate our local nonce (signer 0)
@@ -331,7 +331,7 @@ BOOST_AUTO_TEST_CASE(test_session_completes_on_aggregate)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_session_timeout_on_epoch_boundary)
 {
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
 
     // Create sessions for epochs 100 and 101
     BOOST_CHECK(manager.CreateSessionForEpoch(100, 9));
@@ -363,7 +363,7 @@ BOOST_AUTO_TEST_CASE(test_session_timeout_on_epoch_boundary)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_oracle_skips_signing_when_inactive)
 {
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
 
     // ShouldParticipate returns false when not configured as oracle
     BOOST_CHECK(!manager.IsOracleActive());
@@ -402,7 +402,7 @@ BOOST_AUTO_TEST_CASE(test_concurrent_epochs_no_crosstalk)
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk_a, &cache_a, &pk_ptr_a, 1));
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk_b, &cache_b, &pk_ptr_b, 1));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
 
     // Create sessions for two consecutive epochs
     BOOST_CHECK(manager.CreateSessionForEpoch(100, 1));
@@ -457,7 +457,7 @@ BOOST_AUTO_TEST_CASE(test_concurrent_epochs_no_crosstalk)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_session_count_limit)
 {
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
 
     // Create sessions for epochs 1-5
     for (int32_t e = 1; e <= 5; e++) {
@@ -503,7 +503,7 @@ BOOST_AUTO_TEST_CASE(test_check_and_advance_signing)
     secp256k1_musig_keyagg_cache cache;
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), N));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
     BOOST_CHECK(manager.CreateSessionForEpoch(EPOCH, 9));
 
     // Generate nonce for signer 0
@@ -561,7 +561,7 @@ BOOST_AUTO_TEST_CASE(test_completed_bitmap_is_padded_to_network_oracle_count)
     secp256k1_musig_keyagg_cache cache;
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, &pk_ptr, 1));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
     BOOST_REQUIRE(manager.CreateSessionForEpoch(EPOCH, 1));
 
     CKey ckey = MakeCKey(seckey);
@@ -610,7 +610,7 @@ BOOST_AUTO_TEST_CASE(test_nonexistent_epoch_operations_fail)
     secp256k1_musig_keyagg_cache cache;
     BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, &pk_ptr, 1));
 
-    MuSig2SessionManager manager;
+    MuSig2Orchestrator manager;
 
     CKey ckey = MakeCKey(seckey);
     secp256k1_musig_pubnonce pubnonce;

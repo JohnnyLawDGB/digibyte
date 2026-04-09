@@ -116,6 +116,11 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
 
 double DynamicCollateralAdjustment::GetDCAMultiplier(int systemHealth)
 {
+    // RH-36b: Clamp health to valid range [0, 30000] before tier lookup.
+    // Negative health (shouldn't happen but can from overflow/bugs) must map
+    // to the lowest tier (emergency), not fall through to a hardcoded fallback.
+    systemHealth = std::clamp(systemHealth, 0, 30000);
+
     // Find the appropriate tier for this health level
     for (const auto& tier : HEALTH_TIERS) {
         if (systemHealth >= tier.minCollateral && systemHealth <= tier.maxCollateral) {
@@ -178,7 +183,7 @@ CAmount DynamicCollateralAdjustment::GetTotalSystemCollateral()
     // Return cached collateral from SystemHealthMonitor
     // These are updated by ScanUTXOSet() called from RPC layer
     // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
-    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+    const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
     return metrics.totalCollateral;
 }
 
@@ -187,7 +192,7 @@ CAmount DynamicCollateralAdjustment::GetTotalDDSupply()
     // Return cached DD supply from SystemHealthMonitor
     // These are updated by ScanUTXOSet() called from RPC layer
     // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
-    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+    const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
     return metrics.totalDDSupply;
 }
 
@@ -195,7 +200,7 @@ int DynamicCollateralAdjustment::GetCurrentSystemHealth()
 {
     // Return cached system health from SystemHealthMonitor
     // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
-    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+    const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
 
     // If we have a cached health value, return it
     if (metrics.systemHealth > 0) {
@@ -224,7 +229,7 @@ bool DynamicCollateralAdjustment::IsOracleAvailable()
 {
     // Check cached oracle data
     // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
-    const SystemMetrics& metrics = SystemHealthMonitor::GetCachedMetrics();
+    const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
     return (metrics.lastOraclePrice > 0 && metrics.activeOracles > 0);
 }
 

@@ -53,7 +53,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - **What happens:** Nothing. DigiDollar deployment exists in the code but signaling hasn't begun.
 - **Miner behavior:** Miners don't need to do anything. Block versions don't include bit 23.
 - **User experience:** DigiDollar tab visible in Qt but shows "DigiDollar is not yet active on this blockchain" with current BIP9 status.
-- **RPC behavior:** All 28 DD/Oracle RPCs return error: "DigiDollar is not yet active on this blockchain"
+- **RPC behavior:** All 30 DD/Oracle RPCs return error: "DigiDollar is not yet active on this blockchain"
 - **P2P behavior:** Oracle price/bundle/discovery messages are silently dropped.
 - **Consensus:** DD transactions rejected with "digidollar-not-active". DD opcodes treated as NOPs.
 
@@ -72,7 +72,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 ### Phase 4: ACTIVE (block 600+ on testnet)
 - **What happens:** DigiDollar is fully operational.
-- **RPC behavior:** All 28 DD/Oracle RPCs become functional.
+- **RPC behavior:** All 30 DD/Oracle RPCs become functional.
 - **P2P behavior:** Oracle messages are processed, relayed, and validated.
 - **Consensus:** DD transactions are validated. DD opcodes are enforced. `SCRIPT_VERIFY_DIGIDOLLAR` flag is set.
 - **Qt behavior:** Activation overlay disappears. Full DD tab (overview, send, receive, mint, redeem, vault, transactions) becomes accessible.
@@ -82,7 +82,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 ## What Gets Gated (Complete List)
 
-### RPC Commands (28 total — all gated)
+### RPC Commands (30 total — all gated)
 
 **Core DD Operations:**
 - `mintdigidollar` — Mint new DigiDollar
@@ -116,29 +116,35 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - `createoraclekey` — Generate oracle key in wallet
 - `startoracle` — Start oracle service
 - `stoporacle` — Stop oracle service
-- `sendoracleprice` — Submit oracle price (testnet/regtest only)
 - `submitoracleprice` — Submit price via P2P (regtest only)
 - `simulatepricevolatility` — Simulate price changes (regtest only)
+- `setmockoracleprice` — Set mock oracle price (regtest only)
+- `getmockoracleprice` — Get mock oracle price (regtest only)
+- `enablemockoracle` — Enable/disable mock oracle (regtest only)
+
+**Note:** `sendoracleprice` was REMOVED as a security vulnerability (fake price injection). Oracle prices come exclusively from live exchange aggregation.
 
 **Gate pattern:** Each RPC checks `DigiDollar::IsDigiDollarEnabled(tip, chainman)` which calls `DeploymentActiveAfter()` — the BIP9 status check.
 
-### P2P Message Handlers (5 total — all gated)
+### P2P Message Handlers (7 total — all gated)
 
 | Message | Handler | Gate |
 |---------|---------|------|
-| `ORACLEPRICE` | Line ~5375 | `IsOracleActive()` — height-based (nOracleActivationHeight=600) |
-| `ORACLEBUNDLE` | Line ~5542 | `IsOracleActive()` — height-based |
-| `ORACLECONSENSUS` | Line ~5697 | `IsOracleActive()` — height-based |
-| `ORACLEATTESTATION` | Line ~5827 | `IsOracleActive()` — height-based |
-| `GETORACLES` | Line ~5926 | `IsOracleActive()` — height-based |
+| `ORACLEPRICE` | Line ~5440 | `IsOracleActive()` — height-based (nOracleActivationHeight=600) |
+| `ORACLEBUNDLE` | Line ~5607 | `IsOracleActive()` — height-based |
+| `ORACLECONSENSUS` | Line ~5762 | `IsOracleActive()` — height-based |
+| `ORACLEATTESTATION` | Line ~5892 | `IsOracleActive()` — height-based |
+| `ORACLEMUSIGNONCE` | Line ~5991 | `IsOracleActive()` — height-based |
+| `ORACLEMUSIGPARTIALSIG` | Line ~6103 | `IsOracleActive()` — height-based |
+| `GETORACLES` | Line ~6206 | `IsOracleActive()` — height-based |
 
-**Note:** P2P handlers use `Consensus::IsOracleActive()` which is height-based (`nHeight >= nOracleActivationHeight`), not BIP9. On testnet, `nOracleActivationHeight=600` matches `min_activation_height=600`, so they align in practice. On mainnet, `nOracleActivationHeight` is currently set to `INT_MAX` (oracle system disabled until Phase Two). A malicious node sending oracle messages before activation gets silently ignored (no ban, no penalty — just dropped).
+**Note:** P2P handlers use `Consensus::IsOracleActive()` which is height-based (`nHeight >= nOracleActivationHeight`), not BIP9. On testnet, `nOracleActivationHeight=600` matches `min_activation_height=600`, so they align in practice. On mainnet, `nOracleActivationHeight` is set to `3000000`. A malicious node sending oracle messages before activation gets silently ignored (no ban, no penalty — just dropped).
 
 ### Consensus Validation (all BIP9-gated)
 
-1. **Mempool acceptance** (`validation.cpp:~731`): `DigiDollar::HasDigiDollarMarker(tx)` + `IsDigiDollarEnabled()` → rejects DD TXs with `TX_CONSENSUS "digidollar-not-active"`
-2. **Block validation** (`validation.cpp:~2823`): Same check during `ConnectBlock()` → rejects blocks containing DD TXs before activation
-3. **Script verification** (`validation.cpp:~2519`): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true → DD opcodes are NOPs before activation
+1. **Mempool acceptance** (`validation.cpp:~765`): `DigiDollar::HasDigiDollarMarker(tx)` + `IsDigiDollarEnabled()` → rejects DD TXs with `TX_CONSENSUS "digidollar-not-active"`
+2. **Block validation** (`validation.cpp:~2874`): Same check during `ConnectBlock()` → rejects blocks containing DD TXs before activation
+3. **Script verification** (`validation.cpp:~2566`): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true → DD opcodes are NOPs before activation
 
 ### Qt GUI
 
@@ -191,7 +197,7 @@ During STARTED/LOCKED_IN, blocks should have version `0x20800004` or similar (wi
 ### Manual Testing Checklist
 
 Before activation (any block < 600):
-- [ ] All 28 DD RPCs return "DigiDollar is not yet active on this blockchain"
+- [ ] All 30 DD RPCs return "DigiDollar is not yet active on this blockchain"
 - [ ] `getdeploymentinfo` shows correct BIP9 state
 - [ ] Qt DD tab shows activation overlay
 - [ ] No oracle messages processed (check debug.log)
@@ -248,11 +254,11 @@ On mainnet, the process is:
 | BIP9 state machine | `src/versionbits.cpp` | `ThresholdConditionChecker` |
 | Deployment info | `src/deploymentinfo.cpp` | `VersionBitsDeploymentInfo[]` |
 | RPC activation gate | `src/rpc/digidollar.cpp` | `IsDigiDollarEnabled()` check in each RPC |
-| P2P activation gate | `src/net_processing.cpp` | `IsOracleActive()` in ORACLEPRICE/BUNDLE/CONSENSUS/ATTESTATION/GETORACLES |
-| Mempool gate | `src/validation.cpp:~731` | `IsDigiDollarEnabled()` in `AcceptToMemoryPool` |
-| Block validation gate | `src/validation.cpp:~2823` | `IsDigiDollarEnabled()` in `ConnectBlock` |
-| Script flags | `src/validation.cpp:~2519` | `SCRIPT_VERIFY_DIGIDOLLAR` flag |
+| P2P activation gate | `src/net_processing.cpp` | `IsOracleActive()` in ORACLEPRICE/BUNDLE/CONSENSUS/ATTESTATION/MUSIGNONCE/MUSIGPARTIALSIG/GETORACLES |
+| Mempool gate | `src/validation.cpp:~765` | `IsDigiDollarEnabled()` in `AcceptToMemoryPool` |
+| Block validation gate | `src/validation.cpp:~2874` | `IsDigiDollarEnabled()` in `ConnectBlock` |
+| Script flags | `src/validation.cpp:~2566` | `SCRIPT_VERIFY_DIGIDOLLAR` flag |
 | Qt activation overlay | `src/qt/digidollartab.cpp` | `checkActivationStatus()` timer |
 | Qt widget polling guard | `src/qt/digidollar*widget.cpp` | `if (!isVisible()) return;` |
-| Oracle height gate | `src/consensus/params.h:234` | `IsOracleActive()` |
+| Oracle height gate | `src/consensus/params.h:244` | `IsOracleActive()` |
 | DD enabled check | `src/digidollar/digidollar.cpp` | `IsDigiDollarEnabled()` |

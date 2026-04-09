@@ -149,10 +149,29 @@ BOOST_AUTO_TEST_CASE(bidirectional_encoding_test)
 // Test validation of DD address format
 BOOST_AUTO_TEST_CASE(address_format_validation_test)
 {
+    // Generate valid DD/TD/RD addresses via the encoder to test round-trip
+    // Create a dummy 32-byte taproot key
+    XOnlyPubKey xpk;
+    {
+        std::vector<unsigned char> dummy(32, 0x42);
+        std::copy(dummy.begin(), dummy.end(), xpk.begin());
+    }
+    WitnessV1Taproot taproot(xpk);
+    CTxDestination dest(taproot);
+
+    CDigiDollarAddress ddAddr, tdAddr, rdAddr;
+    BOOST_CHECK(ddAddr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS));
+    BOOST_CHECK(tdAddr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS_TESTNET));
+    BOOST_CHECK(rdAddr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS_REGTEST));
+
+    std::string ddStr = ddAddr.ToString();
+    std::string tdStr = tdAddr.ToString();
+    std::string rdStr = rdAddr.ToString();
+
     // Valid DD addresses should be detected
-    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddress("DD1234567890abcdef"));
-    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddress("TD1234567890abcdef"));
-    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddress("RD1234567890abcdef"));
+    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddress(ddStr));
+    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddress(tdStr));
+    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddress(rdStr));
 
     // Invalid prefixes should be rejected
     BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddress("BD1234567890abcdef"));  // Bad prefix
@@ -160,6 +179,8 @@ BOOST_AUTO_TEST_CASE(address_format_validation_test)
     BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddress("D1234567890abcdef"));   // Too short
     BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddress(""));                    // Empty
     BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddress("1DD234567890abcdef"));  // Wrong position
+    // Fake prefix+junk (no valid base58check)
+    BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddress("DD1234567890abcdef"));
 }
 
 // Test rejection of invalid addresses

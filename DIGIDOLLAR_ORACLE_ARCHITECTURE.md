@@ -67,7 +67,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 **Trade-off Analysis:**
 ```
 ✅ BENEFITS:
-- Fits in 83-byte OP_RETURN limit (24% utilization)
+- Fits in 83-byte OP_RETURN limit (26.5% utilization)
 - Fast block validation (< 1ms overhead)
 - Simple testnet deployment
 - Clean upgrade path to Phase Two
@@ -218,7 +218,7 @@ Exchange APIs (6 working exchanges, parallel fetching - 5 broken/removed not sho
                     MultiExchangeAggregator
                     ┌─────────────────────────────┐
                     │ 1. Filter failures          │
-                    │ 2. Remove outliers (MAD)    │
+                    │ 2. Remove outliers          │
                     │ 3. Calculate median         │
                     │ 4. Convert to micro-USD     │
                     └──────────────┬──────────────┘
@@ -281,7 +281,7 @@ CreateOracleScript(bundle) → Produces 22-byte compact format:
 │  Bytes 12-19: 0x8080AB67 00000000 (timestamp LE)        │
 └──────────────────────────────────────────────────────────┘
 
-Total: 22 bytes (27% of 83-byte OP_RETURN limit) ✅
+Total: 22 bytes (26.5% of 83-byte OP_RETURN limit) ✅
 
 KEY DESIGN DECISION:
 - Schnorr signature (64 bytes) NOT included → saves space
@@ -403,7 +403,7 @@ Core Oracle Layer:
   ┌──────────────────────────────────────────┐
   │   MultiExchangeAggregator                │
   │   - FetchAllPrices()                     │
-  │   - FilterOutliers() [MAD algorithm]     │
+  │   - FilterOutliers() [%-threshold]       │
   │   - CalculateMedianPrice()               │
   └──────────────────┬───────────────────────┘
                      │ Median price (micro-USD)
@@ -421,7 +421,7 @@ Bundle Management:
   │   OracleBundleManager (Singleton)        │
   │   ├─ AddOracleMessage()                  │
   │   ├─ TryCreateBundle()                   │
-  │   ├─ CreateOracleScript() [compact 20B]  │
+  │   ├─ CreateOracleScript() [compact 22B]  │
   │   ├─ ExtractOracleBundle()               │
   │   ├─ BroadcastMessage() ◄──┐             │
   │   └─ UpdatePriceCache()     │             │
@@ -690,34 +690,36 @@ SERIALIZE_METHODS(COraclePriceMessage, obj) {
 **Complete Validation Logic** (src/primitives/oracle.cpp:30-56):
 
 ```cpp
-bool COraclePriceMessage::IsValid() const
+bool COraclePriceMessage::IsValid(int64_t reference_time) const
 {
     // 1. PRICE RANGE VALIDATION
-    static constexpr uint64_t MIN_PRICE_MICRO_USD = 100;          // $0.0001
-    static constexpr uint64_t MAX_PRICE_MICRO_USD = 100000000;   // $100.00
-
-    if (price_micro_usd < MIN_PRICE_MICRO_USD) return false;
-    if (price_micro_usd > MAX_PRICE_MICRO_USD) return false;
+    // Uses shared constants from oracle.h: ORACLE_MIN/MAX_PRICE_MICRO_USD
+    if (price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD) return false;  // 100 ($0.0001)
+    if (price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) return false;  // 100000000 ($100.00)
 
     // 2. TIMESTAMP VALIDATION
-    int64_t current_time = GetTime();
+    // Use provided reference time (block time during validation) or current time
+    int64_t current_time = (reference_time > 0) ? reference_time : GetTime();
 
     // Not in future (1 minute tolerance for clock skew)
     if (timestamp > current_time + 60) return false;
 
     // Not too old (1 hour maximum age)
-    static constexpr int ORACLE_MAX_AGE_SECONDS = 3600;
     if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
 
     // 3. SCHNORR SIGNATURE VERIFICATION (optional for compact format)
     // ⚠️ SECURITY ISSUE: Empty signature BYPASSES all verification
     if (!schnorr_sig.empty()) {
-        // Full format with embedded signature - verify it
-        return Verify();  // Full BIP-340 verification
+        // Try Phase 2 verification first (signs only oracle_id + price + timestamp)
+        if (VerifyPhase2()) {
+            return true;
+        }
+        // Fall back to Phase 1 full verification (includes block_height + nonce)
+        return Verify();
     }
 
     // ⚠️ WARNING: If schnorr_sig is empty, message passes validation!
-    // This is intentional for compact format but allows spoofing
+    // Compact format: Trust based on chainparams oracle pubkey (verified at extraction)
     return true;
 }
 ```
@@ -751,39 +753,67 @@ public:
     int64_t timestamp{0};                       // Bundle creation time
 
     // Phase One: messages.size() == 1 (1-of-1 consensus)
-    // Phase Two: messages.size() >= 8 (8-of-15 consensus)
+    // Phase Two: messages.size() >= nOracleRequiredMessages (6-of-11 current config)
 };
 ```
 
 #### 4.2.2 Median Price Calculation
 
-**Algorithm** (src/primitives/oracle.cpp:236-261):
+**Algorithm** (src/primitives/oracle.cpp):
 
 ```cpp
 uint64_t COracleBundle::GetConsensusPrice(int min_required) const
 {
     if (!HasConsensus(min_required)) return 0;
 
-    // Step 1: Filter outliers (10% threshold)
-    std::vector<COraclePriceMessage> filtered = FilterOutliers();
-    if (filtered.empty()) return 0;
-
-    // Step 2: Extract and sort prices
-    std::vector<uint64_t> prices;
-    for (const auto& msg : filtered) {
-        prices.push_back(msg.price_micro_usd);
+    // Step 1: Price-range filter only (deterministic, time-independent)
+    std::vector<int64_t> prices;
+    for (const auto& msg : messages) {
+        if (msg.price_micro_usd >= ORACLE_MIN_PRICE_MICRO_USD &&
+            msg.price_micro_usd <= ORACLE_MAX_PRICE_MICRO_USD) {
+            prices.push_back(static_cast<int64_t>(msg.price_micro_usd));
+        }
     }
+    if (prices.empty()) return 0;
+
+    // Step 2: Sort for IQR calculation
     std::sort(prices.begin(), prices.end());
 
-    // Step 3: Calculate median
-    size_t size = prices.size();
-    if (size % 2 == 0) {
-        // Even: average of middle two
-        return (prices[size/2 - 1] + prices[size/2]) / 2;
-    } else {
-        // Odd: middle element
-        return prices[size/2];
+    // Step 3: If less than 4 prices, return simple median (no IQR filtering)
+    if (prices.size() < 4) {
+        size_t mid = prices.size() / 2;
+        if (prices.size() % 2 == 0) {
+            return static_cast<uint64_t>((prices[mid - 1] + prices[mid]) / 2);
+        }
+        return static_cast<uint64_t>(prices[mid]);
     }
+
+    // Step 4: Apply IQR outlier filtering (1.5 * IQR rule)
+    size_t q1_idx = prices.size() / 4;
+    size_t q3_idx = (prices.size() * 3) / 4;
+    int64_t q1 = prices[q1_idx];
+    int64_t q3 = prices[q3_idx];
+    int64_t iqr = q3 - q1;
+    int64_t lower_bound = q1 - (iqr * 3 / 2);
+    int64_t upper_bound = q3 + (iqr * 3 / 2);
+
+    // Step 5: Filter outliers and return median of filtered set
+    std::vector<int64_t> filtered;
+    for (int64_t price : prices) {
+        if (price >= lower_bound && price <= upper_bound) {
+            filtered.push_back(price);
+        }
+    }
+
+    // Step 6: Fall back to unfiltered median if all filtered
+    if (filtered.empty()) filtered = prices;
+
+    std::sort(filtered.begin(), filtered.end());
+    size_t mid = filtered.size() / 2;
+    if (filtered.size() % 2 == 0) {
+        return static_cast<uint64_t>((filtered[mid - 1] + filtered[mid]) / 2);
+    }
+    return static_cast<uint64_t>(filtered[mid]);
 }
 ```
 
@@ -854,7 +884,7 @@ PHASE 1: MESSAGE CREATION (External Oracle Daemon)
 │ Oracle Daemon (oracle.digibyte.io)                           │
 ├───────────────────────────────────────────────────────────────┤
 │ 1. Fetch prices from 6 working exchanges (5 broken/removed)       │
-│ 2. Calculate median with MAD outlier filtering               │
+│ 2. Calculate median with percentage-threshold outlier filtering│
 │ 3. Create COraclePriceMessage structure:                     │
 │    ┌─────────────────────────────────────────────────────┐  │
 │    │ struct COraclePriceMessage {                        │  │
@@ -1005,7 +1035,7 @@ PHASE 5: PRICE CACHE (ConnectBlock - validation.cpp:~2748)
 │                                                               │
 │ Cache management:                                             │
 │   - Keep last 1,000 blocks                                    │
-│   - Thread-safe (RecursiveMutex)                              │
+│   - Thread-safe (std::mutex)                                  │
 │   - Auto-evict oldest entries                                 │
 └───────────────────────────────────────────────────────────────┘
                               │
@@ -1163,15 +1193,25 @@ Annual savings (5,760 blocks/day × 365 days):
 ```cpp
 CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) const
 {
+    // Phase Three (v0x03): MuSig2 aggregate signature + participation bitmap
+    if (bundle.version == 3) {
+        // ... MuSig2 handling (omitted for brevity) ...
+    }
+
     if (bundle.messages.empty()) {
         return CScript(); // Empty script for no oracle data
     }
 
-    // Phase One: Must have exactly 1 message
-    if (bundle.messages.size() != 1) {
-        return CScript(); // Reject bundles with wrong message count
+    // Phase Two: multi-message bundles (version 0x02) when Phase Two is active
+    if (bundle.messages.size() > 1) {
+        // Only create multi-oracle scripts when Phase Two is enabled
+        // If Phase Two not activated, reject multi-message bundles
+        // Phase Two format: OP_RETURN OP_ORACLE <0x02> <data>
+        // Data: num_messages(1) + price(8) + timestamp(8) + per-oracle: id(1) + sig(64)
+        // ... (see bundle_manager.cpp for full implementation)
     }
 
+    // Phase One: Must have exactly 1 message (1-of-1 consensus)
     CScript script;
     script << OP_RETURN << OP_ORACLE;
 
@@ -1184,6 +1224,7 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
     compact_data.reserve(17);
 
     // Oracle ID (uint8 for Phase One)
+    // SECURITY (DGB-SEC-004): Defense-in-depth — reject oracle_id > 255
     compact_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF));
 
     // Price in micro-USD (uint64, little-endian)
@@ -1236,7 +1277,7 @@ Timestamp bytes: 00 2f 50 65 00 00 00 00
   Step 2: 0x2f << 8                     = 12,032
   Step 3: 0x50 << 16                    = 5,242,880
   Step 4: 0x65 << 24                    = 1,694,498,816
-  Total:  0 + 12,032 + 5,242,880 + 1,694,498,816 = 1,700,000,000 ✓
+  Total:  0 + 12,032 + 5,242,880 + 1,694,498,816 = 1,699,753,728 (example value)
 ```
 
 #### 4.3.4 Decoding Implementation
@@ -1761,38 +1802,40 @@ Phase Two implements decentralized multi-oracle consensus for mainnet security.
 
 **Configuration Parameters** (`src/consensus/params.h`):
 ```cpp
-int nDigiDollarPhase2Height{std::numeric_limits<int>::max()};  // Activation height
-int nOracleRequiredMessages{1};  // Phase One: 1, Phase Two regtest: 4, testnet: 5, mainnet: 8
-int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet: 9, mainnet: 15
+int nDigiDollarPhase2Height{std::numeric_limits<int>::max()};  // Default; overridden: mainnet=3000000, testnet=600, regtest=650
+int nOracleRequiredMessages{1};  // Phase One: 1, Phase Two regtest: 4, testnet: 6, mainnet: 6
+int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet: 11, mainnet: 11
 ```
 
 ### 14.2 Network-Specific Configuration
 
 | Network | Phase | Consensus | Oracles Defined | Activation Height | Status |
 |---------|-------|-----------|-----------------|-------------------|--------|
-| Mainnet | One | **DISABLED** | 30 vOracleNodes, 0 pubkeys | Never (validation bypassed) | ❌ NOT FUNCTIONAL |
-| Testnet | One | 5-of-9 | 9 | Block 600 | ✅ Working |
+| Mainnet | One | **DISABLED** | 11 vOraclePublicKeys defined, validation bypassed | Block 22014720 (validation bypassed) | ❌ NOT FUNCTIONAL |
+| Testnet | One | 6-of-11 | 11 | Block 600 | ✅ Working |
 | RegTest | One | 4-of-7 | 7 | Block 650 | ✅ Working |
 
 > **⚠️ CRITICAL**: Mainnet oracle validation returns true at bundle_manager.cpp:1563.
 > This means mainnet will accept ANY oracle data without verification.
 > Phase Two infrastructure exists but cannot be enabled until mainnet validation is fixed.
 
-### 14.3 Testnet Oracle Keys (All 9 Defined)
+### 14.3 Testnet Oracle Keys (All 11 Defined)
 
-**Location**: `src/kernel/chainparams.cpp` (lines 540-574)
+**Location**: `src/kernel/chainparams.cpp` (lines 598-609)
 
 ```cpp
-// All 9 testnet oracles are ACTIVE for 5-of-9 consensus
-consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb..."); // Oracle 0 - Jared (ACTIVE)
-consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6f..."); // Oracle 1 - Green Candle (ACTIVE)
-consensus.vOraclePublicKeys.push_back("172755a320cec96c..."); // Oracle 2 - Bastian (ACTIVE)
-consensus.vOraclePublicKeys.push_back("546c07ee9d21640c..."); // Oracle 3 - DanGB (ACTIVE)
-consensus.vOraclePublicKeys.push_back("9cef021f841794c1..."); // Oracle 4 - Shenger (ACTIVE)
-consensus.vOraclePublicKeys.push_back("85016758856ed273..."); // Oracle 5 - Ycagel (ACTIVE)
-consensus.vOraclePublicKeys.push_back("7a858e055099e4a9..."); // Oracle 6 - Aussie (ACTIVE)
-consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e2..."); // Oracle 7 - LookInto (ACTIVE)
-consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311..."); // Oracle 8 - JohnnyLawDGB (ACTIVE)
+// All 11 testnet oracles are ACTIVE for 6-of-11 consensus
+consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c..."); // ChopperBrian (ACTIVE)
+consensus.vOraclePublicKeys.push_back("172755a320cec96c..."); // Bastian (ACTIVE)
+consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e2..."); // LookInto (ACTIVE)
+consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6f..."); // Green Candle (ACTIVE)
+consensus.vOraclePublicKeys.push_back("546c07ee9d21640c..."); // DanGB (ACTIVE)
+consensus.vOraclePublicKeys.push_back("7a858e055099e4a9..."); // Aussie (ACTIVE)
+consensus.vOraclePublicKeys.push_back("85016758856ed273..."); // Ycagel (ACTIVE)
+consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311..."); // JohnnyLawDGB (ACTIVE)
+consensus.vOraclePublicKeys.push_back("9cef021f841794c1..."); // Shenger (ACTIVE)
+consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a..."); // Ogilvie (ACTIVE)
+consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb..."); // Jared (ACTIVE)
 ```
 
 ### 14.4 Phase Two Validation Functions
@@ -1844,7 +1887,7 @@ int OracleBundleManager::GetRequiredConsensus(int block_height,
                                                const Consensus::Params& params)
 {
     if (block_height >= params.nDigiDollarPhase2Height) {
-        return params.nOracleRequiredMessages;  // 5 for testnet, 4 for regtest, 8 for mainnet
+        return params.nOracleRequiredMessages;  // 6 for testnet, 4 for regtest, 6 for mainnet
     }
     return 1;  // Phase One: 1-of-1
 }
@@ -1855,7 +1898,7 @@ int OracleBundleManager::GetRequiredConsensus(int block_height,
 To enable Phase Two on testnet, change in `chainparams.cpp`:
 ```cpp
 consensus.nDigiDollarPhase2Height = <desired_block_height>;
-consensus.nOracleRequiredMessages = 5;  // 5-of-9 for testnet
+consensus.nOracleRequiredMessages = 6;  // 6-of-11 for testnet
 ```
 
 ---
@@ -1892,8 +1935,8 @@ Validation Range:      100 - 100,000,000 micro-USD ($0.0001 - $100.00)
 Compact Script Size:   22 bytes (OP_RETURN + OP_ORACLE + data)
 Full Message Size:     128 bytes (with 64-byte Schnorr signature)
 Phase One Consensus:   1-of-1 (testnet/regtest ONLY - mainnet disabled)
-Phase Two Consensus:   5-of-9 testnet, 4-of-7 regtest, 8-of-15 mainnet (infrastructure exists)
-Activation Heights:    Mainnet=DISABLED, Testnet=600, Regtest=650
+Phase Two Consensus:   6-of-11 testnet, 4-of-7 regtest, 6-of-11 mainnet (infrastructure exists)
+Activation Heights:    Mainnet=22014720 (validation bypassed), Testnet=600, Regtest=650
 ```
 
 ## Known TODOs and Stubs (VERIFIED)

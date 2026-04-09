@@ -32,23 +32,40 @@ BOOST_AUTO_TEST_CASE(musig2_inv_types_map_to_wire_commands)
 
 BOOST_AUTO_TEST_CASE(musig2_messages_validate_expected_field_lengths)
 {
+    // RH-24: IsValid() now requires a 64-byte signature field
     OracleMusigNonceMsg nonce_msg;
     nonce_msg.epoch = 123;
     nonce_msg.oracle_id = 1;
     nonce_msg.pubnonce.assign(66, 0x22);
+    nonce_msg.signature.assign(64, 0x00); // signature present (validity of sig checked separately)
     BOOST_CHECK(nonce_msg.IsValid());
 
     nonce_msg.pubnonce.assign(65, 0x22);
     BOOST_CHECK(!nonce_msg.IsValid());
 
+    // Missing signature must fail
+    OracleMusigNonceMsg no_sig_msg;
+    no_sig_msg.epoch = 123;
+    no_sig_msg.oracle_id = 1;
+    no_sig_msg.pubnonce.assign(66, 0x22);
+    BOOST_CHECK(!no_sig_msg.IsValid());
+
     OracleMusigPartialSigMsg psig_msg;
     psig_msg.epoch = 123;
     psig_msg.oracle_id = 1;
     psig_msg.partial_sig.assign(32, 0x33);
+    psig_msg.signature.assign(64, 0x00);
     BOOST_CHECK(psig_msg.IsValid());
 
     psig_msg.partial_sig.assign(31, 0x33);
     BOOST_CHECK(!psig_msg.IsValid());
+
+    // Missing signature must fail
+    OracleMusigPartialSigMsg no_sig_psig;
+    no_sig_psig.epoch = 123;
+    no_sig_psig.oracle_id = 1;
+    no_sig_psig.partial_sig.assign(32, 0x33);
+    BOOST_CHECK(!no_sig_psig.IsValid());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

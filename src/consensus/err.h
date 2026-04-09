@@ -10,6 +10,7 @@
 #include <uint256.h>
 
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -225,6 +226,12 @@ public:
     static void ReconstructERRState(int currentSystemHealth, uint32_t currentHeight);
 
     /**
+     * @brief Clear the state-reconstructed lock, allowing GetCurrentState() to read DCA cache again.
+     * Call this after the first real health update from block processing.
+     */
+    static void ClearStateReconstructed();
+
+    /**
      * Validate an ERR redemption transaction.
      *
      * @param tx The ERR redemption transaction
@@ -433,8 +440,21 @@ public:
 private:
     // Internal state management
     static ERRState s_currentState;
+    static bool s_stateReconstructed;  // RH-36a: prevents DCA cache from overwriting reconstructed ERR state
     static std::vector<COutPoint> s_errQueue;
     static std::map<COutPoint, std::pair<CAmount, uint32_t>> s_queuedRedemptions;
+    static std::mutex s_errMutex;  //!< RH-44: Protects all ERR static state from concurrent access
+
+    /** Deactivate ERR while s_errMutex is already held. Prevents self-deadlock
+     *  when GetCurrentState() needs to deactivate inline. */
+    static bool DeactivateERRLocked(int currentHealth);
+
+public:
+    /** Reset all static ERR state — for unit tests only. */
+    static void ResetForTesting();
+
+    /** Set ERR active state directly — for unit tests only. */
+    static void SetActiveForTesting(bool active);
 
     /**
      * Internal helper to calculate oracle consensus hash.

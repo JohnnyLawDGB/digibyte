@@ -1,20 +1,386 @@
 // Copyright (c) 2024-2026 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-// Stub: MuSig2 P2P message tests require OracleMusigNonceMsg/OracleMusigPartialSigMsg
-// types which are not yet implemented in protocol.h. Tests will be added when
-// the P2P message types are committed.
+//
+// RH-03: Red-team P2P message handling tests for MuSig2 oracle messages.
+// Tests attack vectors: flooding, oversized payloads, replay, invalid nonces,
+// epoch mismatch, sybil spoofing, malformed serialization, memory exhaustion.
 
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
 
+#include <oracle/musig2_messages.h>
+#include <primitives/oracle.h>
+#include <hash.h>
+#include <serialize.h>
+#include <streams.h>
+
+#include <vector>
+#include <set>
+
+// Helper: create a valid nonce message with dummy signature (RH-24 requires signature for IsValid)
+static OracleMusigNonceMsg MakeNonceMsg(int32_t epoch, uint8_t oracle_id, size_t nonce_size = 66) {
+    OracleMusigNonceMsg msg;
+    msg.epoch = epoch;
+    msg.oracle_id = oracle_id;
+    msg.pubnonce.assign(nonce_size, 0xAA);
+    msg.signature.assign(64, 0xBB); // dummy sig for IsValid()
+    return msg;
+}
+
+static OracleMusigPartialSigMsg MakePartialSigMsg(int32_t epoch, uint8_t oracle_id, size_t sig_size = 32) {
+    OracleMusigPartialSigMsg msg;
+    msg.epoch = epoch;
+    msg.oracle_id = oracle_id;
+    msg.partial_sig.assign(sig_size, 0xCC);
+    msg.signature.assign(64, 0xDD); // dummy sig for IsValid()
+    return msg;
+}
+
 BOOST_FIXTURE_TEST_SUITE(musig2_p2p_message_tests, BasicTestingSetup)
 
-BOOST_AUTO_TEST_CASE(placeholder)
+// ──────────────────────────────────────────────────────────────────────
+// Attack Vector 1: Invalid nonce injection — zero/wrong-size nonces
+// ──────────────────────────────────────────────────────────────────────
+
+BOOST_AUTO_TEST_CASE(rh03_invalid_nonce_zero_pubnonce)
 {
-    // P2P message tests pending protocol.h type definitions
-    BOOST_CHECK(true);
+    // A nonce message with an all-zero 66-byte pubnonce should pass IsValid()
+    // (size check) but fail at secp256k1_musig_pubnonce_parse() in the handler.
+    // The P2P layer defense is IsValid() which only checks size — deeper
+    // validation happens in ProcessRemoteMusigNonce.
+    OracleMusigNonceMsg msg;
+    msg.epoch = 1;
+    msg.oracle_id = 0;
+    msg.pubnonce.assign(66, 0x00);
+    msg.signature.assign(64, 0xBB); // RH-24: dummy sig for IsValid()
+
+    // Size check passes — this is by design; the P2P handler calls IsValid()
+    // then relies on secp256k1 to reject bad nonces
+    BOOST_CHECK(msg.IsValid());
+
+    // Verify hash is deterministic (dedup works even for garbage)
+    uint256 h1 = msg.GetHash();
+    uint256 h2 = msg.GetHash();
+    BOOST_CHECK_EQUAL(h1, h2);
+}
+
+BOOST_AUTO_TEST_CASE(rh03_invalid_nonce_wrong_size)
+{
+    // Pubnonce must be exactly 66 bytes
+    OracleMusigNonceMsg msg;
+    msg.epoch = 1;
+    msg.oracle_id = 0;
+
+    // Too short
+    msg.pubnonce.assign(65, 0xAA);
+    BOOST_CHECK(!msg.IsValid());
+
+    // Too long
+    msg.pubnonce.assign(67, 0xAA);
+    BOOST_CHECK(!msg.IsValid());
+
+    // Empty
+    msg.pubnonce.clear();
+    BOOST_CHECK(!msg.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(rh03_invalid_partialsig_wrong_size)
+{
+    // Partial sig must be exactly 32 bytes
+    OracleMusigPartialSigMsg msg;
+    msg.epoch = 1;
+    msg.oracle_id = 0;
+
+    msg.partial_sig.assign(31, 0xBB);
+    BOOST_CHECK(!msg.IsValid());
+
+    msg.partial_sig.assign(33, 0xBB);
+    BOOST_CHECK(!msg.IsValid());
+
+    msg.partial_sig.clear();
+    BOOST_CHECK(!msg.IsValid());
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Attack Vector 2: Oracle ID range — sybil/spoofing
+// ──────────────────────────────────────────────────────────────────────
+
+BOOST_AUTO_TEST_CASE(rh03_nonce_oracle_id_boundary)
+{
+    // IsValid() checks oracle_id < 255. But ORACLE_TOTAL_COUNT is 30.
+    // IDs 30-254 pass IsValid() but are invalid oracles.
+    // The P2P handler MUST reject these (via Misbehaving or similar).
+    OracleMusigNonceMsg msg;
+    msg.epoch = 1;
+    msg.pubnonce.assign(66, 0xAA);
+    msg.signature.assign(64, 0xBB); // RH-24: dummy sig for IsValid()
+
+    // Valid range: 0 to ORACLE_TOTAL_COUNT-1
+    msg.oracle_id = 0;
+    BOOST_CHECK(msg.IsValid());
+    msg.oracle_id = ORACLE_TOTAL_COUNT - 1; // 29
+    BOOST_CHECK(msg.IsValid());
+
+    // Invalid but passes IsValid() — this is the gap!
+    // These should be caught by the P2P handler's oracle_id range check.
+    msg.oracle_id = ORACLE_TOTAL_COUNT; // 30
+    BOOST_CHECK(msg.IsValid()); // NOTE: IsValid() doesn't know ORACLE_TOTAL_COUNT
+    // ^^^^ This documents that IsValid() alone is insufficient.
+    // The net_processing.cpp handler MUST add: oracle_id >= ORACLE_TOTAL_COUNT check
+
+    msg.oracle_id = 254;
+    BOOST_CHECK(msg.IsValid()); // passes basic check but is invalid oracle
+
+    // 255 is caught by IsValid()
+    msg.oracle_id = 255;
+    BOOST_CHECK(!msg.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(rh03_partialsig_oracle_id_boundary)
+{
+    OracleMusigPartialSigMsg msg;
+    msg.epoch = 1;
+    msg.partial_sig.assign(32, 0xCC);
+    msg.signature.assign(64, 0xDD); // RH-24: dummy sig for IsValid()
+
+    msg.oracle_id = ORACLE_TOTAL_COUNT; // 30
+    BOOST_CHECK(msg.IsValid()); // Gap: passes but shouldn't be a valid oracle
+
+    msg.oracle_id = 255;
+    BOOST_CHECK(!msg.IsValid());
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Attack Vector 3: Epoch mismatch / replay
+// ──────────────────────────────────────────────────────────────────────
+
+BOOST_AUTO_TEST_CASE(rh03_nonce_negative_epoch)
+{
+    // Negative or zero epochs should be detectable
+    OracleMusigNonceMsg msg;
+    msg.oracle_id = 0;
+    msg.pubnonce.assign(66, 0xAA);
+    msg.signature.assign(64, 0xBB); // RH-24: dummy sig for IsValid()
+
+    msg.epoch = -1;
+    BOOST_CHECK(msg.IsValid()); // IsValid() doesn't check epoch — gap!
+
+    msg.epoch = 0;
+    BOOST_CHECK(msg.IsValid()); // epoch 0 is pre-activation
+
+    msg.epoch = INT32_MAX;
+    BOOST_CHECK(msg.IsValid()); // far-future epoch — should be bounded
+}
+
+BOOST_AUTO_TEST_CASE(rh03_replay_different_epochs_different_hashes)
+{
+    // Replay protection: same oracle data in different epochs must hash differently
+    OracleMusigNonceMsg msg1, msg2;
+    msg1.oracle_id = msg2.oracle_id = 5;
+    msg1.pubnonce = msg2.pubnonce = std::vector<unsigned char>(66, 0xDD);
+    msg1.epoch = 100;
+    msg2.epoch = 101;
+
+    BOOST_CHECK(msg1.GetHash() != msg2.GetHash());
+}
+
+BOOST_AUTO_TEST_CASE(rh03_replay_same_epoch_same_hash)
+{
+    // Same message replayed in same epoch should be caught by dedup
+    OracleMusigNonceMsg msg1, msg2;
+    msg1.epoch = msg2.epoch = 100;
+    msg1.oracle_id = msg2.oracle_id = 5;
+    msg1.pubnonce = msg2.pubnonce = std::vector<unsigned char>(66, 0xDD);
+
+    BOOST_CHECK_EQUAL(msg1.GetHash(), msg2.GetHash());
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Attack Vector 4: Malformed serialization
+// ──────────────────────────────────────────────────────────────────────
+
+BOOST_AUTO_TEST_CASE(rh03_nonce_deserialization_truncated)
+{
+    // Craft a valid nonce message, serialize it, then truncate
+    OracleMusigNonceMsg orig;
+    orig.epoch = 42;
+    orig.oracle_id = 3;
+    orig.pubnonce.assign(66, 0xEE);
+    orig.signature.assign(64, 0xBB); // RH-24: dummy sig for IsValid()
+
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << orig;
+
+    // Truncate to half
+    CDataStream ss_trunc(SER_NETWORK, PROTOCOL_VERSION);
+    ss_trunc.write(MakeByteSpan(ss).first(ss.size() / 2));
+
+    OracleMusigNonceMsg recovered;
+    bool threw = false;
+    try {
+        ss_trunc >> recovered;
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    // Either throws or produces invalid message
+    if (!threw) {
+        BOOST_CHECK(!recovered.IsValid());
+    } else {
+        BOOST_CHECK(true); // Exception is the defense
+    }
+}
+
+BOOST_AUTO_TEST_CASE(rh03_partialsig_deserialization_truncated)
+{
+    OracleMusigPartialSigMsg orig;
+    orig.epoch = 42;
+    orig.oracle_id = 3;
+    orig.partial_sig.assign(32, 0xFF);
+
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << orig;
+
+    CDataStream ss_trunc(SER_NETWORK, PROTOCOL_VERSION);
+    ss_trunc.write(MakeByteSpan(ss).first(ss.size() / 2));
+
+    OracleMusigPartialSigMsg recovered;
+    bool threw = false;
+    try {
+        ss_trunc >> recovered;
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    if (!threw) {
+        BOOST_CHECK(!recovered.IsValid());
+    } else {
+        BOOST_CHECK(true);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(rh03_nonce_oversized_pubnonce_serialized)
+{
+    // An attacker could craft a serialized message with huge pubnonce vector.
+    // The deserialization should cap vector size or IsValid() rejects it.
+    OracleMusigNonceMsg msg;
+    msg.epoch = 1;
+    msg.oracle_id = 0;
+    msg.pubnonce.assign(1000000, 0xAA); // 1MB nonce — absurd
+
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << msg;
+
+    OracleMusigNonceMsg recovered;
+    ss >> recovered;
+
+    // Even if deserialization succeeds, IsValid() must reject
+    BOOST_CHECK(!recovered.IsValid());
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Attack Vector 5: Deduplication / memory exhaustion
+// ──────────────────────────────────────────────────────────────────────
+
+BOOST_AUTO_TEST_CASE(rh03_unique_hashes_per_field_change)
+{
+    // Verify that changing any field produces a different hash (proper coverage)
+    OracleMusigNonceMsg base;
+    base.epoch = 100;
+    base.oracle_id = 5;
+    base.pubnonce.assign(66, 0xAA);
+    base.signature.assign(64, 0xBB); // RH-24: dummy sig for IsValid()
+
+    std::set<uint256> hashes;
+    hashes.insert(base.GetHash());
+
+    // Change epoch
+    OracleMusigNonceMsg m1 = base;
+    m1.epoch = 101;
+    hashes.insert(m1.GetHash());
+
+    // Change oracle_id
+    OracleMusigNonceMsg m2 = base;
+    m2.oracle_id = 6;
+    hashes.insert(m2.GetHash());
+
+    // Change pubnonce
+    OracleMusigNonceMsg m3 = base;
+    m3.pubnonce[0] = 0xBB;
+    hashes.insert(m3.GetHash());
+
+    // All 4 should be unique
+    BOOST_CHECK_EQUAL(hashes.size(), 4U);
+}
+
+BOOST_AUTO_TEST_CASE(rh03_partialsig_unique_hashes)
+{
+    OracleMusigPartialSigMsg base;
+    base.epoch = 100;
+    base.oracle_id = 5;
+    base.partial_sig.assign(32, 0xAA);
+
+    std::set<uint256> hashes;
+    hashes.insert(base.GetHash());
+
+    OracleMusigPartialSigMsg m1 = base;
+    m1.epoch = 101;
+    hashes.insert(m1.GetHash());
+
+    OracleMusigPartialSigMsg m2 = base;
+    m2.oracle_id = 6;
+    hashes.insert(m2.GetHash());
+
+    OracleMusigPartialSigMsg m3 = base;
+    m3.partial_sig[0] = 0xBB;
+    hashes.insert(m3.GetHash());
+
+    BOOST_CHECK_EQUAL(hashes.size(), 4U);
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Attack Vector 6: Serialization roundtrip integrity
+// ──────────────────────────────────────────────────────────────────────
+
+BOOST_AUTO_TEST_CASE(rh03_nonce_serialization_roundtrip)
+{
+    OracleMusigNonceMsg orig;
+    orig.epoch = 12345;
+    orig.oracle_id = 7;
+    orig.pubnonce.assign(66, 0x42);
+    orig.signature.assign(64, 0xAA); // RH-24: signature now required for IsValid()
+
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << orig;
+
+    OracleMusigNonceMsg recovered;
+    ss >> recovered;
+
+    BOOST_CHECK_EQUAL(recovered.epoch, orig.epoch);
+    BOOST_CHECK_EQUAL(recovered.oracle_id, orig.oracle_id);
+    BOOST_CHECK(recovered.pubnonce == orig.pubnonce);
+    BOOST_CHECK(recovered.IsValid());
+    BOOST_CHECK_EQUAL(recovered.GetHash(), orig.GetHash());
+}
+
+BOOST_AUTO_TEST_CASE(rh03_partialsig_serialization_roundtrip)
+{
+    OracleMusigPartialSigMsg orig;
+    orig.epoch = 12345;
+    orig.oracle_id = 7;
+    orig.partial_sig.assign(32, 0x42);
+    orig.signature.assign(64, 0xBB); // RH-24: signature now required for IsValid()
+
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << orig;
+
+    OracleMusigPartialSigMsg recovered;
+    ss >> recovered;
+
+    BOOST_CHECK_EQUAL(recovered.epoch, orig.epoch);
+    BOOST_CHECK_EQUAL(recovered.oracle_id, orig.oracle_id);
+    BOOST_CHECK(recovered.partial_sig == orig.partial_sig);
+    BOOST_CHECK(recovered.IsValid());
+    BOOST_CHECK_EQUAL(recovered.GetHash(), orig.GetHash());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

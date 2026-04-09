@@ -34,7 +34,9 @@ namespace DigiDollar {
 
 // Static member definitions
 SystemMetrics SystemHealthMonitor::s_currentMetrics;
+std::mutex SystemHealthMonitor::s_metricsMutex;
 std::map<int64_t, int> SystemHealthMonitor::s_healthHistory;
+std::mutex SystemHealthMonitor::s_historyMutex;
 bool SystemHealthMonitor::s_initialized = false;
 
 // Standard tier definitions (lock days)
@@ -148,6 +150,10 @@ void SystemHealthMonitor::UpdateMetrics(const CBlock& block)
     UpdateTierMetrics();
     UpdateProtectionStatus();
     UpdateOracleStatus();
+
+    // RH-36a: First real health update from block processing — unlock
+    // ERR state so GetCurrentState() can read DCA cache again.
+    DigiDollar::ERR::EmergencyRedemptionRatio::ClearStateReconstructed();
 
     // Record health history
     // TODO: Fix chainstate access - temporary mock implementation
@@ -401,49 +407,39 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 
                         bool isValidDDMint = false;
 
-                        // Verify structure: need at least 3 outputs
-                        if (tx->vout.size() >= 3) {
-                            // Check output 1 is P2TR with zero value (DD token)
-                            // DD tokens are simple P2TR (key-path only) for free transferability
-                            if (tx->vout[1].scriptPubKey.size() == 34 &&
-                                tx->vout[1].scriptPubKey[0] == OP_1 &&
-                                tx->vout[1].nValue == 0) {
+                        // Find the DD OP_RETURN output (searches all vouts)
+                        int ddOpReturnIdx = DigiDollar::FindDDOpReturn(*tx);
+                        if (ddOpReturnIdx >= 0) {
+                            const CScript& ddScript = tx->vout[ddOpReturnIdx].scriptPubKey;
 
-                                // Check output 2 is OP_RETURN with DD marker
-                                if (tx->vout[2].scriptPubKey.size() > 0 &&
-                                    tx->vout[2].scriptPubKey[0] == OP_RETURN) {
+                            // Log the OP_RETURN script for debugging
+                            LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found OP_RETURN for tx %s at vout[%d], size=%d, first bytes: %02x %02x %02x %02x\n",
+                                     txid.ToString(), ddOpReturnIdx, ddScript.size(),
+                                     ddScript.size() > 0 ? ddScript[0] : 0,
+                                     ddScript.size() > 1 ? ddScript[1] : 0,
+                                     ddScript.size() > 2 ? ddScript[2] : 0,
+                                     ddScript.size() > 3 ? ddScript[3] : 0);
 
-                                    // Log the OP_RETURN script for debugging
-                                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found OP_RETURN for tx %s, size=%d, first bytes: %02x %02x %02x %02x\n",
-                                             txid.ToString(), tx->vout[2].scriptPubKey.size(),
-                                             tx->vout[2].scriptPubKey.size() > 0 ? tx->vout[2].scriptPubKey[0] : 0,
-                                             tx->vout[2].scriptPubKey.size() > 1 ? tx->vout[2].scriptPubKey[1] : 0,
-                                             tx->vout[2].scriptPubKey.size() > 2 ? tx->vout[2].scriptPubKey[2] : 0,
-                                             tx->vout[2].scriptPubKey.size() > 3 ? tx->vout[2].scriptPubKey[3] : 0);
+                            // CRITICAL: Check txType to ensure this is a MINT (1), not REDEEM (3) or TRANSFER (2)
+                            DigiDollarTxType txType = DigiDollar::GetDigiDollarTxType(*tx);
+                            if (txType != DD_TX_MINT) {
+                                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Skipping tx %s - txType=%d (not MINT)\n",
+                                         txid.ToString(), static_cast<int>(txType));
+                                processed_txids.insert(txid);
+                                pcursor->Next();
+                                continue;
+                            }
 
-                                    // CRITICAL: Check txType to ensure this is a MINT (1), not REDEEM (3) or TRANSFER (2)
-                                    // Redemption transactions have similar structure but should NOT be counted as vaults
-                                    DigiDollarTxType txType = DigiDollar::GetDigiDollarTxType(*tx);
-                                    if (txType != DD_TX_MINT) {
-                                        LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Skipping tx %s - txType=%d (not MINT)\n",
-                                                 txid.ToString(), static_cast<int>(txType));
-                                        processed_txids.insert(txid);
-                                        pcursor->Next();
-                                        continue;
-                                    }
-
-                                    // Try to extract DD amount from OP_RETURN
-                                    if (DigiDollar::ExtractDDAmount(tx->vout[2].scriptPubKey, ddAmount)) {
-                                        isValidDDMint = true;
-                                        exactAmount = true;
-                                        dd_amount_extracted++;
-                                        LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Extracted exact DD amount %s from tx %s\n",
-                                                 FormatMoney(ddAmount), txid.ToString());
-                                    } else {
-                                        LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: FAILED to extract DD amount from tx %s OP_RETURN\n",
-                                                 txid.ToString());
-                                    }
-                                }
+                            // Try to extract DD amount from OP_RETURN
+                            if (DigiDollar::ExtractDDAmount(ddScript, ddAmount)) {
+                                isValidDDMint = true;
+                                exactAmount = true;
+                                dd_amount_extracted++;
+                                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Extracted exact DD amount %s from tx %s\n",
+                                         FormatMoney(ddAmount), txid.ToString());
+                            } else {
+                                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: FAILED to extract DD amount from tx %s OP_RETURN\n",
+                                         txid.ToString());
                             }
                         }
 
@@ -510,8 +506,22 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 
 void SystemHealthMonitor::OnMintConnected(CAmount ddAmount, CAmount dgbCollateral)
 {
-    s_currentMetrics.totalDDSupply += ddAmount;
-    s_currentMetrics.totalCollateral += dgbCollateral;
+    std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
+    // SECURITY [RH-11]: Prevent supply overflow — cap at MAX_DIGIDOLLAR
+    if (ddAmount > 0 && s_currentMetrics.totalDDSupply <= MAX_DIGIDOLLAR - ddAmount) {
+        s_currentMetrics.totalDDSupply += ddAmount;
+    } else if (ddAmount > 0) {
+        LogPrintf("Health: WARNING - totalDDSupply would exceed MAX_DIGIDOLLAR, capping at %s\n",
+                 FormatMoney(MAX_DIGIDOLLAR));
+        s_currentMetrics.totalDDSupply = MAX_DIGIDOLLAR;
+    }
+    // Cap collateral at MAX_MONEY to prevent int64_t overflow
+    if (dgbCollateral > 0 && s_currentMetrics.totalCollateral <= std::numeric_limits<CAmount>::max() - dgbCollateral) {
+        s_currentMetrics.totalCollateral += dgbCollateral;
+    } else if (dgbCollateral > 0) {
+        LogPrintf("Health: WARNING - totalCollateral would overflow, capping\n");
+        s_currentMetrics.totalCollateral = std::numeric_limits<CAmount>::max();
+    }
     LogPrint(BCLog::DIGIDOLLAR, "Health: Mint connected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
@@ -519,6 +529,7 @@ void SystemHealthMonitor::OnMintConnected(CAmount ddAmount, CAmount dgbCollatera
 
 void SystemHealthMonitor::OnRedeemConnected(CAmount ddAmount, CAmount dgbCollateral)
 {
+    std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
     s_currentMetrics.totalDDSupply = std::max<CAmount>(0, s_currentMetrics.totalDDSupply - ddAmount);
     s_currentMetrics.totalCollateral = std::max<CAmount>(0, s_currentMetrics.totalCollateral - dgbCollateral);
     LogPrint(BCLog::DIGIDOLLAR, "Health: Redeem connected - DD -%s, Collateral -%s (totals: DD=%s, Collateral=%s)\n",
@@ -528,6 +539,7 @@ void SystemHealthMonitor::OnRedeemConnected(CAmount ddAmount, CAmount dgbCollate
 
 void SystemHealthMonitor::OnMintDisconnected(CAmount ddAmount, CAmount dgbCollateral)
 {
+    std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
     s_currentMetrics.totalDDSupply = std::max<CAmount>(0, s_currentMetrics.totalDDSupply - ddAmount);
     s_currentMetrics.totalCollateral = std::max<CAmount>(0, s_currentMetrics.totalCollateral - dgbCollateral);
     LogPrint(BCLog::DIGIDOLLAR, "Health: Mint disconnected - DD -%s, Collateral -%s (totals: DD=%s, Collateral=%s)\n",
@@ -537,8 +549,18 @@ void SystemHealthMonitor::OnMintDisconnected(CAmount ddAmount, CAmount dgbCollat
 
 void SystemHealthMonitor::OnRedeemDisconnected(CAmount ddAmount, CAmount dgbCollateral)
 {
-    s_currentMetrics.totalDDSupply += ddAmount;
-    s_currentMetrics.totalCollateral += dgbCollateral;
+    std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
+    // SECURITY [RH-11]: Same overflow protection as OnMintConnected
+    if (ddAmount > 0 && s_currentMetrics.totalDDSupply <= MAX_DIGIDOLLAR - ddAmount) {
+        s_currentMetrics.totalDDSupply += ddAmount;
+    } else if (ddAmount > 0) {
+        s_currentMetrics.totalDDSupply = MAX_DIGIDOLLAR;
+    }
+    if (dgbCollateral > 0 && s_currentMetrics.totalCollateral <= std::numeric_limits<CAmount>::max() - dgbCollateral) {
+        s_currentMetrics.totalCollateral += dgbCollateral;
+    } else if (dgbCollateral > 0) {
+        s_currentMetrics.totalCollateral = std::numeric_limits<CAmount>::max();
+    }
     LogPrint(BCLog::DIGIDOLLAR, "Health: Redeem disconnected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));

@@ -26,6 +26,7 @@
 #include <oracle/musig2_session.h>
 #include <oracle/node.h>
 #include <primitives/block.h>
+#include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <protocol.h>
 #include <script/script.h>
@@ -1190,6 +1191,7 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         }
 
                         // Create bundle with single message
+                        bundle.version = 1; // Phase One (V01)
                         bundle.messages.clear();
                         bundle.messages.push_back(msg);
                         bundle.median_price_micro_usd = price;
@@ -1206,6 +1208,17 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         }
 
                         uint8_t num_messages = data[1];
+
+                        // Reject empty bundles and unreasonably large message counts
+                        if (num_messages == 0) {
+                            LogPrintf("Oracle: Phase Two bundle rejected: num_messages=0 (ghost bundle)\n");
+                            return false;
+                        }
+                        if (num_messages > ORACLE_ACTIVE_COUNT) {
+                            LogPrintf("Oracle: Phase Two bundle rejected: num_messages=%d exceeds ORACLE_ACTIVE_COUNT=%d\n",
+                                     num_messages, ORACLE_ACTIVE_COUNT);
+                            return false;
+                        }
 
                         // Validate we have enough data for all messages
                         size_t expected_size = 1 + 1 + 8 + 8 + num_messages * 65; // version + header + per-msg
@@ -1422,6 +1435,17 @@ void OracleBundleManager::RegisterSeenHash(const uint256& hash)
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
     seen_message_hashes.insert(hash);
+
+    // RH-03 Fix: Cap seen_message_hashes from P2P RegisterSeenHash path too.
+    // Without this, an attacker flooding unique MuSig2 messages can grow the
+    // set unboundedly since RegisterSeenHash bypasses the MAX_SEEN_HASHES
+    // cap in AddOracleMessage.
+    static constexpr size_t MAX_SEEN_HASHES = 2048;
+    if (seen_message_hashes.size() > MAX_SEEN_HASHES) {
+        auto erase_end = seen_message_hashes.begin();
+        std::advance(erase_end, seen_message_hashes.size() - MAX_SEEN_HASHES);
+        seen_message_hashes.erase(seen_message_hashes.begin(), erase_end);
+    }
 }
 
 bool OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)
@@ -1664,6 +1688,18 @@ bool OracleBundleManager::ProcessRemoteMusigNonce(const OracleMusigNonceMsg& msg
 {
     if (!msg.IsValid()) return false;
 
+    // RH-24: Verify authentication signature before processing
+    {
+        const OracleNodeInfo* oracle_config = Params().GetOracleNode(msg.oracle_id);
+        if (!oracle_config) return false;
+        XOnlyPubKey oracle_pubkey(oracle_config->pubkey);
+        if (!msg.VerifySignature(oracle_pubkey)) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: MuSig2 nonce signature verification failed for oracle %u\n",
+                     msg.oracle_id);
+            return false;
+        }
+    }
+
     LOCK(g_oracle_signing_sessions_mutex);
     auto it = g_oracle_signing_sessions.find(msg.epoch);
     if (it == g_oracle_signing_sessions.end()) {
@@ -1701,6 +1737,18 @@ bool OracleBundleManager::ProcessRemoteMusigNonce(const OracleMusigNonceMsg& msg
 bool OracleBundleManager::ProcessRemoteMusigPartialSig(const OracleMusigPartialSigMsg& msg)
 {
     if (!msg.IsValid()) return false;
+
+    // RH-24: Verify authentication signature before processing
+    {
+        const OracleNodeInfo* oracle_config = Params().GetOracleNode(msg.oracle_id);
+        if (!oracle_config) return false;
+        XOnlyPubKey oracle_pubkey(oracle_config->pubkey);
+        if (!msg.VerifySignature(oracle_pubkey)) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: MuSig2 partial sig signature verification failed for oracle %u\n",
+                     msg.oracle_id);
+            return false;
+        }
+    }
 
     LOCK(g_oracle_signing_sessions_mutex);
     auto it = g_oracle_signing_sessions.find(msg.epoch);
@@ -2152,11 +2200,21 @@ uint64_t OracleBundleManager::GetOraclePriceForHeight(int height) const
 
 void OracleBundleManager::RemovePriceCache(int height)
 {
-    std::lock_guard<std::mutex> lock(mtx_price_cache);
+    // RH-44: Must hold both mtx_price_cache (for height_to_price) and
+    // mtx_bundles (for cached_price) to avoid data race with GetLatestPrice().
+    // Lock order: mtx_bundles before mtx_price_cache to prevent deadlocks.
+    std::lock_guard<std::mutex> bundles_lock(mtx_bundles);
+    std::lock_guard<std::mutex> price_lock(mtx_price_cache);
     auto it = height_to_price.find(height);
     if (it != height_to_price.end()) {
         height_to_price.erase(it);
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Removed price cache for height %d\n", height);
+        // Revert cached_price to highest remaining height's price
+        if (!height_to_price.empty()) {
+            cached_price = height_to_price.rbegin()->second;
+        } else {
+            cached_price = 0;
+        }
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Removed price cache for height %d, cached_price reverted to %d\n", height, cached_price);
     }
 }
 

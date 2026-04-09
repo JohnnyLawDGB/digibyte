@@ -130,10 +130,11 @@ public:
     //! Serialization
     SERIALIZE_METHODS(COracleBundle, obj)
     {
-        READWRITE(obj.messages);
-        READWRITE(obj.epoch);
-        READWRITE(obj.median_price_micro_usd);
-        READWRITE(obj.timestamp);
+        READWRITE(obj.version);
+        READWRITE(obj.messages, obj.epoch, obj.median_price_micro_usd, obj.timestamp);
+        if (obj.version >= 3) {
+            READWRITE(obj.aggregate_sig, obj.participation_bitmap);
+        }
     }
 
     //! v0x03 MuSig2 helpers

@@ -215,4 +215,4 @@ class DigiDollarWatchOnlyRescanTest(DigiByteTestFramework):
 
 
 if __name__ == '__main__':
-    DigiDollarWatchOnlyRescanTest(__file__).main()
+    DigiDollarWatchOnlyRescanTest().main()

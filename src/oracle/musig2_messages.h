@@ -6,6 +6,8 @@
 #define DIGIBYTE_ORACLE_MUSIG2_MESSAGES_H
 
 #include <hash.h>
+#include <key.h>
+#include <pubkey.h>
 #include <serialize.h>
 #include <uint256.h>
 
@@ -22,15 +24,25 @@ public:
     int32_t epoch{0};
     uint8_t oracle_id{0};
     std::vector<unsigned char> pubnonce;  // 66 bytes serialized secp256k1_musig_pubnonce
+    std::vector<unsigned char> signature; // 64 bytes Schnorr signature (RH-24)
 
     SERIALIZE_METHODS(OracleMusigNonceMsg, obj)
     {
-        READWRITE(obj.epoch, obj.oracle_id, obj.pubnonce);
+        READWRITE(obj.epoch, obj.oracle_id, obj.pubnonce, obj.signature);
     }
 
     uint256 GetHash() const;
 
-    bool IsValid() const { return pubnonce.size() == 66 && oracle_id < 255; }
+    /** Hash of fields covered by the authentication signature (excludes signature itself). */
+    uint256 GetSignatureHash() const;
+
+    /** Sign this message with the oracle's private key. */
+    bool Sign(const CKey& key);
+
+    /** Verify the authentication signature against the given oracle pubkey. */
+    bool VerifySignature(const XOnlyPubKey& pubkey) const;
+
+    bool IsValid() const { return pubnonce.size() == 66 && oracle_id < 255 && signature.size() == 64; }
 };
 
 /**
@@ -43,15 +55,25 @@ public:
     int32_t epoch{0};
     uint8_t oracle_id{0};
     std::vector<unsigned char> partial_sig;  // 32 bytes serialized secp256k1_musig_partial_sig
+    std::vector<unsigned char> signature;    // 64 bytes Schnorr signature (RH-24)
 
     SERIALIZE_METHODS(OracleMusigPartialSigMsg, obj)
     {
-        READWRITE(obj.epoch, obj.oracle_id, obj.partial_sig);
+        READWRITE(obj.epoch, obj.oracle_id, obj.partial_sig, obj.signature);
     }
 
     uint256 GetHash() const;
 
-    bool IsValid() const { return partial_sig.size() == 32 && oracle_id < 255; }
+    /** Hash of fields covered by the authentication signature (excludes signature itself). */
+    uint256 GetSignatureHash() const;
+
+    /** Sign this message with the oracle's private key. */
+    bool Sign(const CKey& key);
+
+    /** Verify the authentication signature against the given oracle pubkey. */
+    bool VerifySignature(const XOnlyPubKey& pubkey) const;
+
+    bool IsValid() const { return partial_sig.size() == 32 && oracle_id < 255 && signature.size() == 64; }
 };
 
 #endif // DIGIBYTE_ORACLE_MUSIG2_MESSAGES_H

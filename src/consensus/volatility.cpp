@@ -8,6 +8,7 @@
 #include <logging.h>
 #include <util/time.h>
 #include <util/moneystr.h>
+#include <limits>
 #include <hash.h>
 #include <pubkey.h>
 #include <serialize.h>
@@ -167,7 +168,9 @@ void VolatilityMonitor::UpdateState(uint32_t currentHeight)
         currentState.allOperationsFrozen = true;
         currentState.mintingFrozen = true;
         currentState.freezeHeight = currentHeight;
-        currentState.cooldownEndHeight = currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
+        currentState.cooldownEndHeight = (currentHeight > std::numeric_limits<uint32_t>::max() - VolatilityThresholds::COOLDOWN_BLOCKS)
+            ? std::numeric_limits<uint32_t>::max()
+            : currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
 
         LogPrintf("VolatilityMonitor: FREEZE - All DigiDollar operations frozen due to high volatility (%.2f%% daily, %.2f%% weekly)\n",
                   currentState.dailyVolatility, currentState.weeklyVolatility);
@@ -176,7 +179,9 @@ void VolatilityMonitor::UpdateState(uint32_t currentHeight)
         // Trigger minting freeze only
         currentState.mintingFrozen = true;
         currentState.freezeHeight = currentHeight;
-        currentState.cooldownEndHeight = currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
+        currentState.cooldownEndHeight = (currentHeight > std::numeric_limits<uint32_t>::max() - VolatilityThresholds::COOLDOWN_BLOCKS)
+            ? std::numeric_limits<uint32_t>::max()
+            : currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
 
         LogPrintf("VolatilityMonitor: FREEZE - DigiDollar minting frozen due to high volatility (%.2f%% hourly)\n",
                   currentState.hourlyVolatility);
@@ -243,7 +248,9 @@ void VolatilityMonitor::TriggerFreeze(bool freezeAll, uint32_t height)
     currentState.mintingFrozen = true;
     currentState.allOperationsFrozen = freezeAll;
     currentState.freezeHeight = height;
-    currentState.cooldownEndHeight = height + VolatilityThresholds::COOLDOWN_BLOCKS;
+    currentState.cooldownEndHeight = (height > std::numeric_limits<uint32_t>::max() - VolatilityThresholds::COOLDOWN_BLOCKS)
+        ? std::numeric_limits<uint32_t>::max()
+        : height + VolatilityThresholds::COOLDOWN_BLOCKS;
 
     LogPrintf("VolatilityMonitor: MANUAL FREEZE - %s frozen at height %d\n",
               freezeAll ? "All operations" : "Minting only", height);
@@ -388,7 +395,9 @@ void VolatilityMonitor::UpdateVolatilityState()
         currentState.allOperationsFrozen = true;
         currentState.mintingFrozen = true;
         currentState.freezeHeight = currentHeight;
-        currentState.cooldownEndHeight = currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
+        currentState.cooldownEndHeight = (currentHeight > std::numeric_limits<uint32_t>::max() - VolatilityThresholds::COOLDOWN_BLOCKS)
+            ? std::numeric_limits<uint32_t>::max()
+            : currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
 
         LogPrintf("VolatilityMonitor: FREEZE - All DigiDollar operations frozen due to high volatility (%.2f%% daily, %.2f%% weekly)\n",
                   currentState.dailyVolatility, currentState.weeklyVolatility);
@@ -397,7 +406,9 @@ void VolatilityMonitor::UpdateVolatilityState()
         // Trigger minting freeze only
         currentState.mintingFrozen = true;
         currentState.freezeHeight = currentHeight;
-        currentState.cooldownEndHeight = currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
+        currentState.cooldownEndHeight = (currentHeight > std::numeric_limits<uint32_t>::max() - VolatilityThresholds::COOLDOWN_BLOCKS)
+            ? std::numeric_limits<uint32_t>::max()
+            : currentHeight + VolatilityThresholds::COOLDOWN_BLOCKS;
 
         LogPrintf("VolatilityMonitor: FREEZE - DigiDollar minting frozen due to high volatility (%.2f%% hourly)\n",
                   currentState.hourlyVolatility);

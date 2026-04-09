@@ -763,6 +763,16 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 
     // DigiDollar consensus validation with blockchain context
     if (DigiDollar::HasDigiDollarMarker(tx)) {
+        // RH-36c: Early reject invalid DD tx types BEFORE expensive oracle/block-DB lookups.
+        // Transactions with the 0x0770 marker but invalid type (>= DD_TX_MAX) would
+        // otherwise trigger full oracle price lookup + block reads before eventual rejection.
+        // 65K distinct version values can exploit this for DoS amplification.
+        auto earlyType = DigiDollar::GetDigiDollarTxType(tx);
+        if (earlyType == DigiDollar::DD_TX_NONE) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "digidollar-invalid-type",
+                               "DigiDollar marker present but transaction type is invalid");
+        }
+
         // Check if DigiDollar is enabled via BIP9 deployment
         if (!DigiDollar::IsDigiDollarEnabled(m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman)) {
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "digidollar-not-active",
@@ -2396,8 +2406,9 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
                 if (ddTxType == DigiDollar::DD_TX_MINT) {
                     // Undo a MINT: subtract its DD supply and collateral from metrics
                     CAmount ddAmount = 0;
-                    if (tx.vout.size() >= 3 &&
-                        DigiDollar::ExtractDDAmount(tx.vout[2].scriptPubKey, ddAmount) &&
+                    int ddIdx = DigiDollar::FindDDOpReturn(tx);
+                    if (ddIdx >= 0 &&
+                        DigiDollar::ExtractDDAmount(tx.vout[ddIdx].scriptPubKey, ddAmount) &&
                         ddAmount > 0) {
                         DigiDollar::SystemHealthMonitor::OnMintDisconnected(ddAmount, tx.vout[0].nValue);
                     }
@@ -2413,9 +2424,11 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
                         CBlock mintBlock;
                         if (m_blockman.ReadBlockFromDisk(mintBlock, *pMintBlock)) {
                             for (const auto& btx : mintBlock.vtx) {
-                                if (btx->GetHash() == tx.vin[0].prevout.hash &&
-                                    btx->vout.size() >= 3) {
-                                    DigiDollar::ExtractDDAmount(btx->vout[2].scriptPubKey, ddAmount);
+                                if (btx->GetHash() == tx.vin[0].prevout.hash) {
+                                    int btxDdIdx = DigiDollar::FindDDOpReturn(*btx);
+                                    if (btxDdIdx >= 0) {
+                                        DigiDollar::ExtractDDAmount(btx->vout[btxDdIdx].scriptPubKey, ddAmount);
+                                    }
                                     break;
                                 }
                             }

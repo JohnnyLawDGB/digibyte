@@ -436,20 +436,20 @@ BOOST_FIXTURE_TEST_CASE(test_oracle_price_format, DigiDollarRPCTestSetup)
     BOOST_CHECK(result.exists("price_cents"));
     BOOST_CHECK(result.exists("price_usd"));
 
-    // Price in USD should be cents / 100
-    double cents = result["price_cents"].get_real();
+    // price_cents is int64_t (integer division: micro-USD / 10000).
+    // Note: sub-cent prices (e.g., DGB at $0.0065 = 6500 micro-USD) truncate to 0 cents.
+    // Use price_usd or price_micro_usd for sub-cent precision.
+    int64_t cents = result["price_cents"].getInt<int64_t>();
     double usd = result["price_usd"].get_real();
 
-    // Both price_cents and price_usd derive from the same micro-USD source.
-    // price_cents is now a double with full precision (no integer rounding).
-    BOOST_CHECK(cents >= 0.0);
+    BOOST_CHECK(cents >= 0);
     BOOST_CHECK(usd >= 0.0);
     if (usd > 0) {
         int64_t micro_usd = result["price_micro_usd"].getInt<int64_t>();
         // USD should match micro-USD exactly
         BOOST_CHECK_CLOSE(usd, static_cast<double>(micro_usd) / 1000000.0, 0.001);
-        // Cents should be micro-USD / 10000.0 with full precision
-        BOOST_CHECK_CLOSE(cents, static_cast<double>(micro_usd) / 10000.0, 0.001);
+        // Cents uses integer division: micro_usd / 10000
+        BOOST_CHECK_EQUAL(cents, micro_usd / 10000);
     }
 }
 

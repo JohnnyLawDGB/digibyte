@@ -26,8 +26,10 @@ namespace ERR {
 
 // Initialize static members
 ERRState EmergencyRedemptionRatio::s_currentState;
+bool EmergencyRedemptionRatio::s_stateReconstructed{false};
 std::vector<COutPoint> EmergencyRedemptionRatio::s_errQueue;
 std::map<COutPoint, std::pair<CAmount, uint32_t>> EmergencyRedemptionRatio::s_queuedRedemptions;
+std::mutex EmergencyRedemptionRatio::s_errMutex;
 
 // ERR adjustment tier thresholds and ratios
 // CRITICAL: ERR returns 100% collateral ALWAYS. Ratios determine DD burn multiplier.
@@ -138,13 +140,23 @@ bool EmergencyRedemptionRatio::HasOracleConsensus(const COracleBundle& bundle, c
 
 ERRState EmergencyRedemptionRatio::GetCurrentState()
 {
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
+    // RH-36a: If state was reconstructed from chain data after restart,
+    // do NOT re-fetch health from DCA cache until DCA cache is properly
+    // initialized (first real health update from block processing).
+    // The DCA cache defaults to 30000 (300% healthy) which would silently
+    // deactivate ERR even though the system is under-collateralized.
+    if (s_stateReconstructed) {
+        return s_currentState;
+    }
+
     // Update state based on current system health
     int currentHealth = DCA::DynamicCollateralAdjustment::GetCurrentSystemHealth();
 
     if (s_currentState.isActive) {
-        // Check if ERR should deactivate
+        // Check if ERR should deactivate (use locked variant — mutex already held)
         if (currentHealth >= 100) {
-            DeactivateERR(currentHealth);
+            DeactivateERRLocked(currentHealth);
         } else {
             // Update current health and adjustment ratio
             s_currentState.systemHealth = currentHealth;
@@ -161,11 +173,13 @@ ERRState EmergencyRedemptionRatio::GetCurrentState()
 
 std::vector<COutPoint> EmergencyRedemptionRatio::GetERRQueue()
 {
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
     return s_errQueue;
 }
 
 bool EmergencyRedemptionRatio::QueueERRRedemption(const COutPoint& outpoint, CAmount ddAmount, uint32_t requestHeight)
 {
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
     if (!s_currentState.isActive) {
         return false;
     }
@@ -187,6 +201,7 @@ bool EmergencyRedemptionRatio::QueueERRRedemption(const COutPoint& outpoint, CAm
 
 size_t EmergencyRedemptionRatio::ProcessERRQueue(size_t maxRedemptions)
 {
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
     if (!s_currentState.isActive || s_errQueue.empty()) {
         return 0;
     }
@@ -226,6 +241,7 @@ size_t EmergencyRedemptionRatio::ProcessERRQueue(size_t maxRedemptions)
 
 bool EmergencyRedemptionRatio::ActivateERR(const COracleBundle& oracleBundle, uint32_t activationHeight, const Consensus::Params& params)
 {
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
     // Check if ERR is already active
     if (s_currentState.isActive) {
         return false;
@@ -265,6 +281,13 @@ bool EmergencyRedemptionRatio::ActivateERR(const COracleBundle& oracleBundle, ui
 
 bool EmergencyRedemptionRatio::DeactivateERR(int currentHealth)
 {
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
+    return DeactivateERRLocked(currentHealth);
+}
+
+bool EmergencyRedemptionRatio::DeactivateERRLocked(int currentHealth)
+{
+    // Caller MUST hold s_errMutex
     if (!s_currentState.isActive) {
         return false;
     }
@@ -276,16 +299,26 @@ bool EmergencyRedemptionRatio::DeactivateERR(int currentHealth)
 
     LogPrint(BCLog::DIGIDOLLAR, "ERR: Deactivating - system health recovered to %d%%\n", currentHealth);
 
-    // Process any remaining queued redemptions
-    ProcessERRQueue(s_errQueue.size());
+    // Process any remaining queued redemptions (lock already held)
+    {
+        auto it = s_errQueue.begin();
+        while (it != s_errQueue.end()) {
+            auto redemptionIt = s_queuedRedemptions.find(*it);
+            if (redemptionIt != s_queuedRedemptions.end()) {
+                s_queuedRedemptions.erase(redemptionIt);
+            }
+            it = s_errQueue.erase(it);
+        }
+    }
 
     // Clear ERR state
     ERRState clearedState;
     clearedState.systemHealth = currentHealth;
     UpdateERRState(clearedState);
 
-    // Clear queue
-    ClearERRQueue();
+    // Clear queue (lock already held)
+    s_errQueue.clear();
+    s_queuedRedemptions.clear();
 
     LogPrint(BCLog::DIGIDOLLAR, "ERR: Deactivated - system health restored\n");
     return true;
@@ -346,18 +379,16 @@ bool EmergencyRedemptionRatio::ValidateERRRedemption(const CTransaction& tx, CAm
 
 bool EmergencyRedemptionRatio::ShouldBlockMinting(CAmount oraclePriceOverride)
 {
-    // Block minting if:
-    // 1. ERR is formally activated (via oracle consensus), OR
-    // 2. System health is below 100% (automatic protection)
-    //
-    // The second check is important for regtest/testnet with mock oracles
-    // where ERR may not be formally activated but system is under-collateralized.
-    if (s_currentState.isActive) {
-        return true;
+    // RH-44: Read ERR active state under lock
+    {
+        std::lock_guard<std::mutex> lock(s_errMutex);
+        if (s_currentState.isActive) {
+            return true;
+        }
     }
 
     // Get cached metrics for DD supply and collateral
-    const DigiDollar::SystemMetrics& metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    const DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
 
     // If no DD in circulation, minting is always allowed (system has no liabilities)
     if (metrics.totalDDSupply <= 0) {
@@ -500,11 +531,13 @@ bool EmergencyRedemptionRatio::IsAuthorizedOracleKey(const XOnlyPubKey& oracleKe
 
 void EmergencyRedemptionRatio::UpdateERRState(const ERRState& newState)
 {
+    // Note: caller must hold s_errMutex (or this is called from a locked context)
     s_currentState = newState;
 }
 
 void EmergencyRedemptionRatio::ReconstructERRState(int currentSystemHealth, uint32_t currentHeight)
 {
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
     ERRState newState;
 
     if (currentSystemHealth < 100) {
@@ -524,10 +557,23 @@ void EmergencyRedemptionRatio::ReconstructERRState(int currentSystemHealth, uint
     }
 
     UpdateERRState(newState);
+    s_stateReconstructed = true;
+
+    LogPrintf("ERR: State reconstruction locked — DCA cache reads blocked until first real health update\n");
+}
+
+void EmergencyRedemptionRatio::ClearStateReconstructed()
+{
+    std::lock_guard<std::mutex> lock(s_errMutex); // RH-44: thread safety
+    if (s_stateReconstructed) {
+        s_stateReconstructed = false;
+        LogPrintf("ERR: State reconstruction lock cleared — DCA cache reads re-enabled\n");
+    }
 }
 
 void EmergencyRedemptionRatio::ClearERRQueue()
 {
+    // Note: caller must hold s_errMutex
     s_errQueue.clear();
     s_queuedRedemptions.clear();
 }
@@ -687,6 +733,21 @@ bool EmergencyRedemptionRatio::ValidateConsensusPerformance(int64_t durationMs)
 {
     // Oracle consensus should complete within reasonable time (10 seconds)
     return durationMs <= 10000;
+}
+
+void EmergencyRedemptionRatio::ResetForTesting()
+{
+    std::lock_guard<std::mutex> lock(s_errMutex);
+    s_currentState = ERRState();
+    s_stateReconstructed = false;
+    s_errQueue.clear();
+    s_queuedRedemptions.clear();
+}
+
+void EmergencyRedemptionRatio::SetActiveForTesting(bool active)
+{
+    std::lock_guard<std::mutex> lock(s_errMutex);
+    s_currentState.isActive = active;
 }
 
 } // namespace ERR

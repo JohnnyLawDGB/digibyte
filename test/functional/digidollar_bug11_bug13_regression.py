@@ -330,4 +330,4 @@ class DigiDollarBug11Bug13RegressionTest(DigiByteTestFramework):
 
 
 if __name__ == '__main__':
-    DigiDollarBug11Bug13RegressionTest(__file__).main()
+    DigiDollarBug11Bug13RegressionTest().main()

@@ -285,13 +285,28 @@ bool CDigiDollarAddress::IsValid() const
 
 bool CDigiDollarAddress::IsValidDigiDollarAddress(const std::string& str)
 {
-    if (str.length() < 2) {
+    if (str.length() < 2 || str.length() > 64) {
+        return false;
+    }
+
+    // Reject embedded null bytes
+    if (str.find('\0') != std::string::npos) {
         return false;
     }
 
     // Check for valid prefixes
     std::string prefix = str.substr(0, 2);
-    return (prefix == "DD" || prefix == "TD" || prefix == "RD");
+    if (prefix != "DD" && prefix != "TD" && prefix != "RD") {
+        return false;
+    }
+
+    // Verify valid base58 encoding with checksum
+    std::vector<unsigned char> vchRet;
+    if (!DecodeBase58Check(str, vchRet, 256)) {
+        return false;
+    }
+
+    return true;
 }
 
 //

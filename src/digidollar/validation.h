@@ -133,6 +133,15 @@ ScriptType IdentifyScriptType(const CScript& script);
 bool ExtractDDAmount(const CScript& script, CAmount& amount);
 
 /**
+ * Find the index of the DD OP_RETURN output in a transaction.
+ * Searches all vouts for an OP_RETURN with the 'DD' marker bytes.
+ *
+ * @param tx Transaction to search
+ * @return Index of the DD OP_RETURN vout, or -1 if not found
+ */
+int FindDDOpReturn(const CTransaction& tx);
+
+/**
  * Extract DD amount from the previous transaction's OP_RETURN metadata.
  * This is the DECENTRALIZED approach - no local registry needed.
  * The DD amount is stored in the creating transaction's OP_RETURN output.

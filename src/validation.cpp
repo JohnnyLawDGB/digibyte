@@ -804,7 +804,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
             args.m_chainparams,                          // Chain parameters
             &m_active_chainstate.CoinsTip(),             // Coins view for UTXO lookup
             false,                                       // Don't skip oracle validation in mempool
-            txLookup                                     // Block-db tx lookup for DD amounts
+            txLookup,                                    // Block-db tx lookup for DD amounts
+            &m_pool                                      // Mempool for unconfirmed DD input lookup
         );
 
         if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, state)) {

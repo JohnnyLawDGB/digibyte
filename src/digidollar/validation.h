@@ -16,6 +16,8 @@
 #include <chainparams.h>
 #include <coins.h>
 
+class CTxMemPool;
+
 #include <cstdint>
 #include <functional>
 #include <vector>
@@ -68,13 +70,14 @@ struct ValidationContext {
     const CCoinsViewCache* coins;    // Coins view for UTXO lookups (nullptr if not available)
     bool skipOracleValidation;       // Skip oracle-dependent validation (for historical blocks)
     TxLookupFn txLookup;             // Look up tx from block database (for DD amount extraction)
+    const CTxMemPool* mempool;       // Mempool for resolving DD amounts from unconfirmed parent txs
 
     ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams,
                       const CCoinsViewCache* coins_view = nullptr, bool skip_oracle = false,
-                      TxLookupFn tx_lookup = nullptr)
+                      TxLookupFn tx_lookup = nullptr, const CTxMemPool* pool = nullptr)
         : nHeight(height), oraclePriceMicroUSD(price_micro_usd), systemCollateral(collateral),
           params(chainParams), coins(coins_view), skipOracleValidation(skip_oracle),
-          txLookup(std::move(tx_lookup)) {}
+          txLookup(std::move(tx_lookup)), mempool(pool) {}
 };
 
 // ============================================================================

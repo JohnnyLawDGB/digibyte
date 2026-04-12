@@ -15,6 +15,7 @@ using DigiDollar::GetScriptMetadata;
 #include <consensus/dca.h>
 #include <consensus/err.h>
 #include <index/txindex.h>  // For decentralized DD amount lookup via g_txindex
+#include <txmempool.h>      // For mempool DD amount lookup (Bug #35)
 #include <script/standard.h>
 #include <script/solver.h>
 #include <script/interpreter.h>
@@ -327,6 +328,30 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
     LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromTxRef - output %d not found in tx %s\n",
              prevout.n, prevout.hash.ToString());
     return false;
+}
+
+/**
+ * Extract DD amount from a transaction in the mempool (Bug #35).
+ * Mempool txs have already passed full validation, so their OP_RETURN is trustworthy.
+ * This enables chaining DD transfers without waiting for block confirmation.
+ */
+bool ExtractDDAmountFromMempool(const COutPoint& prevout, const CTxMemPool* mempool, CAmount& amount) {
+    amount = 0;
+    if (!mempool) return false;
+
+    CTransactionRef prev_tx = mempool->get(prevout.hash);
+    if (!prev_tx) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromMempool - tx %s not in mempool\n",
+                 prevout.hash.ToString());
+        return false;
+    }
+
+    bool ok = ExtractDDAmountFromTxRef(prev_tx, prevout, amount);
+    if (ok) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromMempool - tx %s vout %d = %lld cents\n",
+                 prevout.hash.ToString(), prevout.n, (long long)amount);
+    }
+    return ok;
 }
 
 bool ExtractDDAmountFromPrevTx(const COutPoint& prevout, CAmount& amount) {
@@ -1255,6 +1280,13 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             CAmount ddAmt = 0;
             bool found = false;
 
+            // 0. Try mempool lookup (for spending unconfirmed DD outputs — Bug #35)
+            if (!found && ctx.mempool) {
+                if (ExtractDDAmountFromMempool(txin.prevout, ctx.mempool, ddAmt) && ddAmt > 0) {
+                    found = true;
+                }
+            }
+
             // 1. Try txindex (authoritative — reads creating tx's OP_RETURN)
             if (!found && ExtractDDAmountFromPrevTx(txin.prevout, ddAmt) && ddAmt > 0) {
                 found = true;
@@ -1388,6 +1420,10 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                         if (ExtractDDAmount(coin.out.scriptPubKey, ddAmount) && ddAmount > 0) {
                             totalDDInputs += ddAmount;
                             LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from registry)\n",
+                                     i, (long long)ddAmount);
+                        } else if (ctx.mempool && ExtractDDAmountFromMempool(input.prevout, ctx.mempool, ddAmount) && ddAmount > 0) {
+                            totalDDInputs += ddAmount;
+                            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from mempool)\n",
                                      i, (long long)ddAmount);
                         } else if (ExtractDDAmountFromPrevTx(input.prevout, ddAmount) && ddAmount > 0) {
                             totalDDInputs += ddAmount;

@@ -2567,17 +2567,69 @@ static RPCHelpMan estimatecollateral()
             int lockDays = GetLockDaysForTier(lockTier);
             int baseRatio = GetMinCollateralRatio(lockTier);
 
-            // Get real system health and DCA multiplier from chain state
-            // Previously hardcoded to 150/1.0 — caused wrong collateral
-            // estimates when system health degrades (DCA multiplier increases)
-            DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
-            CAmount totalCollateral_est = metrics.totalCollateral;
-            CAmount totalDD_est = metrics.totalDDSupply;
+            // Get real system health and DCA multiplier from chain state.
+            //
+            // Bug #34 fix: previously this called GetSystemMetrics() without
+            // populating the cache first. That static cache (s_currentMetrics)
+            // is only filled when ScanUTXOSet() runs, which only happens inside
+            // getdigidollarstats and getprotectionstatus. If estimatecollateral
+            // ran before either of those, the cache had totalDDSupply=0, and the
+            // check below hardcoded systemHealth to 0 / emergency / DCA 2x —
+            // even when the system was well-collateralized at 528%.
+            //
+            // Fix: read totalCollateral and totalDDSupply from the stats index
+            // (fast, already synced) or fall back to ScanUTXOSet(), matching
+            // the same pattern getdigidollarstats and getprotectionstatus use.
+            CAmount totalCollateral_est = 0;
+            CAmount totalDD_est = 0;
+
+            {
+                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+                ChainstateManager& chainman = EnsureChainman(node);
+
+                if (g_digidollar_stats_index) {
+                    // Fast path: read from the stats index (already synced)
+                    if (g_digidollar_stats_index->BlockUntilSyncedToCurrentChain()) {
+                        const CBlockIndex* pindex;
+                        {
+                            LOCK(cs_main);
+                            pindex = chainman.ActiveChain().Tip();
+                        }
+                        if (pindex) {
+                            auto stats = g_digidollar_stats_index->LookUpStats(*pindex);
+                            if (stats) {
+                                totalDD_est = stats->total_dd_supply;
+                                totalCollateral_est = stats->total_collateral;
+                            }
+                        }
+                    }
+                } else {
+                    // Slow fallback: scan the UTXO set (same as getdigidollarstats)
+                    Chainstate& active_chainstate = chainman.ActiveChainstate();
+                    active_chainstate.ForceFlushStateToDisk();
+                    {
+                        LOCK(::cs_main);
+                        CCoinsView* coins_view = &active_chainstate.CoinsDB();
+                        node::BlockManager* blockman = &active_chainstate.m_blockman;
+                        const CTxMemPool* mempool = node.mempool.get();
+                        DigiDollar::SystemHealthMonitor::ScanUTXOSet(
+                            coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+                    }
+                    DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+                    totalCollateral_est = metrics.totalCollateral;
+                    totalDD_est = metrics.totalDDSupply;
+                }
+            }
+
             CAmount oraclePriceMillicents_est = oraclePriceMicroUSD / 10;
 
+            // Calculate system health from real chain data.
+            // When totalDD is 0 (no positions exist), use max health (30000)
+            // so DCA multiplier is 1x — there's nothing at risk, no reason to
+            // penalize the first minter with an emergency multiplier.
             int systemHealth;
             if (totalDD_est == 0) {
-                systemHealth = 0;
+                systemHealth = 30000;
             } else {
                 systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
                     totalCollateral_est, totalDD_est, oraclePriceMillicents_est);

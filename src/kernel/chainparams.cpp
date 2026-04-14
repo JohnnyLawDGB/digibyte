@@ -601,7 +601,7 @@ public:
         // consensus.vOraclePublicKeys.push_back("f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac");  // test oracle 6
         //
         // Production testnet oracle public keys (8-of-15):
-        // 11 active operators + 4 reserved slots (SHA256("digibyte_oracle_reserved_N"))
+        // 12 active operators + 3 reserved slots
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // ChopperBrian
         consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // Bastian

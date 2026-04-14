@@ -267,7 +267,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ### src/consensus/volatility.h
 - `DigiDollar::Volatility::PricePoint` (struct) → price, timestamp, height
 - `DigiDollar::Volatility::VolatilityState` (struct) → hourly/daily/weekly volatility %, mintingFrozen, allOperationsFrozen, freezeHeight, cooldownEndHeight
-- `DigiDollar::Volatility::VolatilityThresholds` (struct) → WARNING_1H (10%), FREEZE_MINT_1H (20%), FREEZE_ALL_24H (30%), EMERGENCY_7D (50%), COOLDOWN_BLOCKS (144 ≈ 36 hours)
+- `DigiDollar::Volatility::VolatilityThresholds` (struct) → WARNING_1H (10%), FREEZE_MINT_1H (20%), FREEZE_ALL_24H (30%), EMERGENCY_7D (50%), COOLDOWN_BLOCKS (8640 ≈ 36 hours)
 - `DigiDollar::Volatility::VolatilityMonitor` (class) → monitors price volatility and manages freeze mechanisms
   - `RecordPrice(price, timestamp, height)` → adds price point to history deque (max 30 days × 24h)
   - `GetPriceHistory()` → returns copy of all recorded price points
@@ -835,7 +835,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ DD-aware transaction broadcast handling, oracle data relay
 
 ### src/rpc/client.cpp
-- ⚠️ Registers all DD RPC command parameter types (35 entries)
+- ⚠️ Registers all DD RPC command parameter types (38 entries)
 
 ### src/rpc/register.h
 - ⚠️ Calls `RegisterDigiDollarRPCCommands()` during RPC table setup

@@ -79,7 +79,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 
 🚨 CRITICAL ISSUES (Current State) - ALL VERIFIED:
 - Mainnet validation DISABLED (bundle_manager.cpp:2229 returns true)
-- MockOracleManager leaks into non-regtest code (err.cpp:403 - no regtest check)
+- MockOracleManager singleton instantiated globally (err.cpp:403 guarded by regtest check at line 402)
 - ERR system health hardcoded to 150% (txbuilder.cpp:29 DEFAULT_SYSTEM_COLLATERAL=150)
 - sendoracleprice RPC REMOVED (security vulnerability - fake price injection, digidollar.cpp:3642)
 - GetBestHeight() returns hardcoded 0 (bundle_manager.cpp:47-51)
@@ -105,7 +105,7 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - ❌ 5 broken/removed exchange APIs (Coinbase, Kraken, Messari, Bittrex/Poloniex; CoinMarketCap removed)
 - ❌ `sendoracleprice` RPC REMOVED (security vulnerability - fake price injection)
 - ❌ `GetBestHeight()` returns hardcoded 0 (bundle_manager.cpp:47-51)
-- ❌ MockOracleManager leaks into production code (err.cpp:403, digidollarwallet.cpp)
+- ❌ MockOracleManager singleton instantiated globally (err.cpp:403 guarded by regtest check at line 402, but singleton available on all networks)
 - ❌ ERR system health hardcoded to 150% - ERR ratio can never activate
 - ❌ Empty schnorr_sig accepted without verification (signature bypass)
 
@@ -181,7 +181,7 @@ Known Stubs/TODOs (VERIFIED):
 ├── bundle_manager.cpp:2229: Mainnet validation returns true (DISABLED)
 ├── bundle_manager.cpp:47-51: GetBestHeight() returns hardcoded 0
 ├── txbuilder.cpp:29,273: GetCurrentSystemCollateral() returns 150%
-├── err.cpp:403: MockOracleManager used without regtest check
+├── err.cpp:403: MockOracleManager guarded by regtest check at line 402, but singleton instantiated globally
 └── digidollar.cpp:3642: sendoracleprice REMOVED (security vulnerability)
 ```
 
@@ -1417,9 +1417,9 @@ Phase Two (15 oracles):
 
 ### 5.1 CheckBlock() Integration
 
-**Location**: `/home/jared/Code/digibyte/src/validation.cpp` (CheckBlock calls ValidateBlockOracleData at line 4313)
+**Location**: `/home/jared/Code/digibyte/src/validation.cpp` (CheckBlock calls ValidateBlockOracleData at line 4373)
 
-**Integration Point (line 4313)**:
+**Integration Point (line 4373)**:
 ```cpp
 // Validate oracle data (if present and after activation)
 if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams, state)) {
@@ -1442,7 +1442,7 @@ CheckBlock() Validation Sequence:
 ├─► Mark block as checked                   [line 4308]
 │     block.fChecked = true;
 │
-└─► ★ ORACLE VALIDATION ★                   [line 4313]
+└─► ★ ORACLE VALIDATION ★                   [line 4373]
       OracleDataValidator::ValidateBlockOracleData()
 ```
 
@@ -1815,7 +1815,7 @@ int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet:
 
 | Network | Phase | Consensus | Oracles Defined | Activation Height | Status |
 |---------|-------|-----------|-----------------|-------------------|--------|
-| Mainnet | One | **DISABLED** | 15 vOraclePublicKeys defined, validation bypassed | Block 22014720 (validation bypassed) | ❌ NOT FUNCTIONAL |
+| Mainnet | One | **DISABLED** | 15 vOraclePublicKeys defined, validation bypassed | Block 3000000 (nOracleActivationHeight; nDDActivationHeight=22014720; validation bypassed) | ❌ NOT FUNCTIONAL |
 | Testnet | One | 8-of-15 | 15 | Block 600 | ✅ Working |
 | RegTest | One | 4-of-7 | 7 | Block 650 | ✅ Working |
 
@@ -1823,7 +1823,7 @@ int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet:
 > This means mainnet will accept ANY oracle data without verification.
 > Phase Two infrastructure exists but cannot be enabled until mainnet validation is fixed.
 
-### 14.3 Testnet Oracle Keys (All 11 Defined)
+### 14.3 Testnet Oracle Keys (All 15 Defined)
 
 **Location**: `src/kernel/chainparams.cpp` (lines 598-609)
 
@@ -1930,7 +1930,7 @@ consensus.nOracleRequiredMessages = 8;  // 8-of-15 for testnet
 **Critical Issues (Must Fix Before Mainnet)**:
 - ❌ **MAINNET VALIDATION DISABLED** - bundle_manager.cpp:2229 returns true
 - ❌ **5 broken/removed exchange APIs** - Coinbase, Kraken, Messari, Bittrex/Poloniex; CoinMarketCap removed
-- ❌ **MockOracleManager leaks** - err.cpp:403 uses it WITHOUT regtest check
+- ❌ **MockOracleManager leaks** - err.cpp:403 is guarded by regtest check (line 402), but MockOracleManager singleton is instantiated globally
 - ❌ **ERR system broken** - txbuilder.cpp:273 GetCurrentSystemCollateral() returns hardcoded 150%
 - ❌ **GetBestHeight() stub** - bundle_manager.cpp:47 returns hardcoded 0
 - ❌ **sendoracleprice REMOVED** - digidollar.cpp:3642 (security vulnerability - fake price injection)
@@ -1944,7 +1944,7 @@ Compact Script Size:   22 bytes (OP_RETURN + OP_ORACLE + data)
 Full Message Size:     128 bytes (with 64-byte Schnorr signature)
 Phase One Consensus:   1-of-1 (testnet/regtest ONLY - mainnet disabled)
 Phase Two Consensus:   8-of-15 testnet, 4-of-7 regtest, 8-of-15 mainnet (infrastructure exists)
-Activation Heights:    Mainnet=22014720 (validation bypassed), Testnet=600, Regtest=650
+Activation Heights:    Mainnet=3000000 (nOracleActivationHeight; nDDActivationHeight=22014720; validation bypassed), Testnet=600, Regtest=650
 ```
 
 ## Known TODOs and Stubs (VERIFIED)
@@ -1954,7 +1954,7 @@ Activation Heights:    Mainnet=22014720 (validation bypassed), Testnet=600, Regt
 | `bundle_manager.cpp:2229` | ValidateBlockOracleData | Mainnet returns true immediately | CRITICAL |
 | `bundle_manager.cpp:47-51` | GetBestHeight() | Returns hardcoded 0 | HIGH |
 | `txbuilder.cpp:29,273` | GetCurrentSystemCollateral() | Returns hardcoded 150% (ERR never activates) | HIGH |
-| `err.cpp:403` | ShouldBlockMinting() | Uses MockOracleManager without regtest check | HIGH |
+| `err.cpp:403` | ShouldBlockMinting() | MockOracleManager guarded by regtest check (line 402), but singleton instantiated globally | MEDIUM |
 | `digidollar.cpp:3642` | sendoracleprice | REMOVED: Security vulnerability (fake price injection) | FIXED |
 | `exchange.cpp` | Coinbase fetcher | Broken - API changed | LOW |
 | `exchange.cpp` | Kraken fetcher | Broken - API changed | LOW |

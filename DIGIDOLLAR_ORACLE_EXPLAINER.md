@@ -76,7 +76,7 @@ These issues have been verified against the actual codebase:
 |-------|----------|--------|
 | **Mainnet validation DISABLED** | `bundle_manager.cpp:2229` | Returns true immediately - no validation |
 | **ERR system broken** | `txbuilder.cpp:29,273` | Health hardcoded to 150% - ERR can never activate |
-| **MockOracleManager leaks** | `err.cpp:403` | Used without regtest check |
+| **MockOracleManager leaks** | `err.cpp:403` | Guarded by regtest check at line 402, but MockOracleManager singleton is instantiated globally |
 | **sendoracleprice REMOVED** | `digidollar.cpp:3642` | Security vulnerability - fake price injection |
 | **GetBestHeight() stub** | `bundle_manager.cpp:47` | Returns hardcoded 0 |
 | **5 broken/removed exchange APIs** | `exchange.cpp` | Coinbase, Kraken, Messari, Bittrex/Poloniex (broken); CoinMarketCap (removed) |
@@ -698,7 +698,7 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 
 **How it works**:
 - Oracle validation is **completely disabled**
-- Activation height set to `22014720` but validation returns true immediately (bypassed)
+- Oracle activation height set to `3000000` (nOracleActivationHeight) but validation returns true immediately (bypassed)
 - Blocks are **not required** to have oracle data
 - Code has **safety guards** preventing accidental activation
 
@@ -716,7 +716,7 @@ Phase One's single oracle (1-of-1 consensus) is **not secure enough for mainnet*
 - ✅ **Reputation system** (track oracle accuracy over time)
 - ✅ **On-chain signatures** (all 8 signatures verified in blocks)
 
-**Activation height**: `22014720` (but oracle validation is bypassed on mainnet)
+**Activation height**: `3000000` (nOracleActivationHeight; nDDActivationHeight=22014720, but oracle validation is bypassed on mainnet)
 
 **Use case**: N/A (not active yet)
 
@@ -1389,7 +1389,7 @@ Block Accepted
 
 ### CheckBlock() Oracle Validation
 
-**Location**: `validation.cpp` line 4313
+**Location**: `validation.cpp` line 4373
 
 **Validation steps** (in order):
 
@@ -1407,7 +1407,7 @@ if (network != TESTNET && network != REGTEST) {
 if (block_height < nOracleActivationHeight) {
     return true;  // Not active yet
 }
-// Testnet: 600, Regtest: 650, Mainnet: 22014720 (but validation bypassed)
+// Testnet: 600, Regtest: 650, Mainnet: 3000000 (but validation bypassed)
 ```
 
 **Purpose**: Oracle activates at block 600 (testnet) or 650 (regtest). Mainnet is disabled.
@@ -2044,7 +2044,7 @@ Before testnet launch:
 | **Schnorr Signatures** | ❌ Not used (mock) | ✅ P2P only (not in blocks) | ✅ On-chain (8 signatures) |
 | **Compact Format** | ✅ 22 bytes | ✅ 22 bytes | ~150 bytes (with sigs) |
 | **Price Cache** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
-| **Activation Height** | Block 650 | Block 600 | Block 22014720 (validation bypassed) |
+| **Activation Height** | Block 650 | Block 600 | Block 3000000 (nOracleActivationHeight; nDDActivationHeight=22014720; validation bypassed) |
 | **Economic Incentives** | ❌ None | ❌ None (trust-based) | ✅ Staking/slashing |
 | **Reputation System** | ❌ None | ❌ None | ✅ On-chain metrics |
 | **Status** | ✅ **Working now** | 🚧 **Ready (needs daemon)** | 📋 **Planned (2026)** |

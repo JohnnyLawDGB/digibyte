@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
 *Updated: 2026-04-14*
-*Document Version: 3.6 - Re-verified against source code (oracle config corrected)*
+*Document Version: 3.7 - Second-pass verification: fixed testnet oracle operator count (was 11+4, actually 12+3)*
 
 ## Overview
 
@@ -218,7 +218,7 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-15 oracle slots configured (12 active operators + 3 reserved on mainnet; 11 active + 4 reserved on testnet). Script requires 8-of-15 signatures using Schnorr threshold aggregation, ensuring decentralized price consensus (mainnet/testnet configuration).
+15 oracle slots configured (12 active operators + 3 reserved on both mainnet and testnet). Script requires 8-of-15 signatures using Schnorr threshold aggregation, ensuring decentralized price consensus (mainnet/testnet configuration).
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.

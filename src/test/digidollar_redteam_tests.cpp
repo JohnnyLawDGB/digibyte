@@ -2792,16 +2792,16 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06i_oracle_vs_dd_activation_sync)
             "Regtest DD should be ALWAYS_ACTIVE");
     }
 
-    // Check mainnet: oracle activation should be set (RC27: 6-of-11 active)
+    // Check mainnet: oracle activation should be set (RC30: 8-of-15 active)
     {
         const auto mainnet_params = CChainParams::Main();
         const auto& consensus = mainnet_params->GetConsensus();
 
         int oracle_height = consensus.nOracleActivationHeight;
-        // RC27: mainnet oracle activation is no longer INT_MAX — oracles are configured
-        // for 6-of-11 consensus across all networks
+        // RC30: mainnet oracle activation is no longer INT_MAX — oracles are configured
+        // for 8-of-15 consensus across all networks
         BOOST_CHECK_MESSAGE(oracle_height != std::numeric_limits<int>::max(),
-            "Mainnet oracle activation should be set (not INT_MAX) for RC27 6-of-11 config");
+            "Mainnet oracle activation should be set (not INT_MAX) for RC30 8-of-15 config");
     }
 }
 
@@ -14360,12 +14360,12 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01f_eclipse_mainnet_oracle_gap)
     const auto& mainnet_params = CreateChainParams(*m_node.args, ChainType::MAIN);
     const auto& mainnet_consensus = mainnet_params->GetConsensus();
 
-    // RC27: mainnet oracle activation is set (6-of-11 across all networks)
+    // RC30: mainnet oracle activation is set (8-of-15 across all networks)
     BOOST_CHECK_NE(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
 
-    // RC27: 6-of-11 oracle consensus
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 6);
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 11);
+    // RC30: 8-of-15 oracle consensus
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 8);
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 15);
 
     BOOST_TEST_MESSAGE("T8-01f: Eclipse mainnet oracle gap ⚠️ — "
         "Mainnet ConnectBlock does NOT update oracle price cache "

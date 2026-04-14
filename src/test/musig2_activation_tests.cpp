@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
 {
     SelectParams(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
-    // Mainnet uses MuSig2 immediately on top of 6-of-11 oracle consensus.
+    // Mainnet uses MuSig2 immediately on top of 8-of-15 oracle consensus.
     BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
 }
 
@@ -64,7 +64,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet also switches immediately to MuSig2 (6-of-11).
+    // Testnet also switches immediately to MuSig2 (8-of-15).
     BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
 }
 
@@ -80,21 +80,21 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
 // PART 2: Oracle Configuration Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_is_11)
+BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_is_15)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // 11 oracle pubkeys configured for Phase 3 MuSig2
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 11);
+    // 15 oracle pubkeys configured for Phase 3 MuSig2
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 15);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
 
-BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_6)
+BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_8)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // 6-of-11 MuSig2 quorum for Phase 3
-    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 6);
+    // 8-of-15 MuSig2 quorum for Phase 3
+    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 8);
     BOOST_CHECK_GT(params.nOracleConsensusRequired, params.nOraclePubkeyCount / 2);
     BOOST_CHECK_LE(params.nOracleConsensusRequired, params.nOraclePubkeyCount);
 }

@@ -963,9 +963,9 @@ BOOST_AUTO_TEST_CASE(test_session_rejects_invalid_partial_sig_content)
                                                  rand1_2, seckeys[1], &pubkeys[1],
                                                  nullptr, &cache, nullptr));
 
-        // Pass pubkeys this time
-        BOOST_CHECK(session2.AddPubnonce(0, pn0_2, &pubkeys[0]));
-        BOOST_CHECK(session2.AddPubnonce(1, pn1_2, &pubkeys[1]));
+        // Pass pubnonces
+        BOOST_CHECK(session2.AddPubnonce(0, pn0_2));
+        BOOST_CHECK(session2.AddPubnonce(1, pn1_2));
 
         unsigned char msg2[32];
         GetStrongRandBytes(Span{msg2, 32});

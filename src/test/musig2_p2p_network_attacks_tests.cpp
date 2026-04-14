@@ -575,8 +575,8 @@ BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
 //
 // Threat: If you control the P2P path, you can withhold oracle price
 // messages from certain oracles, biasing the IQR-median computation.
-// With 9-of-15 threshold, withholding 7 oracles' prices leaves only 8,
-// still above threshold. If the 8 remaining are biased, the consensus
+// With 8-of-15 threshold, withholding 7 oracles' prices leaves only 8,
+// still at threshold. If the 8 remaining are biased, the consensus
 // price shifts.
 //
 // Defense: IQR filtering + median makes this extremely hard. You need
@@ -613,8 +613,8 @@ BOOST_AUTO_TEST_CASE(attack_selective_price_withholding_iqr_resilience)
     int64_t shift_ppm = ((int64_t)full_median - (int64_t)biased_median) * 1000000 / (int64_t)full_median;
     BOOST_CHECK(shift_ppm < 3000); // Less than 0.3% shift
 
-    // FINDING: Even in the worst case (withholding 6 of 15 oracles
-    // to barely meet threshold), the price shift is < 0.3%.
+    // FINDING: Even in the worst case (withholding 7 of 15 oracles
+    // to barely meet 8-of-15 threshold), the price shift is < 0.3%.
     // DigiDollar's ±5% mint/burn threshold absorbs this trivially.
     // A real attack would need to compromise exchange APIs too.
 }

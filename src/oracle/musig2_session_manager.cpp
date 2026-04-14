@@ -146,16 +146,26 @@ bool MuSig2SessionManager::RegisterSeenPartialSig(const uint256& hash)
 void MuSig2SessionManager::CleanupOldSessions(int32_t current_epoch)
 {
     LOCK(m_mutex);
+    bool removed_any_session = false;
     auto it = m_sessions.begin();
     while (it != m_sessions.end()) {
         MuSig2SessionState state = it->second->GetState();
         bool is_old = it->first < current_epoch;
         bool is_terminal = (state == MuSig2SessionState::COMPLETE || state == MuSig2SessionState::FAILED);
         if (is_old && is_terminal) {
+            removed_any_session = true;
             it = m_sessions.erase(it);
         } else {
             ++it;
         }
+    }
+
+    // These replay filters are only useful for live sessions. Once old
+    // terminal sessions are pruned, clear the global seen sets as well so they
+    // cannot grow without bound across epochs.
+    if (removed_any_session || m_sessions.empty()) {
+        m_seen_nonces.clear();
+        m_seen_partial_sigs.clear();
     }
 }
 

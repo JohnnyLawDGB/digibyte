@@ -348,6 +348,12 @@ bool MuSig2SigningSession::AddPartialSignature(uint8_t oracle_id,
 
     if (m_state != MuSig2SessionState::SIGNING) return false;
 
+    // Validate secp256k1 internal magic bytes before storing the struct.
+    // libsecp256k1 uses ARG_CHECK and aborts on malformed partial_sig objects,
+    // so reject obviously invalid data here instead of letting aggregation die.
+    static const unsigned char partial_sig_magic[4] = {0xeb, 0xfb, 0x1a, 0x32};
+    if (memcmp(partial_sig.data, partial_sig_magic, 4) != 0) return false;
+
     // Reject duplicate oracle ID
     if (m_partial_sigs.count(oracle_id)) return false;
 

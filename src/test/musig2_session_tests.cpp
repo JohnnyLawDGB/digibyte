@@ -1013,27 +1013,16 @@ BOOST_AUTO_TEST_CASE(test_session_manager_seen_sets_cleanup)
     BOOST_CHECK(manager.HasSeenNonce(hash1));
     BOOST_CHECK(manager.HasSeenPartialSig(hash2));
 
-    // After CleanupOldSessions, the seen sets should ideally be bounded.
-    // Currently they are NOT pruned — this documents the gap.
-    // CleanupOldSessions only removes terminal sessions, not seen hashes.
+    // After CleanupOldSessions, the replay filters should be pruned so they
+    // cannot grow without bound across epochs.
     manager.CleanupOldSessions(1000);
 
-    // The seen hashes survive cleanup — this is the memory leak:
-    bool nonce_survives = manager.HasSeenNonce(hash1);
-    bool psig_survives = manager.HasSeenPartialSig(hash2);
-    // This test documents current behavior. After the fix, these should
-    // be cleared or bounded.
-    BOOST_CHECK_MESSAGE(!nonce_survives || !psig_survives,
-        "LOW [RH-02]: m_seen_nonces/m_seen_partial_sigs grow unbounded. "
-        "CleanupOldSessions should prune stale entries.");
+    BOOST_CHECK_MESSAGE(!manager.HasSeenNonce(hash1),
+        "CleanupOldSessions should prune stale nonce replay entries.");
+    BOOST_CHECK_MESSAGE(!manager.HasSeenPartialSig(hash2),
+        "CleanupOldSessions should prune stale partial-sig replay entries.");
 }
 
-BOOST_AUTO_TEST_SUITE_END()
-
-// ============================================================================
-// test_participation_bitmap_sized_for_total_oracles
-// Bitmap must be (nOracleTotalOracles + 7) / 8 bytes, not just max_id + 1
-// ============================================================================
 BOOST_AUTO_TEST_CASE(test_participation_bitmap_sized_for_total_oracles)
 {
     // nOracleTotalOracles = 11 in testnet chainparams
@@ -1056,3 +1045,5 @@ BOOST_AUTO_TEST_CASE(test_participation_bitmap_sized_for_total_oracles)
 
     secp256k1_context_destroy(ctx);
 }
+
+BOOST_AUTO_TEST_SUITE_END()

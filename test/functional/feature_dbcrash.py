@@ -184,7 +184,10 @@ class ChainstateWriteCrashTest(DigiByteTestFramework):
             assert_equal(nodei_utxo_hash, node3_utxo_hash)
 
     def generate_small_transactions(self, node, count, utxo_list):
-        FEE = 1000  # TODO: replace this with node relay fee based calculation
+        # DigiByte's policy floor is higher than upstream Bitcoin's defaults.
+        # Keep this well above min relay fee so the crash-recovery exercise is
+        # testing chainstate durability, not mempool policy rejection.
+        FEE = 24000
         num_transactions = 0
         random.shuffle(utxo_list)
         while len(utxo_list) >= 2 and num_transactions < count:

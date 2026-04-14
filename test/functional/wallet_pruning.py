@@ -95,6 +95,14 @@ class WalletPruningTest(DigiByteTestFramework):
         assert_raises_rpc_error(-4, f"Pruned blocks from height {wallet_birthheight - 11} required to import keys. Use RPC call getblockchaininfo to determine your pruned height.", self.nodes[1].importwallet, self.nodes[0].datadir_path / wallet_file)
         self.log.info("- Done")
 
+    def wait_until_wallet_birthheight_pruned(self, wallet_birthheight):
+        for _ in range(60):
+            pruneheight = self.nodes[1].getblockchaininfo()["pruneheight"]
+            if pruneheight >= wallet_birthheight:
+                return
+            self.mine_large_blocks(self.nodes[0], 10)
+        raise AssertionError(f"wallet birthheight {wallet_birthheight} was not pruned, pruneheight={self.nodes[1].getblockchaininfo()['pruneheight']}")
+
     def get_birthheight(self, wallet_file):
         """Gets birthheight of a wallet on node0"""
         with open(self.nodes[0].datadir_path / wallet_file, 'r', encoding="utf8") as f:
@@ -143,13 +151,10 @@ class WalletPruningTest(DigiByteTestFramework):
         # Fund wallet to later verify that importwallet correctly accounts for balances
         self.generatetoaddress(self.nodes[0], COINBASE_MATURITY + 1, self.nodes[0].getnewaddress(), sync_fun=self.no_op)
 
-        # We've reached pruning storage & height limit but
-        # pruning doesn't run until another chunk (blk*.dat file) is allocated.
-        # That's why we are generating another 5 large blocks
-        self.mine_large_blocks(self.nodes[0], 5)
-
-        # blk00000.dat file is now pruned from node1
-        assert_equal(self.has_block(0), False)
+        # Drive pruning until the older wallet's birthheight is actually below
+        # the prune horizon. File-level assumptions are brittle across blockfile
+        # layout changes, but wallet import behavior is what this test cares about.
+        self.wait_until_wallet_birthheight_pruned(self.get_birthheight(f"{wallet_birthheight_1}.dat"))
 
         self.test_wallet_import_pruned(wallet_birthheight_2)
         self.test_wallet_import_pruned_with_missing_blocks(wallet_birthheight_1)

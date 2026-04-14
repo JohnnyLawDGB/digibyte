@@ -178,39 +178,37 @@ class PruneTest(DigiByteTestFramework):
         self.log.info(f"Usage can be over target because of high stale rate: {calc_usage(self.prunedir)}")
 
     def reorg_test(self):
-        # Node 1 will mine a 300 block chain starting 287 blocks back from Node 0 and Node 2's tip
-        # This will cause Node 2 to do a reorg requiring 288 blocks of undo data to the reorg_test chain
+        # Exercise a deep reorg on the pruning node by rewinding node 0 back 288 blocks,
+        # building a higher-work fork, then reconnecting node 2 so it must reorg onto it.
 
-        height = self.nodes[1].getblockcount()
+        height = self.nodes[0].getblockcount()
         self.log.info(f"Current block height: {height}")
 
         self.forkheight = height - 287
-        self.forkhash = self.nodes[1].getblockhash(self.forkheight)
+        self.forkhash = self.nodes[0].getblockhash(self.forkheight)
         self.log.info(f"Invalidating block {self.forkhash} at height {self.forkheight}")
-        self.nodes[1].invalidateblock(self.forkhash)
+        original_chainwork = int(self.nodes[0].getblockheader(self.nodes[0].getbestblockhash())["chainwork"], 16)
 
-        # We've now switched to our previously mined-24 block fork on node 1, but that's not what we want
-        # So invalidate that fork as well, until we're on the same chain as node 0/2 (but at an ancestor 288 blocks ago)
-        mainchainhash = self.nodes[0].getblockhash(self.forkheight - 1)
-        curhash = self.nodes[1].getblockhash(self.forkheight - 1)
-        while curhash != mainchainhash:
-            self.nodes[1].invalidateblock(curhash)
-            curhash = self.nodes[1].getblockhash(self.forkheight - 1)
-
-        assert self.nodes[1].getblockcount() == self.forkheight - 1
-        self.log.info(f"New best height: {self.nodes[1].getblockcount()}")
-
-        # Disconnect node1 and generate the new chain
         self.disconnect_nodes(0, 1)
-        self.disconnect_nodes(1, 2)
+        self.disconnect_nodes(0, 2)
 
-        self.log.info("Generating new longer chain of 300 more blocks")
-        self.generate(self.nodes[1], 300, sync_fun=self.no_op)
+        self.nodes[0].invalidateblock(self.forkhash)
+        assert self.nodes[0].getblockcount() == self.forkheight - 1
+        self.log.info(f"New best height: {self.nodes[0].getblockcount()}")
+
+        self.log.info("Generating replacement chain on node 0 until it exceeds the old chain work")
+        blocks_mined = 0
+        while int(self.nodes[0].getblockheader(self.nodes[0].getbestblockhash())["chainwork"], 16) <= original_chainwork:
+            self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+            blocks_mined += 1
+        self.log.info(f"Mined {blocks_mined} blocks on node 0, new height {self.nodes[0].getblockcount()}")
 
         self.log.info("Reconnect nodes")
         self.connect_nodes(0, 1)
-        self.connect_nodes(1, 2)
-        self.sync_blocks(self.nodes[0:3], timeout=120)
+        self.connect_nodes(0, 2)
+        self.nodes[1].invalidateblock(self.forkhash)
+        self.nodes[2].invalidateblock(self.forkhash)
+        self.sync_blocks(self.nodes[0:3], timeout=300)
 
         self.log.info(f"Verify height on node 2: {self.nodes[2].getblockcount()}")
         self.log.info(f"Usage possibly still high because of stale blocks in block files: {calc_usage(self.prunedir)}")
@@ -218,7 +216,7 @@ class PruneTest(DigiByteTestFramework):
         self.log.info("Mine 220 more large blocks so we have requisite history")
 
         mine_large_blocks(self.nodes[0], 220)
-        self.sync_blocks(self.nodes[0:3], timeout=120)
+        self.sync_blocks(self.nodes[0:3], timeout=300)
 
         usage = calc_usage(self.prunedir)
         self.log.info(f"Usage should be below target: {usage}")

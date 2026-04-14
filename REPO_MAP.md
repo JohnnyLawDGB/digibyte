@@ -703,10 +703,9 @@
 - `AbsPathForConfigVal()` → resolves relative paths in config to absolute paths
 
 ### src/common/init.cpp / .h
-- `EnsureDataDir()` → creates data directory if it doesn't exist
-- `SanityChecks()` → performs basic sanity checks (e.g., verify crypto functions)
-- `SetGlobals()` → initializes global logging, args, etc.
-- `UnsetGlobals()` → cleans up globals on shutdown
+- `common::ConfigStatus` (enum) → FAILED, FAILED_WRITE, ABORTED
+- `common::ConfigError` (struct) → carries config error status, message, and details
+- `common::InitConfig()` → reads config files, creates datadir and `settings.json` if they don't exist, handles config parsing errors
 
 ### src/common/interfaces.cpp
 - `MakeEcho()` → factory for IPC echo interface (testing)
@@ -972,10 +971,12 @@
 ## Source Files — src/init/
 
 ### src/init/common.cpp / .h
-- `init::EnsureDataDir()` → creates the data directory with proper permissions
-- `init::SetGlobals()` → initializes global state (logging, args)
-- `init::UnsetGlobals()` → cleans up global state
-- `init::SanityChecks()` → runs startup sanity checks (glibcxx, crypto)
+- `init::AddLoggingArgs()` → registers `-debuglogfile`, `-debug`, `-loglevel`, `-printtoconsole`, `-shrinkdebugfile` arguments
+- `init::SetLoggingOptions()` → configures logging output (file, console, timestamps, thread names, source locations)
+- `init::SetLoggingCategories()` → enables/disables debug logging categories from `-debug` args
+- `init::SetLoggingLevel()` → sets minimum log level from `-loglevel` arg
+- `init::StartLogging()` → opens log file and begins logging
+- `init::LogPackageVersion()` → logs DigiByte Core version and build info at startup
 
 ### src/init/digibyted.cpp
 - `interfaces::MakeNodeInit()` → factory for daemon-mode node initialization
@@ -1082,7 +1083,7 @@
 ### src/kernel/chainparams.cpp / .h
 - `CChainParams` (class) → full chain parameters: network magic bytes, default port, genesis block, seeds, checkpoints, consensus params, address prefixes
   - `Main()` → creates mainnet parameters (port 12024, genesis Jan 10 2014, 5-algo PoW, DigiShield/MultiShield activation heights)
-  - `TestNet()` → creates testnet parameters (port 12026, relaxed difficulty)
+  - `TestNet()` → creates testnet parameters (port 12035, relaxed difficulty)
   - `SigNet()` → creates signet parameters (signed block test network)
   - `RegTest()` → creates regtest parameters (instant mining, no real PoW)
   - ⚠️ `GetOracleNode()` → looks up oracle node info by ID from hardcoded oracle configuration
@@ -1342,7 +1343,7 @@
   - `GetAlgo()` → extracts mining algorithm from version field (bits 8-10 encode algo 0-4)
 - `CBlock` (class extends CBlockHeader) → full block: header + vector of transactions
   - `ToString()` → human-readable block summary
-- `GetAlgoName()` → maps algo number (0-7) to name string ("sha256d", "scrypt", "groestl", "skein", "qubit", "odocrypt")
+- `GetAlgoName()` → maps algo number (0-7) to name string ("sha256d", "scrypt", "groestl", "skein", "qubit", "odo")
 - `GetAlgoByName()` → reverse mapping from name to algo number
 - `GetVersionForAlgo()` → constructs version field with algo bits set
 - `OdoKey()` → derives time-rotating Odocrypt key from block timestamp
@@ -1368,13 +1369,14 @@
 ### src/primitives/oracle.cpp / .h
 - ⚠️ `COraclePriceMessage` (class) → signed oracle price report: DGB/USD price, timestamp, oracle ID, Schnorr signature
   - `GetHash()` → message hash for signature verification
-  - `VerifySignature()` → verifies Schnorr signature against oracle's public key
-  - `IsExpired()` → checks if price message has expired based on block height
+  - `Verify()` → verifies Schnorr signature against oracle's public key
+  - `IsValid(reference_time)` → validates message structure and checks if not expired based on reference timestamp
 - ⚠️ `COracleBundle` (class) → collection of oracle price messages forming a consensus price
   - `GetConsensusPrice()` → computes IQR-filtered median price from valid messages (replaces old `GetMedianPrice`)
   - `HasConsensus()` → checks if bundle has minimum required oracle messages
-  - `Validate()` → validates bundle completeness, signatures, and consistency
-  - `GetEpoch()` → returns the oracle epoch this bundle belongs to
+  - `IsValid(min_required, reference_time)` → validates bundle completeness, signatures, and consistency
+  - `epoch` (field) → the oracle epoch this bundle belongs to (direct public member)
+  - `ValidateEpoch(current_epoch)` → checks epoch consistency between bundle and current epoch
 - ⚠️ `OracleNodeInfo` (struct) → oracle identity: ID, public key, and status
 - ⚠️ `SelectOraclesForEpoch()` → deterministically selects which oracles are active in a given epoch
 - ⚠️ `GetCurrentEpoch()` → calculates current oracle epoch from block height

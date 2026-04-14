@@ -84,7 +84,7 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned oracle ID (0–10 for testnet, 11 oracles total) — contact the maintainer.
+For first-time oracle operators. You need an assigned oracle ID (0–14 for testnet, 15 oracles total) — contact the maintainer.
 
 ```bash
 # 1. Start your node
@@ -108,7 +108,7 @@ digibyte-cli -testnet getoracles true
 
 **Qt wallet users:** Create wallet via **File → Create Wallet**, name it `oracle`. Then **Help → Debug Window → Console** to run `createoraclekey` and `startoracle`.
 
-> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet19/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
+> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet21/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
 
 ---
 
@@ -179,8 +179,8 @@ Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari, KuCoin, Crypto
 
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| Active Oracles | 11 | 7 | 11 |
-| Consensus Required | 6-of-11 | 4-of-7 | 6-of-11 |
+| Active Oracles | 15 | 7 | 15 |
+| Consensus Required | 8-of-15 | 4-of-7 | 8-of-15 |
 | Activation Height | 600 | 650 | BIP9 (22,014,720) |
 | Epoch Length (`nDDOracleEpochBlocks`) | 50 blocks | 10 blocks | 100 blocks |
 | Price Update Interval | 2 blocks | 1 block | 4 blocks |
@@ -195,7 +195,7 @@ Total oracle slots: 30 (defined in `src/primitives/oracle.h`). Active oracle pub
 
 ```bash
 # Watch oracle activity in real-time
-tail -f ~/.digibyte/testnet19/debug.log | grep -i "oracle\|digidollar"
+tail -f ~/.digibyte/testnet21/debug.log | grep -i "oracle\|digidollar"
 
 # Check current oracle price
 digibyte-cli -testnet getoracleprice
@@ -468,10 +468,10 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 | Component | Path |
 |-----------|------|
 | Config | `~/.digibyte/digibyte.conf` |
-| Testnet data | `~/.digibyte/testnet19/` |
-| Debug log | `~/.digibyte/testnet19/debug.log` |
-| Wallets | `~/.digibyte/testnet19/wallets/` |
-| RPC cookie | `~/.digibyte/testnet19/.cookie` |
+| Testnet data | `~/.digibyte/testnet21/` |
+| Debug log | `~/.digibyte/testnet21/debug.log` |
+| Wallets | `~/.digibyte/testnet21/wallets/` |
+| RPC cookie | `~/.digibyte/testnet21/.cookie` |
 
 ---
 
@@ -481,7 +481,7 @@ If `getwalletinfo` shows the full path as wallet name:
 
 ```bash
 # Unload with the wrong name
-digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet19/wallets/oracle/"
+digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet21/wallets/oracle/"
 
 # Reload with just the name
 digibyte-cli -testnet loadwallet "oracle"
@@ -492,4 +492,4 @@ digibyte-cli -testnet -rpcwallet=oracle getwalletinfo
 
 ---
 
-*Verified against DigiByte Core v9.26.0-rc29 source code.*
+*Verified against DigiByte Core v9.26.0-rc30 source code.*

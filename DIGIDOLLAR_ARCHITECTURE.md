@@ -1,9 +1,9 @@
 # DigiDollar Implementation Architecture
 **DigiByte v8.26 - Current Implementation Status**
-*Updated: 2026-04-04*
+*Updated: 2026-04-14*
 *Implementation Status: ~90% Complete*
-*Document Version: 6.5 - Validated against codebase*
-*Validation Status: ✅ Validated Against Codebase (2026-04-04)*
+*Document Version: 6.6 - Validated against codebase*
+*Validation Status: ✅ Validated Against Codebase (2026-04-14)*
 
 ## Executive Summary
 
@@ -15,7 +15,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 
 ### Current Implementation Status
 
-**85% Complete** - This is not vaporware! The DigiDollar system has approximately 50,000+ lines of functional, tested code with sophisticated features already working:
+**85% Complete** - This is not vaporware! The DigiDollar system has approximately 43,000 lines of source code and 101,000 lines of tests (~144,000 total) with sophisticated features already working:
 
 ✅ **What's Working Right Now:**
 - **Complete Address System**: DD/TD/RD addresses work perfectly
@@ -24,7 +24,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 - **Network-Wide Tracking**: Blockchain UTXO scanning shows identical stats to all nodes
 - **User Interface**: Complete wallet with 7 functional tabs (Overview, Receive, Send, Mint, Redeem, Positions, Transactions)
 - **Protection Systems**: DCA, ERR, and Volatility structure complete (70%) - depends on stub functions
-- **Comprehensive Testing**: 66 DigiDollar unit test files + 16 Oracle unit test files + 1 redteam audit file + 51 functional test files = 134 total test files
+- **Comprehensive Testing**: 66 DigiDollar unit test files + 16 Oracle unit test files + 19 MuSig2 unit test files + 1 redteam audit file + 2 wallet test files + 2 Qt test files + 51 functional test files = 157 total test files
 
 🔄 **What's In Progress:**
 - **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` now use cached metrics from UTXO scanning
@@ -73,13 +73,13 @@ This document explains exactly how everything works, where the code lives, and w
 The DigiDollar system is built into DigiByte Core with code organized in these main folders:
 
 - **`/src/digidollar/`** - Core DigiDollar logic (5 .cpp + 5 .h files)
-- **`/src/oracle/`** - Price feed system (10 .cpp + 12 .h files, includes MuSig2)
+- **`/src/oracle/`** - Price feed system (10 .cpp + 12 .h files, includes MuSig2 signing)
 - **`/src/qt/`** - User interface (10 widget .cpp + 10 .h files)
 - **`/src/wallet/`** - Wallet integration (digidollarwallet.cpp + .h)
 - **`/src/consensus/`** - Network rules (DCA, ERR, volatility systems)
 - **`/src/rpc/`** - RPC commands (digidollar.cpp + digidollar_transactions.cpp)
 - **`/test/functional/`** - Automated tests (51 functional test files)
-- **`/src/test/`** - Unit tests (66 DigiDollar test files + 16 Oracle test files + 1 redteam audit file = 83 total unit test files)
+- **`/src/test/`** - Unit tests (66 DigiDollar + 16 Oracle + 19 MuSig2 + 1 redteam + 2 wallet + 2 Qt = 106 total unit test files)
 
 ### 1.4 Development Phases - What's Been Built
 
@@ -391,7 +391,7 @@ double GetDCAMultiplier(int systemHealth) {
     return 2.0;                              // Emergency (+100%)
 }
 // NOTE: ConsensusParams::dcaLevels (src/consensus/digidollar.h) uses slightly
-// different values: >=150→1.0, >=120→1.25, >=110→1.5, >=100→2.0
+// different values: >=150→1.0x, 120-149→1.25x, 110-119→1.5x, <110→2.0x
 // The DCA class HEALTH_TIERS above are the authoritative runtime values.
 ```
 
@@ -407,7 +407,7 @@ double GetDCAMultiplier(int systemHealth) {
 - ✅ Proper fee estimation and change handling
 - ✅ Dual P2TR output creation: collateral with MAST, DD token with key-path only
 
-**Transaction Output Structure (~lines 335-363):**
+**Transaction Output Structure (~lines 344-370):**
 ```cpp
 // Output 0: Collateral vault (P2TR with CLTV timelock)
 CScript collateralScript = CreateCollateralScript(params);  // MAST structure
@@ -587,7 +587,7 @@ flowchart TD
 
 1. **Oracle Selection Algorithm** (`/src/primitives/oracle.cpp`)
    - Deterministic selection of 15 active oracles from 30 total
-   - Hash-based epoch system (1440 blocks = ~6 hours)
+   - Hash-based epoch system (100 blocks = ~25 minutes on mainnet; 1440-block fallback default)
    - 8-of-15 signature threshold for consensus
 
 2. **Price Consensus Mechanism**
@@ -601,7 +601,7 @@ flowchart TD
    - DoS protection with rate limiting
 
 4. **Hardcoded Oracle Configuration** (`/src/kernel/chainparams.cpp`)
-   - 30 oracle nodes: oracle1-30.digidollar.org
+   - 30 oracle nodes: oracle0 at oracle1.digibyte.io:12028, oracle1-29 at oracle2-30.digidollar.org
    - Unique public keys and endpoints
    - Network-specific configuration (mainnet/testnet/regtest)
 
@@ -759,7 +759,7 @@ class VolatilityMonitor {
 ### 7.3 Network-Wide Tracking System
 
 #### **CRITICAL FEATURE: Blockchain-Wide UTXO Scanning**
-**Status: ✅ FULLY IMPLEMENTED AND TESTED** (`/src/digidollar/health.cpp:274`)
+**Status: ✅ FULLY IMPLEMENTED AND TESTED** (`/src/digidollar/health.cpp:299`)
 
 This is a **major implementation** that was completely missing from the architecture document.
 
@@ -963,7 +963,7 @@ class DigiDollarTab : public QWidget {
 
 DigiDollar uses HD (Hierarchical Deterministic) key derivation from the wallet's seed for all DigiDollar operations. This enables wallet restore via descriptors.
 
-**Implementation Location**: `src/rpc/digidollar.cpp` (lines 91-177)
+**Implementation Location**: `src/rpc/digidollar.cpp` (lines 101-199)
 
 ### 8.5.2 GetHDKeyForDigiDollar() Function
 
@@ -985,9 +985,10 @@ CKey GetHDKeyForDigiDollar(wallet::CWallet* pwallet, const std::string& label)
 
 | Operation | Label | Called From |
 |-----------|-------|-------------|
-| Mint DigiDollars | `"dd-owner"` | `mintdigidollar` RPC (~line 870) |
-| Redeem DigiDollars | `"dd-redeem"` | `redeemdigidollar` RPC (~line 1140) |
-| Generate DD Address | `"dd-address"` | `getdigidollaraddress` RPC (~line 1720) |
+| Mint DigiDollars | `"dd-owner"` | `mintdigidollar` RPC (~line 930) |
+| Generate DD Address | `"dd-address"` | `getdigidollaraddress` RPC (~line 1996) |
+
+**Note**: `redeemdigidollar` RPC does not call `GetHDKeyForDigiDollar()` -- it uses stored owner keys from the position database.
 
 ### 8.5.4 Wallet Restore Implications
 
@@ -1005,7 +1006,7 @@ Because DD keys are derived from the wallet seed (when using descriptor wallets)
 
 When a wallet is restored via descriptors and rescanned, DD positions must be reconstructed from blockchain data.
 
-**Implementation Location**: `src/wallet/digidollarwallet.cpp` (~line 1847)
+**Implementation Location**: `src/wallet/digidollarwallet.cpp` (~line 1920)
 
 ### 8.6.2 ProcessDDTxForRescan() Function
 
@@ -1055,7 +1056,7 @@ All position data is extracted from on-chain OP_RETURN metadata:
 
 ### 8.6.5 Tier Derivation with Tolerance
 
-**Implementation**: `DeriveLockTierFromHeight()` at ~line 1738
+**Implementation**: `DeriveLockTierFromHeight()` at ~line 1811
 
 ```cpp
 uint32_t DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height) {
@@ -1160,12 +1161,11 @@ Tests the complete workflow:
 
 ```cpp
 // Core data structures with wallet.dat integration
-enum DDDataType {
-    DD_OUTPUT = 1,      // UTXO tracking
-    DD_BALANCE = 2,     // Address-based balances
-    DD_POSITION = 3,    // Collateral positions
-    DD_TRANSACTION = 4  // Transaction history
-};
+// Database keys (string-based, in walletdb.cpp DBKeys namespace):
+//   "ddutxo"     (DD_OUTPUT)      - UTXO tracking
+//   "ddbalance"  (DD_BALANCE)     - Address-based balances
+//   "ddposition" (DD_POSITION)    - Collateral positions
+//   "ddtx"       (DD_TRANSACTION) - Transaction history
 ```
 
 #### **Persistence Implementation**
@@ -1337,7 +1337,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         │    • Witness when spending: [64-byte signature] only       │
         │ 4. Create vout[2]: OP_RETURN metadata (tx type + amounts)  │
         │ 5. Calculate fees and create change outputs                 │
-        │ CODE: /src/digidollar/txbuilder.cpp lines 283-291           │
+        │ CODE: /src/digidollar/txbuilder.cpp lines 344-370           │
         └─────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -1416,7 +1416,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         ├─────────────────────────────────────────────────────────────┤
         │ ⚠️  Transfer transactions set LOCKTIME = 0 (no timelock)    │
         │                                                             │
-        │ SIGNING PROCESS (SignDDInputs, ~line 5032):                │
+        │ SIGNING PROCESS (SignDDInputs, ~line 5098):                │
         │                                                             │
         │ 1. Sign DGB Fee Inputs FIRST:                               │
         │    → wallet's SignTransaction() creates ECDSA signatures    │
@@ -1447,7 +1447,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
         │ (collateral) which requires complex script-path signing.    │
         │                                                             │
         │ CODE: /src/wallet/digidollarwallet.cpp - SignDDInputs       │
-        │       ~Line 5032+ contains the vout index check logic      │
+        │       ~Line 5098+ contains the vout index check logic      │
         └─────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -1531,7 +1531,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 **Implementation Quality:**
 - ✅ **Bitcoin Core Compliance**: Follows Bitcoin Core coding standards and patterns
-- ✅ **Test Coverage**: Extensive testing across 83 unit test files (66 DigiDollar + 16 Oracle + 1 redteam) + 51 functional test files
+- ✅ **Test Coverage**: Extensive testing across 106 unit test files (66 DigiDollar + 16 Oracle + 19 MuSig2 + 1 redteam + 2 wallet + 2 Qt) + 51 functional test files
 - ✅ **Documentation**: Well-documented code with clear intent and usage examples
 - ✅ **Security Awareness**: Proper input validation, overflow protection, and access control
 
@@ -1693,7 +1693,7 @@ The recent development activity shows strong momentum in core functionality comp
 | **GUI Implementation** | 92% | ✅ Functional | All widgets working, network stats display |
 | **RPC Interface** | 90% | ✅ Production Ready | 29 commands (18 registered + 11 wallet-layer), only oracle APIs are mock |
 | **Database Persistence** | 100% | ✅ Complete | Save/load/restart/backup/restore all working (tested today) |
-| **Test Coverage** | 100% | ✅ Comprehensive | 83 unit test files (66 DD + 16 Oracle + 1 redteam) + 51 functional test files |
+| **Test Coverage** | 100% | ✅ Comprehensive | 106 unit test files (66 DD + 16 Oracle + 19 MuSig2 + 1 redteam + 2 wallet + 2 Qt) + 51 functional test files |
 
 ### 16.2 Overall Implementation Status
 
@@ -1865,7 +1865,7 @@ The DigiDollar implementation represents a **sophisticated and well-architected 
 ### 19.2 Critical Assessment
 
 **The DigiDollar implementation is NOT vaporware** - it represents ~85% completion of a sophisticated financial system with:
-- **~50,000+ lines of functional, tested code**
+- **~43,000 lines of source code + ~101,000 lines of tests (~144,000 total)**
 - **51 functional test files**
 - **Complete integration with Bitcoin Core infrastructure**
 - **Advanced protection mechanisms (DCA, ERR, volatility monitoring) - PRODUCTION-READY**
@@ -1956,7 +1956,7 @@ This update adds several **major implemented features** that were missing from t
 - All three systems fully implemented and tested
 
 ### ✅ **Test Coverage**
-- **Unit Tests**: 66 DigiDollar test files + 16 Oracle test files + 1 redteam audit file = 83 total
+- **Unit Tests**: 66 DigiDollar + 16 Oracle + 19 MuSig2 + 1 redteam + 2 wallet + 2 Qt = 106 total
 - **Functional Tests**: 51 end-to-end integration test files
 - All tests passing including network tracking verification
 - Test: `digidollar_network_tracking.py` proves UTXO scanning works
@@ -1981,16 +1981,21 @@ This update adds several **major implemented features** that were missing from t
 
 ### 21.1 Test Coverage Summary
 
-**Total Test Files: 134**
-- **Unit Test Files**: 83
+**Total Test Files: 157**
+- **Unit Test Files**: 106
   - DigiDollar: 66 files
   - Oracle: 16 files
+  - MuSig2: 19 files
   - Redteam: 1 file
+  - Wallet: 2 files
+  - Qt: 2 files
 - **Functional Tests**: 51 end-to-end integration test files
 
 ### 21.2 DigiDollar Unit Tests (66 files)
 
 **File Location**: `/home/jared/Code/digibyte/src/test/`
+
+**Note**: This is a representative subset. See `REPO_MAP_DIGIDOLLAR.md` for the complete listing of all 66 DD + 16 Oracle + 19 MuSig2 + 1 redteam unit test files plus 2 wallet tests and 2 Qt tests.
 
 | Test File | Coverage Area |
 |-----------|---------------|
@@ -2118,7 +2123,7 @@ test/functional/digidollar_oracle.py            # Oracle integration
 
 ### 21.6 Test Status
 
-Comprehensive test suite across 83 unit test files + 51 functional test files (134 total). This provides:
+Comprehensive test suite across 106 unit test files + 51 functional test files (157 total). This provides:
 - ✅ Unit test coverage for all core components
 - ✅ Integration testing for end-to-end workflows
 - ✅ Network testing with multi-node scenarios
@@ -2142,7 +2147,7 @@ Comprehensive test suite across 83 unit test files + 51 functional test files (1
 - **DCA** (Dynamic Collateral Adjustment): Fully implemented and tested
 - **ERR** (Emergency Redemption Ratio): Fully implemented and tested
 - **Volatility Protection**: Fully implemented and tested
-- Total: 3,048 lines of protection system code (across 6 files: dca.cpp/h, err.cpp/h, volatility.cpp/h)
+- Total: 3,161 lines of protection system code (across 6 files: dca.cpp/h, err.cpp/h, volatility.cpp/h)
 
 ✅ **User Interface** (Fully functional):
 - 7 complete widgets: Overview, Send, Receive, Mint, Redeem, Positions, Transactions
@@ -2150,7 +2155,7 @@ Comprehensive test suite across 83 unit test files + 51 functional test files (1
 - Theme-aware, professional Qt implementation
 
 ✅ **Testing** (Comprehensive):
-- **134 total test files**: 66 DigiDollar unit + 16 Oracle unit + 1 redteam + 51 functional test files
+- **157 total test files**: 66 DigiDollar unit + 16 Oracle unit + 19 MuSig2 unit + 1 redteam + 2 wallet + 2 Qt + 51 functional test files
 - Complete test coverage for all core features
 - Verified network-wide tracking with multi-node tests
 - Descriptor wallet support tested and verified
@@ -2185,9 +2190,9 @@ Everything else - minting, sending, receiving, redemption, protection systems, n
 
 | Feature | Specification | Code Implementation | Status |
 |---------|---------------|---------------------|--------|
-| **MAST Paths** | 2 (Normal + ERR) | Only 2 paths in MAST tree (scripts.cpp:133-193) | ✅ Correct |
+| **MAST Paths** | 2 (Normal + ERR) | Only 2 paths in MAST tree (scripts.cpp:134-147) | ✅ Correct |
 | **Emergency Path** | Not used | Removed from codebase entirely | ✅ Removed |
-| **Partial Redemption** | Not supported | Rejected at validation (validation.cpp:1113-1118) | ✅ Correct |
+| **Partial Redemption** | Not supported | Rejected at validation (validation.cpp:1826-1832, "bad-collateral-release-partial-burn") | ✅ Correct |
 | **ERR Behavior** | 100% collateral, 105-125% DD burn | Matches specification exactly | ✅ Correct |
 | **CLTV Required** | Both paths need CLTV | Both Normal and ERR start with CLTV check | ✅ Correct |
 | **Minting During ERR** | Blocked | Correctly blocked via ShouldBlockMinting() | ✅ Correct |
@@ -2205,11 +2210,11 @@ Everything else - minting, sending, receiving, redemption, protection systems, n
 
 ### Key File References
 
-- MAST path definitions: `src/digidollar/scripts.h:37-44` (comments state 2 paths)
+- MAST path definitions: `src/digidollar/scripts.h:65-67` (comments state 2 paths)
 - Path creation: `src/digidollar/scripts.cpp:55-149`
-- MAST tree building: `src/digidollar/scripts.cpp:133-193` (only adds Normal + ERR)
-- Partial rejection: `src/digidollar/validation.cpp:1113-1118` ("partial-redemption-disabled")
-- ERR burn calculation: `src/consensus/err.cpp:74-106` (GetRequiredDDBurn)
+- MAST tree building: `src/digidollar/scripts.cpp:134-147` (only adds Normal + ERR leaves)
+- Partial rejection: `src/digidollar/validation.cpp:1826-1832` ("bad-collateral-release-partial-burn")
+- ERR burn calculation: `src/consensus/err.cpp:79-112` (GetRequiredDDBurn)
 
 ### Code Cleanup Completed (2025-12-23)
 
@@ -2223,4 +2228,4 @@ Removed all partial redemption and emergency oracle override code:
 
 ---
 
-*This architecture document reflects the DigiDollar implementation state, last validated 2026-04-04 against actual source code. Test counts: 83 unit + 51 functional = 134 total. RPC commands: 29 (18 registered + 11 wallet-layer). Oracle system: 11 real exchange API fetchers via libcurl + mock fallback. P2P oracle relay: implemented. UTXO scanning: production-ready. sendoracleprice RPC: removed (security vulnerability).*
+*This architecture document reflects the DigiDollar implementation state, last validated 2026-04-14 against actual source code. Test counts: 106 unit + 51 functional = 157 total. RPC commands: 29 (18 registered + 11 wallet-layer). Oracle system: 11 real exchange API fetchers via libcurl + mock fallback. P2P oracle relay: implemented. UTXO scanning: production-ready. sendoracleprice RPC: removed (security vulnerability).*

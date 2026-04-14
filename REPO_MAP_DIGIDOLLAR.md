@@ -798,7 +798,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ Calls `OracleBundleManager::AddOracleBundleToBlock()` to embed oracle data in coinbase during block assembly
 
 ### src/consensus/tx_check.cpp
-- ⚠️ `CheckTransaction` → skips dust checks for DD transactions (0-value P2TR outputs are valid DD tokens)
+- ⚠️ `CheckTransaction` → defers DD validation to ConnectBlock (context-free, cannot check BIP9 activation); 0-value P2TR outputs pass the `nValue >= 0` consensus check
 
 ### src/consensus/tx_verify.cpp
 - ⚠️ Skips DD-specific validation that requires chain state (deferred to ConnectBlock)
@@ -835,7 +835,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ DD-aware transaction broadcast handling, oracle data relay
 
 ### src/rpc/client.cpp
-- ⚠️ Registers all DD RPC command parameter types (22 entries)
+- ⚠️ Registers all DD RPC command parameter types (35 entries)
 
 ### src/rpc/register.h
 - ⚠️ Calls `RegisterDigiDollarRPCCommands()` during RPC table setup
@@ -862,10 +862,10 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ Wallet interface extensions for DD balance queries
 
 ### src/wallet/rpc/coins.cpp
-- ⚠️ DD-aware `listunspent` filtering (excludes DD UTXOs from standard listing)
+- ⚠️ DD-aware `lockunspent` protection (prevents unlocking DD collateral/token UTXOs via RPC)
 
 ### src/wallet/rpc/wallet.cpp
-- ⚠️ `getwalletinfo` includes DD balance and position counts
+- ⚠️ Registers DD RPC commands (mintdigidollar, senddigidollar, redeemdigidollar, etc.) in the wallet RPC table
 
 ### src/wallet/scriptpubkeyman.h
 - ⚠️ Forward declaration of DD key management interface

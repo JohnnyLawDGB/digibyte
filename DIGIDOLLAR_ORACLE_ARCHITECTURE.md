@@ -6,7 +6,7 @@
 *Validation Status: ⚠️ DEVELOPMENT BUILD - NOT PRODUCTION READY*
 
 > **⚠️ CRITICAL NOTICE**: This document reflects the ACTUAL state of the code as of March 2026.
-> Mainnet oracle validation is completely disabled (returns true at bundle_manager.cpp:1563).
+> Mainnet oracle validation is completely disabled (returns true at bundle_manager.cpp:2229).
 > Several components have stubs, TODOs, and mock implementations that leak into production code paths.
 
 ---
@@ -78,11 +78,11 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - Limited to testnet/regtest (mainnet requires Phase Two)
 
 🚨 CRITICAL ISSUES (Current State) - ALL VERIFIED:
-- Mainnet validation DISABLED (bundle_manager.cpp:1563 returns true)
-- MockOracleManager leaks into non-regtest code (err.cpp:356 - no regtest check)
+- Mainnet validation DISABLED (bundle_manager.cpp:2229 returns true)
+- MockOracleManager leaks into non-regtest code (err.cpp:403 - no regtest check)
 - ERR system health hardcoded to 150% (txbuilder.cpp:29 DEFAULT_SYSTEM_COLLATERAL=150)
-- sendoracleprice RPC has TODO for P2P broadcast (digidollar.cpp:2550)
-- GetBestHeight() returns hardcoded 0 (bundle_manager.cpp:30-33)
+- sendoracleprice RPC REMOVED (security vulnerability - fake price injection, digidollar.cpp:3642)
+- GetBestHeight() returns hardcoded 0 (bundle_manager.cpp:47-51)
 ```
 
 ### 1.3 Implementation Status
@@ -101,11 +101,11 @@ Phase One implements a **streamlined, testnet-ready system** with:
 - ✅ Data structures (COraclePriceMessage, COracleBundle, OracleNodeInfo)
 
 **What's NOT Working / Incomplete:**
-- ❌ **MAINNET VALIDATION DISABLED** - bundle_manager.cpp:1563 returns true immediately
+- ❌ **MAINNET VALIDATION DISABLED** - bundle_manager.cpp:2229 returns true immediately
 - ❌ 5 broken/removed exchange APIs (Coinbase, Kraken, Messari, Bittrex/Poloniex; CoinMarketCap removed)
-- ❌ `sendoracleprice` RPC has TODO for actual P2P broadcast
-- ❌ `GetBestHeight()` returns hardcoded 0 (bundle_manager.cpp:30-33)
-- ❌ MockOracleManager leaks into production code (err.cpp:356, digidollarwallet.cpp)
+- ❌ `sendoracleprice` RPC REMOVED (security vulnerability - fake price injection)
+- ❌ `GetBestHeight()` returns hardcoded 0 (bundle_manager.cpp:47-51)
+- ❌ MockOracleManager leaks into production code (err.cpp:403, digidollarwallet.cpp)
 - ❌ ERR system health hardcoded to 150% - ERR ratio can never activate
 - ❌ Empty schnorr_sig accepted without verification (signature bypass)
 
@@ -167,7 +167,7 @@ Core Implementation:
 ├── src/oracle/mock_oracle.{h,cpp}         [Mock system - LEAKS to production]
 ├── src/validation.cpp                     [Block validation - calls bundle_manager]
 ├── src/net_processing.cpp                 [P2P handlers - WORKING with rate limiting]
-├── src/rpc/digidollar.cpp                 [12 RPC commands - sendoracleprice has TODO]
+├── src/rpc/digidollar.cpp                 [RPC commands - sendoracleprice REMOVED (security vuln)]
 ├── src/consensus/err.cpp                  [ERR system - health HARDCODED to 150%]
 └── src/kernel/chainparams.cpp             [Oracle authorization - mainnet disabled]
 
@@ -178,11 +178,11 @@ Test Suite (826 unit tests + 36 functional):
 └── test/functional/digidollar_*.py             [36 functional tests]
 
 Known Stubs/TODOs (VERIFIED):
-├── bundle_manager.cpp:1563: Mainnet validation returns true (DISABLED)
-├── bundle_manager.cpp:30-33: GetBestHeight() returns hardcoded 0
-├── txbuilder.cpp:29,268: GetCurrentSystemCollateral() returns 150%
-├── err.cpp:356: MockOracleManager used without regtest check
-└── digidollar.cpp:2550: sendoracleprice P2P broadcast TODO
+├── bundle_manager.cpp:2229: Mainnet validation returns true (DISABLED)
+├── bundle_manager.cpp:47-51: GetBestHeight() returns hardcoded 0
+├── txbuilder.cpp:29,273: GetCurrentSystemCollateral() returns 150%
+├── err.cpp:403: MockOracleManager used without regtest check
+└── digidollar.cpp:3642: sendoracleprice REMOVED (security vulnerability)
 ```
 
 ---
@@ -306,7 +306,7 @@ Miner (BlockAssembler::CreateNewBlock)
 PHASE 6: BLOCK VALIDATION
 ══════════════════════════
 
-CheckBlock(block, state, params)  [validation.cpp:4313]
+CheckBlock(block, state, params)  [validation.cpp:4373]
 ├─► OracleDataValidator::ValidateBlockOracleData()
 │     │
 │     ├─► STEP 1: Extract compact format (22 bytes)
@@ -342,7 +342,7 @@ CheckBlock(block, state, params)  [validation.cpp:4313]
 PHASE 7: PRICE CACHE UPDATE
 ════════════════════════════
 
-ConnectBlock(block, state, pindex)  [validation.cpp:~2748]
+ConnectBlock(block, state, pindex)  [validation.cpp:~2805]
 ├─► ExtractOracleBundle(coinbase_tx, bundle)
 │     - Parse compact format from OP_RETURN
 │     - Reconstruct COracleBundle
@@ -486,7 +486,7 @@ DigiDollar Integration:
 
 ### 4.1 COraclePriceMessage - Complete Specification
 
-**Location**: `/home/jared/Code/digibyte/src/primitives/oracle.h` (lines 30-89)
+**Location**: `/home/jared/Code/digibyte/src/primitives/oracle.h` (lines 31-107)
 
 #### 4.1.1 Field-by-Field Breakdown
 
@@ -687,7 +687,7 @@ SERIALIZE_METHODS(COraclePriceMessage, obj) {
 
 #### 4.1.6 Validation Rules (`IsValid()`)
 
-**Complete Validation Logic** (src/primitives/oracle.cpp:30-56):
+**Complete Validation Logic** (src/primitives/oracle.cpp:30-61):
 
 ```cpp
 bool COraclePriceMessage::IsValid(int64_t reference_time) const
@@ -739,7 +739,7 @@ bool COraclePriceMessage::IsValid(int64_t reference_time) const
 
 ### 4.2 COracleBundle - Complete Specification
 
-**Location**: `/home/jared/Code/digibyte/src/primitives/oracle.h` (lines 95-151)
+**Location**: `/home/jared/Code/digibyte/src/primitives/oracle.h` (lines 113-168)
 
 #### 4.2.1 Bundle Structure
 
@@ -753,7 +753,7 @@ public:
     int64_t timestamp{0};                       // Bundle creation time
 
     // Phase One: messages.size() == 1 (1-of-1 consensus)
-    // Phase Two: messages.size() >= nOracleRequiredMessages (6-of-11 current config)
+    // Phase Two: messages.size() >= nOracleRequiredMessages (8-of-15 current config)
 };
 ```
 
@@ -869,7 +869,7 @@ Epoch 20: Blocks 1000 - 1049 (Oracle activation height)
 
 ### 4.3 Compact Format Encoding (Blockchain Storage)
 
-**Location**: `/home/jared/Code/digibyte/src/oracle/bundle_manager.cpp` (lines 277-324)
+**Location**: `/home/jared/Code/digibyte/src/oracle/bundle_manager.cpp` (lines 896-1048)
 
 #### 4.3.0 OP_ORACLE: Complete System Flow
 
@@ -915,7 +915,7 @@ PHASE 2: P2P VALIDATION (All Nodes - net_processing.cpp)
 │ ✓ Deserialize 128-byte COraclePriceMessage                   │
 │ ✓ msg.IsValid() → Structural validation                      │
 │ ✓ msg.Verify() → BIP-340 Schnorr signature verification      │
-│ ✓ oracle_id == 0? (Phase One requirement)                    │
+│ ✓ oracle_id < 30? (ORACLE_TOTAL_COUNT range check)           │
 │ ✓ Timestamp fresh? (age < 1 hour, not > 1 min future)        │
 │ ✓ Rate limit: max 3600 messages/hour from this peer           │
 │ ✓ Duplicate check: msg.GetHash() not in seen_messages        │
@@ -930,7 +930,7 @@ PHASE 2: P2P VALIDATION (All Nodes - net_processing.cpp)
 └───────────────────────────────────────────────────────────────┘
                               │
                               ▼
-PHASE 3: BLOCK INCLUSION (Miner - bundle_manager.cpp:277-324)
+PHASE 3: BLOCK INCLUSION (Miner - bundle_manager.cpp:896-1048)
 ════════════════════════════════════════════════════════════════════
 ┌───────────────────────────────────────────────────────────────┐
 │ Miner calls CreateOracleScript()                              │
@@ -965,7 +965,7 @@ PHASE 3: BLOCK INCLUSION (Miner - bundle_manager.cpp:277-324)
 └───────────────────────────────────────────────────────────────┘
                               │
                               ▼
-PHASE 4: BLOCK VALIDATION (All Nodes - validation.cpp:4313)
+PHASE 4: BLOCK VALIDATION (All Nodes - validation.cpp:4373)
 ════════════════════════════════════════════════════════════════════
 ┌───────────────────────────────────────────────────────────────┐
 │ CheckBlock() calls ValidateBlockOracleData()                  │
@@ -986,7 +986,7 @@ PHASE 4: BLOCK VALIDATION (All Nodes - validation.cpp:4313)
 │    │       found = true;                            │         │
 │    └───────────────────────────────────────────────┘         │
 │                                                               │
-│ 4. Extract Compact Data (bundle_manager.cpp:333-410):        │
+│ 4. Extract Compact Data (bundle_manager.cpp:1050-1200):      │
 │    ┌───────────────────────────────────────────────┐         │
 │    │ Parse 22-byte scriptPubKey:                   │         │
 │    │ - Byte 3: version (must be 0x01)             │         │
@@ -1012,7 +1012,7 @@ PHASE 4: BLOCK VALIDATION (All Nodes - validation.cpp:4313)
 └───────────────────────────────────────────────────────────────┘
                               │
                               ▼
-PHASE 5: PRICE CACHE (ConnectBlock - validation.cpp:~2748)
+PHASE 5: PRICE CACHE (ConnectBlock - validation.cpp:~2805)
 ════════════════════════════════════════════════════════════════════
 ┌───────────────────────────────────────────────────────────────┐
 │ OracleBundleManager::UpdatePriceCache()                       │
@@ -1448,9 +1448,13 @@ CheckBlock() Validation Sequence:
 
 ### 5.2 ValidateBlockOracleData() - Complete Flow
 
-**Location**: `/home/jared/Code/digibyte/src/oracle/bundle_manager.cpp:1560-1733`
+**Location**: `/home/jared/Code/digibyte/src/oracle/bundle_manager.cpp:2225-2417`
 
-**Complete Implementation with Line-by-Line Analysis**:
+**Simplified Phase One Flow** (actual code is phase-aware with BIP9 activation, Phase2/Phase3 branches):
+
+> **Note**: The actual implementation at bundle_manager.cpp:2225-2417 uses BIP9 deployment checks
+> (DigiDollar::IsDigiDollarEnabled) and has separate code paths for Phase 1, Phase 2, and Phase 3 (MuSig2).
+> The pseudocode below shows the Phase One path only.
 
 ```cpp
 bool OracleDataValidator::ValidateBlockOracleData(
@@ -1460,10 +1464,10 @@ bool OracleDataValidator::ValidateBlockOracleData(
     BlockValidationState& state)
 {
     //═══════════════════════════════════════════════════════════════════
-    // STEP 1: NETWORK FILTER (lines 804-807) - ⚠️ MAINNET DISABLED
+    // STEP 1: NETWORK FILTER - ⚠️ MAINNET DISABLED
     //═══════════════════════════════════════════════════════════════════
     // 🚨 CRITICAL: Mainnet validation COMPLETELY BYPASSED
-    // bundle_manager.cpp:1563 returns true immediately for mainnet
+    // bundle_manager.cpp:2229 returns true immediately for mainnet
     // This means ANY oracle data (valid or invalid) is accepted on mainnet
     if (Params().GetChainType() != ChainType::TESTNET &&
         Params().GetChainType() != ChainType::REGTEST) {
@@ -1673,7 +1677,7 @@ bool OracleDataValidator::ValidateBlockOracleData(
 
 ### 5.4 ConnectBlock() Integration
 
-**Location**: `/home/jared/Code/digibyte/src/validation.cpp:~2748` (oracle price extraction in ConnectBlock)
+**Location**: `/home/jared/Code/digibyte/src/validation.cpp:~2805` (oracle price extraction in ConnectBlock)
 
 ```cpp
 bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state,
@@ -1712,7 +1716,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state,
 
 **Price Cache Implementation**:
 ```cpp
-// src/oracle/bundle_manager.cpp:762-774
+// src/oracle/bundle_manager.cpp:2163-2175
 void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd)
 {
     std::lock_guard<std::mutex> lock(mtx_price_cache);
@@ -1736,7 +1740,7 @@ void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd)
 
 ### 5.5 DisconnectBlock() Integration
 
-**Location**: `/home/jared/Code/digibyte/src/validation.cpp:2411-2435`
+**Location**: `/home/jared/Code/digibyte/src/validation.cpp:~2460-2485`
 
 ```cpp
 bool Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex,
@@ -1780,7 +1784,7 @@ bool Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex,
 
 **Cache Removal Implementation**:
 ```cpp
-// src/oracle/bundle_manager.cpp:788-796
+// src/oracle/bundle_manager.cpp:2201-2210
 void OracleBundleManager::RemovePriceCache(int height)
 {
     std::lock_guard<std::mutex> lock(mtx_price_cache);
@@ -1803,19 +1807,19 @@ Phase Two implements decentralized multi-oracle consensus for mainnet security.
 **Configuration Parameters** (`src/consensus/params.h`):
 ```cpp
 int nDigiDollarPhase2Height{std::numeric_limits<int>::max()};  // Default; overridden: mainnet=3000000, testnet=600, regtest=650
-int nOracleRequiredMessages{1};  // Phase One: 1, Phase Two regtest: 4, testnet: 6, mainnet: 6
-int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet: 11, mainnet: 11
+int nOracleRequiredMessages{1};  // Phase One: 1, Phase Two regtest: 4, testnet: 8, mainnet: 8
+int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet: 15, mainnet: 15
 ```
 
 ### 14.2 Network-Specific Configuration
 
 | Network | Phase | Consensus | Oracles Defined | Activation Height | Status |
 |---------|-------|-----------|-----------------|-------------------|--------|
-| Mainnet | One | **DISABLED** | 11 vOraclePublicKeys defined, validation bypassed | Block 22014720 (validation bypassed) | ❌ NOT FUNCTIONAL |
-| Testnet | One | 6-of-11 | 11 | Block 600 | ✅ Working |
+| Mainnet | One | **DISABLED** | 15 vOraclePublicKeys defined, validation bypassed | Block 22014720 (validation bypassed) | ❌ NOT FUNCTIONAL |
+| Testnet | One | 8-of-15 | 15 | Block 600 | ✅ Working |
 | RegTest | One | 4-of-7 | 7 | Block 650 | ✅ Working |
 
-> **⚠️ CRITICAL**: Mainnet oracle validation returns true at bundle_manager.cpp:1563.
+> **⚠️ CRITICAL**: Mainnet oracle validation returns true at bundle_manager.cpp:2229.
 > This means mainnet will accept ANY oracle data without verification.
 > Phase Two infrastructure exists but cannot be enabled until mainnet validation is fixed.
 
@@ -1824,25 +1828,29 @@ int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet:
 **Location**: `src/kernel/chainparams.cpp` (lines 598-609)
 
 ```cpp
-// All 11 testnet oracles are ACTIVE for 6-of-11 consensus
+// All 15 testnet oracles are ACTIVE for 8-of-15 consensus
 consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c..."); // ChopperBrian (ACTIVE)
 consensus.vOraclePublicKeys.push_back("172755a320cec96c..."); // Bastian (ACTIVE)
 consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e2..."); // LookInto (ACTIVE)
 consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6f..."); // Green Candle (ACTIVE)
 consensus.vOraclePublicKeys.push_back("546c07ee9d21640c..."); // DanGB (ACTIVE)
+consensus.vOraclePublicKeys.push_back("68453c40d14ebea0..."); // DigiByteForce (ACTIVE - placeholder)
 consensus.vOraclePublicKeys.push_back("7a858e055099e4a9..."); // Aussie (ACTIVE)
 consensus.vOraclePublicKeys.push_back("85016758856ed273..."); // Ycagel (ACTIVE)
 consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311..."); // JohnnyLawDGB (ACTIVE)
 consensus.vOraclePublicKeys.push_back("9cef021f841794c1..."); // Shenger (ACTIVE)
+consensus.vOraclePublicKeys.push_back("b1a04e129b075632..."); // OPEN (ACTIVE - placeholder)
 consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a..."); // Ogilvie (ACTIVE)
+consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8cee..."); // hallvardo (ACTIVE)
 consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb..."); // Jared (ACTIVE)
+consensus.vOraclePublicKeys.push_back("e717a6d7b3497a8d..."); // DigiSwarm (ACTIVE - placeholder)
 ```
 
 ### 14.4 Phase Two Validation Functions
 
 **Location**: `src/oracle/bundle_manager.cpp`
 
-#### ValidatePhaseTwoBundle() (lines 1166-1239)
+#### ValidatePhaseTwoBundle() (lines 2559+)
 ```cpp
 bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle,
                                                    const Consensus::Params& params)
@@ -1857,7 +1865,7 @@ bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle,
 }
 ```
 
-#### CalculateConsensusPrice() (lines 1241-1300)
+#### CalculateConsensusPrice() (lines 2756+)
 ```cpp
 CAmount OracleBundleManager::CalculateConsensusPrice(const COracleBundle& bundle,
                                                       const Consensus::Params& params)
@@ -1881,13 +1889,13 @@ Upper bound = Q3 + (1.5 * IQR)
 Reject prices outside [lower_bound, upper_bound]
 ```
 
-#### GetRequiredConsensus() (lines 1126-1132)
+#### GetRequiredConsensus() (lines 2519-2524)
 ```cpp
 int OracleBundleManager::GetRequiredConsensus(int block_height,
                                                const Consensus::Params& params)
 {
     if (block_height >= params.nDigiDollarPhase2Height) {
-        return params.nOracleRequiredMessages;  // 6 for testnet, 4 for regtest, 6 for mainnet
+        return params.nOracleRequiredMessages;  // 8 for testnet, 4 for regtest, 8 for mainnet
     }
     return 1;  // Phase One: 1-of-1
 }
@@ -1898,7 +1906,7 @@ int OracleBundleManager::GetRequiredConsensus(int block_height,
 To enable Phase Two on testnet, change in `chainparams.cpp`:
 ```cpp
 consensus.nDigiDollarPhase2Height = <desired_block_height>;
-consensus.nOracleRequiredMessages = 6;  // 6-of-11 for testnet
+consensus.nOracleRequiredMessages = 8;  // 8-of-15 for testnet
 ```
 
 ---
@@ -1920,12 +1928,12 @@ consensus.nOracleRequiredMessages = 6;  // 6-of-11 for testnet
 - ✅ Mock Oracle default: 6500 micro-USD ($0.0065/DGB)
 
 **Critical Issues (Must Fix Before Mainnet)**:
-- ❌ **MAINNET VALIDATION DISABLED** - bundle_manager.cpp:1563 returns true
+- ❌ **MAINNET VALIDATION DISABLED** - bundle_manager.cpp:2229 returns true
 - ❌ **5 broken/removed exchange APIs** - Coinbase, Kraken, Messari, Bittrex/Poloniex; CoinMarketCap removed
-- ❌ **MockOracleManager leaks** - err.cpp:356 uses it WITHOUT regtest check
-- ❌ **ERR system broken** - txbuilder.cpp:268 GetCurrentSystemCollateral() returns hardcoded 150%
-- ❌ **GetBestHeight() stub** - bundle_manager.cpp:30 returns hardcoded 0
-- ❌ **sendoracleprice incomplete** - digidollar.cpp:2550 TODO for P2P broadcast
+- ❌ **MockOracleManager leaks** - err.cpp:403 uses it WITHOUT regtest check
+- ❌ **ERR system broken** - txbuilder.cpp:273 GetCurrentSystemCollateral() returns hardcoded 150%
+- ❌ **GetBestHeight() stub** - bundle_manager.cpp:47 returns hardcoded 0
+- ❌ **sendoracleprice REMOVED** - digidollar.cpp:3642 (security vulnerability - fake price injection)
 - ❌ **Signature bypass** - Empty schnorr_sig accepted without verification
 
 **Key Technical Details**:
@@ -1935,7 +1943,7 @@ Validation Range:      100 - 100,000,000 micro-USD ($0.0001 - $100.00)
 Compact Script Size:   22 bytes (OP_RETURN + OP_ORACLE + data)
 Full Message Size:     128 bytes (with 64-byte Schnorr signature)
 Phase One Consensus:   1-of-1 (testnet/regtest ONLY - mainnet disabled)
-Phase Two Consensus:   6-of-11 testnet, 4-of-7 regtest, 6-of-11 mainnet (infrastructure exists)
+Phase Two Consensus:   8-of-15 testnet, 4-of-7 regtest, 8-of-15 mainnet (infrastructure exists)
 Activation Heights:    Mainnet=22014720 (validation bypassed), Testnet=600, Regtest=650
 ```
 
@@ -1943,11 +1951,11 @@ Activation Heights:    Mainnet=22014720 (validation bypassed), Testnet=600, Regt
 
 | File:Line | Function | Issue | Priority |
 |-----------|----------|-------|----------|
-| `bundle_manager.cpp:1563` | ValidateBlockOracleData | Mainnet returns true immediately | CRITICAL |
-| `bundle_manager.cpp:30-33` | GetBestHeight() | Returns hardcoded 0 | HIGH |
-| `txbuilder.cpp:29,268` | GetCurrentSystemCollateral() | Returns hardcoded 150% (ERR never activates) | HIGH |
-| `err.cpp:356` | ShouldBlockMinting() | Uses MockOracleManager without regtest check | HIGH |
-| `digidollar.cpp:2550` | sendoracleprice | TODO: P2P broadcast not implemented | MEDIUM |
+| `bundle_manager.cpp:2229` | ValidateBlockOracleData | Mainnet returns true immediately | CRITICAL |
+| `bundle_manager.cpp:47-51` | GetBestHeight() | Returns hardcoded 0 | HIGH |
+| `txbuilder.cpp:29,273` | GetCurrentSystemCollateral() | Returns hardcoded 150% (ERR never activates) | HIGH |
+| `err.cpp:403` | ShouldBlockMinting() | Uses MockOracleManager without regtest check | HIGH |
+| `digidollar.cpp:3642` | sendoracleprice | REMOVED: Security vulnerability (fake price injection) | FIXED |
 | `exchange.cpp` | Coinbase fetcher | Broken - API changed | LOW |
 | `exchange.cpp` | Kraken fetcher | Broken - API changed | LOW |
 | `exchange.cpp` | Messari fetcher | Broken - API deprecated | LOW |

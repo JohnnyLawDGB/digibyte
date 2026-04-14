@@ -74,11 +74,11 @@ These issues have been verified against the actual codebase:
 
 | Issue | Location | Impact |
 |-------|----------|--------|
-| **Mainnet validation DISABLED** | `bundle_manager.cpp:1563` | Returns true immediately - no validation |
-| **ERR system broken** | `txbuilder.cpp:29,268` | Health hardcoded to 150% - ERR can never activate |
-| **MockOracleManager leaks** | `err.cpp:356` | Used without regtest check |
-| **sendoracleprice incomplete** | `digidollar.cpp:2550` | TODO for P2P broadcast |
-| **GetBestHeight() stub** | `bundle_manager.cpp:30` | Returns hardcoded 0 |
+| **Mainnet validation DISABLED** | `bundle_manager.cpp:2229` | Returns true immediately - no validation |
+| **ERR system broken** | `txbuilder.cpp:29,273` | Health hardcoded to 150% - ERR can never activate |
+| **MockOracleManager leaks** | `err.cpp:403` | Used without regtest check |
+| **sendoracleprice REMOVED** | `digidollar.cpp:3642` | Security vulnerability - fake price injection |
+| **GetBestHeight() stub** | `bundle_manager.cpp:47` | Returns hardcoded 0 |
 | **5 broken/removed exchange APIs** | `exchange.cpp` | Coinbase, Kraken, Messari, Bittrex/Poloniex (broken); CoinMarketCap (removed) |
 
 **Think of it like email**: DigiByte Core is like your email client (receives, validates, stores messages). The oracle daemon is like the email server (creates and sends messages). They're separate but work together.
@@ -239,7 +239,7 @@ New Block Received
          │
          ▼
     ╔═══════════════════════╗
-    ║ Oracle Validation     ║  ← validation.cpp:4313
+    ║ Oracle Validation     ║  ← validation.cpp:4373
     ║ (CheckBlock)          ║
     ╚═══════════════════════╝
          │
@@ -678,7 +678,7 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 - Miners include real oracle data in blocks
 
 **Key differences from mainnet**:
-- ⚠️ **6-of-11 consensus** (Phase Two ready)
+- ⚠️ **8-of-15 consensus** (Phase Two ready)
 - ⚠️ **Testnet DGB** (free, no value)
 - ⚠️ **Lower security** (acceptable for testing)
 
@@ -980,7 +980,7 @@ Every node validates the block:
     └────────┬───────────┘
              ▼
     ┌────────────────────────────────────────────┐
-    │ Oracle Validation (validation.cpp:4313)    │
+    │ Oracle Validation (validation.cpp:4373)    │
     ├────────────────────────────────────────────┤
     │ 1. Scan ALL coinbase outputs for OP_ORACLE │ ◄── Looks for 0x6a 0xbf
     │ 2. Extract 22-byte compact data            │
@@ -1493,7 +1493,7 @@ if (!info || !info->is_active) {
 
 ### ConnectBlock() Price Cache Update
 
-**Location**: `validation.cpp` line ~2748
+**Location**: `validation.cpp` line ~2805
 
 **What happens**:
 
@@ -1657,9 +1657,9 @@ if (msg_type == NetMsgType::ORACLEPRICE) {
         return;
     }
 
-    // Step 4: Check oracle_id (Phase One: must be 0)
-    if (msg.oracle_id != 0) {
-        Misbehavior(peer, 10, "invalid oracle_id");
+    // Step 4: Check oracle_id is within valid range (0-29)
+    if (msg.oracle_id >= ORACLE_TOTAL_COUNT) {  // 30
+        Misbehavior(peer, 10, "invalid oracle ID");
         return;
     }
 
@@ -1938,7 +1938,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 
 ### Network Modes
 - **RegTest**: Mock oracle (fake prices for testing)
-- **Testnet**: Real oracle, real prices, 6-of-11 consensus
+- **Testnet**: Real oracle, real prices, 8-of-15 consensus
 - **Mainnet**: Disabled (Phase Two required)
 
 ### Current Limitations
@@ -2038,7 +2038,7 @@ Before testnet launch:
 |--------------|-------------------|-------------------------|-------------------------|
 | **Oracle Daemon** | Mock (built-in) | External daemon | 15 external daemons |
 | **Price Source** | Manual (`setmockoracleprice`) | 6 active exchanges | 6 active exchanges |
-| **Consensus Model** | 4-of-7 | 6-of-11 | 6-of-11 (code current; aspirational: 8-of-15) |
+| **Consensus Model** | 4-of-7 | 8-of-15 | 8-of-15 |
 | **P2P Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Block Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Schnorr Signatures** | ❌ Not used (mock) | ✅ P2P only (not in blocks) | ✅ On-chain (8 signatures) |
@@ -2113,8 +2113,8 @@ Before testnet launch:
 
 #### **Mainnet (Phase Two) - 📋 INFRASTRUCTURE READY**
 - [x] Multi-oracle validation functions implemented
-- [x] 11 mainnet oracle pubkeys defined in chainparams
-- [x] 6-of-11 consensus configured (aspirational target: 8-of-15)
+- [x] 15 mainnet oracle pubkeys defined in chainparams
+- [x] 8-of-15 consensus configured
 - [x] IQR outlier filtering algorithm implemented
 - [x] nDigiDollarPhase2Height parameter ready
 - [ ] 15 oracle operators recruited and active
@@ -2130,23 +2130,24 @@ Before testnet launch:
 ### What's Phase Two?
 
 Phase Two upgrades the oracle system from **1-of-1** to **multi-oracle consensus**:
-- **Testnet**: 6-of-11 (need 6 agreeing oracles from 11 total)
-- **Mainnet**: 6-of-11 (need 6 agreeing oracles from 11 total; aspirational target: 8-of-15)
+- **Testnet**: 8-of-15 (need 8 agreeing oracles from 15 total)
+- **Mainnet**: 8-of-15 (need 8 agreeing oracles from 15 total)
 
 This provides true decentralization - no single oracle can manipulate prices.
 
 ### Phase Two Infrastructure (Already Implemented)
 
-**All 11 testnet oracle keys are defined** in `chainparams.cpp`:
+**All 15 testnet oracle keys are defined** in `chainparams.cpp`:
 ```
-ChopperBrian, Bastian, LookInto, Green Candle, DanGB, Aussie, Ycagel,
-JohnnyLawDGB, Shenger, Ogilvie, Jared (all active for 6-of-11 consensus)
+ChopperBrian, Bastian, LookInto, Green Candle, DanGB, DigiByteForce,
+Aussie, Ycagel, JohnnyLawDGB, Shenger, OPEN, Ogilvie, hallvardo,
+Jared, DigiSwarm (all active for 8-of-15 consensus)
 ```
 
 **Validation functions ready** in `bundle_manager.cpp`:
 - `ValidatePhaseTwoBundle()` - Validates multi-oracle bundles
 - `CalculateConsensusPrice()` - Median with IQR outlier filtering
-- `GetRequiredConsensus()` - Returns 1 (Phase One) or 4-6 (Phase Two)
+- `GetRequiredConsensus()` - Returns 1 (Phase One) or 4-8 (Phase Two)
 
 **Activation parameter**:
 ```cpp
@@ -2190,8 +2191,8 @@ Median = $0.050 ✓
 
 | Aspect | Phase One (Current) | Phase Two (Ready) |
 |--------|---------------------|-------------------|
-| Consensus | 1-of-1 | 6-of-11 testnet, 6-of-11 mainnet |
-| Oracles Defined | 11 (all active) | 11 testnet, 11 mainnet |
+| Consensus | 1-of-1 | 8-of-15 testnet, 8-of-15 mainnet |
+| Oracles Defined | 15 (all active) | 15 testnet, 15 mainnet |
 | Signature Required | Optional | Required (all messages) |
 | Price Calculation | Direct | IQR-filtered median |
 | Manipulation Risk | Single point of failure | Requires majority collusion |
@@ -2200,16 +2201,16 @@ Median = $0.050 ✓
 ### **Key Takeaway**
 
 **DigiByte Core is ready** to validate and use oracle data. The **Phase One system is active** on testnet with a single oracle. **Phase Two infrastructure is complete** - just awaiting:
-1. Oracle operator recruitment (11 testnet, 11 mainnet)
+1. Oracle operator recruitment (15 testnet, 15 mainnet)
 2. Setting `nDigiDollarPhase2Height` to an activation block
 
 **For RegTest**: Use the built-in mock oracle (`setmockoracleprice`).
 
 **For Testnet Phase One**: Single oracle broadcasting via P2P.
 
-**For Testnet Phase Two**: Set activation height, enable 6-of-11 consensus.
+**For Testnet Phase Two**: Set activation height, enable 8-of-15 consensus.
 
-**For Mainnet**: Requires full multi-oracle system with operators (currently configured as 6-of-11; aspirational target is 8-of-15).
+**For Mainnet**: Requires full multi-oracle system with 15 operators (8-of-15 consensus).
 
 ---
 

@@ -325,25 +325,25 @@ public:
         consensus.nOraclePubkeyCount = 15;
         consensus.nOracleConsensusRequired = 8;
 
-        // Oracle public keys (x-only, 32 bytes) — sorted lexicographically
-        // 15 oracles: 12 active operators + 3 reserved slots
+        // Oracle public keys (x-only, 32 bytes) — ordered by oracle slot (0-14)
+        // 15 oracles: 13 active operators + 2 reserved slots (BlindDave, Neel)
         // Reserved slots will be replaced with real operator keys as they onboard
         consensus.vOraclePublicKeys.clear();
-        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // ChopperBrian
-        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // Bastian
-        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // LookInto
-        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // Green Candle
-        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // DanGB
-        consensus.vOraclePublicKeys.push_back("68453c40d14ebea0a564355a2f43077588e76e4d997dfb7fa892c8e2849a757e");  // DigiByteForce (placeholder)
-        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // Aussie
-        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // Ycagel
-        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // JohnnyLawDGB
-        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // Shenger
-        consensus.vOraclePublicKeys.push_back("b1a04e129b075632923cc05003bab61a31de9edd0c42abf60363461da635a42a");  // OPEN (placeholder)
-        consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // Ogilvie
-        consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // hallvardo
-        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // Jared
-        consensus.vOraclePublicKeys.push_back("e717a6d7b3497a8da930ce7687384c580c08263571b9eab82baf1707c70c3103");  // DigiSwarm (placeholder)
+        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
+        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
+        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // 2: Bastian
+        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // 3: DanGB
+        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // 4: Shenger
+        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // 5: Ycagel
+        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // 6: Aussie
+        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // 7: LookInto
+        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // 8: JohnnyLawDGB
+        consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
+        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
+        consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // 11: hallvardo
+        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 12: BlindDave (placeholder)
+        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce (RC30)
+        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // 14: Neel (placeholder)
 
         LogPrintf("Oracle: Mainnet Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
                  consensus.nDigiDollarPhase3Height, consensus.nOracleConsensusRequired,
@@ -580,7 +580,7 @@ public:
         consensus.nOraclePubkeyCount = 15;
         consensus.nOracleConsensusRequired = 8;
 
-        // Testnet oracle public keys (x-only, 32 bytes) — sorted lexicographically
+        // Testnet oracle public keys (x-only, 32 bytes) — ordered by oracle slot (0-14)
         // for deterministic MuSig2 key aggregation
         //
         // FOR LOCAL MINI-TESTNET TESTING: uncomment the block below and comment out
@@ -601,23 +601,23 @@ public:
         // consensus.vOraclePublicKeys.push_back("f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac");  // test oracle 6
         //
         // Production testnet oracle public keys (8-of-15):
-        // 12 active operators + 3 reserved slots
+        // 13 active operators + 2 reserved slots (BlindDave, Neel)
         consensus.vOraclePublicKeys.clear();
-        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // ChopperBrian
-        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // Bastian
-        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // LookInto
-        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // Green Candle
-        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // DanGB
-        consensus.vOraclePublicKeys.push_back("68453c40d14ebea0a564355a2f43077588e76e4d997dfb7fa892c8e2849a757e");  // DigiByteForce (placeholder)
-        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // Aussie
-        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // Ycagel
-        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // JohnnyLawDGB
-        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // Shenger
-        consensus.vOraclePublicKeys.push_back("b1a04e129b075632923cc05003bab61a31de9edd0c42abf60363461da635a42a");  // OPEN (placeholder)
-        consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // Ogilvie
-        consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // hallvardo
-        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // Jared
-        consensus.vOraclePublicKeys.push_back("e717a6d7b3497a8da930ce7687384c580c08263571b9eab82baf1707c70c3103");  // DigiSwarm (placeholder)
+        consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
+        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
+        consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // 2: Bastian
+        consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // 3: DanGB
+        consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // 4: Shenger
+        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // 5: Ycagel
+        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // 6: Aussie
+        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // 7: LookInto
+        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // 8: JohnnyLawDGB
+        consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
+        consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
+        consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // 11: hallvardo
+        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 12: BlindDave (placeholder)
+        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce (RC30)
+        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // 14: Neel (placeholder)
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
         LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
@@ -666,9 +666,9 @@ private:
             {9,  ParsePubKey("02d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "129.212.182.152:12035", true},          // Ogilvie (new RC27)
             {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digibyte.io:12035", true},  // ChopperBrian (new RC27)
             {11, ParsePubKey("03dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd"), "oracle12.digibyte.io:12035", true}, // hallvardo (RC30)
-            {12, ParsePubKey("020e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a"), "oracle13.digibyte.io:12035", true}, // OPEN (placeholder)
-            {13, ParsePubKey("025d07d4a8321edff646e1b40e9b4c63de4d5258af46b08deacb8e43c387c1719a"), "oracle14.digibyte.io:12035", true}, // DigiByteForce (placeholder)
-            {14, ParsePubKey("0202e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17"), "oracle15.digibyte.io:12035", true}, // DigiSwarm (placeholder)
+            {12, ParsePubKey("020e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a"), "oracle13.digibyte.io:12035", true}, // BlindDave (placeholder)
+            {13, ParsePubKey("03a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digibyte.io:12035", true}, // DigiByteForce (RC30)
+            {14, ParsePubKey("0202e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17"), "oracle15.digibyte.io:12035", true}, // Neel (placeholder)
         };
     }
 };

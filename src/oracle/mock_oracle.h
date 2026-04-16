@@ -79,7 +79,7 @@ public:
 
     /**
      * Create mock oracle bundle for a given height
-     * Simulates 8 of 15 oracle signatures with consistent price
+     * Simulates 9-of-17 oracle signatures with consistent price (RC30)
      * @param height Block height for the bundle
      * @return Mock oracle bundle with valid structure
      */

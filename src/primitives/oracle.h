@@ -16,8 +16,8 @@
 #include <vector>
 
 //! Oracle consensus constants (defined before classes for use in default parameters)
-static constexpr int ORACLE_CONSENSUS_REQUIRED = 8;     // 8 of 15 required
-static constexpr int ORACLE_ACTIVE_COUNT = 15;         // 15 active oracles per epoch
+static constexpr int ORACLE_CONSENSUS_REQUIRED = 9;     // 9 of 17 required (RC30)
+static constexpr int ORACLE_ACTIVE_COUNT = 17;         // 17 active oracles per epoch (RC30)
 static constexpr int ORACLE_TOTAL_COUNT = 30;          // 30 total hardcoded oracles
 static constexpr int ORACLE_MAX_AGE_SECONDS = 3600;    // 1 hour max age for prices
 static constexpr uint64_t ORACLE_MIN_PRICE_MICRO_USD = 100;          // $0.0001 minimum
@@ -204,7 +204,7 @@ struct OracleNodeInfo
  * Deterministic oracle selection for each epoch
  */
 
-//! Select 15 active oracles for given epoch (deterministic)
+//! Select 17 active oracles for given epoch (deterministic, RC30)
 std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeInfo>& all_oracles, int32_t epoch);
 
 //! Get current epoch based on block height

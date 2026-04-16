@@ -271,9 +271,10 @@ inline bool ValidateOracleConfiguration(const Params& params) {
                 return false;
         }
     }
-    for (size_t i = 1; i < params.vOraclePublicKeys.size(); ++i) {
-        if (params.vOraclePublicKeys[i - 1] >= params.vOraclePublicKeys[i]) return false;
-    }
+    // Note: vOraclePublicKeys is ordered by oracle slot (0..N-1), matching
+    // vOracleNodes and the MuSig2 participation bitmap. MuSig2 key aggregation
+    // sorts internally per BIP-327, so consensus pubkey ordering is slot-based,
+    // not lexicographic. We require uniqueness (checked above) but not sort order.
     return true;
 }
 

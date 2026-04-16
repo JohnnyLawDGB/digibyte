@@ -594,8 +594,8 @@ bool ValidateNormalRedemption(const CScript& script, int currentHeight) {
 
 bool ValidateEmergencyRedemption(const CScript& script,
                                 const std::vector<std::vector<unsigned char>>& sigs) {
-    // Emergency path requires 8-of-15 oracle signatures
-    const size_t requiredSigs = 8;
+    // Emergency path requires 9-of-17 oracle signatures (RC30)
+    const size_t requiredSigs = 9;
 
     // Count valid signatures (simplified check)
     size_t validSigs = 0;
@@ -2291,7 +2291,7 @@ bool ValidateERROracleConsensus(const CTransaction& tx,
                                const ValidationContext& ctx) {
     // RED Phase: Always return false - oracle consensus not implemented
     // In GREEN phase, this will extract oracle messages from transaction
-    // and validate 8-of-15 signature threshold
+    // and validate 9-of-17 signature threshold (RC30)
     LogPrintf("DigiDollar: Oracle consensus validation not implemented yet\n");
     return false;
 }

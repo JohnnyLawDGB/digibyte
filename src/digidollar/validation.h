@@ -218,7 +218,7 @@ bool ValidateNormalRedemption(const CScript& script, int currentHeight);
 /**
  * Validate emergency redemption path conditions
  *
- * Verifies 8-of-15 oracle signature threshold is met.
+ * Verifies 9-of-17 oracle signature threshold is met (RC30).
  *
  * @param script Emergency redemption script
  * @param sigs Oracle signatures provided
@@ -516,7 +516,7 @@ bool ValidateERRAdjustmentAmount(CAmount originalCollateral,
 /**
  * Validate oracle consensus for ERR activation
  *
- * Checks that sufficient oracle signatures (8-of-15) exist
+ * Checks that sufficient oracle signatures (9-of-17, RC30) exist
  * to authorize ERR activation for under-collateralized system.
  *
  * @param tx Transaction containing oracle consensus data

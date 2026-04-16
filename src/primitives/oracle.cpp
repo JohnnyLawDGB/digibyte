@@ -337,7 +337,7 @@ bool COracleBundle::IsValid(int min_required, int64_t reference_time) const
 
 bool COracleBundle::AddMessage(const COraclePriceMessage& message)
 {
-    // Don't allow more than 15 messages (max active oracles)
+    // Don't allow more than ORACLE_ACTIVE_COUNT messages (RC30: 17 max active oracles)
     if (messages.size() >= ORACLE_ACTIVE_COUNT) return false;
 
     // Check if oracle already submitted a message
@@ -500,7 +500,7 @@ std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeIn
         }
     }
 
-    // If we have 15 or fewer active oracles, return all of them
+    // If we have ORACLE_ACTIVE_COUNT (RC30: 17) or fewer active oracles, return all of them
     if (active_oracles.size() <= ORACLE_ACTIVE_COUNT) {
         return active_oracles;
     }

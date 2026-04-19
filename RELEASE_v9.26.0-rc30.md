@@ -10,21 +10,42 @@
 
 ## ⚠️ TESTNET RESET REQUIRED
 
-**RC30 launches a fresh `testnet23` chain.** This reset changes the genesis block, keeps proof-of-work enabled, and moves the default testnet P2P port to **12030**. Existing wallets and oracle keys can be migrated forward, but old `testnet21` chain data must not be reused.
+**RC30 launches a fresh `testnet23` chain.** This reset changes the genesis block to `0xa19e809bb060f7f50c05a9bec7fdefedd8497aa0bd6ccca6f55c86090963e4ca`, changes network magic to `fd d2 b9 e4`, keeps proof-of-work enabled, and moves the default testnet P2P port to **12030**. Existing wallets and oracle keys can be migrated forward, but old `testnet21` chain data must not be reused.
 
 ---
 
 ### Reset / Migration Quick Path
 
 1. Stop your old RC28 or RC29 testnet node.
-2. Start the RC30 binary on `testnet23`.
-3. Verify the new network is listening on **12030**.
+2. Install and start the RC30 binary once so `testnet23/` is created.
+3. Verify the new network is listening on **12030** and matches genesis `0xa19e809bb060f7f50c05a9bec7fdefedd8497aa0bd6ccca6f55c86090963e4ca`.
 4. Migrate only wallet and oracle key material from `testnet21` into `testnet23` as needed.
-5. Do not copy old `blocks/` or `chainstate/` forward.
+5. Do not copy old `blocks/`, `chainstate/`, or `indexes/` forward.
 
 ## What's New in RC30
 
-RC30 is an **oracle expansion + hardening release** that grows DigiDollar's oracle operator set from **11 to 17** and raises the consensus quorum from **8-of-15 to 9-of-17**. Three new operators join the set, a real key is added for Neel, and several source-level stale references are corrected.
+RC30 is an **oracle expansion + hardening release** that grows DigiDollar's oracle operator set from **11 to 17** and raises the consensus quorum from **8-of-15 to 9-of-17**. Three new operators join the set, real RC30 testnet keys are wired in for Neel and GTO90, proof-of-work mining stays enabled on release testnet, and the local multi-oracle debugger now uses a runtime-only `-easypow` harness mode instead of source edits.
+
+## RC30 fix summary since RC29
+
+One-line summary of each substantive fix or release-facing change landed after RC29:
+
+- **Oracle quorum expanded from 8-of-15 to 9-of-17** with 17 slots and 3-byte MuSig2 participation bitmaps.
+- **Real operator/pubkey set refreshed** for RC30, including hallvardo, DigiByteForce slot assignment, Neel real key, and GTO90 real key.
+- **Oracle key lists are slot-ordered** across `vOraclePublicKeys`, `vOracleNodes`, and test fixtures so MuSig2 bitmaps line up with oracle IDs.
+- **`ValidateOracleConfiguration()` no longer requires lexicographic pubkey ordering**, while still enforcing count, uniqueness, and key validity.
+- **Phase 3 MuSig2 payload now includes epoch on-chain**, fixing signer/verifier hash mismatch and cross-epoch replay risk.
+- **MuSig2 P2P nonce and partial-signature messages are now Schnorr-signed by the sender**, matching RH-24 network hardening.
+- **Remote partial signatures are verified before aggregation**, preventing invalid aggregates from mismatched participant sets and fixing the replay-filter memory leak path covered by RH-02 tests.
+- **Lazy MuSig2 session creation on remote message arrival** prevents valid early nonces/partials from being dropped during fast testnet startup.
+- **`ValidateEmergencyRedemption()` and related defaults/comments were updated from stale 8-of-15 assumptions to final 9-of-17 values.**
+- **Qt DigiDollar amount widgets now allow typing values below the minimum**, so users can enter/edit values naturally before final validation.
+- **`estimatecollateral` now reads system health from the indexed DigiDollar stats path**, fixing stale-health results (Bug #34).
+- **Qt minting now auto-consolidates wallet UTXOs when needed**, preventing fragmented-wallet mint failures.
+- **Mempool-backed DigiDollar amount resolution now works across chained transfers**, fixing conservation lookups before confirmation (Bug #35).
+- **RC30 cuts a fresh `testnet23` chain** with new genesis, new network magic, fresh chainTx baseline, and default P2P port **12030**.
+- **Release testnet keeps normal proof-of-work rules enabled by default**, while local multi-oracle harnesses can opt into `-easypow` without patching source.
+- **Shell harnesses and operator docs were updated for `testnet23`**, wallet/key migration, 9-of-17 quorum, and the new runtime debug flow.
 
 ### 1. Oracle quorum upgraded to 9-of-17
 
@@ -112,7 +133,7 @@ Several comments and one hardcoded threshold were still quoting the old 8-of-15 
 
 ### 9. `test_multi_oracle_testnet.sh` — 9-of-17 end-to-end debugger
 
-`test_multi_oracle_testnet.sh` was extended to drive 9-of-17 oracle consensus on **testnet** (not regtest) across **9 wallet nodes at ≤2 oracles each**:
+`test_multi_oracle_testnet.sh` was extended to drive 9-of-17 oracle consensus on **testnet** (not regtest) across **9 wallet nodes at ≤2 oracles each**. The released script now uses runtime `-easypow` local-harness mode, so production RC30 chainparams remain untouched while the debugger swaps to localhost oracle keys and easy PoW only when explicitly requested:
 
 | Node | Oracle slots |
 |------|--------------|
@@ -132,15 +153,19 @@ All previous coverage (tier-by-tier mint, transfer chains, redemption paths, wal
 - **Step 27C** — median filter with 15 agreeing + 2 outliers filters outliers.
 - **Step 27D** — oracle recovery after disagreement on 17 oracles.
 
-### 10. Temporary testnet-only debug code (must be reverted before release tag)
+### 10. Local harness mode for testnet debugging
 
-For end-to-end validation, `test_multi_oracle_testnet.sh` expects the "FOR LOCAL MINI-TESTNET TESTING" block in `src/kernel/chainparams.cpp` to be temporarily enabled (both the `vOraclePublicKeys` block and the `vOracleNodes` block). The header of the script documents exactly what to revert before cutting the final RC30 tag:
+RC30 release builds keep the production testnet configuration active by default:
 
-1. Re-comment the test-oracle `vOraclePublicKeys` block in `CTestNetParams`.
-2. Re-comment the test-oracle `vOracleNodes` block in `CTestNetParams::InitializeOracleNodes()`.
-3. Re-enable the production testnet blocks above.
+1. **Production RC30 testnet keys stay live** in `CTestNetParams`.
+2. The old local mini-testnet keys and localhost oracle-node table stay **commented out** in `src/kernel/chainparams.cpp` for future reuse.
+3. Passing **`-easypow`** on `-testnet` enables local harness mode at runtime, which:
+   - turns on easy PoW for the local debugger,
+   - swaps in the commented mini-testnet oracle pubkeys,
+   - redirects oracle peers to localhost ports,
+   - leaves the release default unchanged for normal RC30 operators.
 
-No easy-PoW switch is currently required — testnet's native difficulty ladder is sufficient. If a future script revision enables one, the revert notes in the script header must be updated too.
+That means there is **no source edit to revert before tagging RC30**. The release path is already production-safe, and the local debugger is explicitly opt-in.
 
 ---
 
@@ -174,11 +199,11 @@ See [RC28 release notes](RELEASE_v9.26.0-rc28.md) for:
 
 | Category | Result | Status |
 |----------|--------|--------|
-| Unit tests (oracle/MuSig2/DigiDollar) | Updated to 9-of-17 fixtures | ✅ |
-| Fuzz harnesses | Quorum-driven from chainparams | ✅ |
-| Functional tests | `digidollar_oracle.py`, `digidollar_oracle_phase2.py` rewritten | ✅ |
-| `test_multi_oracle_testnet.sh` | 9-of-17 end-to-end debugger on testnet | ✅ |
-| Consensus audit | New 17-slot layout, slot-order keys, 3-byte bitmap | ✅ |
+| Unit tests (oracle/MuSig2/DigiDollar) | Updated to 9-of-17 fixtures and epoch-aware v0x03 format | ✅ |
+| RH-02 / adversarial coverage | Partial-sig bypass + replay-filter growth path covered | ✅ |
+| Functional tests | `digidollar_oracle.py`, `digidollar_oracle_phase2.py` rewritten for 17 slots / 9 quorum | ✅ |
+| `test_multi_oracle_testnet.sh` | 9-of-17 end-to-end debugger on testnet via runtime `-easypow` | ✅ |
+| Consensus audit | New 17-slot layout, slot-order keys, 3-byte bitmap, epoch in payload | ✅ |
 | RC29-era test coverage | Preserved | ✅ |
 
 ### Known follow-ups
@@ -195,9 +220,18 @@ RC30 resets testnet onto `testnet23`, so do **not** reuse old `testnet21` blocks
 ```bash
 digibyte-cli -testnet stop
 # Replace binaries with RC30
-# Start fresh on testnet23, then migrate only wallet/key material as needed
+# Start fresh on testnet23, then migrate only wallet.dat / oracle key material as needed
 digibyted -testnet -daemon
 ```
+
+Recommended migration checklist:
+
+1. Stop the old node.
+2. Install the RC30 binary.
+3. Start once on RC30 so `testnet23/` is created.
+4. Copy forward only wallet and oracle key material.
+5. Do **not** copy `blocks/`, `chainstate/`, `indexes/`, or peers data from the previous testnet.
+6. Confirm the node is listening on **12030** and syncing the new genesis chain.
 
 If you are an oracle operator, your oracle will auto-start once the migrated wallet is loaded on `testnet23`:
 - **Unencrypted wallets:** oracle starts automatically when wallet loads
@@ -311,6 +345,8 @@ addnode=oracle1.digibyte.io
 | Setting | Value |
 |---------|-------|
 | Network | Testnet (`testnet23`) |
+| Genesis Hash | `0xa19e809bb060f7f50c05a9bec7fdefedd8497aa0bd6ccca6f55c86090963e4ca` |
+| Network Magic | `fd d2 b9 e4` |
 | Default P2P Port | **12030** |
 | Default RPC Port | **14026** |
 | Oracle Consensus | **9-of-17 (RC30)** |
@@ -336,6 +372,7 @@ addnode=oracle1.digibyte.io
 
 - BlindDave still carries a placeholder pubkey until the real operator key is submitted.
 - Oracle and wallet operators must migrate key material forward into `testnet23`; old `testnet21` blocks and chainstate are incompatible with RC30.
+- Local debug runs that need the full 17-oracle single-machine harness must pass `-easypow`; release testnet defaults intentionally do not enable that mode.
 
 ---
 
@@ -369,7 +406,7 @@ That is expected: RC30 requires **9-of-17** signatures for Phase 2/Phase 3 bundl
 
 ## RC30 Final — MuSig2 Phase 3 correctness fixes (critical)
 
-Three interlocking bugs were preventing v0x03 MuSig2 aggregate bundles from ever landing on chain — the network silently fell back to v0x02 per-oracle-signature bundles (609–1064 bytes per block). All three are fixed in RC30 and verified end-to-end on the 8-wallet 9-of-17 testnet debugger: **41 v0x03 bundles on chain, 94-byte scriptPubKey (88-byte payload), 0 verify failures**.
+Three interlocking bugs were preventing v0x03 MuSig2 aggregate bundles from ever landing on chain — the network silently fell back to v0x02 per-oracle-signature bundles (609–1064 bytes per block). All three are fixed in RC30 and verified end-to-end on the 9-wallet 9-of-17 testnet debugger: **41 v0x03 bundles on chain, 94-byte scriptPubKey (88-byte payload), 0 verify failures**.
 
 ### Bug 1 — v0x03 on-chain payload did not include epoch
 Signer hashed `H(epoch, price, timestamp)`; validator forced `bundle.epoch = 0` on extract because the payload lacked the field. Schnorr verify always failed.

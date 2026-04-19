@@ -31,7 +31,7 @@ RC30 is an **oracle expansion + hardening release** that grows DigiDollar's orac
 One-line summary of each substantive fix or release-facing change landed after RC29:
 
 - **Oracle quorum expanded from 8-of-15 to 9-of-17** with 17 slots and 3-byte MuSig2 participation bitmaps.
-- **Real operator/pubkey set refreshed** for RC30, including hallvardo, DigiByteForce slot assignment, Neel real key, and GTO90 real key.
+- **Real operator/pubkey set refreshed** for RC30, including hallvardo, DigiByteForce slot assignment, Neel real key, DigiSwarm slot 15 key, and GTO90 real key.
 - **Oracle key lists are slot-ordered** across `vOraclePublicKeys`, `vOracleNodes`, and test fixtures so MuSig2 bitmaps line up with oracle IDs.
 - **`ValidateOracleConfiguration()` no longer requires lexicographic pubkey ordering**, while still enforcing count, uniqueness, and key validity.
 - **Phase 3 MuSig2 payload now includes epoch on-chain**, fixing signer/verifier hash mismatch and cross-epoch replay risk.
@@ -64,9 +64,8 @@ Three oracles are added to the consensus set for RC30:
 |------|----------|--------|
 | 12 | **DaPunzy** | ✅ Live on testnet |
 | 14 | **Neel** | ✅ Live on testnet (real pubkey in RC30) |
+| 15 | **DigiSwarm** | ✅ Live on testnet (real pubkey in RC30) |
 | 16 | **GTO90** | ✅ Live on testnet (real pubkey in RC30) |
-
-**BlindDave** remains a reserved placeholder at slot 15.
 
 ### 3. Full oracle slot order (RC30)
 
@@ -86,7 +85,7 @@ Three oracles are added to the consensus set for RC30:
 12  DaPunzy          ← new in RC30
 13  DigiByteForce
 14  Neel             ← real key added in RC30
-15  BlindDave        (placeholder)
+15  DigiSwarm        ← real key added in RC30
 16  GTO90            ← real key added in RC30
 ```
 
@@ -208,7 +207,7 @@ See [RC28 release notes](RELEASE_v9.26.0-rc28.md) for:
 
 ### Known follow-ups
 
-- **BlindDave** (slot 15) still uses a placeholder pubkey until the operator submits a real key.
+- **DigiSwarm** now occupies slot 15 with a wallet-backed RC30 key managed locally for oracle bring-up.
 - Oracle and wallet operators must migrate key material into `testnet23`; old `testnet21` blocks and chainstate are incompatible with RC30.
 
 ---
@@ -281,7 +280,7 @@ For the complete guide see **`DIGIDOLLAR_ORACLE_SETUP.md`**.
 | 12 | **DaPunzy** | ✅ Active (RC30) |
 | 13 | DigiByteForce | ✅ Active |
 | 14 | **Neel** | ✅ Active (RC30) |
-| 15 | BlindDave | 🔒 Reserved (placeholder) |
+| 15 | **DigiSwarm** | ✅ Active (RC30) |
 | 16 | **GTO90** | ✅ Active (RC30) |
 
 ---
@@ -370,7 +369,7 @@ addnode=oracle1.digibyte.io
 
 ## Known Issues
 
-- BlindDave still carries a placeholder pubkey until the real operator key is submitted.
+- DigiSwarm now fills slot 15 with a wallet-backed RC30 oracle key.
 - Oracle and wallet operators must migrate key material forward into `testnet23`; old `testnet21` blocks and chainstate are incompatible with RC30.
 - Local debug runs that need the full 17-oracle single-machine harness must pass `-easypow`; release testnet defaults intentionally do not enable that mode.
 

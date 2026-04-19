@@ -326,8 +326,7 @@ public:
         consensus.nOracleConsensusRequired = 9;
 
         // Oracle public keys (x-only, 32 bytes) — ordered by oracle slot (0-16)
-        // 17 oracles: 16 active operators + 1 reserved slot (BlindDave)
-        // Replace the reserved BlindDave slot once the operator submits a real key.
+        // 17 active operators (RC30 final roster includes DigiSwarm at slot 15).
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
@@ -345,7 +344,7 @@ public:
         consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
         consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
         consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
-        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 15: BlindDave (placeholder)
+        consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
         consensus.vOraclePublicKeys.push_back("83b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7");  // 16: GTO90 (RC30)
 
         LogPrintf("Oracle: Mainnet Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
@@ -588,7 +587,7 @@ public:
         // for deterministic MuSig2 key aggregation.
         //
         // Production testnet oracle public keys (9-of-17, RC30):
-        // 16 active operators + 1 reserved slot (BlindDave).
+        // 17 active operators, including DigiSwarm at slot 15.
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
@@ -605,7 +604,7 @@ public:
         consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
         consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
         consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
-        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 15: BlindDave (placeholder)
+        consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
         consensus.vOraclePublicKeys.push_back("83b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7");  // 16: GTO90 (RC30)
         //
         // LOCAL MINI-TESTNET TESTING (disabled; retained for future use).
@@ -715,7 +714,7 @@ private:
             {12, ParsePubKey("020f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560"), "oracle13.digibyte.io:12030", true},  // DaPunzy (RC30)
             {13, ParsePubKey("03a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digibyte.io:12030", true},  // DigiByteForce
             {14, ParsePubKey("03f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digibyte.io:12030", true},  // Neel (RC30)
-            {15, ParsePubKey("020e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a"), "oracle16.digibyte.io:12030", true},  // BlindDave (placeholder)
+            {15, ParsePubKey("03447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digibyte.io:12030", true},  // DigiSwarm (RC30)
             {16, ParsePubKey("0283b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digibyte.io:12030", true},  // GTO90 (RC30)
         };
         //

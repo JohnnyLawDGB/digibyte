@@ -195,7 +195,8 @@ bool BlockAssembler::ValidateDDForBlockInclusion(const CTransaction& tx, const C
         chainparams,
         &m_chainstate.CoinsTip(),
         false,
-        txLookup
+        txLookup,
+        m_mempool
     );
 
     TxValidationState tx_state;

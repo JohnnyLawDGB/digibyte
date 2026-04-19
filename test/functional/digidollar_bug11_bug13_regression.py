@@ -320,7 +320,7 @@ class DigiDollarBug11Bug13RegressionTest(DigiByteTestFramework):
         self.log.info("BUG #13: DD transaction blockheight tests")
         self.log.info("=" * 60)
         self.test_bug13_confirmed_tx_has_blockheight()
-        self.test_bug13_unconfirmed_tx_has_blockheight()
+        self.test_bug13_unconfirmed_tx_has_negative_blockheight()
         self.test_bug13_blockheight_matches_actual_block()
         self.test_bug13_multiple_confirmations()
 

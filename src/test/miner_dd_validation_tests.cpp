@@ -144,6 +144,21 @@ struct MinerDDValidationSetup : public TestChain100Setup {
         return MakeTransactionRef(tx);
     }
 
+    CTransactionRef BuildDDTransfer(const COutPoint& prevout, const XOnlyPubKey& recipient, CAmount dd_amount)
+    {
+        CMutableTransaction tx;
+        tx.SetDigiDollarType(DD_TX_TRANSFER);
+        tx.vin.emplace_back(prevout);
+        tx.vout.emplace_back(0, DigiDollar::CreateDigiDollarP2TR(recipient, dd_amount));
+
+        CScript op_return = CScript() << OP_RETURN
+                                      << std::vector<unsigned char>{'D', 'D'}
+                                      << CScriptNum(2)
+                                      << CScriptNum(dd_amount);
+        tx.vout.emplace_back(0, op_return);
+        return MakeTransactionRef(tx);
+    }
+
     bool ValidateMintAtPrice(const CTransaction& tx, int next_height, CAmount oracle_price_micro_usd, std::string* reject_reason = nullptr) const
     {
         DigiDollar::ValidationContext ctx(next_height, oracle_price_micro_usd, 300, Params());
@@ -325,6 +340,50 @@ BOOST_FIXTURE_TEST_CASE(test_block_validity_retry, MinerDDValidationSetup)
     BOOST_CHECK(hook_called);
     BOOST_CHECK(!BlockHasTx(block_template->block, borderline_mint->GetHash()));
     BOOST_CHECK_EQUAL(block_template->block.vtx.size(), 1U);
+}
+
+BOOST_FIXTURE_TEST_CASE(block_includes_chained_dd_transfers_from_mempool, MinerDDValidationSetup)
+{
+    constexpr CAmount kPrice = 50000;
+    constexpr CAmount kDDAmount = 10000;
+    constexpr CAmount kFee = 1000;
+
+    MockOracleManager::GetInstance().SetMockPrice(kPrice);
+
+    const int next_height = NextBlockHeight();
+    const CAmount required = RequiredCollateralAt(kDDAmount, 30, next_height, kPrice);
+    const COutPoint funding = ConfirmOpTrueFunding(required + kFee);
+    const CTransactionRef mint = BuildDDMint(funding, required + kFee, required, kDDAmount, next_height, kFee);
+
+    std::string reject_reason;
+    BOOST_REQUIRE(ValidateMintAtPrice(*mint, next_height, kPrice, &reject_reason));
+
+    CKey transfer1_key;
+    transfer1_key.MakeNewKey(true);
+    const XOnlyPubKey transfer1_xonly(transfer1_key.GetPubKey());
+
+    CKey transfer2_key;
+    transfer2_key.MakeNewKey(true);
+    const XOnlyPubKey transfer2_xonly(transfer2_key.GetPubKey());
+
+    const COutPoint mint_dd_out(mint->GetHash(), 1);
+    const CTransactionRef transfer1 = BuildDDTransfer(mint_dd_out, transfer1_xonly, kDDAmount);
+    const COutPoint transfer1_dd_out(transfer1->GetHash(), 0);
+    const CTransactionRef transfer2 = BuildDDTransfer(transfer1_dd_out, transfer2_xonly, kDDAmount);
+
+    AddToMempool(mint, kFee);
+    AddToMempool(transfer1, kFee);
+    AddToMempool(transfer2, kFee);
+
+    BlockAssembler::Options options;
+    options.blockMinFeeRate = CFeeRate(0);
+    options.test_block_validity = false;
+
+    auto block_template = BuildTemplate(options);
+    BOOST_REQUIRE(block_template);
+    BOOST_CHECK(BlockHasTx(block_template->block, mint->GetHash()));
+    BOOST_CHECK(BlockHasTx(block_template->block, transfer1->GetHash()));
+    BOOST_CHECK(BlockHasTx(block_template->block, transfer2->GetHash()));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

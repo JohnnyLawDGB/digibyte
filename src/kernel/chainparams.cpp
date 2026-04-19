@@ -294,9 +294,9 @@ public:
 
         // DigiDollar consensus parameters (mainnet)
         digidollarParams = DigiDollar::ConsensusParams();
-        digidollarParams.oracleThreshold = 8;
-        digidollarParams.activeOracles = 15;
-        digidollarParams.oracleCount = 15;
+        digidollarParams.oracleThreshold = 9;   // 9-of-17 consensus (RC30)
+        digidollarParams.activeOracles = 17;    // 17 active oracles (RC30)
+        digidollarParams.oracleCount = 17;      // 17 oracles defined (RC30)
 
         // Initialize DigiDollar Oracle Nodes (30 total, historical Phase One/Two providers)
         InitializeOracleNodes();
@@ -310,24 +310,24 @@ public:
         // Mainnet skips Phase 1 (single-oracle); goes directly to Phase 3 (MuSig2)
         consensus.nOracleActivationHeight = 3000000;
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 8;        // Phase Two (pre-MuSig2): 8-of-15 consensus
-        consensus.nOracleTotalOracles = 15;
+        consensus.nOracleRequiredMessages = 9;        // Phase Two (pre-MuSig2): 9-of-17 consensus
+        consensus.nOracleTotalOracles = 17;
         consensus.nDigiDollarPhase2Height = 3000000;  // Phase Two and Three activate together
         consensus.nDigiDollarPhase3Height = 0;  // Phase Three (MuSig2): active immediately on mainnet
 
-        // Phase 3 MuSig2 oracle configuration — 8-of-15 quorum
+        // Phase 3 MuSig2 oracle configuration — 9-of-17 quorum (RC30)
         // Same oracle operator set as testnet. To add/replace operators:
         //   1. Generate keypair via `digibyte-cli generateoraclekey <id>`
-        //   2. Add x-only pubkey to vOraclePublicKeys in sorted order
-        //   3. Add OracleNodeInfo to vOracleNodes
+        //   2. Add x-only pubkey to vOraclePublicKeys in slot order
+        //   3. Add OracleNodeInfo to vOracleNodes (same slot order)
         //   4. Update nOraclePubkeyCount/nOracleConsensusRequired
         //   5. Deploy via coordinated software upgrade
-        consensus.nOraclePubkeyCount = 15;
-        consensus.nOracleConsensusRequired = 8;
+        consensus.nOraclePubkeyCount = 17;
+        consensus.nOracleConsensusRequired = 9;
 
-        // Oracle public keys (x-only, 32 bytes) — ordered by oracle slot (0-14)
-        // 15 oracles: 13 active operators + 2 reserved slots (BlindDave, Neel)
-        // Reserved slots will be replaced with real operator keys as they onboard
+        // Oracle public keys (x-only, 32 bytes) — ordered by oracle slot (0-16)
+        // 17 oracles: 16 active operators + 1 reserved slot (BlindDave)
+        // Replace the reserved BlindDave slot once the operator submits a real key.
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
@@ -341,9 +341,12 @@ public:
         consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
         consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // 11: hallvardo
-        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 12: BlindDave (placeholder)
-        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce (RC30)
-        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // 14: Neel (placeholder)
+        // Slot 12: DaPunzy real key — operator-supplied and live at oracle_id=12.
+        consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
+        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
+        consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
+        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 15: BlindDave (placeholder)
+        consensus.vOraclePublicKeys.push_back("83b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7");  // 16: GTO90 (RC30)
 
         LogPrintf("Oracle: Mainnet Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
                  consensus.nDigiDollarPhase3Height, consensus.nOracleConsensusRequired,
@@ -400,7 +403,7 @@ private:
  */
 class CTestNetParams : public CChainParams {
 public:
-    CTestNetParams() {
+    explicit CTestNetParams(const CChainParams::TestNetOptions& options) {
         m_chain_type = ChainType::TESTNET;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
@@ -416,7 +419,7 @@ public:
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
 
-        consensus.initialTarget[ALGO_SHA256D] = ArithToUint256(~arith_uint256(0) >> 31); // SHA256D needs higher starting difficulty (2048x powLimit) — fastest algo on CPUs
+        consensus.initialTarget[ALGO_SHA256D] = ArithToUint256(~arith_uint256(0) >> 31); // production testnet (2048x powLimit)
 
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 60 / 4;
@@ -460,8 +463,9 @@ public:
         consensus.nLocalDifficultyAdjustment = 4; // difficulty adjustment per algo
 
         // DigiByte Hard Fork Block Heights for testnet (compressed like regtest)
-        // All features activate within first 500 blocks for rapid testing
-        consensus.multiAlgoDiffChangeTarget = 100; // Block 100 MultiAlgo Hard Fork
+        // Multi-algo is enabled immediately on testnet23 so automated mining can
+        // bootstrap the chain quickly from genesis.
+        consensus.multiAlgoDiffChangeTarget = 0; // Height 0 MultiAlgo activation
         consensus.alwaysUpdateDiffChangeTarget = 200; // Block 200 MultiShield Hard Fork
         consensus.workComputationChangeTarget = 400; // Block 400 DigiSpeed Hard Fork
         consensus.algoSwapChangeTarget = 500; // Block 500 Odo PoW Hard Fork
@@ -495,23 +499,23 @@ public:
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274
 
-        // NEW TESTNET MAGIC BYTES (2025) - DigiDollar Reset
+        // NEW TESTNET MAGIC BYTES (2026) - DigiDollar Reset
         pchMessageStart[0] = 0xfd;
         pchMessageStart[1] = 0xd2;
         pchMessageStart[2] = 0xb9;
-        pchMessageStart[3] = 0xe3;
-        nDefaultPort = 12035;
+        pchMessageStart[3] = 0xe4;
+        nDefaultPort = 12030;
         nPruneAfterHeight = 1000;
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
 
-        // DigiDollar testnet21 genesis (2026) — 6-of-11 MuSig2 oracle consensus
-        const char* pszTimestamp = "DigiDollar: 6-of-11 MuSig2 Oracle Consensus on The DigiByte Blockchain";
+        // DigiDollar testnet23 genesis (RC30, 2026) — 9-of-17 MuSig2 oracle consensus
+        const char* pszTimestamp = "DigiDollar Testnet23: 9-of-17 MuSig2 Oracle Consensus on DigiByte";
         const CScript genesisOutputScript = CScript() << 0x0 << OP_CHECKSIG;
-        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1743710400, 124240, 0x1e0ffff0, 1, 8000 * COIN);
+        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1776456000, 561075, 0x1e0ffff0, 1, 8000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0xaf94bc0b267965d39faab989bd7cf5a59f641dd02ccd40b0f43cbb0bf62c6122"));
-        assert(genesis.hashMerkleRoot == uint256S("0xef66d6c3094772321cfe7217b57899df05ed1142f0b62547070c362b5c2eb870"));
+        assert(consensus.hashGenesisBlock == uint256S("0xa19e809bb060f7f50c05a9bec7fdefedd8497aa0bd6ccca6f55c86090963e4ca"));
+        assert(genesis.hashMerkleRoot == uint256S("0x14d23080efd3f7ff071e1c250b6fa57d7a3be839c19f05d70d7d04b1341bba97"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -536,7 +540,7 @@ public:
 
         checkpointData = {
             {
-                // testnet21: fresh chain, no checkpoints yet
+                // testnet23: fresh chain, no checkpoints yet
             }
         };
 
@@ -545,10 +549,10 @@ public:
         };
 
         chainTxData = ChainTxData{
-            // DigiByte testnet: Estimated data
-            .nTime    = 1700000000,  // Approximate November 2023
-            .nTxCount = 1000000,     // Approximate testnet transactions
-            .dTxRate  = 0.01,        // Lower rate for testnet
+            // testnet23 starts from a fresh RC30 reset genesis
+            .nTime    = 1776456000,
+            .nTxCount = 1,
+            .dTxRate  = 0.0,
         };
 
         // DigiDollar consensus parameters (testnet)
@@ -558,50 +562,33 @@ public:
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
-        digidollarParams.oracleThreshold = 8;                         // 8-of-15 consensus for Phase Two (strict majority)
-        digidollarParams.activeOracles = 15;                          // 15 active oracles
-        digidollarParams.oracleCount = 15;                            // Total 15 oracles defined
+        digidollarParams.oracleThreshold = 9;                         // 9-of-17 consensus for Phase Two (strict majority, RC30)
+        digidollarParams.activeOracles = 17;                          // 17 active oracles (RC30)
+        digidollarParams.oracleCount = 17;                            // Total 17 oracles defined (RC30)
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
         InitializeOracleNodes();
 
-        // Oracle system parameters — Testnet 8-of-15 consensus
+        // Oracle system parameters — Testnet 9-of-17 consensus (RC30)
         // Oracle activation matches DigiDollar BIP9 activation — everything at block 600
         consensus.nOracleActivationHeight = 600;      // Same as nDDActivationHeight
         consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 8;        // Phase Two: 8-of-15 consensus
-        consensus.nOracleTotalOracles = 15;           // 15 oracles active
+        consensus.nOracleRequiredMessages = 9;        // Phase Two: 9-of-17 consensus (RC30)
+        consensus.nOracleTotalOracles = 17;           // 17 oracles active (RC30)
         // Multi-oracle activates at same height as DigiDollar (no separate phases)
         // Everything — DD minting, oracle consensus, multi-oracle — activates together
         consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
         consensus.nDigiDollarPhase3Height = 0;  // Phase Three (MuSig2): active immediately on testnet
 
-        // Phase 3 MuSig2 oracle configuration — 8-of-15 quorum
-        consensus.nOraclePubkeyCount = 15;
-        consensus.nOracleConsensusRequired = 8;
+        // Phase 3 MuSig2 oracle configuration — 9-of-17 quorum (RC30)
+        consensus.nOraclePubkeyCount = 17;
+        consensus.nOracleConsensusRequired = 9;
 
-        // Testnet oracle public keys (x-only, 32 bytes) — ordered by oracle slot (0-14)
-        // for deterministic MuSig2 key aggregation
+        // Testnet oracle public keys (x-only, 32 bytes) — ordered by oracle slot (0-16)
+        // for deterministic MuSig2 key aggregation.
         //
-        // FOR LOCAL MINI-TESTNET TESTING: uncomment the block below and comment out
-        // the production keys. Also swap InitializeOracleNodes() below.
-        // Test keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..10.
-        // See test_multi_oracle_testnet.sh for private keys and full usage.
-        //
-        // consensus.vOraclePublicKeys.push_back("56baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88");  // test oracle 1
-        // consensus.vOraclePublicKeys.push_back("692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81");  // test oracle 3
-        // consensus.vOraclePublicKeys.push_back("75a81280ef4e7d977a3234ca9c6860e15243accb7565ff133fb02eda174df34e");  // test oracle 8
-        // consensus.vOraclePublicKeys.push_back("977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440");  // test oracle 4
-        // consensus.vOraclePublicKeys.push_back("9f802e732aa1b71e6ebf2385a21d70945c04d7a79adaaf1a72b8358e7d9c8466");  // test oracle 10
-        // consensus.vOraclePublicKeys.push_back("a31a0d23ab9d2b2e9fdea406ccc902ff6812b2455985edd54ddba37402283cbb");  // test oracle 9
-        // consensus.vOraclePublicKeys.push_back("a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee");  // test oracle 0
-        // consensus.vOraclePublicKeys.push_back("b003867d046e3ea6876e1d33fca9018fd9b3f130f9fcb8a0904d9f58e8cf6141");  // test oracle 7
-        // consensus.vOraclePublicKeys.push_back("ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e");  // test oracle 5
-        // consensus.vOraclePublicKeys.push_back("df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9");  // test oracle 2
-        // consensus.vOraclePublicKeys.push_back("f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac");  // test oracle 6
-        //
-        // Production testnet oracle public keys (8-of-15):
-        // 13 active operators + 2 reserved slots (BlindDave, Neel)
+        // Production testnet oracle public keys (9-of-17, RC30):
+        // 16 active operators + 1 reserved slot (BlindDave).
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
@@ -615,9 +602,39 @@ public:
         consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
         consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // 11: hallvardo
-        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 12: BlindDave (placeholder)
-        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce (RC30)
-        consensus.vOraclePublicKeys.push_back("02e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17");  // 14: Neel (placeholder)
+        consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
+        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
+        consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
+        consensus.vOraclePublicKeys.push_back("0e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a");  // 15: BlindDave (placeholder)
+        consensus.vOraclePublicKeys.push_back("83b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7");  // 16: GTO90 (RC30)
+        //
+        // LOCAL MINI-TESTNET TESTING (disabled; retained for future use).
+        // Test keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..16.
+        // Enable this block (and the matching vOracleNodes block in
+        // InitializeOracleNodes()) when running test_multi_oracle_testnet.sh.
+        //
+        // consensus.vOraclePublicKeys.clear();
+        // consensus.vOraclePublicKeys.push_back("a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee");  //  0: test oracle 0
+        // consensus.vOraclePublicKeys.push_back("56baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88");  //  1: test oracle 1
+        // consensus.vOraclePublicKeys.push_back("df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9");  //  2: test oracle 2
+        // consensus.vOraclePublicKeys.push_back("692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81");  //  3: test oracle 3
+        // consensus.vOraclePublicKeys.push_back("977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440");  //  4: test oracle 4
+        // consensus.vOraclePublicKeys.push_back("ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e");  //  5: test oracle 5
+        // consensus.vOraclePublicKeys.push_back("f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac");  //  6: test oracle 6
+        // consensus.vOraclePublicKeys.push_back("b003867d046e3ea6876e1d33fca9018fd9b3f130f9fcb8a0904d9f58e8cf6141");  //  7: test oracle 7
+        // consensus.vOraclePublicKeys.push_back("75a81280ef4e7d977a3234ca9c6860e15243accb7565ff133fb02eda174df34e");  //  8: test oracle 8
+        // consensus.vOraclePublicKeys.push_back("a31a0d23ab9d2b2e9fdea406ccc902ff6812b2455985edd54ddba37402283cbb");  //  9: test oracle 9
+        // consensus.vOraclePublicKeys.push_back("9f802e732aa1b71e6ebf2385a21d70945c04d7a79adaaf1a72b8358e7d9c8466");  // 10: test oracle 10
+        // consensus.vOraclePublicKeys.push_back("ab2ca9a4d43ea036eab82375b3eebe6a4422cb8c327bcdd144813f0d111603fd");  // 11: test oracle 11
+        // consensus.vOraclePublicKeys.push_back("bc7117d979782809de3012f2946a91a38af36176c171c1f214282c6958387990");  // 12: test oracle 12
+        // consensus.vOraclePublicKeys.push_back("954543733113170ff2fafad02b372ed14ed1692640e0299d7c5d2701f21c5d32");  // 13: test oracle 13
+        // consensus.vOraclePublicKeys.push_back("07ad71f90ef3eac0f599a1e233c2b1cb79f10d547ef5615c73935a7e25a30c27");  // 14: test oracle 14
+        // consensus.vOraclePublicKeys.push_back("c8a52a79f57a6682396f8cc2589f8cd639434128a96e0bf245987d12e8896016");  // 15: test oracle 15
+        // consensus.vOraclePublicKeys.push_back("b2f5c1f7dba8484c08a1b6d8a1b47320586edfdfbd53aedb59522f8154ed6f89");  // 16: test oracle 16
+
+        if (options.easy_pow) {
+            EnableLocalMiniTestnetMode();
+        }
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
         LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
@@ -631,45 +648,101 @@ public:
     }
 
 private:
+    void EnableLocalMiniTestnetMode() {
+        consensus.fPowAllowMinDifficultyBlocks = true;
+        consensus.fEasyPow = true;
+
+        consensus.vOraclePublicKeys.clear();
+        consensus.vOraclePublicKeys.push_back("a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee");  //  0: test oracle 0
+        consensus.vOraclePublicKeys.push_back("56baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88");  //  1: test oracle 1
+        consensus.vOraclePublicKeys.push_back("df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9");  //  2: test oracle 2
+        consensus.vOraclePublicKeys.push_back("692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81");  //  3: test oracle 3
+        consensus.vOraclePublicKeys.push_back("977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440");  //  4: test oracle 4
+        consensus.vOraclePublicKeys.push_back("ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e");  //  5: test oracle 5
+        consensus.vOraclePublicKeys.push_back("f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac");  //  6: test oracle 6
+        consensus.vOraclePublicKeys.push_back("b003867d046e3ea6876e1d33fca9018fd9b3f130f9fcb8a0904d9f58e8cf6141");  //  7: test oracle 7
+        consensus.vOraclePublicKeys.push_back("75a81280ef4e7d977a3234ca9c6860e15243accb7565ff133fb02eda174df34e");  //  8: test oracle 8
+        consensus.vOraclePublicKeys.push_back("a31a0d23ab9d2b2e9fdea406ccc902ff6812b2455985edd54ddba37402283cbb");  //  9: test oracle 9
+        consensus.vOraclePublicKeys.push_back("9f802e732aa1b71e6ebf2385a21d70945c04d7a79adaaf1a72b8358e7d9c8466");  // 10: test oracle 10
+        consensus.vOraclePublicKeys.push_back("ab2ca9a4d43ea036eab82375b3eebe6a4422cb8c327bcdd144813f0d111603fd");  // 11: test oracle 11
+        consensus.vOraclePublicKeys.push_back("bc7117d979782809de3012f2946a91a38af36176c171c1f214282c6958387990");  // 12: test oracle 12
+        consensus.vOraclePublicKeys.push_back("954543733113170ff2fafad02b372ed14ed1692640e0299d7c5d2701f21c5d32");  // 13: test oracle 13
+        consensus.vOraclePublicKeys.push_back("07ad71f90ef3eac0f599a1e233c2b1cb79f10d547ef5615c73935a7e25a30c27");  // 14: test oracle 14
+        consensus.vOraclePublicKeys.push_back("c8a52a79f57a6682396f8cc2589f8cd639434128a96e0bf245987d12e8896016");  // 15: test oracle 15
+        consensus.vOraclePublicKeys.push_back("b2f5c1f7dba8484c08a1b6d8a1b47320586edfdfbd53aedb59522f8154ed6f89");  // 16: test oracle 16
+
+        vOracleNodes = {
+            { 0, ParsePubKey("03a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee"), "localhost:9001", true},
+            { 1, ParsePubKey("0356baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88"), "localhost:9002", true},
+            { 2, ParsePubKey("03df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9"), "localhost:9003", true},
+            { 3, ParsePubKey("03692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81"), "localhost:9004", true},
+            { 4, ParsePubKey("03977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440"), "localhost:9005", true},
+            { 5, ParsePubKey("02ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e"), "localhost:9006", true},
+            { 6, ParsePubKey("02f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac"), "localhost:9007", true},
+            { 7, ParsePubKey("03b003867d046e3ea6876e1d33fca9018fd9b3f130f9fcb8a0904d9f58e8cf6141"), "localhost:9008", true},
+            { 8, ParsePubKey("0275a81280ef4e7d977a3234ca9c6860e15243accb7565ff133fb02eda174df34e"), "localhost:9009", true},
+            { 9, ParsePubKey("02a31a0d23ab9d2b2e9fdea406ccc902ff6812b2455985edd54ddba37402283cbb"), "localhost:9010", true},
+            {10, ParsePubKey("039f802e732aa1b71e6ebf2385a21d70945c04d7a79adaaf1a72b8358e7d9c8466"), "localhost:9011", true},
+            {11, ParsePubKey("02ab2ca9a4d43ea036eab82375b3eebe6a4422cb8c327bcdd144813f0d111603fd"), "localhost:9012", true},
+            {12, ParsePubKey("02bc7117d979782809de3012f2946a91a38af36176c171c1f214282c6958387990"), "localhost:9013", true},
+            {13, ParsePubKey("02954543733113170ff2fafad02b372ed14ed1692640e0299d7c5d2701f21c5d32"), "localhost:9014", true},
+            {14, ParsePubKey("0207ad71f90ef3eac0f599a1e233c2b1cb79f10d547ef5615c73935a7e25a30c27"), "localhost:9015", true},
+            {15, ParsePubKey("02c8a52a79f57a6682396f8cc2589f8cd639434128a96e0bf245987d12e8896016"), "localhost:9016", true},
+            {16, ParsePubKey("02b2f5c1f7dba8484c08a1b6d8a1b47320586edfdfbd53aedb59522f8154ed6f89"), "localhost:9017", true},
+        };
+
+        LogPrintf("Testnet local mini-testnet mode enabled via -easypow: easy PoW + local oracle set\n");
+    }
+
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // 15 oracles active (8-of-15 consensus)
+        // 17 oracles active (9-of-17 consensus, RC30)
         //
-        // FOR LOCAL MINI-TESTNET TESTING: uncomment the block below and comment out
-        // the production nodes. Also swap vOraclePublicKeys above.
+        // Production testnet oracle nodes.
+        vOracleNodes = {
+            { 0, ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12030",  true},  // Jared
+            { 1, ParsePubKey("033dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digibyte.io:12030",  true},  // Green Candle
+            { 2, ParsePubKey("03172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digibyte.io:12030",  true},  // Bastian
+            { 3, ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12030",  true},  // DanGB
+            { 4, ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12030",  true},  // Shenger
+            { 5, ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12030",  true},  // Ycagel
+            { 6, ParsePubKey("037a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digibyte.io:12030",  true},  // Aussie
+            { 7, ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12030",  true},  // LookInto
+            { 8, ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12030",  true},  // JohnnyLawDGB
+            { 9, ParsePubKey("02d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "129.212.182.152:12030",      true},  // Ogilvie
+            {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digibyte.io:12030", true},  // ChopperBrian
+            {11, ParsePubKey("03dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd"), "oracle12.digibyte.io:12030", true},  // hallvardo
+            {12, ParsePubKey("020f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560"), "oracle13.digibyte.io:12030", true},  // DaPunzy (RC30)
+            {13, ParsePubKey("03a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digibyte.io:12030", true},  // DigiByteForce
+            {14, ParsePubKey("03f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digibyte.io:12030", true},  // Neel (RC30)
+            {15, ParsePubKey("020e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a"), "oracle16.digibyte.io:12030", true},  // BlindDave (placeholder)
+            {16, ParsePubKey("0283b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digibyte.io:12030", true},  // GTO90 (RC30)
+        };
+        //
+        // LOCAL MINI-TESTNET TESTING (disabled; retained for future use).
+        // Test keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..16.
+        // Enable this block (and the matching vOraclePublicKeys block in CTestNetParams)
+        // when running test_multi_oracle_testnet.sh.
         //
         // vOracleNodes = {
-        //     {0,  ParsePubKey("03a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee"), "localhost:9001", true},   // test oracle 0
-        //     {1,  ParsePubKey("0356baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88"), "localhost:9002", true},   // test oracle 1
-        //     {2,  ParsePubKey("03df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9"), "localhost:9003", true},   // test oracle 2
-        //     {3,  ParsePubKey("03692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81"), "localhost:9004", true},   // test oracle 3
-        //     {4,  ParsePubKey("03977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440"), "localhost:9005", true},   // test oracle 4
-        //     {5,  ParsePubKey("02ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e"), "localhost:9006", true},   // test oracle 5
-        //     {6,  ParsePubKey("02f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac"), "localhost:9007", true},   // test oracle 6
-        //     {7,  ParsePubKey("03b003867d046e3ea6876e1d33fca9018fd9b3f130f9fcb8a0904d9f58e8cf6141"), "localhost:9008", true},   // test oracle 7
-        //     {8,  ParsePubKey("0275a81280ef4e7d977a3234ca9c6860e15243accb7565ff133fb02eda174df34e"), "localhost:9009", true},   // test oracle 8
-        //     {9,  ParsePubKey("02a31a0d23ab9d2b2e9fdea406ccc902ff6812b2455985edd54ddba37402283cbb"), "localhost:9010", true},   // test oracle 9
+        //     { 0, ParsePubKey("03a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee"), "localhost:9001", true},   // test oracle 0
+        //     { 1, ParsePubKey("0356baa94b6a787502146177802820189113029d31c4d99b0a5ad59bbb776efc88"), "localhost:9002", true},   // test oracle 1
+        //     { 2, ParsePubKey("03df3f298148c79840218722a4dfc81413d3dd4597a1aa3b97f12b3810bb21e4e9"), "localhost:9003", true},   // test oracle 2
+        //     { 3, ParsePubKey("03692857a4e171ce477d16afc8c4f225d479f139eaa4baee796f195f7d67927d81"), "localhost:9004", true},   // test oracle 3
+        //     { 4, ParsePubKey("03977e8e7355bf6718adf79e3e0cc874f9c98893fa450bfe9d433ae7643b6f6440"), "localhost:9005", true},   // test oracle 4
+        //     { 5, ParsePubKey("02ccdca14f48d2e2c7225e378d3d0b40f6aebbc0aef783a6971479cae4d105fc5e"), "localhost:9006", true},   // test oracle 5
+        //     { 6, ParsePubKey("02f3c51b026ce02416d806c76e046fb8c32dce4e7ab82a1bb163a1a852f521a7ac"), "localhost:9007", true},   // test oracle 6
+        //     { 7, ParsePubKey("03b003867d046e3ea6876e1d33fca9018fd9b3f130f9fcb8a0904d9f58e8cf6141"), "localhost:9008", true},   // test oracle 7
+        //     { 8, ParsePubKey("0275a81280ef4e7d977a3234ca9c6860e15243accb7565ff133fb02eda174df34e"), "localhost:9009", true},   // test oracle 8
+        //     { 9, ParsePubKey("02a31a0d23ab9d2b2e9fdea406ccc902ff6812b2455985edd54ddba37402283cbb"), "localhost:9010", true},   // test oracle 9
         //     {10, ParsePubKey("039f802e732aa1b71e6ebf2385a21d70945c04d7a79adaaf1a72b8358e7d9c8466"), "localhost:9011", true},   // test oracle 10
+        //     {11, ParsePubKey("02ab2ca9a4d43ea036eab82375b3eebe6a4422cb8c327bcdd144813f0d111603fd"), "localhost:9012", true},   // test oracle 11
+        //     {12, ParsePubKey("02bc7117d979782809de3012f2946a91a38af36176c171c1f214282c6958387990"), "localhost:9013", true},   // test oracle 12
+        //     {13, ParsePubKey("02954543733113170ff2fafad02b372ed14ed1692640e0299d7c5d2701f21c5d32"), "localhost:9014", true},   // test oracle 13
+        //     {14, ParsePubKey("0207ad71f90ef3eac0f599a1e233c2b1cb79f10d547ef5615c73935a7e25a30c27"), "localhost:9015", true},   // test oracle 14
+        //     {15, ParsePubKey("02c8a52a79f57a6682396f8cc2589f8cd639434128a96e0bf245987d12e8896016"), "localhost:9016", true},   // test oracle 15
+        //     {16, ParsePubKey("02b2f5c1f7dba8484c08a1b6d8a1b47320586edfdfbd53aedb59522f8154ed6f89"), "localhost:9017", true},   // test oracle 16
         // };
-        //
-        // Production testnet oracle nodes:
-        vOracleNodes = {
-            {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12035", true},   // Jared
-            {1,  ParsePubKey("033dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digibyte.io:12035", true},   // Green Candle
-            {2,  ParsePubKey("03172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digibyte.io:12035", true},   // Bastian
-            {3,  ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12035", true},   // DanGB
-            {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12035", true},   // Shenger
-            {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12035", true},   // Ycagel
-            {6,  ParsePubKey("037a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digibyte.io:12035", true},   // Aussie (new key RC15)
-            {7,  ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12035", true},   // LookInto (new key RC13)
-            {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12035", true},   // JohnnyLawDGB (new RC19)
-            {9,  ParsePubKey("02d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "129.212.182.152:12035", true},          // Ogilvie (new RC27)
-            {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digibyte.io:12035", true},  // ChopperBrian (new RC27)
-            {11, ParsePubKey("03dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd"), "oracle12.digibyte.io:12035", true}, // hallvardo (RC30)
-            {12, ParsePubKey("020e2bc0f9c8a7028ca901119ab223230497f98b7f5dad375104dac22454d7d75a"), "oracle13.digibyte.io:12035", true}, // BlindDave (placeholder)
-            {13, ParsePubKey("03a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digibyte.io:12035", true}, // DigiByteForce (RC30)
-            {14, ParsePubKey("0202e666c604621c3b04a84aac9ffc6ef69be224027a783ff15c8f369d8a666c17"), "oracle15.digibyte.io:12035", true}, // Neel (placeholder)
-        };
     }
 };
 
@@ -1105,7 +1178,12 @@ std::unique_ptr<const CChainParams> CChainParams::Main()
 
 std::unique_ptr<const CChainParams> CChainParams::TestNet()
 {
-    return std::make_unique<const CTestNetParams>();
+    return TestNet(TestNetOptions{});
+}
+
+std::unique_ptr<const CChainParams> CChainParams::TestNet(const TestNetOptions& options)
+{
+    return std::make_unique<const CTestNetParams>(options);
 }
 
 // Helper function implementations

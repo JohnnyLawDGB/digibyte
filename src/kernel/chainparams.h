@@ -166,6 +166,13 @@ public:
     };
 
     /**
+     * TestNetOptions holds local debug configurations for testnet.
+     */
+    struct TestNetOptions {
+        bool easy_pow{false};
+    };
+
+    /**
      * RegTestOptions holds configurations for creating a regtest CChainParams.
      */
     struct RegTestOptions {
@@ -178,6 +185,7 @@ public:
     static std::unique_ptr<const CChainParams> SigNet(const SigNetOptions& options);
     static std::unique_ptr<const CChainParams> Main();
     static std::unique_ptr<const CChainParams> TestNet();
+    static std::unique_ptr<const CChainParams> TestNet(const TestNetOptions& options);
 
 protected:
     CChainParams() {}

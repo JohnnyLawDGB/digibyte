@@ -1,13 +1,15 @@
 # Oracle Wallet Migration Guide — DigiByte DigiDollar Testnet
 
-**Last Updated:** 2026-04-17
+**Last Updated:** 2026-04-19
 **Applies to:** v9.26.0-rc30 (testnet23) and future testnet resets
+
+> **RC30 migration in one line:** copy `wallets/Oracle/` from `testnet21/` (rc28/rc29) into `testnet23/` (rc30), then patch the SQLite `application_id` from `0xFDD2B9E3` → `0xFDD2B9E4`. Everything else below explains how and why.
 
 ---
 
 ## Overview
 
-When a new DigiDollar testnet release resets the chain (e.g., testnet21 → testnet23), your Oracle wallet must be migrated to the new testnet directory. The wallet contains your Schnorr/MuSig2 oracle keypair — **this key does NOT change between resets**.
+When a new DigiDollar testnet release resets the chain (e.g., testnet21 → testnet23 for rc30), your Oracle wallet must be migrated to the new testnet directory. The wallet contains your Schnorr/MuSig2 oracle keypair — **this key does NOT change between resets**, so your slot in the 17-oracle list stays with you across migrations.
 
 However, simply copying `wallet.dat` into the new directory will fail due to two separate validation checks introduced in recent releases. This guide walks through every step to get your Oracle wallet working on the new chain.
 
@@ -69,6 +71,8 @@ Example changes for rc30 (testnet23):
 
 rpcport=14026          # Unchanged since rc28
 port=12030             # Was 12035 in rc28/rc29 (P2P port)
+digidollar=1           # REQUIRED for oracles to run
+txindex=1              # REQUIRED for DD-enabled nodes (enforced at startup)
 walletcrosschain=1     # REQUIRED — allows wallet from previous chain
 addnode=oracle1.digibyte.io:12030   # Update port in addnode
 ```
@@ -123,7 +127,7 @@ Copy **only** the Oracle wallet directory — do NOT copy any chain data (blocks
 cp -r /path/to/.digibyte-testnet/OLD_TESTNET/wallets/Oracle \
       /path/to/.digibyte-testnet/NEW_TESTNET/wallets/Oracle
 
-# Example for rc29 → rc30:
+# Example for rc28/rc29 → rc30 (both ran on testnet21, rc30 resets to testnet23):
 cp -r ~/.digibyte-testnet/testnet21/wallets/Oracle \
       ~/.digibyte-testnet/testnet23/wallets/Oracle
 ```
@@ -181,11 +185,11 @@ digibyte-cli -datadir=/path/to/.digibyte-testnet stop
 sleep 15
 ```
 
-Example output:
+Example output (rc28/rc29 → rc30 migration):
 
 ```
-NEW (expected): 0xFDD2B9E3 (4258445795)
-OLD (your Oracle): 0xFCD1B8E2 (4241602786)
+NEW (expected):   0xFDD2B9E4 (4258445796)
+OLD (your Oracle): 0xFDD2B9E3 (4258445795)
 ```
 
 ### 7b: Patch Your Oracle Wallet
@@ -209,7 +213,7 @@ with open(wallet_path, 'rb') as f:
 print(f'Old application_id: 0x{old_id:08X}')
 
 # Step 3: Write the new application_id
-new_id = 0xFDD2B9E3  # <-- Replace with YOUR new value from step 7a
+new_id = 0xFDD2B9E4  # <-- rc30 value. Replace with YOUR new value from step 7a if migrating to a later release.
 with open(wallet_path, 'r+b') as f:
     f.seek(68)
     f.write(struct.pack('>I', new_id))
@@ -311,12 +315,16 @@ Your pubkey should be the same as before the reset. The keypair lives in the wal
 
 ## Quick Reference: Known application_id Values
 
-| Release | application_id (hex) | application_id (decimal) |
-|---------|---------------------|--------------------------|
-| rc27 and earlier | `0xFCD1B8E2` | 4241602786 |
-| rc28 | `0xFDD2B9E3` | 4258445795 |
+| Release | Testnet dir | application_id (hex) | application_id (decimal) |
+|---------|-------------|---------------------|--------------------------|
+| rc27 and earlier | `testnet19/20` | `0xFCD1B8E2` | 4241602786 |
+| rc28 | `testnet21`    | `0xFDD2B9E3` | 4258445795 |
+| rc29 | `testnet21`    | `0xFDD2B9E3` | 4258445795 |
+| **rc30 (current)** | **`testnet23`** | **`0xFDD2B9E4`** | **4258445796** |
 
-> **Note:** Future releases may change this value again. Always use Step 7a to discover the correct ID from a fresh wallet created by the new binary.
+> **Note:** rc29 did not reset the chain — it shared testnet21 with rc28. rc30 is the first reset since rc28, which is why everyone migrating to rc30 patches `0xFDD2B9E3` → `0xFDD2B9E4`.
+>
+> Future releases may change this value again. Always use Step 7a to discover the correct ID from a fresh wallet created by the new binary.
 
 ---
 

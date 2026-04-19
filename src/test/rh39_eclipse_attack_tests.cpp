@@ -89,7 +89,7 @@ BOOST_AUTO_TEST_CASE(eclipse_no_oracle_messages_no_bundle)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
     manager.ClearPendingMessages();
-    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED); // 8-of-15
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED); // RC30: 9-of-17
 
     // With zero messages, consensus should be impossible
     int32_t epoch = 1;
@@ -160,9 +160,9 @@ BOOST_AUTO_TEST_CASE(eclipse_block_rejects_zero_oracle_price)
 // ============================================================================
 
 /**
- * V2-A: Node receiving only 5 of 8+ required oracles cannot reach consensus.
+ * V2-A: Node receiving only 5 of 9+ required oracles cannot reach consensus.
  *
- * With ORACLE_CONSENSUS_REQUIRED=8, relaying only 5 oracle messages means
+ * With ORACLE_CONSENSUS_REQUIRED=9 (RC30), relaying only 5 oracle messages means
  * the victim node never builds a valid bundle. This is a DoS, not a forgery.
  */
 BOOST_AUTO_TEST_CASE(selective_relay_below_quorum_no_consensus)
@@ -170,11 +170,11 @@ BOOST_AUTO_TEST_CASE(selective_relay_below_quorum_no_consensus)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
     manager.ClearPendingMessages();
-    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED); // 8
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED); // RC30: 9
 
     int64_t now = GetTime();
 
-    // Add only 5 oracle messages (below 8 required)
+    // Add only 5 oracle messages (below 9 required for RC30 9-of-17)
     for (uint32_t i = 0; i < 5; i++) {
         COraclePriceMessage msg = CreateSignedOracleMsg(i, 6500 + i * 10, now);
         manager.AddOracleMessage(msg);
@@ -183,7 +183,7 @@ BOOST_AUTO_TEST_CASE(selective_relay_below_quorum_no_consensus)
     COracleBundle bundle = manager.GetCurrentBundle(0);
     BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
     BOOST_CHECK_MESSAGE(bundle.messages.size() < static_cast<size_t>(ORACLE_CONSENSUS_REQUIRED),
-        "5 of 8 required oracles should not produce consensus");
+        "5 of 9 required oracles should not produce consensus");
 }
 
 /**
@@ -602,8 +602,8 @@ BOOST_AUTO_TEST_CASE(eclipse_resistance_summary)
     //    → Eclipse CANNOT cause consensus splits via stale prices
     //
     // 3. QUORUM REQUIREMENT
-    //    - Phase Two requires 8-of-15 oracle signatures for consensus
-    //    - Relaying only <8 oracles prevents bundle creation (DoS only)
+    //    - Phase Two requires 9-of-17 oracle signatures for consensus (RC30)
+    //    - Relaying only <9 oracles prevents bundle creation (DoS only)
     //    - Median price resists outlier manipulation
     //    → Eclipse CANNOT bias price with selective relay (below quorum)
     //

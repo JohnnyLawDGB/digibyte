@@ -35,7 +35,7 @@ std::array<unsigned char, 32> SerializeXOnly(const secp256k1_xonly_pubkey& pk)
 
 } // anonymous namespace
 
-// Use testnet fixture: 15 oracles, 9-of-15 consensus
+// Use testnet fixture: 17 oracles, 9-of-17 consensus (RC30)
 struct TestnetSetup : public BasicTestingSetup {
     TestnetSetup() : BasicTestingSetup(ChainType::TESTNET) {}
 };
@@ -46,18 +46,20 @@ BOOST_FIXTURE_TEST_SUITE(musig2_aggregator_tests, TestnetSetup)
 // Bitmap Encoding/Decoding Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_bitmap_encode_decode_9_of_15)
+BOOST_AUTO_TEST_CASE(test_bitmap_encode_decode_9_of_17)
 {
+    // RC30: 9-of-17 consensus
     std::vector<uint8_t> oracle_ids = {0, 1, 2, 3, 4, 5, 6, 7, 8};
-    uint16_t total = 15;
+    uint16_t total = 17;
 
     auto bitmap = MuSig2OracleAggregator::EncodeBitmap(oracle_ids, total);
     BOOST_REQUIRE(!bitmap.empty());
-    BOOST_CHECK_EQUAL(bitmap.size(), 2u); // ceil(15/8) = 2 bytes
+    BOOST_CHECK_EQUAL(bitmap.size(), 3u); // ceil(17/8) = 3 bytes
 
     // Verify bit pattern: bits 0-8 set
     BOOST_CHECK_EQUAL(bitmap[0], 0xFF); // oracles 0-7
     BOOST_CHECK_EQUAL(bitmap[1], 0x01); // oracle 8
+    BOOST_CHECK_EQUAL(bitmap[2], 0x00); // no oracles 16
 
     auto decoded = MuSig2OracleAggregator::DecodeBitmap(bitmap, total);
     BOOST_CHECK_EQUAL(decoded.size(), oracle_ids.size());
@@ -95,15 +97,15 @@ BOOST_AUTO_TEST_CASE(test_bitmap_variable_length_256_oracles)
 BOOST_AUTO_TEST_CASE(test_bitmap_invalid_empty)
 {
     std::vector<uint8_t> empty_ids;
-    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(empty_ids, 15);
+    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(empty_ids, 17);
     BOOST_CHECK(bitmap.empty());
 }
 
 BOOST_AUTO_TEST_CASE(test_bitmap_invalid_below_threshold)
 {
-    // 7 oracles < ORACLE_CONSENSUS_REQUIRED (8) — must be rejected
-    std::vector<uint8_t> oracle_ids = {0, 1, 2, 3, 4, 5, 6};
-    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(oracle_ids, 15);
+    // RC30: 8 oracles < ORACLE_CONSENSUS_REQUIRED (9) — must be rejected
+    std::vector<uint8_t> oracle_ids = {0, 1, 2, 3, 4, 5, 6, 7};
+    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(oracle_ids, 17);
     BOOST_CHECK(bitmap.empty());
 }
 
@@ -194,14 +196,15 @@ BOOST_AUTO_TEST_CASE(test_aggregate_pubkey_cache)
     BOOST_CHECK(!agg.GetCachedAggregatePubkey(bitmap, pk_cached));
 }
 
-BOOST_AUTO_TEST_CASE(test_all_5005_subsets_9_of_15)
+BOOST_AUTO_TEST_CASE(test_all_subsets_9_of_17)
 {
+    // RC30: 9-of-17 → C(17, 9) = 24310 combinations
     MuSig2OracleAggregator agg;
     std::set<std::array<unsigned char, 32>> unique_keys;
 
-    // Generate 15 deterministic keypairs (testnet has 2 invalid placeholder keys,
-    // so we generate our own to guarantee all 15 are valid EC points).
-    constexpr size_t N = 15;
+    // Generate 17 deterministic keypairs (testnet has some placeholder keys, so
+    // we generate our own to guarantee all 17 are valid EC points).
+    constexpr size_t N = 17;
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
     std::vector<secp256k1_pubkey> all_pubkeys(N);
 
@@ -213,7 +216,7 @@ BOOST_AUTO_TEST_CASE(test_all_5005_subsets_9_of_15)
         BOOST_REQUIRE(secp256k1_keypair_pub(ctx, &all_pubkeys[i], &kp));
     }
 
-    // Generate all C(15,9) = 5005 combinations.
+    // Generate all C(17,9) = 24310 combinations.
     std::vector<int> selector(N, 0);
     std::fill(selector.end() - 9, selector.end(), 1);
 
@@ -238,11 +241,11 @@ BOOST_AUTO_TEST_CASE(test_all_5005_subsets_9_of_15)
 
     secp256k1_context_destroy(ctx);
 
-    // Must have visited exactly 5005 subsets
-    BOOST_CHECK_EQUAL(count, 5005);
+    // Must have visited exactly C(17,9) = 24310 subsets (RC30)
+    BOOST_CHECK_EQUAL(count, 24310);
 
     // Every subset must produce a unique aggregate pubkey
-    BOOST_CHECK_EQUAL(unique_keys.size(), 5005u);
+    BOOST_CHECK_EQUAL(unique_keys.size(), 24310u);
 }
 
 // ============================================================================
@@ -325,8 +328,9 @@ BOOST_AUTO_TEST_CASE(rh01_duplicate_key_injection_deduplicated)
 // Attack Vector 4: Below-threshold sets rejected
 BOOST_AUTO_TEST_CASE(rh01_below_threshold_rejected)
 {
-    std::vector<uint8_t> too_few = {0, 1, 2, 3, 4, 5, 6};
-    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(too_few, 15);
+    // RC30: below 9-of-17 threshold
+    std::vector<uint8_t> too_few = {0, 1, 2, 3, 4, 5, 6, 7};
+    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(too_few, 17);
     BOOST_CHECK(bitmap.empty());
 
     MuSig2OracleAggregator agg;
@@ -343,7 +347,7 @@ BOOST_AUTO_TEST_CASE(rh01_out_of_bounds_oracle_id)
     secp256k1_xonly_pubkey pk{};
     secp256k1_musig_keyagg_cache cache{};
 
-    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(bad_ids, 15);
+    auto bitmap = MuSig2OracleAggregator::EncodeBitmap(bad_ids, 17);
     BOOST_CHECK(bitmap.empty());
     BOOST_CHECK(!agg.ComputeAggregatePubkey(bad_ids, pk, cache));
 }
@@ -351,8 +355,10 @@ BOOST_AUTO_TEST_CASE(rh01_out_of_bounds_oracle_id)
 // Attack Vector 6: Bitmap size mismatch
 BOOST_AUTO_TEST_CASE(rh01_bitmap_size_mismatch_rejected)
 {
-    std::vector<unsigned char> bad_bitmap = {0xFF, 0x01, 0x00};
-    auto decoded = MuSig2OracleAggregator::DecodeBitmap(bad_bitmap, 15);
+    // RC30: 17 oracles means bitmap size should be ceil(17/8) = 3 bytes
+    // An incorrectly-sized 4-byte bitmap should be rejected
+    std::vector<unsigned char> bad_bitmap = {0xFF, 0x01, 0x00, 0x00};
+    auto decoded = MuSig2OracleAggregator::DecodeBitmap(bad_bitmap, 17);
     BOOST_CHECK(decoded.empty());
 }
 

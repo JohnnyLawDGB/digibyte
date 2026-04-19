@@ -269,7 +269,7 @@ BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_minimum_ratio, DigiDollarERRTest
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_sufficient_signatures, DigiDollarERRTestSetup)
 {
-    // Arrange: Create oracle bundle with 8 messages (sufficient for consensus)
+    // Arrange: Create oracle bundle with 8 messages (sufficient — regtest needs 4-of-7)
     COracleBundle bundle(1); // Epoch 1
 
     for (int i = 0; i < 8; i++) {
@@ -279,11 +279,11 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_sufficient_signatures, DigiDollarER
         bundle.AddMessage(msg);
     }
 
-    // Act: Check oracle consensus
+    // Act: Check oracle consensus (regtest 4-of-7, RC30 mainnet/testnet: 9-of-17)
     bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, Params().GetConsensus());
 
     // Assert: GREEN phase - verify correct behavior
-    BOOST_CHECK(hasConsensus); // Should have consensus with 8/15 signatures
+    BOOST_CHECK(hasConsensus); // Should have consensus on regtest (4-of-7 satisfied)
 }
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_insufficient_signatures, DigiDollarERRTestSetup)

@@ -242,9 +242,11 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK_EQUAL(testDD.minMintAmount, 10000);   // Testnet: 10000 cents = $100.00 min
     BOOST_CHECK_EQUAL(regTestDD.minMintAmount, 1);    // Regtest: 1 cent = $0.01 min
 
-    BOOST_CHECK_EQUAL(mainDD.oracleThreshold, 8);  // Mainnet: 8-of-15 (Phase Two)
-    BOOST_CHECK_EQUAL(testDD.oracleThreshold, 8);  // Testnet: 8-of-15 (Phase Two)
-    BOOST_CHECK_EQUAL(regTestDD.oracleThreshold, 1); // Regtest: 1-of-1 (Phase One)
+    // RC30: mainnet and testnet both use 9-of-17 via DigiDollar::ConsensusParams
+    // (kept in sync with Consensus::Params nOracleRequiredMessages/nOracleTotalOracles).
+    BOOST_CHECK_EQUAL(mainDD.oracleThreshold, 9);  // Mainnet: 9-of-17 (RC30)
+    BOOST_CHECK_EQUAL(testDD.oracleThreshold, 9);  // Testnet: 9-of-17 (Phase Two, RC30)
+    BOOST_CHECK_EQUAL(regTestDD.oracleThreshold, 1); // Regtest: 1-of-1 (Phase One, unchanged)
 
     // Test activation heights
     BOOST_CHECK_EQUAL(mainParams->GetConsensus().nDDActivationHeight, 22014720); // Aligned with BIP9 min_activation_height

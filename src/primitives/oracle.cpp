@@ -202,8 +202,9 @@ COracleBundle::COracleBundle(int32_t epoch_in) : epoch(epoch_in)
 
 size_t COracleBundle::GetV03PayloadSize() const
 {
-    // v0x03 on-chain format: bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
-    return 1 + participation_bitmap.size() + 8 + 8 + 64;
+    // v0x03 on-chain format (RC30):
+    //   bitmap_len(1) + bitmap(variable) + epoch(4) + price(8) + timestamp(8) + aggregate_sig(64)
+    return 1 + participation_bitmap.size() + 4 + 8 + 8 + 64;
 }
 
 std::vector<unsigned char> COracleBundle::SerializeV03Data() const
@@ -222,6 +223,14 @@ std::vector<unsigned char> COracleBundle::SerializeV03Data() const
 
     // bitmap (variable)
     data.insert(data.end(), participation_bitmap.begin(), participation_bitmap.end());
+
+    // epoch (4 bytes, little-endian, int32) — RC30: required for signature verification.
+    // Signer computes H(epoch, price, timestamp); validator must see the same epoch.
+    uint32_t ep = static_cast<uint32_t>(epoch);
+    for (int i = 0; i < 4; ++i) {
+        data.push_back(static_cast<unsigned char>(ep & 0xFF));
+        ep >>= 8;
+    }
 
     // price (8 bytes, little-endian)
     uint64_t price = median_price_micro_usd;
@@ -245,8 +254,8 @@ std::vector<unsigned char> COracleBundle::SerializeV03Data() const
 
 bool COracleBundle::DeserializeV03Data(const std::vector<unsigned char>& data, COracleBundle& bundle)
 {
-    // Minimum: bitmap_len(1) + bitmap(>=1) + price(8) + timestamp(8) + sig(64) = 82
-    if (data.size() < 82) return false;
+    // RC30 minimum: bitmap_len(1) + bitmap(>=1) + epoch(4) + price(8) + timestamp(8) + sig(64) = 86
+    if (data.size() < 86) return false;
 
     // Ensure bundle is marked as v0x03 when decoding this payload type.
     bundle.version = 3;
@@ -258,13 +267,20 @@ bool COracleBundle::DeserializeV03Data(const std::vector<unsigned char>& data, C
     if (bitmap_len == 0) return false;
 
     // Enforce exact payload size to avoid trailing-byte ambiguity/malleability.
-    // Need exactly: bitmap_len + 8 (price) + 8 (timestamp) + 64 (sig) bytes after bitmap_len byte
-    const size_t expected_size = 1 + bitmap_len + 8 + 8 + 64;
+    // Need exactly: bitmap_len + 4 (epoch) + 8 (price) + 8 (timestamp) + 64 (sig) after bitmap_len byte
+    const size_t expected_size = 1 + bitmap_len + 4 + 8 + 8 + 64;
     if (data.size() != expected_size) return false;
 
     // bitmap (variable)
     bundle.participation_bitmap.assign(data.begin() + pos, data.begin() + pos + bitmap_len);
     pos += bitmap_len;
+
+    // epoch (4 bytes, little-endian, int32) — RC30
+    uint32_t ep = 0;
+    for (int i = 0; i < 4; ++i) {
+        ep |= static_cast<uint32_t>(data[pos++]) << (i * 8);
+    }
+    bundle.epoch = static_cast<int32_t>(ep);
 
     // price (8 bytes, little-endian)
     uint64_t price = 0;

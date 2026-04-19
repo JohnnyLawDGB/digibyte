@@ -367,6 +367,38 @@ bool MuSig2SigningSession::AddPartialSignature(uint8_t oracle_id,
     return true;
 }
 
+// RC30: verifying wrapper — used by orchestrator to reject partial sigs
+// signed under a different keyagg_cache (participant-set divergence).
+// Tests use AddPartialSignature directly without verification.
+bool MuSig2SigningSession::AddPartialSignatureVerified(uint8_t oracle_id,
+                                                       const secp256k1_musig_partial_sig& partial_sig,
+                                                       const secp256k1_pubkey& signer_pk)
+{
+    LOCK(m_mutex);
+
+    if (m_state != MuSig2SessionState::SIGNING) return false;
+
+    static const unsigned char partial_sig_magic[4] = {0xeb, 0xfb, 0x1a, 0x32};
+    if (memcmp(partial_sig.data, partial_sig_magic, 4) != 0) return false;
+
+    if (m_partial_sigs.count(oracle_id)) return false;
+
+    auto pubnonce_it = m_pubnonces.find(oracle_id);
+    if (pubnonce_it == m_pubnonces.end()) return false;
+
+    if (!secp256k1_musig_partial_sig_verify(m_ctx,
+                                            &partial_sig,
+                                            &pubnonce_it->second,
+                                            &signer_pk,
+                                            &m_keyagg_cache,
+                                            &m_session)) {
+        return false;
+    }
+
+    m_partial_sigs[oracle_id] = partial_sig;
+    return true;
+}
+
 bool MuSig2SigningSession::HasEnoughPartialSigs() const
 {
     LOCK(m_mutex);

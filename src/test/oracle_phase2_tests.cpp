@@ -5,7 +5,7 @@
 /**
  * Oracle Phase 2 Unit Tests
  *
- * Tests for multi-oracle consensus (8-of-15 mainnet, 3-of-10 testnet).
+ * Tests for multi-oracle consensus (RC30: 9-of-17 mainnet and testnet).
  * Validates ValidatePhaseTwoBundle(), CalculateConsensusPrice(), and related functions.
  *
  * Specification: ORACLE_PHASE_2_SPEC_PRD.md
@@ -514,7 +514,7 @@ BOOST_AUTO_TEST_CASE(required_consensus_phase1)
 {
     LogPrintf("Test: GetRequiredConsensus returns 1 below Phase 2 height\n");
 
-    Consensus::Params params = CreatePhase2Params(8, 15);
+    Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
     params.nDigiDollarPhase2Height = 10000;  // Phase 2 at block 10000
 
     // Below Phase 2 height
@@ -531,12 +531,12 @@ BOOST_AUTO_TEST_CASE(required_consensus_phase2_at_activation)
 {
     LogPrintf("Test: GetRequiredConsensus returns params value at Phase 2 height\n");
 
-    Consensus::Params params = CreatePhase2Params(8, 15);
+    Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
     params.nDigiDollarPhase2Height = 10000;
 
-    // Exactly at Phase 2 height
+    // Exactly at Phase 2 height (RC30: 9-of-17)
     int required = OracleBundleManager::GetRequiredConsensus(10000, params);
-    BOOST_CHECK_EQUAL(required, 8);
+    BOOST_CHECK_EQUAL(required, 9);
 
     LogPrintf("Test PASSED: Phase 2 (height 10000) requires %d signatures\n", required);
 }
@@ -548,12 +548,12 @@ BOOST_AUTO_TEST_CASE(required_consensus_phase2_above_activation)
 {
     LogPrintf("Test: GetRequiredConsensus returns params value above Phase 2 height\n");
 
-    Consensus::Params params = CreatePhase2Params(8, 15);
+    Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
     params.nDigiDollarPhase2Height = 10000;
 
-    // Above Phase 2 height
+    // Above Phase 2 height (RC30: 9-of-17)
     int required = OracleBundleManager::GetRequiredConsensus(15000, params);
-    BOOST_CHECK_EQUAL(required, 8);
+    BOOST_CHECK_EQUAL(required, 9);
 
     LogPrintf("Test PASSED: Phase 2 (height 15000) requires %d signatures\n", required);
 }
@@ -569,7 +569,7 @@ BOOST_AUTO_TEST_CASE(validate_bundle_routes_phase1)
 {
     LogPrintf("Test: ValidateBundle routes to Phase 1 below activation height\n");
 
-    Consensus::Params params = CreatePhase2Params(8, 15);
+    Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
     params.nDigiDollarPhase2Height = 10000;
 
     auto oracle_keys = CreateOracleKeys(1);
@@ -625,16 +625,16 @@ BOOST_AUTO_TEST_CASE(validate_bundle_routes_phase2)
 //
 
 /**
- * Test: 8-of-15 consensus tolerates up to 7 Byzantine oracles
+ * Test: 9-of-17 consensus tolerates up to 8 Byzantine oracles (RC30)
  */
 BOOST_AUTO_TEST_CASE(byzantine_tolerance_test)
 {
-    LogPrintf("Test: Byzantine fault tolerance - 7 malicious + 8 honest = SUCCESS\n");
+    LogPrintf("Test: Byzantine fault tolerance - 8 malicious + 9 honest = SUCCESS (RC30 9-of-17)\n");
 
-    Consensus::Params params = CreatePhase2Params(8, 15);
+    Consensus::Params params = CreatePhase2Params(9, 17);
     params.nDigiDollarPhase2Height = 100;
 
-    auto oracle_keys = CreateOracleKeys(15);
+    auto oracle_keys = CreateOracleKeys(17);
     int64_t timestamp = GetTime();
     int32_t block_height = 200;
 
@@ -642,14 +642,14 @@ BOOST_AUTO_TEST_CASE(byzantine_tolerance_test)
     bundle.epoch = GetCurrentEpoch(block_height);
     bundle.timestamp = timestamp;
 
-    // 8 honest oracles with consistent prices
-    for (size_t i = 0; i < 8; ++i) {
+    // 9 honest oracles with consistent prices
+    for (size_t i = 0; i < 9; ++i) {
         bundle.messages.push_back(CreateSignedOracleMessage(
             oracle_keys[i], i, 50000 + i * 100, timestamp, block_height));
     }
 
-    // 7 Byzantine oracles with wildly different prices (will be filtered)
-    for (size_t i = 8; i < 15; ++i) {
+    // 8 Byzantine oracles with wildly different prices (will be filtered)
+    for (size_t i = 9; i < 17; ++i) {
         COraclePriceMessage bad_msg = CreateSignedOracleMessage(
             oracle_keys[i], i, 1000000, timestamp, block_height);  // 10x higher
         // Corrupt signatures to simulate malicious behavior
@@ -657,16 +657,16 @@ BOOST_AUTO_TEST_CASE(byzantine_tolerance_test)
         bundle.messages.push_back(bad_msg);
     }
 
-    // Calculate consensus (should use only 8 valid messages)
+    // Calculate consensus (should use only 9 valid messages)
     bundle.median_price_micro_usd = OracleBundleManager::CalculateConsensusPrice(bundle, params);
 
-    // Even with 7 bad oracles, 8 honest ones should reach consensus
+    // Even with 8 bad oracles, 9 honest ones should reach consensus
     BOOST_CHECK_MESSAGE(bundle.median_price_micro_usd > 0,
-                        "Consensus should be reached with 8 honest oracles");
+                        "Consensus should be reached with 9 honest oracles");
     BOOST_CHECK_MESSAGE(bundle.median_price_micro_usd < 100000,
                         "Consensus should not be affected by Byzantine outliers");
 
-    LogPrintf("Test: Byzantine tolerance - consensus price = %llu with 7 bad oracles\n",
+    LogPrintf("Test: Byzantine tolerance - consensus price = %llu with 8 bad oracles\n",
               bundle.median_price_micro_usd);
 }
 
@@ -734,42 +734,42 @@ BOOST_AUTO_TEST_CASE(maximum_price_values)
 }
 
 /**
- * Test: Testnet 3-of-10 configuration
+ * Test: Testnet 9-of-17 configuration (RC30)
  */
 BOOST_AUTO_TEST_CASE(testnet_configuration)
 {
-    LogPrintf("Test: Testnet 3-of-10 configuration\n");
+    LogPrintf("Test: Testnet 9-of-17 configuration (RC30)\n");
 
-    // Simulate testnet params
-    Consensus::Params testnet_params = CreatePhase2Params(3, 10);
+    // Simulate testnet params (RC30 9-of-17)
+    Consensus::Params testnet_params = CreatePhase2Params(9, 17);
 
-    BOOST_CHECK_EQUAL(testnet_params.nOracleRequiredMessages, 3);
-    BOOST_CHECK_EQUAL(testnet_params.nOracleTotalOracles, 10);
+    BOOST_CHECK_EQUAL(testnet_params.nOracleRequiredMessages, 9);
+    BOOST_CHECK_EQUAL(testnet_params.nOracleTotalOracles, 17);
 
     // Verify GetRequiredConsensus returns correct value
     int required = OracleBundleManager::GetRequiredConsensus(1000, testnet_params);
-    BOOST_CHECK_EQUAL(required, 3);
+    BOOST_CHECK_EQUAL(required, 9);
 
     LogPrintf("Test PASSED: Testnet requires %d of %d oracles\n",
               testnet_params.nOracleRequiredMessages, testnet_params.nOracleTotalOracles);
 }
 
 /**
- * Test: Mainnet 8-of-15 configuration
+ * Test: Mainnet 9-of-17 configuration (RC30)
  */
 BOOST_AUTO_TEST_CASE(mainnet_configuration)
 {
-    LogPrintf("Test: Mainnet 8-of-15 configuration\n");
+    LogPrintf("Test: Mainnet 9-of-17 configuration (RC30)\n");
 
-    // Simulate mainnet params
-    Consensus::Params mainnet_params = CreatePhase2Params(8, 15);
+    // Simulate mainnet params (RC30 9-of-17)
+    Consensus::Params mainnet_params = CreatePhase2Params(9, 17);
 
-    BOOST_CHECK_EQUAL(mainnet_params.nOracleRequiredMessages, 8);
-    BOOST_CHECK_EQUAL(mainnet_params.nOracleTotalOracles, 15);
+    BOOST_CHECK_EQUAL(mainnet_params.nOracleRequiredMessages, 9);
+    BOOST_CHECK_EQUAL(mainnet_params.nOracleTotalOracles, 17);
 
     // Verify GetRequiredConsensus returns correct value
     int required = OracleBundleManager::GetRequiredConsensus(1000000, mainnet_params);
-    BOOST_CHECK_EQUAL(required, 8);
+    BOOST_CHECK_EQUAL(required, 9);
 
     LogPrintf("Test PASSED: Mainnet requires %d of %d oracles\n",
               mainnet_params.nOracleRequiredMessages, mainnet_params.nOracleTotalOracles);
@@ -806,19 +806,19 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_survive_after_bundle, BasicTestingSetup
 
     // Reset singleton state to defaults (may be contaminated by prior tests)
     manager.SetEnabled(true);
-    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // RC30: 9-of-17
 
     // Clear state using public API
     manager.ClearPendingMessages();
 
-    // Inject 8 consensus attestations (properly signed, same price)
+    // Inject 9 consensus attestations (properly signed, same price) — RC30 9-of-17
     uint64_t consensus_price = 10000;
     int64_t consensus_timestamp = GetTime();
-    InjectConsensusAttestations(manager, 8, consensus_price, consensus_timestamp);
+    InjectConsensusAttestations(manager, 9, consensus_price, consensus_timestamp);
 
-    // Verify 8 messages pending + 8 attestations
-    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 8);
-    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 8);
+    // Verify 9 messages pending + 9 attestations (RC30)
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 9);
+    BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 9);
 
     // Create a block — messages are consumed into the bundle but NOT cleared
     // (they persist for future template creation, expire via stale purge)
@@ -831,12 +831,12 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_survive_after_bundle, BasicTestingSetup
     // They are available for the next block template; expiry is handled by
     // ORACLE_MAX_AGE_SECONDS stale purge, not by bundle creation
     BOOST_CHECK_MESSAGE(
-        manager.GetPendingMessageCount() == 8,
-        strprintf("Pending messages should survive bundle creation (got %zu, expected 8)", manager.GetPendingMessageCount())
+        manager.GetPendingMessageCount() == 9,
+        strprintf("Pending messages should survive bundle creation (got %zu, expected 9)", manager.GetPendingMessageCount())
     );
     BOOST_CHECK_MESSAGE(
-        manager.GetPendingAttestationCount() == 8,
-        strprintf("Attestations should survive bundle creation (got %zu, expected 8)", manager.GetPendingAttestationCount())
+        manager.GetPendingAttestationCount() == 9,
+        strprintf("Attestations should survive bundle creation (got %zu, expected 9)", manager.GetPendingAttestationCount())
     );
 
     LogPrintf("Test PASSED: Pending messages and attestations persist after Phase Two bundle creation\n");
@@ -847,10 +847,10 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_preserved_when_insufficient, BasicTesti
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
-    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // RC30: 9-of-17
     manager.ClearPendingMessages();
 
-    // Inject only 2 consensus attestations (below 8-of-15 threshold)
+    // Inject only 2 consensus attestations (below 9-of-17 threshold, RC30)
     InjectConsensusAttestations(manager, 2, 10000, GetTime());
 
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 2);
@@ -875,12 +875,12 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
-    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // 8-of-15
+    manager.SetMinOracleCount(ORACLE_CONSENSUS_REQUIRED);  // RC30: 9-of-17
     manager.ClearPendingMessages();
 
-    // Block 1: Inject 8 consensus attestations, create bundle
+    // Block 1: Inject 9 consensus attestations, create bundle (RC30 9-of-17)
     int64_t ts1 = GetTime();
-    InjectConsensusAttestations(manager, 8, 10000, ts1);
+    InjectConsensusAttestations(manager, 9, 10000, ts1);
 
     CBlock block1;
     AddDummyCoinbase(block1);

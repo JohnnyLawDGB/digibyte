@@ -98,6 +98,8 @@ private:
     std::unique_ptr<MuSig2OracleAggregator> m_aggregator;
     std::map<int32_t, std::set<uint8_t>> m_nonce_broadcast_tracker;
     std::map<int32_t, std::set<uint8_t>> m_partialsig_broadcast_tracker;
+    // RC30: buffer partial sigs that arrive before local session enters SIGNING.
+    std::map<int32_t, std::vector<OracleMusigPartialSigMsg>> m_pending_partialsigs;
     mutable std::unique_ptr<CKey> m_cached_oracle_key;
     mutable uint8_t m_cached_oracle_id{255};
     mutable bool m_oracle_key_cached{false};

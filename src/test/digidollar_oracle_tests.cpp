@@ -158,27 +158,28 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_consensus_requirement)
     // No messages - no consensus
     BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // Add 7 messages - still no consensus (need 8 of 15)
-    for (int i = 0; i < 7; i++) {
+    // RC30: 9-of-17 consensus
+    // Add 8 messages - still no consensus (need 9 of 17)
+    for (int i = 0; i < 8; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
     BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // Add 8th message - now has consensus
-    COraclePriceMessage msg8(7, 6000, GetTime());  // $0.006 (realistic price)
-    bundle.AddMessage(msg8);
+    // Add 9th message - now has consensus
+    COraclePriceMessage msg9(8, 6000, GetTime());  // $0.006 (realistic price)
+    bundle.AddMessage(msg9);
     BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // Test with more messages (up to 15)
-    for (int i = 8; i < 15; i++) {
+    // Test with more messages (up to 17)
+    for (int i = 9; i < 17; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
     BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Test with too many messages (should reject)
-    COraclePriceMessage extra_msg(15, 6000, GetTime());  // $0.006 (realistic price)
+    COraclePriceMessage extra_msg(17, 6000, GetTime());  // $0.006 (realistic price)
     BOOST_CHECK(!bundle.AddMessage(extra_msg));
 }
 
@@ -402,9 +403,9 @@ BOOST_AUTO_TEST_CASE(oracle_selection_deterministic)
     std::vector<OracleNodeInfo> selected1 = SelectOraclesForEpoch(all_oracles, epoch);
     std::vector<OracleNodeInfo> selected2 = SelectOraclesForEpoch(all_oracles, epoch);
 
-    // Should select exactly 15 oracles
-    BOOST_CHECK_EQUAL(selected1.size(), 15);
-    BOOST_CHECK_EQUAL(selected2.size(), 15);
+    // Should select exactly ORACLE_ACTIVE_COUNT oracles (RC30: 17)
+    BOOST_CHECK_EQUAL(selected1.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
+    BOOST_CHECK_EQUAL(selected2.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
 
     // Selections should be identical (deterministic)
     for (size_t i = 0; i < selected1.size(); i++) {
@@ -425,7 +426,7 @@ BOOST_AUTO_TEST_CASE(oracle_selection_deterministic)
 
 BOOST_AUTO_TEST_CASE(oracle_selection_insufficient_oracles)
 {
-    // Test with fewer than 15 oracles
+    // Test with fewer than ORACLE_ACTIVE_COUNT oracles (RC30: 17)
     std::vector<OracleNodeInfo> few_oracles;
     for (int i = 0; i < 10; i++) {
         CKey key;
@@ -479,12 +480,12 @@ BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
 {
-    // Test that testnet has at least 15 oracle nodes (8-of-15 consensus)
+    // Test that testnet has at least 17 oracle nodes (RC30: 9-of-17 consensus)
     auto chainparams = CChainParams::TestNet();
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
-    BOOST_CHECK_GE(oracles.size(), 15);  // 15+ oracle nodes
-    BOOST_CHECK_GE(chainparams->GetActiveOracleCount(), 15);  // 8-of-15 MuSig2 consensus
+    BOOST_CHECK_GE(oracles.size(), 17);  // 17+ oracle nodes (RC30)
+    BOOST_CHECK_GE(chainparams->GetActiveOracleCount(), 17);  // RC30: 9-of-17 MuSig2 consensus
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
@@ -1033,7 +1034,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Test 4: Bundle message validation
     COracleBundle test_bundle(10);
 
-    // Add maximum allowed messages (15)
+    // Add maximum allowed messages (RC30: 17)
     for (int i = 0; i < ORACLE_ACTIVE_COUNT; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006
         test_bundle.AddMessage(msg);

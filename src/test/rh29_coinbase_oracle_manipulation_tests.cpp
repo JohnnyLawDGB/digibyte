@@ -409,7 +409,7 @@ BOOST_AUTO_TEST_CASE(attack3_v02_num_messages_overflow)
 
     std::vector<unsigned char> data;
     data.push_back(0x02); // version
-    data.push_back(255);  // num_messages = 255 (way more than ORACLE_ACTIVE_COUNT=15)
+    data.push_back(255);  // num_messages = 255 (way more than ORACLE_ACTIVE_COUNT=17, RC30)
     uint64_t price = 50000;
     int64_t ts = GetTime();
     for (int i = 0; i < 8; ++i) data.push_back((price >> (i * 8)) & 0xFF);
@@ -494,8 +494,8 @@ BOOST_AUTO_TEST_CASE(attack3_v03_bitmap_len_mismatch)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(MakeCoinbaseTx(script, 101)), bundle);
 
-    // DeserializeV03Data checks exact size: 1 + bitmap_len + 8 + 8 + 64
-    // Expected: 1 + 5 + 80 = 86; actual data after version: 1 + 1 + 80 = 82
+    // DeserializeV03Data checks exact size: 1 + bitmap_len + 4 + 8 + 8 + 64
+    // Expected: 1 + 5 + 4 + 8 + 8 + 64 = 90; actual data after version: 1 + 1 + 80 = 82
     BOOST_CHECK_MESSAGE(!extracted, "V03 with bitmap_len mismatch should be rejected");
 }
 
@@ -972,7 +972,7 @@ BOOST_AUTO_TEST_CASE(attack_oracle_id_out_of_range)
     BOOST_TEST_MESSAGE("=== RH-29 Extra: Oracle ID beyond ORACLE_ACTIVE_COUNT ===");
 
     int64_t now = GetTime();
-    // oracle_id = 255 (way beyond ORACLE_ACTIVE_COUNT=15)
+    // oracle_id = 255 (way beyond ORACLE_ACTIVE_COUNT=17, RC30)
     CScript script = MakeV01Script(255, 50000, now);
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();

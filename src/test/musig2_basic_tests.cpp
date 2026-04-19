@@ -6,8 +6,8 @@
  * MuSig2 Basic Crypto Tests
  *
  * Tests for the secp256k1 MuSig2 module (BIP 327):
- * - Key aggregation (2 signers, 15 signers)
- * - Full sign/verify round-trip (2 signers, 9-of-15 subset)
+ * - Key aggregation (2 signers, 17 signers)
+ * - Full sign/verify round-trip (2 signers, 9-of-17 subset, RC30)
  * - Deterministic aggregate pubkey
  * - Aggregate sig verifiable via standard schnorrsig_verify (BIP-340)
  * - Nonce generation uniqueness
@@ -226,17 +226,17 @@ BOOST_AUTO_TEST_CASE(test_musig2_sign_verify_roundtrip_2_signers)
 }
 
 // ============================================================================
-// test_musig2_sign_verify_roundtrip_9_of_15
-// 9-of-15 signer subset: only 9 signers participate in signing
+// test_musig2_sign_verify_roundtrip_9_of_17
+// RC30 9-of-17 signer subset: only 9 signers participate in signing
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_musig2_sign_verify_roundtrip_9_of_15)
+BOOST_AUTO_TEST_CASE(test_musig2_sign_verify_roundtrip_9_of_17)
 {
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
-    constexpr size_t N_TOTAL = 15;
+    constexpr size_t N_TOTAL = 17;
     constexpr size_t N_SIGNING = 9;
 
-    // Generate all 15 key pairs
+    // Generate all 17 key pairs (RC30)
     std::vector<std::array<unsigned char, 32>> all_seckeys(N_TOTAL);
     std::vector<secp256k1_keypair> all_keypairs(N_TOTAL);
     std::vector<secp256k1_pubkey> all_pubkeys(N_TOTAL);

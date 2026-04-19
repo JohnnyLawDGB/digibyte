@@ -246,20 +246,20 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_signature)
 
 BOOST_AUTO_TEST_CASE(test_oracle_bundle_consensus_validation)
 {
-    // Test oracle bundle consensus requirements
+    // Test oracle bundle consensus requirements (RC30: 9-of-17)
     COracleBundle bundle{100};
 
     // Bundle with insufficient messages should not have consensus
-    for (uint32_t i = 1; i <= 7; ++i) {
+    for (uint32_t i = 1; i <= 8; ++i) {
         COraclePriceMessage msg{i, 5, GetTime()};
         bundle.AddMessage(msg);
     }
-    BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Only 7 messages, need 8
+    BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Only 8 messages, need 9 (RC30)
 
     // Add one more message to reach consensus
-    COraclePriceMessage msg8{8, 5, GetTime()};
-    bundle.AddMessage(msg8);
-    BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Now has 8 messages
+    COraclePriceMessage msg9{9, 5, GetTime()};
+    bundle.AddMessage(msg9);
+    BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Now has 9 messages (RC30: 9-of-17)
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_message_types_in_all_net_message_types)

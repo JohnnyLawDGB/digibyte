@@ -8,7 +8,7 @@
  * Tests for wiring v0x03 data into CreateOracleScript and ExtractOracleBundle:
  * - Round-trip: create v0x03 script, extract back, compare all fields
  * - Phase 3 activation height gate
- * - Script size verification (v0x03 ~89 bytes vs v0x02 600+)
+ * - Script size verification (v0x03 ~93 bytes vs v0x02 600+)
  * - Validation: reject invalid aggregate_sig size, empty bitmap
  * - Oracle ID decoding from participation bitmap
  * - Regression: v0x02 bundles still work after v0x03 additions
@@ -108,8 +108,8 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_roundtrip)
 
 // ============================================================================
 // test_create_oracle_script_v03_size_9_of_15
-// Verify the v0x03 data payload is exactly 83 bytes (bitmap_len=2)
-// Script overhead: OP_RETURN(1) + OP_ORACLE(1) + push(1) + version(1) + pushdata1(2) + data(83) = 89
+// Verify the v0x03 data payload is exactly 87 bytes (bitmap_len=2)
+// Script overhead: OP_RETURN(1) + OP_ORACLE(1) + push(1) + version(1) + pushdata1(2) + data(87) = 93
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_size_9_of_15)
 {
@@ -118,21 +118,21 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_size_9_of_15)
     manager.SetEnabled(true);
 
     // 9-of-15: bitmap = 2 bytes
-    // v0x03 data payload: bitmap_len(1) + bitmap(2) + price(8) + timestamp(8) + sig(64) = 83 bytes
+    // v0x03 data payload: bitmap_len(1) + bitmap(2) + epoch(4) + price(8) + timestamp(8) + sig(64) = 87 bytes
     COracleBundle bundle = MakeV03Bundle({0xFF, 0x01});
 
     CScript oracle_script = manager.CreateOracleScript(bundle);
     BOOST_CHECK(!oracle_script.empty());
 
-    // Verify the serialized data portion is 83 bytes
+    // Verify the serialized data portion is 87 bytes
     std::vector<unsigned char> serialized = bundle.SerializeV03Data();
-    BOOST_CHECK_EQUAL(serialized.size(), 83);
+    BOOST_CHECK_EQUAL(serialized.size(), 87);
 
     // The total script should be: OP_RETURN(1) + OP_ORACLE(1) +
     // push_version(1+1=2 for direct push of 1 byte) +
-    // push_data(OP_PUSHDATA1(1) + len(1) + data(83) = 85)
-    // Total: 1 + 1 + 2 + 85 = 89 bytes
-    BOOST_CHECK_EQUAL(oracle_script.size(), 89);
+    // push_data(OP_PUSHDATA1(1) + len(1) + data(87) = 89)
+    // Total: 1 + 1 + 2 + 89 = 93 bytes
+    BOOST_CHECK_EQUAL(oracle_script.size(), 93);
 }
 
 // ============================================================================
@@ -278,7 +278,7 @@ BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v03_data_integrity)
 
 // ============================================================================
 // test_create_v03_with_various_bitmap_sizes
-// Test with 15, 30, and 256 oracle slots (bitmap sizes 2, 4, 32)
+// Test with 17 (RC30), 30, and 256 oracle slots (bitmap sizes 3, 4, 32)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_create_v03_with_various_bitmap_sizes)
 {
@@ -286,23 +286,23 @@ BOOST_AUTO_TEST_CASE(test_create_v03_with_various_bitmap_sizes)
     manager.Clear();
     manager.SetEnabled(true);
 
-    // 15 oracles: bitmap = 2 bytes, payload = 1+2+8+8+64 = 83
+    // RC30: 17 oracles: bitmap = 3 bytes (ceil(17/8)), payload = 1+3+4+8+8+64 = 88
     {
-        COracleBundle bundle = MakeV03Bundle({0xFF, 0x7F});
+        COracleBundle bundle = MakeV03Bundle({0xFF, 0xFF, 0x01});
         CScript script = manager.CreateOracleScript(bundle);
         BOOST_CHECK(!script.empty());
 
         CTransaction tx = MakeCoinbaseTx(script);
         COracleBundle extracted;
         BOOST_CHECK(manager.ExtractOracleBundle(tx, extracted));
-        BOOST_CHECK_EQUAL(extracted.participation_bitmap.size(), 2);
+        BOOST_CHECK_EQUAL(extracted.participation_bitmap.size(), 3);
     }
 
-    // 30 oracles: bitmap = 4 bytes, payload = 1+4+8+8+64 = 85
+    // 30 oracles: bitmap = 4 bytes, payload = 1+4+4+8+8+64 = 89
     {
         COracleBundle bundle = MakeV03Bundle({0xFF, 0xFF, 0xFF, 0x3F});
         std::vector<unsigned char> serialized = bundle.SerializeV03Data();
-        BOOST_CHECK_EQUAL(serialized.size(), 85);
+        BOOST_CHECK_EQUAL(serialized.size(), 89);
 
         CScript script = manager.CreateOracleScript(bundle);
         BOOST_CHECK(!script.empty());
@@ -313,12 +313,12 @@ BOOST_AUTO_TEST_CASE(test_create_v03_with_various_bitmap_sizes)
         BOOST_CHECK_EQUAL(extracted.participation_bitmap.size(), 4);
     }
 
-    // 256 oracles: bitmap = 32 bytes, payload = 1+32+8+8+64 = 113
+    // 256 oracles: bitmap = 32 bytes, payload = 1+32+4+8+8+64 = 117
     {
         std::vector<unsigned char> big_bitmap(32, 0xFF);
         COracleBundle bundle = MakeV03Bundle(big_bitmap);
         std::vector<unsigned char> serialized = bundle.SerializeV03Data();
-        BOOST_CHECK_EQUAL(serialized.size(), 113);
+        BOOST_CHECK_EQUAL(serialized.size(), 117);
 
         CScript script = manager.CreateOracleScript(bundle);
         BOOST_CHECK(!script.empty());
@@ -427,7 +427,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v02_unchanged)
 
 // ============================================================================
 // test_create_oracle_script_v03_simple
-// v0x03 format with 9-of-15 oracles
+// v0x03 format with 9-of-15 oracles (legacy bitmap shape, pre-RC30)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_simple)
 {
@@ -455,7 +455,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_simple)
 
 // ============================================================================
 // test_create_oracle_script_v03_full_participation
-// 15-of-15 oracles (all bits set)
+// 15-of-15 oracles (all bits set in legacy 2-byte bitmap, pre-RC30 shape)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_full_participation)
 {
@@ -482,7 +482,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_full_participation)
 
 // ============================================================================
 // test_create_oracle_script_v03_size_reduced
-// v0x03 is ~89 bytes total vs v0x02 600+ for 9 oracles
+// v0x03 is ~93 bytes total vs v0x02 600+ for 9 oracles
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_size_reduced)
 {
@@ -495,7 +495,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_size_reduced)
     COracleBundle v03_bundle = MakeV03Bundle({0xFF, 0x01}, 50000, 1700000000);
     CScript v03_script = manager.CreateOracleScript(v03_bundle);
     BOOST_CHECK(!v03_script.empty());
-    BOOST_CHECK_EQUAL(v03_script.size(), 89);
+    BOOST_CHECK_EQUAL(v03_script.size(), 93);
 
     // v0x02: 9 oracles
     COracleBundle v02_bundle;

@@ -9,7 +9,7 @@
  * - State transitions: CREATED→NONCES_COLLECTING→NONCES_COMPLETE→SIGNING→COMPLETE
  * - Nonce generation, collection, aggregation
  * - Partial signature creation and aggregation
- * - 9-of-15 oracle quorum threshold
+ * - 9-of-17 oracle quorum threshold (RC30)
  * - Security: nonce zeroing, reuse prevention
  * - Timeout/failure transitions
  * - Concurrent epoch isolation
@@ -1025,8 +1025,8 @@ BOOST_AUTO_TEST_CASE(test_session_manager_seen_sets_cleanup)
 
 BOOST_AUTO_TEST_CASE(test_participation_bitmap_sized_for_total_oracles)
 {
-    // nOracleTotalOracles = 11 in testnet chainparams
-    // expected bitmap size = (11 + 7) / 8 = 2 bytes
+    // RC30: nOracleTotalOracles = 17 in testnet chainparams
+    // expected bitmap size = (17 + 7) / 8 = 3 bytes
     const uint16_t total_oracles = static_cast<uint16_t>(
         Params().GetConsensus().nOracleTotalOracles);
     size_t expected_bytes = (total_oracles + 7) / 8;

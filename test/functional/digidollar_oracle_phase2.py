@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """DigiDollar Oracle Phase 2 Multi-Oracle Consensus Tests.
 
-Tests for Phase 2 multi-oracle consensus (8-of-15 mainnet, 3-of-10 testnet).
+Tests for Phase 2 multi-oracle consensus (RC30: 9-of-17 mainnet/testnet, 4-of-7 regtest).
 Validates oracle bundle validation, consensus price calculation, and Byzantine fault tolerance.
 
 Specification: ORACLE_PHASE_2_SPEC_PRD.md
@@ -17,11 +17,12 @@ from test_framework.util import (
 from decimal import Decimal
 import time
 
+# RC30: 9-of-17 (was 8-of-15 mainnet / 3-of-10 testnet)
 ORACLE_TOTAL_COUNT = 30
-ORACLE_ACTIVE_COUNT = 15
-ORACLE_CONSENSUS_REQUIRED = 8
-TESTNET_ORACLE_COUNT = 10
-TESTNET_CONSENSUS_REQUIRED = 3
+ORACLE_ACTIVE_COUNT = 17
+ORACLE_CONSENSUS_REQUIRED = 9
+TESTNET_ORACLE_COUNT = 17
+TESTNET_CONSENSUS_REQUIRED = 9
 
 
 class DigiDollarOraclePhase2Test(DigiByteTestFramework):
@@ -91,15 +92,19 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
             self.log.info(f"getoracleinfo() not available: {e}")
 
     def test_multi_oracle_consensus(self):
-        self.log.info("Testing multi-oracle consensus (3-of-10 testnet)...")
+        # RC30: 9-of-17
+        self.log.info("Testing multi-oracle consensus (9-of-17)...")
 
         oracle_prices = [
             49500, 50000, 50500, 51000, 51500,
-            52000, 48000, 49000, 50200, 50800
+            52000, 48000, 49000, 50200, 50800,
+            50100, 50300, 50400, 50600, 49800,
+            49900, 50050
         ]
 
         try:
-            for i, price in enumerate(oracle_prices[:3]):
+            # Submit the consensus threshold (9) of oracle prices
+            for i, price in enumerate(oracle_prices[:ORACLE_CONSENSUS_REQUIRED]):
                 result = self.nodes[0].submitoracleprice(i, price)
                 self.log.info(f"Oracle {i} submitted price {price}: {result}")
 
@@ -109,7 +114,7 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
             oracle_info = self.nodes[0].getoracleprice()
             if 'consensus_price' in oracle_info:
                 consensus = oracle_info['consensus_price']
-                self.log.info(f"Consensus price with 3 oracles: {consensus}")
+                self.log.info(f"Consensus price with {ORACLE_CONSENSUS_REQUIRED} oracles: {consensus}")
 
         except Exception as e:
             self.log.info(f"Multi-oracle consensus test skipped (RPC not available): {e}")
@@ -124,10 +129,12 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
             self.log.info(f"Mock oracle price: {oracle_info}")
 
     def test_insufficient_signatures(self):
-        self.log.info("Testing rejection with insufficient signatures (< 3)...")
+        # RC30: consensus requires 9-of-17, so 8 or fewer must be rejected
+        insufficient = ORACLE_CONSENSUS_REQUIRED - 1  # 8
+        self.log.info(f"Testing rejection with insufficient signatures (< {ORACLE_CONSENSUS_REQUIRED})...")
 
         try:
-            for i in range(2):
+            for i in range(insufficient):
                 self.nodes[0].submitoracleprice(i, 50000 + i * 100)
 
             self.generate(self.nodes[0], 1)
@@ -138,7 +145,7 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
             if 'has_consensus' in oracle_info:
                 has_consensus = oracle_info['has_consensus']
                 if not has_consensus:
-                    self.log.info("PASS: Consensus rejected with only 2 signatures")
+                    self.log.info(f"PASS: Consensus rejected with only {insufficient} signatures")
                 else:
                     self.log.info("Phase 1 mode: Single oracle consensus accepted")
 
@@ -164,9 +171,10 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
             self.log.info(f"Epoch rotation test skipped: {e}")
 
     def test_outlier_filtering(self):
+        # RC30: 9-of-17 — use 9 normal oracles + 1 outlier to cross the consensus threshold
         self.log.info("Testing IQR outlier filtering...")
 
-        normal_prices = [49000, 50000, 51000, 52000, 53000]
+        normal_prices = [49000, 49500, 50000, 50500, 51000, 51500, 52000, 52500, 53000]
         outlier_price = 1000000
 
         expected_median = 51000
@@ -175,7 +183,7 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
             for i, price in enumerate(normal_prices):
                 self.nodes[0].submitoracleprice(i, price)
 
-            self.nodes[0].submitoracleprice(5, outlier_price)
+            self.nodes[0].submitoracleprice(len(normal_prices), outlier_price)
 
             self.generate(self.nodes[0], 1)
             self.sync_all()
@@ -191,17 +199,18 @@ class DigiDollarOraclePhase2Test(DigiByteTestFramework):
             self.log.info(f"Outlier filtering test skipped: {e}")
 
     def test_byzantine_oracle(self):
-        self.log.info("Testing Byzantine fault tolerance (7 malicious + 8 honest)...")
+        # RC30: 9-of-17 => 9 honest + 8 malicious (honest majority)
+        self.log.info("Testing Byzantine fault tolerance (8 malicious + 9 honest)...")
 
-        honest_prices = [50000, 50100, 50200, 50300, 50400, 50500, 50600, 50700]
-        malicious_prices = [1000000, 1, 999999, 2, 888888, 3, 777777]
+        honest_prices = [50000, 50100, 50200, 50300, 50400, 50500, 50600, 50700, 50800]
+        malicious_prices = [1000000, 1, 999999, 2, 888888, 3, 777777, 4]
 
         try:
             for i, price in enumerate(honest_prices):
                 self.nodes[0].submitoracleprice(i, price)
 
             for i, price in enumerate(malicious_prices):
-                self.nodes[0].submitoracleprice(i + 8, price)
+                self.nodes[0].submitoracleprice(i + len(honest_prices), price)
 
             self.generate(self.nodes[0], 1)
             self.sync_all()

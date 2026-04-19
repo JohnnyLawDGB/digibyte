@@ -247,7 +247,7 @@ BOOST_FIXTURE_TEST_CASE(path_validation_normal_redemption, DigiDollarValidationT
 BOOST_FIXTURE_TEST_CASE(path_validation_emergency_redemption_deleted, DigiDollarValidationTestSetup)
 {
     // DELETED: Emergency path test - this redemption path does not exist
-    // Emergency redemption (8-of-15 oracle override) was removed from DigiDollar design
+    // Emergency redemption (RC30: 9-of-17 oracle override) was removed from DigiDollar design
     // Only Normal and ERR paths remain
     //
     // This test validates that emergency redemption does NOT exist

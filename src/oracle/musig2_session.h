@@ -160,6 +160,17 @@ public:
     bool AddPartialSignature(uint8_t oracle_id,
                              const secp256k1_musig_partial_sig& partial_sig);
 
+    /**
+     * RC30: verifying variant used on remote partial-sig ingestion.
+     * Calls secp256k1_musig_partial_sig_verify against this session's
+     * keyagg_cache + aggregate nonce + message. Returns false if the
+     * remote signed under a different cache (participant-set mismatch),
+     * which prevents silent corruption of the aggregate signature.
+     */
+    bool AddPartialSignatureVerified(uint8_t oracle_id,
+                                     const secp256k1_musig_partial_sig& partial_sig,
+                                     const secp256k1_pubkey& signer_pk);
+
     /** Check if enough partial signatures have been collected. */
     bool HasEnoughPartialSigs() const;
     size_t GetPartialSigCount() const;

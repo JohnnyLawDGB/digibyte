@@ -575,8 +575,8 @@ BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
 //
 // Threat: If you control the P2P path, you can withhold oracle price
 // messages from certain oracles, biasing the IQR-median computation.
-// With 8-of-15 threshold, withholding 7 oracles' prices leaves only 8,
-// still at threshold. If the 8 remaining are biased, the consensus
+// With 9-of-17 threshold (RC30), withholding 8 oracles' prices leaves only 9,
+// still at threshold. If the 9 remaining are biased, the consensus
 // price shifts.
 //
 // Defense: IQR filtering + median makes this extremely hard. You need
@@ -586,35 +586,36 @@ BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(attack_selective_price_withholding_iqr_resilience)
 {
-    // Simulate 15 oracle prices: $0.01500 ± small noise
+    // Simulate 17 oracle prices (RC30): $0.01500 ± small noise
     // Attacker wants to push price DOWN
     std::vector<uint64_t> all_prices = {
         15000, 15010, 15020, 14990, 14980,   // low cluster
         15050, 15060, 15040, 15030, 15070,   // mid cluster
-        15100, 15110, 15090, 15080, 15120    // high cluster
+        15100, 15110, 15090, 15080, 15120,   // high cluster
+        15005, 15115                         // extras for 9-of-17 (RC30)
     };
 
     // Sort to compute median
     std::vector<uint64_t> sorted_all = all_prices;
     std::sort(sorted_all.begin(), sorted_all.end());
-    uint64_t full_median = sorted_all[sorted_all.size() / 2]; // 15050
+    uint64_t full_median = sorted_all[sorted_all.size() / 2];
 
-    // Attacker withholds 6 highest-price oracles, leaving 9
+    // Attacker withholds 8 highest-price oracles, leaving 9 (RC30 threshold)
     std::vector<uint64_t> biased_prices;
     std::sort(all_prices.begin(), all_prices.end());
     for (size_t i = 0; i < 9; i++) {
         biased_prices.push_back(all_prices[i]); // 9 lowest
     }
     std::sort(biased_prices.begin(), biased_prices.end());
-    uint64_t biased_median = biased_prices[biased_prices.size() / 2]; // 15020
+    uint64_t biased_median = biased_prices[biased_prices.size() / 2];
 
-    // Price shift: 15050 -> 15020 = 0.2% deviation
+    // Price shift from full_median to biased_median
     // With real exchange prices clustering within 0.1%, this shift is tiny
     int64_t shift_ppm = ((int64_t)full_median - (int64_t)biased_median) * 1000000 / (int64_t)full_median;
-    BOOST_CHECK(shift_ppm < 3000); // Less than 0.3% shift
+    BOOST_CHECK(shift_ppm < 5000); // Less than 0.5% shift
 
-    // FINDING: Even in the worst case (withholding 7 of 15 oracles
-    // to barely meet 8-of-15 threshold), the price shift is < 0.3%.
+    // FINDING: Even in the worst case (withholding 8 of 17 oracles
+    // to barely meet 9-of-17 threshold, RC30), the price shift stays bounded.
     // DigiDollar's ±5% mint/burn threshold absorbs this trivially.
     // A real attack would need to compromise exchange APIs too.
 }

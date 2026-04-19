@@ -72,15 +72,16 @@ BOOST_AUTO_TEST_CASE(test_v03_bundle_has_bitmap)
     COracleBundle bundle;
     bundle.version = 3;
 
-    // 9-of-15: bitmap needs 2 bytes (ceil(15/8) = 2)
+    // RC30: 9-of-17 → bitmap needs 3 bytes (ceil(17/8) = 3)
     // Oracles 0,1,2,3,4,5,6,7,8 participating = bits 0-8 set
-    // Byte 0: 0xFF (bits 0-7), Byte 1: 0x01 (bit 8)
-    std::vector<unsigned char> bitmap = {0xFF, 0x01};
+    // Byte 0: 0xFF (bits 0-7), Byte 1: 0x01 (bit 8), Byte 2: 0x00
+    std::vector<unsigned char> bitmap = {0xFF, 0x01, 0x00};
     bundle.participation_bitmap = bitmap;
 
-    BOOST_CHECK_EQUAL(bundle.participation_bitmap.size(), 2);
+    BOOST_CHECK_EQUAL(bundle.participation_bitmap.size(), 3);
     BOOST_CHECK_EQUAL(bundle.participation_bitmap[0], 0xFF);
     BOOST_CHECK_EQUAL(bundle.participation_bitmap[1], 0x01);
+    BOOST_CHECK_EQUAL(bundle.participation_bitmap[2], 0x00);
 }
 
 // ============================================================================
@@ -114,8 +115,8 @@ BOOST_AUTO_TEST_CASE(test_v03_bundle_serialization_roundtrip)
     bundle.median_price_micro_usd = 1234567;  // ~$1.23
     bundle.timestamp = 1700000000;
 
-    // 9-of-15 bitmap: oracles 0-8 participating
-    bundle.participation_bitmap = {0xFF, 0x01};
+    // RC30: 9-of-17 bitmap (3 bytes): oracles 0-8 participating
+    bundle.participation_bitmap = {0xFF, 0x01, 0x00};
 
     // 64-byte aggregate signature
     bundle.aggregate_sig.resize(64);
@@ -142,47 +143,47 @@ BOOST_AUTO_TEST_CASE(test_v03_bundle_serialization_roundtrip)
 }
 
 // ============================================================================
-// test_v03_data_payload_size_9_of_15 — verify exactly 83 bytes for 9-of-15
+// test_v03_data_payload_size_9_of_17 — verify exactly 88 bytes for 9-of-17 (RC30)
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_9_of_15)
+BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_9_of_17)
 {
-    // v0x03 on-chain: bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
-    // For 15 oracles: bitmap = ceil(15/8) = 2 bytes
-    // Total: 1 + 2 + 8 + 8 + 64 = 83 bytes
+    // v0x03 on-chain: bitmap_len(1) + bitmap(variable) + epoch(4) + price(8) + timestamp(8) + aggregate_sig(64)
+    // RC30: For 17 oracles: bitmap = ceil(17/8) = 3 bytes
+    // Total: 1 + 3 + 4 + 8 + 8 + 64 = 88 bytes
 
     COracleBundle bundle;
     bundle.version = 3;
     bundle.median_price_micro_usd = 50000;
     bundle.timestamp = 1700000000;
-    bundle.participation_bitmap = {0xFF, 0x01};  // 2 bytes for 15 oracles
+    bundle.participation_bitmap = {0xFF, 0x01, 0x00};  // 3 bytes for 17 oracles
     bundle.aggregate_sig.resize(64, 0xAA);
 
     size_t payload_size = bundle.GetV03PayloadSize();
-    BOOST_CHECK_EQUAL(payload_size, 83);
+    BOOST_CHECK_EQUAL(payload_size, 88);
 
     // Also verify the serialized data is exactly this size
     std::vector<unsigned char> serialized = bundle.SerializeV03Data();
-    BOOST_CHECK_EQUAL(serialized.size(), 83);
+    BOOST_CHECK_EQUAL(serialized.size(), 88);
 }
 
 // ============================================================================
-// test_v03_data_payload_size_15_of_15 — verify size for full participation
+// test_v03_data_payload_size_17_of_17 — verify size for full participation (RC30)
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_15_of_15)
+BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_17_of_17)
 {
-    // Full participation: all 15 oracles
-    // bitmap = ceil(15/8) = 2 bytes (same as 9-of-15)
-    // Total: 1 + 2 + 8 + 8 + 64 = 83 bytes
+    // Full participation: all 17 oracles (RC30)
+    // bitmap = ceil(17/8) = 3 bytes
+    // Total: 1 + 3 + 4 + 8 + 8 + 64 = 88 bytes
 
     COracleBundle bundle;
     bundle.version = 3;
     bundle.median_price_micro_usd = 50000;
     bundle.timestamp = 1700000000;
-    bundle.participation_bitmap = {0xFF, 0x7F};  // All 15 bits set
+    bundle.participation_bitmap = {0xFF, 0xFF, 0x01};  // All 17 bits set
     bundle.aggregate_sig.resize(64, 0xBB);
 
     size_t payload_size = bundle.GetV03PayloadSize();
-    BOOST_CHECK_EQUAL(payload_size, 83);
+    BOOST_CHECK_EQUAL(payload_size, 88);
 }
 
 // ============================================================================
@@ -191,7 +192,7 @@ BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_15_of_15)
 BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_9_of_30)
 {
     // For 30 oracles: bitmap = ceil(30/8) = 4 bytes
-    // Total: 1 + 4 + 8 + 8 + 64 = 85 bytes
+    // Total: 1 + 4 + 4 + 8 + 8 + 64 = 89 bytes
 
     COracleBundle bundle;
     bundle.version = 3;
@@ -201,10 +202,10 @@ BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_9_of_30)
     bundle.aggregate_sig.resize(64, 0xCC);
 
     size_t payload_size = bundle.GetV03PayloadSize();
-    BOOST_CHECK_EQUAL(payload_size, 85);
+    BOOST_CHECK_EQUAL(payload_size, 89);
 
     std::vector<unsigned char> serialized = bundle.SerializeV03Data();
-    BOOST_CHECK_EQUAL(serialized.size(), 85);
+    BOOST_CHECK_EQUAL(serialized.size(), 89);
 }
 
 // ============================================================================
@@ -292,12 +293,12 @@ BOOST_AUTO_TEST_CASE(test_v03_deserialize_invalid_data)
     BOOST_CHECK(!COracleBundle::DeserializeV03Data(truncated, bundle));
 
     // bitmap_len=0 is invalid (must have at least 1 byte)
-    std::vector<unsigned char> zero_bitmap(1 + 0 + 8 + 8 + 64, 0x00);
+    std::vector<unsigned char> zero_bitmap(1 + 0 + 4 + 8 + 8 + 64, 0x00);
     zero_bitmap[0] = 0;  // bitmap_len = 0
     BOOST_CHECK(!COracleBundle::DeserializeV03Data(zero_bitmap, bundle));
 
     // Trailing bytes are invalid (must be exact size for declared bitmap_len)
-    std::vector<unsigned char> with_trailing(1 + 2 + 8 + 8 + 64 + 1, 0x00);
+    std::vector<unsigned char> with_trailing(1 + 2 + 4 + 8 + 8 + 64 + 1, 0x00);
     with_trailing[0] = 2;  // bitmap_len
     with_trailing[1] = 0x01;
     with_trailing[2] = 0x00;

@@ -417,41 +417,40 @@ BOOST_AUTO_TEST_CASE(rh13_06_utxo_bloat_griefing)
 }
 
 // ============================================================================
-// ATTACK VECTOR 7: Oracle Quorum Manipulation
-// If only 8-of-15 needed, can 6 colluding oracles manipulate the system?
+// ATTACK VECTOR 7: Oracle Quorum Manipulation (RC30: 9-of-17)
+// With the RC30 chainparams (9-of-17), can colluding oracles manipulate the system?
+// This test exercises the DEFAULT ConsensusParams struct values
+// (src/consensus/digidollar.h): 30 total pool, 17 active, 9 threshold.
+// Consensus::Params tracks the same 9-of-17 quorum per chain.
 // ============================================================================
 
 BOOST_AUTO_TEST_CASE(rh13_07_oracle_quorum_manipulation)
 {
     ConsensusParams params;
 
-    // Oracle config: 30 total, 15 active per epoch, 8-of-15 consensus
+    // Oracle struct defaults in src/consensus/digidollar.h (RC30): 30 total pool, 17 active, 9 threshold.
     BOOST_CHECK_EQUAL(params.oracleCount, 30);
-    BOOST_CHECK_EQUAL(params.activeOracles, 15);
-    BOOST_CHECK_EQUAL(params.oracleThreshold, 8);
+    BOOST_CHECK_EQUAL(params.activeOracles, 17);
+    BOOST_CHECK_EQUAL(params.oracleThreshold, 9);
 
-    // Attack 1: Can 8 colluding oracles set arbitrary price?
-    // YES — 8-of-15 is the threshold. 8 colluding oracles control the price.
+    // Attack 1: Can N colluding oracles set arbitrary price?
+    // YES — the threshold (here: struct default 8) is the bar. Colluders meeting it
+    // control the price. RC30 per-chain threshold is 9-of-17 (stricter).
     //
     // But: Oracle selection per epoch is from a pool of 30.
-    // Getting 8 of YOUR oracles into the 15-active set requires:
-    // - If random selection: probability of 8+ out of 15 from your 8/30 = very low
+    // Getting the threshold of YOUR oracles into the active set requires:
+    // - If random selection: low probability
     // - If deterministic (e.g., sorted by pubkey): predictable but hard to Sybil
     //
     // FINDING: The ValidateConsensusParams check ensures threshold > activeOracles/2
-    // So minimum threshold for 15 active = 8. This is the bare minimum.
-    // With 8 colluding, they exactly meet the threshold.
-    //
-    // SEVERITY: HIGH (design-level) — The oracle model assumes honest majority
-    // among 15 active oracles. 8 colluding is exactly at the threshold.
-    // Consider raising to 9 or 10 of 15 for stronger security margin.
+    // RC30 lifts the effective per-chain threshold to 9-of-17 for stronger safety margin.
 
     // Verify the threshold validation
     BOOST_CHECK(params.oracleThreshold > params.activeOracles / 2);  // 8 > 7 ✓
 
-    // But it's only barely above half:
+    // Default struct is the bare-minimum strict majority:
     BOOST_CHECK_EQUAL(params.oracleThreshold, params.activeOracles / 2 + 1);
-    // 8 == 15/2 + 1 == 7 + 1. Minimum possible threshold.
+    // 8 == 15/2 + 1 == 7 + 1. Minimum possible threshold for struct default.
 }
 
 // ============================================================================

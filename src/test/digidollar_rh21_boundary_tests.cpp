@@ -237,8 +237,8 @@ BOOST_AUTO_TEST_CASE(rh21_bitmap_all_255_oracles)
 
 BOOST_AUTO_TEST_CASE(rh21_bitmap_duplicate_rejection)
 {
-    // Duplicate oracle IDs must be rejected
-    std::vector<uint8_t> ids = {0, 1, 2, 3, 4, 5, 6, 7}; // 8 = threshold
+    // Duplicate oracle IDs must be rejected (RC30: threshold is 9)
+    std::vector<uint8_t> ids = {0, 1, 2, 3, 4, 5, 6, 7, 8}; // 9 = threshold
     ids.push_back(0); // duplicate!
 
     auto bitmap = MuSig2OracleAggregator::EncodeBitmap(ids, 30);

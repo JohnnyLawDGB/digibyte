@@ -241,7 +241,7 @@ BOOST_AUTO_TEST_CASE(rh42_inv2_monotonic_oracle_epochs)
 {
     // Simulate oracle epoch progression across random heights.
     // Oracle epochs should be monotonically non-decreasing.
-    // activeOracles rotate per epoch (30 total, 15 active per epoch).
+    // activeOracles rotate per epoch (RC30: 30 total, 17 active per epoch).
     // Epoch = floor(height / priceValidBlocks).
 
     ConsensusParams ddParams;

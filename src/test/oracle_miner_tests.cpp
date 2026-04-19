@@ -386,7 +386,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_no_oracle_if_unavailable)
  * - Phase One: Single oracle (testnet only)
  * - Bundle should have exactly 1 message
  * - Uses compact format for serialization
- * - Future phases: 8-of-15 consensus
+ * - Future phases: 9-of-17 consensus (RC30)
  */
 BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
 {

@@ -70,12 +70,22 @@ void OracleSigningOrchestrator::InjectSession(int32_t epoch, std::unique_ptr<MuS
 
 void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg)
 {
+    // RC30: auto-create a session for this epoch if we don't have one yet.
+    // Early-arriving remote nonces used to be dropped as "unknown epoch",
+    // which prevented threshold sessions from ever assembling enough nonces
+    // when mining is fast. Sessions are tiny so lazy creation is cheap.
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
     auto it = m_signing_sessions.find(msg.epoch);
     if (it == m_signing_sessions.end() || !it->second) {
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring remote nonce for unknown epoch %d\n", msg.epoch);
-        return;
+        const Consensus::Params& consensus = Params().GetConsensus();
+        const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
+        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        session->SetCreationHeight(msg.epoch * 50);
+        session->SetTimeoutBlocks(100);
+        LogPrintf("Oracle: Lazily created MuSig2 session for epoch %d on remote nonce arrival\n", msg.epoch);
+        it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
     }
+    if (it == m_signing_sessions.end() || !it->second) return;
 
     // Deserialize pubnonce
     if (msg.pubnonce.size() != 66) return;
@@ -92,19 +102,44 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
 
 void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialSigMsg& msg)
 {
+    // RC30: auto-create the session so partial sigs arriving from faster peers
+    // (who already progressed past NONCES_COMPLETE) aren't lost. Session is
+    // also needed to hold a pending buffer if local side is still in
+    // CREATED/NONCES_COLLECTING.
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
     auto it = m_signing_sessions.find(msg.epoch);
     if (it == m_signing_sessions.end() || !it->second) {
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Ignoring remote partial sig for unknown epoch %d\n", msg.epoch);
-        return;
+        const Consensus::Params& consensus = Params().GetConsensus();
+        const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
+        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        session->SetCreationHeight(msg.epoch * 50);
+        session->SetTimeoutBlocks(100);
+        LogPrintf("Oracle: Lazily created MuSig2 session for epoch %d on remote partial sig arrival\n", msg.epoch);
+        it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
     }
+    if (it == m_signing_sessions.end() || !it->second) return;
 
     // Deserialize partial sig
     if (msg.partial_sig.size() != 32) return;
     secp256k1_musig_partial_sig partial_sig;
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
     if (secp256k1_musig_partial_sig_parse(ctx, &partial_sig, msg.partial_sig.data())) {
-        if (it->second->AddPartialSignature(msg.oracle_id, partial_sig)) {
+        // RC30: look up chainparams pubkey for this oracle so we can
+        // verify the partial sig against our local keyagg_cache.
+        const OracleNodeInfo* oracle_cfg = Params().GetOracleNode(msg.oracle_id);
+        bool verified_and_added = false;
+        if (oracle_cfg) {
+            secp256k1_pubkey signer_pk;
+            if (secp256k1_ec_pubkey_parse(ctx, &signer_pk,
+                                          oracle_cfg->pubkey.data(),
+                                          oracle_cfg->pubkey.size())) {
+                if (it->second->AddPartialSignatureVerified(msg.oracle_id, partial_sig, signer_pk)) {
+                    verified_and_added = true;
+                }
+            }
+        }
+
+        if (verified_and_added) {
             LogPrintf("Oracle: Ingested remote partial sig for epoch %d from oracle %d\n",
                      msg.epoch, msg.oracle_id);
 
@@ -116,6 +151,13 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
                              msg.epoch, final_sig.size());
                 }
             }
+        } else {
+            // Buffer for replay — may fail because session isn't in SIGNING yet,
+            // or because the partial sig is signed under a mismatched cache
+            // (participant-set race). Replay on session state change.
+            m_pending_partialsigs[msg.epoch].push_back(msg);
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Buffered partial sig for epoch %d oracle %d (state not SIGNING or cache mismatch)\n",
+                     msg.epoch, msg.oracle_id);
         }
     }
     secp256k1_context_destroy(ctx);
@@ -345,6 +387,16 @@ void OracleSigningOrchestrator::OnBlockConnected(
                         nonce_msg.oracle_id = oid8;
                         nonce_msg.pubnonce.assign(ser_nonce, ser_nonce + 66);
 
+                        // RC30: sign the nonce message so peers accept it.
+                        // RH-24 added Schnorr auth on the receive side; the
+                        // sender must also sign or every peer drops the msg
+                        // as "invalid MuSig2 nonce signature".
+                        if (!nonce_msg.Sign(key)) {
+                            LogPrintf("Oracle: Sign() failed for MuSig2 nonce oracle=%d epoch=%d\n",
+                                     oid8, current_epoch);
+                            continue;
+                        }
+
                         BroadcastMusigNonce(nonce_msg);
                         m_nonce_broadcast_tracker[current_epoch].insert(oid8);
 
@@ -426,6 +478,14 @@ void OracleSigningOrchestrator::OnBlockConnected(
                             psig_msg.epoch = current_epoch;
                             psig_msg.oracle_id = oid8;
                             psig_msg.partial_sig.assign(ser_psig, ser_psig + 32);
+
+                            // RC30: sign the partial-sig message so peers accept it
+                            // (same pattern as nonce_msg — RH-24 auth requirement).
+                            if (!psig_msg.Sign(key)) {
+                                LogPrintf("Oracle: Sign() failed for MuSig2 partial sig oracle=%d epoch=%d\n",
+                                         oid8, current_epoch);
+                                continue;
+                            }
 
                             BroadcastMusigPartialSig(psig_msg);
                             m_partialsig_broadcast_tracker[current_epoch].insert(oid8);

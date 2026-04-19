@@ -177,6 +177,10 @@ BOOST_AUTO_TEST_CASE(v03_correctly_rejects_trailing_data)
     v03_data.push_back(0x01); // bitmap_len = 1
     v03_data.push_back(0xFF); // bitmap byte
 
+    // epoch (4 bytes, zero)
+    for (int i = 0; i < 4; ++i)
+        v03_data.push_back(0x00);
+
     // price (8 bytes)
     uint64_t price = 50000;
     for (int i = 0; i < 8; ++i)
@@ -190,8 +194,8 @@ BOOST_AUTO_TEST_CASE(v03_correctly_rejects_trailing_data)
     // sig (64 bytes of zeros — won't verify but tests deserialization)
     v03_data.insert(v03_data.end(), 64, 0x00);
 
-    // Should be exactly 82 bytes. Verify exact-size enforcement.
-    BOOST_CHECK_EQUAL(v03_data.size(), 82u);
+    // Should be exactly 86 bytes. Verify exact-size enforcement.
+    BOOST_CHECK_EQUAL(v03_data.size(), 86u);
 
     COracleBundle bundle;
     BOOST_CHECK(COracleBundle::DeserializeV03Data(v03_data, bundle));
@@ -261,7 +265,7 @@ BOOST_AUTO_TEST_CASE(v02_excessive_message_count)
 {
     // Craft V02 with num_messages=255 — 255 * 65 = 16575 bytes of oracle data
     // plus 18 byte header = 16593 bytes total.
-    // This exceeds ORACLE_ACTIVE_COUNT (15) but is accepted by deserialization.
+    // This exceeds ORACLE_ACTIVE_COUNT (RC30: 17) but is accepted by deserialization.
 
     uint8_t num_messages = 255;
     std::vector<unsigned char> v02_data;
@@ -296,7 +300,7 @@ BOOST_AUTO_TEST_CASE(v02_excessive_message_count)
     if (ok) {
         BOOST_CHECK_EQUAL(bundle.messages.size(), 255u);
         BOOST_CHECK(bundle.messages.size() > ORACLE_ACTIVE_COUNT);
-        BOOST_TEST_MESSAGE("BUG-3 CONFIRMED: V02 deserialization accepts 255 messages (max active is 15)");
+        BOOST_TEST_MESSAGE("BUG-3 CONFIRMED: V02 deserialization accepts 255 messages (max active is 17, RC30)");
     }
 }
 
@@ -479,6 +483,10 @@ BOOST_AUTO_TEST_CASE(v03_large_bitmap_amplification)
     // 255 bitmap bytes, all 0xFF (all oracles "participating")
     v03_data.insert(v03_data.end(), 255, 0xFF);
 
+    // epoch (4 bytes, zero)
+    for (int i = 0; i < 4; ++i)
+        v03_data.push_back(0x00);
+
     // price (8 bytes)
     uint64_t price = 50000;
     for (int i = 0; i < 8; ++i)
@@ -492,8 +500,8 @@ BOOST_AUTO_TEST_CASE(v03_large_bitmap_amplification)
     // sig (64 bytes zeros)
     v03_data.insert(v03_data.end(), 64, 0x00);
 
-    // Expected size: 1 + 255 + 8 + 8 + 64 = 336
-    BOOST_CHECK_EQUAL(v03_data.size(), 336u);
+    // Expected size: 1 + 255 + 4 + 8 + 8 + 64 = 340
+    BOOST_CHECK_EQUAL(v03_data.size(), 340u);
 
     COracleBundle bundle;
     bool ok = COracleBundle::DeserializeV03Data(v03_data, bundle);

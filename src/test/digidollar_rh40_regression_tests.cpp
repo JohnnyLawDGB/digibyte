@@ -277,7 +277,7 @@ BOOST_AUTO_TEST_CASE(rh40_oracle_bundle_serialize_roundtrip_mutation)
     // Create a valid v03 bundle
     COracleBundle bundle;
     bundle.version = 3;
-    bundle.participation_bitmap = {0xFF, 0x7F};  // 15 oracles, 15 participating
+    bundle.participation_bitmap = {0xFF, 0xFF, 0x01};  // RC30: 17 oracles, 17 participating
     bundle.median_price_micro_usd = 1234567890ULL;
     bundle.timestamp = 1700000000;
     bundle.aggregate_sig.resize(64);
@@ -647,14 +647,14 @@ BOOST_AUTO_TEST_CASE(rh40_oracle_bundle_empty_bitmap_rejected)
 
 BOOST_AUTO_TEST_CASE(rh40_oracle_bundle_deserialize_truncated_data)
 {
-    // Less than minimum 82 bytes
-    std::vector<unsigned char> tooShort(81, 0);
+    // Less than minimum 86 bytes
+    std::vector<unsigned char> tooShort(85, 0);
     tooShort[0] = 1;  // bitmap_len = 1
     COracleBundle bundle;
     BOOST_CHECK(!COracleBundle::DeserializeV03Data(tooShort, bundle));
 
-    // Exactly 82 bytes but bitmap_len claims 2 (would need 83)
-    std::vector<unsigned char> mismatch(82, 0);
+    // Exactly 86 bytes but bitmap_len claims 2 (would need 87)
+    std::vector<unsigned char> mismatch(86, 0);
     mismatch[0] = 2;  // bitmap_len = 2 but only 1 byte of bitmap
     BOOST_CHECK(!COracleBundle::DeserializeV03Data(mismatch, bundle));
 }
@@ -662,7 +662,7 @@ BOOST_AUTO_TEST_CASE(rh40_oracle_bundle_deserialize_truncated_data)
 BOOST_AUTO_TEST_CASE(rh40_oracle_bundle_bitmap_len_zero_rejected)
 {
     // bitmap_len=0 in raw data should be rejected
-    std::vector<unsigned char> data(82, 0);
+    std::vector<unsigned char> data(86, 0);
     data[0] = 0;  // bitmap_len = 0
     COracleBundle bundle;
     BOOST_CHECK(!COracleBundle::DeserializeV03Data(data, bundle));

@@ -91,6 +91,8 @@ static CScript BuildV03Script(const std::vector<unsigned char>& bitmap,
     std::vector<unsigned char> v03_data;
     v03_data.push_back(static_cast<unsigned char>(bitmap.size()));
     v03_data.insert(v03_data.end(), bitmap.begin(), bitmap.end());
+    // epoch (4 bytes, zero)
+    for (int i = 0; i < 4; ++i) v03_data.push_back(0x00);
     for (int i = 0; i < 8; ++i) v03_data.push_back((price >> (i * 8)) & 0xFF);
     for (int i = 0; i < 8; ++i) v03_data.push_back((timestamp >> (i * 8)) & 0xFF);
     v03_data.insert(v03_data.end(), agg_sig.begin(), agg_sig.end());

@@ -1913,7 +1913,7 @@ BOOST_AUTO_TEST_CASE(redteam_nums_oracle_keys_irrelevant)
     ownerKey.MakeNewKey(true);
     XOnlyPubKey ownerXOnly(ownerKey.GetPubKey());
 
-    // Build with 15 oracle keys (standard)
+    // Build with 15 oracle keys (arbitrary count — test verifies oracle keys don't affect P2TR)
     DigiDollar::MintParams params15;
     params15.ddAmount = 10000;
     params15.lockHeight = 200000;
@@ -2792,16 +2792,16 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06i_oracle_vs_dd_activation_sync)
             "Regtest DD should be ALWAYS_ACTIVE");
     }
 
-    // Check mainnet: oracle activation should be set (RC30: 8-of-15 active)
+    // Check mainnet: oracle activation should be set (RC30: 9-of-17 active)
     {
         const auto mainnet_params = CChainParams::Main();
         const auto& consensus = mainnet_params->GetConsensus();
 
         int oracle_height = consensus.nOracleActivationHeight;
         // RC30: mainnet oracle activation is no longer INT_MAX — oracles are configured
-        // for 8-of-15 consensus across all networks
+        // for 9-of-17 consensus across all networks
         BOOST_CHECK_MESSAGE(oracle_height != std::numeric_limits<int>::max(),
-            "Mainnet oracle activation should be set (not INT_MAX) for RC30 8-of-15 config");
+            "Mainnet oracle activation should be set (not INT_MAX) for RC30 9-of-17 config");
     }
 }
 
@@ -5945,7 +5945,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
     CKey attackerKey;
     attackerKey.MakeNewKey(true);
 
-    // Forge 8 messages (ORACLE_CONSENSUS_REQUIRED) with different oracle_ids
+    // Forge ORACLE_CONSENSUS_REQUIRED (RC30: 9) messages with different oracle_ids
     COracleBundle forgedBundle;
     forgedBundle.epoch = 0;
     forgedBundle.timestamp = GetTime();
@@ -5966,9 +5966,10 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
         forgedBundle.messages.push_back(msg);
     }
 
-    // Set median price
-    std::sort(prices.begin(), prices.end());
-    forgedBundle.median_price_micro_usd = (prices[prices.size()/2 - 1] + prices[prices.size()/2]) / 2;
+    // Set median price using the bundle's own IQR algorithm to match GetConsensusPrice()
+    // (ORACLE_CONSENSUS_REQUIRED is odd in RC30 so a simple average of two middle entries
+    // would not match the bundle's odd-count median logic).
+    forgedBundle.median_price_micro_usd = forgedBundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
 
     // Simulate what ORACLEBUNDLE P2P handler does (before fix):
     // Verify signatures WITHOUT rebinding pubkeys from chainparams
@@ -5990,7 +5991,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
 
     // The bundle also passes consensus check
     BOOST_CHECK_MESSAGE(forgedBundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED),
-        "BUG [T3-02a]: Forged bundle meets consensus threshold (8 messages). "
+        "BUG [T3-02a]: Forged bundle meets consensus threshold (9 messages, RC30). "
         "Combined with missing pubkey rebinding, this means the entire P2P "
         "validation pipeline is bypassed.");
 
@@ -6000,7 +6001,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
         "that the bundle passes ALL P2P validation checks and will be relayed.");
 
     BOOST_TEST_MESSAGE("BUG [T3-02a]: ORACLEBUNDLE P2P relay amplification attack. "
-        "Attacker generates own keypair, forges bundle with 8+ messages claiming "
+        "Attacker generates own keypair, forges bundle with 9+ messages claiming "
         "different oracle_ids. All P2P validation passes. Bundle relayed to entire "
         "network. Defense: IsValidOracleMessage in AddOracleMessage catches at storage "
         "level, but relay damage is done. "
@@ -6051,7 +6052,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02c_oracle_id_range_check)
 
     // Valid range: 0 to ORACLE_TOTAL_COUNT-1 (29)
     BOOST_CHECK(ORACLE_TOTAL_COUNT == 30);
-    BOOST_CHECK(ORACLE_ACTIVE_COUNT == 15);
+    BOOST_CHECK(ORACLE_ACTIVE_COUNT == 17);  // RC30: 17 active oracles
 
     // Verify chainparams has nodes for valid IDs (using regtest)
     auto regTestParams = CChainParams::RegTest({});
@@ -6442,7 +6443,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_03d_iqr_half_compromised)
         BOOST_TEST_MESSAGE("  Honest price: $0.05 (50000 micro-USD)");
         BOOST_TEST_MESSAGE("  Manipulated consensus: $" << price / 1000000.0 << " (" << price << " micro-USD)");
         BOOST_TEST_MESSAGE("  This is expected — 50% compromise defeats any filter.");
-        BOOST_TEST_MESSAGE("  The defense is the 4-of-7 minimum threshold on testnet (8-of-15 mainnet).");
+        BOOST_TEST_MESSAGE("  The defense is the 4-of-7 minimum threshold on regtest (9-of-17 mainnet/testnet, RC30).");
         BOOST_TEST_MESSAGE("  Attacker needs to compromise 50%+ oracle private keys.");
     }
     // This is not a bug — it's expected behavior when majority is compromised
@@ -6822,8 +6823,8 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04c_pending_messages_secondary_dedup)
  * An attacker can spam GETORACLES to cause repeated responses of N messages,
  * wasting bandwidth (N * message_size per request).
  *
- * With 15 active oracles, each ~140 bytes, that's ~2.1KB per GETORACLES response.
- * At 1000 requests/sec, that's 2.1MB/sec of outbound traffic per peer.
+ * With 17 active oracles (RC30), each ~140 bytes, that's ~2.4KB per GETORACLES response.
+ * At 1000 requests/sec, that's 2.4MB/sec of outbound traffic per peer.
  */
 BOOST_AUTO_TEST_CASE(redteam_T3_04d_getoracles_no_rate_limit)
 {
@@ -6833,9 +6834,9 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04d_getoracles_no_rate_limit)
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
     mgr.Clear();
 
-    // Inject 15 oracle messages (simulating a full set)
-    std::vector<CKey> keys(15);
-    for (int i = 0; i < 15; ++i) {
+    // Inject 17 oracle messages (RC30 full set)
+    std::vector<CKey> keys(17);
+    for (int i = 0; i < 17; ++i) {
         keys[i].MakeNewKey(true);
         COraclePriceMessage msg;
         msg.oracle_id = i;
@@ -6847,13 +6848,13 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04d_getoracles_no_rate_limit)
         mgr.InjectTestMessage(msg);
     }
 
-    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 15);
+    BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 17);
 
     // GetPendingMessages can be called repeatedly with no rate limit
-    // Each call returns all 15 messages — attacker can spam GETORACLES
+    // Each call returns all 17 messages — attacker can spam GETORACLES
     for (int i = 0; i < 10; ++i) {
         auto msgs = mgr.GetPendingMessages();
-        BOOST_CHECK_EQUAL(msgs.size(), 15);
+        BOOST_CHECK_EQUAL(msgs.size(), 17);
     }
 
     // FINDING: No rate limit on GETORACLES requests.
@@ -7007,7 +7008,7 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
     // FIX VERIFIED [T3-05a]: HasConsensus() no longer has default parameters.
     // All callers must pass min_required explicitly from chainparams.
     // The compile-time ORACLE_CONSENSUS_REQUIRED constant is only used in tests
-    // to explicitly request mainnet's 8-of-15 threshold.
+    // to explicitly request mainnet's 9-of-17 threshold (RC30).
 
     const Consensus::Params& params = Params().GetConsensus();
     int runtime_required = params.nOracleRequiredMessages;
@@ -7017,10 +7018,11 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
     BOOST_TEST_MESSAGE("Compile-time constant ORACLE_CONSENSUS_REQUIRED=" << ORACLE_CONSENSUS_REQUIRED);
 
     // Simulate a testnet scenario: 5 valid messages should meet 5-of-8 threshold
-    int testnet_required = 5;
+    // Use arbitrary smaller threshold (5) vs the mainnet/testnet RC30 value (9 via ORACLE_CONSENSUS_REQUIRED)
+    int smaller_required = 5;
 
     COracleBundle bundle(0);
-    for (int i = 0; i < testnet_required; i++) {
+    for (int i = 0; i < smaller_required; i++) {
         CKey key;
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, GetTime());
@@ -7030,27 +7032,27 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
     }
     bundle.median_price_micro_usd = 50000;
 
-    // With testnet threshold, 5 messages is sufficient
-    BOOST_CHECK_MESSAGE(bundle.HasConsensus(testnet_required),
-        "5 messages should meet 5-of-8 threshold (testnet)");
+    // With smaller threshold, 5 messages is sufficient
+    BOOST_CHECK_MESSAGE(bundle.HasConsensus(smaller_required),
+        "5 messages should meet 5-message threshold");
 
-    // With mainnet threshold (8), 5 messages is NOT sufficient — this is CORRECT behavior
-    bool mainnet_consensus = bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED);
-    BOOST_CHECK_MESSAGE(!mainnet_consensus,
-        "FIXED: HasConsensus(8) correctly rejects 5-message bundle. "
+    // With RC30 threshold (ORACLE_CONSENSUS_REQUIRED=9), 5 messages is NOT sufficient — this is CORRECT behavior
+    bool larger_consensus = bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED);
+    BOOST_CHECK_MESSAGE(!larger_consensus,
+        "FIXED: HasConsensus(9) correctly rejects 5-message bundle (RC30). "
         "After fix, there are no default parameters — all callers pass explicit threshold "
         "from chainparams.nOracleRequiredMessages, so each network uses the right value.");
 
     // GetConsensusPrice with correct threshold works
-    uint64_t correct_price = bundle.GetConsensusPrice(testnet_required);
+    uint64_t correct_price = bundle.GetConsensusPrice(smaller_required);
     BOOST_CHECK_MESSAGE(correct_price == 50000,
         "With correct threshold (5), GetConsensusPrice returns 50000");
 
-    // GetConsensusPrice with mainnet threshold correctly returns 0
-    uint64_t mainnet_price = bundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
-    BOOST_CHECK_MESSAGE(mainnet_price == 0,
-        "FIXED: GetConsensusPrice(8) correctly returns 0 for 5-message bundle. "
-        "On testnet, callers use nOracleRequiredMessages=5 and get the correct price.");
+    // GetConsensusPrice with larger (RC30) threshold correctly returns 0
+    uint64_t larger_price = bundle.GetConsensusPrice(ORACLE_CONSENSUS_REQUIRED);
+    BOOST_CHECK_MESSAGE(larger_price == 0,
+        "FIXED: GetConsensusPrice(9) correctly returns 0 for 5-message bundle (RC30). "
+        "Each network uses its own nOracleRequiredMessages and gets the correct price.");
 }
 
 BOOST_AUTO_TEST_CASE(T3_05b_update_cached_price_uses_wrong_threshold)
@@ -7080,7 +7082,7 @@ BOOST_AUTO_TEST_CASE(T3_05b_update_cached_price_uses_wrong_threshold)
     // Store via UpdateBundle
     manager.UpdateBundle(bundle);
 
-    // FIXED: UpdateCachedPrice now uses min_oracle_count (5), not ORACLE_CONSENSUS_REQUIRED (8)
+    // FIXED: UpdateCachedPrice now uses min_oracle_count (5), not ORACLE_CONSENSUS_REQUIRED (RC30: 9)
     bool updated = manager.UpdateCachedPrice(epoch);
 
     BOOST_CHECK_MESSAGE(updated,
@@ -7225,7 +7227,7 @@ BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_hardcodes_epoch_zero)
         "BUG CONFIRMED: Phase 2 ExtractOracleBundle hardcodes epoch=0. "
         "ValidatePhaseTwoBundle will call GetActiveOraclesForEpoch(0) "
         "regardless of actual block height. Oracle rotation broken for "
-        "on-chain validation once >15 oracles exist on mainnet.");
+        "on-chain validation once >17 oracles exist on mainnet (RC30).");
 
     manager.Clear();
 }
@@ -13431,7 +13433,7 @@ BOOST_AUTO_TEST_CASE(redteam_t7_02e_p2p_oracle_relay_censorship_resilience)
 
     // Verify oracle message validation constants
     BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, 30);
-    BOOST_CHECK_EQUAL(ORACLE_ACTIVE_COUNT, 15);
+    BOOST_CHECK_EQUAL(ORACLE_ACTIVE_COUNT, 17);  // RC30: 17 active oracles
     BOOST_CHECK_EQUAL(ORACLE_MAX_AGE_SECONDS, 3600);
     BOOST_CHECK_GT(ORACLE_MIN_PRICE_MICRO_USD, 0);
     BOOST_CHECK_GT(ORACLE_MAX_PRICE_MICRO_USD, ORACLE_MIN_PRICE_MICRO_USD);
@@ -14243,7 +14245,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01b_no_oracle_specific_peering)
         "Oracle data relies entirely on standard P2P gossip. "
         "No dedicated oracle connections, no NODE_ORACLE service bit, "
         "no oracle DNS seeds. Eclipse the P2P = eclipse oracle data. "
-        "This is BY DESIGN for Phase 1 (1-of-1), but Phase 2 (8-of-15) "
+        "This is BY DESIGN for Phase 1 (1-of-1), but Phase 2 (9-of-17, RC30) "
         "should consider adding oracle DNS seeds or dedicated connections "
         "to oracle operators for resilience. "
         "Standard Bitcoin eclipse mitigations (8 outbound, bucketed addrman, "
@@ -14360,12 +14362,12 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01f_eclipse_mainnet_oracle_gap)
     const auto& mainnet_params = CreateChainParams(*m_node.args, ChainType::MAIN);
     const auto& mainnet_consensus = mainnet_params->GetConsensus();
 
-    // RC30: mainnet oracle activation is set (8-of-15 across all networks)
+    // RC30: mainnet oracle activation is set (9-of-17 across all networks)
     BOOST_CHECK_NE(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
 
-    // RC30: 8-of-15 oracle consensus
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 8);
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 15);
+    // RC30: 9-of-17 oracle consensus
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 9);
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 17);
 
     BOOST_TEST_MESSAGE("T8-01f: Eclipse mainnet oracle gap ⚠️ — "
         "Mainnet ConnectBlock does NOT update oracle price cache "
@@ -14755,7 +14757,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02e_compromised_oracle_median_manipulation)
     //         Goal: shift the consensus median price to enable profitable minting.
     //
     // DEFENSE: Median is robust to up to floor(N/2) compromised values.
-    //          With 5-of-9 consensus (testnet) or 8-of-15 (mainnet),
+    //          With 9-of-17 consensus (mainnet/testnet, RC30),
     //          attacker needs >50% of reporting oracles to shift median.
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
@@ -15814,9 +15816,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_01a_four_of_nine_consensus_must_fail)
     BOOST_CHECK(bundle.HasConsensus(4));
     BOOST_CHECK(bundle.GetConsensusPrice(4) > 0);
 
-    // Mainnet: 8-of-15 required — should fail
-    BOOST_CHECK(!bundle.HasConsensus(8));
-    BOOST_CHECK_EQUAL(bundle.GetConsensusPrice(8), 0u);
+    // Mainnet: 9-of-17 required (RC30) — should fail
+    BOOST_CHECK(!bundle.HasConsensus(9));
+    BOOST_CHECK_EQUAL(bundle.GetConsensusPrice(9), 0u);
 
     BOOST_TEST_MESSAGE("  4-of-9 correctly fails on testnet (5 required), passes regtest (4 required) ✅");
 }
@@ -17096,17 +17098,17 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
 {
     // KEY FINDING: Three independent oracle count values that SHOULD agree but DON'T:
     //   1. ORACLE_TOTAL_COUNT (static constant = 30)
-    //   2. nOracleTotalOracles (consensus param: mainnet=15, testnet=9, regtest=7)
-    //   3. vOracleNodes.size() (per-chain: mainnet=30, testnet=9, regtest=7)
+    //   2. nOracleTotalOracles (consensus param: RC30 mainnet=17, testnet=17, regtest=7)
+    //   3. vOracleNodes.size() (per-chain: mainnet=30, testnet=17, regtest=7)
     //
-    // On mainnet: ORACLE_TOTAL_COUNT(30) == vOracleNodes(30) != nOracleTotalOracles(15)
-    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(9) != nOracleTotalOracles(9)
+    // On mainnet: ORACLE_TOTAL_COUNT(30) == vOracleNodes(30) != nOracleTotalOracles(17)
+    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(17) == nOracleTotalOracles(17)
     //
     // The P2P handler uses ORACLE_TOTAL_COUNT for bounds. This means:
     // - On mainnet: ORACLE_TOTAL_COUNT matches vOracleNodes, but nOracleTotalOracles is lower
-    // - On testnet: IDs 9-29 pass P2P bounds check but are handled by GetOracleNode second check
+    // - On testnet: IDs 17-29 pass P2P bounds check but are handled by GetOracleNode second check
     //
-    // DESIGN GAP: nOracleTotalOracles doesn't match vOracleNodes.size() on mainnet (15 vs 30).
+    // DESIGN GAP: nOracleTotalOracles doesn't match vOracleNodes.size() on mainnet (17 vs 30).
     // This means the "total oracles" consensus parameter doesn't reflect reality.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
@@ -17121,16 +17123,16 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
     BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, static_cast<int>(all_oracles.size()));
     BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
 
-    // BUT: nOracleTotalOracles (15) != vOracleNodes.size() (30) — MISMATCH!
+    // BUT: nOracleTotalOracles (RC30: 17) != vOracleNodes.size() (30 on mainnet) — MISMATCH!
     BOOST_CHECK_NE(consensus.nOracleTotalOracles, all_oracles.size());
     BOOST_TEST_MESSAGE("  ⚠️ nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
                       + ") != vOracleNodes.size() (" + std::to_string(all_oracles.size()) + ") — MISMATCH");
 
     // Document the semantic difference:
-    // nOracleTotalOracles = "how many oracles participate in Phase Two consensus" (15)
+    // nOracleTotalOracles = "how many oracles participate in Phase Two consensus" (RC30: 17)
     // vOracleNodes = "all known oracle configurations including future/inactive" (30)
     // ORACLE_TOTAL_COUNT = "hard upper bound for oracle IDs" (30)
-    BOOST_TEST_MESSAGE("  📝 nOracleTotalOracles = oracles in Phase Two consensus (15)");
+    BOOST_TEST_MESSAGE("  📝 nOracleTotalOracles = oracles in Phase Two consensus (RC30: 17)");
     BOOST_TEST_MESSAGE("  📝 vOracleNodes = all known oracle configs (30, includes inactive/future)");
     BOOST_TEST_MESSAGE("  📝 ORACLE_TOTAL_COUNT = hard upper bound for IDs (30)");
 
@@ -17349,8 +17351,8 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04e_pending_messages_map_key_boundary)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
 {
-    // Mainnet has 30 oracle nodes but ORACLE_ACTIVE_COUNT=15. SelectOraclesForEpoch
-    // uses deterministic selection to pick 15 of 30 per epoch.
+    // Mainnet has 30 oracle nodes but ORACLE_ACTIVE_COUNT=17 (RC30). SelectOraclesForEpoch
+    // uses deterministic selection to pick 17 of 30 per epoch.
     // Oracle ID 8 should be included in SOME epochs but not necessarily all.
     // Key check: selection is deterministic and rotates fairly across epochs.
     const CChainParams& params = Params();
@@ -17360,9 +17362,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
     BOOST_TEST_MESSAGE("  Total oracles: " + std::to_string(all_oracles.size()));
     BOOST_TEST_MESSAGE("  ORACLE_ACTIVE_COUNT: " + std::to_string(ORACLE_ACTIVE_COUNT));
 
-    // Mainnet has 30 > ORACLE_ACTIVE_COUNT (15), so selection logic activates
+    // Mainnet has 30 > ORACLE_ACTIVE_COUNT (17, RC30), so selection logic activates
     if (all_oracles.size() > static_cast<size_t>(ORACLE_ACTIVE_COUNT)) {
-        BOOST_TEST_MESSAGE("  30 > 15 → deterministic selection active");
+        BOOST_TEST_MESSAGE("  30 > 17 → deterministic selection active (RC30)");
 
         int id_8_count = 0;
         int id_29_count = 0;
@@ -17381,14 +17383,14 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
             if (has_29) id_29_count++;
         }
 
-        // With 15-of-30 selection, each oracle should be selected ~50% of epochs
-        // Allow 30-70% range for statistical variation over 100 epochs
+        // With 17-of-30 selection (RC30), each oracle should be selected ~57% of epochs
+        // Allow a broader 30-80% window for statistical variation over 100 epochs.
         BOOST_CHECK_GT(id_8_count, 30);
-        BOOST_CHECK_LT(id_8_count, 70);
+        BOOST_CHECK_LT(id_8_count, 80);
         BOOST_CHECK_GT(id_29_count, 30);
-        BOOST_CHECK_LT(id_29_count, 70);
-        BOOST_TEST_MESSAGE("  Oracle ID 8 selected in " + std::to_string(id_8_count) + "/100 epochs (~50% expected) ✅");
-        BOOST_TEST_MESSAGE("  Oracle ID 29 selected in " + std::to_string(id_29_count) + "/100 epochs (~50% expected) ✅");
+        BOOST_CHECK_LT(id_29_count, 80);
+        BOOST_TEST_MESSAGE("  Oracle ID 8 selected in " + std::to_string(id_8_count) + "/100 epochs (~57% expected) ✅");
+        BOOST_TEST_MESSAGE("  Oracle ID 29 selected in " + std::to_string(id_29_count) + "/100 epochs (~57% expected) ✅");
 
         // Verify determinism — same epoch gives same result
         std::vector<OracleNodeInfo> sel1 = SelectOraclesForEpoch(all_oracles, 42);
@@ -17402,7 +17404,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
         // Fewer oracles, all returned
         std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(all_oracles, 0);
         BOOST_CHECK_EQUAL(selected.size(), all_oracles.size());
-        BOOST_TEST_MESSAGE("  " + std::to_string(all_oracles.size()) + " ≤ 15 → all returned ✅");
+        BOOST_TEST_MESSAGE("  " + std::to_string(all_oracles.size()) + " ≤ 17 → all returned ✅");
     }
 }
 
@@ -17410,18 +17412,18 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
 {
     // DESIGN GAP: Three independent oracle count values disagree.
     //
-    // On mainnet (test context):
+    // On mainnet (test context, RC30):
     //   ORACLE_TOTAL_COUNT = 30 (static constant, matches vOracleNodes)
     //   vOracleNodes.size() = 30 (all configured oracle nodes)
-    //   nOracleTotalOracles = 15 (consensus: "active in Phase Two")
-    //   vOraclePublicKeys.size() = 0 (mainnet has NO oracle keys — Phase One disabled)
+    //   nOracleTotalOracles = 17 (consensus: "active in Phase Two")
+    //   vOraclePublicKeys.size() = 17 (mainnet Phase 3 MuSig2 keys, RC30)
     //
     // The P2P bounds check uses ORACLE_TOTAL_COUNT (30), which matches vOracleNodes on mainnet.
-    // But nOracleTotalOracles (15) is lower — meaning 15 oracles are "for Phase Two consensus"
+    // But nOracleTotalOracles (17) is lower — meaning 17 oracles are "for Phase Two consensus"
     // while 30 are "known/configured". This is architecturally intentional (30 configured,
-    // 15 selected per epoch via SelectOraclesForEpoch), but the naming is confusing.
+    // 17 selected per epoch via SelectOraclesForEpoch), but the naming is confusing.
     //
-    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(9) — IDs 9-29 pass P2P bounds
+    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(17) — IDs 17-29 pass P2P bounds
     // but fail GetOracleNode (defense-in-depth catches it).
     const CChainParams& params = Params();
     const Consensus::Params& consensus = params.GetConsensus();
@@ -17439,13 +17441,13 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
     BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, static_cast<int>(params.GetOracleNodes().size()));
     BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT == vOracleNodes ✅");
 
-    // But nOracleTotalOracles is lower (15 = active per epoch, not total configured)
+    // But nOracleTotalOracles is lower (RC30: 17 = active per epoch, not total configured)
     BOOST_CHECK_NE(consensus.nOracleTotalOracles, params.GetOracleNodes().size());
     BOOST_TEST_MESSAGE("  ⚠️ nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
                       + ") != vOracleNodes (" + std::to_string(params.GetOracleNodes().size()) + ")");
 
-    // nOracleTotalOracles is the per-chain consensus quorum size (RC27: 11)
-    // ORACLE_ACTIVE_COUNT is the static upper bound for validation (15)
+    // nOracleTotalOracles is the per-chain consensus quorum size (RC30: 17)
+    // ORACLE_ACTIVE_COUNT is the static upper bound for validation (RC30: 17)
     // nOracleTotalOracles <= ORACLE_ACTIVE_COUNT always holds
     BOOST_CHECK_LE(consensus.nOracleTotalOracles, ORACLE_ACTIVE_COUNT);
     BOOST_TEST_MESSAGE("  nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles) +

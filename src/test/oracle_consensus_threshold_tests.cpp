@@ -9,9 +9,9 @@
  * instead of the compile-time ORACLE_CONSENSUS_REQUIRED constant.
  *
  * The bug: HasConsensus(), GetConsensusPrice(), and IsValid() had default
- * parameters of ORACLE_CONSENSUS_REQUIRED=8. On testnet (5-of-8) and
- * regtest (4-of-7), call sites using defaults would incorrectly require 8
- * messages, rejecting valid bundles.
+ * parameters of ORACLE_CONSENSUS_REQUIRED (RC30: 9). On regtest (4-of-7),
+ * call sites using defaults would incorrectly require 9 messages,
+ * rejecting valid bundles.
  */
 
 #include <boost/test/unit_test.hpp>

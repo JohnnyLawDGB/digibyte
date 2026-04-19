@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
 {
     SelectParams(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
-    // Mainnet uses MuSig2 immediately on top of 8-of-15 oracle consensus.
+    // Mainnet uses MuSig2 immediately on top of 9-of-17 oracle consensus (RC30).
     BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
 }
 
@@ -64,7 +64,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet also switches immediately to MuSig2 (8-of-15).
+    // Testnet also switches immediately to MuSig2 (9-of-17, RC30).
     BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
 }
 
@@ -80,21 +80,21 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
 // PART 2: Oracle Configuration Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_is_15)
+BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_is_17)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // 15 oracle pubkeys configured for Phase 3 MuSig2
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 15);
+    // RC30: 17 oracle pubkeys configured for Phase 3 MuSig2
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 17);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
 
-BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_8)
+BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_9)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // 8-of-15 MuSig2 quorum for Phase 3
-    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 8);
+    // RC30: 9-of-17 MuSig2 quorum for Phase 3
+    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 9);
     BOOST_CHECK_GT(params.nOracleConsensusRequired, params.nOraclePubkeyCount / 2);
     BOOST_CHECK_LE(params.nOracleConsensusRequired, params.nOraclePubkeyCount);
 }
@@ -129,15 +129,20 @@ BOOST_AUTO_TEST_CASE(test_oracle_pubkey_validity)
     }
 }
 
-BOOST_AUTO_TEST_CASE(test_oracle_config_sorted_by_pubkey)
+BOOST_AUTO_TEST_CASE(test_oracle_config_unique_by_pubkey)
 {
+    // RC30: vOraclePublicKeys is ordered by oracle slot (0..N-1) — matches
+    // vOracleNodes and the MuSig2 participation bitmap. BIP-327 key aggregation
+    // sorts internally, so consensus pubkey ordering is slot-based, not
+    // lexicographic. We still require per-slot uniqueness.
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
     BOOST_REQUIRE_GE(params.vOraclePublicKeys.size(), 2u);
-    for (size_t i = 1; i < params.vOraclePublicKeys.size(); ++i) {
-        BOOST_CHECK_MESSAGE(params.vOraclePublicKeys[i - 1] < params.vOraclePublicKeys[i],
-            "Not sorted at " + std::to_string(i - 1) + ": " +
-            params.vOraclePublicKeys[i - 1].substr(0, 8) + " >= " +
+    std::set<std::string> seen;
+    for (size_t i = 0; i < params.vOraclePublicKeys.size(); ++i) {
+        auto [it, inserted] = seen.insert(params.vOraclePublicKeys[i]);
+        BOOST_CHECK_MESSAGE(inserted,
+            "Duplicate oracle pubkey at slot " + std::to_string(i) + ": " +
             params.vOraclePublicKeys[i].substr(0, 8));
     }
 }

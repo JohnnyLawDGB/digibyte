@@ -1104,9 +1104,9 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
 
                     // Check version byte
                     if (data[0] == 0x03) {
-                        // v0x03 MuSig2 format: aggregate sig + participation bitmap
+                        // v0x03 MuSig2 format: aggregate sig + participation bitmap (RC30)
                         // Data layout (after version byte):
-                        //   bitmap_len(1) + bitmap(variable) + price(8) + timestamp(8) + aggregate_sig(64)
+                        //   bitmap_len(1) + bitmap(variable) + epoch(4) + price(8) + timestamp(8) + aggregate_sig(64)
                         std::vector<unsigned char> v03_data(data.begin() + 1, data.end());
 
                         if (!COracleBundle::DeserializeV03Data(v03_data, bundle)) {
@@ -1116,7 +1116,9 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         }
 
                         bundle.version = 3;
-                        bundle.epoch = 0; // Epoch is not stored on-chain; set by caller
+                        // RC30: bundle.epoch is now parsed from the on-chain payload by
+                        // DeserializeV03Data — do NOT zero it here. The validator binds
+                        // the epoch to the current block height in ValidatePhaseThreeBundle.
 
                         // Wave 3: decode participation bitmap into synthetic oracle messages.
                         // v0x03 stores one aggregate signature, so per-oracle schnorr_sig is empty.
@@ -2687,6 +2689,17 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
     // Check bitmap is present
     if (bundle.participation_bitmap.empty()) {
         error = "v0x03 bitmap cannot be empty";
+        return false;
+    }
+
+    // RC30: Bind the v0x03 payload epoch to the current block's epoch.
+    // The signer hashes H(epoch, price, timestamp); a bundle whose payload epoch
+    // doesn't match the current epoch cannot verify (and could otherwise enable
+    // cross-epoch replay of a previously-valid aggregate signature).
+    const int32_t expected_epoch = GetCurrentEpoch(block_height);
+    if (bundle.epoch != expected_epoch) {
+        error = "v0x03 bundle epoch mismatch (payload=" + std::to_string(bundle.epoch) +
+                ", expected=" + std::to_string(expected_epoch) + ")";
         return false;
     }
 

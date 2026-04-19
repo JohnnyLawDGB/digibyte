@@ -28,7 +28,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 
 🔄 **What's In Progress:**
 - **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` now use cached metrics from UTXO scanning
-- **Oracle Price Feeds**: 11 exchange API fetchers, Phase Two infrastructure ready (8-of-15 mainnet)
+- **Oracle Price Feeds**: 11 exchange API fetchers, Phase Two/Phase 3 MuSig2 infrastructure ready (9-of-17 mainnet — RC30)
 - **Redemption System**: Basic version working, ERR redemptions with increased DD burn implemented
 - **Final Polish**: Minor notification improvements
 
@@ -220,7 +220,7 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 ├─────────────────────────────────────────────┤
 │ Oracle System Integration:                  │
 │ • Phase One: 1-of-1 consensus (testnet)     │
-│ • Phase Two: 8-of-15 consensus (planned)    │
+│ • Phase Two: 9-of-17 consensus (RC30)       │
 │ • Median price in micro-USD format          │
 │ • 11 exchange APIs with real libcurl        │
 └──────────────────────────────────────────────┘
@@ -579,16 +579,16 @@ flowchart TD
 
 ### 6.1 Oracle System Status Overview
 
-**CURRENT STATUS: Phase One (Testnet) 95% Complete** - The oracle system has a complete framework with 11 real exchange API fetchers via libcurl. Phase One uses 1-of-1 single oracle consensus for testnet. Phase Two (8-of-15 mainnet) is planned but not implemented.
+**CURRENT STATUS: Phase One (Testnet) 95% Complete** - The oracle system has a complete framework with 11 real exchange API fetchers via libcurl. Phase One uses 1-of-1 single oracle consensus for testnet. Phase Two / Phase 3 MuSig2 (9-of-17 mainnet, RC30) is planned with infrastructure in place.
 
 **Price Format**: Micro-USD (1,000,000 = $1.00 DGB). Example: 6,500 micro-USD = $0.0065/DGB
 
 #### **✅ Production-Ready Components:**
 
 1. **Oracle Selection Algorithm** (`/src/primitives/oracle.cpp`)
-   - Deterministic selection of 15 active oracles from 30 total
+   - Deterministic selection of 17 active oracles from 30 total (RC30)
    - Hash-based epoch system (100 blocks = ~25 minutes on mainnet; 1440-block fallback default)
-   - 8-of-15 signature threshold for consensus
+   - 9-of-17 signature threshold for consensus (RC30)
 
 2. **Price Consensus Mechanism**
    - Multiple outlier filtering algorithms (MAD, IQR, Z-score)
@@ -653,7 +653,7 @@ CAmount GetCurrentOraclePrice() {
 
 - ✅ Singleton mock oracle for RegTest/development
 - ✅ Volatility simulation capabilities
-- ✅ Valid 8-of-15 oracle bundle creation
+- ✅ Valid 9-of-17 oracle bundle creation
 - ✅ Price manipulation for testing scenarios
 
 ---
@@ -1487,7 +1487,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 - **Current**: Phase One oracle with 11 real exchange API fetchers (libcurl) + mock fallback ($0.0065/DGB default)
 - **Exchange APIs**: Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari, KuCoin, Crypto.com, Gate.io, HTX
 - **Status**: ✅ Real API implementation exists (conditional on HAVE_LIBCURL), mock fallback for regtest
-- **Remaining**: Production testing, mainnet oracle key deployment, Phase 2 (8-of-15 consensus)
+- **Remaining**: Production testing, mainnet oracle key deployment, Phase 2 / Phase 3 MuSig2 (9-of-17 consensus — RC30)
 
 #### **P2P Network Integration**
 - **Current**: Uses standard Bitcoin Core transaction relay + Oracle P2P protocol
@@ -1873,7 +1873,7 @@ The DigiDollar implementation represents a **sophisticated and well-architected 
 - **Network-wide UTXO tracking - FULLY IMPLEMENTED AND VERIFIED**
 - **Database persistence 100% working - restart/backup/restore tested Dec 10**
 
-**Key Limitation**: Phase One oracle (1-of-1) is complete with 11 real exchange API fetchers via libcurl. Phase Two (8-of-15 consensus) infrastructure is ready but not activated. ERR validation is intentionally blocked until oracle consensus is available.
+**Key Limitation**: Phase One oracle (1-of-1) is complete with 11 real exchange API fetchers via libcurl. Phase Two / Phase 3 MuSig2 (9-of-17 consensus — RC30) infrastructure is ready but not activated. ERR validation is intentionally blocked until oracle consensus is available.
 
 ### 19.3 Production Timeline
 
@@ -1924,7 +1924,7 @@ The codebase represents **substantial, functional progress** rather than theoret
 - **Mock Fallback**: When libcurl unavailable OR for regtest, uses MockOracleManager
 - **Code Location**: `/src/oracle/exchange.cpp:38-83` - Real HTTP calls with conditional compilation
 - Default mock price: $0.0065 per DGB (6500 micro-USD)
-- **Phase Two (8-of-15 consensus)**: Infrastructure ready, not yet activated
+- **Phase Two / Phase 3 MuSig2 (9-of-17 consensus — RC30)**: Infrastructure ready, not yet activated
 
 #### **RPC Command Corrections**
 - **Removed non-existent commands**: `getdigidollarsystemhealth` does NOT exist
@@ -1937,7 +1937,7 @@ The codebase represents **substantial, functional progress** rather than theoret
 - Minting, sending, receiving, redemption all functional
 - Protection systems (DCA/ERR/Volatility) fully working
 - Network tracking via UTXO scanning 100% complete and verified
-- **Phase Two work needed**: 8-of-15 oracle consensus for mainnet
+- **Phase Two work needed**: 9-of-17 oracle consensus for mainnet (RC30)
 
 ### 20.2 October 5, 2025 Update - Network Tracking Discovery
 
@@ -2179,20 +2179,20 @@ Comprehensive test suite across 102 unit test files + 51 functional test files (
 - **Phase Two Status**: Infrastructure ready, not activated
 - **Current**: Real prices from exchanges when libcurl available, mock fallback ($0.0065/DGB = 6500 micro-USD)
 - **Remaining**:
-  - Phase Two 8-of-15 Schnorr threshold consensus (mainnet)
+  - Phase Two / Phase 3 MuSig2 9-of-17 Schnorr threshold consensus (mainnet — RC30)
   - ERR validation unblock (waiting on oracle consensus)
   - ~~P2P oracle message broadcasting~~ (complete)
 
 ### Bottom Line:
 
 **DigiDollar is 85% complete** with ALL core functionality working. Phase One oracle uses real exchange APIs (11 exchange fetchers via libcurl when available, mock fallback otherwise). The remaining work is:
-- Phase Two 8-of-15 oracle consensus (mainnet)
+- Phase Two 9-of-17 oracle consensus (mainnet — RC30)
 - ERR validation unblock (waiting on oracle consensus)
 - System health uses cached metrics from UTXO scanning (implemented and tested)
 
 Everything else - minting, sending, receiving, redemption, protection systems, network tracking, GUI, database persistence - is production-ready and fully tested.
 
-**Timeline to Production**: Testnet ready NOW. Mainnet requires 8-of-15 oracle consensus + security audit.
+**Timeline to Production**: Testnet ready NOW. Mainnet requires 9-of-17 oracle consensus + security audit.
 
 ---
 

@@ -203,8 +203,8 @@ digibyte-cli getoracleprice
 ```
 
 **Oracle details:**
-- 5-of-8 Schnorr threshold consensus (testnet)
-- 8-of-15 planned for mainnet
+- 9-of-17 MuSig2 Schnorr threshold consensus (testnet — RC30)
+- 9-of-17 planned/deployed for mainnet (RC30)
 - Sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com
 - Outlier filtering with Median Absolute Deviation
 

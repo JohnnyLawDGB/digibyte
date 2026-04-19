@@ -168,9 +168,9 @@ Then recompile and distribute the updated binary.
 
 | Network | Total Slots | Active | Consensus |
 |---------|------------|--------|-----------|
-| Mainnet | 30 (IDs 0-29) | 15 | 8-of-15 (disabled until Phase Two) |
-| Testnet | 10 (IDs 0-9) | 5 | 3-of-5 planned |
-| Regtest | 5 (IDs 0-4) | 1 | 1-of-1 |
+| Mainnet | 30 (IDs 0-29) | 17 | 9-of-17 (RC30; disabled until Phase Two activation) |
+| Testnet | 30 (IDs 0-29) | 17 | 9-of-17 (RC30) |
+| Regtest | 7 (IDs 0-6) | 7 | 4-of-7 |
 
 ---
 

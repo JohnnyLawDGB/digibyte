@@ -2248,7 +2248,7 @@ A: No real value is lost. Testnet DGB has **no monetary value** - it's only for 
 A: This testnet is intended to run indefinitely. Future resets would only happen for:
 - Major protocol changes requiring clean slate
 - Critical security issues
-- DigiDollar Phase Two transition (8-of-15 oracle consensus)
+- DigiDollar Phase Two transition (9-of-17 oracle consensus — RC30)
 
 Expect this testnet to run at least 1-2 years.
 
@@ -2283,17 +2283,17 @@ This is the **actual regtest pattern** verified from the code!
 
 A: Phase One uses a simplified 1-of-1 oracle for rapid development and testing:
 - **Testnet**: 1 oracle, 1-of-1 consensus (Phase One)
-- **Mainnet (future)**: 15 oracles, 8-of-15 consensus (Phase Two)
+- **Mainnet (future)**: 17 oracles, 9-of-17 consensus (Phase Two / Phase 3 MuSig2 — RC30)
 
 The single-oracle model is not secure enough for mainnet but perfect for testnet validation.
 
 **Q: What happens to the oracle system in Phase Two?**
 
 A: Phase Two (future mainnet deployment) will use:
-- **15 independent oracles** (vs 1 in Phase One)
-- **8-of-15 threshold** for consensus (vs 1-of-1)
+- **17 independent oracles** (vs 1 in Phase One, RC30)
+- **9-of-17 threshold** for consensus (vs 1-of-1)
 - **Schnorr signature verification** in compact format (vs trust-based)
-- **Larger OP_RETURN** to accommodate 8 signatures (vs 1)
+- **Aggregated MuSig2 signature (v0x03)** — a single 64-byte aggregate sig for any N-of-M
 - **Epoch-based oracle selection** (vs fixed single oracle)
 
 Phase One validates the architecture; Phase Two adds production security.
@@ -2571,7 +2571,7 @@ index 1234567..abcdefg 100644
 
 @@ -521,7 +523,7 @@ public:
          // Oracle system (Phase One: Single oracle, 1-of-1 consensus)
-         // Phase Two will use 15 oracles with 8-of-15 threshold
+         // Phase Two / Phase 3 MuSig2 uses 17 oracles with 9-of-17 threshold (RC30)
          // Phase One: Testnet and regtest only
 -        consensus.nOracleActivationHeight = 1000000;       // Activate at height 1M on testnet
 +        consensus.nOracleActivationHeight = 650;           // Activate at height 650 (with DigiDollar!)
@@ -2887,7 +2887,7 @@ This guide provides a complete, step-by-step process for resetting the DigiByte 
 
 **Month 2-3:**
 - Phase One refinement
-- Begin Phase Two planning (8-of-15 oracles)
+- Begin Phase Two / Phase 3 MuSig2 planning (9-of-17 oracles — RC30)
 - Mainnet deployment preparation
 - Security audits
 

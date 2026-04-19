@@ -69,6 +69,7 @@ CHARLIE_RPC=14030
 BOB_DATADIR="/tmp/bob_minitestnet"
 ALICE_DATADIR="/tmp/alice_minitestnet"
 CHARLIE_DATADIR="/tmp/charlie_minitestnet"
+TESTNET_SUBDIR="testnet23"
 
 # CLI commands
 BOB_CLI="./src/digibyte-cli -testnet -datadir=$BOB_DATADIR -rpcport=$BOB_RPC"
@@ -511,6 +512,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
@@ -581,6 +583,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$ALICE_DATADIR \
     -port=$ALICE_PORT \
     -rpcport=$ALICE_RPC \
@@ -618,6 +621,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$CHARLIE_DATADIR \
     -port=$CHARLIE_PORT \
     -rpcport=$CHARLIE_RPC \
@@ -1603,6 +1607,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
@@ -1755,13 +1760,13 @@ fi
 print_subheader "Simulating wallet corruption by renaming wallet file..."
 
 # Move original wallet to simulate corruption/loss
-ORIGINAL_WALLET="$BOB_DATADIR/testnet3/wallets/bob/wallet.dat"
+ORIGINAL_WALLET="$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob/wallet.dat"
 if [ -f "$ORIGINAL_WALLET" ]; then
     mv "$ORIGINAL_WALLET" "${ORIGINAL_WALLET}.original_backup"
     print_status "ok" "Original wallet moved to simulate loss"
-elif [ -d "$BOB_DATADIR/testnet3/wallets/bob" ]; then
+elif [ -d "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob" ]; then
     # Descriptor wallet - just rename the directory
-    mv "$BOB_DATADIR/testnet3/wallets/bob" "$BOB_DATADIR/testnet3/wallets/bob_original_backup"
+    mv "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob" "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob_original_backup"
     print_status "ok" "Original wallet directory moved to simulate loss"
 fi
 
@@ -1772,9 +1777,9 @@ if [ -f "$ORIGINAL_WALLET.original_backup" ]; then
     # Legacy wallet
     cp "$BACKUP_FILE" "$ORIGINAL_WALLET"
     print_status "ok" "Backup restored to wallet location"
-elif [ -d "$BOB_DATADIR/testnet3/wallets/bob_original_backup" ]; then
+elif [ -d "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob_original_backup" ]; then
     # Descriptor wallet - restore original for now (backup may need different handling)
-    mv "$BOB_DATADIR/testnet3/wallets/bob_original_backup" "$BOB_DATADIR/testnet3/wallets/bob"
+    mv "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob_original_backup" "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob"
     print_status "ok" "Wallet directory restored"
 fi
 
@@ -1791,6 +1796,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
@@ -1909,6 +1915,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \

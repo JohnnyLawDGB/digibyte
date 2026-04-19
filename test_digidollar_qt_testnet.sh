@@ -358,6 +358,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
@@ -428,6 +429,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$ALICE_DATADIR \
     -port=$ALICE_PORT \
     -rpcport=$ALICE_RPC \
@@ -465,6 +467,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$CHARLIE_DATADIR \
     -port=$CHARLIE_PORT \
     -rpcport=$CHARLIE_RPC \
@@ -1400,6 +1403,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
@@ -1588,6 +1592,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
@@ -1706,6 +1711,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$BOB_DATADIR \
     -port=$BOB_PORT \
     -rpcport=$BOB_RPC \
@@ -1963,6 +1969,7 @@ env -i \
     PATH="${PATH}" \
     ./src/qt/digibyte-qt \
     -testnet \
+    -easypow \
     -datadir=$ALICE_DATADIR \
     -port=$ALICE_PORT \
     -rpcport=$ALICE_RPC \

@@ -166,7 +166,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-Mainnet/testnet: 15 oracle slots (8-of-15 Schnorr threshold consensus via `consensus.nOracleRequiredMessages=8, nOracleTotalOracles=15`). Regtest: 7 oracle slots with 4-of-7 consensus (`consensus`), though `digidollarParams` uses 1-of-1 for simplified testing. Oracle prices use micro-USD format (1,000,000 = $1.00). Note: `primitives/oracle.h` defines legacy constants (30/15/8) but chainparams overrides these per-network.
+Mainnet/testnet: 17 oracle slots (9-of-17 MuSig2 threshold consensus via `consensus.nOracleRequiredMessages=9, nOracleTotalOracles=17`). Regtest: 7 oracle slots with 4-of-7 consensus (`consensus`), though `digidollarParams` uses 1-of-1 for simplified testing. Oracle prices use micro-USD format (1,000,000 = $1.00). Note: `primitives/oracle.h` defines legacy constants (30/15/8) but chainparams overrides these per-network.
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees. The collateral vault uses **2 redemption paths**:
@@ -204,7 +204,7 @@ Prevents transactions from being mined until specified block height
 ### Core Script Functions
 
 #### Multi-Sig Oracle Validation
-8-of-15 Schnorr threshold signatures for price consensus (mainnet/testnet; regtest: 4-of-7 at consensus layer)
+9-of-17 Schnorr threshold signatures for price consensus (mainnet/testnet; regtest: 4-of-7 at consensus layer)
 
 #### Taproot Script Paths
 Multiple redemption conditions in a single P2TR output
@@ -218,7 +218,7 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-15 oracle slots configured (12 active operators + 3 reserved on both mainnet and testnet). Script requires 8-of-15 signatures using Schnorr threshold aggregation, ensuring decentralized price consensus (mainnet/testnet configuration).
+17 oracle slots configured (15 active operators + 2 reserved placeholders on both mainnet and testnet). Script requires 9-of-17 signatures using MuSig2 Schnorr threshold aggregation, ensuring decentralized price consensus (mainnet/testnet configuration).
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.
@@ -380,7 +380,7 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 | Collateral Tiers | 10 tiers (1hr→10yr) | ✅ Correct | 2-year tier (275%) verified in consensus/digidollar.h |
 | DCA Multipliers | 1.0x/1.2x/1.5x/2.0x | ✅ Correct | dca.cpp:GetDCAMultiplier() matches; note: ConsensusParams::dcaLevels uses 125 (1.25x) for warning but DCA class uses 1.2x |
 | ERR Ratios | 0.95/0.90/0.85/0.80 | ✅ Correct | err.cpp:CalculateERRAdjustment() matches documentation |
-| Oracle Config | 8-of-15 (mainnet/testnet) | ✅ Correct | primitives/oracle.h has legacy 30/15/8 constants; chainparams overrides to 15/15/8 |
+| Oracle Config | 9-of-17 (mainnet/testnet) | ✅ Correct | primitives/oracle.h has legacy 30/15/8 constants; chainparams overrides to 17/17/9 |
 | Cooldown Period | 8640 blocks (~36 hours) | ✅ Correct | volatility.h:COOLDOWN_BLOCKS = 8640 (was 144, fixed in RH-30a) |
 
 **Code Verification Complete** (2026-04-14):
@@ -389,7 +389,7 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 - Only 4 transaction types: NONE=0, MINT=1, TRANSFER=2, REDEEM=3
 - Partial redemption: wallet code exists but consensus enforces FULL redemption only
 - DD amounts stored in cents (100 = $1.00), oracle prices in micro-USD (1,000,000 = $1.00)
-- Oracle config: mainnet/testnet use 8-of-15 (chainparams overrides default 30/15/8 from oracle.h)
+- Oracle config: mainnet/testnet use 9-of-17 (chainparams overrides default 30/15/8 from oracle.h)
 - Cooldown period: 8640 blocks (~36 hours), fixed from original 144 blocks in RH-30a
 
 ---

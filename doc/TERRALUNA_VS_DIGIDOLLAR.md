@@ -134,7 +134,7 @@ No reflexive loop. No death spiral. System stabilizes.
 
 - **No company controls DigiDollar** - it's a protocol upgrade to DigiByte Core
 - **No foundation holds reserves** - all collateral is held by individual users
-- **8-of-15 oracle consensus** - no single entity controls price feeds
+- **9-of-17 oracle consensus** - no single entity controls price feeds (RC30)
 - **Open source** - all code is auditable (50,000+ lines)
 - **Your keys, your vault** - private keys never leave your wallet
 - **Network-wide UTXO tracking** - every node sees identical system state
@@ -200,7 +200,7 @@ This prevents panic actions during extreme market conditions.
 | **Reflexive Loop** | YES (UST↔LUNA mint/burn) | NO (DGB supply fixed) |
 | **Central Control** | Do Kwon / TFL / LFG | None - protocol rules only |
 | **Protection Layers** | 1 (arbitrage) | 4 (collateral, DCA, ERR, freeze) |
-| **Price Oracle** | Centralized | 8-of-15 decentralized consensus |
+| **Price Oracle** | Centralized | 9-of-17 decentralized consensus (RC30) |
 | **Code Verification** | Closed development | 50,000+ lines open source |
 
 ---
@@ -227,7 +227,7 @@ Even with 200% collateral (10-year lock), a 90% crash still leaves 20% collatera
 
 ### "What about oracle manipulation?"
 
-8-of-15 Schnorr threshold signatures required. An attacker would need to compromise 8 independent oracles simultaneously. Median price calculation with outlier filtering (MAD algorithm) prevents single-source manipulation.
+9-of-17 MuSig2 Schnorr threshold signatures required (RC30). An attacker would need to compromise 9 independent oracles simultaneously. Median price calculation with outlier filtering (MAD algorithm) prevents single-source manipulation.
 
 ### "What if everyone stops trusting DigiDollar?"
 

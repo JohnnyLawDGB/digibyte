@@ -26,7 +26,7 @@ DigiDollar Oracle Phase 3: MuSig2 Aggregate Signatures
 Phase 3 of the DigiDollar oracle system introduces MuSig2 (BIP-327) aggregate
 signatures, replacing the individual per-oracle Schnorr signatures used in
 Phase 2. This reduces on-chain oracle data from ~277 bytes (Phase 2, 4 oracles)
-to ~83 bytes (Phase 3, 15 oracles) by combining all participant signatures into
+to ~84 bytes (Phase 3, 17 oracles) by combining all participant signatures into
 a single 64-byte aggregate signature with a compact participation bitmap.
 
 ### Activation Heights

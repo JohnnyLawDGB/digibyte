@@ -26,7 +26,7 @@ Blockchains are **isolated by design** - they can't access the internet, fetch d
 
 ### Why Trust Matters
 
-The oracle is a **critical trust point** - if it reports a fake price, the entire DigiDollar system breaks down. That's why Phase Two will implement **multi-oracle consensus** (8-of-15 agreement required). But for Phase One testnet, we start simple with a single trusted oracle to prove the concept works.
+The oracle is a **critical trust point** - if it reports a fake price, the entire DigiDollar system breaks down. That's why Phase Two / Phase 3 MuSig2 will implement **multi-oracle consensus** (9-of-17 agreement required, RC30). But for Phase One testnet, we start simple with a single trusted oracle to prove the concept works.
 
 ---
 
@@ -296,7 +296,7 @@ New Block Received
 ┌────────────────────────────────┐
 │ 8. Phase One Consensus         │
 │    ✓ Exactly 1 oracle message?│
-│    (8-of-15 in Phase Two)      │
+│    (9-of-17 in Phase Two, RC30)│
 └────────┬───────────────────────┘
          │
          ▼
@@ -678,7 +678,7 @@ MockOracleManager::GetInstance().SetMockPrice(6500); // Set to 6500 micro-USD ($
 - Miners include real oracle data in blocks
 
 **Key differences from mainnet**:
-- ⚠️ **8-of-15 consensus** (Phase Two ready)
+- ⚠️ **9-of-17 consensus** (Phase Two / Phase 3 MuSig2, RC30)
 - ⚠️ **Testnet DGB** (free, no value)
 - ⚠️ **Lower security** (acceptable for testing)
 
@@ -710,11 +710,11 @@ Phase One's single oracle (1-of-1 consensus) is **not secure enough for mainnet*
 - Has a bug → Could report wrong prices
 
 **Phase Two requirements for mainnet**:
-- ✅ **15 independent oracles** (geographic + legal diversity)
-- ✅ **8-of-15 consensus** (majority agreement required)
+- ✅ **17 independent oracles** (geographic + legal diversity, RC30)
+- ✅ **9-of-17 consensus** (majority agreement required)
 - ✅ **Economic incentives** (staking, slashing for bad behavior)
 - ✅ **Reputation system** (track oracle accuracy over time)
-- ✅ **On-chain signatures** (all 8 signatures verified in blocks)
+- ✅ **On-chain signatures** (aggregated via MuSig2 v0x03 into a single 64-byte signature)
 
 **Activation height**: `3000000` (nOracleActivationHeight; nDDActivationHeight=22014720, but oracle validation is bypassed on mainnet)
 
@@ -1212,7 +1212,7 @@ FIELD-BY-FIELD EXPLANATION
 ┃ Byte 4:  PUSH 17 bytes (0x11)                              ┃
 ┃ Byte 5:  Oracle ID = 0 (always 0 in Phase One)             ┃
 ┃ Purpose: Identifies which oracle provided this price       ┃
-┃ Phase 2: Will support IDs 0-14 (15 oracles total)          ┃
+┃ Phase 2: Will support IDs 0-16 (17 oracles total, RC30)    ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -1816,23 +1816,23 @@ If miners don't receive oracle messages quickly:
 
 Phase Two will implement a **fully decentralized multi-oracle system** for mainnet:
 
-#### 1. 15 Independent Oracles (Geographic Diversity)
+#### 1. 17 Independent Oracles (Geographic Diversity, RC30)
 **Design**:
-- 15 oracle operators around the world
+- 17 oracle operators around the world
 - Different legal jurisdictions
 - Different infrastructure providers
-- 8-of-15 consensus (majority agreement required)
+- 9-of-17 consensus (majority agreement required)
 
 **Benefits**:
-- ✅ **No single point of failure**: Up to 7 oracles can be offline
-- ✅ **Byzantine fault tolerance**: Can tolerate 7 malicious/faulty oracles
+- ✅ **No single point of failure**: Up to 8 oracles can be offline
+- ✅ **Byzantine fault tolerance**: Can tolerate 8 malicious/faulty oracles
 - ✅ **Geographic resilience**: Natural disasters can't take down system
-- ✅ **Censorship resistance**: Hard to target all 15 jurisdictions
+- ✅ **Censorship resistance**: Hard to target all 17 jurisdictions
 
 #### 2. On-Chain Signature Verification
 **Design**:
-- All 8 consensus signatures stored in blocks
-- BIP-340 Schnorr signature aggregation
+- All 9 consensus signatures aggregated into a single 64-byte MuSig2 (BIP-327) signature
+- BIP-340 Schnorr signature verification
 - Merkleized format for space efficiency
 
 **Benefits**:
@@ -1842,11 +1842,11 @@ Phase Two will implement a **fully decentralized multi-oracle system** for mainn
 
 **Storage impact**:
 ```
-Phase One: 22 bytes per block
-Phase Two: ~150 bytes per block (8 signatures + metadata)
+Phase One:        22 bytes per block
+Phase 3 MuSig2:   ~88 bytes per block (1 aggregate signature + bitmap + metadata — RC30)
 
-Note: Phase Two will exceed 83-byte OP_RETURN limit - will require
-protocol upgrade or alternative storage (e.g., witness data).
+Note: Phase 3 MuSig2 v0x03 keeps payload small regardless of how many
+oracles participate — constant ~88 bytes for any N-of-M.
 ```
 
 #### 3. Economic Incentives (Staking & Slashing)
@@ -1873,7 +1873,7 @@ protocol upgrade or alternative storage (e.g., witness data).
 
 **Metrics tracked**:
 - ✅ Uptime percentage (last 90 days)
-- ✅ Consensus agreement rate (% of times in 8-of-15)
+- ✅ Consensus agreement rate (% of times in 9-of-17)
 - ✅ Median deviation (how close to final price)
 
 **Benefits**:
@@ -1938,7 +1938,7 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 
 ### Network Modes
 - **RegTest**: Mock oracle (fake prices for testing)
-- **Testnet**: Real oracle, real prices, 8-of-15 consensus
+- **Testnet**: Real oracle, real prices, 9-of-17 consensus (RC30)
 - **Mainnet**: Disabled (Phase Two required)
 
 ### Current Limitations
@@ -1948,8 +1948,8 @@ Final size: ~150 bytes (merkle_root + aggregated_sig + metadata)
 - ⚠️ Testnet only (not production-ready)
 
 ### Phase Two Improvements
-- ✅ 15 independent oracles
-- ✅ 8-of-15 consensus (majority agreement)
+- ✅ 17 independent oracles (RC30)
+- ✅ 9-of-17 consensus (majority agreement)
 - ✅ On-chain signature verification
 - ✅ Economic incentives (staking, slashing, fees)
 - ✅ Reputation tracking
@@ -2036,12 +2036,12 @@ Before testnet launch:
 
 | **Component** | **RegTest (Now)** | **Testnet (Phase One)** | **Mainnet (Phase Two)** |
 |--------------|-------------------|-------------------------|-------------------------|
-| **Oracle Daemon** | Mock (built-in) | External daemon | 15 external daemons |
+| **Oracle Daemon** | Mock (built-in) | External daemon | 17 external daemons (RC30) |
 | **Price Source** | Manual (`setmockoracleprice`) | 6 active exchanges | 6 active exchanges |
-| **Consensus Model** | 4-of-7 | 8-of-15 | 8-of-15 |
+| **Consensus Model** | 4-of-7 | 9-of-17 (RC30) | 9-of-17 (RC30) |
 | **P2P Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Block Validation** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
-| **Schnorr Signatures** | ❌ Not used (mock) | ✅ P2P only (not in blocks) | ✅ On-chain (8 signatures) |
+| **Schnorr Signatures** | ❌ Not used (mock) | ✅ P2P only (not in blocks) | ✅ On-chain (1 MuSig2 aggregate, v0x03) |
 | **Compact Format** | ✅ 22 bytes | ✅ 22 bytes | ~150 bytes (with sigs) |
 | **Price Cache** | ✅ Implemented | ✅ Implemented | ✅ Implemented |
 | **Activation Height** | Block 650 | Block 600 | Block 3000000 (nOracleActivationHeight; nDDActivationHeight=22014720; validation bypassed) |
@@ -2113,11 +2113,11 @@ Before testnet launch:
 
 #### **Mainnet (Phase Two) - 📋 INFRASTRUCTURE READY**
 - [x] Multi-oracle validation functions implemented
-- [x] 15 mainnet oracle pubkeys defined in chainparams
-- [x] 8-of-15 consensus configured
+- [x] 17 mainnet oracle pubkeys defined in chainparams (RC30)
+- [x] 9-of-17 consensus configured
 - [x] IQR outlier filtering algorithm implemented
 - [x] nDigiDollarPhase2Height parameter ready
-- [ ] 15 oracle operators recruited and active
+- [ ] 17 oracle operators recruited and active
 - [ ] Economic incentive system (staking/slashing)
 - [ ] Reputation tracking system
 - [ ] Security audits completed
@@ -2130,24 +2130,39 @@ Before testnet launch:
 ### What's Phase Two?
 
 Phase Two upgrades the oracle system from **1-of-1** to **multi-oracle consensus**:
-- **Testnet**: 8-of-15 (need 8 agreeing oracles from 15 total)
-- **Mainnet**: 8-of-15 (need 8 agreeing oracles from 15 total)
+- **Testnet**: 9-of-17 (need 9 agreeing oracles from 17 total — RC30)
+- **Mainnet**: 9-of-17 (need 9 agreeing oracles from 17 total — RC30)
 
 This provides true decentralization - no single oracle can manipulate prices.
 
 ### Phase Two Infrastructure (Already Implemented)
 
-**All 15 testnet oracle keys are defined** in `chainparams.cpp`:
+**All 17 testnet oracle keys are defined** in `chainparams.cpp` (slot order 0..16, RC30):
 ```
-ChopperBrian, Bastian, LookInto, Green Candle, DanGB, DigiByteForce,
-Aussie, Ycagel, JohnnyLawDGB, Shenger, OPEN, Ogilvie, hallvardo,
-Jared, DigiSwarm (all active for 8-of-15 consensus)
+0  Jared            (ACTIVE)
+1  Green Candle     (ACTIVE)
+2  Bastian          (ACTIVE)
+3  DanGB            (ACTIVE)
+4  Shenger          (ACTIVE)
+5  Ycagel           (ACTIVE)
+6  Aussie           (ACTIVE)
+7  LookInto         (ACTIVE)
+8  JohnnyLawDGB     (ACTIVE)
+9  Ogilvie          (ACTIVE)
+10 ChopperBrian     (ACTIVE)
+11 hallvardo        (ACTIVE)
+12 DaPunzy          (ACTIVE)
+13 DigiByteForce    (ACTIVE)
+14 Neel             (ACTIVE)
+15 BlindDave        (placeholder)
+16 GTO90            (placeholder)
+(9-of-17 consensus threshold)
 ```
 
 **Validation functions ready** in `bundle_manager.cpp`:
 - `ValidatePhaseTwoBundle()` - Validates multi-oracle bundles
 - `CalculateConsensusPrice()` - Median with IQR outlier filtering
-- `GetRequiredConsensus()` - Returns 1 (Phase One) or 4-8 (Phase Two)
+- `GetRequiredConsensus()` - Returns 1 (Phase One), 4 (regtest Phase Two), or 9 (mainnet/testnet Phase Two — RC30)
 
 **Activation parameter**:
 ```cpp
@@ -2191,8 +2206,8 @@ Median = $0.050 ✓
 
 | Aspect | Phase One (Current) | Phase Two (Ready) |
 |--------|---------------------|-------------------|
-| Consensus | 1-of-1 | 8-of-15 testnet, 8-of-15 mainnet |
-| Oracles Defined | 15 (all active) | 15 testnet, 15 mainnet |
+| Consensus | 1-of-1 | 9-of-17 testnet, 9-of-17 mainnet (RC30) |
+| Oracles Defined | 17 (15 active + 2 placeholders) | 17 testnet, 17 mainnet (RC30) |
 | Signature Required | Optional | Required (all messages) |
 | Price Calculation | Direct | IQR-filtered median |
 | Manipulation Risk | Single point of failure | Requires majority collusion |
@@ -2208,9 +2223,9 @@ Median = $0.050 ✓
 
 **For Testnet Phase One**: Single oracle broadcasting via P2P.
 
-**For Testnet Phase Two**: Set activation height, enable 8-of-15 consensus.
+**For Testnet Phase Two**: Set activation height, enable 9-of-17 consensus (RC30).
 
-**For Mainnet**: Requires full multi-oracle system with 15 operators (8-of-15 consensus).
+**For Mainnet**: Requires full multi-oracle system with 17 operators (9-of-17 consensus, RC30).
 
 ---
 

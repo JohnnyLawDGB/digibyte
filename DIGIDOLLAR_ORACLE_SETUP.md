@@ -28,12 +28,12 @@
 
 ## Overview
 
-DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are hardcoded in `src/kernel/chainparams.cpp`. The workflow:
+DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are hardcoded in `src/kernel/chainparams.cpp`. This guide is written to work for **RC29 operators today** and to stay valid for the **RC30 migration**. The workflow:
 
 1. Generate an oracle keypair via `createoraclekey` (stored in your wallet)
 2. Send your **public key only** to the maintainer
 3. Maintainer adds it to chainparams and ships a new release
-4. You run `loadwallet` → `startoracle` after every node start
+4. On startup, load the wallet and verify the oracle is running. If auto-start does not trigger, run `startoracle` manually.
 
 ---
 
@@ -72,6 +72,20 @@ debug=net
 
 > **`testnet=1` goes at the top** (not under any section). Everything else under `[test]`.
 
+That `addnode` line is intentionally hostname-only so it works across both releases:
+- **RC29:** `oracle1.digibyte.io` resolves onto the RC29 testnet on port **12035** (`testnet21`)
+- **RC30:** the same host is used on port **12030** (`testnet23`)
+
+If you want to pin the port explicitly, use the line that matches your release:
+
+```ini
+# RC29
+addnode=oracle1.digibyte.io:12035
+
+# RC30
+addnode=oracle1.digibyte.io:12030
+```
+
 Optional:
 ```ini
 [test]
@@ -84,7 +98,10 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned oracle ID (0–14 for testnet, 15 oracles total) — contact the maintainer.
+For first-time oracle operators. You need an assigned oracle ID from the maintainer.
+
+- **RC29 live network:** existing operators are on `testnet21`
+- **RC30 migration:** expanded roster on `testnet23`, with slots **0–16**
 
 ```bash
 # 1. Start your node
@@ -108,13 +125,15 @@ digibyte-cli -testnet getoracles true
 
 **Qt wallet users:** Create wallet via **File → Create Wallet**, name it `oracle`. Then **Help → Debug Window → Console** to run `createoraclekey` and `startoracle`.
 
-> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet21/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
+> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet23/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
 
 ---
 
 ## Upgrading to a New Release
 
-Your oracle key persists in your wallet across upgrades. You do NOT need to generate a new key.
+Your oracle key persists in your wallet across upgrades. You do **not** need to generate a new key.
+
+### RC29 → RC29 restart / upgrade
 
 ```bash
 # 1. Stop your node
@@ -128,28 +147,56 @@ digibyted -testnet -daemon
 # 4. Load your wallet
 digibyte-cli -testnet loadwallet "oracle"
 
-# 5. Start your oracle
+# 5. If needed, manually start your oracle
 digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
 
 # 6. Verify
 digibyte-cli -testnet getoracles true
 ```
 
-**Qt wallet users:** Start Qt → **File → Open Wallet → oracle** → **Console** → `startoracle <your_oracle_id>`
+### RC29 → RC30 migration
 
-> ⚠️ **Steps 4 and 5 are required after EVERY restart.** The wallet does not auto-load and the oracle thread does not auto-start.
+RC30 is a **fresh testnet reset** onto `testnet23` and port **12030**. Do **not** copy old `blocks/` or `chainstate/` from `testnet21`.
+
+```bash
+# 1. Stop RC29
+digibyte-cli -testnet stop
+
+# 2. Install/build RC30
+
+# 3. Start RC30 on the fresh testnet23 network
+digibyted -testnet -daemon
+
+# 4. Migrate only wallet / oracle key material as needed
+#    Do NOT copy old blocks/ or chainstate/
+
+# 5. Load the oracle wallet
+digibyte-cli -testnet loadwallet "oracle"
+
+# 6. If needed, manually start your oracle
+digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
+
+# 7. Verify
+digibyte-cli -testnet getoracles true
+```
+
+**Qt wallet users:** Start Qt → **File → Open Wallet → oracle**. If the oracle does not come up automatically, open **Console** and run `startoracle <your_oracle_id>`.
+
+> **Auto-start behavior:** since RC25, unencrypted oracle wallets should auto-start when the wallet loads, and encrypted wallets should auto-start after `walletpassphrase` unlock. Keep the manual `startoracle` command handy anyway, because it remains the safest fallback if the oracle is not already running.
 
 ---
 
 ## Restarting After a Reboot or Crash
 
-Same as upgrading but skip step 2:
+Use this sequence after a reboot or crash:
 
 ```bash
 digibyted -testnet -daemon
 digibyte-cli -testnet loadwallet "oracle"
 digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
 ```
+
+If the oracle auto-started when the wallet loaded, the explicit `startoracle` may say it is already running. That is fine.
 
 ---
 
@@ -177,10 +224,19 @@ Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari, KuCoin, Crypto
 
 ## Consensus Parameters
 
+### Current / upcoming testnet settings
+
+| Release | Chain | Testnet P2P Port | Active Oracles | Consensus Required |
+|---------|-------|------------------|----------------|--------------------|
+| RC29 | `testnet21` | **12035** | release-specific | release-specific |
+| RC30 | `testnet23` | **12030** | 17 | 9-of-17 |
+
+### Current source tree consensus values
+
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| Active Oracles | 15 | 7 | 15 |
-| Consensus Required | 8-of-15 | 4-of-7 | 8-of-15 |
+| Active Oracles | 17 | 7 | 17 |
+| Consensus Required | 9-of-17 | 4-of-7 | 9-of-17 |
 | Activation Height | 600 | 650 | BIP9 (22,014,720) |
 | Epoch Length (`nDDOracleEpochBlocks`) | 50 blocks | 10 blocks | 100 blocks |
 | Price Update Interval | 2 blocks | 1 block | 4 blocks |
@@ -194,8 +250,11 @@ Total oracle slots: 30 (defined in `src/primitives/oracle.h`). Active oracle pub
 ## Monitoring
 
 ```bash
-# Watch oracle activity in real-time
+# RC29 log path
 tail -f ~/.digibyte/testnet21/debug.log | grep -i "oracle\|digidollar"
+
+# RC30 log path
+tail -f ~/.digibyte/testnet23/debug.log | grep -i "oracle\|digidollar"
 
 # Check current oracle price
 digibyte-cli -testnet getoracleprice
@@ -437,9 +496,9 @@ digibyte-cli -testnet getprotectionstatus
 
 When an operator sends their `pubkey` (33-byte compressed, e.g. `0398720f...eb7b57`), add it to **two locations** in `src/kernel/chainparams.cpp`:
 
-**1. `vOracleNodes`** — use the full 33-byte compressed key:
+**1. `vOracleNodes`** — use the full 33-byte compressed key. Use the correct testnet port for the target release (`12035` for RC29, `12030` for RC30):
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12035", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12030", true},
 ```
 
 **2. `consensus.vOraclePublicKeys`** — strip the `02`/`03` prefix to get the 32-byte x-only key:
@@ -459,19 +518,19 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12035 (testnet P2P) | Open inbound + outbound |
+| Ports | RC29: 12035, RC30: 12030 (testnet P2P) | Open inbound + outbound |
 
 ---
 
 ## File Locations
 
-| Component | Path |
-|-----------|------|
-| Config | `~/.digibyte/digibyte.conf` |
-| Testnet data | `~/.digibyte/testnet21/` |
-| Debug log | `~/.digibyte/testnet21/debug.log` |
-| Wallets | `~/.digibyte/testnet21/wallets/` |
-| RPC cookie | `~/.digibyte/testnet21/.cookie` |
+| Component | RC29 | RC30 |
+|-----------|------|------|
+| Config | `~/.digibyte/digibyte.conf` | `~/.digibyte/digibyte.conf` |
+| Testnet data | `~/.digibyte/testnet21/` | `~/.digibyte/testnet23/` |
+| Debug log | `~/.digibyte/testnet21/debug.log` | `~/.digibyte/testnet23/debug.log` |
+| Wallets | `~/.digibyte/testnet21/wallets/` | `~/.digibyte/testnet23/wallets/` |
+| RPC cookie | `~/.digibyte/testnet21/.cookie` | `~/.digibyte/testnet23/.cookie` |
 
 ---
 
@@ -480,8 +539,11 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 If `getwalletinfo` shows the full path as wallet name:
 
 ```bash
-# Unload with the wrong name
+# RC29 example
 digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet21/wallets/oracle/"
+
+# RC30 example
+digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet23/wallets/oracle/"
 
 # Reload with just the name
 digibyte-cli -testnet loadwallet "oracle"
@@ -492,4 +554,4 @@ digibyte-cli -testnet -rpcwallet=oracle getwalletinfo
 
 ---
 
-*Verified against DigiByte Core v9.26.0-rc30 source code.*
+*Verified against DigiByte Core RC29 release docs and the current RC30 source tree on `feature/digidollar-v1`.*

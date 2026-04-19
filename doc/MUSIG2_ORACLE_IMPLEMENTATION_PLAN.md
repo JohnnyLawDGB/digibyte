@@ -1,6 +1,6 @@
 # MuSig2 Oracle Bundle Implementation Plan
 
-> **Goal:** Replace individual per-oracle Schnorr signatures in oracle bundles with MuSig2 aggregate signatures, reducing on-chain oracle data from ~609 bytes (9-of-15) to ~88 bytes (constant, any N).
+> **Goal:** Replace individual per-oracle Schnorr signatures in oracle bundles with MuSig2 aggregate signatures, reducing on-chain oracle data from ~609 bytes (9-of-17) to ~88 bytes (constant, any N).
 >
 > **Status:** PLANNING — awaiting review before implementation begins
 >
@@ -38,14 +38,14 @@ The current oracle bundle implementation has a **fundamental scaling flaw**: on-
 
 - **More decentralization = bigger blocks.** The more oracles we add to strengthen the network, the more we bloat the chain. Security and efficiency are working against each other.
 - **The cost is permanent.** Oracle data is embedded in every single block, every 15 seconds, forever. There is no pruning — this data is part of consensus.
-- **It doesn't scale.** At 15 oracles, we're burning nearly 1 KB per block on signatures alone. At 30 oracles, it would be ~2 KB. At 100 oracles, ~6.5 KB. Per block. Forever.
+- **It doesn't scale.** At 17 oracles (RC30), we're burning over 1 KB per block on signatures alone. At 30 oracles, it would be ~2 KB. At 100 oracles, ~6.5 KB. Per block. Forever.
 
 ```
 ON-CHAIN ORACLE SIZE vs. ORACLE COUNT (current implementation)
 
 Bytes
 1100 ┤
-1000 ┤                                                          ●  15 oracles (999 B)
+1130 ┤                                                          ●  17 oracles (1,129 B) [RC30]
  900 ┤
  800 ┤
  700 ┤                                          ●  11 oracles (739 B)
@@ -68,12 +68,12 @@ Bytes
 | Oracles | Current Size | Annual Growth | MuSig2 Size | MuSig2 Annual |
 |---------|-------------|---------------|-------------|---------------|
 | 5-of-9 | 349 B/block | **700 MB/year** | 88 B/block | 176 MB/year |
-| 9-of-15 | 609 B/block | **1.22 GB/year** | 88 B/block | 176 MB/year |
-| 15-of-15 | 999 B/block | **2.00 GB/year** | 88 B/block | 176 MB/year |
+| 9-of-17 (RC30) | 739 B/block | **1.48 GB/year** | 89 B/block | 178 MB/year |
+| 17-of-17 | 1,129 B/block | **2.26 GB/year** | 89 B/block | 178 MB/year |
 | 15-of-30 | 1,974 B/block | **3.96 GB/year** | 90 B/block | 180 MB/year |
 | 30-of-100 | 6,474 B/block | **12.97 GB/year** | 94 B/block | 188 MB/year |
 
-Over 10 years at 9-of-15, the current design adds **12.2 GB** of signature data to the chain. With MuSig2, that same 10 years costs **1.76 GB** — a saving of over 10 GB.
+Over 10 years at 9-of-17, the current design adds **12.2 GB** of signature data to the chain. With MuSig2, that same 10 years costs **1.76 GB** — a saving of over 10 GB.
 
 **This is a design flaw, not a feature.** The whitepaper explicitly called for aggregate signatures. The implementation took a shortcut.
 
@@ -93,10 +93,10 @@ The DigiDollar whitepaper specifies that oracle bundles should use Schnorr thres
 | Oracles | Script Size | Annual Chain Growth |
 |---------|-------------|---------------------|
 | 4-of-7 (regtest) | **284 bytes** | 590 MB/year |
-| 5-of-9 (current testnet) | **349 bytes** | 727 MB/year |
+| 5-of-9 (earlier testnet) | **349 bytes** | 727 MB/year |
 | 7-of-7 | **479 bytes** | 1.00 GB/year |
-| 9-of-15 (proposed) | **609 bytes** | 1.27 GB/year |
-| 15-of-15 | **999 bytes** | 2.09 GB/year |
+| 9-of-17 (RC30 mainnet/testnet) | **739 bytes** | 1.55 GB/year |
+| 17-of-17 | **1,129 bytes** | 2.36 GB/year |
 
 With MuSig2 aggregate signatures, **ALL configurations collapse to ~88 bytes** regardless of oracle count.
 
@@ -126,7 +126,7 @@ With MuSig2 aggregate signatures, **ALL configurations collapse to ~88 bytes** r
 
 ### MuSig2 is N-of-N, not M-of-N
 
-MuSig2 natively requires ALL aggregated signers to participate. For M-of-N (e.g., 9-of-15), we use **signer selection**: the coordinator picks which M oracles will sign, runs MuSig2 with exactly those M, and stores a bitmap indicating which oracles participated. Verification reconstructs the aggregate pubkey for that specific subset.
+MuSig2 natively requires ALL aggregated signers to participate. For M-of-N (e.g., 9-of-17), we use **signer selection**: the coordinator picks which M oracles will sign, runs MuSig2 with exactly those M, and stores a bitmap indicating which oracles participated. Verification reconstructs the aggregate pubkey for that specific subset.
 
 This is simpler and more battle-tested than FROST (true threshold sigs) and is the approach recommended by the BIP 327 authors for M-of-N use cases combined with Taproot script paths.
 
@@ -182,7 +182,7 @@ Data layout:
   aggregate_sig:    64 bytes (BIP 340 Schnorr signature — MuSig2 aggregate)
 
 Total data: 81 + bitmap_len bytes
-  15 oracles:  81 + 2 = 83 bytes
+  17 oracles:  81 + 3 = 84 bytes  (RC30)
   30 oracles:  81 + 4 = 85 bytes
   64 oracles:  81 + 8 = 89 bytes
   100 oracles: 81 + 13 = 94 bytes
@@ -201,7 +201,7 @@ The variable-length bitmap (with 1-byte length prefix) means this format **never
               ┌────────────┼────────────┐
               ▼            ▼            ▼
          ┌────────┐  ┌────────┐  ┌────────┐
-         │Oracle 0│  │Oracle 1│  │  ...   │  (15 oracles)
+         │Oracle 0│  │Oracle 1│  │  ...   │  (17 oracles, RC30)
          └───┬────┘  └───┬────┘  └───┬────┘
              │            │            │
     ═══════════════════════════════════════════
@@ -257,7 +257,7 @@ The variable-length bitmap (with 1-byte length prefix) means this format **never
 5. Verify the single 64-byte aggregate signature using standard `secp256k1_schnorrsig_verify()` against the aggregate pubkey
 6. Confirm signer count ≥ `nOracleRequiredMessages` (e.g., 9)
 
-**Note:** Step 4 can be cached — for a given bitmap, the aggregate pubkey is deterministic. With 15 oracles and C(15,9)=5,005 possible subsets, all aggregate pubkeys can be precomputed at startup.
+**Note:** Step 4 can be cached — for a given bitmap, the aggregate pubkey is deterministic. With 17 oracles and C(17,9)=24,310 possible subsets, all aggregate pubkeys can be precomputed at startup (RC30).
 
 ### ⚠️ CRITICAL DESIGN CHANGE: Signature Message
 
@@ -274,19 +274,19 @@ In Phase 3, all participating oracles sign the **same message**: `H(bitmap || pr
 
 The current oracle system has a **two-tier structure**:
 - **30 total oracle keys** hardcoded in chainparams (`ORACLE_TOTAL_COUNT = 30`)
-- **15 active oracles** selected per epoch via deterministic rotation (`ORACLE_ACTIVE_COUNT = 15`)
-- **9 required** for consensus (`nOracleRequiredMessages = 9` on testnet)
+- **17 active oracles** selected per epoch via deterministic rotation on mainnet/testnet (RC30 chainparams override; legacy header default `ORACLE_ACTIVE_COUNT = 15`)
+- **9 required** for consensus (`nOracleRequiredMessages = 9` on mainnet/testnet in RC30)
 
 **Decision needed: What does the bitmap reference?**
 
 **Option A: Global bitmap (bit N = oracle ID N from full 30-oracle set)**
 - Pro: Simple, self-describing — validators always know which oracle is which
 - Pro: No need to reconstruct epoch's active set to decode
-- Con: Bitmap must be wide enough for total oracle count (4 bytes for 30)
+- Con: Bitmap must be wide enough for total oracle count (4 bytes for 30, RC30 bitmap spans the full 17 active slots plus reserved)
 - **Recommended for simplicity and future-proofing**
 
 **Option B: Epoch-relative bitmap (bit N = Nth oracle in this epoch's active set)**
-- Pro: Smaller bitmap (2 bytes for 15)
+- Pro: Smaller bitmap (3 bytes for 17 — RC30)
 - Con: Validators must compute `SelectOraclesForEpoch()` to decode bitmap
 - Con: Bitmap meaning changes every epoch — harder to audit/debug
 
@@ -300,9 +300,9 @@ The current oracle system has a **two-tier structure**:
 |---------------|---------------|---------------|---------|----------------|---------------|
 | 4-of-7 | 285 B | 89 B | **69%** | 571 MB | 178 MB |
 | 5-of-9 | 350 B | 90 B | **74%** | 702 MB | 180 MB |
-| 9-of-15 | 610 B | 90 B | **85%** | 1,223 MB | 180 MB |
-| 15-of-15 | 1,000 B | 90 B | **91%** | 2,005 MB | 180 MB |
-| 15-of-30 | 1,000 B | 92 B | **91%** | 2,005 MB | 184 MB |
+| 9-of-17 (RC30) | 740 B | 91 B | **88%** | 1,484 MB | 182 MB |
+| 17-of-17 | 1,130 B | 91 B | **92%** | 2,266 MB | 182 MB |
+| 17-of-30 | 1,130 B | 92 B | **92%** | 2,266 MB | 184 MB |
 | 26-of-50 | 1,715 B | 95 B | **94%** | 3,439 MB | 190 MB |
 | 51-of-100 | 3,340 B | 101 B | **97%** | 6,697 MB | 202 MB |
 | 129-of-256 | 8,410 B | 120 B | **99%** | 16,862 MB | 241 MB |
@@ -311,7 +311,7 @@ The current oracle system has a **two-tier structure**:
 
 | Scenario | Current | MuSig2 | Saved |
 |----------|---------|--------|-------|
-| Launch (9-of-15) | **11.9 GB** | **1.76 GB** | 10.2 GB |
+| Launch (9-of-17) | **11.9 GB** | **1.76 GB** | 10.2 GB |
 | Growth (26-of-50) | **33.6 GB** | **1.86 GB** | 31.7 GB |
 | Scale (51-of-100) | **65.4 GB** | **1.98 GB** | 63.4 GB |
 | Max (129-of-256) | **164.7 GB** | **2.35 GB** | 162.3 GB |
@@ -338,9 +338,9 @@ This means validating nodes do NOT need new cryptographic verification code. The
 - [ ] Enable `--enable-module-musig` in configure
 - [ ] Verify existing Schnorr/Taproot/ECDSA tests still pass
 - [ ] Write basic MuSig2 integration tests:
-  - Key aggregation for 2, 7, 15 signers
+  - Key aggregation for 2, 7, 17 signers (RC30)
   - Full sign/verify round-trip
-  - Subset signing (simulate 9-of-15)
+  - Subset signing (simulate 9-of-17)
 - [ ] Verify `secp256k1_musig_pubkey_agg()` produces deterministic results for same key sets
 
 **Files modified:**
@@ -426,7 +426,7 @@ This means validating nodes do NOT need new cryptographic verification code. The
 
 **Tasks:**
 - [ ] Unit tests:
-  - MuSig2 key aggregation for all possible 9-of-15 subsets (5,005 combinations)
+  - MuSig2 key aggregation for all possible 9-of-17 subsets (24,310 combinations — RC30)
   - Nonce exchange simulation (in-process, no network)
   - Partial signature generation and aggregation
   - Bundle roundtrip: create v0x03 → extract → verify
@@ -434,12 +434,12 @@ This means validating nodes do NOT need new cryptographic verification code. The
   - Insufficient signers rejection
   - Mixed v0x02/v0x03 blocks across activation height
 - [ ] Regtest integration test (`test_phase3_oracle_regtest.sh`):
-  - Start 15 oracle nodes
+  - Start 17 oracle nodes (RC30)
   - Mine blocks with MuSig2 oracle bundles
   - Verify bundle size is exactly 88 bytes
-  - Test 9-of-15 (minimum threshold)
-  - Test 14-of-15 (one offline)
-  - Test 8-of-15 (below threshold — should fall back or reject)
+  - Test 9-of-17 (minimum threshold)
+  - Test 16-of-17 (one offline)
+  - Test 8-of-17 (below threshold — should fall back or reject)
   - Test Phase 2 → Phase 3 transition across activation height
 - [ ] Testnet deployment:
   - Set `nDigiDollarPhase3Height` for testnet20
@@ -549,7 +549,7 @@ An attacker cannot construct a valid aggregate signature for a bitmap they didn'
 
 ### Unit tests (src/test/):
 - `musig2_oracle_tests.cpp` (NEW):
-  - Key aggregation correctness for all C(15,9) = 5,005 subsets
+  - Key aggregation correctness for all C(17,9) = 24,310 subsets (RC30)
   - Nonce generation and aggregation
   - Partial sign + aggregate + verify roundtrip
   - v0x03 bundle create → extract → verify
@@ -601,7 +601,7 @@ An attacker cannot construct a valid aggregate signature for a bitmap they didn'
 
 ---
 
-## Scaling Beyond 15 Oracles
+## Scaling Beyond 17 Oracles (RC30)
 
 A key advantage of MuSig2 is that on-chain size barely changes as oracle count grows. The only variable-size component is the signer bitmap (1 bit per possible oracle). The aggregate signature is always exactly 64 bytes.
 
@@ -610,7 +610,7 @@ A key advantage of MuSig2 is that on-chain size barely changes as oracle count g
 ```
 Oracle Count | Bitmap | Total On-Chain | Current (individual sigs)
 -------------|--------|----------------|-------------------------
-     15      |  2 B   |     88 B       |    999 B  (11× bigger)
+     17      |  3 B   |     89 B       |  1,129 B  (13× bigger)  [RC30]
      30      |  4 B   |     90 B       |  1,974 B  (22× bigger)
      64      |  8 B   |     94 B       |  4,184 B  (45× bigger)
     100      | 13 B   |     99 B       |  6,524 B  (66× bigger)
@@ -626,32 +626,31 @@ For M-of-N verification, we need the aggregate pubkey for the specific M-oracle 
 ```
 Config    | Possible Subsets | Cache Size (32B each) | Precompute?
 ----------|------------------|-----------------------|------------
- 9-of-15  |           5,005  |        156 KB         | ✅ YES — precompute all at startup
+ 9-of-17  |          24,310  |        760 KB         | ✅ YES — precompute all at startup (RC30)
  9-of-16  |          11,440  |        357 KB         | ✅ YES — still fast
 15-of-30  |     155,117,520  |        4.6 GB         | ❌ NO — compute on-demand
 33-of-64  |     1.8 trillion |       impossible       | ❌ NO — compute on-demand
 ```
 
-**The solution is simple:** `secp256k1_musig_pubkey_agg()` takes ~0.1ms for any subset size. With 15-second blocks, computing one aggregate pubkey per block validation is negligible. At ≤16 oracles, precompute the full cache. Above 16, compute on-demand with an LRU cache (most blocks will use the same few oracle subsets anyway since the same oracles tend to be online).
+**The solution is simple:** `secp256k1_musig_pubkey_agg()` takes ~0.1ms for any subset size. With 15-second blocks, computing one aggregate pubkey per block validation is negligible. At ≤17 oracles (RC30), precompute the full cache. Above ~20, compute on-demand with an LRU cache (most blocks will use the same few oracle subsets anyway since the same oracles tend to be online).
 
 ### Bitmap encoding for future-proofing
 
 The v0x03 format uses a fixed 2-byte bitmap (uint16, max 16 oracles). To support more than 16 oracles in the future, two options:
 
-**Option A: Variable-length bitmap (recommended)**
+**Option A: Variable-length bitmap (recommended — adopted in RC30 v0x03)**
 - First byte encodes bitmap length: `bitmap_len(1) + bitmap(bitmap_len) + price(8) + ts(8) + sig(64)`
-- 15 oracles: 1 + 2 + 80 = 83 bytes (only 1 byte more than fixed)
+- 17 oracles (RC30): 1 + 3 + 80 = 84 bytes
 - 100 oracles: 1 + 13 + 80 = 94 bytes
 - 256 oracles: 1 + 32 + 80 = 113 bytes
 - Unlimited future scaling with negligible overhead
 
 **Option B: Fixed widths with version bumps**
-- v0x03: uint16 bitmap (max 16 oracles)
-- v0x04 (future): uint32 bitmap (max 32 oracles)
-- v0x05 (future): uint64 bitmap (max 64 oracles)
+- v0x03: uint32 bitmap (max 32 oracles — covers RC30's 17 active slots)
+- v0x04 (future): uint64 bitmap (max 64 oracles)
 - Simple but requires consensus changes to scale
 
-**Recommendation:** Use Option A (variable-length bitmap) from the start. The 1-byte length prefix costs almost nothing and means we never need another format change for oracle scaling. Whether we have 15 or 500 oracles, the v0x03 format handles it.
+**Recommendation:** Use Option A (variable-length bitmap) from the start. The 1-byte length prefix costs almost nothing and means we never need another format change for oracle scaling. Whether we have 17 or 500 oracles, the v0x03 format handles it.
 
 ### Coordination protocol at scale
 

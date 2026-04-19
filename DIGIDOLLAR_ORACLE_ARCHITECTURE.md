@@ -747,13 +747,13 @@ bool COraclePriceMessage::IsValid(int64_t reference_time) const
 class COracleBundle
 {
 public:
-    std::vector<COraclePriceMessage> messages;  // 1-15 messages
+    std::vector<COraclePriceMessage> messages;  // 1-17 messages
     int32_t epoch{0};                           // Epoch identifier
     uint64_t median_price_micro_usd{0};         // Consensus price
     int64_t timestamp{0};                       // Bundle creation time
 
     // Phase One: messages.size() == 1 (1-of-1 consensus)
-    // Phase Two: messages.size() >= nOracleRequiredMessages (8-of-15 current config)
+    // Phase Two / Phase 3 MuSig2: messages.size() >= nOracleRequiredMessages (9-of-17 in RC30)
 };
 ```
 
@@ -1405,10 +1405,11 @@ COMPACT FORMAT (Blockchain Storage):
 
 SAVINGS: 106 bytes per message (82.8% reduction)
 
-Phase Two (15 oracles):
-- Full format:    15 × 128 = 1,920 bytes
-- Compact format: ~150 bytes (version/opcodes shared, 15 × price+timestamp)
-- Savings: ~1,770 bytes (92.2% reduction)
+Phase Two / Phase 3 MuSig2 (17 oracles, RC30):
+- Full format:    17 × 128 = 2,176 bytes
+- Compact format: ~170 bytes (version/opcodes shared, 17 × price+timestamp)
+- MuSig2 v0x03:   ~88 bytes (constant, one aggregate signature)
+- Savings: up to ~2,088 bytes (>95% reduction with MuSig2)
 ```
 
 ---
@@ -1807,43 +1808,46 @@ Phase Two implements decentralized multi-oracle consensus for mainnet security.
 **Configuration Parameters** (`src/consensus/params.h`):
 ```cpp
 int nDigiDollarPhase2Height{std::numeric_limits<int>::max()};  // Default; overridden: mainnet=3000000, testnet=600, regtest=650
-int nOracleRequiredMessages{1};  // Phase One: 1, Phase Two regtest: 4, testnet: 8, mainnet: 8
-int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet: 15, mainnet: 15
+int nOracleRequiredMessages{1};  // Phase One: 1, Phase Two regtest: 4, testnet: 9, mainnet: 9 (RC30)
+int nOracleTotalOracles{1};      // Phase One: 1, Phase Two regtest: 7, testnet: 17, mainnet: 17 (RC30)
 ```
 
 ### 14.2 Network-Specific Configuration
 
 | Network | Phase | Consensus | Oracles Defined | Activation Height | Status |
 |---------|-------|-----------|-----------------|-------------------|--------|
-| Mainnet | One | **DISABLED** | 15 vOraclePublicKeys defined, validation bypassed | Block 3000000 (nOracleActivationHeight; nDDActivationHeight=22014720; validation bypassed) | ❌ NOT FUNCTIONAL |
-| Testnet | One | 8-of-15 | 15 | Block 600 | ✅ Working |
+| Mainnet | One | **DISABLED** | 17 vOraclePublicKeys defined, validation bypassed | Block 3000000 (nOracleActivationHeight; nDDActivationHeight=22014720; validation bypassed) | ❌ NOT FUNCTIONAL |
+| Testnet | One | 9-of-17 (RC30) | 17 | Block 600 | ✅ Working |
 | RegTest | One | 4-of-7 | 7 | Block 650 | ✅ Working |
 
 > **⚠️ CRITICAL**: Mainnet oracle validation returns true at bundle_manager.cpp:2229.
 > This means mainnet will accept ANY oracle data without verification.
 > Phase Two infrastructure exists but cannot be enabled until mainnet validation is fixed.
 
-### 14.3 Testnet Oracle Keys (All 15 Defined)
+### 14.3 Testnet Oracle Keys (All 17 Defined — RC30 slot order 0-16)
 
-**Location**: `src/kernel/chainparams.cpp` (lines 598-609)
+**Location**: `src/kernel/chainparams.cpp`
 
 ```cpp
-// All 15 testnet oracles are ACTIVE for 8-of-15 consensus
-consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c..."); // ChopperBrian (ACTIVE)
-consensus.vOraclePublicKeys.push_back("172755a320cec96c..."); // Bastian (ACTIVE)
-consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e2..."); // LookInto (ACTIVE)
-consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6f..."); // Green Candle (ACTIVE)
-consensus.vOraclePublicKeys.push_back("546c07ee9d21640c..."); // DanGB (ACTIVE)
-consensus.vOraclePublicKeys.push_back("68453c40d14ebea0..."); // DigiByteForce (ACTIVE - placeholder)
-consensus.vOraclePublicKeys.push_back("7a858e055099e4a9..."); // Aussie (ACTIVE)
-consensus.vOraclePublicKeys.push_back("85016758856ed273..."); // Ycagel (ACTIVE)
-consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311..."); // JohnnyLawDGB (ACTIVE)
-consensus.vOraclePublicKeys.push_back("9cef021f841794c1..."); // Shenger (ACTIVE)
-consensus.vOraclePublicKeys.push_back("b1a04e129b075632..."); // OPEN (ACTIVE - placeholder)
-consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a..."); // Ogilvie (ACTIVE)
-consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8cee..."); // hallvardo (ACTIVE)
-consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb..."); // Jared (ACTIVE)
-consensus.vOraclePublicKeys.push_back("e717a6d7b3497a8d..."); // DigiSwarm (ACTIVE - placeholder)
+// All 17 testnet oracles are ACTIVE for 9-of-17 consensus (RC30)
+// Slot order matches chainparams.cpp (ordered 0..16):
+consensus.vOraclePublicKeys.push_back("...");  // 0  Jared (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 1  Green Candle (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 2  Bastian (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 3  DanGB (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 4  Shenger (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 5  Ycagel (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 6  Aussie (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 7  LookInto (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 8  JohnnyLawDGB (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 9  Ogilvie (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 10 ChopperBrian (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 11 hallvardo (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 12 DaPunzy (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 13 DigiByteForce (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 14 Neel (ACTIVE)
+consensus.vOraclePublicKeys.push_back("...");  // 15 BlindDave (placeholder)
+consensus.vOraclePublicKeys.push_back("...");  // 16 GTO90 (placeholder)
 ```
 
 ### 14.4 Phase Two Validation Functions
@@ -1895,7 +1899,7 @@ int OracleBundleManager::GetRequiredConsensus(int block_height,
                                                const Consensus::Params& params)
 {
     if (block_height >= params.nDigiDollarPhase2Height) {
-        return params.nOracleRequiredMessages;  // 8 for testnet, 4 for regtest, 8 for mainnet
+        return params.nOracleRequiredMessages;  // 9 for testnet, 4 for regtest, 9 for mainnet (RC30)
     }
     return 1;  // Phase One: 1-of-1
 }
@@ -1906,7 +1910,7 @@ int OracleBundleManager::GetRequiredConsensus(int block_height,
 To enable Phase Two on testnet, change in `chainparams.cpp`:
 ```cpp
 consensus.nDigiDollarPhase2Height = <desired_block_height>;
-consensus.nOracleRequiredMessages = 8;  // 8-of-15 for testnet
+consensus.nOracleRequiredMessages = 9;  // 9-of-17 for testnet (RC30)
 ```
 
 ---
@@ -1943,7 +1947,7 @@ Validation Range:      100 - 100,000,000 micro-USD ($0.0001 - $100.00)
 Compact Script Size:   22 bytes (OP_RETURN + OP_ORACLE + data)
 Full Message Size:     128 bytes (with 64-byte Schnorr signature)
 Phase One Consensus:   1-of-1 (testnet/regtest ONLY - mainnet disabled)
-Phase Two Consensus:   8-of-15 testnet, 4-of-7 regtest, 8-of-15 mainnet (infrastructure exists)
+Phase Two Consensus:   9-of-17 testnet, 4-of-7 regtest, 9-of-17 mainnet (RC30; Phase 3 MuSig2 v0x03 infrastructure exists)
 Activation Heights:    Mainnet=3000000 (nOracleActivationHeight; nDDActivationHeight=22014720; validation bypassed), Testnet=600, Regtest=650
 ```
 

@@ -554,8 +554,8 @@ DigiDollar is DigiByte's native overcollateralized stablecoin system - 100% on-c
 | Parameter | Testnet | Mainnet |
 |-----------|---------|---------|
 | Total Oracles | 30 | 30 |
-| Active | 1 | 15 |
-| Consensus | 1-of-1 | 8-of-15 |
+| Active | 1 | 17 |
+| Consensus | 1-of-1 | 9-of-17 |
 
 ---
 

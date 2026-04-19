@@ -1083,7 +1083,7 @@
 ### src/kernel/chainparams.cpp / .h
 - `CChainParams` (class) → full chain parameters: network magic bytes, default port, genesis block, seeds, checkpoints, consensus params, address prefixes
   - `Main()` → creates mainnet parameters (port 12024, genesis Jan 10 2014, 5-algo PoW, DigiShield/MultiShield activation heights)
-  - `TestNet()` → creates testnet parameters (port 12035, relaxed difficulty)
+  - `TestNet()` → creates testnet parameters (port 12030, relaxed difficulty)
   - `SigNet()` → creates signet parameters (signed block test network)
   - `RegTest()` → creates regtest parameters (instant mining, no real PoW)
   - ⚠️ `GetOracleNode()` → looks up oracle node info by ID from hardcoded oracle configuration

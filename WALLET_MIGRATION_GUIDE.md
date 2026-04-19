@@ -1,13 +1,13 @@
 # Oracle Wallet Migration Guide — DigiByte DigiDollar Testnet
 
-**Last Updated:** 2026-04-04
-**Applies to:** v9.26.0-rc28 (testnet21) and future testnet resets
+**Last Updated:** 2026-04-17
+**Applies to:** v9.26.0-rc30 (testnet23) and future testnet resets
 
 ---
 
 ## Overview
 
-When a new DigiDollar testnet release resets the chain (e.g., testnet20 → testnet21), your Oracle wallet must be migrated to the new testnet directory. The wallet contains your Schnorr/MuSig2 oracle keypair — **this key does NOT change between resets**.
+When a new DigiDollar testnet release resets the chain (e.g., testnet21 → testnet23), your Oracle wallet must be migrated to the new testnet directory. The wallet contains your Schnorr/MuSig2 oracle keypair — **this key does NOT change between resets**.
 
 However, simply copying `wallet.dat` into the new directory will fail due to two separate validation checks introduced in recent releases. This guide walks through every step to get your Oracle wallet working on the new chain.
 
@@ -62,15 +62,15 @@ digibyted --version
 
 Update your testnet config file with the new release's ports and settings. Check the release notes for port changes.
 
-Example changes for rc28:
+Example changes for rc30 (testnet23):
 
 ```ini
 # In your digibyte.conf under [test] section:
 
-rpcport=14026          # Was 14025 in rc27
-port=12035             # Was 12034 in rc27 (P2P port)
+rpcport=14026          # Unchanged since rc28
+port=12030             # Was 12035 in rc28/rc29 (P2P port)
 walletcrosschain=1     # REQUIRED — allows wallet from previous chain
-addnode=oracle1.digibyte.io:12035   # Update port in addnode
+addnode=oracle1.digibyte.io:12030   # Update port in addnode
 ```
 
 > **IMPORTANT:** The `walletcrosschain=1` setting is mandatory. Without it, the node will reject your wallet because it was last used on a different testnet chain. This is the second of two validation checks you must bypass.
@@ -84,8 +84,8 @@ If the P2P port changed, open the new port:
 ```bash
 sudo ufw allow NEW_PORT/tcp comment "DigiByte Testnet P2P"
 
-# Example for rc28:
-sudo ufw allow 12035/tcp comment "DigiByte Testnet P2P (rc28 testnet21)"
+# Example for rc30:
+sudo ufw allow 12030/tcp comment "DigiByte Testnet P2P (rc30 testnet23)"
 ```
 
 ---
@@ -96,10 +96,10 @@ sudo ufw allow 12035/tcp comment "DigiByte Testnet P2P (rc28 testnet21)"
 digibyted -datadir=/path/to/.digibyte-testnet -daemon
 ```
 
-Wait ~10 seconds for it to create the new directory structure (e.g., `testnet21/`):
+Wait ~10 seconds for it to create the new directory structure (e.g., `testnet23/`):
 
 ```bash
-ls /path/to/.digibyte-testnet/testnet21/
+ls /path/to/.digibyte-testnet/testnet23/
 # Should show: blocks/ chainstate/ wallets/ debug.log etc.
 ```
 
@@ -123,9 +123,9 @@ Copy **only** the Oracle wallet directory — do NOT copy any chain data (blocks
 cp -r /path/to/.digibyte-testnet/OLD_TESTNET/wallets/Oracle \
       /path/to/.digibyte-testnet/NEW_TESTNET/wallets/Oracle
 
-# Example for rc27 → rc28:
-cp -r ~/.digibyte-testnet/testnet20/wallets/Oracle \
-      ~/.digibyte-testnet/testnet21/wallets/Oracle
+# Example for rc29 → rc30:
+cp -r ~/.digibyte-testnet/testnet21/wallets/Oracle \
+      ~/.digibyte-testnet/testnet23/wallets/Oracle
 ```
 
 Verify:

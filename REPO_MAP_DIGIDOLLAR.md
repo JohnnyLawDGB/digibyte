@@ -155,7 +155,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetDigiDollarTxType(tx)` → extracts type from version field (delegates to consensus)
 - **Path Validation:**
   - `ValidateNormalRedemption(script, currentHeight)` → checks timelock expiry via metadata
-  - `ValidateEmergencyRedemption(script, sigs)` → validates 8-of-15 oracle signature threshold
+  - `ValidateEmergencyRedemption(script, sigs)` → validates 9-of-17 oracle signature threshold
   - `ValidateERRRedemption(script, systemCollateral)` → checks system < 100% collateralized
 - **Amount/Collateral Validation:**
   - `ValidateMintAmount(amount, params, nHeight)` → validates against min/max with activation height awareness
@@ -197,7 +197,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ### src/consensus/digidollar.h
 - `DigiDollar::BLOCKS_PER_DAY` → 5760 blocks (15-second block time)
 - `DigiDollarTxType` (enum) → DD_TX_NONE(0), DD_TX_MINT(1), DD_TX_TRANSFER(2), DD_TX_REDEEM(3), DD_TX_MAX(4)
-- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%), mint limits ($100–$100k), minOutputAmount ($1), oracle config (30 total, 15 active, 8-of-15 threshold), DCA levels
+- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%), mint limits ($100–$100k), minOutputAmount ($1), oracle config (30 total, 17 active, 9-of-17 threshold), DCA levels
 - `GetCollateralRatioForLockTime(lockBlocks, params)` → returns collateral ratio % for lock period; uses higher ratio for between-tier periods
 - `GetDCAMultiplier(systemCollateral, params)` → returns collateral requirement multiplier from DCA levels
 - `IsValidMintAmount(amount, params)` → validates against min/max mint amounts
@@ -244,7 +244,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `CalculateERRAdjustment(systemHealth)` → 95–100%: 0.95, 90–95%: 0.90, 85–90%: 0.85, <85%: 0.80
   - `GetRequiredDDBurn(originalDDMinted, systemHealth)` → originalDD / ERRRatio (e.g., at 80% health: burn 125 DD to get back 100 DD worth of collateral)
   - `GetAdjustedRedemption(normalRedemption, systemHealth)` → DEPRECATED alias for backwards compat
-  - `HasOracleConsensus(bundle)` → validates 8-of-15 oracle signatures for ERR activation
+  - `HasOracleConsensus(bundle)` → validates 9-of-17 oracle signatures for ERR activation
   - `GetCurrentState()` → returns current ERRState
   - `GetERRQueue()` → returns pending ERR redemption outpoints
   - `QueueERRRedemption(outpoint, ddAmount, requestHeight)` → adds to FIFO ERR queue
@@ -533,8 +533,8 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 
 ### src/primitives/oracle.h
 - **Constants:**
-  - `ORACLE_CONSENSUS_REQUIRED` = 8 (8 of 15)
-  - `ORACLE_ACTIVE_COUNT` = 15
+  - `ORACLE_CONSENSUS_REQUIRED` = 8 (legacy header default; chainparams overrides to 9 for mainnet/testnet — 9 of 17 in RC30)
+  - `ORACLE_ACTIVE_COUNT` = 15 (legacy header default; chainparams overrides to 17 for mainnet/testnet in RC30)
   - `ORACLE_TOTAL_COUNT` = 30
   - `ORACLE_MAX_AGE_SECONDS` = 3600 (1 hour)
   - `ORACLE_MIN_PRICE_MICRO_USD` = 100 ($0.0001)
@@ -556,7 +556,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetConsensusPrice(min_required)` → calculates median price from valid messages
   - `ValidateEpoch(current_epoch)` → checks epoch consistency
 - `OracleNodeInfo` (struct) → oracle node definition: id, pubkey, endpoint, is_active
-- `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of 15 active oracles for epoch
+- `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of 17 active oracles for epoch (RC30)
 - `GetCurrentEpoch(block_height)` → calculates epoch from block height
 - `OracleP2P` (namespace) → P2P validation with DOS protection
   - `ValidateIncomingMessage(message)` → comprehensive P2P message validation

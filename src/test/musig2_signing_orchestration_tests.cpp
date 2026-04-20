@@ -65,8 +65,11 @@ BOOST_AUTO_TEST_CASE(no_prestart_mid_epoch)
     BOOST_REQUIRE_GT(epoch_length, 0);
 
     // Mid-epoch: far from the boundary, no pre-start expected.
-    const int32_t mid_height = epoch_length / 2;
-    BOOST_REQUIRE_GT(mid_height, 0);
+    // Use height 1 (position 1 within epoch 0) to be unambiguously
+    // outside the pre-start window on any epoch_length (regtest=10,
+    // testnet=50, mainnet=100+).
+    const int32_t mid_height = 1;
+    BOOST_REQUIRE_GT(epoch_length, mid_height + 5);
     const int32_t current_epoch = mid_height / epoch_length;
     const int32_t next_epoch = current_epoch + 1;
 

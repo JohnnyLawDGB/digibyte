@@ -47,6 +47,8 @@ public:
     // Session management
     MuSig2SigningSession* GetOrCreateSigningSession(int32_t epoch, int32_t block_height = 0);
     void CleanupOldSessions(int32_t current_epoch);
+    /** Read-only session existence check — used by tests and diagnostics. */
+    bool HasSession(int32_t epoch) const;
 
     // Block-tick orchestration
     void OnBlockConnected(const std::shared_ptr<const CBlock>& block, int32_t block_height);
@@ -92,6 +94,15 @@ protected:
                         const CBlockIndex* pindex) override;
 
 private:
+    /**
+     * Run one tick of the MuSig2 ceremony for a specific epoch's session.
+     * Called by OnBlockConnected for both the current epoch and, in the
+     * last K blocks of an epoch, for the upcoming epoch so the ceremony
+     * reaches COMPLETE before the first block of the next epoch is
+     * templated by miners.
+     */
+    void TickEpochSession(int32_t epoch, int32_t block_height);
+
     CConnman* m_connman{nullptr};
     std::map<int32_t, std::unique_ptr<MuSig2SigningSession>> m_signing_sessions;
     mutable std::mutex m_sessions_mutex;

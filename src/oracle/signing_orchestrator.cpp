@@ -268,6 +268,12 @@ MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32
     return ptr;
 }
 
+bool OracleSigningOrchestrator::HasSession(int32_t epoch) const
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    return m_signing_sessions.find(epoch) != m_signing_sessions.end();
+}
+
 void OracleSigningOrchestrator::CleanupOldSessions(int32_t current_epoch)
 {
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
@@ -307,21 +313,46 @@ void OracleSigningOrchestrator::BlockConnected(
 // ============================================================================
 
 void OracleSigningOrchestrator::OnBlockConnected(
-    const std::shared_ptr<const CBlock>& block,
+    const std::shared_ptr<const CBlock>& /*block*/,
     int32_t block_height)
 {
-    int32_t current_epoch = GetCurrentEpoch(block_height);
+    const int32_t current_epoch = GetCurrentEpoch(block_height);
 
     CleanupOldSessions(current_epoch);
 
-    MuSig2SigningSession* session = GetOrCreateSigningSession(current_epoch, block_height);
+    TickEpochSession(current_epoch, block_height);
+
+    // Pre-start next epoch's ceremony in the tail of the current one.
+    //
+    // The MuSig2 ceremony needs ~3 block ticks to reach COMPLETE
+    // (nonce → partial-sig → aggregate). Without pre-start, the
+    // session for epoch N+1 is only created when block (N+1)*L
+    // first connects — by which time block_template assembly for
+    // that block has already fired, queried for the non-existent
+    // session, and fallen through to the v0x02 fallback. Starting
+    // the ceremony K blocks early lets it reach COMPLETE before the
+    // first block of the next epoch is templated.
+    const Consensus::Params& p = Params().GetConsensus();
+    int32_t epoch_length = p.nDDOracleEpochBlocks;
+    if (epoch_length <= 0) epoch_length = 1440;
+    const int32_t pos_in_epoch = block_height % epoch_length;
+    const int32_t blocks_until_next = epoch_length - pos_in_epoch;
+    constexpr int32_t kPreStartWindow = 5;
+    if (blocks_until_next > 0 && blocks_until_next <= kPreStartWindow) {
+        TickEpochSession(current_epoch + 1, block_height);
+    }
+}
+
+void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_height)
+{
+    MuSig2SigningSession* session = GetOrCreateSigningSession(epoch, block_height);
     if (!session) return;
 
     MuSig2SessionState state = session->GetState();
     bool is_oracle = IsOracleNode();
 
-    LogPrintf("Oracle: OnBlockConnected h=%d epoch=%d state=%d is_oracle=%d\n",
-             block_height, current_epoch, static_cast<int>(state), is_oracle);
+    LogPrintf("Oracle: TickEpochSession h=%d epoch=%d state=%d is_oracle=%d\n",
+             block_height, epoch, static_cast<int>(state), is_oracle);
 
     if (!m_aggregator) {
         m_aggregator = std::make_unique<MuSig2OracleAggregator>();
@@ -332,7 +363,7 @@ void OracleSigningOrchestrator::OnBlockConnected(
         OracleManager& om = OracleManager::GetInstance();
         const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
 
-        LogPrintf("Oracle: Step 1 - local_ids.size()=%zu for epoch %d\n", local_ids.size(), current_epoch);
+        LogPrintf("Oracle: Step 1 - local_ids.size()=%zu for epoch %d\n", local_ids.size(), epoch);
 
         // Build full oracle ID list for key aggregation
         std::vector<uint8_t> all_oracle_ids;
@@ -352,8 +383,8 @@ void OracleSigningOrchestrator::OnBlockConnected(
             for (uint32_t oid : local_ids) {
                 uint8_t oid8 = static_cast<uint8_t>(oid);
                 // Skip if already generated nonce for this oracle
-                if (m_nonce_broadcast_tracker[current_epoch].count(oid8)) {
-                    LogPrintf("Oracle: Skipping oracle %d epoch %d - already broadcast\n", oid8, current_epoch);
+                if (m_nonce_broadcast_tracker[epoch].count(oid8)) {
+                    LogPrintf("Oracle: Skipping oracle %d epoch %d - already broadcast\n", oid8, epoch);
                     continue;
                 }
 
@@ -383,7 +414,7 @@ void OracleSigningOrchestrator::OnBlockConnected(
                     unsigned char ser_nonce[66];
                     if (secp256k1_musig_pubnonce_serialize(ctx, ser_nonce, &pubnonce)) {
                         OracleMusigNonceMsg nonce_msg;
-                        nonce_msg.epoch = current_epoch;
+                        nonce_msg.epoch = epoch;
                         nonce_msg.oracle_id = oid8;
                         nonce_msg.pubnonce.assign(ser_nonce, ser_nonce + 66);
 
@@ -393,23 +424,23 @@ void OracleSigningOrchestrator::OnBlockConnected(
                         // as "invalid MuSig2 nonce signature".
                         if (!nonce_msg.Sign(key)) {
                             LogPrintf("Oracle: Sign() failed for MuSig2 nonce oracle=%d epoch=%d\n",
-                                     oid8, current_epoch);
+                                     oid8, epoch);
                             continue;
                         }
 
                         BroadcastMusigNonce(nonce_msg);
-                        m_nonce_broadcast_tracker[current_epoch].insert(oid8);
+                        m_nonce_broadcast_tracker[epoch].insert(oid8);
 
                         LogPrintf("Oracle: Generated and broadcast nonce for epoch %d (oracle_id=%d)\n",
-                                 current_epoch, oid8);
+                                 epoch, oid8);
                     }
                 } else {
-                    LogPrintf("Oracle: GenerateNonce FAILED for oracle %d epoch %d\n", oid8, current_epoch);
+                    LogPrintf("Oracle: GenerateNonce FAILED for oracle %d epoch %d\n", oid8, epoch);
                 }
             }
             secp256k1_context_destroy(ctx);
         } else {
-            LogPrintf("Oracle: Failed to compute aggregate pubkey for epoch %d\n", current_epoch);
+            LogPrintf("Oracle: Failed to compute aggregate pubkey for epoch %d\n", epoch);
         }
     }
 
@@ -428,7 +459,7 @@ void OracleSigningOrchestrator::OnBlockConnected(
 
         if (have_consensus) {
             unsigned char msg32[32];
-            ComputeOracleMessageHash(current_epoch, consensus_price, consensus_timestamp, msg32);
+            ComputeOracleMessageHash(epoch, consensus_price, consensus_timestamp, msg32);
 
             // Store the exact values we're signing so the miner embeds
             // them in the bundle (must match for verification).
@@ -445,15 +476,15 @@ void OracleSigningOrchestrator::OnBlockConnected(
             secp256k1_musig_keyagg_cache part_cache;
             if (!m_aggregator->ComputeAggregatePubkey(participant_ids, part_agg_pk, part_cache)) {
                 LogPrintf("Oracle: Step 2 - failed to compute participants-only aggregate for epoch %d (%zu participants)\n",
-                         current_epoch, participant_ids.size());
+                         epoch, participant_ids.size());
             } else {
                 session->SetKeyAggCache(part_cache);
                 LogPrintf("Oracle: Step 2 - recomputed keyagg for %zu participants (epoch %d)\n",
-                         participant_ids.size(), current_epoch);
+                         participant_ids.size(), epoch);
             }
 
             if (session->AggregateNonces(msg32)) {
-                LogPrintf("Oracle: Nonces aggregated for epoch %d, SIGNING\n", current_epoch);
+                LogPrintf("Oracle: Nonces aggregated for epoch %d, SIGNING\n", epoch);
 
                 OracleManager& om = OracleManager::GetInstance();
                 const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
@@ -461,7 +492,7 @@ void OracleSigningOrchestrator::OnBlockConnected(
 
                 for (uint32_t oid : local_ids) {
                     uint8_t oid8 = static_cast<uint8_t>(oid);
-                    if (m_partialsig_broadcast_tracker[current_epoch].count(oid8)) continue;
+                    if (m_partialsig_broadcast_tracker[epoch].count(oid8)) continue;
 
                     OracleNode* onode = om.GetOracleNode(oid);
                     if (!onode) continue;
@@ -475,7 +506,7 @@ void OracleSigningOrchestrator::OnBlockConnected(
                         unsigned char ser_psig[32];
                         if (secp256k1_musig_partial_sig_serialize(ctx, ser_psig, &partial_sig)) {
                             OracleMusigPartialSigMsg psig_msg;
-                            psig_msg.epoch = current_epoch;
+                            psig_msg.epoch = epoch;
                             psig_msg.oracle_id = oid8;
                             psig_msg.partial_sig.assign(ser_psig, ser_psig + 32);
 
@@ -483,15 +514,15 @@ void OracleSigningOrchestrator::OnBlockConnected(
                             // (same pattern as nonce_msg — RH-24 auth requirement).
                             if (!psig_msg.Sign(key)) {
                                 LogPrintf("Oracle: Sign() failed for MuSig2 partial sig oracle=%d epoch=%d\n",
-                                         oid8, current_epoch);
+                                         oid8, epoch);
                                 continue;
                             }
 
                             BroadcastMusigPartialSig(psig_msg);
-                            m_partialsig_broadcast_tracker[current_epoch].insert(oid8);
+                            m_partialsig_broadcast_tracker[epoch].insert(oid8);
 
                             LogPrintf("Oracle: Broadcast partial sig for epoch %d (oracle_id=%d)\n",
-                                     current_epoch, oid8);
+                                     epoch, oid8);
                         }
                     }
                 }
@@ -507,7 +538,7 @@ void OracleSigningOrchestrator::OnBlockConnected(
         std::vector<unsigned char> final_sig;
         if (session->AggregateSignature(final_sig)) {
             LogPrintf("Oracle: MuSig2 COMPLETE for epoch %d, sig size=%zu\n",
-                     current_epoch, final_sig.size());
+                     epoch, final_sig.size());
         }
     }
 

@@ -710,7 +710,7 @@ private:
             { 8, ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12030",  true},  // JohnnyLawDGB
             { 9, ParsePubKey("02d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "129.212.182.152:12030",      true},  // Ogilvie
             {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digibyte.io:12030", true},  // ChopperBrian
-            {11, ParsePubKey("03dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd"), "oracle12.digibyte.io:12030", true},  // hallvardo
+            {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digibyte.io:12030", true},  // hallvardo (key rotated for RC31)
             {12, ParsePubKey("020f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560"), "oracle13.digibyte.io:12030", true},  // DaPunzy (RC30)
             {13, ParsePubKey("03a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digibyte.io:12030", true},  // DigiByteForce
             {14, ParsePubKey("03f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digibyte.io:12030", true},  // Neel (RC30)

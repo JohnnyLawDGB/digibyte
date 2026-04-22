@@ -342,7 +342,7 @@ public:
         consensus.vOraclePublicKeys.push_back("4ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08");  // 11: hallvardo (RC31 rotated key)
         // Slot 12: DaPunzy real key — operator-supplied and live at oracle_id=12.
         consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
-        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
+        consensus.vOraclePublicKeys.push_back("4770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573");  // 13: DigiByteForce (RC31 rotated key)
         consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
         consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
         consensus.vOraclePublicKeys.push_back("83b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7");  // 16: GTO90 (RC30)
@@ -374,7 +374,7 @@ private:
             {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digidollar.org:9011", true},
             {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digidollar.org:9012", true},
             {12, ParsePubKey("020f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560"), "oracle13.digidollar.org:9013", true},
-            {13, ParsePubKey("02a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digidollar.org:9014", true},
+            {13, ParsePubKey("024770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573"), "oracle14.digidollar.org:9014", true},  // DigiByteForce (key rotated for RC31)
             {14, ParsePubKey("02f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digidollar.org:9015", true},
             {15, ParsePubKey("02447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digidollar.org:9016", true},
             {16, ParsePubKey("0383b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digidollar.org:9017", true},
@@ -602,7 +602,7 @@ public:
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
         consensus.vOraclePublicKeys.push_back("4ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08");  // 11: hallvardo (RC31 rotated key)
         consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
-        consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
+        consensus.vOraclePublicKeys.push_back("4770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573");  // 13: DigiByteForce (RC31 rotated key)
         consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
         consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
         consensus.vOraclePublicKeys.push_back("83b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7");  // 16: GTO90 (RC30)
@@ -712,7 +712,7 @@ private:
             {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digibyte.io:12030", true},  // ChopperBrian
             {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digibyte.io:12030", true},  // hallvardo (key rotated for RC31)
             {12, ParsePubKey("020f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560"), "oracle13.digibyte.io:12030", true},  // DaPunzy (RC30)
-            {13, ParsePubKey("03a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digibyte.io:12030", true},  // DigiByteForce
+            {13, ParsePubKey("024770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573"), "oracle14.digibyte.io:12030", true},  // DigiByteForce (key rotated for RC31)
             {14, ParsePubKey("03f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digibyte.io:12030", true},  // Neel (RC30)
             {15, ParsePubKey("03447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digibyte.io:12030", true},  // DigiSwarm (RC30)
             {16, ParsePubKey("0283b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digibyte.io:12030", true},  // GTO90 (RC30)
@@ -1127,17 +1127,20 @@ public:
         consensus.nOraclePubkeyCount = 7;
         consensus.nOracleConsensusRequired = 4;
 
-        // RegTest: Oracle public keys for all 7 oracles — sorted lexicographically
-        // Deterministic keys derived from SHA256("digibyte_regtest_oracle_N")
-        // Matching private keys are in MockOracleManager for test signing
+        // RegTest: Oracle public keys for all 7 oracles — ordered by oracle ID.
+        // Must match vOracleNodes[].id ordering so ValidateOracleNodeAlignment()
+        // succeeds at common::InitConfig; otherwise every regtest digibyted
+        // aborts on startup.
+        // Deterministic keys derived from SHA256("digibyte_regtest_oracle_N").
+        // Matching private keys are in MockOracleManager for test signing.
         consensus.vOraclePublicKeys.clear();
-        consensus.vOraclePublicKeys.push_back("584d30f3650d998b0b5f8be52f46164aee5f10d332421e63f070da8a38693a96");  // oracle 6
         consensus.vOraclePublicKeys.push_back("8849d466503c5bb3875ada6bff3d6eec6299265b7b0a4e31bb58b7cecf6dd08f");  // oracle 0
         consensus.vOraclePublicKeys.push_back("9991f9e0c61dfe10896ee797f271f2f6d4e2545daf9a22732622c02ce39f43f0");  // oracle 1
-        consensus.vOraclePublicKeys.push_back("aa1ebe314382eb820a040acf604a6617db3d063e9ee0640780774650649aaf47");  // oracle 4
-        consensus.vOraclePublicKeys.push_back("be6ad50e0bf26af3798af09a2824142fa79ff37f8730b7a54ba34c9fe6f1e8ec");  // oracle 5
         consensus.vOraclePublicKeys.push_back("d2292678e5c549e90420dc4c6311ef01bf014fb0f4b34d07e02b7b98bbc35e9a");  // oracle 2
         consensus.vOraclePublicKeys.push_back("f24df57d6ab29241f0f00dd87d7ce1418852684dc41d186650a452179618234f");  // oracle 3
+        consensus.vOraclePublicKeys.push_back("aa1ebe314382eb820a040acf604a6617db3d063e9ee0640780774650649aaf47");  // oracle 4
+        consensus.vOraclePublicKeys.push_back("be6ad50e0bf26af3798af09a2824142fa79ff37f8730b7a54ba34c9fe6f1e8ec");  // oracle 5
+        consensus.vOraclePublicKeys.push_back("584d30f3650d998b0b5f8be52f46164aee5f10d332421e63f070da8a38693a96");  // oracle 6
 
         LogPrintf("Oracle: RegTest Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
                  consensus.nDigiDollarPhase3Height, consensus.nOracleConsensusRequired,

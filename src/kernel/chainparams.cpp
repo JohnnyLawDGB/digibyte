@@ -339,7 +339,7 @@ public:
         consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // 8: JohnnyLawDGB
         consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
-        consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // 11: hallvardo
+        consensus.vOraclePublicKeys.push_back("4ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08");  // 11: hallvardo (RC31 rotated key)
         // Slot 12: DaPunzy real key — operator-supplied and live at oracle_id=12.
         consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
         consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
@@ -357,27 +357,27 @@ private:
         // DigiDollar Oracle Nodes - 30 hardcoded trusted providers
         // These use compressed public keys (33 bytes) and unique endpoints
         vOracleNodes = {
-            // Oracle 0-9: Primary Tier 1 providers
-            // Oracle 0: Testnet primary oracle (uses G point key for Phase One testing)
-            {0,  ParsePubKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), "oracle1.digibyte.io:12028", true},
-            {1,  ParsePubKey("02d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"), "oracle2.digidollar.org:9002", true},
-            {2,  ParsePubKey("034e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"), "oracle3.digidollar.org:9003", true},
-            {3,  ParsePubKey("024b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"), "oracle4.digidollar.org:9004", true},
-            {4,  ParsePubKey("03ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"), "oracle5.digidollar.org:9005", true},
-            {5,  ParsePubKey("02e7f6c011776e8db7cd330b54174fd76f7d0216b612387a5ffcfb81e6f0919683"), "oracle6.digidollar.org:9006", true},
-            {6,  ParsePubKey("037902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451"), "oracle7.digidollar.org:9007", true},
-            {7,  ParsePubKey("022c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"), "oracle8.digidollar.org:9008", true},
-            {8,  ParsePubKey("0319581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"), "oracle9.digidollar.org:9009", true},
-            {9,  ParsePubKey("024a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"), "oracle10.digidollar.org:9010", true},
+            // Oracle 0-9: Active Phase 3 operator set. Slots 0-16 must stay aligned
+            // with consensus.vOraclePublicKeys for MuSig2 bitmap/quorum validation.
+            {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12028", true},
+            {1,  ParsePubKey("023dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digidollar.org:9002", true},
+            {2,  ParsePubKey("02172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digidollar.org:9003", true},
+            {3,  ParsePubKey("02546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digidollar.org:9004", true},
+            {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digidollar.org:9005", true},
+            {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digidollar.org:9006", true},
+            {6,  ParsePubKey("027a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digidollar.org:9007", true},
+            {7,  ParsePubKey("022d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digidollar.org:9008", true},
+            {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digidollar.org:9009", true},
+            {9,  ParsePubKey("03d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "oracle10.digidollar.org:9010", true},
 
-            // Oracle 10-19: Secondary Tier 2 providers
-            {10,  ParsePubKey("034fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8"), "oracle11.digidollar.org:9011", true},
-            {11,  ParsePubKey("026b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918"), "oracle12.digidollar.org:9012", true},
-            {12,  ParsePubKey("033fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278"), "oracle13.digidollar.org:9013", true},
-            {13,  ParsePubKey("028527a891e224136950ff32ca212b45bc93f69fbb801c3b1ebedac52775f99e61"), "oracle14.digidollar.org:9014", true},
-            {14,  ParsePubKey("03e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb"), "oracle15.digidollar.org:9015", true},
-            {15,  ParsePubKey("02b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9"), "oracle16.digidollar.org:9016", true},
-            {16,  ParsePubKey("034523540f1504cd17100c4835e85b7eefd49911580f8efff0599a8f283be6b9e3"), "oracle17.digidollar.org:9017", true},
+            // Oracle 10-19: Keep the first 17 slots aligned with the active roster.
+            {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digidollar.org:9011", true},
+            {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digidollar.org:9012", true},
+            {12, ParsePubKey("020f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560"), "oracle13.digidollar.org:9013", true},
+            {13, ParsePubKey("02a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9"), "oracle14.digidollar.org:9014", true},
+            {14, ParsePubKey("02f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digidollar.org:9015", true},
+            {15, ParsePubKey("02447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digidollar.org:9016", true},
+            {16, ParsePubKey("0383b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digidollar.org:9017", true},
             {17,  ParsePubKey("024ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a"), "oracle18.digidollar.org:9018", true},
             {18,  ParsePubKey("039400f1b21cb527d7fa3d3eabba93557a18ebe7a2ca4e471cfe5e4c5b4ca7f767"), "oracle19.digidollar.org:9019", true},
             {19,  ParsePubKey("02f5ca38f748a1d6eaf726b8a42fb575c3c71f1864a8143301782de13da2d9202b"), "oracle20.digidollar.org:9020", true},
@@ -600,7 +600,7 @@ public:
         consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // 8: JohnnyLawDGB
         consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
-        consensus.vOraclePublicKeys.push_back("dfcb956f9e6f8ceea00b067176baa118ba8f0fbdb171a821a362af19234e64bd");  // 11: hallvardo
+        consensus.vOraclePublicKeys.push_back("4ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08");  // 11: hallvardo (RC31 rotated key)
         consensus.vOraclePublicKeys.push_back("0f84e9bacc11c6b3f58d979adf3b0e6899b69d9f6ecd3e8d48bee2a7ac5a8560");  // 12: DaPunzy (RC30)
         consensus.vOraclePublicKeys.push_back("a3758e484fe8d46ecd2f3c0a56cfc2365464d229737c18e75d97f8893134fab9");  // 13: DigiByteForce
         consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
@@ -1191,6 +1191,25 @@ const OracleNodeInfo* CChainParams::GetOracleNode(uint32_t id) const {
         if (oracle.id == id) return &oracle;
     }
     return nullptr;
+}
+
+bool CChainParams::ValidateOracleNodeAlignment() const {
+    const auto& consensus_params = GetConsensus();
+    if (consensus_params.nOraclePubkeyCount < 0) return false;
+    if (vOracleNodes.size() < static_cast<size_t>(consensus_params.nOraclePubkeyCount)) return false;
+
+    for (int slot = 0; slot < consensus_params.nOraclePubkeyCount; ++slot) {
+        const auto& oracle = vOracleNodes[slot];
+        if (oracle.id != static_cast<uint32_t>(slot)) return false;
+        if (!oracle.pubkey.IsValid() || oracle.pubkey.size() != CPubKey::COMPRESSED_SIZE) return false;
+
+        const std::string expected_xonly = ToLower(consensus_params.vOraclePublicKeys[slot]);
+        const std::string actual_xonly = ToLower(HexStr(Span<const unsigned char>(
+            oracle.pubkey.data() + 1, oracle.pubkey.size() - 1)));
+        if (actual_xonly != expected_xonly) return false;
+    }
+
+    return true;
 }
 
 uint32_t CChainParams::GetActiveOracleCount() const {

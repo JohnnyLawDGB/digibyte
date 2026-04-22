@@ -87,6 +87,8 @@ DIGIBYTE_TESTS =\
   test/digidollar_opcodes_tests.cpp \
   test/digidollar_script_attacks_tests.cpp \
   test/digidollar_oracle_tests.cpp \
+  test/digidollar_hot_path_logging_tests.cpp \
+  test/rh50_oracle_keyset_alignment_tests.cpp \
   test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \

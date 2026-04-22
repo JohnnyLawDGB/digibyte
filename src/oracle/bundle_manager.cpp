@@ -1391,7 +1391,7 @@ CAmount OracleBundleManager::GetLatestPrice() const
     if (cached_price > 0 && last_update_time > 0) {
         int64_t age = GetTime() - last_update_time;
         if (age > ORACLE_MAX_AGE_SECONDS) {
-            LogPrintf("Oracle: Rejecting stale cached price %lld micro-USD (age: %lld seconds, max: %d)\n",
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Rejecting stale cached price %lld micro-USD (age: %lld seconds, max: %d)\n",
                      cached_price, age, ORACLE_MAX_AGE_SECONDS);
             return 0;
         }
@@ -2901,7 +2901,7 @@ CAmount GetCurrentOraclePriceMicroUSD()
     }
 
     // No oracle price available
-    LogPrintf("Oracle: No oracle price available in GetCurrentOraclePriceMicroUSD, returning 0\n");
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: No oracle price available in GetCurrentOraclePriceMicroUSD, returning 0\n");
     return 0;
 }
 

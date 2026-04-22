@@ -41,6 +41,14 @@ std::optional<ConfigError> InitConfig(ArgsManager& args, SettingsAbortFn setting
         // Check for chain settings (Params() calls are only valid after this clause)
         SelectParams(args.GetChainType());
 
+        const auto& chain_params{Params()};
+        if (!Consensus::ValidateOracleConfiguration(chain_params.GetConsensus())) {
+            return ConfigError{ConfigStatus::FAILED, strprintf(_("Invalid MuSig2 oracle configuration for %s chain."), chain_params.GetChainTypeString())};
+        }
+        if (!chain_params.ValidateOracleNodeAlignment()) {
+            return ConfigError{ConfigStatus::FAILED, strprintf(_("Oracle node public keys do not match the active MuSig2 keyset for %s chain."), chain_params.GetChainTypeString())};
+        }
+
         // Create datadir if it does not exist.
         const auto base_path{args.GetDataDirBase()};
         if (!fs::exists(base_path)) {

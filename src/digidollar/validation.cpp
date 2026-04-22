@@ -1325,7 +1325,7 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             // Reject instead of silently assuming conservation — a consensus rule must
             // never be soft-bypassed. If this triggers in testing, the validation context
             // is missing required data sources.
-            LogPrintf("DigiDollar: REJECT - Could not determine input DD amounts for conservation check\n");
+            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: REJECT - Could not determine input DD amounts for conservation check\n");
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-amounts-unknown",
                                "Cannot verify DD conservation: input DD amounts undetermined");
         }
@@ -1975,7 +1975,7 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-version");
     }
 
-    LogPrintf("DigiDollar: Validating %s transaction (txid: %s)\n",
+    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Validating %s transaction (txid: %s)\n",
               txType == DD_TX_MINT ? "MINT" :
               txType == DD_TX_TRANSFER ? "TRANSFER" :
               txType == DD_TX_REDEEM ? "REDEEM" : "UNKNOWN",

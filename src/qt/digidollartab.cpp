@@ -194,6 +194,14 @@ void DigiDollarTab::setWalletModel(WalletModel* model)
     if (m_transactionsWidget)
         m_transactionsWidget->setWalletModel(model);
 
+    // Keep the tab's cached DGB/DD balance displays live while the user stays
+    // on DigiDollar. The signal's WalletBalances payload is intentionally
+    // discarded, and the slot re-reads each child widget's current balance.
+    if (m_walletModel) {
+        connect(m_walletModel, &WalletModel::balanceChanged,
+                this, &DigiDollarTab::updateBalance);
+    }
+
     // Update view when wallet model changes
     updateView();
 }

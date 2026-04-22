@@ -40,6 +40,8 @@ private Q_SLOTS:
     void privacyTransactionsMaskTests();
     void privacySignalPropagationTests();
     void mintValidationUpdatesOnBalanceChange();
+    void ddTabRefreshesBalancesOnWalletSignal();
+    void walletViewRefreshesDigiDollarPageOnOpen();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

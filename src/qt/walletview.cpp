@@ -179,6 +179,9 @@ void WalletView::gotoSendCoinsPage(QString addr)
 void WalletView::gotoDigiDollarPage()
 {
     setCurrentWidget(digiDollarPage);
+    if (digiDollarPage) {
+        digiDollarPage->updateView();
+    }
 }
 
 void WalletView::gotoSignMessageTab(QString addr)

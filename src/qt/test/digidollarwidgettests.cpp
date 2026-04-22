@@ -21,6 +21,7 @@
 #include <qt/digidollartransactionswidget.h>
 #include <qt/digidollartab.h>
 #include <qt/ddaddressbookpage.h>
+#include <qt/walletview.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 #include <wallet/test/util.h>
@@ -532,6 +533,90 @@ void DigiDollarWidgetTests::mintValidationUpdatesOnBalanceChange()
         QVERIFY2(!warningLabel->text().isEmpty(),
                  "If warning label is visible after balance update, it should have text");
     }
+}
+
+// Regression test for the RC30/RC31 DD balance-refresh bug class: while the
+// DigiDollar page is already open, a wallet balanceChanged signal must refresh
+// the Mint tab's cached Available DGB label immediately.
+void DigiDollarWidgetTests::ddTabRefreshesBalancesOnWalletSignal()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarTab tab(mini_gui.platformStyle.get());
+    tab.setWalletModel(mini_gui.walletModel.get());
+    tab.setClientModel(mini_gui.clientModel.get());
+    tab.show();
+
+    QLabel* availableDGBValue = tab.findChild<QLabel*>("availableDGBValue");
+    QVERIFY(availableDGBValue != nullptr);
+
+    const QString expected = availableDGBValue->text();
+    QVERIFY2(!expected.isEmpty(), "Expected Mint tab Available DGB label to be initialized");
+
+    availableDGBValue->setText("stale-balance");
+    Q_EMIT mini_gui.walletModel->balanceChanged(interfaces::WalletBalances{});
+    QCoreApplication::processEvents();
+
+    QCOMPARE(availableDGBValue->text(), expected);
+}
+
+// Regression test for au_epic's report: reopening the main DigiDollar page
+// after a redeem/unlock must refresh the Mint tab's Available DGB label instead
+// of leaving a stale cached value until full wallet restart.
+void DigiDollarWidgetTests::walletViewRefreshesDigiDollarPageOnOpen()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    WalletView view(mini_gui.walletModel.get(), mini_gui.platformStyle.get(), nullptr);
+    view.setClientModel(mini_gui.clientModel.get());
+    view.show();
+    view.gotoOverviewPage();
+
+    QLabel* availableDGBValue = view.findChild<QLabel*>("availableDGBValue");
+    QVERIFY(availableDGBValue != nullptr);
+
+    const QString expected = availableDGBValue->text();
+    QVERIFY2(!expected.isEmpty(), "Expected Mint tab Available DGB label to be initialized");
+
+    availableDGBValue->setText("stale-on-open");
+    view.gotoDigiDollarPage();
+    QCoreApplication::processEvents();
+
+    QCOMPARE(availableDGBValue->text(), expected);
 }
 
 // ============================================================================

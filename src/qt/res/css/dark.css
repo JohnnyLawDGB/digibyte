@@ -4242,6 +4242,20 @@ RPCConsole QHeaderView::section, QDialog#RPCConsole QHeaderView::section {
     border: none;
 }
 
+/* Peers detail pane needs an explicit dark surface or Windows falls back
+   to the system grey QWidget palette while the RPC console still forces
+   white text, which makes the details unreadable. */
+RPCConsole QWidget#detailWidget, QDialog#RPCConsole QWidget#detailWidget {
+    background-color: #002352;
+    color: #ffffff;
+}
+
+RPCConsole QWidget#detailWidget QLabel,
+QDialog#RPCConsole QWidget#detailWidget QLabel {
+    color: #ffffff;
+    background-color: transparent;
+}
+
 /* Buttons in RPC Console */
 RPCConsole QPushButton, QDialog#RPCConsole QPushButton {
     background-color: #0066CC;

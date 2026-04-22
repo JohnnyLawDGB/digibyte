@@ -31,9 +31,11 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QFile>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QComboBox>
 #include <QProgressBar>
 #include <QListWidget>
@@ -1059,4 +1061,42 @@ void DigiDollarWidgetTests::ddReceivePanelFollowsSelectedRow()
     table->selectRow(1);
     QCoreApplication::processEvents();
     QCOMPARE(addressEdit->text(), addrB);
+}
+
+// Regression test for shenger's Apr 20 RC30 UX report: on Windows dark
+// theme, the Peers detail pane inside the RPC console renders with a
+// grey system-default QWidget background and white text, making fields
+// unreadable. Root cause: dark.css has no explicit rule for the
+// debugwindow.ui "detailWidget" QWidget inside the RPCConsole scroll
+// area, so it falls through to Qt's default palette. This source-level
+// test enforces that dark.css carries an explicit rule for #detailWidget
+// inside the RPCConsole scope.
+void DigiDollarWidgetTests::darkThemePeerDetailWidgetHasExplicitRule()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+
+    const QStringList candidates = {
+        QStringLiteral("src/qt/res/css/dark.css"),
+        QStringLiteral("../src/qt/res/css/dark.css"),
+        QStringLiteral("../../src/qt/res/css/dark.css"),
+        QStringLiteral("qt/res/css/dark.css"),
+    };
+    QString dark;
+    for (const auto& p : candidates) {
+        dark = readFile(p.toUtf8().constData());
+        if (!dark.isEmpty()) break;
+    }
+    QVERIFY2(!dark.isEmpty(), "could not locate dark.css from current working directory");
+
+    const QRegularExpression detailRule(
+        QStringLiteral(R"re((RPCConsole|QDialog#RPCConsole)\s+QWidget#detailWidget[^\{]*\{[^\}]*background-color\s*:\s*#002352\s*;[^\}]*color\s*:\s*#ffffff\s*;)re"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+
+    const bool found = detailRule.match(dark).hasMatch();
+    QVERIFY2(found,
+             "RC30 dark-mode peers pane contrast bug: dark.css must carry an explicit rule for the RPC console's #detailWidget so the Windows default grey QWidget palette doesn't leak through. Expected a selector like 'RPCConsole QWidget#detailWidget { ... }'.");
 }

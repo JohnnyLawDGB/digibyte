@@ -195,6 +195,11 @@ BOOST_AUTO_TEST_CASE(rc30_hot_path_logs_are_gated_in_source)
          "Rejecting stale cached price %lld micro-USD"},
         {src_root / "oracle" / "bundle_manager.cpp",
          "No oracle price available in GetCurrentOraclePriceMicroUSD"},
+        // ATMP wrapper site missed by the original gating pass. Fires from
+        // AcceptToMemoryPool → BroadcastTransaction → Dandelion stempool on
+        // every rejected DD tx; matches shenger's repro log line exactly.
+        {src_root / "validation.cpp",
+         "DigiDollar: Transaction validation failed (txid: %s): %s"},
     };
 
     for (const auto& site : sites) {

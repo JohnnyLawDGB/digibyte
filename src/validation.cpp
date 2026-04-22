@@ -809,8 +809,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         );
 
         if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, state)) {
-            LogPrintf("DigiDollar: Transaction validation failed (txid: %s): %s\n",
-                      hash.ToString(), state.GetRejectReason());
+            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Transaction validation failed (txid: %s): %s\n",
+                     hash.ToString(), state.GetRejectReason());
             return false; // state filled in by DigiDollar validation
         }
     }

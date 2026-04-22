@@ -30,6 +30,7 @@
 #include <memory>
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -986,4 +987,76 @@ void DigiDollarWidgetTests::privacySignalPropagationTests()
 
     // Verify transactions table is not hidden
     QVERIFY2(!txTable->isHidden(), "Disabling privacy should propagate from tab to transactions widget");
+}
+
+// Regression test for shenger's Apr 20 RC30 UX report: the
+// "Your DigiDollar Address" panel always kept showing the last-generated
+// address instead of the currently-selected row in the recent requests
+// table. The panel must update m_addressEdit to follow whatever row the
+// user highlights, matching DGB receive-table behaviour.
+void DigiDollarWidgetTests::ddReceivePanelFollowsSelectedRow()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarReceiveWidget receive;
+    receive.setWalletModel(mini_gui.walletModel.get());
+    receive.show();
+
+    QTableWidget* table = receive.findChild<QTableWidget*>("m_requestsTable");
+    if (!table) {
+        // Not every build exposes the object name; fall back to first table child.
+        table = receive.findChild<QTableWidget*>();
+    }
+    QVERIFY(table != nullptr);
+
+    QLineEdit* addressEdit = receive.findChild<QLineEdit*>("addressEdit");
+    QVERIFY(addressEdit != nullptr);
+
+    // Seed two distinct DD addresses directly into the table so we can
+    // assert the panel follows selection without depending on address
+    // generation order or wallet state.
+    table->setRowCount(2);
+    const QString addrA = QStringLiteral("dgbt1qfake000000000000000000000000000000000a");
+    const QString addrB = QStringLiteral("dgbt1qfake000000000000000000000000000000000b");
+
+    for (int i = 0; i < 2; ++i) {
+        for (int c = 0; c < 4; ++c) {
+            if (!table->item(i, c)) {
+                table->setItem(i, c, new QTableWidgetItem());
+            }
+        }
+    }
+    table->item(0, 3)->setData(Qt::UserRole, addrA);
+    table->item(0, 3)->setText(addrA);
+    table->item(1, 3)->setData(Qt::UserRole, addrB);
+    table->item(1, 3)->setText(addrB);
+
+    // Seed the panel with a "last generated" string that must be replaced
+    // on selection, matches the real-world symptom.
+    addressEdit->setText(QStringLiteral("last-generated-address"));
+
+    table->selectRow(0);
+    QCoreApplication::processEvents();
+    QCOMPARE(addressEdit->text(), addrA);
+
+    table->selectRow(1);
+    QCoreApplication::processEvents();
+    QCOMPARE(addressEdit->text(), addrB);
 }

@@ -606,6 +606,33 @@ void DigiDollarReceiveWidget::onRecentRequestSelected()
     bool hasSelection = !m_requestsTable->selectedItems().isEmpty();
     m_showRequestButton->setEnabled(hasSelection);
     m_removeRequestButton->setEnabled(hasSelection);
+
+    // Keep the "Your DigiDollar Address" panel in sync with the highlighted
+    // request row, matching DGB receive-table UX. Without this, the panel
+    // kept showing the last-generated address instead of the selected one.
+    if (!hasSelection) {
+        return;
+    }
+    int row = selectedRow();
+    if (row < 0 || row >= m_requestsTable->rowCount()) {
+        return;
+    }
+    QTableWidgetItem* addressItem = m_requestsTable->item(row, 3);
+    if (!addressItem) {
+        return;
+    }
+    QString address = addressItem->data(Qt::UserRole).toString();
+    if (address.isEmpty()) {
+        address = addressItem->text();
+    }
+    if (address.isEmpty()) {
+        return;
+    }
+    m_currentAddress = address;
+    if (m_addressEdit) {
+        m_addressEdit->setText(address);
+    }
+    updateQRCode();
 }
 
 void DigiDollarReceiveWidget::onShowRequestClicked()

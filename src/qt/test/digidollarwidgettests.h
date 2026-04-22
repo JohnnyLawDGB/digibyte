@@ -42,6 +42,7 @@ private Q_SLOTS:
     void mintValidationUpdatesOnBalanceChange();
     void ddTabRefreshesBalancesOnWalletSignal();
     void walletViewRefreshesDigiDollarPageOnOpen();
+    void ddReceivePanelFollowsSelectedRow();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

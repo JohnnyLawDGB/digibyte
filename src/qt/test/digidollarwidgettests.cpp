@@ -11,11 +11,13 @@
 #include <qt/clientmodel.h>
 #include <qt/optionsmodel.h>
 #include <qt/platformstyle.h>
+#include <qt/recentrequeststablemodel.h>
 #include <qt/walletmodel.h>
 #include <qt/digidollaroverviewwidget.h>
 #include <qt/digidollarmintwidget.h>
 #include <qt/digidollarsendwidget.h>
 #include <qt/digidollarreceivewidget.h>
+#include <qt/digidollarreceiverequest.h>
 #include <qt/digidollarredeemwidget.h>
 #include <qt/digidollarpositionswidget.h>
 #include <qt/digidollartransactionswidget.h>
@@ -1061,6 +1063,98 @@ void DigiDollarWidgetTests::ddReceivePanelFollowsSelectedRow()
     table->selectRow(1);
     QCoreApplication::processEvents();
     QCOMPARE(addressEdit->text(), addrB);
+}
+
+// Regression test for shenger's Apr 20 RC30 UX report: double-clicking a
+// DigiDollar request row must open the request dialog for that DD request.
+// This specifically guards against routing DD rows through the DGB recent
+// requests model, which filters DD entries out and leaves double-click inert.
+void DigiDollarWidgetTests::ddReceiveDoubleClickShowsRequestDialog()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    WalletModel* wallet_model = mini_gui.walletModel.get();
+    QVERIFY(wallet_model != nullptr);
+    QVERIFY(wallet_model->getRecentRequestsTableModel() != nullptr);
+
+    const QString ddAddress = wallet_model->getNewDigiDollarAddress(QStringLiteral("dialog-test"));
+    QVERIFY2(!ddAddress.isEmpty(), "expected a valid DigiDollar address for request-dialog regression test");
+
+    SendCoinsRecipient recipient;
+    recipient.address = ddAddress;
+    recipient.label = QStringLiteral("dialog-label");
+    recipient.message = QStringLiteral("dialog-message");
+    recipient.amount = 12345;
+    wallet_model->getRecentRequestsTableModel()->addNewRequest(recipient);
+
+    DigiDollarReceiveWidget receive;
+    receive.setWalletModel(wallet_model);
+    receive.show();
+    receive.updateRecentRequests();
+
+    QTableWidget* table = receive.findChild<QTableWidget*>("m_requestsTable");
+    if (!table) {
+        table = receive.findChild<QTableWidget*>();
+    }
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+
+    int existing_dialogs = 0;
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (widget->inherits("DigiDollarReceiveRequestDialog")) {
+            ++existing_dialogs;
+        }
+    }
+
+    QVERIFY(QMetaObject::invokeMethod(&receive, "onRecentRequestDoubleClicked",
+                                      Qt::DirectConnection,
+                                      Q_ARG(int, 0),
+                                      Q_ARG(int, 0)));
+    QCoreApplication::processEvents();
+
+    DigiDollarReceiveRequestDialog* dialog = nullptr;
+    int updated_dialogs = 0;
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (!widget->inherits("DigiDollarReceiveRequestDialog")) {
+            continue;
+        }
+        ++updated_dialogs;
+        if (!dialog) {
+            dialog = qobject_cast<DigiDollarReceiveRequestDialog*>(widget);
+        }
+    }
+
+    QVERIFY2(updated_dialogs == existing_dialogs + 1 && dialog != nullptr,
+             "double-clicking a DD request row must open DigiDollarReceiveRequestDialog");
+
+    QLabel* addressContent = nullptr;
+    for (QLabel* label : dialog->findChildren<QLabel*>()) {
+        if (label->text() == ddAddress) {
+            addressContent = label;
+            break;
+        }
+    }
+    QVERIFY2(addressContent != nullptr, "request dialog should display the selected DD address");
+
+    dialog->close();
+    QCoreApplication::processEvents();
 }
 
 // Regression test for shenger's Apr 20 RC30 UX report: on Windows dark

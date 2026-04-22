@@ -43,6 +43,7 @@ private Q_SLOTS:
     void ddTabRefreshesBalancesOnWalletSignal();
     void walletViewRefreshesDigiDollarPageOnOpen();
     void ddReceivePanelFollowsSelectedRow();
+    void ddReceiveDoubleClickShowsRequestDialog();
     void darkThemePeerDetailWidgetHasExplicitRule();
 };
 

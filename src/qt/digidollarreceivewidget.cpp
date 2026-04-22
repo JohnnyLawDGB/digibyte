@@ -862,7 +862,7 @@ void DigiDollarReceiveWidget::onRecentRequestDoubleClicked(int row, int column)
 {
     Q_UNUSED(column);
 
-    if (!m_walletModel || !m_walletModel->getRecentRequestsTableModel()) {
+    if (!m_walletModel) {
         return;
     }
 
@@ -871,50 +871,8 @@ void DigiDollarReceiveWidget::onRecentRequestDoubleClicked(int row, int column)
         return;
     }
 
-    // Get address directly from the table (which only contains DD addresses)
-    QTableWidgetItem* addressItem = m_requestsTable->item(row, 3); // Address column
-    if (!addressItem) {
-        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: No address item at row %d\n", row);
-        return;
-    }
-
-    QString address = addressItem->data(Qt::UserRole).toString();
-    if (address.isEmpty()) {
-        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Empty address at row %d\n", row);
-        return;
-    }
-
-    // Verify this is a valid DD address
-    if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
-        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Address at row %d is not a valid DD address: %s\n",
-                row, address.toStdString());
-        return;
-    }
-
-    // Find this address in the underlying model to get full recipient data
-    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
-    const RecentRequestEntry* foundEntry = nullptr;
-
-    for (int i = 0; i < model->rowCount(QModelIndex()); ++i) {
-        const RecentRequestEntry& entry = model->entry(i);
-        if (entry.recipient.address == address) {
-            foundEntry = &entry;
-            break;
-        }
-    }
-
-    if (!foundEntry) {
-        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Could not find entry for address %s\n",
-                address.toStdString());
-        return;
-    }
-
-    // Show request dialog
-    DigiDollarReceiveRequestDialog* dialog = new DigiDollarReceiveRequestDialog(this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setModel(m_walletModel);
-    dialog->setInfo(foundEntry->recipient);
-    dialog->show();
+    m_requestsTable->setCurrentCell(row, 0);
+    onShowRequestClicked();
 }
 
 int DigiDollarReceiveWidget::selectedRow()

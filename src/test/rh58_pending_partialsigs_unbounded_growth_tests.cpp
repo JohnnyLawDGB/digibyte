@@ -131,8 +131,13 @@
 #include <vector>
 
 #if defined(__linux__) && defined(__GLIBC__)
+#  include <features.h>
 #  include <malloc.h>
-#  define RH58_HAVE_MALLINFO2 1
+#  if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+#    define RH58_HAVE_MALLINFO2 1
+#  else
+#    define RH58_HAVE_MALLINFO2 0
+#  endif
 #else
 #  define RH58_HAVE_MALLINFO2 0
 #endif

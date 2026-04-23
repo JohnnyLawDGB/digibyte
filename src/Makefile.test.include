@@ -91,6 +91,8 @@ DIGIBYTE_TESTS =\
   test/rh50_oracle_keyset_alignment_tests.cpp \
   test/rh51_checkphase3_v1_split_tests.cpp \
   test/rh52_bip34_scriptnum_escape_tests.cpp \
+  test/rh53_op_checkprice_mock_weaponization_tests.cpp \
+  test/rh54_op_oracle_opsuccess_tests.cpp \
   test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \

@@ -94,6 +94,7 @@ DIGIBYTE_TESTS =\
   test/rh53_op_checkprice_mock_weaponization_tests.cpp \
   test/rh54_op_oracle_opsuccess_tests.cpp \
   test/rh55_musig2_partial_sig_unverified_aggregation_tests.cpp \
+  test/rh56_oversized_bitmap_message_inflation_tests.cpp \
   test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \

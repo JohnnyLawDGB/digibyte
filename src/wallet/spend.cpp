@@ -269,17 +269,18 @@ util::Result<PreSelectedInputs> FetchSelectedInputs(const CWallet& wallet, const
             if (ptr_wtx->tx->vout.size() <= outpoint.n) {
                 return util::Error{strprintf(_("Invalid pre-selected input %s"), outpoint.ToString())};
             }
-            // W7 fix (rh59): respect lockunspent locks for preset wallet-owned
-            // outpoints. The auto-selection path at AvailableCoins checks
-            // IsLockedCoin via params.skip_locked=true, but preset inputs
-            // bypassed it — letting any RPC exposing user-controlled outpoints
-            // (fundrawtransaction, walletcreatefundedpsbt, send, sendall,
-            // bumpfee) spend a UTXO the user explicitly locked.
-            if (wallet.IsLockedCoin(outpoint)) {
-                return util::Error{strprintf(
-                    _("Pre-selected input %s is locked (use lockunspent to unlock)"),
-                    outpoint.ToString())};
-            }
+            // NOTE (rh59 walk-back): a previous audit commit added an
+            // IsLockedCoin() check here, treating lockunspent as a hard
+            // restriction even against manually preselected coin-control
+            // inputs. That contradicts Bitcoin Core's documented behavior
+            // (see wallet_basic.py:188 — "The lock on a manually selected
+            // output is ignored") and broke a dozen functional tests that
+            // exercise fundrawtransaction / walletcreatefundedpsbt / send /
+            // sendall / bumpfee with pre-locked inputs. Manual selection
+            // is itself the user overriding their own lockunspent hint,
+            // so the check is intentionally absent here — the auto-
+            // selection path at AvailableCoins still filters locked
+            // outputs via params.skip_locked=true.
             txout = ptr_wtx->tx->vout.at(outpoint.n);
             input_bytes = CalculateMaximumSignedInputSize(txout, &wallet, &coin_control);
         } else {

@@ -3,8 +3,25 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 // =============================================================================
-// RH-59: Coin-control / fundrawtransaction bypasses IsLockedByDD + IsLockedCoin
+// RH-59: Coin-control / fundrawtransaction interaction with IsLockedByDD
 // =============================================================================
+//
+// POST-WALK-BACK NOTE (RC31):
+//   The original framing of this test ("VULN CONFIRMED") was wrong. Bitcoin
+//   Core intentionally ignores lockunspent on manually selected outputs
+//   (wallet_basic.py:188: "The lock on a manually selected output is
+//   ignored"). The earlier audit commit that added an IsLockedCoin() check
+//   in FetchSelectedInputs broke a dozen upstream functional tests and was
+//   reverted. This test file is retained as a pin on the coin-selection
+//   behavior — it asserts the actual (documented) Bitcoin invariant that
+//   preset-input path accepts SelectExternal outpoints unconditionally —
+//   but the `VULN CONFIRMED` strings below are historical artifacts of
+//   the original audit narrative, NOT live vulnerabilities.
+//
+// Real DD-collateral safety is enforced at the consensus layer, not at
+// coin selection. A wallet-level bypass would still be rejected at block
+// validation by ValidateRedemptionTransaction, which checks CLTV +
+// position state regardless of how the coins were selected.
 //
 // Red Hornet Wave-7 sub-agent 7B (angle C) --
 // IsLockedByDD bypass via pre-selected coin-control inputs.

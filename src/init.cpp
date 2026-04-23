@@ -62,6 +62,7 @@
 #include <node/validation_cache_args.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/signing_orchestrator.h>
+#include <script/interpreter.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/fees_args.h>
@@ -2186,6 +2187,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     OracleBundleManager::GetInstance().SetConnman(node.connman.get());
     // Load oracle prices from blockchain (must be after chainstate is loaded)
     OracleBundleManager::LoadPricesFromChain(chainman);
+
+    // Register the oracle consensus price hook used by OP_CHECKPRICE in
+    // the script interpreter. Delegates to the live OracleBundleManager
+    // cached_price (updated deterministically in ConnectBlock before DD
+    // transaction validation runs). The standalone libdigibyteconsensus.so
+    // build never reaches this line; OP_CHECKPRICE there fails closed.
+    g_get_oracle_consensus_price = []() -> CAmount {
+        return OracleBundleManager::GetInstance().GetLatestPrice();
+    };
 
     // ********************************************************* Step 13: finished
 

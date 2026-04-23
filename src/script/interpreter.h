@@ -6,6 +6,7 @@
 #ifndef DIGIBYTE_SCRIPT_INTERPRETER_H
 #define DIGIBYTE_SCRIPT_INTERPRETER_H
 
+#include <consensus/amount.h>
 #include <hash.h>
 #include <script/script_error.h>
 #include <span.h>
@@ -148,6 +149,24 @@ enum : uint32_t {
     //
     SCRIPT_VERIFY_END_MARKER
 };
+
+/**
+ * Oracle consensus price provider hook.
+ *
+ * Node initialization (src/init.cpp) registers this pointer to delegate to
+ * `OracleBundleManager::GetInstance().GetLatestPrice()`. The script
+ * interpreter consults it when evaluating OP_CHECKPRICE.
+ *
+ * When the pointer is null (e.g., in the standalone libdigibyteconsensus.so
+ * build which has no access to OracleBundleManager), OP_CHECKPRICE treats
+ * the oracle price as 0 and fails closed — no hardcoded fallback of any
+ * kind is acceptable for a consensus-critical opcode.
+ *
+ * The hook is only consulted when `SCRIPT_VERIFY_DIGIDOLLAR` is set in
+ * flags (i.e., after BIP9 DEPLOYMENT_DIGIDOLLAR is active).
+ */
+using GetOracleConsensusPriceFn = CAmount (*)();
+extern GetOracleConsensusPriceFn g_get_oracle_consensus_price;
 
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror);
 

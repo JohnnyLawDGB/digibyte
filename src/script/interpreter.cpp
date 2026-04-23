@@ -430,12 +430,11 @@ static bool EvalChecksig(const valtype& sig, const valtype& pubkey, CScript::con
     assert(false);
 }
 
-// Temporary mock function for testing DigiDollar oracle price
-// Will be replaced with real oracle integration in Phase 2
-static CAmount GetMockOraclePrice() {
-    // Return a fixed price for testing (e.g., $0.10 per DGB in micro-USD)
-    return 100000;
-}
+// Oracle consensus price provider hook. Default-null; node init registers
+// the real implementation which delegates to OracleBundleManager. The
+// standalone libdigibyteconsensus.so build leaves this null, causing
+// OP_CHECKPRICE to fail closed — no hardcoded fallback of any kind.
+GetOracleConsensusPriceFn g_get_oracle_consensus_price = nullptr;
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror)
 {
@@ -696,8 +695,13 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     if (stack.size() < 1)
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
 
-                    // Get oracle price (mock for now, will be integrated later)
-                    CAmount oraclePrice = GetMockOraclePrice();
+                    // Fetch live oracle consensus price via the interpreter
+                    // hook registered by node init. Returns 0 when no oracle
+                    // price is available (pre-activation, oracle outage,
+                    // standalone consensus library). Zero price fails closed.
+                    const CAmount oraclePrice = g_get_oracle_consensus_price
+                                                    ? g_get_oracle_consensus_price()
+                                                    : CAmount{0};
                     CScriptNum stackPrice(0);
                     try {
                         stackPrice = CScriptNum(stacktop(-1), fRequireMinimal);
@@ -708,7 +712,14 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     }
 
                     popstack(stack);
-                    stack.push_back(oraclePrice == stackPrice.GetInt64() ? vchTrue : vchFalse);
+                    // Fail closed when oracle price is unavailable — a
+                    // missing or stale oracle must never produce a TRUE
+                    // result regardless of the witness operand.
+                    if (oraclePrice <= 0) {
+                        stack.push_back(vchFalse);
+                    } else {
+                        stack.push_back(oraclePrice == stackPrice.GetInt64() ? vchTrue : vchFalse);
+                    }
                 }
                 break;
 

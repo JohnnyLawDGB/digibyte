@@ -3,68 +3,40 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 /**
- * RH-53: OP_CHECKPRICE weaponization — consensus opcode consults hardcoded
- *        mock $0.10 price, ignoring the real OracleBundleManager state
- *        (Wave-2 adversarial PoC, carries forward suspicion W1-M-03)
+ * RH-53: OP_CHECKPRICE consults live oracle consensus price
+ *        (post-fix regression test; pre-fix PoC for the mock weaponization)
  *
  * Target:
- *   src/script/interpreter.cpp:433-438 — `static CAmount GetMockOraclePrice() { return 100000; }`
- *   src/script/interpreter.cpp:687-713 — live OP_CHECKPRICE handler
+ *   src/script/interpreter.cpp::EvalScript (OP_CHECKPRICE handler).
  *
- * Relationship to priors:
- *   - W1-M-03 flagged this as "theoretical" in wave01_mapper_report.md.
- *     This test WEAPONISES it: we set a real oracle price via
- *     OracleBundleManager::UpdatePriceCache() that is DIFFERENT from the
- *     mock 100000, then observe that OP_CHECKPRICE still consults the
- *     hardcoded mock value and ignores the real oracle completely.
- *   - Different from C3 (ERR Tapscript leaf unspendable) which is about
- *     OP_DIGIDOLLAR/OP_DDVERIFY ordering; this one is the CHECKPRICE site.
- *   - Different from W1-H-02 (BIP34 CScriptNum escape) which was an
- *     exception-escape DoS; this is a semantic-correctness divergence
- *     between consensus and the rest of the DD system.
+ * POST-FIX invariant (this test):
+ *   OP_CHECKPRICE pushes TRUE iff the stack operand equals
+ *   OracleBundleManager::GetInstance().GetLatestPrice(), consulted via the
+ *   `g_get_oracle_consensus_price` hook in script/interpreter.h. When no
+ *   oracle consensus price is available (hook unset, cache empty, or price
+ *   equals 0), the opcode fails closed — pushes vchFalse regardless of
+ *   the stack operand.
  *
- * Concrete harm (real attacker path):
- *   1. A DD wallet or dApp library composes a Tapscript leaf that unlocks
- *      funds when `OP_CHECKPRICE <realPriceExpected>` returns true.
- *   2. The user or contract counterparty BELIEVES this enforces the live
- *      oracle price. In fact OP_CHECKPRICE hardcodes $0.10 (100000 µUSD).
- *   3. Regardless of where the real oracle price goes (say, $1.00 after
- *      a rally, or $0.01 after a crash), the leaf spends iff the witness
- *      puts 100000 on the stack. Real-price-conditioned money flow breaks.
- *   4. Since OP_CHECKPRICE is live today post-BIP9 (see the handler at
- *      interpreter.cpp:687 gated only on SCRIPT_VERIFY_DIGIDOLLAR), any
- *      Phase-2 DD script using CHECKPRICE is effectively a constant-false
- *      or constant-true leaf chosen by the mock — not by oracle consensus.
+ * PRE-FIX behavior (documented for the historical record):
+ *   - A hardcoded static `GetMockOraclePrice()` returned 100000 µUSD ($0.10)
+ *     unconditionally. Any DD-script using OP_CHECKPRICE compared against
+ *     the mock, ignoring the real oracle entirely.
+ *   - Root cause files: src/script/interpreter.cpp:433-438, :700.
  *
- * Why this is a vulnerability, not just a TODO:
- *   - The opcode IS in `STANDARD_SCRIPT_VERIFY_FLAGS` (see H1 in the bug
- *     hunt report). It runs today in the mempool and on every node.
- *   - A malicious wallet author / DD-script generator can deliberately
- *     ship a contract that advertises "funds unlock at $X" but gates on
- *     $0.10. End users have no way to tell: the leaf script is opaque.
- *   - Equally, a DD-script author who uses OP_CHECKPRICE in good faith is
- *     today shipping a feature that is semantically broken.
+ * Why the fix matters (attacker model):
+ *   - Malicious script author ships a contract advertising "unlocks at $X"
+ *     that actually gates on the hardcoded $0.10 — user cannot detect the
+ *     divergence from the opaque leaf script.
+ *   - Any good-faith author using OP_CHECKPRICE ships a silently broken
+ *     feature: either constant-false (real price != $0.10) or trivially
+ *     spendable by anyone who pushes 100000 on the stack.
+ *   - Oracle infrastructure is entirely bypassed for in-script price checks.
  *
- * What the post-fix handler MUST do (this test's assertion):
- *   - Read the live oracle price from OracleBundleManager (either
- *     GetLatestPrice() or height-indexed GetOraclePriceForHeight()).
- *   - Compare the stack operand against that real price.
- *   - Return vchFalse if the real oracle price is unavailable or stale.
- *
- * Test construction:
- *   - Scenario A (core): real oracle says $0.50 (500000 µUSD).
- *       Witness puts 500000 on stack. Correct post-fix: TRUE.
- *       Current behavior: FALSE (mock says 100000).
- *   - Scenario B (dual): real oracle says $0.50.
- *       Witness puts 100000 on stack. Correct post-fix: FALSE.
- *       Current behavior: TRUE (mock matches mock).
- *   - Both scenarios are verified in the BASE sigversion (non-tapscript)
- *     and in TAPSCRIPT sigversion — the handler is identical, but we
- *     want to demonstrate the mock affects every activation path.
- *
- * After a fix that replaces GetMockOraclePrice() with
- *   OracleBundleManager::GetInstance().GetLatestPrice()
- * (or a block-height-anchored variant), BOTH test cases flip and pass.
+ * This test was originally filed with BOOST_WARN_MESSAGE to allow the
+ * suite to stay green while the fix direction was being decided. After the
+ * decision to wire OP_CHECKPRICE to the live oracle via the callback hook
+ * (no hardcoded fallback), the assertions are flipped back to
+ * BOOST_CHECK_MESSAGE so the test acts as a regression fixture.
  */
 
 #include <boost/test/unit_test.hpp>
@@ -78,15 +50,16 @@
 
 namespace {
 
-// Matches the current hardcoded mock: src/script/interpreter.cpp:437
-constexpr CAmount MOCK_ORACLE_PRICE = 100000;           // $0.10 µUSD
-// Distinct "real" oracle price to install via UpdatePriceCache.
-constexpr CAmount REAL_ORACLE_PRICE = 500000;           // $0.50 µUSD
+// Legacy mock value — kept as a literal here because the interpreter no
+// longer exposes it. Pre-fix this was the hardcoded return of the static
+// GetMockOraclePrice() function.
+constexpr CAmount LEGACY_MOCK_ORACLE_PRICE = 100000;   // $0.10 µUSD
+// Distinct "real" oracle price installed via UpdatePriceCache.
+constexpr CAmount REAL_ORACLE_PRICE = 500000;          // $0.50 µUSD
 
 // No-op signature checker; OP_CHECKPRICE never consults it.
 class NullSigChecker : public BaseSignatureChecker {};
 
-// Run a script through EvalScript, return (ok, err, final_stack_bool).
 struct EvalOutcome {
     bool ok;
     ScriptError err;
@@ -109,7 +82,6 @@ EvalOutcome RunCheckPrice(CAmount witness_price, SigVersion sigversion)
 
     EvalOutcome out{ok, err, false, stack.size()};
     if (ok && !stack.empty()) {
-        // vchTrue == {1}, vchFalse == {} — re-use CastToBool-equivalent logic.
         const auto& top = stack.back();
         for (size_t i = 0; i < top.size(); ++i) {
             if (top[i] != 0) {
@@ -125,20 +97,48 @@ EvalOutcome RunCheckPrice(CAmount witness_price, SigVersion sigversion)
     return out;
 }
 
-// RAII helper: install a real oracle price and restore on scope exit.
+// RAII helper: install a real oracle price, register the script hook, and
+// restore on scope exit. Tests that don't install the hook see OP_CHECKPRICE
+// fail-closed at 0 — which is the correct standalone-consensus behavior.
 class ScopedOraclePrice {
 public:
     explicit ScopedOraclePrice(CAmount price_micro_usd)
     {
+        m_previous_hook = g_get_oracle_consensus_price;
         auto& mgr = OracleBundleManager::GetInstance();
         mgr.Clear();
-        // Seed via UpdatePriceCache → also sets cached_price + last_update_time.
         mgr.UpdatePriceCache(/*height=*/1, static_cast<uint64_t>(price_micro_usd));
+        // Install the hook: OP_CHECKPRICE will call this to fetch the
+        // live oracle price during script evaluation.
+        g_get_oracle_consensus_price = []() -> CAmount {
+            return OracleBundleManager::GetInstance().GetLatestPrice();
+        };
     }
     ~ScopedOraclePrice()
     {
         OracleBundleManager::GetInstance().Clear();
+        g_get_oracle_consensus_price = m_previous_hook;
     }
+private:
+    GetOracleConsensusPriceFn m_previous_hook{nullptr};
+};
+
+// RAII helper that clears the hook entirely — simulates the standalone
+// libdigibyteconsensus.so build (hook never registered).
+class ScopedNoOraclePrice {
+public:
+    ScopedNoOraclePrice()
+    {
+        m_previous_hook = g_get_oracle_consensus_price;
+        OracleBundleManager::GetInstance().Clear();
+        g_get_oracle_consensus_price = nullptr;
+    }
+    ~ScopedNoOraclePrice()
+    {
+        g_get_oracle_consensus_price = m_previous_hook;
+    }
+private:
+    GetOracleConsensusPriceFn m_previous_hook{nullptr};
 };
 
 } // anonymous namespace
@@ -147,9 +147,8 @@ BOOST_FIXTURE_TEST_SUITE(rh53_op_checkprice_mock_weaponization_tests, BasicTesti
 
 // ---------------------------------------------------------------------------
 // Scenario A (BASE sigversion):
-//   Real oracle price is $0.50. Witness puts $0.50 on stack. A correct
-//   OP_CHECKPRICE must push TRUE. Current (mock-bound) implementation pushes
-//   FALSE because 500000 != GetMockOraclePrice() == 100000.
+//   Real oracle price is $0.50. Witness puts $0.50 on stack. Post-fix:
+//   OP_CHECKPRICE pushes TRUE via the live oracle hook.
 // ---------------------------------------------------------------------------
 BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_base)
 {
@@ -162,34 +161,19 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_base)
                        << " witness=" << REAL_ORACLE_PRICE
                        << " script_ok=" << out.ok
                        << " top_is_true=" << out.top_is_true
-                       << " stack_size=" << out.stack_size
                        << " err=" << ScriptErrorString(out.err));
 
     BOOST_CHECK_MESSAGE(out.ok,
-        "OP_CHECKPRICE evaluation should complete without error when the "
-        "witness matches the real oracle price.");
-    // Orchestrator note (post-Wave-2): This assertion documents the POST-FIX
-    // invariant. The fix is a design decision (wire to OracleBundleManager vs
-    // remove opcode). Until that decision is made, use BOOST_WARN so the
-    // audit suite stays green while the bug remains documented. A ledger
-    // entry marks this as a confirmed HIGH vulnerability.
-    BOOST_WARN_MESSAGE(out.top_is_true,
-        "POST-FIX FAILURE: OP_CHECKPRICE must push TRUE when the stack "
-        "operand equals the real oracle price from "
-        "OracleBundleManager::GetLatestPrice(). Current implementation "
-        "compares against hardcoded GetMockOraclePrice()=100000 "
-        "(interpreter.cpp:435-438, :700) and therefore pushes FALSE for "
-        "every real-oracle price except $0.10. This means a DD-script that "
-        "gates on the real oracle price is bricked in either direction: "
-        "unspendable when real price != $0.10, and spendable for anyone "
-        "who puts 100000 on the stack regardless of the real price.");
+        "OP_CHECKPRICE must evaluate without error when witness matches oracle.");
+    BOOST_CHECK_MESSAGE(out.top_is_true,
+        "OP_CHECKPRICE must push TRUE when the stack operand equals the live "
+        "oracle consensus price.");
 }
 
 // ---------------------------------------------------------------------------
 // Scenario B (BASE sigversion, inverse):
-//   Real oracle price is $0.50. Witness puts $0.10 (the mock). A correct
-//   OP_CHECKPRICE must push FALSE. Current implementation pushes TRUE
-//   because the mock matches the mock — oracle-ignoring.
+//   Real oracle price is $0.50. Witness puts $0.10 (the legacy mock value).
+//   Post-fix: OP_CHECKPRICE pushes FALSE because 100000 != 500000.
 // ---------------------------------------------------------------------------
 BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_mismatch_base)
 {
@@ -197,35 +181,25 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_mismatch_base)
     auto& mgr = OracleBundleManager::GetInstance();
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), REAL_ORACLE_PRICE);
 
-    EvalOutcome out = RunCheckPrice(MOCK_ORACLE_PRICE, SigVersion::BASE);
+    EvalOutcome out = RunCheckPrice(LEGACY_MOCK_ORACLE_PRICE, SigVersion::BASE);
     BOOST_TEST_MESSAGE("  real=" << REAL_ORACLE_PRICE
-                       << " witness=" << MOCK_ORACLE_PRICE
+                       << " witness=" << LEGACY_MOCK_ORACLE_PRICE
                        << " script_ok=" << out.ok
                        << " top_is_true=" << out.top_is_true
-                       << " stack_size=" << out.stack_size
                        << " err=" << ScriptErrorString(out.err));
 
     BOOST_CHECK_MESSAGE(out.ok,
-        "OP_CHECKPRICE evaluation should complete without error even "
-        "when the witness price does not match the oracle.");
-    // See note in sibling case — converted to BOOST_WARN pending design
-    // decision on OP_CHECKPRICE wiring.
-    BOOST_WARN_MESSAGE(!out.top_is_true,
-        "POST-FIX FAILURE: OP_CHECKPRICE must push FALSE when the stack "
-        "operand equals the stale mock $0.10 but the real oracle price is "
-        "different. Current implementation pushes TRUE because "
-        "GetMockOraclePrice()==100000 matches the witness "
-        "(interpreter.cpp:700, :711). A malicious DD-script author can "
-        "exploit this: ship a script that advertises 'unlocks at $X' but "
-        "actually unlocks at $0.10 forever. Anyone who knows 100000 works "
-        "can spend it regardless of the live oracle.");
+        "OP_CHECKPRICE must evaluate without error even on mismatch.");
+    BOOST_CHECK_MESSAGE(!out.top_is_true,
+        "OP_CHECKPRICE must push FALSE when witness != live oracle price. "
+        "Any script that still matches against the legacy $0.10 mock is an "
+        "oracle-bypass trap and must be rejected.");
 }
 
 // ---------------------------------------------------------------------------
 // Scenario C (TAPSCRIPT sigversion):
-//   The OP_CHECKPRICE handler is identical across SigVersion — the mock
-//   leak affects tapscript leaves the same way. This locks down the fix
-//   for the path DD-mint/redeem scripts actually use (taproot script-path).
+//   The OP_CHECKPRICE handler runs identically across SigVersion. This
+//   locks down the live path DD mint/redeem scripts would actually use.
 // ---------------------------------------------------------------------------
 BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_tapscript)
 {
@@ -242,33 +216,72 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_tapscript)
 
     BOOST_CHECK_MESSAGE(out.ok,
         "OP_CHECKPRICE in TAPSCRIPT must evaluate without error.");
-    // Orchestrator note (post-Wave-2): This assertion documents the POST-FIX
-    // invariant. The fix is a design decision (wire to OracleBundleManager vs
-    // remove opcode). Until that decision is made, use BOOST_WARN so the
-    // audit suite stays green while the bug remains documented. A ledger
-    // entry marks this as a confirmed HIGH vulnerability.
-    BOOST_WARN_MESSAGE(out.top_is_true,
-        "POST-FIX FAILURE: OP_CHECKPRICE in TAPSCRIPT must consult the "
-        "real oracle (OracleBundleManager::GetLatestPrice()), not "
-        "GetMockOraclePrice(). Tapscript leaves are the live path for "
-        "DD mint/redeem scripts; a mock-bound opcode here is the "
-        "production attack surface.");
+    BOOST_CHECK_MESSAGE(out.top_is_true,
+        "OP_CHECKPRICE in TAPSCRIPT must push TRUE when witness matches live oracle.");
 }
 
 // ---------------------------------------------------------------------------
-// Control: if the real oracle price is configured EQUAL to the mock (i.e.
-// exactly $0.10 = 100000 µUSD), then current and post-fix behavior agree
-// on TRUE. This control case should pass today and must remain passing
-// after the fix — it proves the assertions above isolate the mock leak
-// and do not reject legitimate behavior.
+// Scenario D (fail-closed when no oracle): hook unset (standalone consensus
+// library build). OP_CHECKPRICE must push FALSE regardless of witness — no
+// hardcoded fallback of any kind.
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(rh53_control_price_equals_mock_passes_both_eras)
+BOOST_AUTO_TEST_CASE(rh53_checkprice_fails_closed_with_no_oracle_hook)
 {
-    ScopedOraclePrice seed(MOCK_ORACLE_PRICE);
-    auto& mgr = OracleBundleManager::GetInstance();
-    BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), MOCK_ORACLE_PRICE);
+    ScopedNoOraclePrice no_oracle;
+    // Any witness value must produce FALSE because there is no oracle.
+    for (CAmount witness : {CAmount{0}, CAmount{1}, LEGACY_MOCK_ORACLE_PRICE,
+                            REAL_ORACLE_PRICE, CAmount{1'000'000},
+                            CAmount{100'000'000}}) {
+        EvalOutcome out = RunCheckPrice(witness, SigVersion::BASE);
+        BOOST_TEST_MESSAGE("  no-oracle witness=" << witness
+                           << " top_is_true=" << out.top_is_true);
+        BOOST_CHECK(out.ok);
+        BOOST_CHECK_MESSAGE(!out.top_is_true,
+            "OP_CHECKPRICE must fail-closed (push FALSE) when no oracle "
+            "consensus price is available. NO hardcoded fallback is allowed. "
+            "witness=" << witness);
+    }
+}
 
-    EvalOutcome out = RunCheckPrice(MOCK_ORACLE_PRICE, SigVersion::BASE);
+// ---------------------------------------------------------------------------
+// Scenario E (fail-closed when oracle returns 0): hook registered but
+// cache empty → GetLatestPrice() returns 0 → opcode still fails closed.
+// ---------------------------------------------------------------------------
+BOOST_AUTO_TEST_CASE(rh53_checkprice_fails_closed_with_zero_oracle_price)
+{
+    auto prev_hook = g_get_oracle_consensus_price;
+    OracleBundleManager::GetInstance().Clear();
+    g_get_oracle_consensus_price = []() -> CAmount {
+        return OracleBundleManager::GetInstance().GetLatestPrice();
+    };
+    // Cache is empty → GetLatestPrice() returns 0.
+    BOOST_REQUIRE_EQUAL(OracleBundleManager::GetInstance().GetLatestPrice(), 0);
+
+    for (CAmount witness : {CAmount{0}, CAmount{1}, LEGACY_MOCK_ORACLE_PRICE, REAL_ORACLE_PRICE}) {
+        EvalOutcome out = RunCheckPrice(witness, SigVersion::BASE);
+        BOOST_CHECK(out.ok);
+        BOOST_CHECK_MESSAGE(!out.top_is_true,
+            "OP_CHECKPRICE must fail-closed when oracle returns 0 even if "
+            "witness also equals 0. Zero is not a valid oracle price. witness="
+            << witness);
+    }
+
+    g_get_oracle_consensus_price = prev_hook;
+}
+
+// ---------------------------------------------------------------------------
+// Scenario F (control): when the live oracle price is exactly the legacy
+// mock value, witness=100000 must return TRUE — confirms the assertions
+// above isolate the oracle-consultation semantics rather than rejecting
+// legitimate matches.
+// ---------------------------------------------------------------------------
+BOOST_AUTO_TEST_CASE(rh53_control_price_equals_legacy_mock_still_matches)
+{
+    ScopedOraclePrice seed(LEGACY_MOCK_ORACLE_PRICE);
+    auto& mgr = OracleBundleManager::GetInstance();
+    BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), LEGACY_MOCK_ORACLE_PRICE);
+
+    EvalOutcome out = RunCheckPrice(LEGACY_MOCK_ORACLE_PRICE, SigVersion::BASE);
     BOOST_CHECK(out.ok);
     BOOST_CHECK(out.top_is_true);
 }

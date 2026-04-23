@@ -26,6 +26,21 @@ public:
     }
 };
 
+// RAII helper: install an oracle-price hook for tests that exercise
+// OP_CHECKPRICE with a specific expected price. Replaces the historical
+// static GetMockOraclePrice() shortcut — the interpreter now consults
+// g_get_oracle_consensus_price, and tests must register their own hook.
+class ScopedOpcodeOraclePrice
+{
+public:
+    explicit ScopedOpcodeOraclePrice(CAmount price) { s_current_price = price; m_previous = g_get_oracle_consensus_price; g_get_oracle_consensus_price = []() -> CAmount { return s_current_price; }; }
+    ~ScopedOpcodeOraclePrice() { g_get_oracle_consensus_price = m_previous; }
+private:
+    GetOracleConsensusPriceFn m_previous{nullptr};
+    static CAmount s_current_price;
+};
+CAmount ScopedOpcodeOraclePrice::s_current_price = 0;
+
 // Test that DigiDollar opcodes have correct values
 BOOST_AUTO_TEST_CASE(digidollar_opcode_values)
 {
@@ -178,12 +193,15 @@ BOOST_AUTO_TEST_CASE(op_ddverify_insufficient_stack)
 // Test OP_CHECKPRICE basic functionality
 BOOST_AUTO_TEST_CASE(op_checkprice_basic)
 {
+    // Post-fix: interpreter consults g_get_oracle_consensus_price. Install
+    // a scoped hook returning 100000 to preserve the original test intent.
+    ScopedOpcodeOraclePrice oracle(100000);
+
     std::vector<std::vector<unsigned char>> stack;
     MockSignatureChecker checker;
     ScriptError error;
     ScriptExecutionData execdata;
 
-    // Test with mock oracle price (assumes GetMockOraclePrice returns 100000)
     CScript script;
     script << CScriptNum(100000) << OP_CHECKPRICE;
 
@@ -316,6 +334,10 @@ BOOST_AUTO_TEST_CASE(opcodes_as_nops_without_flag)
 // Test complex DigiDollar script combining multiple opcodes
 BOOST_AUTO_TEST_CASE(complex_digidollar_script)
 {
+    // Post-fix: register oracle hook returning 100000 so OP_CHECKPRICE with
+    // witness 100000 evaluates to TRUE. The test's intent is unchanged.
+    ScopedOpcodeOraclePrice oracle(100000);
+
     std::vector<std::vector<unsigned char>> stack;
     MockSignatureChecker checker;
     ScriptError error;

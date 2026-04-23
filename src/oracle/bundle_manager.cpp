@@ -2249,7 +2249,13 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
             opcodetype opcode;
             std::vector<unsigned char> data;
             if (coinbase.vin[0].scriptSig.GetOp(pc, opcode, data) && !data.empty()) {
-                block_height = CScriptNum(data, true).getint();
+                try {
+                    block_height = CScriptNum(data, true).getint();
+                } catch (const scriptnum_error&) {
+                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                         "bad-cb-bip34-height-encoding",
+                                         "coinbase BIP34 height push is non-minimal or overflows");
+                }
             }
         }
     }

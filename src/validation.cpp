@@ -121,7 +121,13 @@ static bool CheckPhase3OracleBundleVersion(const CBlock& block, const CBlockInde
         opcodetype opcode;
         std::vector<unsigned char> data;
         if (block.vtx[0]->vin[0].scriptSig.GetOp(pc, opcode, data) && !data.empty()) {
-            block_height = CScriptNum(data, true).getint();
+            try {
+                block_height = CScriptNum(data, true).getint();
+            } catch (const scriptnum_error&) {
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                     "bad-cb-bip34-height-encoding",
+                                     "coinbase BIP34 height push is non-minimal or overflows");
+            }
         }
     }
 

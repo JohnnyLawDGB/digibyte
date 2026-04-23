@@ -269,6 +269,17 @@ util::Result<PreSelectedInputs> FetchSelectedInputs(const CWallet& wallet, const
             if (ptr_wtx->tx->vout.size() <= outpoint.n) {
                 return util::Error{strprintf(_("Invalid pre-selected input %s"), outpoint.ToString())};
             }
+            // W7 fix (rh59): respect lockunspent locks for preset wallet-owned
+            // outpoints. The auto-selection path at AvailableCoins checks
+            // IsLockedCoin via params.skip_locked=true, but preset inputs
+            // bypassed it — letting any RPC exposing user-controlled outpoints
+            // (fundrawtransaction, walletcreatefundedpsbt, send, sendall,
+            // bumpfee) spend a UTXO the user explicitly locked.
+            if (wallet.IsLockedCoin(outpoint)) {
+                return util::Error{strprintf(
+                    _("Pre-selected input %s is locked (use lockunspent to unlock)"),
+                    outpoint.ToString())};
+            }
             txout = ptr_wtx->tx->vout.at(outpoint.n);
             input_bytes = CalculateMaximumSignedInputSize(txout, &wallet, &coin_control);
         } else {

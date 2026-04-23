@@ -100,6 +100,7 @@ DIGIBYTE_TESTS =\
   test/rh60_mempool_dd_scriptnum_escape_tests.cpp \
   test/rh61_coinbase_price_cache_poisoning_tests.cpp \
   test/rh62_senddigidollar_amount_parser_tests.cpp \
+  test/rh63_oracle_validator_escape_hatches_tests.cpp \
   test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \

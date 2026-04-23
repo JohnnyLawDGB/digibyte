@@ -2804,8 +2804,29 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // DD transactions. This ensures all nodes use the same deterministic price
     // from the block itself, not the P2P-gossiped cached price which may differ
     // between partitioned nodes.
+    //
+    // W9-C-01 fix: gate the price-cache update on BIP9 DEPLOYMENT_DIGIDOLLAR
+    // being ACTIVE for this block. Pre-fix, UpdatePriceCache fired for every
+    // block that contained an OP_RETURN OP_ORACLE output, regardless of
+    // activation state AND regardless of whether ValidateBlockOracleData had
+    // actually validated the oracle data (which short-circuits `return true`
+    // on mainnet — see bundle_manager.cpp:2230-2232 / prior C1).
+    //
+    // Pre-fix consequence: any miner could stamp an arbitrary price_micro_usd
+    // into the coinbase and poison OracleBundleManager::cached_price for the
+    // whole network. Downstream consumers in ERR, wallet, Qt, and RPC used
+    // the attacker value. Rh61 demonstrates driving GetLatestPrice from
+    // 50,000 to 7,777,777 in a single mined block.
+    //
+    // Post-fix: cache is only updated after DD is BIP9-active. Combined with
+    // resolving the mainnet validator short-circuit (C1), a fully gated flow
+    // produces a trustworthy price. Until C1 is resolved, this fix limits
+    // the attack window to post-activation blocks (22,014,720+ on mainnet).
     CAmount blockOraclePrice = 0;
-    if (!fJustCheck && !block.vtx.empty()) {
+    const bool dd_bip9_active =
+        (pindex->pprev != nullptr) &&
+        DigiDollar::IsDigiDollarEnabled(pindex->pprev, m_chainman.GetParams().GetConsensus());
+    if (!fJustCheck && !block.vtx.empty() && dd_bip9_active) {
         OracleBundleManager& oracleManager = OracleBundleManager::GetInstance();
         COracleBundle extractedBundle;
         if (oracleManager.ExtractOracleBundle(*block.vtx[0], extractedBundle) &&

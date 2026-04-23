@@ -2017,19 +2017,35 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
     // Type-specific validation
     // NOTE: Only 3 types exist - MINT, TRANSFER, REDEEM
     // ERR is handled within REDEEM based on system health
-    switch (txType) {
-        case DD_TX_MINT:
-            return ValidateMintTransaction(tx, ctx, state);
+    //
+    // W8 (C4 consolidation fix): wrap the dispatcher in try/catch for
+    // scriptnum_error. The transfer validator at lines 1199 and 1206 parses
+    // attacker-controlled OP_RETURN data via fRequireMinimal=true CScriptNum
+    // constructions. A non-minimal or >4-byte push throws scriptnum_error
+    // which — pre-fix — escaped both AcceptToMemoryPool (src/validation.cpp:817)
+    // and ConnectBlock (src/validation.cpp:2933) with no state.Invalid set,
+    // bypassing the peer-ban path via the outer net_processing catch at
+    // net_processing.cpp:6388. Single wrap covers all three sub-validators
+    // and both caller paths.
+    try {
+        switch (txType) {
+            case DD_TX_MINT:
+                return ValidateMintTransaction(tx, ctx, state);
 
-        case DD_TX_TRANSFER:
-            return ValidateTransferTransaction(tx, ctx, state);
+            case DD_TX_TRANSFER:
+                return ValidateTransferTransaction(tx, ctx, state);
 
-        case DD_TX_REDEEM:
-            return ValidateRedemptionTransaction(tx, ctx, state);
+            case DD_TX_REDEEM:
+                return ValidateRedemptionTransaction(tx, ctx, state);
 
-        default:
-            LogPrintf("DigiDollar: Unknown transaction type: %d\n", static_cast<int>(txType));
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-type");
+            default:
+                LogPrintf("DigiDollar: Unknown transaction type: %d\n", static_cast<int>(txType));
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-type");
+        }
+    } catch (const scriptnum_error&) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-dd-op-return-encoding",
+                             "malformed CScriptNum in DD transaction");
     }
 }
 

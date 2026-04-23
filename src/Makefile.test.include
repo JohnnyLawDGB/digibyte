@@ -97,6 +97,7 @@ DIGIBYTE_TESTS =\
   test/rh56_oversized_bitmap_message_inflation_tests.cpp \
   test/rh57_musig2_trim_aggregate_toctou_tests.cpp \
   test/rh58_pending_partialsigs_unbounded_growth_tests.cpp \
+  test/rh60_mempool_dd_scriptnum_escape_tests.cpp \
   test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \

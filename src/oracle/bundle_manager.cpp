@@ -1768,16 +1768,39 @@ bool OracleBundleManager::ProcessRemoteMusigPartialSig(const OracleMusigPartialS
 
     secp256k1_musig_partial_sig psig;
     bool parsed = secp256k1_musig_partial_sig_parse(ctx, &psig, msg.partial_sig.data());
-    secp256k1_context_destroy(ctx);
-
     if (!parsed) {
+        secp256k1_context_destroy(ctx);
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Failed to parse MuSig2 partial sig from oracle %u epoch %d\n",
                  msg.oracle_id, msg.epoch);
         return false;
     }
 
-    if (!session.AddPartialSignature(msg.oracle_id, psig)) {
-        // Duplicate or wrong state — not an error, just skip
+    // W3-H-01 fix: verify the partial sig under the signer's chainparams
+    // pubkey + session's keyagg_cache before admitting it to the session.
+    // Previously used unverified AddPartialSignature which allowed any
+    // in-range scalar submitted by a single compromised oracle to poison
+    // aggregation and force schnorrsig_verify failure on the produced
+    // 64-byte aggregate — per-epoch DoS on oracle attestation.
+    const OracleNodeInfo* oracle_cfg = Params().GetOracleNode(msg.oracle_id);
+    if (!oracle_cfg) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+    secp256k1_pubkey signer_pk;
+    if (!secp256k1_ec_pubkey_parse(ctx, &signer_pk,
+                                   oracle_cfg->pubkey.data(),
+                                   oracle_cfg->pubkey.size())) {
+        secp256k1_context_destroy(ctx);
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Failed to parse chainparams pubkey for oracle %u\n",
+                 msg.oracle_id);
+        return false;
+    }
+    secp256k1_context_destroy(ctx);
+
+    if (!session.AddPartialSignatureVerified(msg.oracle_id, psig, signer_pk)) {
+        // Verification failed (garbage scalar, wrong session, or duplicate)
+        // — not an error, just skip. Prevents a single malicious oracle from
+        // bricking the epoch's aggregate signature.
         return false;
     }
 

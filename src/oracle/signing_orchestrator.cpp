@@ -155,7 +155,24 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
             // Buffer for replay — may fail because session isn't in SIGNING yet,
             // or because the partial sig is signed under a mismatched cache
             // (participant-set race). Replay on session state change.
-            m_pending_partialsigs[msg.epoch].push_back(msg);
+            //
+            // W6-H-01 hardening: cap per-epoch buffer at MAX_PENDING_PER_EPOCH
+            // and cap total epochs at MAX_PENDING_EPOCHS. Pre-cap, this buffer
+            // had zero readers in the repo — every rejected partial sig was
+            // pushed and never drained, producing ~219 B/msg retained heap at
+            // the 600 msg/hr rate limit (~1.1 GB/peer/year measured in rh58).
+            // CleanupOldSessions does not prune it; Clear() does not reset it.
+            // The cap bounds growth pending a proper drain implementation.
+            constexpr size_t MAX_PENDING_PER_EPOCH = 32;   // > any honest oracle count
+            constexpr size_t MAX_PENDING_EPOCHS    = 8;    // ±4 epochs around current
+            auto& epoch_buf = m_pending_partialsigs[msg.epoch];
+            if (epoch_buf.size() < MAX_PENDING_PER_EPOCH) {
+                epoch_buf.push_back(msg);
+            }
+            if (m_pending_partialsigs.size() > MAX_PENDING_EPOCHS) {
+                // FIFO on epoch: drop the lowest-numbered epoch.
+                m_pending_partialsigs.erase(m_pending_partialsigs.begin());
+            }
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Buffered partial sig for epoch %d oracle %d (state not SIGNING or cache mismatch)\n",
                      msg.epoch, msg.oracle_id);
         }
@@ -291,6 +308,10 @@ void OracleSigningOrchestrator::CleanupOldSessions(int32_t current_epoch)
     }
     for (auto it = m_partialsig_broadcast_tracker.begin(); it != m_partialsig_broadcast_tracker.end(); ) {
         it = (it->first < current_epoch - 2) ? m_partialsig_broadcast_tracker.erase(it) : std::next(it);
+    }
+    // W6-H-01: prune stale buffered partial sigs along with sessions.
+    for (auto it = m_pending_partialsigs.begin(); it != m_pending_partialsigs.end(); ) {
+        it = (it->first < current_epoch - 2) ? m_pending_partialsigs.erase(it) : std::next(it);
     }
 }
 

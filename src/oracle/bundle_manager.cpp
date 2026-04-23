@@ -2249,10 +2249,21 @@ void OracleBundleManager::RemovePriceCache(int height)
 
 bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBlockIndex* pindex_prev, const Consensus::Params& params, BlockValidationState& state)
 {
-    // Phase One: Oracle validation on testnet and regtest (for unit tests)
-    if (Params().GetChainType() != ChainType::TESTNET && Params().GetChainType() != ChainType::REGTEST) {
-        return true; // Oracle validation disabled on mainnet
-    }
+    // Oracle validation runs identically on testnet and mainnet. The
+    // previous chain-type short-circuit (return true on any chain other
+    // than testnet/regtest) meant mainnet would never run the phase-
+    // aware validator once DigiDollar activated via BIP9 — miners could
+    // publish arbitrary oracle data with no consensus check. Removing the
+    // short-circuit lets the BIP9/activation-height gate below decide
+    // whether oracle validation applies, in parallel with testnet.
+    //
+    // Pre-activation behavior is preserved by the BIP9/height gate at
+    // the top of the function: any chain where DigiDollar is not yet
+    // BIP9-active returns true without running the validator. Blocks
+    // without an OP_ORACLE output (or with a malformed one) remain
+    // accepted via the intentional transition-period escape hatches
+    // further down — the chain must keep producing blocks when the
+    // oracle network is temporarily unavailable.
 
     // Extract oracle bundle from coinbase OP_RETURN (output index 1)
     if (block.vtx.empty()) {

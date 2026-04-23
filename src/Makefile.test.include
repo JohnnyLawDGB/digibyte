@@ -102,6 +102,7 @@ DIGIBYTE_TESTS =\
   test/rh62_senddigidollar_amount_parser_tests.cpp \
   test/rh63_oracle_validator_escape_hatches_tests.cpp \
   test/rh64_dca_table_disagreement_tests.cpp \
+  test/rh65_mainnet_testnet_validator_parity_tests.cpp \
   test/musig2_aggregator_tests.cpp \
   test/oracle_bundle_manager_tests.cpp \
   test/oracle_bundle_timing_tests.cpp \

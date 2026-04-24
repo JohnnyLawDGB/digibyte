@@ -342,8 +342,20 @@ BOOST_FIXTURE_TEST_CASE(test_block_validity_retry, MinerDDValidationSetup)
     BOOST_CHECK_EQUAL(block_template->block.vtx.size(), 1U);
 }
 
-BOOST_FIXTURE_TEST_CASE(block_includes_chained_dd_transfers_from_mempool, MinerDDValidationSetup)
+BOOST_FIXTURE_TEST_CASE(block_skips_unconfirmed_dd_transfer_chains, MinerDDValidationSetup)
 {
+    // DD transfers are confirmed-only (RC32): transfers spending unconfirmed
+    // mempool DD outputs cannot resolve their input DD amounts and are
+    // rejected with dd-input-amounts-unknown. The mint has no DD inputs so
+    // it still qualifies. Only the mint should land in the block.
+    //
+    // Regression: addPackageTxs must erase mapModifiedTx entries whose trigger
+    // tx fails ValidateDDForBlockInclusion. After the mint is selected,
+    // UpdatePackagesForAdded enqueues its unconfirmed DD descendants into
+    // mapModifiedTx. Each descendant fails DD validation. Without the erase,
+    // the same mapModifiedTx entry is reselected forever and CreateNewBlock
+    // never returns (previously observed writing ~250GB of debug.log before
+    // the disk filled).
     constexpr CAmount kPrice = 50000;
     constexpr CAmount kDDAmount = 10000;
     constexpr CAmount kFee = 1000;
@@ -382,8 +394,8 @@ BOOST_FIXTURE_TEST_CASE(block_includes_chained_dd_transfers_from_mempool, MinerD
     auto block_template = BuildTemplate(options);
     BOOST_REQUIRE(block_template);
     BOOST_CHECK(BlockHasTx(block_template->block, mint->GetHash()));
-    BOOST_CHECK(BlockHasTx(block_template->block, transfer1->GetHash()));
-    BOOST_CHECK(BlockHasTx(block_template->block, transfer2->GetHash()));
+    BOOST_CHECK(!BlockHasTx(block_template->block, transfer1->GetHash()));
+    BOOST_CHECK(!BlockHasTx(block_template->block, transfer2->GetHash()));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

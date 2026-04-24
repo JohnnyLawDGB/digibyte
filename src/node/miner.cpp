@@ -668,6 +668,13 @@ void BlockAssembler::addPackageTxs(const CTxMemPool& mempool, int& nPackagesSele
             mapModifiedTx.erase(sortedEntries[i]);
         }
 
+        // If the trigger tx came from mapModifiedTx but was not added (DD
+        // validation failure), erase modit so the outer loop progresses.
+        // Without this, the same mapModifiedTx entry is reselected forever.
+        if (fUsingModified && !added_ancestors.count(iter)) {
+            mapModifiedTx.get<ancestor_score>().erase(modit);
+        }
+
         if (added_ancestors.empty()) {
             continue;
         }

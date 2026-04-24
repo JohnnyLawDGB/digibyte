@@ -557,7 +557,7 @@ BOOST_FIXTURE_TEST_CASE(test_senddigidollar_unconfirmed_input_error_message, Dig
     // The raw error from the network contains "dd-input-amounts-unknown"
     // The RPC layer should translate this into a user-friendly message
     std::string rawError = "Transaction rejected by network: dd-input-amounts-unknown, Cannot verify DD conservation: input DD amounts undetermined";
-    std::string friendlyMsg = "Previous DigiDollar transfer has not confirmed yet. Please wait ~15 seconds and try again.";
+    std::string friendlyMsg = "Previous DigiDollar transfer has not confirmed yet. Please wait for confirmation and try again.";
 
     // Verify the raw error contains the trigger substring
     BOOST_CHECK(rawError.find("dd-input-amounts-unknown") != std::string::npos);

@@ -46,6 +46,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
 
         # Run test scenarios
         self.test_simple_transfers()
+        self.test_sendmany_transfers_confirmed_only_change()
         self.test_multi_input_transfers()
         self.test_change_handling()
         self.test_transfer_validation()
@@ -169,6 +170,49 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         # Check receiver's perspective
         rx_tx_details = self.nodes[3].gettransaction(txid)
         # assert_equal(rx_tx_details['amount'], transfer_amount_cents)  # Positive for receiver
+
+    def test_sendmany_transfers_confirmed_only_change(self):
+        """Test sendmanydigidollar and confirmed-only DD change policy."""
+        self.log.info("Testing sendmanydigidollar and confirmed-only DD change...")
+
+        sender_initial = Decimal(self.nodes[0].getdigidollarbalance()['total'])
+        node1_initial = Decimal(self.nodes[1].getdigidollarbalance()['total'])
+        node2_initial = Decimal(self.nodes[2].getdigidollarbalance()['total'])
+
+        addr1 = self.nodes[1].getdigidollaraddress()
+        addr2 = self.nodes[2].getdigidollaraddress()
+        amounts = {
+            addr1: 200,
+            addr2: 300,
+        }
+
+        result = self.nodes[0].sendmanydigidollar("", amounts, "sendmany functional test")
+        assert 'txid' in result
+        assert_equal(result['total_amount'], 500)
+        assert_equal(result['amounts'][addr1], 200)
+        assert_equal(result['amounts'][addr2], 300)
+
+        # The first send spends node0's confirmed DD UTXO and creates DD change.
+        # That change is unconfirmed and must not be available for a second DD send.
+        retry_addr = self.nodes[3].getdigidollaraddress()
+        assert_raises_rpc_error(
+            -6,
+            "Insufficient DD balance",
+            self.nodes[0].senddigidollar,
+            retry_addr,
+            100,
+        )
+
+        self.nodes[0].generate(1)
+        self.sync_all()
+
+        sender_final = Decimal(self.nodes[0].getdigidollarbalance()['total'])
+        node1_final = Decimal(self.nodes[1].getdigidollarbalance()['total'])
+        node2_final = Decimal(self.nodes[2].getdigidollarbalance()['total'])
+
+        assert_equal(sender_final, sender_initial - Decimal(500))
+        assert_equal(node1_final, node1_initial + Decimal(200))
+        assert_equal(node2_final, node2_initial + Decimal(300))
 
     def test_multi_input_transfers(self):
         """Test transfers that require multiple DD inputs."""

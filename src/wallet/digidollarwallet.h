@@ -481,8 +481,11 @@ public:
      * @param error Output parameter for error message
      * @return true if transfer successful, false otherwise
      */
+    bool TransferDigiDollarMany(const std::vector<std::pair<CDigiDollarAddress, CAmount>>& recipients,
+                                std::string& txid, std::string& error);
+
     bool TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
-                          std::string& txid, std::string& error);
+                            std::string& txid, std::string& error);
 
     /**
      * Get current DD balance (legacy method)

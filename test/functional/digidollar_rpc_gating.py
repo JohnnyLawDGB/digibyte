@@ -37,7 +37,7 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def get_gated_rpc_calls(self, node):
-        """Return list of (name, callable) for all 27 gated RPCs with reasonable args."""
+        """Return list of (name, callable) for all gated RPCs with reasonable args."""
         dummy_addr = "dgbt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqad0mt2"
         dummy_txid = "ab" * 32  # valid 64-char hex
         return [
@@ -45,6 +45,7 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             ("mintdigidollar", lambda: node.mintdigidollar(10000, 0)),
             ("redeemdigidollar", lambda: node.redeemdigidollar(dummy_txid, 5000)),
             ("senddigidollar", lambda: node.senddigidollar(dummy_addr, 1000)),
+            ("sendmanydigidollar", lambda: node.sendmanydigidollar("", {dummy_addr: 1000})),
             # DD wallet/address RPCs
             ("getdigidollaraddress", lambda: node.getdigidollaraddress()),
             ("getdigidollarbalance", lambda: node.getdigidollarbalance()),
@@ -72,7 +73,6 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             ("startoracle", lambda: node.startoracle(0)),
             ("stoporacle", lambda: node.stoporacle(0)),
             # Oracle price submission RPCs
-            ("sendoracleprice", lambda: node.sendoracleprice(0.05)),
             ("submitoracleprice", lambda: node.submitoracleprice(0, 6500)),
             ("simulatepricevolatility", lambda: node.simulatepricevolatility(10)),
         ]

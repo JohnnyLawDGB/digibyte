@@ -317,6 +317,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "mintdigidollar", 2, "fee_rate" },
     { "senddigidollar", 1, "amount" },
     { "senddigidollar", 3, "fee_rate" },
+    { "sendmanydigidollar", 1, "amounts" },
     { "redeemdigidollar", 1, "dd_amount" },
     { "redeemdigidollar", 3, "fee_rate" },
     { "getdigidollarbalance", 1, "minconf" },

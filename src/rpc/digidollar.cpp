@@ -50,6 +50,7 @@
 #include <util/time.h>
 #include <univalue.h>
 #include <cmath>
+#include <limits>
 
 using namespace DigiDollar;
 using namespace DigiDollar::DCA;
@@ -229,6 +230,46 @@ namespace {
 
         status_message = strprintf("Oracle initialized with %s but failed to start price thread", key_source);
         return false;
+    }
+
+    CAmount ParseDigiDollarRpcAmount(const UniValue& amount_param)
+    {
+        double val;
+        if (amount_param.isStr()) {
+            try {
+                size_t consumed = 0;
+                const std::string amount_str = amount_param.get_str();
+                val = std::stod(amount_str, &consumed);
+                if (consumed != amount_str.size()) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount is not a valid number");
+                }
+            } catch (const std::exception&) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount is not a valid number");
+            }
+        } else if (amount_param.isNum()) {
+            val = amount_param.get_real();
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be a number (integer cents or decimal dollars)");
+        }
+
+        if (!std::isfinite(val)) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be finite");
+        }
+
+        if (val < static_cast<double>(std::numeric_limits<CAmount>::min()) ||
+            val > static_cast<double>(std::numeric_limits<CAmount>::max())) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount out of range");
+        }
+
+        if (val != std::floor(val)) {
+            const double cents = std::round(val * 100);
+            if (cents < static_cast<double>(std::numeric_limits<CAmount>::min()) ||
+                cents > static_cast<double>(std::numeric_limits<CAmount>::max())) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount out of range");
+            }
+            return static_cast<CAmount>(cents);
+        }
+        return static_cast<CAmount>(val);
     }
 }
 
@@ -1274,28 +1315,7 @@ RPCHelpMan senddigidollar()
             // Integer values (e.g. 5000) are treated as cents.
             // Fractional values (e.g. 50.00) are treated as dollars and converted to cents.
             // String values are also handled gracefully.
-            CAmount amount;
-            const UniValue& amountParam = request.params[1];
-            if (amountParam.isStr()) {
-                // String input - try to parse as number
-                double val = std::stod(amountParam.get_str());
-                if (val != std::floor(val)) {
-                    // Fractional → treat as dollars, convert to cents
-                    amount = static_cast<CAmount>(std::round(val * 100));
-                } else {
-                    amount = static_cast<CAmount>(val);
-                }
-            } else if (amountParam.isNum()) {
-                double val = amountParam.get_real();
-                if (val != std::floor(val)) {
-                    // Fractional → treat as dollars, convert to cents
-                    amount = static_cast<CAmount>(std::round(val * 100));
-                } else {
-                    amount = static_cast<CAmount>(val);
-                }
-            } else {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be a number (integer cents or decimal dollars)");
-            }
+            CAmount amount = ParseDigiDollarRpcAmount(request.params[1]);
             std::string comment = request.params.size() > 2 ? request.params[2].get_str() : "";
             LogPrintf("DigiDollar RPC: Parsed params - address=%s, amount=%d\n", addressStr, amount);
 
@@ -1332,7 +1352,7 @@ RPCHelpMan senddigidollar()
                 // Bug #10: Provide user-friendly message for unconfirmed DD input errors
                 if (error.find("dd-input-amounts-unknown") != std::string::npos) {
                     throw JSONRPCError(RPC_WALLET_ERROR,
-                        "Previous DigiDollar transfer has not confirmed yet. Please wait ~15 seconds and try again.");
+                        "Previous DigiDollar transfer has not confirmed yet. Please wait for confirmation and try again.");
                 }
                 throw JSONRPCError(RPC_WALLET_ERROR,
                     strprintf("Transfer failed: %s", error));
@@ -1368,6 +1388,134 @@ RPCHelpMan senddigidollar()
             // Optional: Add comment to wallet transaction if provided
             if (!comment.empty()) {
                 result.pushKV("comment", comment);
+            }
+
+            return result;
+        },
+	    };
+}
+
+RPCHelpMan sendmanydigidollar()
+{
+    return RPCHelpMan{"sendmanydigidollar",
+                "\nSend DigiDollar to multiple DigiDollar addresses in one transaction.\n"
+                "Amounts may be integer cents (for example 5000 = $50.00) or decimal dollars (for example 50.25).\n",
+                {
+                    {"dummy", RPCArg::Type::STR, RPCArg::Default{"\"\""}, "Must be set to \"\" for compatibility with sendmany."},
+                    {"amounts", RPCArg::Type::OBJ_USER_KEYS, RPCArg::Optional::NO, "DigiDollar addresses and amounts",
+                        {
+                            {"address", RPCArg::Type::NUM, RPCArg::Optional::NO, "The DigiDollar address is the key; the amount is integer cents or decimal dollars", RPCArgOptions{.skip_type_check = true}},
+                        },
+                    },
+                    {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional comment for the transaction"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_HEX, "txid", "Transaction ID"},
+                        {RPCResult::Type::OBJ_DYN, "amounts", "Amounts sent by DigiDollar address",
+                            {
+                                {RPCResult::Type::NUM, "address", "Amount sent to this address in cents"},
+                            },
+                        },
+                        {RPCResult::Type::NUM, "total_amount", "Total amount sent in cents"},
+                        {RPCResult::Type::STR, "status", "Transaction status (success/pending/failed)"},
+                        {RPCResult::Type::STR, "comment", /*optional=*/true, "Optional wallet comment"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("sendmanydigidollar", "\"\" \"{\\\"DDtestaddress123456789abcdef\\\":5000,\\\"DDtestaddressabcdef123456789\\\":2500}\"") +
+                    HelpExampleRpc("sendmanydigidollar", "\"\", {\"DDtestaddress123456789abcdef\":5000,\"DDtestaddressabcdef123456789\":2500}")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            LogPrintf("DigiDollar RPC: sendmanydigidollar called\n");
+
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
+            }
+
+            {
+                node::NodeContext* node_ctx = pwallet->chain().context();
+                if (!node_ctx) throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context unavailable");
+                ChainstateManager& chainman = *node_ctx->chainman;
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+                }
+            }
+
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
+            if (!request.params[0].isNull() && !request.params[0].get_str().empty()) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Dummy value must be set to \"\"");
+            }
+
+            const UniValue& amounts = request.params[1].get_obj();
+            if (amounts.empty()) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "No recipients specified");
+            }
+
+            std::vector<std::pair<CDigiDollarAddress, CAmount>> recipients;
+            UniValue result_amounts(UniValue::VOBJ);
+            CAmount total_amount = 0;
+
+            const std::vector<std::string>& keys = amounts.getKeys();
+            const std::vector<UniValue>& values = amounts.getValues();
+            for (size_t i = 0; i < keys.size(); ++i) {
+                CDigiDollarAddress dd_address(keys[i]);
+                if (!dd_address.IsValid()) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address: " + keys[i]);
+                }
+
+                CAmount amount = ParseDigiDollarRpcAmount(values[i]);
+                if (amount <= 0) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be positive");
+                }
+                if (amount > 10000000) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount exceeds maximum transfer limit ($100,000)");
+                }
+                if (total_amount > std::numeric_limits<CAmount>::max() - amount) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Total amount overflow");
+                }
+
+                recipients.push_back({dd_address, amount});
+                result_amounts.pushKV(keys[i], amount);
+                total_amount += amount;
+            }
+
+            CAmount balance = dd_wallet->GetTotalDDBalance();
+            if (total_amount > balance) {
+                throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
+                    strprintf("Insufficient DD balance (have %d cents, need %d cents)",
+                             balance, total_amount));
+            }
+
+            std::string txid;
+            std::string error;
+            bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error);
+            if (!success) {
+                if (error.find("dd-input-amounts-unknown") != std::string::npos) {
+                    throw JSONRPCError(RPC_WALLET_ERROR,
+                        "Previous DigiDollar transfer has not confirmed yet. Please wait for confirmation and try again.");
+                }
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Transfer failed: %s", error));
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("txid", txid);
+            result.pushKV("amounts", result_amounts);
+            result.pushKV("total_amount", total_amount);
+            result.pushKV("status", "success");
+            if (request.params.size() > 2 && !request.params[2].isNull() && !request.params[2].get_str().empty()) {
+                result.pushKV("comment", request.params[2].get_str());
             }
 
             return result;

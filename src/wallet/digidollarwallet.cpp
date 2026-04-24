@@ -30,6 +30,7 @@
 #include <coins.h>
 
 #include <algorithm>
+#include <limits>
 #include <regex>
 
 // CDigiDollarAddress is defined in base58.h - no need to redefine
@@ -1041,34 +1042,50 @@ bool DigiDollarWallet::IsLockedByDD(const COutPoint& outpoint) const
 }
 
 
-bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
-                                        std::string& txid, std::string& error) {
+bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiDollarAddress, CAmount>>& recipients,
+                                             std::string& txid, std::string& error) {
     auto locks = LockDDWallet();
     // Clear previous results
     txid.clear();
     error.clear();
 
     try {
-        LogPrintf("DigiDollar: Starting transfer - %lld cents to %s\n", static_cast<long long>(amount), to.ToString());
+        LogPrintf("DigiDollar: Starting multi-recipient transfer - %zu recipients\n", recipients.size());
 
-        // Validate recipient address
-        if (!to.IsValid()) {
-            error = "Invalid recipient address";
-            LogPrintf("DigiDollar: Invalid recipient address\n");
+        if (recipients.empty()) {
+            error = "No recipients specified";
+            LogPrintf("DigiDollar: No recipients specified\n");
             return false;
         }
 
-        // Validate amount
-        if (amount <= 0) {
-            error = "Amount must be positive";
-            LogPrintf("DigiDollar: Amount must be positive\n");
-            return false;
-        }
+        CAmount totalAmount = 0;
+        for (const auto& [to, amount] : recipients) {
+            // Validate recipient address
+            if (!to.IsValid()) {
+                error = "Invalid recipient address";
+                LogPrintf("DigiDollar: Invalid recipient address\n");
+                return false;
+            }
 
-        if (amount > 10000000) { // $100,000.00 maximum
-            error = "Amount exceeds maximum transfer limit ($100,000)";
-            LogPrintf("DigiDollar: Amount exceeds maximum\n");
-            return false;
+            // Validate amount
+            if (amount <= 0) {
+                error = "Amount must be positive";
+                LogPrintf("DigiDollar: Amount must be positive\n");
+                return false;
+            }
+
+            if (amount > 10000000) { // $100,000.00 maximum per recipient
+                error = "Amount exceeds maximum transfer limit ($100,000)";
+                LogPrintf("DigiDollar: Amount exceeds maximum\n");
+                return false;
+            }
+
+            if (totalAmount > std::numeric_limits<CAmount>::max() - amount) {
+                error = "Total amount overflow";
+                LogPrintf("DigiDollar: Total transfer amount overflow\n");
+                return false;
+            }
+            totalAmount += amount;
         }
 
         // Check balance using new balance tracking
@@ -1078,24 +1095,26 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
             currentBalance = mockBalance;
         }
 
-        if (amount > currentBalance) {
+        if (totalAmount > currentBalance) {
             error = strprintf("Insufficient DD balance. Available: %lld cents, Required: %lld cents",
-                            static_cast<long long>(currentBalance), static_cast<long long>(amount));
+                            static_cast<long long>(currentBalance), static_cast<long long>(totalAmount));
             LogPrintf("DigiDollar: Insufficient balance - available: %lld, required: %lld\n",
-                     static_cast<long long>(currentBalance), static_cast<long long>(amount));
+                     static_cast<long long>(currentBalance), static_cast<long long>(totalAmount));
             return false;
         }
 
         // Build transfer transaction using TxBuilder
         DigiDollar::TxBuilderTransferParams params;
-        params.recipients.push_back({to.ToString(), amount});
+        for (const auto& [to, amount] : recipients) {
+            params.recipients.push_back({to.ToString(), amount});
+        }
         // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
         params.feeRate = 35000000; // 0.35 DGB/kB = 0.105 DGB for 300 byte tx
 
         // Select DD UTXOs to cover the amount (with individual amounts - FIX #7)
         CAmount selectedDDTotal = 0;
         std::vector<CAmount> selected_dd_amounts;
-        if (!SelectDDCoins(amount, params.ddUtxos, selectedDDTotal, &selected_dd_amounts)) {
+        if (!SelectDDCoins(totalAmount, params.ddUtxos, selectedDDTotal, &selected_dd_amounts)) {
             // CRITICAL: Do NOT use mock UTXOs - they cause "bad-txns-inputs-missingorspent" errors!
             error = "No spendable DD UTXOs found. Make sure mint transaction is confirmed.";
             LogPrintf("DigiDollar: Transfer failed - no DD UTXOs available\n");
@@ -1450,10 +1469,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
                 if (dd_output_index < dd_amounts.size()) {
                     CAmount dd_amount = dd_amounts[dd_output_index];
 
-                    // Check if this is the change output (output 1 in transfer txs)
-                    // The change output was created with our owner key, so it's ours
-                    // Output 0 is recipient, output 1+ is change
-                    bool is_ours = (dd_output_index > 0);  // First DD output goes to recipient, rest is change
+                    // Recipient DD outputs are emitted first, followed by optional DD change.
+                    // Only the change output is automatically ours here; self-recipient detection
+                    // is handled by normal incoming-output scanning.
+                    bool is_ours = (dd_output_index >= recipients.size());
 
                     if (is_ours) {
                         COutPoint new_utxo(result.tx.GetHash(), i);
@@ -1481,11 +1500,11 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         LogPrintf("DigiDollar: Transfer complete - time-locks preserved (still ACTIVE)\n");
 
         // Calculate DD change for legacy mock balance update
-        CAmount dd_change = selectedDDTotal - amount;
+        CAmount dd_change = selectedDDTotal - totalAmount;
 
         // Update legacy mock balance for backwards compatibility
         if (mockBalance > 0) {
-            mockBalance -= amount;
+            mockBalance -= totalAmount;
             if (dd_change > 0) {
                 mockBalance += dd_change;
             }
@@ -1494,11 +1513,11 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // Add transaction to history
         DDTransaction tx;
         tx.txid = txid;
-        tx.amount = amount;
+        tx.amount = totalAmount;
         tx.timestamp = GetTime();
         tx.confirmations = 0;
         tx.incoming = false;
-        tx.address = to.ToString();
+        tx.address = recipients.size() == 1 ? recipients.front().first.ToString() : "multiple";
         tx.category = "send";
 
         transaction_history.push_back(tx);
@@ -1516,8 +1535,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
 
         // Verify balance updated correctly
         CAmount newBalance = GetTotalDDBalance();
-        LogPrintf("DigiDollar: Transfer successful - %lld cents to %s (txid: %s)\n",
-                  static_cast<long long>(amount), to.ToString(), txid);
+        LogPrintf("DigiDollar: Transfer successful - %lld cents to %zu recipients (txid: %s)\n",
+                  static_cast<long long>(totalAmount), recipients.size(), txid);
         LogPrintf("DigiDollar: Balance updated: %lld -> %lld (change: %lld)\n",
                   static_cast<long long>(currentBalance), static_cast<long long>(newBalance), static_cast<long long>(dd_change));
 
@@ -1528,6 +1547,11 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         LogPrintf("DigiDollar: Transfer exception - %s\n", error);
         return false;
     }
+}
+
+bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
+                                          std::string& txid, std::string& error) {
+    return TransferDigiDollarMany({{to, amount}}, txid, error);
 }
 
 CAmount DigiDollarWallet::GetDDBalanceLegacy() const {

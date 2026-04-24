@@ -20,6 +20,7 @@ RPCHelpMan getdigidollarstatus();
 // Core transaction commands (Task 5.7)
 RPCHelpMan mintdigidollar();
 RPCHelpMan senddigidollar();
+RPCHelpMan sendmanydigidollar();
 RPCHelpMan redeemdigidollar();
 RPCHelpMan listdigidollarpositions();
 

@@ -11991,10 +11991,10 @@ BOOST_AUTO_TEST_CASE(redteam_t6_03a_unconfirmed_dd_transfer_chain_rejected)
     // ATTACK: Create a chain of unconfirmed DD transfers (mint → transfer1 → transfer2)
     // to test if DD amount extraction fails for 2nd-level unconfirmed chains.
     //
-    // DEFENSE: All 3 DD amount extraction methods fail for unconfirmed inputs:
+    // DEFENSE: DD amount extraction is confirmed-only:
     //   1. txindex: only indexes confirmed transactions
     //   2. block-db: coin.nHeight = MEMPOOL_HEIGHT → no block at that height
-    //   3. metadata registry: only populated on the CREATING node, not on peers
+    //   3. metadata registry: skipped for MEMPOOL_HEIGHT DD inputs
     //
     // Result: ddInputCount == 0 → "dd-input-amounts-unknown" → REJECTED
 
@@ -12078,22 +12078,17 @@ BOOST_AUTO_TEST_CASE(redteam_t6_03a_unconfirmed_dd_transfer_chain_rejected)
     }
 
     BOOST_TEST_MESSAGE("CONFIRMED: Multi-level unconfirmed DD transfer chains are REJECTED. "
-        "Without txindex or block-db, DD amounts cannot be determined for mempool coins. "
+        "DD amount lookups intentionally skip MEMPOOL_HEIGHT coins. "
         "This prevents any form of unconfirmed DD UTXO chaining attack.");
 }
 
-BOOST_AUTO_TEST_CASE(redteam_t6_03b_metadata_registry_creates_local_acceptance)
+BOOST_AUTO_TEST_CASE(redteam_t6_03b_metadata_registry_does_not_enable_local_acceptance)
 {
     // ATTACK: If creating node registers DD script metadata, unconfirmed DD chains
-    // might be accepted LOCALLY (via metadata fallback) but rejected by ALL peers.
+    // previously could be accepted locally (via metadata fallback) but rejected by peers.
     //
-    // This creates mempool inconsistency:
-    //   - Creating node: tx accepted (metadata registry hit)
-    //   - Peer nodes: tx rejected (no metadata, no txindex, no block-db)
-    //
-    // DESIGN GAP: The metadata registry is a Phase 1 workaround that creates
-    // inconsistent P2P behavior. Not directly exploitable (conservation still
-    // holds if metadata is correct) but problematic for network consistency.
+    // DEFENSE: MEMPOOL_HEIGHT DD inputs are rejected before metadata fallback,
+    // so local metadata cannot bypass the confirmed-only policy.
 
     auto regTestParams = CChainParams::RegTest({});
     const CAmount DD_AMOUNT = 5000; // $50
@@ -12192,16 +12187,15 @@ BOOST_AUTO_TEST_CASE(redteam_t6_03b_metadata_registry_creates_local_acceptance)
         BOOST_CHECK_EQUAL(statePeer.GetRejectReason(), "dd-input-amounts-unknown");
     }
 
-    // Document the inconsistency
-    if (validLocal && !validPeer) {
-        BOOST_TEST_MESSAGE("DESIGN GAP CONFIRMED: Metadata registry creates mempool inconsistency. "
-            "Creating node accepts unconfirmed DD chain (metadata hit), but ALL peer nodes reject it. "
-            "Transaction would not propagate and would be evicted from local mempool. "
-            "Not exploitable (conservation holds via metadata) but violates P2P consistency.");
-    } else if (!validLocal && !validPeer) {
-        BOOST_TEST_MESSAGE("DEFENSE HOLDS: Both local and peer nodes reject unconfirmed DD chains. "
-            "Metadata registry did NOT provide fallback for unconfirmed chain.");
+    // Local metadata must not enable a confirmed-only bypass.
+    BOOST_CHECK_MESSAGE(!validLocal,
+        "Local node must reject unconfirmed DD chain even when metadata registry has the script");
+    if (!validLocal) {
+        BOOST_CHECK_EQUAL(stateLocal.GetRejectReason(), "dd-input-amounts-unknown");
     }
+
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS: Both local and peer nodes reject unconfirmed DD chains. "
+        "Metadata registry does not provide fallback for MEMPOOL_HEIGHT DD inputs.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t6_03c_ancestor_limit_applies_to_dd_txs)
@@ -17868,28 +17862,24 @@ BOOST_AUTO_TEST_CASE(redteam_t10_02b_transfer_fee_chain_includes_unsafe)
     BOOST_TEST_MESSAGE("  No DD state corruption on rejection ✅");
 }
 
-BOOST_AUTO_TEST_CASE(redteam_t10_02c_dd_utxo_chain_blocked_by_amount_extraction)
+BOOST_AUTO_TEST_CASE(redteam_t10_02c_dd_utxo_chain_blocked_by_confirmed_only_selection)
 {
     // DEFENSE VERIFIED: DD token chains are independently blocked by
-    // ExtractDDAmountFromTxRef failing at MEMPOOL_HEIGHT.
+    // confirmed-only DD coin selection and validation at MEMPOOL_HEIGHT.
     //
-    // Even though GetDDUTXOs() includes trusted unconfirmed DD UTXOs,
-    // any transfer spending them fails DD validation BEFORE reaching
-    // ancestor limit checks:
+    // Wallet coin selection excludes unconfirmed DD UTXOs before building a
+    // transfer. Consensus validation also refuses to resolve DD amounts for
+    // MEMPOOL_HEIGHT coins:
     //
-    //   1. GetDDUTXOs() returns unconfirmed DD UTXO (trusted, own change)
-    //   2. Transfer builds tx using it as DD input
-    //   3. broadcastTransaction → AcceptToMemoryPool → PreChecks
-    //   4. ValidateDigiDollarTransaction → ExtractDDAmountFromTxRef
-    //   5. ExtractDDAmountFromPrevTx: txindex says MEMPOOL_HEIGHT → fail
-    //   6. ExtractDDAmountFromBlockDb: coin.nHeight = MEMPOOL_HEIGHT → no block → fail
-    //   7. ExtractDDAmount (metadata): Only on creating node → fails on peers
-    //   8. Result: "dd-input-amounts-unknown" → mempool rejects
+    //   1. GetDDUTXOs() skips unconfirmed DD UTXOs when m_wallet is attached
+    //   2. A crafted transfer spending MEMPOOL_HEIGHT DD is rejected
+    //   3. txindex/block-db/local metadata/mempool lookup are not used to
+    //      resolve unconfirmed DD parent amounts
     //
     // The 25-ancestor limit is NEVER the binding constraint for DD token chains.
-    // The DD-specific validation catches it first.
+    // The DD-specific confirmed-only rule catches it first.
 
-    BOOST_TEST_MESSAGE("=== T10-02c: DD UTXO chain blocked by amount extraction ===");
+    BOOST_TEST_MESSAGE("=== T10-02c: DD UTXO chain blocked by confirmed-only policy ===");
 
     // Demonstrate the extraction failure with MEMPOOL_HEIGHT
     const int MEMPOOL_HEIGHT = 0x7FFFFFFF;
@@ -17899,7 +17889,7 @@ BOOST_AUTO_TEST_CASE(redteam_t10_02c_dd_utxo_chain_blocked_by_amount_extraction)
     // block exists at that height.
     BOOST_CHECK(MEMPOOL_HEIGHT > 100000000);  // Much larger than any real height
 
-    // GetDDUTXOs includes unconfirmed trusted UTXOs:
+    // In unit-test mode, GetDDUTXOs has no CWallet confirmation state:
     DigiDollarWallet dd_wallet;
 
     // Add an unconfirmed DD UTXO (simulating a recent transfer's output)
@@ -17914,8 +17904,9 @@ BOOST_AUTO_TEST_CASE(redteam_t10_02c_dd_utxo_chain_blocked_by_amount_extraction)
     BOOST_CHECK_EQUAL(utxos.size(), 1u);
     BOOST_CHECK_EQUAL(utxos[0].dd_amount, 5000);
 
-    BOOST_TEST_MESSAGE("  GetDDUTXOs includes unconfirmed trusted DD UTXOs ⚠️");
-    BOOST_TEST_MESSAGE("  BUT ExtractDDAmountFromTxRef fails at MEMPOOL_HEIGHT ✅");
+    BOOST_TEST_MESSAGE("  Test-mode GetDDUTXOs has no confirmation state ⚠️");
+    BOOST_TEST_MESSAGE("  Real wallet GetDDUTXOs requires confirmed DD UTXOs ✅");
+    BOOST_TEST_MESSAGE("  Consensus validation skips MEMPOOL_HEIGHT DD amount resolution ✅");
     BOOST_TEST_MESSAGE("  DD-specific rejection BEFORE ancestor limit check ✅");
     BOOST_TEST_MESSAGE("  Binding constraint is DD validation, not ancestor limit ✅");
 }
@@ -17990,9 +17981,8 @@ BOOST_AUTO_TEST_CASE(redteam_t10_02e_ancestor_limit_attack_surface)
     //      descendants, that doesn't affect the UTXO's ancestor count.
     //      Ancestor count = how many unconfirmed TXs this TX depends on.
     //      For a confirmed UTXO being spent: ancestor count = 0.
-    //   3. For transfers using unsafe inputs: attacker's unconfirmed payment to
-    //      victim IS considered unsafe and rejected by CachedTxIsTrusted
-    //      check in GetDDUTXOs (not from own wallet → untrusted).
+    //   3. For DD transfers, any unconfirmed DD payment to the victim is
+    //      excluded by GetDDUTXOs, regardless of trust.
     //
     // The only way to hit ancestor limit is through the user's OWN rapid
     // operations, specifically:
@@ -18001,17 +17991,15 @@ BOOST_AUTO_TEST_CASE(redteam_t10_02e_ancestor_limit_attack_surface)
 
     BOOST_TEST_MESSAGE("=== T10-02e: Ancestor limit external attack surface ===");
 
-    // Verify CachedTxIsTrusted requirement
+    // Verify confirmed-only requirement
     // GetDDUTXOs checks:
     //   if (m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
-    //       if (!wallet::CachedTxIsTrusted(*m_wallet, *wtx)) {
-    //           continue;  // Skip untrusted unconfirmed UTXOs
-    //       }
+    //       continue;  // Skip all unconfirmed DD UTXOs
     //   }
     //
-    // Attacker's unconfirmed tx → NOT from wallet → untrusted → SKIPPED
+    // Attacker's unconfirmed tx → unconfirmed → SKIPPED
 
-    BOOST_TEST_MESSAGE("  Attacker's unconfirmed UTXOs: skipped by CachedTxIsTrusted ✅");
+    BOOST_TEST_MESSAGE("  Attacker's unconfirmed DD UTXOs: skipped by confirmed-only DD selection ✅");
     BOOST_TEST_MESSAGE("  Attacker's confirmed UTXOs: ancestor count = 0, no limit issue ✅");
     BOOST_TEST_MESSAGE("  Self-inflicted only: 25+ rapid transfers with DGB change chains ⚠️");
     BOOST_TEST_MESSAGE("  No DD-specific external attack vector ✅");

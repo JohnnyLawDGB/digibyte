@@ -482,12 +482,9 @@ void DigiDollarSendWidget::updateView()
 void DigiDollarSendWidget::updateBalance()
 {
     if (m_walletModel) {
-        // Get confirmed DD balance + trusted pending (our own change/mints).
-        // Without pending, the send widget shows a yellow "insufficient balance"
-        // warning after every send until the change UTXO confirms (~15 sec).
-        // This mirrors how DGB treats trusted unconfirmed change as spendable.
-        CAmount balanceCents = m_walletModel->getDigiDollarBalance()
-                             + m_walletModel->getPendingDigiDollarBalance();
+        // Only confirmed DD is spendable. Pending DD, including wallet-created
+        // transfer change, must confirm before another DD spend can use it.
+        CAmount balanceCents = m_walletModel->getDigiDollarBalance();
         m_availableBalance = balanceCents / 100.0; // Convert cents to DD
     } else {
         m_availableBalance = 0.0;

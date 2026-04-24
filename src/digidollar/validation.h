@@ -70,7 +70,7 @@ struct ValidationContext {
     const CCoinsViewCache* coins;    // Coins view for UTXO lookups (nullptr if not available)
     bool skipOracleValidation;       // Skip oracle-dependent validation (for historical blocks)
     TxLookupFn txLookup;             // Look up tx from block database (for DD amount extraction)
-    const CTxMemPool* mempool;       // Mempool for resolving DD amounts from unconfirmed parent txs
+    const CTxMemPool* mempool;       // Mempool context; DD amount resolution remains confirmed-only
 
     ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams,
                       const CCoinsViewCache* coins_view = nullptr, bool skip_oracle = false,

@@ -343,10 +343,9 @@ public:
     CAmount GetTotalDDBalance() const;
 
     /**
-     * Get pending (unconfirmed but trusted) DD balance.
-     * These are DD UTXOs from our own transactions that have 0 confirmations
-     * but are trusted (e.g. fresh mints, change outputs). Mirrors how the
-     * main DGB overview separates "Available" from "Pending".
+     * Get pending DD balance.
+     * These are unconfirmed DD UTXOs, including trusted wallet-created mints
+     * and transfer change. Pending DD is not spendable until confirmed.
      * @return Pending DD balance in cents
      */
     CAmount GetPendingDDBalance() const;

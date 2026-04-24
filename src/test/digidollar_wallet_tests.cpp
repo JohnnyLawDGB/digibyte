@@ -3825,9 +3825,8 @@ BOOST_FIXTURE_TEST_CASE(tx_type_classification_mint_vs_transfer, DDWalletTestFix
  *
  * BUG FIX TEST: Previously, GetTotalDDBalance() and GetDDUTXOs() used
  * CachedTxIsTrusted() to include trusted unconfirmed UTXOs as spendable.
- * This was correct for DD transfer change but WRONG for DD mint outputs.
- * Mints create new DD — the DD doesn't exist until confirmed. DD consensus
- * rules reject spending unconfirmed mint outputs.
+ * DigiDollar now requires every DD token UTXO to confirm before it is spendable.
+ * This applies to mints and transfer change; DGB fee change remains separate.
  *
  * NOTE: This test verifies the contract with the DigiDollarWallet in test
  * mode (no m_wallet). The actual confirmation checking happens when m_wallet
@@ -3839,7 +3838,7 @@ BOOST_FIXTURE_TEST_CASE(unconfirmed_mint_not_spendable, DDWalletTestFixture)
     // This test documents the expected behavior:
     // - Unconfirmed MINT DD UTXOs should NOT be in GetTotalDDBalance()
     // - Unconfirmed MINT DD UTXOs SHOULD be in GetPendingDDBalance()
-    // - Unconfirmed TRANSFER change DD UTXOs SHOULD be in GetTotalDDBalance()
+    // - Unconfirmed TRANSFER change DD UTXOs follow the same confirmed-only rule
 
     // Verify transaction type classification is correct for the fix
     CMutableTransaction mint_mtx;
@@ -3875,12 +3874,12 @@ BOOST_FIXTURE_TEST_CASE(unconfirmed_mint_not_spendable, DDWalletTestFixture)
 }
 
 /**
- * Test: Unconfirmed transfer change IS included in spendable balance
+ * Test: Unconfirmed transfer change follows confirmed-only policy
  *
- * Verifies that the fix doesn't break the existing behavior for transfer
- * change UTXOs, which should remain spendable while unconfirmed.
+ * Verifies transfer outputs are still classified correctly. With a real wallet
+ * attached, confirmation depth decides spendability for every DD UTXO.
  */
-BOOST_FIXTURE_TEST_CASE(unconfirmed_transfer_change_is_spendable, DDWalletTestFixture)
+BOOST_FIXTURE_TEST_CASE(unconfirmed_transfer_change_confirmed_only_policy, DDWalletTestFixture)
 {
     // Verify TRANSFER type classification
     CMutableTransaction transfer_mtx;
@@ -3888,20 +3887,21 @@ BOOST_FIXTURE_TEST_CASE(unconfirmed_transfer_change_is_spendable, DDWalletTestFi
     CTransactionRef transfer_tx = MakeTransactionRef(std::move(transfer_mtx));
     BOOST_CHECK_EQUAL(static_cast<int>(DigiDollar::GetDigiDollarTxType(*transfer_tx)), static_cast<int>(::DD_TX_TRANSFER));
 
-    // DD_TX_TRANSFER != DD_TX_MINT — so the fix should NOT skip transfer change
+    // DD_TX_TRANSFER != DD_TX_MINT, but confirmed-only spendability applies to both types.
     BOOST_CHECK(static_cast<int>(DigiDollar::GetDigiDollarTxType(*transfer_tx)) != static_cast<int>(::DD_TX_MINT));
 
-    // In test mode, transfer change UTXOs are spendable (as expected)
+    // In test mode there is no CWallet confirmation state, so UTXOs are visible.
+    // The confirmed-only filter is exercised by the m_wallet code path.
     DigiDollarWallet wallet;
     COutPoint transfer_outpoint(transfer_tx->GetHash(), 1);
     CAmount change_amount = 5000; // $50.00
 
     wallet.AddDDUTXO(transfer_outpoint, change_amount);
 
-    // Balance should include transfer change
+    // Test mode balance includes the tracked UTXO.
     BOOST_CHECK_EQUAL(wallet.GetTotalDDBalance(), change_amount);
 
-    // Should appear in UTXOs for coin selection
+    // Test mode coin selection includes the tracked UTXO.
     auto utxos = wallet.GetDDUTXOs();
     BOOST_CHECK_EQUAL(utxos.size(), 1);
     BOOST_CHECK_EQUAL(utxos[0].dd_amount, change_amount);

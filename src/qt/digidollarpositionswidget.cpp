@@ -146,7 +146,7 @@ void DigiDollarPositionsWidget::setupTableHeader()
     m_positionsTable->setColumnWidth(COL_DD_MINTED, 115);        // DD Minted
     m_positionsTable->setColumnWidth(COL_DGB_COLLATERAL, 145);   // DGB Collateral
     m_positionsTable->setColumnWidth(COL_LOCK_DATE, 100);        // Lock Date
-    m_positionsTable->setColumnWidth(COL_LOCK_TIER, 85);         // Lock Tier
+    m_positionsTable->setColumnWidth(COL_LOCK_TIER, 100);        // Lock Tier — must fit "10 years" / "3 months" without truncation
     m_positionsTable->setColumnWidth(COL_TIME_REMAINING, 130);   // Time Remaining (wider to fit header)
     m_positionsTable->setColumnWidth(COL_HEALTH, 105);           // Health
     m_positionsTable->setColumnWidth(COL_ACTIONS, 100);          // Actions

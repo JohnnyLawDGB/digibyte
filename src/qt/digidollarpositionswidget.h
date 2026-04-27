@@ -114,7 +114,9 @@ private:
     // Privacy
     bool m_privacy{false};
 
-    // Table columns
+public:
+    // Table columns — public so widget tests can address columns by name
+    // when asserting layout invariants (e.g. minimum column widths).
     enum PositionColumn {
         COL_POSITION_ID = 0,
         COL_DD_MINTED = 1,
@@ -126,6 +128,8 @@ private:
         COL_ACTIONS = 7,
         NUM_COLUMNS = 8
     };
+
+private:
 
     // Auto-refresh timer — must be stopped during shutdown (Bug #23)
     QTimer* m_autoRefreshTimer{nullptr};

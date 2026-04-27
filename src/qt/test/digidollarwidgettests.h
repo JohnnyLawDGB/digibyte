@@ -46,6 +46,7 @@ private Q_SLOTS:
     void ddReceiveDoubleClickShowsRequestDialog();
     void darkThemePeerDetailWidgetHasExplicitRule();
     void overviewRecentTransactionsSendShowsNegativeSign();
+    void positionsWidgetLockTierColumnFitsLongestLabel();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

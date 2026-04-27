@@ -1269,6 +1269,67 @@ void DigiDollarWidgetTests::overviewRecentTransactionsSendShowsNegativeSign()
     QVERIFY2(mints >= 1, "expected at least one Mint row in mock data");
 }
 
+// Regression test for the DD Vault "Lock Tier" column truncation: with the
+// column pinned at 85 px the longer human-readable tier names ("3 months",
+// "6 months", "10 years") rendered as "3 ...", "6 ...", "10 ye..." in the
+// live wallet because the cell text exceeded the column width by ~15 px.
+// Guard the column against future shrinkage by asserting it is at least
+// wide enough to fit the longest tier label plus a normal cell padding.
+void DigiDollarWidgetTests::positionsWidgetLockTierColumnFitsLongestLabel()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarPositionsWidget positionsWidget;
+    positionsWidget.setWalletModel(mini_gui.walletModel.get());
+    positionsWidget.setClientModel(mini_gui.clientModel.get());
+    positionsWidget.show();
+    positionsWidget.updateView();
+
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+
+    // The longest tier label rendered by digidollarpositionswidget.cpp is
+    // "10 years" (tier 9). Ask Qt for the actual painted width using the
+    // table's own font, then add the standard 12 px frame Qt uses for
+    // QTableWidget cells. The column must be at least that wide.
+    const QFontMetrics fm(table->font());
+    const QStringList tierLabels = {
+        QStringLiteral("1 hour"),    QStringLiteral("30 days"),
+        QStringLiteral("3 months"),  QStringLiteral("6 months"),
+        QStringLiteral("1 year"),    QStringLiteral("2 years"),
+        QStringLiteral("3 years"),   QStringLiteral("5 years"),
+        QStringLiteral("7 years"),   QStringLiteral("10 years"),
+    };
+    int maxLabelWidth = 0;
+    for (const QString& label : tierLabels) {
+        maxLabelWidth = std::max(maxLabelWidth, fm.horizontalAdvance(label));
+    }
+    const int requiredWidth = maxLabelWidth + 12; // QTableWidget cell padding
+    const int actualWidth = table->columnWidth(DigiDollarPositionsWidget::COL_LOCK_TIER);
+    QVERIFY2(actualWidth >= requiredWidth,
+             qPrintable(QString("Lock Tier column too narrow: %1 px, need at least %2 px to fit '%3'")
+                        .arg(actualWidth)
+                        .arg(requiredWidth)
+                        .arg(QStringLiteral("10 years"))));
+}
+
 void DigiDollarWidgetTests::darkThemePeerDetailWidgetHasExplicitRule()
 {
     const auto readFile = [](const char* path) -> QString {

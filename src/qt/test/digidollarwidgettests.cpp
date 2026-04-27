@@ -26,6 +26,7 @@
 #include <qt/walletview.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
+#include <wallet/digidollarwallet.h>
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
 
@@ -1165,6 +1166,109 @@ void DigiDollarWidgetTests::ddReceiveDoubleClickShowsRequestDialog()
 // area, so it falls through to Qt's default palette. This source-level
 // test enforces that dark.css carries an explicit rule for #detailWidget
 // inside the RPCConsole scope.
+// Regression test for the DD Overview "Recent Transactions" sign-prefix bug:
+// DDTransaction stores amounts as unsigned magnitudes (the wallet pushes
+// totalAmount, a positive number, for sends), so the row formatter must
+// derive the sign from the category instead of the raw amount. Before the
+// fix, send/redeem rows rendered as "+$3.00" with red text, contradicting
+// the colour and confusing users about whether DD was leaving or arriving.
+void DigiDollarWidgetTests::overviewRecentTransactionsSendShowsNegativeSign()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+
+    // The mock wallet path used by these Qt tests bypasses CreateWalletFromFile,
+    // which is what normally allocates m_dd_wallet. Allocate it explicitly here
+    // so GetDDWallet() returns a usable pointer for the mock-history injection.
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    // Inject one of each category we care about. amount is stored as an
+    // unsigned magnitude (positive) — exactly how the live wallet persists
+    // it for sends/redeems too. The formatter must read tx.category.
+    auto pushTx = [&](const std::string& txid, CAmount amount, bool incoming, const std::string& category) {
+        DDTransaction tx;
+        tx.txid = txid;
+        tx.amount = amount;
+        tx.timestamp = GetTime();
+        tx.confirmations = 1;
+        tx.incoming = incoming;
+        tx.address = "TDtestlocaladdress";
+        tx.category = category;
+        tx.lock_tier = -1;
+        tx.fee = 0;
+        tx.abandoned = false;
+        dd_wallet->AddMockTransaction(tx);
+    };
+    pushTx("a000000000000000000000000000000000000000000000000000000000000001", 300, false, "send");
+    pushTx("a000000000000000000000000000000000000000000000000000000000000002", 200, true,  "receive");
+    pushTx("a000000000000000000000000000000000000000000000000000000000000003", 500, false, "redeem");
+    pushTx("a000000000000000000000000000000000000000000000000000000000000004", 700, true,  "mint");
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarOverviewWidget overviewWidget;
+    overviewWidget.setWalletModel(mini_gui.walletModel.get());
+    overviewWidget.setClientModel(mini_gui.clientModel.get());
+    overviewWidget.show();
+    overviewWidget.updateView();
+    QCoreApplication::processEvents();
+
+    QListWidget* transactionsList = overviewWidget.findChild<QListWidget*>("transactionsList");
+    QVERIFY(transactionsList != nullptr);
+    QVERIFY2(transactionsList->count() >= 4, "expected at least four mock DD transactions in recent list");
+
+    // Walk every row and look at the amount QLabel — index 2 in the row's
+    // QHBoxLayout (icon, category, amount, confirmations, date).
+    int sends = 0, receives = 0, redeems = 0, mints = 0;
+    for (int row = 0; row < transactionsList->count(); ++row) {
+        QWidget* itemWidget = transactionsList->itemWidget(transactionsList->item(row));
+        QVERIFY(itemWidget != nullptr);
+        const QList<QLabel*> labels = itemWidget->findChildren<QLabel*>();
+        QVERIFY2(labels.size() >= 5, "expected icon/category/amount/confirmations/date labels per row");
+
+        const QString category = labels.at(1)->text();
+        const QString amountText = labels.at(2)->text();
+        if (category == "Send") {
+            ++sends;
+            QVERIFY2(amountText.startsWith('-'),
+                qPrintable(QString("Send row should start with '-', got: %1").arg(amountText)));
+            QVERIFY2(!amountText.startsWith('+'), "Send row must never carry a '+' prefix");
+        } else if (category == "Receive") {
+            ++receives;
+            QVERIFY2(amountText.startsWith('+'),
+                qPrintable(QString("Receive row should start with '+', got: %1").arg(amountText)));
+        } else if (category.startsWith("Redeem")) {
+            ++redeems;
+            QVERIFY2(amountText.startsWith('-'),
+                qPrintable(QString("Redeem row should start with '-', got: %1").arg(amountText)));
+        } else if (category.startsWith("Mint")) {
+            ++mints;
+            QVERIFY2(amountText.startsWith('+'),
+                qPrintable(QString("Mint row should start with '+', got: %1").arg(amountText)));
+        }
+    }
+    QVERIFY2(sends >= 1, "expected at least one Send row in mock data");
+    QVERIFY2(receives >= 1, "expected at least one Receive row in mock data");
+    QVERIFY2(redeems >= 1, "expected at least one Redeem row in mock data");
+    QVERIFY2(mints >= 1, "expected at least one Mint row in mock data");
+}
+
 void DigiDollarWidgetTests::darkThemePeerDetailWidgetHasExplicitRule()
 {
     const auto readFile = [](const char* path) -> QString {

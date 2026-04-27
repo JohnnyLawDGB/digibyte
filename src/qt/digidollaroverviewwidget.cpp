@@ -873,9 +873,13 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         categoryLabel->setFixedWidth(130);  // Wide enough for "Redeem 180-day"
         layout->addWidget(categoryLabel);
 
-        // Amount
+        // Amount — DDTransaction stores unsigned magnitudes, so derive sign from
+        // category (send/redeem are outflows, receive/mint are inflows). This
+        // matches listdigidollartxs RPC behaviour and the row colour logic below.
         const CAmount absAmount = tx.amount < 0 ? -tx.amount : tx.amount;
-        const QString amountPrefix = tx.amount > 0 ? "+" : (tx.amount < 0 ? "-" : "");
+        const bool is_outflow = (tx.category == "send" || tx.category == "redeem") || tx.amount < 0;
+        const bool is_inflow = (tx.category == "receive" || tx.category == "mint") || tx.amount > 0;
+        const QString amountPrefix = absAmount == 0 ? "" : (is_outflow ? "-" : (is_inflow ? "+" : ""));
         QLabel* amountLabel = new QLabel(amountPrefix + QString("$%1").arg(absAmount / 100.0, 0, 'f', 2));
         QFont monospaceFont = GUIUtil::fixedPitchFont();
         amountLabel->setFont(monospaceFont);

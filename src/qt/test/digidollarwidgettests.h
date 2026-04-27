@@ -45,6 +45,7 @@ private Q_SLOTS:
     void ddReceivePanelFollowsSelectedRow();
     void ddReceiveDoubleClickShowsRequestDialog();
     void darkThemePeerDetailWidgetHasExplicitRule();
+    void overviewRecentTransactionsSendShowsNegativeSign();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

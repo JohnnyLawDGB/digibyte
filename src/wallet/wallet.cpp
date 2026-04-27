@@ -1760,6 +1760,13 @@ bool CWallet::CanGetAddresses(bool internal) const
     return false;
 }
 
+void CWallet::EnsureDDWallet()
+{
+    if (!m_dd_wallet) {
+        m_dd_wallet = std::make_unique<DigiDollarWallet>(this);
+    }
+}
+
 void CWallet::SetWalletFlag(uint64_t flags)
 {
     LOCK(cs_wallet);
@@ -3040,7 +3047,7 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     walletInstance->m_notify_tx_changed_script = args.GetArg("-walletnotify", "");
 
     // Initialize DigiDollar wallet
-    walletInstance->m_dd_wallet = std::make_unique<DigiDollarWallet>(walletInstance.get());
+    walletInstance->EnsureDDWallet();
 
     // Load wallet
     bool rescan_required = false;

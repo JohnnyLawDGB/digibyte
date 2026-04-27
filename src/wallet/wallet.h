@@ -1026,6 +1026,11 @@ public:
     DigiDollarWallet* GetDDWallet() { return m_dd_wallet.get(); }
     const DigiDollarWallet* GetDDWallet() const { return m_dd_wallet.get(); }
 
+    //! Lazily allocate the DigiDollar wallet sidecar. Production wallets get
+    //! this in CreateWalletFromFile; mock wallets built directly in unit tests
+    //! need to opt in explicitly.
+    void EnsureDDWallet();
+
     // Oracle key management
     bool HasOracleKey(uint32_t oracle_id) const;
     bool StoreOracleKey(uint32_t oracle_id, const CKey& key);

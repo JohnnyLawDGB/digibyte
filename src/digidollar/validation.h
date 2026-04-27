@@ -184,22 +184,6 @@ bool IsCollateralScript(const CScript& script);
  */
 bool IsDDTokenScript(const CScript& script);
 
-/**
- * Check if transaction has DigiDollar marker in version field
- *
- * @param tx Transaction to check
- * @return true if transaction is DigiDollar-related
- */
-bool HasDigiDollarMarker(const CTransaction& tx);
-
-/**
- * Extract DigiDollar transaction type from version field
- *
- * @param tx Transaction to analyze
- * @return DigiDollarTxType or throws if not a DD transaction
- */
-DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx);
-
 // ============================================================================
 // Path-Specific Validation Functions
 // ============================================================================

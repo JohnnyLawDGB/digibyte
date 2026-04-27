@@ -12,12 +12,81 @@
 
 #include <stdint.h>
 
+#include <map>
+#include <vector>
+
 #include <QDateTime>
 
 using wallet::ISMINE_NO;
 using wallet::ISMINE_SPENDABLE;
 using wallet::ISMINE_WATCH_ONLY;
 using wallet::isminetype;
+
+namespace {
+
+bool IsDDTokenOutput(const CTxOut& txout)
+{
+    return txout.nValue == 0 && txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1;
+}
+
+std::map<unsigned int, CAmount> ExtractDDAmountsByOutput(const CTransaction& tx, DigiDollar::DigiDollarTxType ddTxType)
+{
+    std::vector<CAmount> ddAmounts;
+
+    for (const CTxOut& txout : tx.vout) {
+        const CScript& script = txout.scriptPubKey;
+        if (script.empty() || script[0] != OP_RETURN) continue;
+
+        auto pc = script.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+
+        if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) continue;
+        if (!script.GetOp(pc, opcode, data)) continue;
+        if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+        if (!script.GetOp(pc, opcode, data)) continue;
+
+        int txType = 0;
+        try {
+            CScriptNum txTypeNum(data, false);
+            txType = txTypeNum.getint();
+        } catch (const scriptnum_error&) {
+            break;
+        }
+        if (txType != static_cast<int>(ddTxType)) break;
+
+        while (script.GetOp(pc, opcode, data) && !data.empty()) {
+            try {
+                CScriptNum amountNum(data, false);
+                const CAmount amount = amountNum.GetInt64();
+                if (amount > 0) ddAmounts.push_back(amount);
+            } catch (const scriptnum_error&) {
+                break;
+            }
+        }
+        break;
+    }
+
+    std::map<unsigned int, CAmount> amountsByOutput;
+    size_t ddOutputIndex = 0;
+    for (unsigned int i = 0; i < tx.vout.size(); ++i) {
+        const CTxOut& txout = tx.vout[i];
+        if (!IsDDTokenOutput(txout)) continue;
+
+        if (ddTxType == DigiDollar::DD_TX_MINT && i == 0) {
+            continue; // vault output, not the DD token output
+        }
+
+        const size_t amountIndex = (ddTxType == DigiDollar::DD_TX_MINT) ? 0 : ddOutputIndex;
+        if (amountIndex < ddAmounts.size()) {
+            amountsByOutput[i] = ddAmounts[amountIndex];
+        }
+        ++ddOutputIndex;
+    }
+    return amountsByOutput;
+}
+
+} // namespace
 
 /* Return positive answer if transaction should be shown in list.
  */
@@ -58,6 +127,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
     // Check if this is a DigiDollar transaction and get its type (needed for special handling)
     bool isDDTransaction = DigiDollar::HasDigiDollarMarker(*wtx.tx);
     DigiDollar::DigiDollarTxType ddTxType = DigiDollar::GetDigiDollarTxType(*wtx.tx);
+    const std::map<unsigned int, CAmount> ddAmountsByOutput = isDDTransaction ? ExtractDDAmountsByOutput(*wtx.tx, ddTxType) : std::map<unsigned int, CAmount>{};
 
     // Special handling for DigiDollar REDEEM transactions
     // These have locked collateral inputs that aren't recognized as "mine" by standard wallet,
@@ -120,7 +190,6 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
         }
 
         CAmount nTxFee = nDebit - wtx.tx->GetValueOut();
-        bool feeRecordAdded = false;
 
         for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
             const CTxOut& txout = wtx.tx->vout[i];
@@ -133,9 +202,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
             if (wtx.txout_is_change[i])
                 continue;
 
-            // Check if this is a DD token output (0-value P2TR)
-            bool isDDTokenOutput = txout.nValue == 0 &&
-                txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == 0x51;
+            const bool isDDTokenOutput = IsDDTokenOutput(txout);
 
             if (isDDTokenOutput) {
                 // DD send record
@@ -144,6 +211,10 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 sub.involvesWatchAddress = involvesWatchAddress;
                 sub.type = TransactionRecord::DDSend;
                 sub.address = EncodeDestination(wtx.txout_address[i]);
+                auto amount_it = ddAmountsByOutput.find(i);
+                if (amount_it != ddAmountsByOutput.end()) {
+                    sub.ddAmount = -amount_it->second;
+                }
                 sub.debit = 0;
                 parts.append(sub);
             }
@@ -166,13 +237,16 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
             isminetype mine = wtx.txout_is_mine[i];
             if (!mine) continue;
 
-            bool isDDTokenOutput = txout.nValue == 0 &&
-                txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == 0x51;
+            const bool isDDTokenOutput = IsDDTokenOutput(txout);
 
             if (isDDTokenOutput) {
                 TransactionRecord sub(hash, nTime);
                 sub.idx = i;
                 sub.credit = 0;
+                auto amount_it = ddAmountsByOutput.find(i);
+                if (amount_it != ddAmountsByOutput.end()) {
+                    sub.ddAmount = amount_it->second;
+                }
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
                 sub.type = TransactionRecord::DDRecv;
                 sub.address = EncodeDestination(wtx.txout_address[i]);
@@ -202,8 +276,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
 
             // Check if this is a DD token output (0-value P2TR)
             // P2TR outputs start with OP_1 (0x51) and are 34 bytes
-            bool isDDTokenOutput = isDDTransaction && txout.nValue == 0 &&
-                txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == 0x51;
+            bool isDDTokenOutput = isDDTransaction && IsDDTokenOutput(txout);
 
             if (fAllFromMe) {
                 // Change is only really possible if we're the sender
@@ -224,6 +297,10 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 if (isDDTokenOutput) {
                     sub.type = TransactionRecord::DDSend;
                     sub.address = EncodeDestination(wtx.txout_address[i]);
+                    auto amount_it = ddAmountsByOutput.find(i);
+                    if (amount_it != ddAmountsByOutput.end()) {
+                        sub.ddAmount = -amount_it->second;
+                    }
                 }
                 // Check if this is a DigiDollar collateral output (MINT transaction, vout 0)
                 // Collateral is the first output (index 0) in a mint tx, has value > 0, P2TR
@@ -275,6 +352,10 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                     // Received DigiDollar (0-value P2TR in DD transaction)
                     sub.type = TransactionRecord::DDRecv;
                     sub.address = EncodeDestination(wtx.txout_address[i]);
+                    auto amount_it = ddAmountsByOutput.find(i);
+                    if (amount_it != ddAmountsByOutput.end()) {
+                        sub.ddAmount = amount_it->second;
+                    }
                 }
                 else if (isDDTransaction && ddTxType == DigiDollar::DD_TX_REDEEM &&
                          txout.nValue > 0 && i == 0) {

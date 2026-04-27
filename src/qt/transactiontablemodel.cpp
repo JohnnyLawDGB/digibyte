@@ -254,7 +254,7 @@ TransactionTableModel::TransactionTableModel(const PlatformStyle *_platformStyle
 {
     subscribeToCoreSignals();
 
-    columns << QString() << QString() << tr("Date") << tr("Type") << tr("Label") << DigiByteUnits::getAmountColumnTitle(walletModel->getOptionsModel()->getDisplayUnit());
+    columns << QString() << QString() << tr("Date") << tr("Type") << tr("Label") << tr("Amount (%1/DD)").arg(DigiByteUnits::shortName(walletModel->getOptionsModel()->getDisplayUnit()));
     priv->refreshWallet(walletModel->wallet());
 
     connect(walletModel->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &TransactionTableModel::updateDisplayUnit);
@@ -266,10 +266,10 @@ TransactionTableModel::~TransactionTableModel()
     delete priv;
 }
 
-/** Updates the column title to "Amount (DisplayUnit)" and emits headerDataChanged() signal for table headers to react. */
+/** Updates the column title to include both the selected DGB display unit and DigiDollar rows. */
 void TransactionTableModel::updateAmountColumnTitle()
 {
-    columns[Amount] = DigiByteUnits::getAmountColumnTitle(walletModel->getOptionsModel()->getDisplayUnit());
+    columns[Amount] = tr("Amount (%1/DD)").arg(DigiByteUnits::shortName(walletModel->getOptionsModel()->getDisplayUnit()));
     Q_EMIT headerDataChanged(Qt::Horizontal,Amount,Amount);
 }
 
@@ -490,7 +490,15 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
 
 QString TransactionTableModel::formatTxAmount(const TransactionRecord *wtx, bool showUnconfirmed, DigiByteUnits::SeparatorStyle separators) const
 {
-    QString str = DigiByteUnits::format(walletModel->getOptionsModel()->getDisplayUnit(), wtx->credit + wtx->debit, false, separators);
+    QString str;
+    if ((wtx->type == TransactionRecord::DDSend || wtx->type == TransactionRecord::DDRecv) && wtx->ddAmount != 0) {
+        const CAmount amount = wtx->ddAmount;
+        const CAmount absAmount = amount < 0 ? -amount : amount;
+        const QString prefix = amount > 0 ? QString("+") : (amount < 0 ? QString("-") : QString());
+        str = prefix + QString("$") + QString::number(absAmount / 100.0, 'f', 2) + QString(" DD");
+    } else {
+        str = DigiByteUnits::format(walletModel->getOptionsModel()->getDisplayUnit(), wtx->credit + wtx->debit, false, separators);
+    }
     if(showUnconfirmed)
     {
         if(!wtx->status.countsForBalance)
@@ -607,6 +615,9 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
         case ToAddress:
             return formatTxToAddress(rec, true);
         case Amount:
+            if ((rec->type == TransactionRecord::DDSend || rec->type == TransactionRecord::DDRecv) && rec->ddAmount != 0) {
+                return qint64(rec->ddAmount);
+            }
             return qint64(rec->credit + rec->debit);
         } // no default case, so the compiler can warn about missing cases
         assert(false);
@@ -634,7 +645,10 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
                 // Let the specific column logic below handle the actual colors
                 // This used to return gray, but we want theme-aware colors
             }
-            if(index.column() == Amount && (rec->credit+rec->debit) < 0)
+            const CAmount displayAmount = ((rec->type == TransactionRecord::DDSend || rec->type == TransactionRecord::DDRecv) && rec->ddAmount != 0)
+                ? rec->ddAmount
+                : (rec->credit + rec->debit);
+            if(index.column() == Amount && displayAmount < 0)
             {
                 // Red for negative amounts
                 return isDarkTheme ? QColor(255, 70, 70) : QColor(200, 0, 0);

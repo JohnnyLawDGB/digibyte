@@ -451,9 +451,9 @@ QColor DigiDollarTransactionsWidget::getAmountColor(bool isPositive) const
 QString DigiDollarTransactionsWidget::formatDDAmount(CAmount amount) const
 {
     // Amount is in cents, convert to DD with 2 decimal places
-    double ddAmount = amount / 100.0;
-    QString prefix = ddAmount >= 0 ? "+" : "";
-    return prefix + "$" + QString::number(std::abs(ddAmount), 'f', 2) + " DD";
+    const CAmount absAmount = amount < 0 ? -amount : amount;
+    const QString prefix = amount > 0 ? "+" : (amount < 0 ? "-" : "");
+    return prefix + "$" + QString::number(absAmount / 100.0, 'f', 2) + " DD";
 }
 
 QString DigiDollarTransactionsWidget::formatTimestamp(uint64_t timestamp) const

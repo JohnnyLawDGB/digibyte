@@ -874,11 +874,18 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         layout->addWidget(categoryLabel);
 
         // Amount
-        QLabel* amountLabel = new QLabel(QString("$%1").arg(tx.amount / 100.0, 0, 'f', 2));
+        const CAmount absAmount = tx.amount < 0 ? -tx.amount : tx.amount;
+        const QString amountPrefix = tx.amount > 0 ? "+" : (tx.amount < 0 ? "-" : "");
+        QLabel* amountLabel = new QLabel(amountPrefix + QString("$%1").arg(absAmount / 100.0, 0, 'f', 2));
         QFont monospaceFont = GUIUtil::fixedPitchFont();
         amountLabel->setFont(monospaceFont);
         amountLabel->setFixedWidth(100);
         amountLabel->setAlignment(Qt::AlignRight);
+        if (tx.amount < 0 || tx.category == "send" || tx.category == "redeem") {
+            amountLabel->setStyleSheet("color: #ff4646;");
+        } else if (tx.amount > 0 || tx.category == "receive" || tx.category == "mint") {
+            amountLabel->setStyleSheet("color: #64ff64;");
+        }
         layout->addWidget(amountLabel);
 
         // Confirmations - also check for abandoned status

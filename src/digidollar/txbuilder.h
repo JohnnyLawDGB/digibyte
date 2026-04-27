@@ -200,7 +200,7 @@ public:
 protected:
     // Virtual for testing - can be overridden
     virtual CAmount GetDDFromUTXO(const COutPoint& outpoint) const;
-    virtual CAmount GetDGBFromUTXO(const COutPoint& outpoint) const;
+    CAmount GetDGBFromUTXO(const COutPoint& outpoint) const override;
 
 private:
     bool ValidateDDAddress(const std::string& address) const;

@@ -1564,6 +1564,120 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
     // Return actual transaction history (with mock fallback for testing)
     std::vector<DDTransaction> history = transaction_history;
 
+    // Synthesize receive-side rows for send-to-self/sendmany-to-local-addresses.
+    // The database stores one DDTransaction per txid, so a sendmany created by this
+    // wallet is persisted as the aggregate send row (address="multiple"). For the
+    // Qt table and RPC address filters, local recipient outputs still need to be
+    // visible as receives. Build those rows on demand from the confirmed wallet tx
+    // and the wallet's DD address keys, while excluding trailing DD change output.
+    if (m_wallet) {
+        LOCK(m_wallet->cs_wallet);
+        for (const auto& sendtx : transaction_history) {
+            if (sendtx.incoming || sendtx.category != "send" || sendtx.amount == 0) continue;
+            const CAmount send_amount = sendtx.amount < 0 ? -sendtx.amount : sendtx.amount;
+
+            uint256 send_txid;
+            send_txid.SetHex(sendtx.txid);
+            const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(send_txid);
+            if (!wtx || !wtx->tx) continue;
+
+            std::vector<CAmount> dd_amounts;
+            for (const CTxOut& txout : wtx->tx->vout) {
+                const CScript& script = txout.scriptPubKey;
+                if (script.empty() || script[0] != OP_RETURN) continue;
+
+                auto pc = script.begin();
+                opcodetype opcode;
+                std::vector<unsigned char> data;
+
+                if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) continue;
+                if (!script.GetOp(pc, opcode, data)) continue;
+                if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+                if (!script.GetOp(pc, opcode, data)) continue;
+
+                int tx_type = 0;
+                try {
+                    CScriptNum txTypeNum(data, false);
+                    tx_type = txTypeNum.getint();
+                } catch (const scriptnum_error&) {
+                    break;
+                }
+                if (tx_type != 2) break;
+
+                while (script.GetOp(pc, opcode, data) && !data.empty()) {
+                    try {
+                        CScriptNum amtNum(data, false);
+                        CAmount amount = amtNum.GetInt64();
+                        if (amount > 0) dd_amounts.push_back(amount);
+                    } catch (const scriptnum_error&) {
+                        break;
+                    }
+                }
+                break;
+            }
+
+            if (dd_amounts.empty()) continue;
+
+            // Recipients are emitted first by TransferTxBuilder; optional DD change
+            // follows. The persisted send amount is the sum of recipient amounts.
+            CAmount recipient_sum = 0;
+            size_t recipient_count = 0;
+            for (CAmount amount : dd_amounts) {
+                recipient_sum += amount;
+                ++recipient_count;
+                if (recipient_sum >= send_amount) break;
+            }
+            if (recipient_sum != send_amount || recipient_count == 0) continue;
+
+            size_t dd_output_index = 0;
+            for (size_t n = 0; n < wtx->tx->vout.size(); ++n) {
+                const CTxOut& txout = wtx->tx->vout[n];
+                if (txout.nValue != 0 || txout.scriptPubKey.size() != 34 || txout.scriptPubKey[0] != OP_1) continue;
+
+                const size_t amount_index = dd_output_index++;
+                if (amount_index >= recipient_count || amount_index >= dd_amounts.size()) continue; // change or malformed
+
+                std::array<unsigned char, 32> output_key;
+                std::copy(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.begin() + 34, output_key.begin());
+                const bool is_mine = m_wallet->IsMine(txout.scriptPubKey);
+                const bool has_plain_key = dd_address_keys.find(output_key) != dd_address_keys.end();
+                const bool has_crypted_key = dd_crypted_address_keys.find(output_key) != dd_crypted_address_keys.end();
+                if (!is_mine && !has_plain_key && !has_crypted_key) continue; // not a local recipient
+
+                CTxDestination dest;
+                std::string dd_address;
+                if (ExtractDestination(txout.scriptPubKey, dest)) {
+                    dd_address = DigiDollar::EncodeDigiDollarAddress(dest, Params());
+                }
+
+                bool already_exists = false;
+                for (const auto& existing : history) {
+                    if (existing.txid == sendtx.txid && existing.category == "receive" && existing.address == dd_address) {
+                        already_exists = true;
+                        break;
+                    }
+                }
+                if (already_exists) continue;
+
+                DDTransaction receive_tx;
+                receive_tx.txid = sendtx.txid;
+                receive_tx.amount = dd_amounts[amount_index];
+                receive_tx.timestamp = sendtx.timestamp;
+                receive_tx.confirmations = sendtx.confirmations;
+                receive_tx.incoming = true;
+                receive_tx.address = dd_address;
+                receive_tx.category = "receive";
+                receive_tx.blockheight = sendtx.blockheight;
+                receive_tx.blockhash = sendtx.blockhash;
+                receive_tx.fee = 0;
+                receive_tx.comment = sendtx.comment;
+                receive_tx.abandoned = sendtx.abandoned;
+                receive_tx.lock_tier = -1;
+                history.push_back(receive_tx);
+            }
+        }
+    }
+
     // Add mock history for testing if present
     history.insert(history.end(), mockHistory.begin(), mockHistory.end());
 
@@ -4900,13 +5014,21 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
                   return a.dd_amount < b.dd_amount;
               });
 
+    // DD outputs have a consensus-enforced minimum amount. Since DD conservation
+    // is exact, any change output must be either zero (exact spend) or at least
+    // minOutputAmount. A naive "first total >= target" selector can pick a UTXO
+    // that leaves sub-minimum DD change; the transaction then builds, signs, and
+    // only fails at mempool admission with transfer-dd-amount-below-minimum.
+    const CAmount min_change = Params().GetDigiDollarParams().minOutputAmount;
+
     // Select UTXOs until target amount met
     // FIXED: Now selects ALL DD UTXOs (both minted and received)
     // Signing logic properly handles both types:
     //  - Minted DD: Uses custom owner keys from dd_owner_keys map
     //  - Received DD: Uses wallet's regular key management
     for (const auto& utxo : available_utxos) {
-        if (selected_total >= target_amount) break;
+        CAmount current_change = selected_total - target_amount;
+        if (selected_total >= target_amount && (current_change == 0 || current_change >= min_change)) break;
 
         selected_utxos.push_back(utxo.outpoint);
         selected_total += utxo.dd_amount;
@@ -4919,16 +5041,19 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
                   static_cast<long long>(utxo.dd_amount), static_cast<long long>(selected_total));
     }
 
-    bool success = (selected_total >= target_amount);
+    CAmount change = selected_total - target_amount;
+    bool success = selected_total >= target_amount && (change == 0 || change >= min_change);
 
     if (!success) {
-        LogPrintf("DigiDollar: SelectDDCoins - FAILED: need %lld, have %lld\n",
-                  static_cast<long long>(target_amount), static_cast<long long>(selected_total));
+        LogPrintf("DigiDollar: SelectDDCoins - FAILED: need %lld, selected %lld, change %lld (minimum DD change is %lld unless exact)\n",
+                  static_cast<long long>(target_amount), static_cast<long long>(selected_total),
+                  static_cast<long long>(change), static_cast<long long>(min_change));
         selected_utxos.clear();
         selected_total = 0;
+        if (amounts) amounts->clear();
     } else {
-        LogPrintf("DigiDollar: SelectDDCoins - SUCCESS: selected %lld cents from %zu UTXOs\n",
-                  static_cast<long long>(selected_total), selected_utxos.size());
+        LogPrintf("DigiDollar: SelectDDCoins - SUCCESS: selected %lld cents from %zu UTXOs (change: %lld cents)\n",
+                  static_cast<long long>(selected_total), selected_utxos.size(), static_cast<long long>(change));
     }
 
     return success;

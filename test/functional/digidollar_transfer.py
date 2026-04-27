@@ -214,6 +214,39 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         assert_equal(node1_final, node1_initial + Decimal(200))
         assert_equal(node2_final, node2_initial + Decimal(300))
 
+        # Regression: sendmany to local DD addresses must show both sides in
+        # wallet/RPC history. The send row remains the aggregate "multiple" row,
+        # and each local recipient address gets its own receive row so Qt can show
+        # the incoming entries too.
+        local_initial = Decimal(self.nodes[0].getdigidollarbalance()['total'])
+        local_addr1 = self.nodes[0].getdigidollaraddress()
+        local_addr2 = self.nodes[0].getdigidollaraddress()
+        local_amounts = {
+            local_addr1: 200,
+            local_addr2: 300,
+        }
+
+        local_result = self.nodes[0].sendmanydigidollar("", local_amounts, "sendmany local functional test")
+        local_txid = local_result['txid']
+        assert_equal(local_result['total_amount'], 500)
+
+        self.nodes[0].generate(1)
+        self.sync_all()
+
+        local_final = Decimal(self.nodes[0].getdigidollarbalance()['total'])
+        assert_equal(local_final, local_initial)
+
+        local_txs = self.nodes[0].listdigidollartxs(20, 0)
+        send_rows = [tx for tx in local_txs if tx['txid'] == local_txid and tx['category'] == 'send']
+        assert_equal(len(send_rows), 1)
+        assert_equal(send_rows[0]['address'], 'multiple')
+        assert_equal(send_rows[0]['amount'], Decimal('-500'))
+
+        recv_addr1 = self.nodes[0].listdigidollartxs(10, 0, local_addr1)
+        recv_addr2 = self.nodes[0].listdigidollartxs(10, 0, local_addr2)
+        assert_equal(len([tx for tx in recv_addr1 if tx['txid'] == local_txid and tx['category'] == 'receive' and tx['amount'] == Decimal('200')]), 1)
+        assert_equal(len([tx for tx in recv_addr2 if tx['txid'] == local_txid and tx['category'] == 'receive' and tx['amount'] == Decimal('300')]), 1)
+
     def test_multi_input_transfers(self):
         """Test transfers that require multiple DD inputs."""
         self.log.info("Testing multi-input transfers...")

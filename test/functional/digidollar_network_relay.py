@@ -355,7 +355,9 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # This is expected behavior - we just verify it eventually reaches mempool
         if in_mempool:
             self.log.info("✓ Dandelion relay successful (transaction reached mempool)")
-            # Mine to confirm
+            # Ensure the miner has the fluffed transaction before mining. It
+            # may have appeared first on the receiver during Dandelion relay.
+            self.sync_mempools([self.nodes[3], self.nodes[4]])
             self.nodes[3].generate(1)
             self.sync_blocks([self.nodes[3], self.nodes[4]])
         else:
@@ -379,6 +381,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
             if fluffed:
                 self.log.info("✓ Transaction fluffed after mocktime bump")
+                self.sync_mempools([self.nodes[3], self.nodes[4]])
                 self.nodes[3].generate(1)
                 self.sync_blocks([self.nodes[3], self.nodes[4]])
             else:
@@ -389,9 +392,22 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
                 self.nodes[3].generate(1)
                 self.sync_blocks([self.nodes[3], self.nodes[4]])
 
-        # Verify transaction is now confirmed
-        tx_info = self.nodes[3].gettransaction(txid)
-        assert_greater_than(tx_info['confirmations'], 0)
+        # Verify transaction is now confirmed. Search recent blocks instead of
+        # relying on wallet gettransaction state, because the Dandelion fluff
+        # can reach either peer first before the block is mined.
+        found_confirmed = False
+        block_hash = self.nodes[3].getbestblockhash()
+        for _ in range(5):
+            block = self.nodes[3].getblock(block_hash)
+            if txid in block['tx']:
+                tx_info = self.nodes[3].getrawtransaction(txid, True, block_hash)
+                assert_greater_than(tx_info['confirmations'], 0)
+                found_confirmed = True
+                break
+            if 'previousblockhash' not in block:
+                break
+            block_hash = block['previousblockhash']
+        assert found_confirmed, f"Dandelion transaction {txid} not found in recent blocks"
         self.log.info("✓ Dandelion transaction confirmed")
 
         self.log.info("✓ Dandelion++ integration test passed")

@@ -1597,7 +1597,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
 
                 int tx_type = 0;
                 try {
-                    CScriptNum txTypeNum(data, false);
+                    CScriptNum txTypeNum(data, true);
                     tx_type = txTypeNum.getint();
                 } catch (const scriptnum_error&) {
                     break;
@@ -1606,7 +1606,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
 
                 while (script.GetOp(pc, opcode, data) && !data.empty()) {
                     try {
-                        CScriptNum amtNum(data, false);
+                        CScriptNum amtNum(data, true, 8); // 8-byte max for large DD amounts
                         CAmount amount = amtNum.GetInt64();
                         if (amount > 0) dd_amounts.push_back(amount);
                     } catch (const scriptnum_error&) {

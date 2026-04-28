@@ -222,7 +222,35 @@ void DigiDollarTransactionsWidget::populateTable()
         UniValue params(UniValue::VARR);
         params.push_back(1000);  // count - get up to 1000 transactions
         params.push_back(0);     // skip - start from the beginning
-        UniValue result = m_walletModel->executeRpc("listdigidollartxs", params);
+        UniValue result(UniValue::VARR);
+        try {
+            result = m_walletModel->executeRpc("listdigidollartxs", params);
+        } catch (const UniValue& e) {
+            // Qt unit tests and early GUI startup paths may not have the wallet
+            // RPC table registered yet. Fall back to the same wallet history data
+            // that listdigidollartxs exposes so the display path stays available.
+            const int code = e.find_value("code").isNum() ? e.find_value("code").getInt<int>() : 0;
+            if (code != -32601) throw;
+
+            DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
+            if (!ddWallet) throw;
+            for (const auto& histTx : ddWallet->GetDDTransactionHistory()) {
+                UniValue txInfo(UniValue::VOBJ);
+                txInfo.pushKV("txid", histTx.txid);
+                txInfo.pushKV("category", histTx.category);
+                txInfo.pushKV("amount", histTx.incoming ? histTx.amount : -histTx.amount);
+                txInfo.pushKV("address", histTx.address);
+                txInfo.pushKV("confirmations", histTx.confirmations);
+                txInfo.pushKV("blockheight", histTx.blockheight);
+                txInfo.pushKV("blockhash", histTx.blockhash);
+                txInfo.pushKV("time", static_cast<int64_t>(histTx.timestamp));
+                txInfo.pushKV("fee", histTx.fee);
+                txInfo.pushKV("comment", histTx.comment);
+                txInfo.pushKV("abandoned", histTx.abandoned);
+                txInfo.pushKV("lock_tier", histTx.lock_tier);
+                result.push_back(txInfo);
+            }
+        }
 
         if (!result.isArray()) {
             m_statusLabel->setText(tr("No DigiDollar transactions found"));

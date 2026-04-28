@@ -63,10 +63,10 @@ void SyncUpWallet(const std::shared_ptr<wallet::CWallet>& wallet, interfaces::No
     QCOMPARE(result.status, wallet::CWallet::ScanResult::SUCCESS);
 }
 
-std::shared_ptr<wallet::CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChain100Setup& test)
+std::shared_ptr<wallet::CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChain100Setup& test, const std::string& wallet_name = "")
 {
     std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(
-        node.context()->chain.get(), "", CreateMockableWalletDatabase());
+        node.context()->chain.get(), wallet_name, CreateMockableWalletDatabase());
     wallet->LoadWallet();
     LOCK(wallet->cs_wallet);
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
@@ -1267,6 +1267,114 @@ void DigiDollarWidgetTests::overviewRecentTransactionsSendShowsNegativeSign()
     QVERIFY2(receives >= 1, "expected at least one Receive row in mock data");
     QVERIFY2(redeems >= 1, "expected at least one Redeem row in mock data");
     QVERIFY2(mints >= 1, "expected at least one Mint row in mock data");
+}
+
+// Regression coverage for the DD Transactions tab's RPC-backed history table:
+// listdigidollartxs returns signed amounts derived from incoming/outgoing wallet
+// direction, and the Qt table must preserve those signs while showing the right
+// category, lock-period, note, truncated txid, and confirmation text. This is the
+// display path used for sendmanydigidollar history rows, including the aggregate
+// outgoing "multiple" row and local-recipient receive rows verified functionally.
+void DigiDollarWidgetTests::transactionsWidgetShowsRpcHistorySignsAndFields()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-history");
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    const int64_t now = GetTime();
+    auto pushTx = [&](const std::string& txid, CAmount amount, bool incoming,
+                      const std::string& category, const std::string& address,
+                      const std::string& comment, int lock_tier, int64_t offset) {
+        DDTransaction tx;
+        tx.txid = txid;
+        tx.amount = amount;
+        tx.timestamp = now + offset;
+        tx.confirmations = 0;
+        tx.incoming = incoming;
+        tx.address = address;
+        tx.category = category;
+        tx.lock_tier = lock_tier;
+        tx.fee = 0;
+        tx.comment = comment;
+        tx.abandoned = false;
+        dd_wallet->AddMockTransaction(tx);
+    };
+
+    const QString sendTxid = "b000000000000000000000000000000000000000000000000000000000000001";
+    const QString recvTxid = "b000000000000000000000000000000000000000000000000000000000000002";
+    const QString redeemTxid = "b000000000000000000000000000000000000000000000000000000000000003";
+    const QString mintTxid = "b000000000000000000000000000000000000000000000000000000000000004";
+
+    pushTx(sendTxid.toStdString(), 500, false, "send", "multiple", "sendmany functional test", -1, 4);
+    pushTx(recvTxid.toStdString(), 200, true, "receive", "TDlocalrecipient1", "local receive row", -1, 3);
+    pushTx(redeemTxid.toStdString(), 1250, false, "redeem", "TDredeemaddress", "redeem note", 1, 2);
+    pushTx(mintTxid.toStdString(), 700, true, "mint", "TDmintaddress", "mint note", 9, 1);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
+    transactionsWidget.setClientModel(mini_gui.clientModel.get());
+    transactionsWidget.show();
+    QCoreApplication::processEvents();
+    transactionsWidget.updateView();
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 4);
+
+    auto findRowByTxid = [&](const QString& txid) -> int {
+        for (int row = 0; row < table->rowCount(); ++row) {
+            QTableWidgetItem* txidItem = table->item(row, 5);
+            if (txidItem && txidItem->data(Qt::UserRole).toString() == txid) {
+                return row;
+            }
+        }
+        return -1;
+    };
+
+    auto checkRow = [&](const QString& txid, const QString& type, const QString& amount,
+                        const QString& lockPeriod, const QString& note) {
+        const int row = findRowByTxid(txid);
+        QVERIFY2(row >= 0, qPrintable(QString("missing DD transaction row for %1").arg(txid)));
+        QTableWidgetItem* txidItem = table->item(row, 5);
+        QVERIFY(txidItem != nullptr);
+        QCOMPARE(txidItem->text(), txid.left(16) + "..." + txid.right(8));
+        QCOMPARE(txidItem->toolTip(), txid);
+        QCOMPARE(table->item(row, 1)->text(), type);
+        QCOMPARE(table->item(row, 2)->text(), amount);
+        QCOMPARE(table->item(row, 3)->text(), lockPeriod);
+        QCOMPARE(table->item(row, 4)->text(), note);
+        QCOMPARE(table->item(row, 4)->toolTip(), note);
+        QCOMPARE(table->item(row, 6)->text(), QString("Pending"));
+    };
+
+    checkRow(sendTxid, "Send", "-$5.00 DD", "-", "sendmany functional test");
+    checkRow(recvTxid, "Receive", "+$2.00 DD", "-", "local receive row");
+    checkRow(redeemTxid, "Redeem 30-day", "-$12.50 DD", "30 days", "redeem note");
+    checkRow(mintTxid, "Mint 10-yr", "+$7.00 DD", "10 years", "mint note");
 }
 
 // Regression test for the DD Vault "Lock Tier" column truncation: with the

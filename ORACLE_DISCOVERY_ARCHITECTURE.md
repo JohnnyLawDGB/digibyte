@@ -151,9 +151,9 @@ Requires 5-of-7 (or similar threshold) existing oracle signatures to add a new o
 
 ## P2P Oracle Message Relay
 
-**Current state:** `sendoracleprice` stores the message locally in the bundle manager. No P2P broadcast.
+**Current state (RC30+):** Oracle nodes started via `startoracle` fetch live exchange prices, sign them, and broadcast `ORACLEPRICE` messages over P2P; peers relay them and miners aggregate the bundle into the next coinbase. The legacy `sendoracleprice` RPC was removed as a fake-price-injection vulnerability and the regtest-only `submitoracleprice` is the only manual price entry surface that remains.
 
-**Needed:** Oracle price messages need to be relayed to miners so they can include them in blocks.
+**Still needed:** Endpoint discovery so wallet/light nodes can choose which oracle nodes to peer with, especially as new oracles are added without a software update. The rest of this document is the design proposal for that piece.
 
 ### P2P Message Flow
 

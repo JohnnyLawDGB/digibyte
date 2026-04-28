@@ -166,7 +166,15 @@ digibyte-cli getbalance
 
 - No minimum send amount (any cent value works)
 - Maximum: $100,000 per transaction
-- Consecutive sends work without waiting for confirmations
+- DD inputs must be **confirmed** (≥1 confirmation) before they can be re-spent. As of RC32, the wallet does not chain unconfirmed DigiDollar UTXOs, and consensus rejects DD transfer/redeem inputs that resolve from `MEMPOOL_HEIGHT`. Plan withdrawal cadence around the 15-second block time, or batch with `sendmanydigidollar`.
+
+### Batch withdrawals
+
+`sendmanydigidollar` sends DD to multiple addresses in a single transaction (one fee, one set of inputs):
+
+```bash
+digibyte-cli sendmanydigidollar '{"DDcust1...":12500,"DDcust2...":7500}'
+```
 
 ---
 
@@ -183,8 +191,8 @@ digibyte-cli getdigidollarbalance
 # DGB balance (for fees)
 digibyte-cli getbalance
 
-# Combined view
-digibyte-cli getdigidollarinfo
+# BIP9 activation status (verifies DD is live)
+digibyte-cli getdigidollardeploymentinfo
 ```
 
 ### Watch-Only (Cold Wallet Monitoring)
@@ -203,10 +211,10 @@ digibyte-cli getoracleprice
 ```
 
 **Oracle details:**
-- 9-of-17 MuSig2 Schnorr threshold consensus (testnet — RC30)
-- 9-of-17 planned/deployed for mainnet (RC30)
-- Sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com
-- Outlier filtering with Median Absolute Deviation
+- 9-of-17 MuSig2 Schnorr threshold consensus on testnet23 and mainnet (RC30+)
+- 4-of-7 MuSig2 on regtest
+- Sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders)
+- Per-source weights and IQR-based outlier rejection (`src/oracle/exchange.cpp`)
 
 ---
 
@@ -335,11 +343,11 @@ Exchanges typically handle deposits and withdrawals — not minting or redeeming
 
 ## 13. Test on Testnet Now!
 
-DigiDollar is **live and activated on testnet18**. Start building your integration today.
+DigiDollar is **live and activated on testnet23**. Start building your integration today.
 
 ### Testnet Quick Start
 
-1. **Download** DigiByte Core v9.26.0-rc18
+1. **Download** the latest DigiByte Core v9.26.0 RC build (RC30 or later)
 2. **Configure:**
    ```ini
    testnet=1
@@ -360,11 +368,11 @@ DigiDollar is **live and activated on testnet18**. Start building your integrati
 
 | Parameter | Value |
 |-----------|-------|
-| P2P Port | 12032 |
-| RPC Port | 14025 |
+| Testnet name | testnet23 |
+| P2P Port | 12030 |
 | DD Address Prefix | `TD` |
-| Status | **Active** (BIP9 activated at block 599) |
-| Oracle | 5-of-8 Schnorr consensus, 6 exchange sources |
+| Status | **Active** (BIP9 ACTIVE at block 600) |
+| Oracle | 9-of-17 MuSig2 Schnorr consensus, 6 exchange sources (RC30+) |
 
 ---
 

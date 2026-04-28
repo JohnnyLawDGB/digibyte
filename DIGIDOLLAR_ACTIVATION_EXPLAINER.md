@@ -53,7 +53,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - **What happens:** Nothing. DigiDollar deployment exists in the code but signaling hasn't begun.
 - **Miner behavior:** Miners don't need to do anything. Block versions don't include bit 23.
 - **User experience:** DigiDollar tab visible in Qt but shows "DigiDollar is not yet active on this blockchain" with current BIP9 status.
-- **RPC behavior:** All 30 DD/Oracle RPCs return error: "DigiDollar is not yet active on this blockchain"
+- **RPC behavior:** All 31 DD/Oracle RPCs return error: "DigiDollar is not yet active on this blockchain"
 - **P2P behavior:** Oracle price/bundle/discovery messages are silently dropped.
 - **Consensus:** DD transactions rejected with "digidollar-not-active". DD opcodes treated as NOPs.
 
@@ -72,7 +72,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 ### Phase 4: ACTIVE (block 600+ on testnet)
 - **What happens:** DigiDollar is fully operational.
-- **RPC behavior:** All 30 DD/Oracle RPCs become functional.
+- **RPC behavior:** All 31 DD/Oracle RPCs become functional.
 - **P2P behavior:** Oracle messages are processed, relayed, and validated.
 - **Consensus:** DD transactions are validated. DD opcodes are enforced. `SCRIPT_VERIFY_DIGIDOLLAR` flag is set.
 - **Qt behavior:** Activation overlay disappears. Full DD tab (overview, send, receive, mint, redeem, vault, transactions) becomes accessible.
@@ -82,12 +82,13 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 ## What Gets Gated (Complete List)
 
-### RPC Commands (30 total — all gated)
+### RPC Commands (31 total — all gated)
 
 **Core DD Operations:**
 - `mintdigidollar` — Mint new DigiDollar
 - `redeemdigidollar` — Redeem DD back to DGB
 - `senddigidollar` — Send DD to another address
+- `sendmanydigidollar` — Send DD to multiple addresses in one transaction
 
 **DD Wallet/Balance:**
 - `getdigidollaraddress` — Generate DD address
@@ -197,7 +198,7 @@ During STARTED/LOCKED_IN, blocks should have version `0x20800004` or similar (wi
 ### Manual Testing Checklist
 
 Before activation (any block < 600):
-- [ ] All 30 DD RPCs return "DigiDollar is not yet active on this blockchain"
+- [ ] All 31 DD RPCs return "DigiDollar is not yet active on this blockchain"
 - [ ] `getdeploymentinfo` shows correct BIP9 state
 - [ ] Qt DD tab shows activation overlay
 - [ ] No oracle messages processed (check debug.log)

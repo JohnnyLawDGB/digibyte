@@ -1,6 +1,6 @@
 # REPO_MAP_DIGIDOLLAR.md — DigiDollar + Oracle Subsystem v9.26
 
-*Auto-generated: 2026-02-14*
+*Last updated: 2026-04-28 (RC33 / `feature/digidollar-v1`)*
 
 This is the granular file index for all DigiDollar and Oracle source code. Read `DIGIDOLLAR_ARCHITECTURE.md` and `DIGIDOLLAR_ORACLE_ARCHITECTURE.md` first for system design context.
 
@@ -438,20 +438,20 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - Aggregator with outlier filtering and configurable consensus
 
 ### src/oracle/mock_oracle.h
-- `MockOracleManager` (class, singleton) → provides mock oracle for RegTest testing
+- `MockOracleManager` (class, singleton) → regtest helper for scripted price tests. **Not a production fallback for `OP_CHECKPRICE`**: as of commit `f77678cd0f` the script interpreter consults the live oracle consensus price via `g_get_oracle_consensus_price` and fails closed when no consensus is available.
   - `GetInstance()` → singleton access
   - `GetCurrentPrice()` → returns mockPriceMicroUSD (micro-USD)
   - `SetMockPrice(price_micro_usd)` → sets mock price
   - `IsEnabled()` / `SetEnabled(enable)` → toggle mock oracle
   - `GetLastUpdateHeight()` → block height of last update
-  - `CreateMockBundle(height)` → creates bundle with 8 signed messages from deterministic test keys
+  - `CreateMockBundle(height)` → creates bundle with deterministic test-key signed messages
   - `SimulateVolatility(percentChange)` → applies % change to current price
-  - `GetTestKey(oracle_id)` → returns deterministic test private key for oracle 0-4
+  - `GetTestKey(oracle_id)` → returns deterministic test private key for low-id regtest oracles
   - `Reset()` → restores default state
 
 ### src/oracle/mock_oracle.cpp
-- Implementation with deterministic keys derived from SHA256("digibyte_regtest_oracle_N")
-- Creates bundles with ORACLE_CONSENSUS_REQUIRED (8) signatures
+- Implementation with deterministic keys derived from `SHA256("digibyte_regtest_oracle_N")`.
+- Builds bundles whose signature count satisfies the regtest 4-of-7 quorum (`consensus.nOracleConsensusRequired`); the legacy header default (8) is no longer authoritative.
 
 ### src/oracle/node.h
 - `OracleNode` (class) → oracle node daemon: price fetching, signing, broadcasting
@@ -579,7 +579,8 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `getdigidollarstatus()` → overall DD system status
 - **Core Transactions:**
   - `mintdigidollar()` → mints DD by locking DGB collateral with specified lock tier
-  - `senddigidollar()` → sends DD to another address
+  - `senddigidollar()` → sends DD to another address (confirmed inputs only, RC32+)
+  - `sendmanydigidollar()` → sends DD to multiple recipients in one transaction (RC32+, commit `9143bed9b9`)
   - `redeemdigidollar()` → redeems DD to unlock DGB collateral
   - `listdigidollarpositions()` → lists all collateral positions and minted DD
 - **Address Management:**
@@ -603,21 +604,12 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - Full implementation of all DD RPC commands
 - Integrates with wallet, oracle, health monitoring systems
 
-### src/rpc/digidollar_transactions.h
-- `getdigidollarinfo(request)` → DD system information
-- `getdigidollaraddress(request)` → generate DD address
-- `getdigidollarbalance(request)` → DD balance
-- `mintdigidollar(request)` → mint DD tokens
-- `transferdigidollar(request)` → transfer DD tokens
-- `redeemdigidollar(request)` → redeem DD tokens
-- `getredemptioninfo(request)` → redemption info for position
-- `listredeemablepositions(request)` → list redeemable positions
-- `setmockoracleprice(request)` → set mock oracle price (testing)
-- `createrawddtransaction(request)` → create raw DD transaction
-- `GetDigiDollarTransactionRPCCommands()` → returns Span of CRPCCommand entries
+### src/rpc/digidollar_transactions.{h,cpp} *(legacy / unregistered)*
+- Defines `getdigidollarinfo`, `getdigidollaraddress`, `getdigidollarbalance`, `mintdigidollar`, `transferdigidollar`, `redeemdigidollar`, `getredemptioninfo`, `listredeemablepositions`, `setmockoracleprice`, `createrawddtransaction`, plus `GetDigiDollarTransactionRPCCommands()`.
+- ⚠️ **NOT registered** anywhere in the build (no caller of `GetDigiDollarTransactionRPCCommands()`). The active versions of all callable RPCs live in `src/rpc/digidollar.cpp` (`RegisterDigiDollarRPCCommands`) and `src/wallet/rpc/wallet.cpp` (`GetWalletRPCCommands`). Treat this file as legacy until removed or rewired.
 
-### src/rpc/digidollar_transactions.cpp
-- Implementation of transaction-focused DD RPC commands
+### src/wallet/rpc/wallet.cpp *(DigiDollar/oracle wallet-context registrations)*
+- Registers 13 wallet-context commands: `mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `validateddaddress`, `createoraclekey`, `startoracle`. These require a loaded wallet for key access.
 
 ---
 
@@ -1001,6 +993,25 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_rh46_rpc_input_validation_tests.cpp` | RH-46: RPC input validation and DoS surface tests |
 | `digidollar_rh47_consensus_fork_deep_tests.cpp` | RH-47: Consensus fork scenario deep dive (builds on RH-31) |
 | `digidollar_rh49_find_opreturn_tests.cpp` | RH-49: FindDDOpReturn helper validation and dynamic OP_RETURN detection |
+| `rh05_bundle_validation_attacks_tests.cpp` | RH-05: oracle bundle validation — v0x02 downgrade, epoch mismatch, oversized data, bitmap attacks, zero-length bypass |
+| `rh15_crypto_primitives_tests.cpp` | RH-15: hash domain separation, __int128 edge cases, version-marker ambiguity, MuSig2 nonce/key validation |
+| `rh29_coinbase_oracle_manipulation_tests.cpp` | RH-29: coinbase OP_RETURN injection, multiple oracle bundles, version confusion, signature replay, withholding |
+| `rh39_eclipse_attack_tests.cpp` | RH-39: eclipse + oracle suppression, selective relay, message ordering, INV/GETDATA withholding, sybil spoofing |
+| `rh50_oracle_keyset_alignment_tests.cpp` | RH-50: oracle keyset alignment invariant — vOracleNodes ↔ vOraclePublicKeys slot 0–16 ordering |
+| `rh51_checkphase3_v1_split_tests.cpp` | RH-51: regtest activation-gate asymmetry hardening (regtest/mainnet divergence at heights 0–649) |
+| `rh52_bip34_scriptnum_escape_tests.cpp` | RH-52: BIP34 coinbase-height CScriptNum escape in oracle validators (Wave-1 PoC; fixed in `2b37384e79`) |
+| `rh53_op_checkprice_mock_weaponization_tests.cpp` | RH-53: OP_CHECKPRICE mock-price weaponization regression (Wave-2 PoC; live oracle wired in `f77678cd0f`) |
+| `rh54_op_oracle_opsuccess_tests.cpp` | RH-54: OP_ORACLE incorrectly classified OP_SUCCESS in Tapscript (Wave-2 PoC; fixed in `20d56c34da`) |
+| `rh55_musig2_partial_sig_unverified_aggregation_tests.cpp` | RH-55: MuSig2 partial-sig aggregation accepted unverified scalars (Wave-3 PoC; fixed in `986eca83ce`) |
+| `rh56_oversized_bitmap_message_inflation_tests.cpp` | RH-56: oversized participation-bitmap inflates `bundle.messages` before consensus (Wave-4 PoC) |
+| `rh57_musig2_trim_aggregate_toctou_tests.cpp` | RH-57: TOCTOU between TrimNoncesToThreshold and AggregateNonces; pubnonce injection (Wave-5 documentation) |
+| `rh58_pending_partialsigs_unbounded_growth_tests.cpp` | RH-58: `m_pending_partialsigs` unbounded growth DoS (Wave-6; capped/pruned in `35561d598b`) |
+| `rh60_mempool_dd_scriptnum_escape_tests.cpp` | RH-60: unhandled CScriptNum escape on mempool DD path (Wave-8; wrapped in `c66c853479`) |
+| `rh61_coinbase_price_cache_poisoning_tests.cpp` | RH-61: miner coinbase OP_ORACLE price-cache poisoning (Wave-9; UpdatePriceCache gated on BIP9 in `fd1ac41424`) |
+| `rh62_senddigidollar_amount_parser_tests.cpp` | RH-62: senddigidollar amount-parser pathology — exception-unsafe `std::stod`, NaN/Inf-to-int64 UB cast (Wave-10) |
+| `rh63_oracle_validator_escape_hatches_tests.cpp` | RH-63: ValidateBlockOracleData "transition period" escape-hatch weaponization (Wave-11; W1-M-05) |
+| `rh64_dca_table_disagreement_tests.cpp` | RH-64: DCA multiplier table disagreement (Wave-12 H2 weaponization) |
+| `rh65_mainnet_testnet_validator_parity_tests.cpp` | RH-65: mainnet ≡ testnet oracle block validation parity (mainnet short-circuit removed in `f0d9a7b2c7`) |
 | `musig2_basic_tests.cpp` | MuSig2 basic key aggregation and signing protocol |
 | `musig2_session_tests.cpp` | MuSig2 signing session state machine lifecycle |
 | `musig2_aggregator_tests.cpp` | MuSig2 oracle key aggregation, bitmap encoding, cache |
@@ -1027,6 +1038,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 |------|--------------|
 | `digidollar_persistence_wallet_tests.cpp` | Full wallet DD persistence: balances, positions, transactions, keys across restart |
 | `digidollar_wallet_security_tests.cpp` | Wallet-level DD security: key protection, unauthorized access, encryption boundaries |
+| `rh59_coincontrol_dd_lock_bypass_tests.cpp` | RH-59: coin-control / lockunspent bypass on preset DD inputs (W7; partially reverted in `ce0abf4e3a`) |
 
 ### Qt Tests (`src/qt/test/`)
 
@@ -1064,7 +1076,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_rpc_gating.py` | RPC command availability gating based on activation status |
 | `digidollar_rpc_oracle.py` | getoracleprice, setmockoracleprice, oracle status |
 | `digidollar_rpc_protection.py` | getprotectionstatus, DCA/ERR/volatility via RPC |
-| `digidollar_rpc_redemption.py` | redeemdigidollar, getredemptioninfo, listredeemablepositions |
+| `digidollar_rpc_redemption.py` | redeemdigidollar, getredemptioninfo |
 | `digidollar_stress.py` | Stress testing: high tx volume, many positions, rapid mints/transfers |
 | `digidollar_transactions.py` | Transaction structure validation, version markers, OP_RETURN parsing |
 | `digidollar_transfer.py` | DD transfer: single/multi recipient, conservation, change outputs |

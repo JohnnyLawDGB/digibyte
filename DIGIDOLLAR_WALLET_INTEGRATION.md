@@ -198,7 +198,18 @@ digibyte-cli senddigidollar "DDrecipientAddress..." 5000 "Payment for services"
 - Minimum fee: **0.1 DGB** per transaction
 - Maximum single transfer: **$100,000**
 - DD change is automatically returned to your wallet
-- Consecutive sends work without waiting for confirmations (trusted unconfirmed UTXOs)
+- Transfers are **confirmed-only** as of RC32: a DD UTXO must have at least one confirmation before it can be spent in a subsequent transfer or redeem. Consensus refuses to resolve DD amounts from `MEMPOOL_HEIGHT` inputs for transfer/redeem, and the wallet no longer chains unconfirmed DigiDollar outputs. Plan throughput around the 15-second block time.
+
+### Sending to many recipients in one transaction
+
+Use `sendmanydigidollar` to fan out DD to many addresses with a single fee:
+
+```bash
+digibyte-cli -rpcwallet=hot sendmanydigidollar '{"DDaddr1...":1500,"DDaddr2...":2500}'
+# amounts in cents
+```
+
+This is the DigiDollar analogue of `sendmany`. Like `senddigidollar`, it requires confirmed DD inputs and pays the fee in DGB.
 
 ---
 
@@ -256,15 +267,14 @@ digibyte-cli listdigidollartxs 10 0 "DDspecificAddress..."
 When you mint DD, you create a collateral position. You can view and manage these:
 
 ```bash
-# List all your positions
+# List all your positions (filterable by tier / amount / active)
 digibyte-cli listdigidollarpositions
 
 # Check if a position can be redeemed
 digibyte-cli getredemptioninfo "position_id"
-
-# List positions ready for redemption
-digibyte-cli listredeemablepositions
 ```
+
+`listdigidollarpositions` reports `unlock_height` and `is_redeemable` for each position; clients should filter on those fields rather than calling a separate "redeemable only" RPC. (The legacy `listredeemablepositions` symbol exists in `src/rpc/digidollar_transactions.cpp` but is not registered.)
 
 Each position tracks:
 - DD amount minted
@@ -358,9 +368,9 @@ Non-DD-aware wallets can safely ignore these — they fall through as NOPs.
 | `getdigidollarbalance [addr] [minconf]` | Get DD balance (confirmed + pending) |
 | `mintdigidollar <cents> <tier>` | Mint DD by locking DGB collateral |
 | `senddigidollar <addr> <cents>` | Send DD to a DD address |
+| `sendmanydigidollar <amounts_obj>` | Send DD to multiple DD addresses in one tx |
 | `listdigidollartxs [count] [skip] [addr] [category]` | List DD transaction history |
 | `listdigidollarpositions` | List all collateral positions |
-| `listredeemablepositions` | List positions ready to redeem |
 | `getredemptioninfo <position_id>` | Check redemption status of a position |
 | `redeemdigidollar <position_id> <cents>` | Redeem DD → unlock DGB collateral |
 
@@ -373,17 +383,17 @@ Non-DD-aware wallets can safely ignore these — they fall through as NOPs.
 | `getoracleprice` | Current DGB/USD oracle price |
 | `calculatecollateralrequirement <cents> <lock_days>` | Calculate needed collateral |
 | `estimatecollateral <cents> <tier>` | Estimate collateral at current price |
-| `getdigidollarinfo` | General DD system info |
+| `getdigidollardeploymentinfo` | BIP9 activation status, signaling progress |
 
 ---
 
 ## 13. Test on Testnet Now!
 
-DigiDollar is **live and activated on testnet18**. You can start integrating today.
+DigiDollar is **live and activated on testnet23**. You can start integrating today.
 
 ### Quick Setup
 
-1. Download DigiByte Core v9.26.0-rc18
+1. Download the latest DigiByte Core v9.26.0 RC build (RC30 or later)
 2. Configure for testnet:
    ```ini
    testnet=1
@@ -402,12 +412,12 @@ DigiDollar is **live and activated on testnet18**. You can start integrating tod
 
 | Parameter | Value |
 |-----------|-------|
-| P2P Port | 12032 |
-| RPC Port | 14025 |
+| Testnet name | testnet23 |
+| P2P Port | 12030 |
 | DD Address Prefix | `TD` |
-| Oracle Consensus | 5-of-8 Schnorr threshold |
+| Oracle Consensus | 9-of-17 MuSig2 Schnorr threshold (RC30+) |
 | Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com |
-| Activation | Active (BIP9 activated at block 599) |
+| Activation | Active (BIP9 ACTIVE at block 600) |
 
 ### Mainnet Timeline
 

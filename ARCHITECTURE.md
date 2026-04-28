@@ -1164,6 +1164,7 @@ Exchange APIs → Price Aggregation → Schnorr-Signed Oracle Message → P2P Br
 |-------|-------------|-----------|----------------|------------|
 | Phase 1 | 1-of-1 | Single Schnorr sig | None | `nOracleActivationHeight` |
 | Phase 2 | N-of-M multi-oracle | Multiple Schnorr sigs | IQR 1.5×IQR rule | `nDigiDollarPhase2Height` |
+| Phase 3 (RC30+) | 9-of-17 mainnet/testnet, 4-of-7 regtest | MuSig2 Schnorr aggregate signature + participation bitmap | IQR + per-source weights | `nDigiDollarPhase3Height` (= 0 on all networks: active as soon as DigiDollar activates) |
 
 ### 13.2 Price Message Structure
 

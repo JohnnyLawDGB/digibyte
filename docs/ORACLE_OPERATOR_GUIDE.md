@@ -5,19 +5,21 @@
 
 ## Overview
 
-DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `chainparams.cpp`** — every oracle operator must:
+DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `src/kernel/chainparams.cpp`** — every oracle operator must:
 
-1. Run DigiByte Core RC12 and create a descriptor wallet
+1. Run a current DigiByte Core release (RC30 or later; RC33 is the latest at the time of writing) and create a descriptor wallet
 2. Run `createoraclekey` to generate their oracle keypair inside the wallet
 3. Send their **public key only** to the DigiByte Core maintainer
 4. The maintainer adds their key to `chainparams.cpp` and ships a new release
 5. The operator runs `startoracle` — the wallet provides the private key automatically
 
+For testnet release/migration mechanics (testnet23, port 12030, RC29→RC30 cutover), follow `DIGIDOLLAR_ORACLE_SETUP.md`.
+
 ---
 
 ## Step-by-Step: For Oracle Operators
 
-### Step 1: Compile and Run DigiByte Core RC12
+### Step 1: Compile and Run DigiByte Core (RC30+)
 
 ```bash
 cd ~/Code/digibyte
@@ -33,7 +35,7 @@ Start on testnet:
 
 ### Step 2: Create a Descriptor Wallet
 
-RC12 creates descriptor wallets by default. No special flags needed.
+Current releases create descriptor wallets by default. No special flags needed.
 
 ```bash
 ./src/digibyte-cli -testnet createwallet "oracle"
@@ -45,7 +47,9 @@ RC12 creates descriptor wallets by default. No special flags needed.
 ./src/digibyte-cli -testnet -rpcwallet=oracle createoraclekey 0
 ```
 
-Replace `0` with the oracle ID slot assigned to you by the maintainer (0-29).
+Replace `0` with the oracle ID slot assigned to you by the maintainer.
+
+The chainparams `vOracleNodes` table allocates 30 mainnet/testnet slots (IDs 0–29), but only slots **0–16** are part of the active 17-of-17 roster (`consensus.vOraclePublicKeys`) participating in 9-of-17 MuSig2 consensus. Slots 17–29 are reserve placeholders and are not validated against MuSig2 quorum. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
 
 **Output:**
 ```json
@@ -136,7 +140,7 @@ Once running, your oracle automatically:
 
 - **Key persists in wallet** — Your oracle key survives wallet unload/reload. But after restarting `digibyted`, you need to run `startoracle` again.
 - **One key per oracle ID** — `createoraclekey` rejects if a key already exists for that ID. This prevents accidental overwrites.
-- **Descriptor wallets only** — RC12 defaults to descriptor wallets. `dumpprivkey` is not available (by design).
+- **Descriptor wallets** are the default in current releases. `dumpprivkey` exists for legacy wallets; descriptor-wallet operators do not need it because the oracle private key is stored under the `oraclekey` record (see `WriteOracleKey/ReadOracleKey` in `src/wallet/walletdb.cpp` and `StoreOracleKey/GetOracleKey` in `src/wallet/wallet.cpp`).
 - **Backup your wallet** — `backupwallet` includes your oracle key. Losing the wallet means losing your oracle key.
 
 ---
@@ -166,11 +170,11 @@ Then recompile and distribute the updated binary.
 
 ## Oracle Slots
 
-| Network | Total Slots | Active | Consensus |
-|---------|------------|--------|-----------|
-| Mainnet | 30 (IDs 0-29) | 17 | 9-of-17 (RC30; disabled until Phase Two activation) |
-| Testnet | 30 (IDs 0-29) | 17 | 9-of-17 (RC30) |
-| Regtest | 7 (IDs 0-6) | 7 | 4-of-7 |
+| Network | Total Slots | Active (in MuSig2 quorum) | Consensus | Notes |
+|---------|------------|---------------------------|-----------|-------|
+| Mainnet | 30 (IDs 0–29) | 17 (slots 0–16) | 9-of-17 MuSig2 (RC30) | Slots 17–29 are reserve placeholders, not in `consensus.vOraclePublicKeys`. Active for use only after BIP9 activation at min height 22,014,720. |
+| Testnet | 30 (IDs 0–29) | 17 (slots 0–16) | 9-of-17 MuSig2 (RC30) | Active on testnet23 from height 600. |
+| Regtest | 7 (IDs 0–6) | 7 | 4-of-7 MuSig2 | Always active. |
 
 ---
 
@@ -195,7 +199,7 @@ Then recompile and distribute the updated binary.
 | `stoporacle <id>` | Stop oracle price thread |
 | `getoraclepubkey <id>` | Check oracle key and status |
 | `listoracles [active_only]` | List all configured oracles |
-| `sendoracleprice <price>` | Manually send price (testnet only) |
+| `submitoracleprice <price>` | Submit price (regtest / Phase 2 oracle testing only) |
 | `getoracleprice` | Get current oracle price |
 
 ---
@@ -204,15 +208,15 @@ Then recompile and distribute the updated binary.
 
 | Component | File | Key Lines |
 |-----------|------|-----------|
-| `createoraclekey` RPC | `src/rpc/digidollar.cpp` | ~line 2680 |
-| `startoracle` RPC (wallet loading) | `src/rpc/digidollar.cpp` | ~line 2800 |
-| Wallet DB storage | `src/wallet/walletdb.cpp` | WriteOracleKey/ReadOracleKey |
-| CWallet key methods | `src/wallet/wallet.cpp` | StoreOracleKey/GetOracleKey |
-| OracleNodeInfo struct | `src/primitives/oracle.h` | Line 157 |
-| chainparams oracle slots | `src/kernel/chainparams.cpp` | InitializeOracleNodes() |
-| Unit tests | `src/test/oracle_wallet_key_tests.cpp` | 10 tests |
-| Functional test | `test/functional/digidollar_oracle_keygen.py` | End-to-end |
+| `createoraclekey` RPC | `src/rpc/digidollar.cpp` | ~line 4033 |
+| `startoracle` RPC (wallet loading) | `src/rpc/digidollar.cpp` | ~line 4137 |
+| Wallet DB storage | `src/wallet/walletdb.cpp` | `WriteOracleKey` / `ReadOracleKey` |
+| CWallet key methods | `src/wallet/wallet.cpp` | `StoreOracleKey` / `GetOracleKey` |
+| OracleNodeInfo struct | `src/primitives/oracle.h` | OracleNodeInfo |
+| chainparams oracle slots | `src/kernel/chainparams.cpp` | `InitializeOracleNodes()`, `vOraclePublicKeys` |
+| Unit tests | `src/test/oracle_wallet_key_tests.cpp` | Wallet key generation / persistence |
+| Functional test | `test/functional/digidollar_oracle_keygen.py` | End-to-end keygen + start |
 
 ---
 
-*This guide is verified against DigiByte Core RC12 codebase. All RPC commands tested in regtest.*
+*Verified against the DigiByte Core RC30+ codebase on `feature/digidollar-v1`. All RPC commands tested in regtest.*

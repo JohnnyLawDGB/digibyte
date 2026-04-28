@@ -1,7 +1,15 @@
 # DigiDollar Mint Privacy and PQC Hardening Plan
-*Updated: 2026-04-14*  
-*Status: Research only, no code changes*  
+*Updated: 2026-04-28*
+*Status: **Research / proposal only — no code changes.** Document describes a future MINT v2 format that does not exist in the current codebase. Treat all "Mint format v2", "Phase A–E", and "P2MR" content as forward-looking design, not deployed behavior.*
 *Scope: Remove owner pubkey exposure from MINT OP_RETURN without breaking DigiDollar behavior*
+
+> Code reality (RC33 / `feature/digidollar-v1`):
+> - `src/digidollar/txbuilder.cpp:355` still emits `OP_RETURN <"DD"> <txType=1> <ddAmount> <lockHeight> <lockTier> <ownerXOnlyPubKey>` for mints — **the legacy v1 format described below is the only format produced today**.
+> - `src/digidollar/validation.cpp:920+` still extracts the owner x-only pubkey from OP_RETURN and reconstructs the expected collateral Taproot script using the BIP-341 NUMS internal key from `src/digidollar/scripts.h`.
+> - The `sendmanydigidollar` RPC introduced a new TRANSFER-side OP_RETURN layout (`<"DD"> <txType=2> <output_count> <amount1>...<amountN>` — `txbuilder.cpp:743`); this is unrelated to the mint privacy concern but worth noting since it touches OP_RETURN parsing.
+> - No `mint_format_version` field exists on chain. No alternative collateral commitment is implemented.
+>
+> Anyone implementing this proposal must add v2 alongside v1, keep v1 valid forever, and follow the security properties listed in the "Security properties the replacement must preserve" section below.
 
 ---
 

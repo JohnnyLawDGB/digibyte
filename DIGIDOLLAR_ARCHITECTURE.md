@@ -28,7 +28,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 
 🔄 **What's In Progress:**
 - **System Health Functions**: `GetTotalSystemCollateral()` and `GetTotalDDSupply()` now use cached metrics from UTXO scanning
-- **Oracle Price Feeds**: 11 exchange API fetchers, Phase Two/Phase 3 MuSig2 infrastructure ready (9-of-17 mainnet — RC30)
+- **Oracle Price Feeds**: 6 active exchange API fetchers, Phase Two/Phase 3 MuSig2 infrastructure ready (9-of-17 mainnet — RC30)
 - **Redemption System**: Basic version working, ERR redemptions with increased DD burn implemented
 - **Final Polish**: Minor notification improvements
 
@@ -64,7 +64,7 @@ This document explains exactly how everything works, where the code lives, and w
 | **🌐 Network Tracking** | ✅ 100% Working | UTXO scanning provides network-wide visibility - VERIFIED |
 | **📱 User Interface** | ✅ 100% Working | Complete wallet app with 7 tabs (Overview, Receive, Send, Mint, Redeem, Positions, Transactions) |
 | **🛡️ Safety Systems** | 🔄 70% Working | DCA, ERR, Volatility structure complete - needs system health functions |
-| **💰 Price Feeds** | ✅ 85% Working | 11 real exchange API fetchers via libcurl, mock fallback for regtest |
+| **💰 Price Feeds** | ✅ 85% Working | 6 active exchange API fetchers via libcurl, mock fallback for regtest |
 | **🗄️ Data Storage** | ✅ 100% Working | Your DigiDollars and vaults save properly (tested today) |
 
 ### 1.3 Where the Code Lives
@@ -222,7 +222,7 @@ The DigiDollar system is built into DigiByte Core with code organized in these m
 │ • Phase One: 1-of-1 consensus (testnet)     │
 │ • Phase Two: 9-of-17 consensus (RC30)       │
 │ • Median price in micro-USD format          │
-│ • 11 exchange APIs with real libcurl        │
+│ • 6 active exchange APIs (libcurl)          │
 └──────────────────────────────────────────────┘
 ```
 
@@ -579,7 +579,7 @@ flowchart TD
 
 ### 6.1 Oracle System Status Overview
 
-**CURRENT STATUS: Phase One (Testnet) 95% Complete** - The oracle system has a complete framework with 11 real exchange API fetchers via libcurl. Phase One uses 1-of-1 single oracle consensus for testnet. Phase Two / Phase 3 MuSig2 (9-of-17 mainnet, RC30) is planned with infrastructure in place.
+**CURRENT STATUS: Phase One (Testnet) 95% Complete** - The oracle system has a complete framework with 6 active exchange API fetchers via libcurl. Phase One uses 1-of-1 single oracle consensus for testnet. Phase Two / Phase 3 MuSig2 (9-of-17 mainnet, RC30) is planned with infrastructure in place.
 
 **Price Format**: Micro-USD (1,000,000 = $1.00 DGB). Example: 6,500 micro-USD = $0.0065/DGB
 
@@ -608,12 +608,12 @@ flowchart TD
 #### **Phase One Implementation (Testnet):**
 
 1. **Exchange API Integration** (`/src/oracle/exchange.cpp`)
-   - 11 real exchange API fetchers with libcurl: Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari, KuCoin, Crypto.com, Gate.io, HTX (Huobi)
+   - 6 active exchange API fetchers via libcurl: Binance, KuCoin, Gate.io, HTX (Huobi), Crypto.com, CoinGecko (Coinbase, Kraken, CoinMarketCap removed: DGB not tradeable / paid-key incompatible with decentralized design)
    - Real HTTP requests with timeout handling
    - IQR outlier filtering for price aggregation
 
 2. **Price Fetching** (`/src/oracle/node.cpp`)
-   - Fetches from all 11 exchanges in parallel
+   - Fetches from the 6 active exchanges in parallel
    - Calculates median price after filtering outliers
    - Updates every 15 seconds (DigiByte block time)
 
@@ -1257,7 +1257,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 **Important Notes:**
 - All wallet commands are fully functional through the Qt GUI
-- Oracle system uses mock prices for regtest; real exchange APIs exist via libcurl (11 exchanges) when `HAVE_LIBCURL` is defined
+- Oracle system uses mock prices for regtest; real exchange APIs exist via libcurl (6 active exchanges) when `HAVE_LIBCURL` is defined
 - Mock price defaults to $0.0065 per DGB = 6500 micro-USD (can be changed via `setmockoracleprice`)
 - Everything works correctly with mock prices for testing/development
 
@@ -1484,9 +1484,9 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 ### 12.1 External Dependencies
 
 #### **Oracle Price Integration**
-- **Current**: Phase One oracle with 11 real exchange API fetchers (libcurl) + mock fallback ($0.0065/DGB default)
-- **Exchange APIs**: Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari, KuCoin, Crypto.com, Gate.io, HTX
-- **Status**: ✅ Real API implementation exists (conditional on HAVE_LIBCURL), mock fallback for regtest
+- **Current**: 6 active exchange API fetchers (libcurl). `MockOracleManager` is a regtest helper for test scenarios; `OP_CHECKPRICE` no longer falls back to mock prices in production (it consults live oracle consensus via `g_get_oracle_consensus_price` and fails closed when none is available — commit `f77678cd0f`).
+- **Exchange APIs**: Binance, KuCoin, Gate.io, HTX (Huobi), Crypto.com, CoinGecko (Coinbase, Kraken, CoinMarketCap removed: DGB not tradeable / paid-key incompatible with decentralized design)
+- **Status**: ✅ Real API implementation exists (conditional on HAVE_LIBCURL); regtest mock available for scripted tests
 - **Remaining**: Production testing, mainnet oracle key deployment, Phase 2 / Phase 3 MuSig2 (9-of-17 consensus — RC30)
 
 #### **P2P Network Integration**
@@ -1632,7 +1632,7 @@ The recent development activity shows strong momentum in core functionality comp
 #### **1. Oracle Exchange API Integration**
 **Location**: `/src/oracle/exchange.cpp`
 **Status**: Real libcurl implementation exists (conditional on `HAVE_LIBCURL`)
-**Impact**: Medium - 11 exchange fetchers implemented, needs production testing and mainnet validation
+**Impact**: Medium - 6 active exchange fetchers implemented, needs production testing and mainnet validation
 **Note**: The HttpGet function uses real libcurl with persistent CURL handles, timeout handling, and proper error recovery. The earlier characterization as "mock" was incorrect. When `HAVE_LIBCURL` is not defined, falls back to mock oracle for regtest.
 
 #### **2. UTXO Set Scanning for System Health**
@@ -1688,7 +1688,7 @@ The recent development activity shows strong momentum in core functionality comp
 | **Receiving System** | 90% | ✅ Mostly Complete | Core working, minor GUI notifications pending |
 | **Redemption System** | 75% | 🔄 Framework Complete | Basic paths working, advanced validation simplified |
 | **Network Tracking** | 100% | ✅ Production Ready | UTXO scanning fully implemented and tested |
-| **Oracle System** | 85% | ✅ Phase 1 Complete | 11 real exchange APIs, P2P relay, Phase 2 infra ready |
+| **Oracle System** | 85% | ✅ Phase 1 Complete | 6 active exchange APIs, P2P relay, Phase 2 infra ready |
 | **Protection Systems** | 95% | ✅ Production Ready | DCA, ERR, volatility fully implemented |
 | **Validation Framework** | 90% | ✅ Production Ready | Comprehensive consensus rules |
 | **GUI Implementation** | 92% | ✅ Functional | All widgets working, network stats display |
@@ -1873,7 +1873,7 @@ The DigiDollar implementation represents a **sophisticated and well-architected 
 - **Network-wide UTXO tracking - FULLY IMPLEMENTED AND VERIFIED**
 - **Database persistence 100% working - restart/backup/restore tested Dec 10**
 
-**Key Limitation**: Phase One oracle (1-of-1) is complete with 11 real exchange API fetchers via libcurl. Phase Two / Phase 3 MuSig2 (9-of-17 consensus — RC30) infrastructure is ready but not activated. ERR validation is intentionally blocked until oracle consensus is available.
+**Key Limitation**: Phase One oracle (1-of-1) is complete with 6 active exchange API fetchers via libcurl. Phase Two / Phase 3 MuSig2 (9-of-17 consensus — RC30) infrastructure is ready but not activated. ERR validation is intentionally blocked until oracle consensus is available.
 
 ### 19.3 Production Timeline
 
@@ -1918,7 +1918,7 @@ The codebase represents **substantial, functional progress** rather than theoret
 
 #### **Oracle System: Real libcurl + Mock Fallback (Phase One 95% Complete)**
 - **Phase One Implementation**: 1-of-1 single oracle consensus for testnet
-- **Real Exchange APIs**: 11 exchange fetchers via libcurl when HAVE_LIBCURL is defined:
+- **Real Exchange APIs**: 6 active exchange fetchers via libcurl when HAVE_LIBCURL is defined:
   - Binance, Coinbase, Kraken, CoinGecko, Bittrex, Poloniex, Messari
   - KuCoin, Crypto.com, Gate.io, HTX (Huobi)
 - **Mock Fallback**: When libcurl unavailable OR for regtest, uses MockOracleManager
@@ -1929,7 +1929,7 @@ The codebase represents **substantial, functional progress** rather than theoret
 #### **RPC Command Corrections**
 - **Removed non-existent commands**: `getdigidollarsystemhealth` does NOT exist
 - **Correct command**: Only `getdigidollarstats` exists (provides all system health + stats)
-- **Total commands**: 30 (18 registered RPC + 12 wallet-layer commands)
+- **Total commands**: 31 (18 registered RPC + 13 wallet-layer commands)
 - **Oracle commands**: All functional but use 100% mock data
 
 #### **What This Means**
@@ -1963,7 +1963,7 @@ This update adds several **major implemented features** that were missing from t
 - Test: `digidollar_network_tracking.py` proves UTXO scanning works
 
 ### ✅ **RPC Commands Accuracy**
-- 30 RPC commands implemented (18 registered + 12 wallet-layer)
+- 31 RPC commands implemented (18 registered + 13 wallet-layer, including sendmanydigidollar)
 - Oracle commands use mock data, all others fully functional
 - 90% complete (up from 85%)
 
@@ -2175,7 +2175,7 @@ Comprehensive test suite across 102 unit test files + 51 functional test files (
 ### What's In Progress:
 
 🔄 **Phase Two Oracle Consensus**:
-- **Phase One Status**: ✅ Complete - 1-of-1 single oracle with 11 real exchange API fetchers via libcurl
+- **Phase One Status**: ✅ Complete - 1-of-1 single oracle with 6 active exchange API fetchers via libcurl
 - **Phase Two Status**: Infrastructure ready, not activated
 - **Current**: Real prices from exchanges when libcurl available, mock fallback ($0.0065/DGB = 6500 micro-USD)
 - **Remaining**:
@@ -2185,7 +2185,7 @@ Comprehensive test suite across 102 unit test files + 51 functional test files (
 
 ### Bottom Line:
 
-**DigiDollar is 85% complete** with ALL core functionality working. Phase One oracle uses real exchange APIs (11 exchange fetchers via libcurl when available, mock fallback otherwise). The remaining work is:
+**DigiDollar is 85% complete** with ALL core functionality working. Phase One oracle uses real exchange APIs (6 active exchange fetchers via libcurl when available, mock fallback otherwise). The remaining work is:
 - Phase Two 9-of-17 oracle consensus (mainnet — RC30)
 - ERR validation unblock (waiting on oracle consensus)
 - System health uses cached metrics from UTXO scanning (implemented and tested)
@@ -2240,4 +2240,4 @@ Removed all partial redemption and emergency oracle override code:
 
 ---
 
-*This architecture document reflects the DigiDollar implementation state, last validated 2026-04-14 against actual source code. Test counts: 102 unit + 51 functional = 153 total. RPC commands: 30 (18 registered + 12 wallet-layer). Oracle system: 11 real exchange API fetchers via libcurl + mock fallback. P2P oracle relay: implemented. UTXO scanning: production-ready. sendoracleprice RPC: removed (security vulnerability).*
+*This architecture document reflects the DigiDollar implementation state, last validated 2026-04-28 against actual source code on `feature/digidollar-v1`. RPC commands: 31 (18 registered in `RegisterDigiDollarRPCCommands`, 13 in `GetWalletRPCCommands`, including `sendmanydigidollar`). Oracle system: 6 active exchange API fetchers via libcurl (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko). The mock oracle is a regtest helper; `OP_CHECKPRICE` no longer falls back to mock prices in production — it consults live oracle consensus only and fails closed when none is available (commit `f77678cd0f`). P2P oracle relay: implemented. UTXO scanning: production-ready. DigiDollar transfers/redeems are confirmed-only (RC32, commit `0b4959f563`). `sendoracleprice` RPC: removed (security vulnerability — fake-price injection).*

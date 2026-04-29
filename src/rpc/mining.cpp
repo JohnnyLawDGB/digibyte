@@ -726,6 +726,10 @@ static RPCHelpMan getblocktemplate()
                 {
                     {RPCResult::Type::STR_HEX, "key", "values must be in the coinbase (keys may be ignored)"},
                 }},
+                {RPCResult::Type::OBJ, "coinbasetxn", /*optional=*/true, "pre-built coinbase transaction to use when the template carries mandatory coinbase data",
+                {
+                    {RPCResult::Type::STR_HEX, "data", "coinbase transaction encoded in hexadecimal without witness data"},
+                }},
                 {RPCResult::Type::NUM, "coinbasevalue", "maximum allowable input to coinbase transaction, including the generation award and transaction fees (in satoshis)"},
                 {RPCResult::Type::STR, "longpollid", "an id to include with a request to longpoll on an update to this template"},
                 {RPCResult::Type::STR, "target", "The hash target"},
@@ -743,8 +747,10 @@ static RPCHelpMan getblocktemplate()
                 {RPCResult::Type::NUM, "height", "The height of the next block"},
                 {RPCResult::Type::NUM, "pow_algo_id", "The mining algorithm ID (DigiByte multi-algo)"},
                 {RPCResult::Type::STR, "pow_algo", "The mining algorithm name (DigiByte multi-algo)"},
+                {RPCResult::Type::NUM, "odokey", /*optional=*/true, "The Odocrypt key for Odocrypt mining templates"},
                 {RPCResult::Type::STR_HEX, "signet_challenge", /*optional=*/true, "Only on signet"},
                 {RPCResult::Type::STR_HEX, "default_witness_commitment", /*optional=*/true, "a valid witness commitment for the unmodified block template"},
+                {RPCResult::Type::STR_HEX, "default_oracle_commitment", /*optional=*/true, "a valid DigiDollar oracle commitment for the unmodified block template"},
             }},
         },
         RPCExamples{

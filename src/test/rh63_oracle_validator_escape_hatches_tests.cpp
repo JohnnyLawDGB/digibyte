@@ -165,10 +165,12 @@
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/mock_oracle.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
+#include <validation.h>
 
 #include <cstdint>
 #include <vector>
@@ -510,6 +512,40 @@ BOOST_AUTO_TEST_CASE(rh63_06_future_version_silent_acceptance)
         "bytes silently accepted by ValidateBlockOracleData at h=3000.  "
         "Any future Phase-4 version rollout must first close these escape "
         "hatches or old nodes will treat the rollout as a no-op.");
+}
+
+// =====================================================================
+// DD-RH-052 / RH-63-07: Block validation must never fall back to local
+//           oracle state. ValidateBlockOracleData currently allows
+//           missing/malformed oracle blocks through for transition
+//           liveness. That is only consensus-safe if DD transaction
+//           validation does NOT then consult node-local P2P/mock/cache
+//           prices. The block path is identified by nHeight > 0.
+// =====================================================================
+BOOST_AUTO_TEST_CASE(rh63_07_block_path_rejects_local_oracle_fallback)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    const CAmount SEED_CACHE_PRICE = 23456789LL;
+    mgr.UpdatePriceCache(4000, SEED_CACHE_PRICE);
+    BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), SEED_CACHE_PRICE);
+
+    MockOracleManager::GetInstance().Reset();
+    BOOST_REQUIRE_GT(MockOracleManager::GetInstance().GetCurrentPrice(), 0);
+
+    CMutableTransaction dummy_mut;
+    CTransaction dummy_tx(dummy_mut);
+
+    BOOST_CHECK_EQUAL(
+        GetOraclePriceForTransaction(dummy_tx, /*nHeight=*/4001, /*blockOraclePrice=*/0),
+        0);
+    BOOST_CHECK_EQUAL(
+        GetOraclePriceForTransaction(dummy_tx, /*nHeight=*/4001, /*blockOraclePrice=*/987654LL),
+        987654LL);
+
+    BOOST_TEST_MESSAGE("DD-RH-052: block validation path with no extracted "
+        "oracle bundle must return price=0 even when local mock/cache oracle "
+        "state is populated. The DD transaction validator must fail closed "
+        "instead of using nondeterministic local state.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -1884,6 +1884,15 @@ CAmount GetOraclePriceForTransaction(const CTransaction& tx, int nHeight, CAmoun
         return blockOraclePrice;
     }
 
+    // ConnectBlock path: do not fall back to node-local oracle cache or mock
+    // state. Block validation must be deterministic across peers.
+    if (nHeight > 0) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "DigiDollar: No block-extracted oracle price at height %d; refusing local oracle fallback during block validation\n",
+                 nHeight);
+        return 0;
+    }
+
     // Mempool path: Fall back to P2P-gossiped cached price (non-deterministic, advisory only)
     CAmount oracle_price_micro_usd = OracleIntegration::GetCurrentOraclePriceMicroUSD();
 

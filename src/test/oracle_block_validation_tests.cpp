@@ -243,23 +243,27 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_invalid_bundle_signature)
     BlockValidationState state;
     const Consensus::Params& params = Params().GetConsensus();
 
-    // CheckBlock should reject — invalid oracle price in the bundle
+    // CheckBlock is context-free and must not enforce oracle price rules.
     bool accepted = CheckBlock(block, state, params, false, false);
+    BOOST_CHECK_MESSAGE(accepted,
+        "CheckBlock should defer oracle price validation to contextual block checks");
 
-    if (accepted) {
-        // If accepted, the compact format encoded price=0 which ExtractOracleBundle
-        // should have rejected or bundle.IsValid() should have caught
-        BOOST_CHECK_MESSAGE(!accepted,
-            "CheckBlock should reject block with invalid oracle price (0)");
-    } else {
-        // Rejected as expected — verify it's an oracle-related rejection
-        std::string reason = state.GetRejectReason();
-        BOOST_CHECK_MESSAGE(
-            reason == "bad-oracle-bundle" || reason == "bad-oracle-phase2" ||
-            reason == "bad-oracle-consensus" || reason == "bad-oracle-median",
-            "Expected oracle rejection reason, got: " + reason
-        );
-    }
+    CBlockIndex prev_index;
+    prev_index.nHeight = 699;
+    prev_index.nTime = block.nTime - 15;
+
+    BlockValidationState contextual_state;
+    bool contextual_accepted = OracleDataValidator::ValidateBlockOracleData(
+        block, &prev_index, params, contextual_state);
+
+    BOOST_CHECK_MESSAGE(!contextual_accepted,
+        "Contextual oracle validation should reject block with invalid oracle price (0)");
+    std::string reason = contextual_state.GetRejectReason();
+    BOOST_CHECK_MESSAGE(
+        reason == "bad-oracle-bundle" || reason == "bad-oracle-phase2" ||
+        reason == "bad-oracle-consensus" || reason == "bad-oracle-median",
+        "Expected oracle rejection reason, got: " + reason
+    );
 }
 
 /**

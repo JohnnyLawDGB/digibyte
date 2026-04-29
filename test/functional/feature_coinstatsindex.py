@@ -47,8 +47,8 @@ class CoinStatsIndexTest(DigiByteTestFramework):
         self.supports_cli = False
         self.rpc_timeout = 900  # Needs extra time for reindexing under parallel load
         self.extra_args = [
-            ["-dandelion=0", "-minrelaytxfee=0.00000001"],
-            ["-coinstatsindex", "-dandelion=0", "-minrelaytxfee=0.00000001"]
+            ["-dandelion=0", "-minrelaytxfee=0.00000001", "-rpcbind=127.0.0.1"],
+            ["-coinstatsindex", "-dandelion=0", "-minrelaytxfee=0.00000001", "-rpcbind=127.0.0.1"]
         ]
 
     def _port_available(self, port):

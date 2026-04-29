@@ -134,8 +134,8 @@ class DigiDollarMintTest(DigiByteTestFramework):
         test_cases = [
             {"amount": Decimal('100.00'), "tier": 4},   # tier 4 (~365 days)
             {"amount": Decimal('500.50'), "tier": 3},   # tier 3 (~180 days)
-            {"amount": Decimal('1234.56'), "tier": 2},  # tier 2 (~90 days)
-            {"amount": Decimal('10000.00'), "tier": 1}  # tier 1 (~30 days)
+            {"amount": Decimal('750.25'), "tier": 2},   # tier 2 (~90 days)
+            {"amount": Decimal('999.99'), "tier": 1}    # tier 1 (~30 days)
         ]
 
         for case in test_cases:
@@ -256,8 +256,8 @@ class DigiDollarMintTest(DigiByteTestFramework):
         except Exception as e:
             self.log.info(f"Insufficient balance validation: {e}")
 
-        # Test valid amounts at boundaries
-        valid_amounts = [10000, 10000000]  # Min and max valid amounts in cents ($100.00, $100,000.00)
+        # Test valid regtest amounts at boundaries
+        valid_amounts = [1, 100000]  # Min and max valid regtest amounts in cents ($0.01, $1000.00)
 
         for amount in valid_amounts:
             # Should not raise an error, just calculate requirements
@@ -272,7 +272,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
         precise_amounts = [
             10001,    # $100.01
             99999,    # $999.99
-            123456    # $1234.56 (cents don't support sub-cent precision)
+            75025     # $750.25 (cents don't support sub-cent precision)
         ]
 
         for amount in precise_amounts:

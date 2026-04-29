@@ -333,6 +333,12 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
 
     // WILL FAIL: Oracle bundle not added by CreateNewBlock()
     BOOST_CHECK(found_oracle_opreturn);
+
+    // Regression: CreateNewBlock appends the oracle output after generating the
+    // witness commitment. The returned template must already have the final
+    // merkle root; miners/GBT consumers should not need IncrementExtraNonce()
+    // to repair it.
+    BOOST_CHECK(block.hashMerkleRoot == BlockMerkleRoot(block));
 }
 
 /**
@@ -371,9 +377,9 @@ BOOST_AUTO_TEST_CASE(create_new_block_no_oracle_if_unavailable)
     // Coinbase should have at least miner payout
     BOOST_CHECK_GE(coinbase.vout.size(), 1);
 
-    // Compute and verify merkle root (CreateNewBlock doesn't set it)
-    block.hashMerkleRoot = BlockMerkleRoot(block);
+    // Verify CreateNewBlock returned a populated merkle root.
     BOOST_CHECK(!block.hashMerkleRoot.IsNull());
+    BOOST_CHECK(block.hashMerkleRoot == BlockMerkleRoot(block));
 
     // Test should pass even without oracle bundle (graceful degradation)
     BOOST_CHECK(true);

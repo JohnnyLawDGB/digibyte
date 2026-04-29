@@ -52,22 +52,21 @@ BOOST_AUTO_TEST_CASE(rh11_supply_overflow_no_protection)
 
     DigiDollar::SystemHealthMonitor::ResetMetrics();
 
-    // After fix [RH-11]: OnMintConnected caps at MAX_DIGIDOLLAR to prevent overflow
     CAmount bigMint = std::numeric_limits<CAmount>::max() / 2;
     DigiDollar::SystemHealthMonitor::OnMintConnected(bigMint, 100 * COIN);
 
     auto metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
-    // Should be capped at MAX_DIGIDOLLAR, not bigMint
-    BOOST_CHECK_EQUAL(metrics.totalDDSupply, MAX_DIGIDOLLAR);
+    BOOST_CHECK_EQUAL(metrics.totalDDSupply, bigMint);
 
-    // Second mint should still be capped
+    // Second mint still fits in CAmount and must be accounted exactly.
     DigiDollar::SystemHealthMonitor::OnMintConnected(bigMint, 100 * COIN);
     metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
-    BOOST_CHECK_EQUAL(metrics.totalDDSupply, MAX_DIGIDOLLAR);
+    BOOST_CHECK_EQUAL(metrics.totalDDSupply, bigMint * 2);
 
-    // Verify no overflow
-    BOOST_CHECK(metrics.totalDDSupply > 0);
-    BOOST_CHECK(metrics.totalDDSupply <= MAX_DIGIDOLLAR);
+    // A true int64 overflow attempt is clamped at CAmount max.
+    DigiDollar::SystemHealthMonitor::OnMintConnected(2, 100 * COIN);
+    metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    BOOST_CHECK_EQUAL(metrics.totalDDSupply, std::numeric_limits<CAmount>::max());
 
     DigiDollar::SystemHealthMonitor::ResetMetrics();
 }

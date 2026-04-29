@@ -2511,16 +2511,12 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06a_dd_marker_version_check)
     }
 }
 
-// T1-06b: DD opcodes behave as NOPs when SCRIPT_VERIFY_DIGIDOLLAR is NOT set
-BOOST_AUTO_TEST_CASE(redteam_T1_06b_dd_opcodes_nop_before_activation)
+// T1-06b: DD opcode bytes are only soft-fork-safe in Tapscript
+BOOST_AUTO_TEST_CASE(redteam_T1_06b_dd_opcodes_tapscript_only)
 {
-    // ATTACK: Before activation, can DD opcodes be used in scripts to create
-    // unexpected behavior?
-
-    // Create a simple script that uses OP_DIGIDOLLAR with an amount push
-    // Script: OP_DIGIDOLLAR <amount=1000> OP_DROP OP_TRUE
-    // Pre-activation: OP_DIGIDOLLAR is NOP, <1000> is pushed to stack, OP_DROP removes it, OP_TRUE succeeds
-    // Post-activation: OP_DIGIDOLLAR consumes <1000>, pushes true, OP_DROP removes it, OP_TRUE succeeds
+    // 0xbb..0xbf are BIP342 OP_SUCCESSx bytes, not legacy OP_NOP slots.
+    // Executed legacy/witness-v0 scripts must keep rejecting them as bad opcodes
+    // so DigiDollar activation does not loosen old-node consensus.
 
     CScript scriptPubKey;
     scriptPubKey << OP_DIGIDOLLAR;
@@ -2528,140 +2524,99 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06b_dd_opcodes_nop_before_activation)
     scriptPubKey << OP_DROP;
     scriptPubKey << OP_TRUE;
 
-    CScript scriptSig;  // Empty — not needed for this script structure
-
-    // Without SCRIPT_VERIFY_DIGIDOLLAR (pre-activation behavior):
-    // OP_DIGIDOLLAR = NOP, <1000> pushed, OP_DROP removes 1000, OP_TRUE → stack has [true]
     {
-        unsigned int flags = SCRIPT_VERIFY_P2SH;  // No DD flag
+        unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
-        // Use direct EvalScript since this isn't a real spending scenario
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result,
-            "Pre-activation: OP_DIGIDOLLAR as NOP, script should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
-            "Pre-activation: Stack should have [true] at top");
+        BOOST_CHECK_MESSAGE(!result,
+            "Legacy script execution must reject DD opcode bytes, not treat them as NOPs");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 
-    // With SCRIPT_VERIFY_DIGIDOLLAR (post-activation behavior):
-    // OP_DIGIDOLLAR reads <1000>, pushes true (1000 > 0), OP_DROP removes true, OP_TRUE → stack has [true]
+    // Once active in Tapscript, OP_DIGIDOLLAR reads the following amount push,
+    // pushes true, OP_DROP removes it, and OP_TRUE leaves a true stack item.
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
-        bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::TAPSCRIPT, &err);
         BOOST_CHECK_MESSAGE(result,
-            "Post-activation: OP_DIGIDOLLAR processes amount, script should succeed");
+            "Post-activation Tapscript: OP_DIGIDOLLAR processes amount and script succeeds");
         BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
-            "Post-activation: Stack should have [true] at top");
+            "Post-activation Tapscript: Stack should have [true] at top");
     }
 }
 
-// T1-06c: OP_DDVERIFY as NOP doesn't pop stack (consensus safety)
-BOOST_AUTO_TEST_CASE(redteam_T1_06c_ddverify_nop_stack_safety)
+// T1-06c: OP_DDVERIFY is Tapscript-only
+BOOST_AUTO_TEST_CASE(redteam_T1_06c_ddverify_tapscript_only)
 {
-    // ATTACK: OP_DDVERIFY pops and verifies top of stack when active.
-    // As NOP, it must NOT touch the stack.
-    // If it incorrectly popped pre-activation, scripts would break at activation.
-
-    // Script: OP_TRUE OP_DDVERIFY
-    // Pre-activation: OP_TRUE pushes 1, OP_DDVERIFY is NOP → stack has [1]
-    // Post-activation: OP_TRUE pushes 1, OP_DDVERIFY pops 1 (verifies true) → stack is empty
-
     CScript script;
-    script << OP_TRUE;
-    script << OP_DDVERIFY;
+    script << OP_TRUE << OP_DDVERIFY;
 
-    // Pre-activation: stack should still have the true value
     {
-        unsigned int flags = SCRIPT_VERIFY_P2SH;  // No DD flag
+        unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_DDVERIFY as NOP should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 1,
-            "CRITICAL: Pre-activation OP_DDVERIFY must NOT pop stack (stack size should be 1, got " +
-            std::to_string(stack.size()) + ")");
+        BOOST_CHECK_MESSAGE(!result, "Legacy OP_DDVERIFY byte must be SCRIPT_ERR_BAD_OPCODE");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 
-    // Post-activation: OP_DDVERIFY consumes the true, stack should be empty
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
-        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Post-activation: OP_DDVERIFY should verify true and succeed");
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::TAPSCRIPT, &err);
+        BOOST_CHECK_MESSAGE(result, "Post-activation Tapscript: OP_DDVERIFY should verify true and succeed");
         BOOST_CHECK_MESSAGE(stack.size() == 0,
-            "Post-activation: OP_DDVERIFY should pop the verified value (stack size should be 0, got " +
+            "Post-activation Tapscript: OP_DDVERIFY should pop the verified value (stack size should be 0, got " +
             std::to_string(stack.size()) + ")");
     }
 }
 
-// T1-06d: OP_CHECKCOLLATERAL NOP doesn't touch stack (consensus critical)
-BOOST_AUTO_TEST_CASE(redteam_T1_06d_checkcollateral_nop_stack_safety)
+// T1-06d: OP_CHECKCOLLATERAL is Tapscript-only
+BOOST_AUTO_TEST_CASE(redteam_T1_06d_checkcollateral_tapscript_only)
 {
-    // ATTACK: OP_CHECKCOLLATERAL pops 2 items when active.
-    // As NOP, it MUST NOT touch the stack — the comment in the code says so.
-    // If it popped pre-activation, it would be a consensus split.
-
-    // Script: <ratio=500> <threshold=200> OP_CHECKCOLLATERAL
-    // Pre-activation: both numbers pushed, OP_CHECKCOLLATERAL NOP → stack has [500, 200]
-    // Post-activation: both popped, 500 >= 200 → true → stack has [true]
-
     CScript script;
     script << CScriptNum(500);
     script << CScriptNum(200);
     script << OP_CHECKCOLLATERAL;
 
-    // Pre-activation: stack should have both values
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_CHECKCOLLATERAL NOP should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 2,
-            "CRITICAL: Pre-activation OP_CHECKCOLLATERAL must NOT touch stack (stack size should be 2, got " +
-            std::to_string(stack.size()) + ")");
+        BOOST_CHECK_MESSAGE(!result, "Legacy OP_CHECKCOLLATERAL byte must be SCRIPT_ERR_BAD_OPCODE");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 
-    // Post-activation: stack should have [true]
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
-        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Post-activation: OP_CHECKCOLLATERAL(500>=200) should succeed");
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::TAPSCRIPT, &err);
+        BOOST_CHECK_MESSAGE(result, "Post-activation Tapscript: OP_CHECKCOLLATERAL(500>=200) should succeed");
         BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
-            "Post-activation: OP_CHECKCOLLATERAL should push true (500 >= 200)");
+            "Post-activation Tapscript: OP_CHECKCOLLATERAL should push true (500 >= 200)");
     }
 }
 
-// T1-06e: OP_CHECKPRICE NOP doesn't touch stack
-BOOST_AUTO_TEST_CASE(redteam_T1_06e_checkprice_nop_stack_safety)
+// T1-06e: OP_CHECKPRICE is Tapscript-only
+BOOST_AUTO_TEST_CASE(redteam_T1_06e_checkprice_tapscript_only)
 {
-    // ATTACK: OP_CHECKPRICE pops 1 item when active.
-    // As NOP, it must NOT touch the stack.
-
-    // Script: <price=42000> OP_CHECKPRICE
-    // Pre-activation: number pushed, OP_CHECKPRICE NOP → stack has [42000]
-    // Post-activation: number popped, compared to mock oracle → stack has [true/false]
-
     CScript script;
     script << CScriptNum(42000);
     script << OP_CHECKPRICE;
 
-    // Pre-activation: stack should still have the price value
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_CHECKPRICE NOP should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 1,
-            "CRITICAL: Pre-activation OP_CHECKPRICE must NOT pop stack (stack size should be 1, got " +
-            std::to_string(stack.size()) + ")");
+        BOOST_CHECK_MESSAGE(!result, "Legacy OP_CHECKPRICE byte must be SCRIPT_ERR_BAD_OPCODE");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 }
 
@@ -18998,7 +18953,7 @@ BOOST_AUTO_TEST_CASE(redteam_t10_05c_script_flags_at_activation_boundary)
     // Block 600 (pprev=599): DeploymentActiveAfter(599) = ACTIVE → DD flag set
     //
     // This means:
-    // - Block 599: DD opcodes are NOPs (soft-fork compat)
+    // - Block 599: DD opcodes remain Tapscript OP_SUCCESSx (soft-fork compat)
     // - Block 600: DD opcodes enforced
     //
     // Mempool PolicyScriptChecks uses STANDARD_SCRIPT_VERIFY_FLAGS which
@@ -19018,7 +18973,7 @@ BOOST_AUTO_TEST_CASE(redteam_t10_05c_script_flags_at_activation_boundary)
 
     BOOST_TEST_MESSAGE("  SCRIPT_VERIFY_DIGIDOLLAR in STANDARD_SCRIPT_VERIFY_FLAGS ✅");
     BOOST_TEST_MESSAGE("  SCRIPT_VERIFY_DIGIDOLLAR NOT in MANDATORY_SCRIPT_VERIFY_FLAGS ✅");
-    BOOST_TEST_MESSAGE("  Block 599: DD opcodes are NOPs (standard soft-fork behavior) ✅");
+    BOOST_TEST_MESSAGE("  Block 599: DD opcodes remain Tapscript OP_SUCCESSx (old-node behavior) ✅");
     BOOST_TEST_MESSAGE("  Block 600: DD opcodes enforced (activation complete) ✅");
     BOOST_TEST_MESSAGE("  Mempool flag mismatch at tip=599 is benign (no DD UTXOs to spend) ✅");
 }

@@ -235,6 +235,36 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_basic)
     BOOST_CHECK(::GetDigiDollarTxType(CTransaction(result.tx)) == ::DD_TX_TRANSFER);
 }
 
+BOOST_AUTO_TEST_CASE(transfer_rejects_underfunded_fee_inputs)
+{
+    const CChainParams& params = Params();
+    int height = 1000;
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
+
+    TestTransferTxBuilder builder(params, height, price);
+
+    CKey recipient = CreateTestKey();
+    CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(recipient.GetPubKey()))};
+    std::string addr = DigiDollar::EncodeDigiDollarAddress(dest, params);
+
+    uint256 feeHash;
+    feeHash.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+
+    TxBuilderTransferParams transferParams;
+    transferParams.recipients = {{addr, 5000}};
+    transferParams.feeRate = 35000000;
+    transferParams.ddUtxos = CreateTestUTXOs(1);
+    transferParams.ddAmounts = {5000};
+    transferParams.feeUtxos = {COutPoint(feeHash, 0)};
+    transferParams.feeAmounts = {1};
+    transferParams.spenderKey = CreateTestKey();
+
+    TxBuilderResult result = builder.BuildTransferTransaction(transferParams);
+
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(result.error.find("Insufficient DGB fee input") != std::string::npos);
+}
+
 BOOST_AUTO_TEST_CASE(transfer_transaction_invalid_address)
 {
     const CChainParams& params = Params();

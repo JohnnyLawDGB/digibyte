@@ -199,16 +199,9 @@ BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_to_oracle_script)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(MakeCoinbaseTx(script, 101)), bundle);
 
-    // The extra push data gets concatenated into the data buffer during extraction.
-    // V01 expects exactly 18 bytes. Extra data means data.size() > 18.
-    // But ExtractOracleBundle for V01 only checks data.size() < 18, not ==18.
     BOOST_TEST_MESSAGE("  Extracted: " << extracted);
-    if (extracted) {
-        BOOST_TEST_MESSAGE("  >>> FINDING: V01 extraction accepts trailing data (no exact size check)");
-        BOOST_TEST_MESSAGE("  >>> Extra bytes after V01 oracle data are silently ignored");
-        BOOST_TEST_MESSAGE("  >>> Malleability risk: same oracle data can have different serializations");
-        BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, price);
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "V01 extraction must reject trailing data so the same oracle payload has one canonical serialization");
 }
 
 BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_v02)
@@ -241,13 +234,9 @@ BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_v02)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(MakeCoinbaseTx(script, 101)), bundle);
 
-    // V02 calculates expected_size = 1+1+8+8+N*65 and checks data.size() < expected_size
-    // But does NOT check data.size() > expected_size — trailing bytes allowed
     BOOST_TEST_MESSAGE("  V02 extraction with trailing data: " << extracted);
-    if (extracted) {
-        BOOST_TEST_MESSAGE("  >>> FINDING: V02 extraction accepts trailing data beyond expected_size");
-        BOOST_TEST_MESSAGE("  >>> Script malleability: miners can embed hidden data after oracle payload");
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "V02 extraction must reject trailing data beyond expected_size");
 }
 
 BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_v03)
@@ -325,15 +314,13 @@ BOOST_AUTO_TEST_CASE(attack2_two_oracle_op_returns)
     BOOST_TEST_MESSAGE("  Validation result: " << valid);
     BOOST_TEST_MESSAGE("  State: " << state.ToString());
 
-    // ExtractOracleBundle returns the FIRST match — which price wins?
+    // ExtractOracleBundle should also reject ambiguous oracle outputs rather than
+    // returning the first match and silently ignoring the second.
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(*block.vtx[0], bundle);
-    if (extracted) {
-        BOOST_TEST_MESSAGE("  Extracted price: " << bundle.median_price_micro_usd);
-        BOOST_TEST_MESSAGE("  >>> ExtractOracleBundle returns first OP_ORACLE match");
-        BOOST_TEST_MESSAGE("  >>> Second oracle output (price=99999) is silently ignored");
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "ExtractOracleBundle must reject transactions with multiple OP_ORACLE outputs");
 
     // The block validation should reject this
     if (!valid) {

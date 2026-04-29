@@ -205,12 +205,14 @@ BOOST_AUTO_TEST_CASE(rh16_clamp_to_zero_hides_double_disconnect)
 
 BOOST_AUTO_TEST_CASE(rh16_overflow_after_reorg_reconnect)
 {
-    // ATTACK: Get supply near MAX_DIGIDOLLAR, disconnect, then reconnect
-    // with a different (larger) amount. Does overflow protection still work?
+    // ATTACK: Get supply near MAX_DIGIDOLLAR, connect a normal valid-size mint,
+    // then reorg it out. The incremental cache must return to the exact
+    // pre-connect value even when the connected mint crosses the local cap.
     DigiDollar::SystemHealthMonitor::ResetMetrics();
 
     const CAmount nearMax = MAX_DIGIDOLLAR - 100;
     const CAmount smallMint = 50;
+    const CAmount validMint = 10000000; // Default maxMintAmount ($100k in cents)
 
     // Set supply near max
     DigiDollar::SystemHealthMonitor::OnMintConnected(nearMax, 1000 * COIN);
@@ -222,29 +224,19 @@ BOOST_AUTO_TEST_CASE(rh16_overflow_after_reorg_reconnect)
     metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
     BOOST_CHECK_EQUAL(metrics.totalDDSupply, nearMax + smallMint);
 
-    // Try to overflow with huge mint
-    const CAmount hugeMint = MAX_DIGIDOLLAR;
-    DigiDollar::SystemHealthMonitor::OnMintConnected(hugeMint, 1000 * COIN);
-    metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
-    // Should be capped at MAX_DIGIDOLLAR, not overflow
-    BOOST_CHECK_EQUAL(metrics.totalDDSupply, MAX_DIGIDOLLAR);
+    const CAmount beforeReorg = metrics.totalDDSupply;
 
-    // Now disconnect the huge mint — since it was capped, how much do we subtract?
-    // VULNERABILITY: We disconnect hugeMint amount, but only MAX_DIGIDOLLAR was recorded.
-    // After disconnect: MAX_DIGIDOLLAR - hugeMint could be negative → clamped to 0
-    // But the actual state should be nearMax + smallMint.
-    DigiDollar::SystemHealthMonitor::OnMintDisconnected(hugeMint, 1000 * COIN);
+    // A valid-size mint crossing the cap must still be reversible. Current code
+    // caps the connected total to MAX_DIGIDOLLAR, then subtracts the full mint
+    // on disconnect, losing valid pre-existing supply.
+    DigiDollar::SystemHealthMonitor::OnMintConnected(validMint, 1000 * COIN);
+    DigiDollar::SystemHealthMonitor::OnMintDisconnected(validMint, 1000 * COIN);
     metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
 
-    // EXPLOIT CONFIRMED: Supply is now 0 (clamped) instead of nearMax + smallMint
-    // The overflow cap during connect + raw subtraction during disconnect = supply loss
-    BOOST_CHECK_MESSAGE(metrics.totalDDSupply == 0,
-        "Expected supply drift to 0 due to cap+disconnect asymmetry. Got: " +
-        std::to_string(metrics.totalDDSupply));
-
-    // Document the expected correct value for when this is fixed:
-    // BOOST_CHECK_EQUAL(metrics.totalDDSupply, nearMax + smallMint);
-    // ^^^ This is what it SHOULD be after fix
+    BOOST_CHECK_MESSAGE(metrics.totalDDSupply == beforeReorg,
+        "Reorg supply drift after valid mint crossing cap: got " +
+        std::to_string(metrics.totalDDSupply) + " expected " +
+        std::to_string(beforeReorg));
 }
 
 // =============================================================================

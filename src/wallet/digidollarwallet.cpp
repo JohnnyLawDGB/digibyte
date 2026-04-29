@@ -3716,9 +3716,14 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
                 continue;
             }
 
+            const DigiDollarTxType versionTxType = GetDigiDollarTxType(*wtx.tx);
+            if (versionTxType == DD_TX_NONE) {
+                continue;
+            }
+
             // First, find the OP_RETURN output and extract DD amounts
             std::vector<CAmount> ddAmounts;
-            int ddTxType = 0;  // 0=none, 1=MINT, 2=TRANSFER
+            int ddTxType = static_cast<int>(versionTxType);  // 1=MINT, 2=TRANSFER, 3=REDEEM
 
             for (size_t i = 0; i < wtx.tx->vout.size(); ++i) {
                 const CScript& script = wtx.tx->vout[i].scriptPubKey;
@@ -3739,7 +3744,10 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
                     if (!script.GetOp(pc, opcode, data)) continue;
                     try {
                         CScriptNum txTypeNum(data, false);
-                        ddTxType = txTypeNum.getint();
+                        if (txTypeNum.getint() != ddTxType) {
+                            ddAmounts.clear();
+                            break;
+                        }
                     } catch (const scriptnum_error&) {
                         continue;
                     }
@@ -4030,10 +4038,15 @@ bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uin
             }
         }
 
+        const DigiDollarTxType versionTxType = GetDigiDollarTxType(tx);
+        if (versionTxType == DD_TX_NONE) {
+            return changed;
+        }
+
         // Step 2: Check if this transaction CREATES DD outputs we own
         // First find OP_RETURN with DD marker and parse amounts
         std::vector<CAmount> ddAmounts;
-        int ddTxType = 0;
+        int ddTxType = static_cast<int>(versionTxType);
 
         for (size_t i = 0; i < tx.vout.size(); ++i) {
             const CScript& script = tx.vout[i].scriptPubKey;
@@ -4049,7 +4062,10 @@ bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uin
                 if (!script.GetOp(pc, opcode, data)) continue;
                 try {
                     CScriptNum txTypeNum(data, false);
-                    ddTxType = txTypeNum.getint();
+                    if (txTypeNum.getint() != ddTxType) {
+                        ddAmounts.clear();
+                        break;
+                    }
                 } catch (const scriptnum_error&) {
                     continue;
                 }
@@ -6794,11 +6810,14 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
         LogPrintf("DigiDollar: ProcessIncomingTransaction called but no wallet pointer\n");
         return;
     }
+    if (!tx || GetDigiDollarTxType(*tx) == DD_TX_NONE) {
+        return;
+    }
 
     try {
         // First, extract DD amounts from OP_RETURN (same logic as DetectIncomingDDOutputs)
         std::vector<CAmount> dd_amounts;
-        int txType = 0;
+        int txType = static_cast<int>(GetDigiDollarTxType(*tx));
 
         for (const auto& vout : tx->vout) {
             if (vout.scriptPubKey.size() > 0 && vout.scriptPubKey[0] == OP_RETURN) {
@@ -6816,7 +6835,7 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
                 // Get transaction type
                 if (!vout.scriptPubKey.GetOp(pc, opcode, data)) break;
                 CScriptNum txTypeNum(data, true);
-                txType = txTypeNum.getint();
+                if (txTypeNum.getint() != txType) break;
 
                 // Extract DD amounts
                 while (vout.scriptPubKey.GetOp(pc, opcode, data)) {
@@ -6943,6 +6962,12 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
     LogPrint(BCLog::WALLETDB, "DigiDollar: DetectIncomingDDOutputs - Checking transaction %s\n",
              tx->GetHash().ToString());
 
+    const DigiDollarTxType versionTxType = GetDigiDollarTxType(*tx);
+    if (versionTxType == DD_TX_NONE) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: DetectIncomingDDOutputs - not a DigiDollar versioned transaction\n");
+        return false;
+    }
+
     // First, extract DD amounts from OP_RETURN
     // Format: OP_RETURN <"DD"> <txType> <amount1> <amount2> ...
     std::vector<CAmount> dd_amounts;
@@ -6964,6 +6989,7 @@ bool DigiDollarWallet::DetectIncomingDDOutputs(const CTransactionRef& tx,
             if (!txout.scriptPubKey.GetOp(pc, opcode, data)) continue;
             CScriptNum txType(data, true);
             int type = txType.getint();
+            if (type != static_cast<int>(versionTxType)) continue;
             if (type != 2 && type != 3) continue;  // TRANSFER (2) or REDEEM (3) transactions
 
             // Extract DD amounts
@@ -7132,6 +7158,10 @@ bool DigiDollarWallet::ProcessIncomingDDTransaction(const CTransactionRef& tx) {
     if (!m_wallet) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessIncomingDDTransaction - no wallet pointer\n");
         return false;
+    }
+    if (GetDigiDollarTxType(*tx) == DD_TX_NONE) {
+        LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessIncomingDDTransaction - not a DigiDollar versioned transaction\n");
+        return true;
     }
 
     LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessIncomingDDTransaction - Processing tx %s\n",

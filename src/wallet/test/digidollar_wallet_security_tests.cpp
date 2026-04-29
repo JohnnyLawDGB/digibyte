@@ -342,6 +342,66 @@ BOOST_AUTO_TEST_CASE(rh08_03b_foreign_mint_with_wallet_dgb_output_not_claimed)
         "without owning the DD spending key");
 }
 
+BOOST_AUTO_TEST_CASE(rh08_03c_non_dd_opreturn_cannot_credit_dd_balance)
+{
+    // ATTACK: A normal, non-DigiDollar transaction pays a zero-value P2TR
+    // output to a wallet DD address and includes DD-looking OP_RETURN metadata.
+    // blockConnected calls ProcessTransactionForDD() for every transaction, so
+    // wallet DD accounting must require the DigiDollar version marker before
+    // crediting any created DD output.
+
+    DigiDollarWallet dd_wallet(&m_wallet);
+
+    CKey address_key;
+    address_key.MakeNewKey(true);
+    XOnlyPubKey output_key(address_key.GetPubKey());
+    dd_wallet.StoreAddressKey(output_key, address_key);
+
+    CTxDestination dd_like_dest{WitnessV1Taproot(output_key)};
+    CScript dd_like_script = GetScriptForDestination(dd_like_dest);
+
+    const CAmount fake_dd_amount = 50000;
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 2; // Intentionally not a DigiDollar version marker.
+    mtx.vin.resize(1);
+    uint256 prev_txid;
+    GetRandBytes(prev_txid);
+    mtx.vin[0].prevout = COutPoint(prev_txid, 0);
+    mtx.vout.push_back(CTxOut(0, dd_like_script));
+    mtx.vout.push_back(CTxOut(0, CScript() << OP_RETURN
+                                           << std::vector<unsigned char>{'D', 'D'}
+                                           << std::vector<unsigned char>{2}
+                                           << CScriptNum(fake_dd_amount)));
+
+    CTransactionRef tx = MakeTransactionRef(std::move(mtx));
+    const COutPoint fake_dd_outpoint(tx->GetHash(), 0);
+
+    BOOST_CHECK(!IsDigiDollarTransaction(*tx));
+
+    BOOST_CHECK_MESSAGE(!dd_wallet.ProcessTransactionForDD(*tx, tx->GetHash()),
+        "SECURITY BUG [DD-RH-073]: non-DD tx with DD-looking OP_RETURN was "
+        "treated as a DD credit during block processing");
+    BOOST_CHECK_MESSAGE(!dd_wallet.HasDDUTXO(fake_dd_outpoint),
+        "SECURITY BUG [DD-RH-073]: non-DD tx created a spendable DD wallet UTXO");
+
+    dd_wallet.RemoveDDUTXO(fake_dd_outpoint);
+
+    {
+        LOCK(m_wallet.cs_wallet);
+        uint256 block_hash;
+        GetRandBytes(block_hash);
+        m_wallet.mapWallet.emplace(std::piecewise_construct,
+                                   std::forward_as_tuple(tx->GetHash()),
+                                   std::forward_as_tuple(tx, TxStateConfirmed{block_hash, 1, 0}));
+    }
+
+    BOOST_CHECK_EQUAL(dd_wallet.ScanForDDUTXOs(), 0u);
+    BOOST_CHECK_MESSAGE(!dd_wallet.HasDDUTXO(fake_dd_outpoint),
+        "SECURITY BUG [DD-RH-073]: wallet startup scan credited a non-DD tx "
+        "with DD-looking OP_RETURN metadata");
+}
+
 // =============================================================================
 // RH-08-05: Race Condition — Concurrent Access to DigiDollarWallet
 // =============================================================================

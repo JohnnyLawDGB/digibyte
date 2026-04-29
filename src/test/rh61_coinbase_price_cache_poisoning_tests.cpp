@@ -144,12 +144,16 @@
 #include <boost/test/unit_test.hpp>
 
 #include <chainparams.h>
+#include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <digidollar/digidollar.h>
 #include <oracle/bundle_manager.h>
+#include <pow.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
 #include <util/time.h>
+#include <validation.h>
 
 #include <cstdint>
 #include <vector>
@@ -209,6 +213,14 @@ CMutableTransaction BuildMaliciousCoinbase(uint64_t attacker_price_micro_usd,
     cb.vout.push_back(CTxOut(0, oracle_output));
 
     return cb;
+}
+
+CScript BuildCompactOracleScript(uint64_t attacker_price_micro_usd,
+                                 int64_t ts,
+                                 uint8_t oracle_id = 0)
+{
+    return BuildMaliciousCoinbase(attacker_price_micro_usd, ts, oracle_id)
+        .vout[1].scriptPubKey;
 }
 
 } // anonymous namespace
@@ -460,6 +472,73 @@ BOOST_AUTO_TEST_CASE(rh61_07_document_mainnet_validator_shortcircuit)
         "`return true` at src/oracle/bundle_manager.cpp:2253 for all "
         "non-TESTNET/REGTEST chains. No gate between miner and "
         "OracleBundleManager::cached_price.");
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(rh66_startup_oracle_price_loading_tests, TestChain100Setup)
+
+BOOST_AUTO_TEST_CASE(load_prices_from_chain_skips_recent_pre_activation_oracle_outputs)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.Clear();
+    mgr.SetEnabled(false);
+
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const int32_t activation_height = consensus.nDDActivationHeight;
+    BOOST_REQUIRE_EQUAL(activation_height, 650);
+
+    const int32_t poisoned_height = activation_height - 5;
+    const int32_t final_height = activation_height + 10;
+    const uint64_t attacker_price = 42424242ULL;
+
+    while (m_node.chainman->ActiveChain().Height() < poisoned_height - 1) {
+        mineBlocks(1);
+    }
+
+    CScript coinbase_script = CScript() << OP_TRUE;
+    CBlock block = CreateBlock({}, coinbase_script, m_node.chainman->ActiveChainstate());
+
+    CMutableTransaction coinbase(*block.vtx[0]);
+    coinbase.vout.push_back(CTxOut(0, BuildCompactOracleScript(attacker_price, GetTime())));
+    block.vtx[0] = MakeTransactionRef(std::move(coinbase));
+    COracleBundle inserted_bundle;
+    BOOST_REQUIRE(mgr.ExtractOracleBundle(*block.vtx[0], inserted_bundle));
+    BOOST_REQUIRE_EQUAL(inserted_bundle.median_price_micro_usd, attacker_price);
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+    block.nNonce = 0;
+    while (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, m_node.chainman->GetConsensus())) {
+        ++block.nNonce;
+    }
+
+    bool new_block = false;
+    BOOST_REQUIRE(m_node.chainman->ProcessNewBlock(std::make_shared<const CBlock>(block),
+                                                   /*force_processing=*/true,
+                                                   /*min_pow_checked=*/true,
+                                                   &new_block));
+    BOOST_REQUIRE_EQUAL(m_node.chainman->ActiveChain().Height(), poisoned_height);
+
+    while (m_node.chainman->ActiveChain().Height() < final_height) {
+        mineBlocks(1);
+    }
+    BOOST_REQUIRE_EQUAL(m_node.chainman->ActiveChain().Height(), final_height);
+    BOOST_REQUIRE(DigiDollar::IsDigiDollarEnabled(m_node.chainman->ActiveChain().Tip(), *m_node.chainman));
+
+    CBlock disk_block;
+    CBlockIndex* poisoned_index = m_node.chainman->ActiveChain()[poisoned_height];
+    BOOST_REQUIRE(poisoned_index != nullptr);
+    BOOST_REQUIRE(m_node.chainman->m_blockman.ReadBlockFromDisk(disk_block, *poisoned_index));
+    COracleBundle disk_bundle;
+    BOOST_REQUIRE(mgr.ExtractOracleBundle(*disk_block.vtx[0], disk_bundle));
+    BOOST_REQUIRE_EQUAL(disk_bundle.median_price_micro_usd, attacker_price);
+
+    mgr.Clear();
+    BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), 0);
+
+    OracleBundleManager::LoadPricesFromChain(*m_node.chainman);
+
+    BOOST_CHECK_EQUAL(mgr.GetOraclePriceForHeight(poisoned_height), 0U);
+    BOOST_CHECK_EQUAL(mgr.GetLatestPrice(), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

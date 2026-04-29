@@ -2092,9 +2092,23 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     LogPrintf("Oracle: Scanning last %d blocks for oracle prices (height %d to %d)...\n",
              scan_depth, tip_height - scan_depth + 1, tip_height);
 
-    for (int height = tip_height; height >= tip_height - scan_depth + 1 && height >= 0; --height) {
+    const int start_height = std::max(0, tip_height - scan_depth + 1);
+    for (int height = start_height; height <= tip_height; ++height) {
         CBlockIndex* block_index = chainman.ActiveChain()[height];
         if (!block_index) continue;
+
+        if (height < consensus.nDDActivationHeight) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Skipping pre-activation price cache load at height %d\n",
+                     height);
+            continue;
+        }
+        if (block_index->pprev && !DigiDollar::IsDigiDollarEnabled(block_index->pprev, consensus)) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Skipping inactive BIP9 price cache load at height %d\n",
+                     height);
+            continue;
+        }
 
         CBlock block;
         if (!chainman.m_blockman.ReadBlockFromDisk(block, *block_index)) {
@@ -2109,6 +2123,12 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
         COracleBundle bundle;
         if (manager.ExtractOracleBundle(coinbase, bundle)) {
             if (bundle.median_price_micro_usd > 0) {
+                BlockValidationState state;
+                if (!OracleDataValidator::ValidateBlockOracleData(block, block_index->pprev, consensus, state)) {
+                    LogPrintf("Oracle: Skipping invalid startup oracle bundle at height %d: %s\n",
+                             height, state.ToString());
+                    continue;
+                }
                 manager.UpdatePriceCache(height, bundle.median_price_micro_usd, bundle.timestamp);
                 prices_found++;
                 LogPrintf("Oracle: Found price %llu micro-USD at height %d\n",

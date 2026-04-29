@@ -999,8 +999,15 @@ BOOST_AUTO_TEST_CASE(redteam_nums_key_legitimate_collateral_accepted)
 
     const int nHeight = 1000;
     const CAmount ddAmount = 10000;  // $100
+    const CAmount oraclePriceMicroUSD = 500000; // $0.50/DGB
     // Use tier 1 = 30 days lock, consistent lockHeight and tier
     const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    DigiDollar::ValidationContext ctx(nHeight, oraclePriceMicroUSD, 150, *regTestParams);
+    ctx.skipOracleValidation = true;
+    const CAmount collateralAmount = DigiDollar::CalculateRequiredCollateral(
+        ddAmount, DigiDollar::LockDaysToBlocks(30), ctx);
+    BOOST_REQUIRE_GT(collateralAmount, 0);
 
     // Create LEGITIMATE collateral with NUMS key
     DigiDollar::MintParams params;
@@ -1030,13 +1037,11 @@ BOOST_AUTO_TEST_CASE(redteam_nums_key_legitimate_collateral_accepted)
                                  << CScriptNum(1)
                                  << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
     mintTx.vout.push_back(CTxOut(0, opReturn));
-    mintTx.vout.push_back(CTxOut(100 * COIN, collateral));
+    mintTx.vout.push_back(CTxOut(collateralAmount, collateral));
 
     CScript ddToken = DigiDollar::CreateDigiDollarP2TR(ownerXOnly, ddAmount);
     mintTx.vout.push_back(CTxOut(0, ddToken));
 
-    DigiDollar::ValidationContext ctx(nHeight, 1000, 150, *regTestParams);
-    ctx.skipOracleValidation = true;
     TxValidationState state;
 
     bool result = DigiDollar::ValidateMintTransaction(

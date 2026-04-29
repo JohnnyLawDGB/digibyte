@@ -22,6 +22,9 @@
 
 BOOST_FIXTURE_TEST_SUITE(rh54_op_oracle_opsuccess_tests, BasicTestingSetup)
 
+static constexpr unsigned int TAPROOT_VERIFY_FLAGS =
+    SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT;
+
 static CScript MakeSingleLeafTaproot(const CScript& leaf, CScriptWitness& witness)
 {
     static const std::vector<unsigned char> NUMS_PK{ParseHex("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0")};
@@ -68,7 +71,7 @@ BOOST_AUTO_TEST_CASE(rh54_preactivation_tapscript_matches_old_opsuccess)
 
     ScriptError error;
     BOOST_CHECK(VerifyScript(CScript{}, script_pubkey, &witness,
-        SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+        TAPROOT_VERIFY_FLAGS,
         BaseSignatureChecker{}, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
 }
@@ -83,7 +86,7 @@ BOOST_AUTO_TEST_CASE(rh54_activation_removes_dd_opcodes_from_opsuccess)
 
     ScriptError error;
     BOOST_CHECK(!VerifyScript(CScript{}, script_pubkey, &witness,
-        SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT | SCRIPT_VERIFY_DIGIDOLLAR,
+        TAPROOT_VERIFY_FLAGS | SCRIPT_VERIFY_DIGIDOLLAR,
         BaseSignatureChecker{}, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
 }
@@ -97,7 +100,7 @@ BOOST_AUTO_TEST_CASE(rh54_op_oracle_is_opsuccess_before_activation_bad_opcode_af
     const CScript script_pubkey_pre = MakeSingleLeafTaproot(leaf, witness_pre);
     ScriptError error_pre;
     BOOST_CHECK(VerifyScript(CScript{}, script_pubkey_pre, &witness_pre,
-        SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+        TAPROOT_VERIFY_FLAGS,
         BaseSignatureChecker{}, &error_pre));
     BOOST_CHECK_EQUAL(error_pre, SCRIPT_ERR_OK);
 
@@ -105,7 +108,7 @@ BOOST_AUTO_TEST_CASE(rh54_op_oracle_is_opsuccess_before_activation_bad_opcode_af
     const CScript script_pubkey_post = MakeSingleLeafTaproot(leaf, witness_post);
     ScriptError error_post;
     BOOST_CHECK(!VerifyScript(CScript{}, script_pubkey_post, &witness_post,
-        SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT | SCRIPT_VERIFY_DIGIDOLLAR,
+        TAPROOT_VERIFY_FLAGS | SCRIPT_VERIFY_DIGIDOLLAR,
         BaseSignatureChecker{}, &error_post));
     BOOST_CHECK_EQUAL(error_post, SCRIPT_ERR_BAD_OPCODE);
 }

@@ -492,7 +492,9 @@ BOOST_FIXTURE_TEST_CASE(skip_oracle_validation_still_checks_structure, RH20TestS
     mtx.vout[1] = CTxOut(0, ddScript);
 
     CTransaction tx(mtx);
-    auto ctx = MakeContext(currentHeight, /*oraclePrice=*/0, /*systemCollateral=*/150, /*skipOracle=*/true);
+    // Use a live oracle price here so this fixture isolates the structural
+    // missing-collateral check rather than the consensus oracle-price gate.
+    auto ctx = MakeContext(currentHeight, /*oraclePrice=*/500000, /*systemCollateral=*/150, /*skipOracle=*/true);
     TxValidationState state;
 
     bool result = DigiDollar::ValidateMintTransaction(tx, ctx, state);

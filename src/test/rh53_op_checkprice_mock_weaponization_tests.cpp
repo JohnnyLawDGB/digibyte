@@ -10,12 +10,12 @@
  *   src/script/interpreter.cpp::EvalScript (OP_CHECKPRICE handler).
  *
  * POST-FIX invariant (this test):
- *   OP_CHECKPRICE pushes TRUE iff the stack operand equals
- *   OracleBundleManager::GetInstance().GetLatestPrice(), consulted via the
- *   `g_get_oracle_consensus_price` hook in script/interpreter.h. When no
- *   oracle consensus price is available (hook unset, cache empty, or price
- *   equals 0), the opcode fails closed — pushes vchFalse regardless of
- *   the stack operand.
+ *   In active DigiDollar Tapscript, OP_CHECKPRICE pushes TRUE iff the stack
+ *   operand equals OracleBundleManager::GetInstance().GetLatestPrice(),
+ *   consulted via the `g_get_oracle_consensus_price` hook in
+ *   script/interpreter.h. When no oracle consensus price is available (hook
+ *   unset, cache empty, or price equals 0), the opcode fails closed — pushes
+ *   vchFalse regardless of the stack operand.
  *
  * PRE-FIX behavior (documented for the historical record):
  *   - A hardcoded static `GetMockOraclePrice()` returned 100000 µUSD ($0.10)
@@ -146,17 +146,17 @@ private:
 BOOST_FIXTURE_TEST_SUITE(rh53_op_checkprice_mock_weaponization_tests, BasicTestingSetup)
 
 // ---------------------------------------------------------------------------
-// Scenario A (BASE sigversion):
+// Scenario A (TAPSCRIPT sigversion):
 //   Real oracle price is $0.50. Witness puts $0.50 on stack. Post-fix:
 //   OP_CHECKPRICE pushes TRUE via the live oracle hook.
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_base)
+BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_tapscript)
 {
     ScopedOraclePrice seed(REAL_ORACLE_PRICE);
     auto& mgr = OracleBundleManager::GetInstance();
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), REAL_ORACLE_PRICE);
 
-    EvalOutcome out = RunCheckPrice(REAL_ORACLE_PRICE, SigVersion::BASE);
+    EvalOutcome out = RunCheckPrice(REAL_ORACLE_PRICE, SigVersion::TAPSCRIPT);
     BOOST_TEST_MESSAGE("  real=" << REAL_ORACLE_PRICE
                        << " witness=" << REAL_ORACLE_PRICE
                        << " script_ok=" << out.ok
@@ -171,17 +171,17 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_base)
 }
 
 // ---------------------------------------------------------------------------
-// Scenario B (BASE sigversion, inverse):
+// Scenario B (TAPSCRIPT sigversion, inverse):
 //   Real oracle price is $0.50. Witness puts $0.10 (the legacy mock value).
 //   Post-fix: OP_CHECKPRICE pushes FALSE because 100000 != 500000.
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_mismatch_base)
+BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_mismatch_tapscript)
 {
     ScopedOraclePrice seed(REAL_ORACLE_PRICE);
     auto& mgr = OracleBundleManager::GetInstance();
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), REAL_ORACLE_PRICE);
 
-    EvalOutcome out = RunCheckPrice(LEGACY_MOCK_ORACLE_PRICE, SigVersion::BASE);
+    EvalOutcome out = RunCheckPrice(LEGACY_MOCK_ORACLE_PRICE, SigVersion::TAPSCRIPT);
     BOOST_TEST_MESSAGE("  real=" << REAL_ORACLE_PRICE
                        << " witness=" << LEGACY_MOCK_ORACLE_PRICE
                        << " script_ok=" << out.ok
@@ -197,27 +197,28 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_mismatch_base)
 }
 
 // ---------------------------------------------------------------------------
-// Scenario C (TAPSCRIPT sigversion):
-//   The OP_CHECKPRICE handler runs identically across SigVersion. This
-//   locks down the live path DD mint/redeem scripts would actually use.
+// Scenario C (legacy sigversions):
+//   DigiDollar opcodes are Tapscript-only. Legacy script versions must reject
+//   OP_CHECKPRICE as a bad opcode even when the oracle hook is installed.
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_tapscript)
+BOOST_AUTO_TEST_CASE(rh53_checkprice_rejected_outside_tapscript)
 {
     ScopedOraclePrice seed(REAL_ORACLE_PRICE);
     auto& mgr = OracleBundleManager::GetInstance();
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), REAL_ORACLE_PRICE);
 
-    EvalOutcome out = RunCheckPrice(REAL_ORACLE_PRICE, SigVersion::TAPSCRIPT);
-    BOOST_TEST_MESSAGE("  [tapscript] real=" << REAL_ORACLE_PRICE
-                       << " witness=" << REAL_ORACLE_PRICE
-                       << " script_ok=" << out.ok
-                       << " top_is_true=" << out.top_is_true
-                       << " err=" << ScriptErrorString(out.err));
+    for (SigVersion sigversion : {SigVersion::BASE, SigVersion::WITNESS_V0}) {
+        EvalOutcome out = RunCheckPrice(REAL_ORACLE_PRICE, sigversion);
+        BOOST_TEST_MESSAGE("  [legacy sigversion] real=" << REAL_ORACLE_PRICE
+                           << " witness=" << REAL_ORACLE_PRICE
+                           << " script_ok=" << out.ok
+                           << " top_is_true=" << out.top_is_true
+                           << " err=" << ScriptErrorString(out.err));
 
-    BOOST_CHECK_MESSAGE(out.ok,
-        "OP_CHECKPRICE in TAPSCRIPT must evaluate without error.");
-    BOOST_CHECK_MESSAGE(out.top_is_true,
-        "OP_CHECKPRICE in TAPSCRIPT must push TRUE when witness matches live oracle.");
+        BOOST_CHECK_MESSAGE(!out.ok,
+            "OP_CHECKPRICE must be rejected outside Tapscript.");
+        BOOST_CHECK_EQUAL(out.err, SCRIPT_ERR_BAD_OPCODE);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,7 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_fails_closed_with_no_oracle_hook)
     for (CAmount witness : {CAmount{0}, CAmount{1}, LEGACY_MOCK_ORACLE_PRICE,
                             REAL_ORACLE_PRICE, CAmount{1'000'000},
                             CAmount{100'000'000}}) {
-        EvalOutcome out = RunCheckPrice(witness, SigVersion::BASE);
+        EvalOutcome out = RunCheckPrice(witness, SigVersion::TAPSCRIPT);
         BOOST_TEST_MESSAGE("  no-oracle witness=" << witness
                            << " top_is_true=" << out.top_is_true);
         BOOST_CHECK(out.ok);
@@ -258,7 +259,7 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_fails_closed_with_zero_oracle_price)
     BOOST_REQUIRE_EQUAL(OracleBundleManager::GetInstance().GetLatestPrice(), 0);
 
     for (CAmount witness : {CAmount{0}, CAmount{1}, LEGACY_MOCK_ORACLE_PRICE, REAL_ORACLE_PRICE}) {
-        EvalOutcome out = RunCheckPrice(witness, SigVersion::BASE);
+        EvalOutcome out = RunCheckPrice(witness, SigVersion::TAPSCRIPT);
         BOOST_CHECK(out.ok);
         BOOST_CHECK_MESSAGE(!out.top_is_true,
             "OP_CHECKPRICE must fail-closed when oracle returns 0 even if "
@@ -281,7 +282,7 @@ BOOST_AUTO_TEST_CASE(rh53_control_price_equals_legacy_mock_still_matches)
     auto& mgr = OracleBundleManager::GetInstance();
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), LEGACY_MOCK_ORACLE_PRICE);
 
-    EvalOutcome out = RunCheckPrice(LEGACY_MOCK_ORACLE_PRICE, SigVersion::BASE);
+    EvalOutcome out = RunCheckPrice(LEGACY_MOCK_ORACLE_PRICE, SigVersion::TAPSCRIPT);
     BOOST_CHECK(out.ok);
     BOOST_CHECK(out.top_is_true);
 }

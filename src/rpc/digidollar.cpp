@@ -281,6 +281,11 @@ namespace {
         return static_cast<CAmount>(val);
     }
 
+    bool OptionalParamIsSet(const JSONRPCRequest& request, size_t index)
+    {
+        return request.params.size() > index && !request.params[index].isNull();
+    }
+
     std::string ExpectedDigiDollarAddressPrefix()
     {
         switch (Params().GetChainType()) {
@@ -588,7 +593,7 @@ static RPCHelpMan getdcamultiplier()
             int systemHealth;
 
             // Use provided health or calculate current
-            if (!request.params[0].isNull()) {
+            if (OptionalParamIsSet(request, 0)) {
                 systemHealth = request.params[0].getInt<int>();
                 if (systemHealth < 0 || systemHealth > 30000) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "System health must be between 0 and 30000");
@@ -673,7 +678,7 @@ static RPCHelpMan calculatecollateralrequirement()
 
             // Get oracle price in micro-USD: use provided value or fetch from real oracle system
             CAmount oraclePriceMicroUSD;
-            if (request.params.size() > 2 && !request.params[2].isNull()) {
+            if (OptionalParamIsSet(request, 2)) {
                 // User-provided value is in micro-USD (1,000,000 = $1.00)
                 oraclePriceMicroUSD = request.params[2].getInt<int64_t>();
             } else {
@@ -918,7 +923,7 @@ RPCHelpMan mintdigidollar()
             // For a typical 300-byte tx, we need feeRate = 10,000,000 / 300 * 1000 = 33,333,333 sat/kB
             // We use 35,000,000 sat/kB to ensure minimum is always met
             static const CAmount MIN_DD_FEE_RATE = 35000000; // 0.35 DGB/kB ensures min 0.1 DGB for typical tx
-            CAmount feeRate = request.params.size() > 2 && !request.params[2].isNull() ?
+            CAmount feeRate = OptionalParamIsSet(request, 2) ?
                 std::max(request.params[2].getInt<int64_t>(), MIN_DD_FEE_RATE) : MIN_DD_FEE_RATE;
 
             // Validate parameters
@@ -1373,7 +1378,7 @@ RPCHelpMan senddigidollar()
             // Fractional values (e.g. 50.00) are treated as dollars and converted to cents.
             // String values are also handled gracefully.
             CAmount amount = ParseDigiDollarRpcAmount(request.params[1]);
-            std::string comment = request.params.size() > 2 ? request.params[2].get_str() : "";
+            std::string comment = OptionalParamIsSet(request, 2) ? request.params[2].get_str() : "";
             LogPrintf("DigiDollar RPC: Parsed params - address=%s, amount=%d\n", addressStr, amount);
 
             // Validate amount
@@ -1514,7 +1519,7 @@ RPCHelpMan sendmanydigidollar()
                 throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
             }
 
-            if (!request.params[0].isNull() && !request.params[0].get_str().empty()) {
+            if (OptionalParamIsSet(request, 0) && !request.params[0].get_str().empty()) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Dummy value must be set to \"\"");
             }
 
@@ -1576,7 +1581,7 @@ RPCHelpMan sendmanydigidollar()
             result.pushKV("amounts", result_amounts);
             result.pushKV("total_amount", total_amount);
             result.pushKV("status", "success");
-            if (request.params.size() > 2 && !request.params[2].isNull() && !request.params[2].get_str().empty()) {
+            if (OptionalParamIsSet(request, 2) && !request.params[2].get_str().empty()) {
                 result.pushKV("comment", request.params[2].get_str());
             }
 
@@ -1620,7 +1625,7 @@ RPCHelpMan redeemdigidollar()
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
             CAmount ddAmount = request.params[1].getInt<int64_t>(); // DD amount in cents (not BTC format)
-            std::string redeemAddress = request.params.size() > 2 && !request.params[2].isNull() ? request.params[2].get_str() : "";
+            std::string redeemAddress = OptionalParamIsSet(request, 2) ? request.params[2].get_str() : "";
 
             // Validate parameters
             if (ddAmount <= 0) {
@@ -2046,10 +2051,10 @@ RPCHelpMan listdigidollarpositions()
                 }
             }
             // Parse parameters
-            bool activeOnly = request.params.size() > 0 ? request.params[0].get_bool() : true;
-            int tierFilter = request.params.size() > 1 && !request.params[1].isNull() ?
+            bool activeOnly = OptionalParamIsSet(request, 0) ? request.params[0].get_bool() : true;
+            int tierFilter = OptionalParamIsSet(request, 1) ?
                             request.params[1].getInt<int>() : -1;
-            CAmount minAmount = request.params.size() > 2 && !request.params[2].isNull() ?
+            CAmount minAmount = OptionalParamIsSet(request, 2) ?
                                ParseDigiDollarRpcAmount(request.params[2]) : 0;
 
             // Get wallet
@@ -2206,7 +2211,7 @@ RPCHelpMan getdigidollaraddress()
             }
 
             // Parse parameters
-            std::string label = request.params.size() > 0 ? request.params[0].get_str() : "";
+            std::string label = OptionalParamIsSet(request, 0) ? request.params[0].get_str() : "";
 
             // DigiDollar addresses must be P2TR (Taproot/bech32m)
             OutputType output_type = OutputType::BECH32M;
@@ -2466,8 +2471,8 @@ RPCHelpMan listdigidollaraddresses()
             }
 
             // Parse parameters
-            bool includeWatchOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
-            CAmount minBalance = request.params.size() > 1 ? ParseDigiDollarRpcAmount(request.params[1]) : 0;
+            bool includeWatchOnly = OptionalParamIsSet(request, 0) ? request.params[0].get_bool() : false;
+            CAmount minBalance = OptionalParamIsSet(request, 1) ? ParseDigiDollarRpcAmount(request.params[1]) : 0;
             const bool privateKeysDisabled = pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
 
             UniValue result(UniValue::VARR);
@@ -2566,9 +2571,9 @@ static RPCHelpMan importdigidollaraddress()
             }
             // Parse parameters
             std::string addressStr = request.params[0].get_str();
-            std::string label = request.params.size() > 1 ? request.params[1].get_str() : "";
-            bool rescan = request.params.size() > 2 ? request.params[2].get_bool() : false;
-            bool p2sh = request.params.size() > 3 ? request.params[3].get_bool() : false;
+            std::string label = OptionalParamIsSet(request, 1) ? request.params[1].get_str() : "";
+            bool rescan = OptionalParamIsSet(request, 2) ? request.params[2].get_bool() : false;
+            bool p2sh = OptionalParamIsSet(request, 3) ? request.params[3].get_bool() : false;
 
             std::string address_error;
             if (!ValidateDigiDollarAddressForCurrentNetwork(addressStr, address_error)) {
@@ -2662,10 +2667,10 @@ RPCHelpMan getdigidollarbalance()
             }
 
             // Parse parameters
-            std::string addressStr = request.params.size() > 0 && !request.params[0].isNull() ?
+            std::string addressStr = OptionalParamIsSet(request, 0) ?
                                    request.params[0].get_str() : "";
-            int minConf = request.params.size() > 1 ? request.params[1].getInt<int>() : 1;
-            bool includeWatchOnly = request.params.size() > 2 ? request.params[2].get_bool() : false;
+            int minConf = OptionalParamIsSet(request, 1) ? request.params[1].getInt<int>() : 1;
+            bool includeWatchOnly = OptionalParamIsSet(request, 2) ? request.params[2].get_bool() : false;
 
             // Validate parameters
             if (minConf < 0) {
@@ -2824,7 +2829,7 @@ static RPCHelpMan estimatecollateral()
 
             // Get oracle price in micro-USD: use provided value or fetch from real oracle system
             CAmount oraclePriceMicroUSD;
-            if (request.params.size() > 2 && !request.params[2].isNull()) {
+            if (OptionalParamIsSet(request, 2)) {
                 // User-provided value is in micro-USD (1,000,000 = $1.00)
                 oraclePriceMicroUSD = request.params[2].getInt<int64_t>();
             } else {
@@ -3011,7 +3016,7 @@ RPCHelpMan getredemptioninfo()
 
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
-            CAmount ddAmount = request.params.size() > 1 && !request.params[1].isNull() ?
+            CAmount ddAmount = OptionalParamIsSet(request, 1) ?
                               ParseDigiDollarRpcAmount(request.params[1]) : 0;
 
             // Validate position ID format
@@ -3197,11 +3202,11 @@ RPCHelpMan listdigidollartxs()
             }
 
             // Parse parameters
-            int count = request.params.size() > 0 ? request.params[0].getInt<int>() : 10;
-            int skip = request.params.size() > 1 ? request.params[1].getInt<int>() : 0;
-            std::string addressFilter = request.params.size() > 2 && !request.params[2].isNull() ?
+            int count = OptionalParamIsSet(request, 0) ? request.params[0].getInt<int>() : 10;
+            int skip = OptionalParamIsSet(request, 1) ? request.params[1].getInt<int>() : 0;
+            std::string addressFilter = OptionalParamIsSet(request, 2) ?
                                        request.params[2].get_str() : "";
-            std::string categoryFilter = request.params.size() > 3 && !request.params[3].isNull() ?
+            std::string categoryFilter = OptionalParamIsSet(request, 3) ?
                                         request.params[3].get_str() : "";
 
             // Validate parameters
@@ -4000,9 +4005,9 @@ static RPCHelpMan getoracles()
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
                 }
             }
-            bool activeOnly = !request.params[0].isNull() ? request.params[0].get_bool() : false;
+            bool activeOnly = OptionalParamIsSet(request, 0) ? request.params[0].get_bool() : false;
 
-            int scan_blocks = !request.params[1].isNull() ? request.params[1].getInt<int>() : 20;
+            int scan_blocks = OptionalParamIsSet(request, 1) ? request.params[1].getInt<int>() : 20;
             if (scan_blocks < 1) scan_blocks = 1;
             if (scan_blocks > 1000) scan_blocks = 1000;
 
@@ -4347,7 +4352,7 @@ RPCHelpMan startoracle()
             }
 
             int oracle_id = request.params[0].getInt<int>();
-            std::string private_key_hex = request.params.size() > 1 ? request.params[1].get_str() : "";
+            std::string private_key_hex = OptionalParamIsSet(request, 1) ? request.params[1].get_str() : "";
 
             // Validate oracle ID
             if (oracle_id < 0 || oracle_id >= ORACLE_TOTAL_COUNT) {

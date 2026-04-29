@@ -59,6 +59,19 @@ class DigiDollarRPCAmountFiltersTest(DigiByteTestFramework):
         assert_equal(large_positions[0]["position_id"], tier0_mint["position_id"])
         assert_equal(large_positions[0]["dd_minted"], 20000)
 
+        self.log.info("DD-RH-078: named optional DigiDollar RPC arguments must preserve documented defaults")
+        named_tier0_positions = node0.listdigidollarpositions(tier_filter=0)
+        assert_equal(len(named_tier0_positions), 1)
+        assert_equal(named_tier0_positions[0]["position_id"], tier0_mint["position_id"])
+
+        named_large_positions = node0.listdigidollarpositions(min_amount=7500)
+        assert_equal(len(named_large_positions), 1)
+        assert_equal(named_large_positions[0]["position_id"], tier0_mint["position_id"])
+
+        assert_equal(node0.getdigidollarbalance(include_watchonly=True)["total"], 25000)
+        assert isinstance(node0.listdigidollaraddresses(min_balance=0), list)
+        assert isinstance(node0.listdigidollartxs(category="mint"), list)
+
         self.log.info("DD-RH-072: redemption info must not advertise unsupported partial redemption")
         full_info = node0.getredemptioninfo(tier0_mint["position_id"])
         assert_equal(full_info["redeemable_dd"], 20000)

@@ -65,6 +65,12 @@ class WalletDigiDollarPendingRedeemRestartTest(DigiByteTestFramework):
         position = next(p for p in node.listdigidollarpositions(False) if p["position_id"] == position_id)
         assert_equal(position_is_active(position), True)
 
+        balance = node.getdigidollarbalance()
+        assert_equal(balance["total"], 100000)
+
+        retry = node.redeemdigidollar(position_id, 100000)
+        assert "txid" in retry
+
 
 if __name__ == "__main__":
     WalletDigiDollarPendingRedeemRestartTest().main()

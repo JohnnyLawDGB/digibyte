@@ -1398,6 +1398,31 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
     return true;
 }
 
+size_t CWallet::AbandonStaleDigiDollarRedeems()
+{
+    LOCK(cs_wallet);
+
+    WalletBatch batch(GetDatabase(), false);
+    size_t abandoned = 0;
+
+    for (auto& [txid, wtx] : mapWallet) {
+        if (GetDigiDollarTxType(*wtx.tx) != DD_TX_REDEEM) continue;
+        if (wtx.isAbandoned() || wtx.isConflicted() || wtx.isConfirmed() || wtx.InMempool()) continue;
+
+        wtx.m_state = TxStateInactive{/*abandoned=*/true};
+        wtx.MarkDirty();
+        batch.WriteTx(wtx);
+        MarkInputsDirty(wtx.tx);
+        NotifyTransactionChanged(txid, CT_UPDATED);
+        ++abandoned;
+
+        WalletLogPrintf("DigiDollar: abandoned stale non-mempool redeem transaction %s\n",
+                        txid.ToString());
+    }
+
+    return abandoned;
+}
+
 void CWallet::MarkConflicted(const uint256& hashBlock, int conflicting_height, const uint256& hashTx)
 {
     LOCK(cs_wallet);
@@ -3499,6 +3524,11 @@ void CWallet::postInitProcess()
 
     // Scan for DigiDollar UTXOs
     if (m_dd_wallet) {
+        const size_t abandoned_dd_redeems = AbandonStaleDigiDollarRedeems();
+        if (abandoned_dd_redeems > 0) {
+            LogPrintf("Wallet: Abandoned %zu stale DigiDollar redeem transaction(s) before DD scan\n",
+                      abandoned_dd_redeems);
+        }
         LogPrintf("Wallet: Scanning for DigiDollar UTXOs...\n");
         size_t dd_utxo_count = m_dd_wallet->ScanForDDUTXOs();
         LogPrintf("Wallet: DigiDollar scan complete - Found %d DD UTXOs\n", dd_utxo_count);

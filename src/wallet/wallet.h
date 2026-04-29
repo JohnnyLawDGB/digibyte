@@ -864,6 +864,9 @@ public:
     /* Mark a transaction (and it in-wallet descendants) as abandoned so its inputs may be respent. */
     bool AbandonTransaction(const uint256& hashTx);
 
+    /** Mark unconfirmed, non-mempool DigiDollar redeem transactions abandoned. */
+    size_t AbandonStaleDigiDollarRedeems();
+
     /** Mark a transaction as replaced by another transaction. */
     bool MarkReplaced(const uint256& originalHash, const uint256& newHash);
 

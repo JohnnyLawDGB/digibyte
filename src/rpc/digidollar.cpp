@@ -1861,41 +1861,19 @@ RPCHelpMan redeemdigidollar()
                 pwallet->CommitTransaction(redeemTx, {}, {});
             }
 
-            // CRITICAL: Track DD change output if there was any
-            // AND persist to wallet database!
-            {
-                LOCK(pwallet->cs_wallet);
-                wallet::WalletBatch batch(pwallet->GetDatabase());
-
-                if (redeemResult.ddChange > 0) {
-                    LogPrintf("DigiDollar: Redemption has DD change of %d cents - tracking\n", redeemResult.ddChange);
-                    uint256 txid = redeemTx->GetHash();
-                    // Find the DD change output (P2TR with nValue=0)
-                    for (size_t i = 0; i < redeemTx->vout.size(); i++) {
-                        const CTxOut& vout = redeemTx->vout[i];
-                        // DD outputs are P2TR (34 bytes, starts with OP_1) with nValue=0
-                        if (vout.nValue == 0 && vout.scriptPubKey.size() == 34 && vout.scriptPubKey[0] == OP_1) {
-                            COutPoint changeOutpoint(txid, i);
-                            // Update in-memory map
-                            dd_wallet->AddDDUTXO(changeOutpoint, redeemResult.ddChange);
-                            // Persist to wallet database
-                            batch.WriteDDUTXO(changeOutpoint, redeemResult.ddChange);
-                            // Store owner key so we can spend the change later
-                            dd_wallet->StoreOwnerKey(txid, ownerKey);
-                            LogPrintf("DigiDollar: Tracked and persisted DD change output at %s:%d = %d cents\n",
-                                      txid.ToString(), i, redeemResult.ddChange);
-                            break;
-                        }
-                    }
-                }
-
-                // Also remove spent DD UTXOs from tracking and database
-                for (const auto& spentUtxo : selectedDDUtxos) {
-                    dd_wallet->RemoveDDUTXO(spentUtxo);
-                    batch.EraseDDUTXO(spentUtxo);
-                    LogPrintf("DigiDollar: Removed spent DD UTXO %s:%d from memory and database\n",
-                              spentUtxo.hash.ToString(), spentUtxo.n);
-                }
+            // Do not mutate persistent DD UTXO accounting while the redeem is
+            // only in mempool. Selected DD inputs stay tracked and are hidden
+            // from balances through wallet IsSpent(); confirmed removal and DD
+            // change creation are applied by ProcessTransactionForDD when the
+            // redeem is mined. This keeps restart/abandon/retry paths safe.
+            if (redeemResult.ddChange > 0) {
+                dd_wallet->StoreOwnerKey(redeemTx->GetHash(), ownerKey);
+                LogPrintf("DigiDollar: Deferred DD change tracking for pending redemption %s (%d cents)\n",
+                          redeemTx->GetHash().ToString(), redeemResult.ddChange);
+            }
+            for (const auto& spentUtxo : selectedDDUtxos) {
+                LogPrintf("DigiDollar: DD UTXO %s:%d pending redemption spend (will be erased on block confirm)\n",
+                          spentUtxo.hash.ToString(), spentUtxo.n);
             }
 
             // Calculate collateral returned (proportional to DD redeemed)
@@ -1909,18 +1887,11 @@ RPCHelpMan redeemdigidollar()
                 foundPosition.is_active = false;
                 dd_wallet->WriteDDTimeLock(foundPosition);
 
-                // CRITICAL FIX: Unlock the collateral and DD token UTXOs
-                // now that the position is fully redeemed
-                {
-                    LOCK(pwallet->cs_wallet);
-                    wallet::WalletBatch unlock_batch(pwallet->GetDatabase());
-                    COutPoint collateralOutpoint(positionId, 0);
-                    COutPoint ddTokenOutpoint(positionId, 1);
-                    pwallet->UnlockCoin(collateralOutpoint, &unlock_batch);
-                    pwallet->UnlockCoin(ddTokenOutpoint, &unlock_batch);
-                    LogPrintf("DigiDollar: Unlocked collateral+DD-token UTXOs for redeemed position %s\n",
-                             positionIdStr);
-                }
+                // Keep collateral and DD token outpoints locked while the redeem
+                // is unconfirmed. They are spent if the redeem confirms, and they
+                // must remain protected if the redeem leaves mempool or is reorged.
+                LogPrintf("DigiDollar: Position %s pending redemption; collateral+DD-token locks remain until chain state resolves\n",
+                          positionIdStr);
             } else {
                 // Update position with remaining amounts
                 CAmount remainingDD = foundPosition.dd_minted - ddAmount;

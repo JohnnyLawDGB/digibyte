@@ -128,3 +128,61 @@ Known non-passing exploratory command:
 The implementation bugs fixed in this campaign are committed separately and verified. Legitimate DigiDollar/oracle mint, transfer, redeem, wallet restore/rescan, RPC, mining-template, oracle, MuSig2, Qt, and fuzz smoke behavior passes the final test matrix above.
 
 The main remaining launch blockers are not hidden in chat memory: they are recorded as open bugs and architecture-review items in this report and in `reports/red_hornet_security_ledger.md`.
+
+## Post-Campaign Continuation Addendum - 2026-04-29
+
+Ledger path: `reports/red_hornet_security_ledger.md`. Scope stayed within DigiDollar/oracle and directly gating RPC, wallet, index, and test surfaces.
+
+Jared requested follow-up work on the open implementation bugs from the previous campaign. The continuation fixes the prior open set DD-RH-055/DD-RH-057/DD-RH-058/DD-RH-059, with each implementation fix committed separately.
+
+| ID | Severity | Status | Commit | Fix summary |
+|---|---:|---|---|---|
+| DD-RH-055 | Low | Fixed and committed | `9335a841c2` | `senddigidollar` now reports selected-input DD change returned by the wallet transfer path, not whole-wallet remainder. |
+| DD-RH-057 | Low | Fixed and committed | `a96a988499` | Removed dead signed `CAmount` USD-value multiplication from `estimatecollateral`; returned `usd_value` remains `ddAmount / 100.0`. UBSan build remains recommended follow-up sanitizer proof. |
+| DD-RH-058 | Low | Fixed and committed | `cd3f6425b5` | `calculatecollateralrequirement` now enforces live mint min/max bounds before quoting collateral. |
+| DD-RH-059 | Medium | Fixed and committed | `7d6ee67f0f` | `digidollarstatsindex` now uses order-independent mint accounting and stores/redeems the actual collateral vault outpoint. |
+
+New/updated tests:
+
+| Test | Coverage |
+|---|---|
+| `test/functional/digidollar_rpc_collateral.py` | DD-RH-058 above-regtest-maximum collateral quote rejection. |
+| `test/functional/digidollar_send.py` | DD-RH-055 selected-input DD change response (`900`, not `5900`). |
+| `test/functional/digidollar_stats_reordered_mint.py` | DD-RH-059 consensus-valid reordered mint is included in stats. |
+| `test/functional/digidollar_mint.py` | Existing mint functional test now uses regtest-valid amounts after DD-RH-058 made collateral quote bounds strict. |
+| `test/functional/feature_index_prune.py` | Full extended functional suite now uses the current DigiByte prune boundaries and preserves the index restart/failure checks. |
+| `test/functional/test_runner.py` | DD-RH-059 regression and the previously unregistered DigiDollar/oracle functional scripts are included in the standard functional test list. |
+| `src/test/rh61_coinbase_price_cache_poisoning_tests.cpp` | RH68 now resets global volatility state so the full unit suite does not inherit `minting-frozen-volatility` from earlier tests. |
+
+Continuation verification:
+
+| Command | Result |
+|---|---|
+| `make -C src -j$(nproc) digibyted` | Passed. |
+| `make -C src -j$(nproc) test/test_digibyte` | Passed. |
+| `./src/test/test_digibyte --show_progress` | Passed, 2967 test cases. |
+| `python3 test/functional/digidollar_rpc_collateral.py` | Passed. |
+| `python3 test/functional/digidollar_rpc_estimate.py` | Passed. |
+| `python3 test/functional/digidollar_send.py` | Passed. |
+| `python3 test/functional/digidollar_transfer.py` | Passed. |
+| `python3 test/functional/digidollar_mint.py` | Passed. |
+| `python3 test/functional/feature_index_prune.py` | Passed. |
+| `python3 test/functional/digidollar_stats_reordered_mint.py` | Passed. |
+| `python3 test/functional/digidollar_stats_reorg.py` | Passed. |
+| `python3 test/functional/test_runner.py --extended --jobs=4` | Passed, 360 registered scripts; accumulated test time 3021s, runtime 804s. Runner still warns that `feature_assumevalid.py` and `feature_assumeutxo.py` are not registered because they are documented as disabled pending DigiByte MultiAlgo adaptation. |
+| `./src/test/test_digibyte --run_test=digidollar_rh46_rpc_input_validation_tests --log_level=error --report_level=short` | Passed, 63 test cases / 119 assertions. |
+| `./src/test/test_digibyte --run_test=digidollar_consensus_tests/mint_amount_validation_test --log_level=error --report_level=short` | Passed, 1 test case / 9 assertions. |
+| `./src/test/test_digibyte --run_test=digidollar_validation_tests/mint_accounting_extraction_allows_change_before_opreturn --log_level=error --report_level=short` | Passed, 1 test case / 7 assertions. |
+| `./src/test/test_digibyte --run_test=digidollar_redteam_tests/redteam_T4_01b_usd_value_display_overflow --log_level=error --report_level=short` | Passed, 1 test case / 2 assertions. |
+| `git diff --check` | Passed. |
+
+Additional test-isolation commit:
+
+- `3a88816293` (`tests digidollar: reset volatility in RH68 block-validity test`) fixes the full-suite unit failure where RH68 inherited a frozen DigiDollar volatility state and rejected its valid mint as `minting-frozen-volatility`.
+- `8454c57363` (`functional digidollar: align mint test with regtest bounds`) fixes the full functional failure where `digidollar_mint.py` still treated above-regtest-maximum collateral quote amounts as valid after DD-RH-058.
+- `c7e0887b3f` (`functional tests: refresh index prune boundaries`) fixes the full functional failure in `feature_index_prune.py` by using the current DigiByte prune-file boundaries and syncing indexes one block past the actual restart boundary.
+- `318fc8edb9` (`functional tests: register DigiDollar oracle scripts`) adds the missing DigiDollar/oracle functional scripts to the standard runner, including the descriptor flag required by `wallet_digidollar_descriptors.py`.
+
+Architecture-review addendum:
+
+- DD-RH-059-WALLET-STORAGE: wallet position storage still commonly reconstructs collateral as `COutPoint(txid, 0)`. The stats index fix covers order-independent index/RPC accounting, but supporting arbitrary collateral vault output indexes in wallet position storage should be approved as a wallet-storage/schema decision before implementation.

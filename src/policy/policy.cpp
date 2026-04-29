@@ -25,6 +25,20 @@
 #include <cstddef>
 #include <vector>
 
+namespace {
+
+bool IsDigiDollarDustExemptOutput(const CTxOut& txout)
+{
+    // DigiDollar token outputs intentionally carry zero DGB value. Ordinary
+    // positive-value DGB outputs in the same DD transaction must still obey
+    // normal dust policy.
+    return txout.nValue == 0 &&
+           txout.scriptPubKey.size() == 34 &&
+           txout.scriptPubKey[0] == OP_1;
+}
+
+} // namespace
+
 CAmount GetDustThreshold(const CTxOut& txout, const CFeeRate& dustRelayFeeIn)
 {
     // "Dust" is defined in terms of dustRelayFee,
@@ -97,9 +111,9 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
 {
     // Allow DigiDollar transactions with special version markers
     // Check lower 16 bits for 0x0770 marker (consensus layer format)
-    const int32_t DD_TX_VERSION = 0x0D1D0770;
-    const int32_t DD_VERSION_MASK = 0x0000FFFF;
-    bool isDigiDollar = (tx.nVersion & DD_VERSION_MASK) == (DD_TX_VERSION & DD_VERSION_MASK);
+    const bool hasDigiDollarMarker = DigiDollar::HasDigiDollarMarker(tx);
+    const bool isDigiDollar = hasDigiDollarMarker &&
+                              DigiDollar::GetDigiDollarTxType(tx) != DigiDollar::DD_TX_NONE;
 
     LogPrintf("IsStandardTx: version=%d, isDigiDollar=%d, TX_MAX_STANDARD_VERSION=%d\n",
               tx.nVersion, isDigiDollar, TX_MAX_STANDARD_VERSION);
@@ -158,9 +172,10 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
             reason = "bare-multisig";
             return false;
         } else if (IsDust(txout, dust_relay_fee)) {
-            // Skip dust check for DigiDollar transactions - DD tokens have 0 DGB value
-            // and collateral/change outputs are validated by DD consensus rules
-            if (!isDigiDollar) {
+            // Skip dust only for zero-value DigiDollar token outputs. Collateral
+            // outputs and ordinary DGB change/payment outputs must still satisfy
+            // the normal DGB dust threshold.
+            if (!isDigiDollar || !IsDigiDollarDustExemptOutput(txout)) {
                 reason = "dust";
                 return false;
             }

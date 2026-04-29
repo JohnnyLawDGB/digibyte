@@ -334,13 +334,36 @@ BOOST_AUTO_TEST_CASE(rh17_04_dd_validation_cost_asymmetry)
 
 BOOST_AUTO_TEST_CASE(rh17_05_dust_exemption_utxo_bloat)
 {
-    // Create DD tx with multiple dust outputs
-    CMutableTransaction ddTx = MakeTxWithVersion(0x0D1D0770, 5);
-    ddTx.vout[0].nValue = 1;      // 1 sat — dust
-    ddTx.vout[1].nValue = 1;      // 1 sat — dust
-    ddTx.vout[2].nValue = 1;      // 1 sat — dust
-    ddTx.vout[3].nValue = 1;      // 1 sat — dust
-    ddTx.vout[4].nValue = 1000;   // Normal output
+    const int32_t valid_transfer_version =
+        (static_cast<int32_t>(DigiDollar::DD_TX_TRANSFER) << 24) | 0x00000770;
+
+    // A legitimate DD transaction still needs its zero-value P2TR token output
+    // exempted from normal DGB dust policy.
+    CMutableTransaction ddTokenTx = MakeTxWithVersion(valid_transfer_version, 3);
+    ddTokenTx.vout[0].nValue = 0;
+    ddTokenTx.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<unsigned char>(32, 0xDD);
+    ddTokenTx.vout[1].nValue = 0;
+    ddTokenTx.vout[1].scriptPubKey = CScript() << OP_RETURN << std::vector<unsigned char>{'D', 'D'};
+    ddTokenTx.vout[2].nValue = 100000;
+
+    std::string tokenReason;
+    bool tokenStandard = IsStandardTx(CTransaction(ddTokenTx),
+        MAX_OP_RETURN_RELAY, /*permit_bare_multisig=*/true,
+        CFeeRate(DUST_RELAY_TX_FEE), tokenReason);
+
+    BOOST_CHECK_MESSAGE(tokenStandard,
+        "Valid DD zero-value P2TR token output must remain standard; reason="
+        << tokenReason);
+
+    // Create a valid DD-versioned tx with unrelated positive-value DGB dust
+    // outputs. Only zero-value DD token outputs should receive the exemption.
+    CMutableTransaction ddTx = MakeTxWithVersion(valid_transfer_version, 5);
+    ddTx.vout[0].nValue = 0;
+    ddTx.vout[0].scriptPubKey = CScript() << OP_1 << std::vector<unsigned char>(32, 0xDD);
+    ddTx.vout[1].nValue = 1;      // 1 sat — unrelated DGB dust
+    ddTx.vout[2].nValue = 1;      // 1 sat — unrelated DGB dust
+    ddTx.vout[3].nValue = 1;      // 1 sat — unrelated DGB dust
+    ddTx.vout[4].nValue = 100000; // Normal output
 
     std::string reason;
     bool isStandard = IsStandardTx(CTransaction(ddTx),
@@ -351,15 +374,10 @@ BOOST_AUTO_TEST_CASE(rh17_05_dust_exemption_utxo_bloat)
     BOOST_TEST_MESSAGE("DD tx with 4 dust outputs: isStandard=" << isStandard
         << " reason=" << reason);
 
-    if (isStandard) {
-        BOOST_TEST_MESSAGE(
-            "VULNERABILITY CONFIRMED: DD version mask exempts ALL outputs from "
-            "dust check, not just the DD token output. Attacker can create "
-            "unlimited tiny UTXO entries. "
-            "RECOMMENDATION: Only skip dust for outputs that are actual DD "
-            "token outputs (check scriptPubKey for DD marker), not all outputs "
-            "in a DD-versioned transaction.");
-    }
+    BOOST_CHECK_MESSAGE(!isStandard,
+        "VULNERABILITY: DD version mask exempts positive-value DGB dust outputs. "
+        "Only zero-value DD token outputs should bypass dust policy.");
+    BOOST_CHECK_EQUAL(reason, "dust");
 
     // Compare: non-DD tx with same outputs should fail
     CMutableTransaction normalTx = MakeTxWithVersion(2, 5);
@@ -367,7 +385,7 @@ BOOST_AUTO_TEST_CASE(rh17_05_dust_exemption_utxo_bloat)
     normalTx.vout[1].nValue = 1;
     normalTx.vout[2].nValue = 1;
     normalTx.vout[3].nValue = 1;
-    normalTx.vout[4].nValue = 1000;
+    normalTx.vout[4].nValue = 100000;
 
     std::string normalReason;
     bool normalStandard = IsStandardTx(CTransaction(normalTx),
@@ -515,7 +533,9 @@ BOOST_AUTO_TEST_CASE(rh17_08_dd_unknown_type_standardness)
 
 BOOST_AUTO_TEST_CASE(rh17_09_multiple_op_return_dd_tx)
 {
-    CMutableTransaction ddTx = MakeTxWithVersion(0x0D1D0770, 3);
+    const int32_t valid_transfer_version =
+        (static_cast<int32_t>(DigiDollar::DD_TX_TRANSFER) << 24) | 0x00000770;
+    CMutableTransaction ddTx = MakeTxWithVersion(valid_transfer_version, 3);
     ddTx.vout[0].nValue = 50000;
     ddTx.vout[0].scriptPubKey = CScript() << OP_DUP << OP_HASH160
         << std::vector<unsigned char>(20, 0x01) << OP_EQUALVERIFY << OP_CHECKSIG;
@@ -549,7 +569,9 @@ BOOST_AUTO_TEST_CASE(rh17_09_multiple_op_return_dd_tx)
 BOOST_AUTO_TEST_CASE(rh17_10_weight_limit_applies_to_dd)
 {
     // Create an oversized DD tx
-    CMutableTransaction ddTx = MakeTxWithVersion(0x0D1D0770);
+    const int32_t valid_transfer_version =
+        (static_cast<int32_t>(DigiDollar::DD_TX_TRANSFER) << 24) | 0x00000770;
+    CMutableTransaction ddTx = MakeTxWithVersion(valid_transfer_version);
     ddTx.vout[0].nValue = 50000;
     // Add massive scriptSig to exceed weight limit
     ddTx.vin[0].scriptSig = CScript() << std::vector<unsigned char>(MAX_STANDARD_TX_WEIGHT / 4 + 1, 0x00);

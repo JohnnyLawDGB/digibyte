@@ -1101,6 +1101,25 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
 
 bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, COracleBundle& bundle) const
 {
+    const std::optional<int32_t> coinbase_height = [&]() -> std::optional<int32_t> {
+        if (coinbase_tx.vin.empty() || coinbase_tx.vin[0].scriptSig.empty()) {
+            return std::nullopt;
+        }
+
+        CScript::const_iterator pc = coinbase_tx.vin[0].scriptSig.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+        if (!coinbase_tx.vin[0].scriptSig.GetOp(pc, opcode, data) || data.empty()) {
+            return std::nullopt;
+        }
+
+        try {
+            return CScriptNum(data, true).getint();
+        } catch (const scriptnum_error&) {
+            return std::nullopt;
+        }
+    }();
+
     // Look for OP_RETURN output with OP_ORACLE marker
     for (const auto& output : coinbase_tx.vout) {
         if (output.scriptPubKey.size() > 2 && output.scriptPubKey[0] == OP_RETURN) {
@@ -1231,7 +1250,7 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         msg.timestamp = timestamp;
 
                         // Set remaining fields (not in compact format)
-                        msg.block_height = 0; // Not needed for Phase One
+                        msg.block_height = coinbase_height.value_or(0);
                         msg.nonce = 0;
 
                         // Phase One: Get oracle pubkey from chainparams for verification
@@ -1250,7 +1269,7 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         bundle.messages.push_back(msg);
                         bundle.median_price_micro_usd = price;
                         bundle.timestamp = timestamp;
-                        bundle.epoch = GetCurrentEpoch(msg.block_height);
+                        bundle.epoch = coinbase_height ? GetCurrentEpoch(*coinbase_height) : 0;
 
                         return true;
                     }
@@ -1313,7 +1332,7 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                             // All oracles in the bundle attested to the same consensus price
                             msg.price_micro_usd = price;
                             msg.timestamp = timestamp;
-                            msg.block_height = 0;
+                            msg.block_height = coinbase_height.value_or(0);
                             msg.nonce = 0;
 
                             // Get oracle pubkey from chainparams for verification
@@ -1327,7 +1346,7 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
 
                         bundle.median_price_micro_usd = price;
                         bundle.timestamp = timestamp;
-                        bundle.epoch = 0;
+                        bundle.epoch = coinbase_height ? GetCurrentEpoch(*coinbase_height) : 0;
 
                         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted Phase Two bundle: %d oracles with signatures, price=%llu micro-USD\n",
                                  num_messages, price);

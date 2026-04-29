@@ -7263,11 +7263,12 @@ BOOST_AUTO_TEST_CASE(T3_05d_net_processing_oraclebundle_wrong_threshold)
         "and legitimate oracle peers are not banned.");
 }
 
-BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_hardcodes_epoch_zero)
+BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_uses_coinbase_epoch)
 {
-    // Phase 2 ExtractOracleBundle hardcodes bundle.epoch = 0
-    // ValidatePhaseTwoBundle uses GetActiveOraclesForEpoch(bundle.epoch)
-    // This means epoch-based oracle rotation is broken for on-chain validation
+    // Phase 2 ExtractOracleBundle must bind the bundle epoch to the coinbase
+    // height. ValidatePhaseTwoBundle uses bundle.epoch to select the active
+    // oracle roster, so hardcoding epoch 0 would let the epoch-0 roster validate
+    // oracle data in later epochs.
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -7335,12 +7336,11 @@ BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_hardcodes_epoch_zero)
     BOOST_CHECK(ok);
     BOOST_CHECK_EQUAL(extracted.messages.size(), (size_t)num_msgs);
 
-    // BUG: epoch is hardcoded to 0 regardless of actual block height
-    BOOST_CHECK_MESSAGE(extracted.epoch == 0,
-        "BUG CONFIRMED: Phase 2 ExtractOracleBundle hardcodes epoch=0. "
-        "ValidatePhaseTwoBundle will call GetActiveOraclesForEpoch(0) "
-        "regardless of actual block height. Oracle rotation broken for "
-        "on-chain validation once >17 oracles exist on mainnet (RC30).");
+    const int32_t expected_epoch = GetCurrentEpoch(1000);
+    BOOST_CHECK_MESSAGE(extracted.epoch == expected_epoch,
+        "Phase 2 ExtractOracleBundle must derive the bundle epoch from the "
+        "coinbase height so ValidatePhaseTwoBundle checks the correct active "
+        "oracle roster. got=" << extracted.epoch << " expected=" << expected_epoch);
 
     manager.Clear();
 }

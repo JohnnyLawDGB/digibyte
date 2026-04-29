@@ -128,6 +128,41 @@ static Consensus::Params CreatePhase2Params(int required_messages, int total_ora
     return params;
 }
 
+BOOST_AUTO_TEST_CASE(phase2_extraction_derives_epoch_from_coinbase_height)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    const int32_t block_height = 1000;
+    const int32_t expected_epoch = GetCurrentEpoch(block_height);
+    BOOST_REQUIRE_NE(expected_epoch, 0);
+
+    COracleBundle bundle(expected_epoch);
+    bundle.timestamp = GetTime();
+    bundle.median_price_micro_usd = 50000;
+    for (uint32_t oracle_id = 0; oracle_id < 4; ++oracle_id) {
+        bundle.messages.push_back(CreateSignedOracleMessage(
+            GetRegtestOracleKey(oracle_id), oracle_id, bundle.median_price_micro_usd,
+            bundle.timestamp, block_height));
+    }
+
+    CScript oracle_script = manager.CreateOracleScript(bundle);
+    BOOST_REQUIRE(!oracle_script.empty());
+
+    CMutableTransaction coinbase_tx;
+    coinbase_tx.vin.resize(1);
+    coinbase_tx.vin[0].prevout.SetNull();
+    coinbase_tx.vin[0].scriptSig << CScriptNum(block_height);
+    coinbase_tx.vout.push_back(CTxOut(5000000000LL, CScript()));
+    coinbase_tx.vout.push_back(CTxOut(0, oracle_script));
+
+    COracleBundle extracted;
+    BOOST_REQUIRE(manager.ExtractOracleBundle(CTransaction(coinbase_tx), extracted));
+    BOOST_CHECK_EQUAL(extracted.epoch, expected_epoch);
+
+    manager.Clear();
+}
+
 //
 // CATEGORY 1: ValidatePhaseTwoBundle() Tests
 //

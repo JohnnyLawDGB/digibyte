@@ -249,4 +249,31 @@ BOOST_AUTO_TEST_CASE(consensus_threshold_boundary)
     BOOST_CHECK(above_threshold.GetConsensusPrice(required) > 0);
 }
 
+BOOST_AUTO_TEST_CASE(duplicate_oracle_ids_do_not_count_toward_consensus)
+{
+    const Consensus::Params& params = Params().GetConsensus();
+    int required = params.nOracleRequiredMessages;
+    BOOST_REQUIRE(required > 1);
+
+    COracleBundle duplicate_bundle(0);
+    COracleBundle single_oracle_bundle = CreateTestBundle(1, 50000);
+    const COraclePriceMessage duplicate_msg = single_oracle_bundle.messages.front();
+
+    for (int i = 0; i < required; ++i) {
+        duplicate_bundle.messages.push_back(duplicate_msg);
+    }
+    duplicate_bundle.median_price_micro_usd = 50000;
+    duplicate_bundle.timestamp = GetTime();
+
+    BOOST_CHECK_MESSAGE(!duplicate_bundle.HasConsensus(required),
+        "Consensus threshold must count unique oracle IDs, not repeated copies of one signed message");
+    BOOST_CHECK_EQUAL(duplicate_bundle.GetConsensusPrice(required), 0);
+
+    COracleBundle unique_plus_duplicate = CreateTestBundle(required, 50000);
+    unique_plus_duplicate.messages.push_back(unique_plus_duplicate.messages.front());
+    BOOST_CHECK_MESSAGE(!unique_plus_duplicate.HasConsensus(required),
+        "A bundle with any duplicate oracle ID is malformed and must not satisfy consensus");
+    BOOST_CHECK_EQUAL(unique_plus_duplicate.GetConsensusPrice(required), 0);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

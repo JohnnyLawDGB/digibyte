@@ -370,8 +370,14 @@ bool COracleBundle::AddMessage(const COraclePriceMessage& message)
 
 bool COracleBundle::HasConsensus(int min_required) const
 {
-    // Check if we have enough valid messages for consensus
-    return messages.size() >= static_cast<size_t>(min_required);
+    std::set<uint32_t> unique_oracle_ids;
+    for (const auto& msg : messages) {
+        if (!unique_oracle_ids.insert(msg.oracle_id).second) {
+            return false;
+        }
+    }
+
+    return unique_oracle_ids.size() >= static_cast<size_t>(min_required);
 }
 
 uint64_t COracleBundle::GetConsensusPrice(int min_required) const

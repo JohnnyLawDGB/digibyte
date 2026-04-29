@@ -87,7 +87,9 @@ struct DBHashKey {
 
 /**
  * Vault information stored in database.
- * Maps outpoint (vault UTXO) to DD amount and collateral.
+ * Maps minted vault outpoints to DD amount and collateral. Entries are
+ * immutable mint metadata, not an active-vault set, so alternate-branch
+ * redemptions after a reorg can still recover the original mint amount.
  */
 struct VaultInfo {
     CAmount dd_amount;
@@ -303,8 +305,10 @@ bool DigiDollarStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
                         m_total_collateral -= vault_info.collateral;
                         m_vault_count--;
 
-                        // Remove vault from database
-                        m_db->Erase(DBVaultKey(txin.prevout));
+                        // Keep immutable mint metadata for reorg safety.
+                        // A disconnected redeem may be mined again on a
+                        // different branch; deleting this entry would make
+                        // the alternate redeem invisible to the stats index.
 
                         LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Block %d - DD REDEMPTION: -%d DD, -%d DGB collateral (total: %d DD, %d DGB, %d vaults)\n",
                                  block.height, vault_info.dd_amount, vault_info.collateral, m_total_dd_supply, m_total_collateral, m_vault_count);
@@ -373,9 +377,9 @@ bool DigiDollarStatsIndex::CustomRewind(const interfaces::BlockKey& current_tip,
     LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Rewound to height %d - DD Supply: %d, Collateral: %d, Vaults: %d\n",
              new_tip.height, m_total_dd_supply, m_total_collateral, m_vault_count);
 
-    // Note: Vault database will be rebuilt as blocks are replayed forward from new_tip
-    // This is acceptable because the vault database is only used for tracking active vaults,
-    // and it will be reconstructed correctly during the replay
+    // Vault metadata is intentionally retained after redemption. Running totals
+    // determine active supply/collateral; the side table stores immutable mint
+    // amounts needed to account for alternate-branch redemptions after reorgs.
 
     return true;
 }

@@ -178,6 +178,13 @@ namespace {
         return request.params.size() > index && !request.params[index].isNull();
     }
 
+    bool IsFreshOracleTimestamp(int64_t timestamp, int64_t now)
+    {
+        return timestamp > 0 &&
+               timestamp <= now + 60 &&
+               now - timestamp <= ORACLE_MAX_AGE_SECONDS;
+    }
+
     std::string ExpectedDigiDollarAddressPrefix()
     {
         switch (Params().GetChainType()) {
@@ -3243,6 +3250,7 @@ static RPCHelpMan getoracleprice()
                 // and count unique reporting oracles (same approach as getalloracleprices)
                 {
                     LOCK(cs_main);
+                    const int64_t now = GetTime();
                     for (int h = currentHeight; h >= std::max(0, currentHeight - 19); --h) {
                         CBlockIndex* pindex = chainman.ActiveChain()[h];
                         if (!pindex) continue;
@@ -3251,11 +3259,13 @@ static RPCHelpMan getoracleprice()
                         if (block.vtx.empty()) continue;
                         COracleBundle bundle;
                         if (oracle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                            if (!IsFreshOracleTimestamp(bundle.timestamp, now)) continue;
                             if (h > lastBundleHeight) {
                                 lastBundleHeight = h;
                                 lastBundleTime = bundle.timestamp;
                             }
                             for (const auto& msg : bundle.messages) {
+                                if (!IsFreshOracleTimestamp(msg.timestamp, now)) continue;
                                 reportingOracleIds.insert(msg.oracle_id);
                             }
                         }
@@ -3268,7 +3278,7 @@ static RPCHelpMan getoracleprice()
                     int64_t now = GetTime();
                     std::vector<COraclePriceMessage> pending = oracle_manager.GetPendingMessages();
                     for (const auto& msg : pending) {
-                        if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
+                        if (!IsFreshOracleTimestamp(msg.timestamp, now)) continue;
                         reportingOracleIds.insert(msg.oracle_id);
                         if (msg.timestamp > freshestPendingTime) {
                             freshestPendingTime = msg.timestamp;
@@ -3283,12 +3293,9 @@ static RPCHelpMan getoracleprice()
             // Time-based:  stale if no oracle data (on-chain or pending) within
             //              ORACLE_MAX_AGE_SECONDS (1 hour).
             //
-            // Data is NOT stale if EITHER check says it's fresh.  This prevents
-            // false positives on networks with slow block production (e.g. testnet
-            // with fixed difficulty where inter-block time exceeds the normal
-            // 15-second target by orders of magnitude).  On mainnet, the block-based
-            // check dominates.  On slow testnets, the time-based check ensures that
-            // actively-reporting oracles are not flagged as stale.
+            // A recent block height only helps if the scanned bundle timestamp is
+            // still fresh. Otherwise an oracle outage with no new blocks can leave
+            // an old bundle close to the tip while the usable price has expired.
             int validityBlocks = 20; // Oracle data valid for 20 blocks
             // Use on-chain bundle height if available, otherwise use current
             // height when oracles are actively reporting via P2P pending messages.
@@ -3614,6 +3621,7 @@ static OracleScanResult ScanOracleDataFromChain(
     OracleScanResult res;
 
     int tip_height = chainman.ActiveChain().Height();
+    const int64_t now = GetTime();
 
     // 1. On-chain: scan recent blocks for oracle bundles
     {
@@ -3628,6 +3636,7 @@ static OracleScanResult ScanOracleDataFromChain(
 
             COracleBundle bundle;
             if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                if (!IsFreshOracleTimestamp(bundle.timestamp, now)) continue;
                 if (h > res.last_bundle_height) {
                     res.last_bundle_height = h;
                     res.last_bundle_time = bundle.timestamp;
@@ -3635,6 +3644,7 @@ static OracleScanResult ScanOracleDataFromChain(
                 }
 
                 for (const auto& msg : bundle.messages) {
+                    if (!IsFreshOracleTimestamp(msg.timestamp, now)) continue;
                     if (res.oracle_data.find(msg.oracle_id) == res.oracle_data.end() ||
                         !res.oracle_data[msg.oracle_id].has_data) {
                         auto& od = res.oracle_data[msg.oracle_id];
@@ -3652,11 +3662,10 @@ static OracleScanResult ScanOracleDataFromChain(
 
     // 2. Pending P2P messages (for oracles not yet on-chain)
     {
-        int64_t now = GetTime();
         std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
         for (const auto& msg : pending) {
             // Skip stale pending messages
-            if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
+            if (!IsFreshOracleTimestamp(msg.timestamp, now)) continue;
 
             if (res.oracle_data.find(msg.oracle_id) == res.oracle_data.end() ||
                 !res.oracle_data[msg.oracle_id].has_data) {
@@ -4036,7 +4045,7 @@ static RPCHelpMan listoracle()
                         int64_t now = GetTime();
                         std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
                         for (const auto& msg : pending) {
-                            if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
+                            if (!IsFreshOracleTimestamp(msg.timestamp, now)) continue;
                             if (msg.oracle_id == id) {
                                 price = msg.price_micro_usd;
                                 update_time = msg.timestamp;
@@ -4058,7 +4067,9 @@ static RPCHelpMan listoracle()
                                 if (block.vtx.empty()) continue;
                                 COracleBundle bundle;
                                 if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+                                    if (!IsFreshOracleTimestamp(bundle.timestamp, now)) continue;
                                     for (const auto& msg : bundle.messages) {
+                                        if (!IsFreshOracleTimestamp(msg.timestamp, now)) continue;
                                         if (msg.oracle_id == id) {
                                             price = msg.price_micro_usd;
                                             update_time = msg.timestamp;

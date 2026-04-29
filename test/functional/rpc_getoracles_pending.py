@@ -21,6 +21,7 @@ from test_framework.util import (
     assert_greater_than,
     assert_greater_than_or_equal,
 )
+from decimal import Decimal
 
 ORACLE_MAX_AGE_SECONDS = 3600
 REGTEST_ORACLE_EPOCH_BLOCKS = 10
@@ -119,7 +120,7 @@ class GetOraclesPendingTest(DigiByteTestFramework):
             assert isinstance(oracle["endpoint"], str)
             assert isinstance(oracle["is_active"], bool)
             assert isinstance(oracle["last_price_micro_usd"], int)
-            assert isinstance(oracle["last_price_usd"], (int, float))
+            assert isinstance(oracle["last_price_usd"], (int, float, Decimal))
             assert isinstance(oracle["last_update"], int)
             assert isinstance(oracle["price_source"], str)
             assert isinstance(oracle["status"], str)
@@ -132,7 +133,7 @@ class GetOraclesPendingTest(DigiByteTestFramework):
                 f"Invalid price_source '{oracle['price_source']}' for oracle {oracle['oracle_id']}"
 
             # status must be valid
-            valid_statuses = ["reporting", "stopped", "no_data"]
+            valid_statuses = ["reporting", "stopped", "no_data", "outlier"]
             assert oracle["status"] in valid_statuses, \
                 f"Invalid status '{oracle['status']}' for oracle {oracle['oracle_id']}"
 

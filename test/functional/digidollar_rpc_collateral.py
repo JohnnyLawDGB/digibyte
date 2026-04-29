@@ -273,13 +273,23 @@ class DigiDollarCollateralTest(DigiByteTestFramework):
                 except Exception as e:
                     self.log.info(f"    Correctly rejected with: {e}")
 
-        below_minimum = 50
-        self.log.info(f"  Testing below minimum: {below_minimum} cents")
+        small_valid_regtest_amount = 50
+        self.log.info(f"  Testing small valid regtest amount: {small_valid_regtest_amount} cents")
         try:
-            result = self.nodes[0].calculatecollateralrequirement(below_minimum, lock_days)
-            self.log.info(f"    Implementation allows below-minimum calculation")
+            result = self.nodes[0].calculatecollateralrequirement(small_valid_regtest_amount, lock_days)
+            self.log.info(f"    Accepted small valid regtest amount")
         except Exception as e:
-            self.log.info(f"    Correctly rejected below-minimum: {e}")
+            self.log.info(f"    Rejected small valid regtest amount: {e}")
+
+        above_regtest_max = 100001
+        self.log.info(f"  Testing above regtest mint maximum: {above_regtest_max} cents")
+        assert_raises_rpc_error(
+            -8,
+            "Maximum mint amount is $1000",
+            self.nodes[0].calculatecollateralrequirement,
+            above_regtest_max,
+            lock_days,
+        )
 
         self.log.info("Invalid amount tests completed!")
 
@@ -323,7 +333,7 @@ class DigiDollarCollateralTest(DigiByteTestFramework):
         assert_greater_than_or_equal(dca_multiplier, Decimal('1.0')), \
             f"dca_multiplier must be >= 1.0, got {dca_multiplier}"
 
-        amounts = [10000, 50000, 100000, 500000]
+        amounts = [10000, 50000, 100000]
         self.log.info("  Testing amount scaling...")
 
         previous_dgb = Decimal('0')

@@ -606,6 +606,16 @@ static RPCHelpMan calculatecollateralrequirement()
             // Get system parameters
             const auto& params = Params();
             const auto& ddParams = params.GetDigiDollarParams();
+            if (!DigiDollar::IsValidMintAmount(ddAmount, ddParams)) {
+                if (ddAmount < ddParams.minMintAmount) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER,
+                        strprintf("Minimum mint amount is $%d (%d cents)",
+                            ddParams.minMintAmount / 100, ddParams.minMintAmount));
+                }
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Maximum mint amount is $%d (%d cents)",
+                        ddParams.maxMintAmount / 100, ddParams.maxMintAmount));
+            }
 
             // Convert lock days to blocks
             int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);

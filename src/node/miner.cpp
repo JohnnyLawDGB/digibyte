@@ -120,12 +120,22 @@ void BlockAssembler::resetBlock()
     nFees = 0;
 }
 
-static bool IsInsufficientCollateralFailure(const BlockValidationState& state, std::string_view what = {})
+static bool IsRetryableDigiDollarBlockFailure(const BlockValidationState& state, std::string_view what = {})
 {
-    if (state.GetRejectReason() == "insufficient-collateral") {
+    const std::string& reject_reason = state.GetRejectReason();
+    if (reject_reason == "insufficient-collateral" ||
+        reject_reason == "bad-oracle-price" ||
+        reject_reason == "invalid-oracle-price") {
         return true;
     }
-    return !what.empty() && what.find("insufficient-collateral") != std::string_view::npos;
+
+    if (what.empty()) {
+        return false;
+    }
+
+    return what.find("insufficient-collateral") != std::string_view::npos ||
+           what.find("bad-oracle-price") != std::string_view::npos ||
+           what.find("invalid-oracle-price") != std::string_view::npos;
 }
 
 bool BlockAssembler::IsDDTransactionForMiner(const CTransaction& tx) const
@@ -387,13 +397,13 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
         bool needs_dd_retry{false};
         try {
             if (!run_block_validity(state)) {
-                needs_dd_retry = IsInsufficientCollateralFailure(state);
+                needs_dd_retry = IsRetryableDigiDollarBlockFailure(state);
                 if (!needs_dd_retry) {
                     throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, state.ToString()));
                 }
             }
         } catch (const std::exception& e) {
-            needs_dd_retry = IsInsufficientCollateralFailure(state, e.what());
+            needs_dd_retry = IsRetryableDigiDollarBlockFailure(state, e.what());
             if (!needs_dd_retry) {
                 throw;
             }

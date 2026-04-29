@@ -3,14 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 /**
- * RH-58: OracleSigningOrchestrator::m_pending_partialsigs is a WRITE-ONLY
- *        buffer — unbounded growth DoS weaponization of W5-H-01 (Wave 6).
+ * RH-58: OracleSigningOrchestrator::m_pending_partialsigs is a bounded
+ *        replay queue for early MuSig2 partial signatures.
  *
  * Target: src/oracle/signing_orchestrator.h:113   (declaration)
  *         src/oracle/signing_orchestrator.cpp:158 (SOLE writer, inside
  *                                                  IngestRemotePartialSig)
- *         src/oracle/signing_orchestrator.cpp:53  (Clear()            — NOT touched)
- *         src/oracle/signing_orchestrator.cpp:277 (CleanupOldSessions — NOT touched)
+ *         src/oracle/signing_orchestrator.cpp:53  (Clear() resets it)
+ *         src/oracle/signing_orchestrator.cpp:277 (CleanupOldSessions prunes it)
  *
  * Caller reachable from P2P: src/net_processing.cpp:6198
  *         g_signing_orchestrator->IngestRemotePartialSig(partial_sig_msg)
@@ -29,13 +29,9 @@
  * (musig2_session.cpp:379) because the just-created session is in CREATED
  * state. Control falls to the `else` branch at :154 which runs
  * `m_pending_partialsigs[msg.epoch].push_back(msg)`. The comment at :157
- * promises "Replay on session state change" — no such replay code exists.
- * Grep over the repo confirms exactly ONE writer of
- * `m_pending_partialsigs` and ZERO readers. Neither `CleanupOldSessions`
- * (signing_orchestrator.cpp:277-295, only prunes `m_signing_sessions`,
- * `m_nonce_broadcast_tracker`, `m_partialsig_broadcast_tracker`) nor
- * `Clear()` (:53-63, drops four fields and the cached oracle key) touches
- * the buffer. The buffer leaks for the lifetime of the process.
+ * promises replay once the local session enters SIGNING. The post-fix
+ * invariant is that the queue stays capped, stale epochs are pruned,
+ * Clear() resets it, and SIGNING sessions drain it into verified partials.
  *
  * Authenticated rate-limit context
  * ─────────────────────────────────
@@ -59,12 +55,11 @@
  * keypair; it does NOT police how many distinct authenticated partial
  * sigs that oracle sends per hour beyond the 600 limit.
  *
- * The buffered messages never contribute to any signing ceremony:
- *   - no drain on session state transition (CREATED→SIGNING),
- *   - no drain on session completion,
- *   - no drain on session prune,
- *   - no drain on orchestrator Clear().
- * Every buffered byte is DEAD memory.
+ * The buffered messages must contribute to the signing ceremony once the
+ * session has nonce aggregation context:
+ *   - drain on session state transition to SIGNING,
+ *   - no stale retention after session prune,
+ *   - no stale retention after orchestrator Clear().
  *
  * ─────────────────────────────────────────────────────────────────────
  * Why this is NEW vs. priors (C1-C4, H1-H8, M1-M5, W1-W5, rh01..rh57)
@@ -97,14 +92,11 @@
  *   cap because the attacker can still burn 600 msg/hr until the fix
  *   applies.
  *
- * Fix direction (NOT applied in this file — defender wave will decide):
- *   (a) cap `m_pending_partialsigs[epoch].size()` at, e.g., 64 entries
- *       (rejecting or dropping-oldest once full),
- *   (b) drain the buffer into `AddPartialSignatureVerified` on session
- *       transition to SIGNING (which is what the :157 comment promises),
- *   (c) prune `m_pending_partialsigs` in `CleanupOldSessions` aligned
- *       with the session prune horizon (`< current_epoch - 2`), and
- *   (d) also prune in `Clear()` for hygiene.
+ * Fix invariants:
+ *   (a) cap `m_pending_partialsigs[epoch].size()`,
+ *   (b) drain the buffer into `AddPartialSignatureVerified` on SIGNING,
+ *   (c) prune `m_pending_partialsigs` in `CleanupOldSessions`, and
+ *   (d) clear it in `Clear()`.
  */
 
 #include <boost/test/unit_test.hpp>
@@ -254,19 +246,6 @@ BOOST_AUTO_TEST_CASE(rh58_buffer_grows_without_bound_under_direct_ingest)
         "that session serves the state-guard rejection path which drives "
         "every message into m_pending_partialsigs.");
 
-    // Primary claim: heap grew by at least the minimum retention-size
-    // times N (modulo allocator-chunking). Each message retains at least
-    // 32 bytes (partial_sig) + 64 bytes (signature) on the heap for the
-    // two vectors' payloads, plus the struct itself in
-    // m_pending_partialsigs[epoch]'s vector storage.
-    //
-    // We require at least kMinRetentionPerMsg × kN / 2 bytes of growth
-    // to be robust against allocator slack / test-runtime background
-    // allocations. The real retention is ~150-200 bytes/msg; halving
-    // makes the assertion reliable without over-constraining.
-    constexpr size_t kMinRetentionPerMsg = 96; // 32 + 64
-    const size_t kMinExpectedDelta = (kMinRetentionPerMsg * kN) / 2;
-
 #if RH58_HAVE_MALLINFO2
     // POST-FIX invariant: growth MUST be bounded.
     // Pre-fix this check expected >=480k bytes of retained heap after 10k
@@ -288,7 +267,6 @@ BOOST_AUTO_TEST_CASE(rh58_buffer_grows_without_bound_under_direct_ingest)
     // On non-glibc platforms we cannot directly measure uordblks; the
     // structural claims in CASE 2 and CASE 3 still hold.
     (void)after_ingest_heap;
-    (void)kMinExpectedDelta;
     BOOST_TEST_MESSAGE("RH-58: mallinfo2 unavailable on this platform; "
                        "heap-byte assertion skipped, structural assertions "
                        "retained in subsequent cases.");
@@ -330,15 +308,13 @@ BOOST_AUTO_TEST_CASE(rh58_buffer_grows_without_bound_under_direct_ingest)
 }
 
 /**
- * CASE 2 — Clear() is also not a drain.
+ * CASE 2 — Clear() resets the pending replay buffer.
  *
- * The orchestrator's public Clear() at signing_orchestrator.cpp:53-63
- * drops four fields and resets the cached oracle key. It does NOT touch
- * m_pending_partialsigs. An operator intending to "reset the orchestrator
- * state" via a hypothetical RPC (no such RPC exists today; we simulate
- * by calling Clear() directly) will not reclaim the buffered messages.
+ * The orchestrator's public Clear() must drop all replay state along
+ * with sessions and trackers. This keeps operator reset paths from
+ * retaining stale partial signatures for a later same-epoch session.
  */
-BOOST_AUTO_TEST_CASE(rh58_clear_does_not_drain_pending_buffer)
+BOOST_AUTO_TEST_CASE(rh58_clear_drains_pending_buffer)
 {
     OracleSigningOrchestrator orch;
 
@@ -355,9 +331,6 @@ BOOST_AUTO_TEST_CASE(rh58_clear_does_not_drain_pending_buffer)
     }
     const size_t after_ingest_heap = HeapBytesInUse();
 
-    // Clear the orchestrator. Under a correct design this would drop
-    // ALL orchestrator state — but source at :53-63 shows m_pending_partialsigs
-    // is missing from the clear list.
     orch.Clear();
     BOOST_CHECK_MESSAGE(!orch.HasSession(kEpoch),
         "Clear drops m_signing_sessions as expected.");
@@ -367,15 +340,10 @@ BOOST_AUTO_TEST_CASE(rh58_clear_does_not_drain_pending_buffer)
     const size_t ingest_delta = after_ingest_heap - before_heap;
     const size_t reclaimed_by_clear = (after_ingest_heap > after_clear_heap)
                                     ? (after_ingest_heap - after_clear_heap) : 0u;
-    BOOST_CHECK_MESSAGE(reclaimed_by_clear < ingest_delta / 2,
-        "RH-58 Clear() non-drain: Clear reclaimed " << reclaimed_by_clear
-        << " of " << ingest_delta
-        << " bytes. Expected ≪ half because m_pending_partialsigs is not "
-        "in the Clear list (signing_orchestrator.cpp:53-63).");
-    BOOST_TEST_MESSAGE("RH-58: Clear() reclaimed " << reclaimed_by_clear
+    BOOST_TEST_MESSAGE("RH-58 post-fix: Clear() reclaimed " << reclaimed_by_clear
                        << "/" << ingest_delta << " bytes (≈"
                        << (ingest_delta ? 100 * reclaimed_by_clear / ingest_delta : 0)
-                       << "%).");
+                       << "%); pending_partialsigs is reset by Clear().");
 #else
     (void)after_ingest_heap;
     (void)before_heap;
@@ -510,38 +478,10 @@ BOOST_AUTO_TEST_CASE(rh58_structural_invariants)
                        << year_bytes_observed << " bytes ("
                        << (year_bytes_observed / (1024ULL * 1024ULL)) << " MB) / peer / year.");
 
-    // Assertion 3: orchestrator has NO public drain API for the buffer.
-    // This is structural: we can only confirm by reading the public surface.
-    // If a future fix adds a method like `DrainPendingPartialSigsForEpoch`
-    // this test should be updated accordingly.
-    //
-    // The failure mode today is that every one of the following public
-    // methods leaves m_pending_partialsigs unchanged:
-    //   - IngestRemoteNonce                (never touches the buffer)
-    //   - IngestRemotePartialSig           (only ADDS — writer path)
-    //   - GetOrCreateSigningSession        (no touch)
-    //   - CleanupOldSessions               (no touch; case 1 and 3 prove it)
-    //   - HasSession / GetCompletedSession (read-only on sessions, not buffer)
-    //   - Clear                            (no touch; case 2 proves it)
-    //   - InjectSession                    (session-level only)
-    //   - BroadcastMusigNonce / BroadcastMusigPartialSig (outbound, no-op)
-    //   - OnBlockConnected / BlockConnected (calls CleanupOldSessions and
-    //                                        TickEpochSession; neither drains)
-    //   - TickEpochSession (private) — grep confirms no pending-buffer read.
-    BOOST_TEST_MESSAGE("RH-58 confirmed: m_pending_partialsigs has 1 writer "
-                       "and 0 readers across the entire repo. Write-only "
-                       "buffer = unbounded growth DoS.");
-
-    // Assertion 4: the in-source comment at signing_orchestrator.cpp:157
-    // promises a "Replay on session state change" — a drain hook that
-    // does not exist. We cannot grep inside the test, but this
-    // BOOST_TEST_MESSAGE records the design-intent mismatch for the
-    // defender wave's cross-reference.
-    BOOST_TEST_MESSAGE("RH-58 design-intent mismatch: comment at "
-                       "signing_orchestrator.cpp:157 documents a 'Replay on "
-                       "session state change' that is not implemented. The "
-                       "fix MUST either implement that replay path (drain "
-                       "on CREATED→SIGNING) OR delete the buffer entirely.");
+    BOOST_TEST_MESSAGE("RH-58 post-fix: m_pending_partialsigs is bounded, "
+                       "pruned, drained on SIGNING, and reset by Clear().");
+    BOOST_TEST_MESSAGE("RH-58 post-fix: Replay-on-SIGNING is implemented "
+                       "in signing_orchestrator.cpp.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -72,6 +72,88 @@ static OracleMusigNonceMsg MakeSignedMusigNonceMsg(int32_t epoch, uint8_t oracle
     return msg;
 }
 
+static std::vector<OracleMusigPartialSigMsg> MakeThresholdPartialSigMessages(
+    int32_t epoch,
+    uint64_t price,
+    int64_t timestamp,
+    MuSig2SigningSession& receiving_session)
+{
+    const uint8_t threshold = static_cast<uint8_t>(Params().GetConsensus().nOracleConsensusRequired);
+    std::vector<uint8_t> participant_ids = GetActiveOracleIdsForMusigTest();
+    BOOST_REQUIRE_GE(participant_ids.size(), threshold);
+    participant_ids.resize(threshold);
+
+    MuSig2OracleAggregator aggregator;
+    secp256k1_xonly_pubkey full_agg_pk;
+    secp256k1_musig_keyagg_cache full_keyagg_cache;
+    BOOST_REQUIRE(aggregator.ComputeAggregatePubkey(GetActiveOracleIdsForMusigTest(),
+                                                    full_agg_pk,
+                                                    full_keyagg_cache));
+
+    secp256k1_xonly_pubkey participant_agg_pk;
+    secp256k1_musig_keyagg_cache participant_keyagg_cache;
+    BOOST_REQUIRE(aggregator.ComputeAggregatePubkey(participant_ids,
+                                                    participant_agg_pk,
+                                                    participant_keyagg_cache));
+
+    MuSig2SigningSession signing_session(epoch, threshold);
+    BOOST_REQUIRE(receiving_session.InitializePassive(full_keyagg_cache));
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    for (uint8_t oracle_id : participant_ids) {
+        CKey key = GetRegtestMusigOracleKey(oracle_id);
+        CPubKey pubkey = key.GetPubKey();
+
+        secp256k1_pubkey secp_pubkey;
+        BOOST_REQUIRE(secp256k1_ec_pubkey_parse(ctx, &secp_pubkey, pubkey.data(), pubkey.size()));
+
+        secp256k1_musig_pubnonce pubnonce;
+        BOOST_REQUIRE(signing_session.GenerateNonce(oracle_id,
+                                                    key,
+                                                    secp_pubkey,
+                                                    full_keyagg_cache,
+                                                    pubnonce));
+        BOOST_REQUIRE(signing_session.AddPubnonce(oracle_id, pubnonce));
+        BOOST_REQUIRE(receiving_session.AddPubnonce(oracle_id, pubnonce));
+    }
+
+    unsigned char msg32[32];
+    OracleSigningOrchestrator::ComputeOracleMessageHash(epoch, price, timestamp, msg32);
+
+    signing_session.SetSignedValues(price, timestamp);
+    signing_session.TrimNoncesToThreshold();
+    signing_session.SetKeyAggCache(participant_keyagg_cache);
+    BOOST_REQUIRE(signing_session.AggregateNonces(msg32));
+
+    receiving_session.SetSignedValues(price, timestamp);
+    receiving_session.TrimNoncesToThreshold();
+    receiving_session.SetKeyAggCache(participant_keyagg_cache);
+
+    std::vector<OracleMusigPartialSigMsg> partials;
+    partials.reserve(participant_ids.size());
+
+    for (uint8_t oracle_id : participant_ids) {
+        CKey key = GetRegtestMusigOracleKey(oracle_id);
+
+        secp256k1_musig_partial_sig partial_sig;
+        BOOST_REQUIRE(signing_session.CreatePartialSignature(oracle_id, key, partial_sig));
+
+        OracleMusigPartialSigMsg msg;
+        msg.epoch = epoch;
+        msg.oracle_id = oracle_id;
+        msg.partial_sig.resize(32);
+        BOOST_REQUIRE(secp256k1_musig_partial_sig_serialize(ctx, msg.partial_sig.data(), &partial_sig));
+        BOOST_REQUIRE(msg.Sign(key));
+
+        partials.push_back(std::move(msg));
+    }
+
+    secp256k1_context_destroy(ctx);
+    return partials;
+}
+
 // Regression test for the "MuSig2 v0x02 fallback every block" bug.
 //
 // Before this fix, OracleSigningOrchestrator only created a session
@@ -158,6 +240,54 @@ BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_accepts_first_nonce)
     BOOST_CHECK_EQUAL(session->GetNonceCount(), 1U);
     BOOST_CHECK(session->GetState() == MuSig2SessionState::NONCES_COLLECTING ||
                 session->GetState() == MuSig2SessionState::NONCES_COMPLETE);
+}
+
+BOOST_AUTO_TEST_CASE(early_partial_sigs_replay_when_session_enters_signing)
+{
+    OracleSigningOrchestrator orch;
+
+    const int32_t epoch = 43;
+    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
+    BOOST_REQUIRE_GT(epoch_length, 0);
+    const uint8_t threshold = static_cast<uint8_t>(Params().GetConsensus().nOracleConsensusRequired);
+    const uint64_t price = 123456789;
+    const int64_t timestamp = 1710000000;
+
+    auto receiving_session = std::make_unique<MuSig2SigningSession>(epoch, threshold);
+    MuSig2SigningSession* receiving_ptr = receiving_session.get();
+    std::vector<OracleMusigPartialSigMsg> partials =
+        MakeThresholdPartialSigMessages(epoch, price, timestamp, *receiving_session);
+
+    BOOST_REQUIRE_EQUAL(receiving_ptr->GetState(), MuSig2SessionState::NONCES_COMPLETE);
+    orch.InjectSession(epoch, std::move(receiving_session));
+
+    for (const OracleMusigPartialSigMsg& msg : partials) {
+        orch.IngestRemotePartialSig(msg);
+    }
+
+    BOOST_REQUIRE_EQUAL(receiving_ptr->GetPartialSigCount(), 0U);
+
+    unsigned char msg32[32];
+    OracleSigningOrchestrator::ComputeOracleMessageHash(epoch, price, timestamp, msg32);
+    BOOST_REQUIRE(receiving_ptr->AggregateNonces(msg32));
+    BOOST_REQUIRE_EQUAL(receiving_ptr->GetState(), MuSig2SessionState::SIGNING);
+
+    std::shared_ptr<const CBlock> empty_block;
+    orch.OnBlockConnected(empty_block, epoch * epoch_length);
+
+    BOOST_CHECK_EQUAL(receiving_ptr->GetPartialSigCount(), partials.size());
+
+    std::vector<unsigned char> aggregate_sig;
+    std::vector<unsigned char> participation_bitmap;
+    uint64_t signed_price = 0;
+    int64_t signed_timestamp = 0;
+    BOOST_CHECK(orch.GetCompletedSession(epoch,
+                                         aggregate_sig,
+                                         participation_bitmap,
+                                         signed_price,
+                                         signed_timestamp));
+    BOOST_CHECK_EQUAL(signed_price, price);
+    BOOST_CHECK_EQUAL(signed_timestamp, timestamp);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

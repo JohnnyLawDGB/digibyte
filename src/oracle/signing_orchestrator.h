@@ -102,6 +102,10 @@ private:
      * templated by miners.
      */
     void TickEpochSession(int32_t epoch, int32_t block_height);
+    bool TryApplyRemotePartialSig(const OracleMusigPartialSigMsg& msg,
+                                  MuSig2SigningSession& session) const;
+    void BufferPendingPartialSig(const OracleMusigPartialSigMsg& msg);
+    size_t DrainPendingPartialSigsForEpoch(int32_t epoch, MuSig2SigningSession& session);
 
     CConnman* m_connman{nullptr};
     std::map<int32_t, std::unique_ptr<MuSig2SigningSession>> m_signing_sessions;

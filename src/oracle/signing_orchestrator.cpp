@@ -66,6 +66,7 @@ void OracleSigningOrchestrator::Clear()
     m_signing_sessions.clear();
     m_nonce_broadcast_tracker.clear();
     m_partialsig_broadcast_tracker.clear();
+    m_pending_partialsigs.clear();
     m_aggregator.reset();
     m_cached_oracle_key.reset();
     m_cached_oracle_id = 255;
@@ -150,65 +151,96 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
     }
     if (it == m_signing_sessions.end() || !it->second) return;
 
-    // Deserialize partial sig
-    if (msg.partial_sig.size() != 32) return;
+    if (TryApplyRemotePartialSig(msg, *it->second)) {
+        LogPrintf("Oracle: Ingested remote partial sig for epoch %d from oracle %d\n",
+                 msg.epoch, msg.oracle_id);
+
+        // Auto-aggregate if threshold met
+        if (it->second->HasEnoughPartialSigs()) {
+            std::vector<unsigned char> final_sig;
+            if (it->second->AggregateSignature(final_sig)) {
+                LogPrintf("Oracle: MuSig2 auto-aggregated for epoch %d after remote partial sig, sig size=%zu\n",
+                         msg.epoch, final_sig.size());
+            }
+        }
+    } else if (it->second->GetState() != MuSig2SessionState::SIGNING &&
+               it->second->GetState() != MuSig2SessionState::COMPLETE &&
+               it->second->GetState() != MuSig2SessionState::FAILED) {
+        BufferPendingPartialSig(msg);
+    }
+}
+
+bool OracleSigningOrchestrator::TryApplyRemotePartialSig(const OracleMusigPartialSigMsg& msg,
+                                                         MuSig2SigningSession& session) const
+{
+    if (msg.partial_sig.size() != 32) return false;
+
     secp256k1_musig_partial_sig partial_sig;
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    bool verified_and_added = false;
     if (secp256k1_musig_partial_sig_parse(ctx, &partial_sig, msg.partial_sig.data())) {
-        // RC30: look up chainparams pubkey for this oracle so we can
-        // verify the partial sig against our local keyagg_cache.
         const OracleNodeInfo* oracle_cfg = Params().GetOracleNode(msg.oracle_id);
-        bool verified_and_added = false;
         if (oracle_cfg) {
             secp256k1_pubkey signer_pk;
             if (secp256k1_ec_pubkey_parse(ctx, &signer_pk,
                                           oracle_cfg->pubkey.data(),
                                           oracle_cfg->pubkey.size())) {
-                if (it->second->AddPartialSignatureVerified(msg.oracle_id, partial_sig, signer_pk)) {
-                    verified_and_added = true;
-                }
+                verified_and_added = session.AddPartialSignatureVerified(
+                    msg.oracle_id, partial_sig, signer_pk);
             }
-        }
-
-        if (verified_and_added) {
-            LogPrintf("Oracle: Ingested remote partial sig for epoch %d from oracle %d\n",
-                     msg.epoch, msg.oracle_id);
-
-            // Auto-aggregate if threshold met
-            if (it->second->HasEnoughPartialSigs()) {
-                std::vector<unsigned char> final_sig;
-                if (it->second->AggregateSignature(final_sig)) {
-                    LogPrintf("Oracle: MuSig2 auto-aggregated for epoch %d after remote partial sig, sig size=%zu\n",
-                             msg.epoch, final_sig.size());
-                }
-            }
-        } else {
-            // Buffer for replay — may fail because session isn't in SIGNING yet,
-            // or because the partial sig is signed under a mismatched cache
-            // (participant-set race). Replay on session state change.
-            //
-            // W6-H-01 hardening: cap per-epoch buffer at MAX_PENDING_PER_EPOCH
-            // and cap total epochs at MAX_PENDING_EPOCHS. Pre-cap, this buffer
-            // had zero readers in the repo — every rejected partial sig was
-            // pushed and never drained, producing ~219 B/msg retained heap at
-            // the 600 msg/hr rate limit (~1.1 GB/peer/year measured in rh58).
-            // CleanupOldSessions does not prune it; Clear() does not reset it.
-            // The cap bounds growth pending a proper drain implementation.
-            constexpr size_t MAX_PENDING_PER_EPOCH = 32;   // > any honest oracle count
-            constexpr size_t MAX_PENDING_EPOCHS    = 8;    // ±4 epochs around current
-            auto& epoch_buf = m_pending_partialsigs[msg.epoch];
-            if (epoch_buf.size() < MAX_PENDING_PER_EPOCH) {
-                epoch_buf.push_back(msg);
-            }
-            if (m_pending_partialsigs.size() > MAX_PENDING_EPOCHS) {
-                // FIFO on epoch: drop the lowest-numbered epoch.
-                m_pending_partialsigs.erase(m_pending_partialsigs.begin());
-            }
-            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Buffered partial sig for epoch %d oracle %d (state not SIGNING or cache mismatch)\n",
-                     msg.epoch, msg.oracle_id);
         }
     }
+
     secp256k1_context_destroy(ctx);
+    return verified_and_added;
+}
+
+void OracleSigningOrchestrator::BufferPendingPartialSig(const OracleMusigPartialSigMsg& msg)
+{
+    // Keep early partial sig replay bounded. Honest epochs need at most one
+    // message per oracle; malformed overflow is dropped until the next epoch.
+    constexpr size_t MAX_PENDING_PER_EPOCH = 32;   // > any honest oracle count
+    constexpr size_t MAX_PENDING_EPOCHS    = 8;    // ±4 epochs around current
+
+    auto& epoch_buf = m_pending_partialsigs[msg.epoch];
+    if (epoch_buf.size() < MAX_PENDING_PER_EPOCH) {
+        epoch_buf.push_back(msg);
+    }
+    if (m_pending_partialsigs.size() > MAX_PENDING_EPOCHS) {
+        m_pending_partialsigs.erase(m_pending_partialsigs.begin());
+    }
+    LogPrint(BCLog::DIGIDOLLAR,
+             "Oracle: Buffered partial sig for epoch %d oracle %d (session not SIGNING yet)\n",
+             msg.epoch, msg.oracle_id);
+}
+
+size_t OracleSigningOrchestrator::DrainPendingPartialSigsForEpoch(int32_t epoch,
+                                                                  MuSig2SigningSession& session)
+{
+    if (session.GetState() != MuSig2SessionState::SIGNING) return 0;
+
+    std::vector<OracleMusigPartialSigMsg> pending;
+    {
+        std::lock_guard<std::mutex> lock(m_sessions_mutex);
+        auto it = m_pending_partialsigs.find(epoch);
+        if (it == m_pending_partialsigs.end()) return 0;
+        pending = std::move(it->second);
+        m_pending_partialsigs.erase(it);
+    }
+
+    size_t accepted = 0;
+    for (const OracleMusigPartialSigMsg& msg : pending) {
+        if (TryApplyRemotePartialSig(msg, session)) {
+            ++accepted;
+        }
+    }
+
+    if (accepted > 0) {
+        LogPrintf("Oracle: Replayed %zu pending partial sigs for epoch %d\n", accepted, epoch);
+    }
+    return accepted;
 }
 
 OracleSigningOrchestrator& OracleSigningOrchestrator::GetInstance()
@@ -584,6 +616,9 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
     }
 
     state = session->GetState();
+    if (state == MuSig2SessionState::SIGNING) {
+        DrainPendingPartialSigsForEpoch(epoch, *session);
+    }
 
     // ── Step 3: All nodes aggregate when enough partial sigs ──
     if (state == MuSig2SessionState::SIGNING && session->HasEnoughPartialSigs()) {

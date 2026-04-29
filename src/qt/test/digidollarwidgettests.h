@@ -23,6 +23,7 @@ public:
 private Q_SLOTS:
     void overviewWidgetTests();
     void watchOnlyDigiDollarBalanceHiddenInWalletModel();
+    void privateKeyDisabledWalletCannotGenerateDigiDollarAddress();
     void mintWidgetTests();
     void mintWidgetCollateralMatchesBuilderSafetyMargin();
     void sendWidgetTests();

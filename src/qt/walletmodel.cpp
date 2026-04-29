@@ -1388,6 +1388,11 @@ QString WalletModel::getNewDigiDollarAddress(const QString& label)
             return QString();
         }
 
+        if (m_wallet->privateKeysDisabled()) {
+            LogPrintf("DigiDollar Qt: refusing to generate DigiDollar address for private-key-disabled wallet\n");
+            return QString();
+        }
+
         // Generate a new Taproot (P2TR) destination for DigiDollar
         // DigiDollar addresses must be P2TR (Taproot) type
         auto result = m_wallet->getNewDestination(OutputType::BECH32M, label.toStdString());

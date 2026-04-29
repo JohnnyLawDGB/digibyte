@@ -281,6 +281,31 @@ void DigiDollarWidgetTests::watchOnlyDigiDollarBalanceHiddenInWalletModel()
     QCOMPARE(mini_gui.walletModel->getDigiDollarBalance(), 0);
 }
 
+void DigiDollarWidgetTests::privateKeyDisabledWalletCannotGenerateDigiDollarAddress()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    QCOMPARE(mini_gui.walletModel->getNewDigiDollarAddress("watch-only-dd"), QString());
+}
+
 void DigiDollarWidgetTests::mintWidgetTests()
 {
 #ifdef Q_OS_MACOS

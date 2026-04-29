@@ -146,6 +146,7 @@
 #include <chainparams.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <consensus/volatility.h>
 #include <crypto/sha256.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/health.h>
@@ -173,6 +174,20 @@ struct OracleManagerReset
 {
     OracleManagerReset() { OracleBundleManager::GetInstance().Clear(); }
     ~OracleManagerReset() { OracleBundleManager::GetInstance().Clear(); }
+};
+
+struct VolatilityReset
+{
+    VolatilityReset()
+    {
+        DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+        DigiDollar::Volatility::VolatilityMonitor::ClearHistory();
+    }
+    ~VolatilityReset()
+    {
+        DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+        DigiDollar::Volatility::VolatilityMonitor::ClearHistory();
+    }
 };
 
 // Build a coinbase transaction whose SECOND output is a
@@ -572,6 +587,7 @@ BOOST_FIXTURE_TEST_SUITE(rh68_test_block_validity_health_metrics_side_effect_tes
 
 BOOST_AUTO_TEST_CASE(test_block_validity_does_not_update_health_metrics)
 {
+    VolatilityReset volatility_reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
     mgr.Clear();
     mgr.SetEnabled(false);
@@ -609,7 +625,8 @@ BOOST_AUTO_TEST_CASE(test_block_validity_does_not_update_health_metrics)
     {
         const CTransaction mint_tx(mint);
         TxValidationState state;
-        BOOST_REQUIRE(DigiDollar::ValidateDigiDollarTransaction(mint_tx, dd_context, state));
+        const bool mint_valid = DigiDollar::ValidateDigiDollarTransaction(mint_tx, dd_context, state);
+        BOOST_REQUIRE_MESSAGE(mint_valid, state.ToString());
     }
 
     const DigiDollar::SystemMetrics before = DigiDollar::SystemHealthMonitor::GetCachedMetrics();

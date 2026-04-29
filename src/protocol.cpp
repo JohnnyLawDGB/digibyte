@@ -277,7 +277,8 @@ uint256 OraclePriceMsg::GetHash() const
 uint256 OracleBundleMsg::GetHash() const
 {
     CHashWriter hasher(0);
-    hasher << bundle << block_hash;
+    hasher << std::string{"oracle-bundle-v1"};
+    hasher << bundle;
     return hasher.GetHash();
 }
 

@@ -391,6 +391,26 @@ BOOST_AUTO_TEST_CASE(consensus_hash_is_domain_separated_from_oracle_price)
         "Consensus proposals and oracle prices must not share the same replay-cache hash domain");
 }
 
+BOOST_AUTO_TEST_CASE(bundle_hash_ignores_unauthenticated_block_hash)
+{
+    const int64_t timestamp = GetTime();
+
+    COracleBundle bundle(7);
+    bundle.messages.push_back(MakeRegtestOracleMessage(0, 7500, timestamp));
+    bundle.median_price_micro_usd = 7500;
+    bundle.timestamp = timestamp;
+
+    OracleBundleMsg first_msg;
+    first_msg.bundle = bundle;
+    first_msg.block_hash = uint256S("0x01");
+
+    OracleBundleMsg replay_msg = first_msg;
+    replay_msg.block_hash = uint256S("0x02");
+
+    BOOST_CHECK_MESSAGE(first_msg.GetHash() == replay_msg.GetHash(),
+        "Unauthenticated block_hash mutations must not bypass oracle bundle replay dedup");
+}
+
 BOOST_AUTO_TEST_CASE(attestation_replay_hash_binds_signature)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();

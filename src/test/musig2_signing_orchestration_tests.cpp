@@ -154,6 +154,22 @@ static std::vector<OracleMusigPartialSigMsg> MakeThresholdPartialSigMessages(
     return partials;
 }
 
+static OracleMusigPartialSigMsg MakeSignedGarbagePartialSigMsg(int32_t epoch,
+                                                               uint8_t oracle_id,
+                                                               uint64_t seed)
+{
+    OracleMusigPartialSigMsg msg;
+    msg.epoch = epoch;
+    msg.oracle_id = oracle_id;
+    msg.partial_sig.resize(32);
+    for (size_t i = 0; i < msg.partial_sig.size(); ++i) {
+        msg.partial_sig[i] = static_cast<unsigned char>((seed * 0x9E3779B97F4A7C15ULL) + i);
+    }
+    msg.partial_sig[0] &= 0x3F;
+    BOOST_REQUIRE(msg.Sign(GetRegtestMusigOracleKey(oracle_id)));
+    return msg;
+}
+
 // Regression test for the "MuSig2 v0x02 fallback every block" bug.
 //
 // Before this fix, OracleSigningOrchestrator only created a session
@@ -288,6 +304,47 @@ BOOST_AUTO_TEST_CASE(early_partial_sigs_replay_when_session_enters_signing)
                                          signed_timestamp));
     BOOST_CHECK_EQUAL(signed_price, price);
     BOOST_CHECK_EQUAL(signed_timestamp, timestamp);
+}
+
+BOOST_AUTO_TEST_CASE(early_partial_buffer_dedups_by_oracle_before_capacity)
+{
+    OracleSigningOrchestrator orch;
+
+    const int32_t epoch = 44;
+    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
+    BOOST_REQUIRE_GT(epoch_length, 0);
+    const uint8_t threshold = static_cast<uint8_t>(Params().GetConsensus().nOracleConsensusRequired);
+    const uint64_t price = 123456789;
+    const int64_t timestamp = 1710000000;
+
+    auto receiving_session = std::make_unique<MuSig2SigningSession>(epoch, threshold);
+    MuSig2SigningSession* receiving_ptr = receiving_session.get();
+    std::vector<OracleMusigPartialSigMsg> honest_partials =
+        MakeThresholdPartialSigMessages(epoch, price, timestamp, *receiving_session);
+
+    BOOST_REQUIRE_EQUAL(receiving_ptr->GetState(), MuSig2SessionState::NONCES_COMPLETE);
+    orch.InjectSession(epoch, std::move(receiving_session));
+
+    const uint8_t attacker_id = static_cast<uint8_t>(Params().GetConsensus().nOracleTotalOracles - 1);
+    for (size_t i = 0; i < 32; ++i) {
+        orch.IngestRemotePartialSig(MakeSignedGarbagePartialSigMsg(epoch, attacker_id, i + 1));
+    }
+
+    for (const OracleMusigPartialSigMsg& msg : honest_partials) {
+        orch.IngestRemotePartialSig(msg);
+    }
+
+    BOOST_REQUIRE_EQUAL(receiving_ptr->GetPartialSigCount(), 0U);
+
+    unsigned char msg32[32];
+    OracleSigningOrchestrator::ComputeOracleMessageHash(epoch, price, timestamp, msg32);
+    BOOST_REQUIRE(receiving_ptr->AggregateNonces(msg32));
+    BOOST_REQUIRE_EQUAL(receiving_ptr->GetState(), MuSig2SessionState::SIGNING);
+
+    std::shared_ptr<const CBlock> empty_block;
+    orch.OnBlockConnected(empty_block, epoch * epoch_length);
+
+    BOOST_CHECK_EQUAL(receiving_ptr->GetPartialSigCount(), honest_partials.size());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

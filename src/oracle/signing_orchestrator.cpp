@@ -205,6 +205,18 @@ void OracleSigningOrchestrator::BufferPendingPartialSig(const OracleMusigPartial
     constexpr size_t MAX_PENDING_EPOCHS    = 8;    // ±4 epochs around current
 
     auto& epoch_buf = m_pending_partialsigs[msg.epoch];
+    auto existing = std::find_if(epoch_buf.begin(), epoch_buf.end(),
+                                 [&msg](const OracleMusigPartialSigMsg& pending) {
+                                     return pending.oracle_id == msg.oracle_id;
+                                 });
+    if (existing != epoch_buf.end()) {
+        *existing = msg;
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Replaced buffered partial sig for epoch %d oracle %d (session not SIGNING yet)\n",
+                 msg.epoch, msg.oracle_id);
+        return;
+    }
+
     if (epoch_buf.size() < MAX_PENDING_PER_EPOCH) {
         epoch_buf.push_back(msg);
     }

@@ -5421,6 +5421,117 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06c_collateral_release_fee_tolerance)
         "Reason: " + state2.GetRejectReason());
 }
 
+BOOST_AUTO_TEST_CASE(redteam_t2_06d_reordered_collateral_as_fee_input)
+{
+    DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+
+    // ATTACK [DD-RH-005]: A valid mint can place the collateral P2TR output at
+    // a nonzero vout. Redemption's collateral-as-fee guard must still detect it.
+    //
+    // If the guard only treats vout[0] as collateral, an attacker can redeem
+    // position A while including position B's collateral as a "fee input".
+    // The net-release subtraction makes the transaction look balanced, while
+    // position B's DD remains circulating without its backing collateral.
+
+    auto regTestParams = CChainParams::RegTest({});
+    DigiDollar::ValidationContext mintCtx(1000, 500000, 150, *regTestParams);
+
+    const CAmount originalDDA = 10000;
+    const CAmount originalDDB = 15000;
+    const int64_t lockHeight = 1000 + DigiDollar::LockDaysToBlocks(30);
+    const int64_t lockPeriod = lockHeight - mintCtx.nHeight;
+    const CAmount collateralA = DigiDollar::CalculateRequiredCollateral(originalDDA, lockPeriod, mintCtx);
+    const CAmount collateralB = DigiDollar::CalculateRequiredCollateral(originalDDB, lockPeriod, mintCtx);
+    BOOST_REQUIRE_GT(collateralA, 0);
+    BOOST_REQUIRE_GT(collateralB, 0);
+
+    CKey ownerKeyA;
+    ownerKeyA.MakeNewKey(true);
+    XOnlyPubKey ownerA(ownerKeyA.GetPubKey());
+
+    DigiDollar::MintParams paramsA;
+    paramsA.ddAmount = originalDDA;
+    paramsA.lockHeight = lockHeight;
+    paramsA.ownerKey = ownerA;
+    paramsA.internalKey = DigiDollar::GetCollateralNUMSKey();
+    paramsA.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CMutableTransaction mintTxA;
+    mintTxA.nVersion = 0x01000770;
+    mintTxA.vin.push_back(CTxIn(COutPoint(uint256S("d206d00000000000000000000000000000000000000000000000000000000001"), 0)));
+    mintTxA.vout.push_back(CTxOut(collateralA, DigiDollar::CreateCollateralP2TR(paramsA)));
+    mintTxA.vout.push_back(CTxOut(0, DigiDollar::CreateDigiDollarP2TR(ownerA, originalDDA)));
+    mintTxA.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDDA, lockHeight, 1, ownerA)));
+
+    CTransaction txA(mintTxA);
+    TxValidationState mintStateA;
+    BOOST_REQUIRE_MESSAGE(DigiDollar::ValidateMintTransaction(txA, mintCtx, mintStateA),
+                          "position A mint must be valid: " + mintStateA.GetRejectReason());
+
+    CKey ownerKeyB;
+    ownerKeyB.MakeNewKey(true);
+    XOnlyPubKey ownerB(ownerKeyB.GetPubKey());
+
+    DigiDollar::MintParams paramsB;
+    paramsB.ddAmount = originalDDB;
+    paramsB.lockHeight = lockHeight;
+    paramsB.ownerKey = ownerB;
+    paramsB.internalKey = DigiDollar::GetCollateralNUMSKey();
+    paramsB.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CScript ordinaryDGBChange = GetScriptForDestination(PKHash(ownerKeyB.GetPubKey().GetID()));
+
+    CMutableTransaction mintTxB;
+    mintTxB.nVersion = 0x01000770;
+    mintTxB.vin.push_back(CTxIn(COutPoint(uint256S("d206d00000000000000000000000000000000000000000000000000000000002"), 0)));
+    mintTxB.vout.push_back(CTxOut(COIN, ordinaryDGBChange)); // Valid non-P2TR DGB change at vout 0.
+    mintTxB.vout.push_back(CTxOut(0, DigiDollar::CreateDigiDollarP2TR(ownerB, originalDDB)));
+    mintTxB.vout.push_back(CTxOut(collateralB, DigiDollar::CreateCollateralP2TR(paramsB))); // Collateral at vout 2.
+    mintTxB.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDDB, lockHeight, 1, ownerB)));
+
+    CTransaction txB(mintTxB);
+    TxValidationState mintStateB;
+    BOOST_REQUIRE_MESSAGE(DigiDollar::ValidateMintTransaction(txB, mintCtx, mintStateB),
+                          "reordered position B mint must be valid: " + mintStateB.GetRejectReason());
+
+    CTransactionRef mintRefA = MakeTransactionRef(mintTxA);
+    CTransactionRef mintRefB = MakeTransactionRef(mintTxB);
+    uint256 mintHashA = mintRefA->GetHash();
+    uint256 mintHashB = mintRefB->GetHash();
+
+    COutPoint collOutA(mintHashA, 0);
+    COutPoint collOutB(mintHashB, 2);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    coinsView.AddCoin(collOutA, Coin(mintRefA->vout[0], 400, false), false);
+    coinsView.AddCoin(collOutB, Coin(mintRefB->vout[2], 400, false), false);
+
+    auto txLookup = [&](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        if (txid == mintHashA) { tx_out = mintRefA; return true; }
+        if (txid == mintHashB) { tx_out = mintRefB; return true; }
+        return false;
+    };
+
+    CMutableTransaction redeemTx;
+    redeemTx.nVersion = 0x03000770;
+    redeemTx.vin.push_back(CTxIn(collOutA));  // Position A collateral, correctly redeemed.
+    redeemTx.vin.push_back(CTxIn(collOutB));  // Position B collateral masquerading as a fee input.
+    redeemTx.vin.push_back(CTxIn(COutPoint(uint256S("d206d00000000000000000000000000000000000000000000000000000000099"), 0))); // DD burn input.
+    redeemTx.vout.push_back(CTxOut(collateralA + collateralB - COIN, MakeP2TR(ownerA)));
+
+    CTransaction redeem(redeemTx);
+    TxValidationState redeemState;
+    DigiDollar::ValidationContext redeemCtx(2000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateCollateralReleaseAmount(redeem, redeemCtx, originalDDA, redeemState);
+
+    BOOST_CHECK_MESSAGE(!result,
+        "EXPLOIT [DD-RH-005]: Collateral at nonzero vout was treated as a fee input, "
+        "freeing position B collateral without burning position B DD.");
+    BOOST_CHECK_EQUAL(redeemState.GetRejectReason(), "bad-redeem-collateral-as-fee-input");
+}
+
 BOOST_AUTO_TEST_CASE(redteam_t2_06d_dust_bypass_scope)
 {
     // ATTACK [T2-06d]: Verify that dust check bypass is ONLY for DD transactions.

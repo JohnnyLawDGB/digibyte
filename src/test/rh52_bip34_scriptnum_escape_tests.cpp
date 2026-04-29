@@ -151,11 +151,9 @@ CBlock MakeBlockWithNonMinimalBip34Push(uint32_t block_time)
 
 BOOST_FIXTURE_TEST_SUITE(rh52_bip34_scriptnum_escape_tests, RegTestingSetup)
 
-// Proof the exploit reproduces TODAY (pre-patch): CheckBlock throws rather
-// than returning a clean state.Invalid() for a malformed BIP34 push.
-//
-// A correct system returns false with a named reject reason; the current
-// system raises scriptnum_error.
+// CheckBlock is context-free and must not let oracle helper BIP34 parsing
+// throw into the caller. Contextual height validation is enforced outside
+// CheckBlock.
 BOOST_AUTO_TEST_CASE(rh52_checkblock_must_not_throw_on_overflow_bip34_push)
 {
     const Consensus::Params& params = Params().GetConsensus();
@@ -188,8 +186,9 @@ BOOST_AUTO_TEST_CASE(rh52_checkblock_must_not_throw_on_overflow_bip34_push)
                        << " what='" << caught_what << "'"
                        << " reject='" << state.GetRejectReason() << "'");
 
-    // Post-patch expectation: no throw, CheckBlock returns false with a
-    // named reject reason.
+    // Post-patch expectation: no throw. CheckBlock no longer runs the
+    // context-dependent oracle validators with a nullptr pindex, so the
+    // malformed BIP34 height is left to contextual validation.
     BOOST_CHECK_MESSAGE(!threw_scriptnum && !threw_other,
         "CheckBlock escaped scriptnum_error into the caller — attacker-"
         "crafted BIP34 coinbase push forces an unhandled exception out of "
@@ -197,8 +196,8 @@ BOOST_AUTO_TEST_CASE(rh52_checkblock_must_not_throw_on_overflow_bip34_push)
         "and bundle_manager.cpp:2252 (try/catch → state.Invalid).");
 
     if (!threw_scriptnum && !threw_other) {
-        BOOST_CHECK(!returned);
-        BOOST_CHECK(state.IsInvalid());
+        BOOST_CHECK(returned);
+        BOOST_CHECK(state.IsValid());
     }
 }
 
@@ -240,8 +239,8 @@ BOOST_AUTO_TEST_CASE(rh52_checkblock_must_not_throw_on_nonminimal_bip34_push)
         "(validation.cpp:124 / bundle_manager.cpp:2252).");
 
     if (!threw_scriptnum && !threw_other) {
-        BOOST_CHECK(!returned);
-        BOOST_CHECK(state.IsInvalid());
+        BOOST_CHECK(returned);
+        BOOST_CHECK(state.IsValid());
     }
 }
 

@@ -146,9 +146,10 @@ BOOST_AUTO_TEST_CASE(rh51_phase1_v01_accepted_by_validate_block_oracle_data)
     BOOST_CHECK(ok);
 }
 
-// Activation boundary: v=1 is Phase-1 encoding; at h >= nDigiDollarPhase2Height
-// Phase-2+ rules apply and v=1 is rightly refused. Document this.
-BOOST_AUTO_TEST_CASE(rh51_phase2_boundary_rejects_v01)
+// Activation boundary: CheckBlock has no pindex/BIP9 context, so it must not
+// enforce oracle phase rules from static height alone. Contextual validation
+// with pindex_prev still rejects the same v=1 bundle at the phase-2 boundary.
+BOOST_AUTO_TEST_CASE(rh51_checkblock_defers_oracle_phase_rules_to_context)
 {
     const Consensus::Params& params = Params().GetConsensus();
     const int32_t height = params.nDDActivationHeight;
@@ -164,15 +165,27 @@ BOOST_AUTO_TEST_CASE(rh51_phase2_boundary_rejects_v01)
     BOOST_TEST_MESSAGE("  CheckBlock v=1 @ h=" << height
                        << " => " << (ok ? "ACCEPT" : "REJECT")
                        << " reason=" << state.GetRejectReason());
-    // Correct Phase-2 activation behavior: v=1 rejected at h >= Phase2Height.
-    BOOST_CHECK(!ok);
-    const std::string reason = state.GetRejectReason();
+    BOOST_CHECK_MESSAGE(ok,
+        "CheckBlock must not enforce oracle phase/version rules without BIP9 context; got '"
+        << state.GetRejectReason() << "'");
+
+    CBlockIndex prev;
+    prev.nHeight = height - 1;
+    BlockValidationState contextual_state;
+    const bool contextual_ok = OracleDataValidator::ValidateBlockOracleData(
+        block, &prev, params, contextual_state);
+
+    BOOST_TEST_MESSAGE("  contextual ValidateBlockOracleData v=1 @ h=" << height
+                       << " => " << (contextual_ok ? "ACCEPT" : "REJECT")
+                       << " reason=" << contextual_state.GetRejectReason());
+    BOOST_CHECK(!contextual_ok);
+    const std::string reason = contextual_state.GetRejectReason();
     const bool is_dd_related =
         (reason == "bad-oracle-version") ||
         (reason == "bad-oracle-phase2")  ||
         (reason == "bad-oracle-bundle");
     BOOST_CHECK_MESSAGE(is_dd_related,
-        "Expected Phase-2 rejection reason; got '" << reason << "'");
+        "Expected contextual Phase-2 rejection reason; got '" << reason << "'");
 }
 
 // Pre-activation acceptance: at h=100 (< Phase2Height), CheckBlock accepts

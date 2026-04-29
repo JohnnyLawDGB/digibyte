@@ -233,8 +233,12 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
         return false;
     }
 
-    // Parse the OP_RETURN in the previous transaction to get DD amounts
+    // Parse the OP_RETURN in the previous transaction to get DD amounts.
+    // The transaction version is the authoritative DD type. Reject ambiguous
+    // or mismatched DD metadata so later spends cannot reinterpret outputs.
+    const DigiDollarTxType versionTxType = DigiDollar::GetDigiDollarTxType(*prev_tx);
     std::vector<CAmount> dd_amounts;
+    int ddOpReturnCount = 0;
     for (const auto& vout : prev_tx->vout) {
         if (vout.scriptPubKey.size() > 0 && vout.scriptPubKey[0] == OP_RETURN) {
             CScript::const_iterator pc = vout.scriptPubKey.begin();
@@ -248,6 +252,13 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
             if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
             if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
 
+            ddOpReturnCount++;
+            if (ddOpReturnCount > 1) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromPrevTx - tx %s has multiple DD OP_RETURN outputs\n",
+                         prevout.hash.ToString());
+                return false;
+            }
+
             // Read transaction type (1=MINT, 2=TRANSFER, 3=REDEEM)
             if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
             int64_t txType = 0;
@@ -256,8 +267,13 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
                     CScriptNum txTypeNum(data, true);
                     txType = txTypeNum.GetInt64();
                 } catch (const scriptnum_error&) {
-                    continue;
+                    return false;
                 }
+            }
+            if (txType != static_cast<int64_t>(versionTxType)) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: ExtractDDAmountFromPrevTx - tx %s OP_RETURN type %lld does not match version type %d\n",
+                         prevout.hash.ToString(), static_cast<long long>(txType), static_cast<int>(versionTxType));
+                return false;
             }
 
             // SECURITY: Type-aware parsing of OP_RETURN fields.
@@ -269,7 +285,7 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
             // lockHeight and lockTier are NOT DD amounts. Reading them as such would
             // allow an attacker to add extra P2TR zero-value outputs and inflate the
             // DD supply (e.g., 360-day lockHeight = 2,073,600 interpreted as $20,736).
-            if (txType == 1 || txType == 3) {
+            if (versionTxType == DD_TX_MINT || versionTxType == DD_TX_REDEEM) {
                 // MINT or REDEEM: Only first push is DD amount
                 if (vout.scriptPubKey.GetOp(pc, opcode, data) && data.size() > 0) {
                     try {
@@ -290,7 +306,7 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
                     }
                 }
             }
-            break;  // Only process first DD OP_RETURN
+            // Keep scanning remaining outputs so a second DD OP_RETURN fails closed.
         }
     }
 
@@ -367,6 +383,46 @@ bool ExtractDDAmountFromBlockDb(const COutPoint& prevout, uint32_t coinHeight,
     }
 
     return ExtractDDAmountFromTxRef(prev_tx, prevout, amount);
+}
+
+bool ExtractMintAccountingAmounts(const CTransaction& tx,
+                                  CAmount& ddAmount,
+                                  CAmount& collateralAmount)
+{
+    ddAmount = 0;
+    collateralAmount = 0;
+
+    if (DigiDollar::GetDigiDollarTxType(tx) != DD_TX_MINT) {
+        return false;
+    }
+
+    const int ddIdx = FindDDOpReturn(tx);
+    if (ddIdx < 0 ||
+        !ExtractDDAmount(tx.vout[ddIdx].scriptPubKey, ddAmount) ||
+        ddAmount <= 0) {
+        ddAmount = 0;
+        return false;
+    }
+
+    int collateralOutputs = 0;
+    for (const CTxOut& out : tx.vout) {
+        if (out.nValue <= 0 || out.scriptPubKey.IsUnspendable()) {
+            continue;
+        }
+
+        if (out.scriptPubKey.size() == 34 && out.scriptPubKey[0] == OP_1) {
+            collateralOutputs++;
+            collateralAmount = out.nValue;
+        }
+    }
+
+    if (collateralOutputs != 1 || collateralAmount <= 0) {
+        ddAmount = 0;
+        collateralAmount = 0;
+        return false;
+    }
+
+    return true;
 }
 
 bool IsCollateralScript(const CScript& script) {
@@ -1158,6 +1214,7 @@ bool ValidateTransferTransaction(const CTransaction& tx,
     // Extract DD amounts from OP_RETURN (needed for cross-node validation)
     // Format: OP_RETURN <"DD"> <txType> <amount1> <amount2> ...
     std::vector<CAmount> dd_amounts;
+    int ddOpReturnCount = 0;
     for (const auto& output : tx.vout) {
         if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
             CScript::const_iterator pc = output.scriptPubKey.begin();
@@ -1171,10 +1228,21 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             if (!output.scriptPubKey.GetOp(pc, opcode, data)) continue;
             if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
 
+            ddOpReturnCount++;
+            if (ddOpReturnCount > 1) {
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-multiple-dd-opreturn",
+                                     "Transfer transactions must have exactly one DD OP_RETURN");
+            }
+
             // Get transaction type
-            if (!output.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            if (!output.scriptPubKey.GetOp(pc, opcode, data)) {
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-malformed-op-return");
+            }
             CScriptNum txType(data, true);
-            if (txType.getint() != 2) continue;  // Must be TRANSFER (type 2)
+            if (txType.getint() != 2) {
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-opreturn-type-mismatch",
+                                     "Transfer OP_RETURN type must match transaction version");
+            }
 
             // Extract DD amounts
             while (output.scriptPubKey.GetOp(pc, opcode, data)) {
@@ -1184,7 +1252,6 @@ bool ValidateTransferTransaction(const CTransaction& tx,
                     dd_amounts.push_back(amount.GetInt64());
                 }
             }
-            break;
         }
     }
 
@@ -1224,6 +1291,11 @@ bool ValidateTransferTransaction(const CTransaction& tx,
 
             outputDD += ddAmount;
         }
+    }
+
+    if (dd_amount_index != dd_amounts.size()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-dd-output-amount-mismatch",
+                             "Transfer OP_RETURN amount count must match DD output count");
     }
 
     // Must have at least one DD output
@@ -1845,29 +1917,47 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
             // This input has DGB value — verify it's NOT from a DD mint (collateral)
             bool isCollateral = false;
 
-            // Helper: check if a specific output of a transaction is DD collateral
-            // Only the collateral output (vout[0]) of a mint is locked — change outputs
-            // from mint transactions are regular DGB and safe to use as fee inputs.
+            // Helper: check if a specific output of a transaction is DD collateral.
+            // Mint validation permits regular non-P2TR DGB change before/after the
+            // collateral, so the collateral is the unique positive P2TR output of a
+            // DD mint rather than a fixed vout index.
             auto isCollateralOutput = [&](const CTransactionRef& prev_tx, uint32_t outputIndex) -> bool {
                 if (!prev_tx) return false;
-                // Check version marker
-                if ((prev_tx->nVersion & 0xFFFF) != 0x0770) return false;
-                // Check type field = MINT (upper byte = 0x01)
-                if (((prev_tx->nVersion >> 24) & 0xFF) != 0x01) return false;
-                // Only vout[0] is the collateral output in a mint transaction.
-                // Other outputs (DD tokens, change) are not collateral.
-                if (outputIndex != 0) return false;
-                // Verify DD OP_RETURN exists (confirms this is really a mint)
-                for (const auto& vout : prev_tx->vout) {
-                    if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
-                    CScript::const_iterator pc = vout.scriptPubKey.begin();
-                    opcodetype opcode;
-                    std::vector<unsigned char> data;
-                    if (!vout.scriptPubKey.GetOp(pc, opcode)) continue;
-                    if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
-                    if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') return true;
+                if (!DigiDollar::HasDigiDollarMarker(*prev_tx)) return false;
+                if (DigiDollar::GetDigiDollarTxType(*prev_tx) != DD_TX_MINT) return false;
+                if (outputIndex >= prev_tx->vout.size()) return false;
+
+                const CTxOut& candidate = prev_tx->vout[outputIndex];
+                if (candidate.nValue <= 0 ||
+                    candidate.scriptPubKey.size() != 34 ||
+                    candidate.scriptPubKey[0] != OP_1) {
+                    return false;
                 }
-                return false;
+
+                bool hasDDOpReturn = false;
+                uint32_t collateralIndex = std::numeric_limits<uint32_t>::max();
+                int collateralCount = 0;
+                for (uint32_t candidateIndex = 0; candidateIndex < prev_tx->vout.size(); ++candidateIndex) {
+                    const CTxOut& vout = prev_tx->vout[candidateIndex];
+                    if (vout.nValue > 0 &&
+                        vout.scriptPubKey.size() == 34 &&
+                        vout.scriptPubKey[0] == OP_1) {
+                        collateralIndex = candidateIndex;
+                        collateralCount++;
+                    }
+
+                    if (vout.scriptPubKey.size() > 0 && vout.scriptPubKey[0] == OP_RETURN) {
+                        CScript::const_iterator pc = vout.scriptPubKey.begin();
+                        opcodetype opcode;
+                        std::vector<unsigned char> data;
+                        if (!vout.scriptPubKey.GetOp(pc, opcode)) continue;
+                        if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+                        if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+                            hasDDOpReturn = true;
+                        }
+                    }
+                }
+                return hasDDOpReturn && collateralCount == 1 && collateralIndex == outputIndex;
             };
 
             // Try txindex

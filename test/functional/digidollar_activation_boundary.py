@@ -29,6 +29,7 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         self.extra_args = [[
             "-digidollaractivationheight=200",
             "-dandelion=0",
+            "-txindex=1",
         ]]
 
     def add_options(self, parser):
@@ -172,6 +173,34 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         dep = node.getdigidollardeploymentinfo()
         assert_equal(dep['status'], 'active')
         assert_equal(dep['enabled'], True)
+
+        # ── Phase 8: Reorg below activation purges stale DD mempool txs ──
+        self.log.info("Phase 8: Verifying reorg below activation purges DD mempool entries...")
+        locked_in_since = active_since - REGTEST_CONFIRMATION_WINDOW
+        rollback_tip = locked_in_since - 1
+        mature_at_rollback_height = rollback_tip - 100
+        current_height = node.getblockcount()
+        transient_utxos = []
+        for utxo in node.listunspent():
+            utxo_height = current_height - utxo["confirmations"] + 1
+            if utxo_height > mature_at_rollback_height:
+                transient_utxos.append({"txid": utxo["txid"], "vout": utxo["vout"]})
+        if transient_utxos:
+            node.lockunspent(False, transient_utxos)
+
+        pending_result = node.mintdigidollar(50000, 4)
+        pending_txid = pending_result['txid']
+        assert pending_txid in node.getrawmempool(), \
+            f"Pending DD tx {pending_txid} should be in mempool before reorg"
+
+        rollback_hash = node.getblockhash(locked_in_since)
+        node.invalidateblock(rollback_hash)
+
+        dep = node.getdigidollardeploymentinfo()
+        self.log.info(f"  Deployment after reorg: status={dep['status']}, enabled={dep['enabled']}")
+        assert_equal(dep['enabled'], False)
+        assert pending_txid not in node.getrawmempool(), \
+            f"DD tx {pending_txid} must be removed from mempool after reorg below activation"
 
         self.log.info("All activation boundary tests PASSED ✓")
 

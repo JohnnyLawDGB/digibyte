@@ -334,7 +334,7 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
     size_t dd_amount_extracted = 0;
     size_t dd_amount_estimated = 0;
     size_t utxos_scanned = 0;
-    size_t output0_checked = 0;
+    size_t vault_candidates_checked = 0;
     size_t p2tr_found = 0;
 
     // Track which transactions we've seen to avoid double-counting
@@ -360,133 +360,75 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 
         utxos_scanned++;
 
-        // Check if this UTXO is part of a DD transaction we haven't processed
-        if (processed_txids.find(txid) == processed_txids.end()) {
-            // Check output 0
-            if (key.n == 0) {
-                output0_checked++;
-                // Note: Removed per-UTXO logging - too verbose for networks with many UTXOs
+        if (processed_txids.find(txid) != processed_txids.end()) {
+            pcursor->Next();
+            continue;
+        }
 
-                // Check if output 0 is a P2TR collateral output (vaults are 34 bytes starting with OP_1)
-                // DigiDollar minting creates native P2TR (Taproot) outputs for collateral vaults
-                if (coin.out.scriptPubKey.size() == 34 &&
-                    coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
-                    p2tr_found++;  // Found potential P2TR vault
-                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2TR output 0 with value, fetching full transaction...\n");
+        // DigiDollar mint collateral is a positive P2TR output, but consensus
+        // validation does not require it to be vout[0].
+        if (coin.out.scriptPubKey.size() == 34 &&
+            coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
+            vault_candidates_checked++;
+            p2tr_found++;
+            LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2TR output with value at %s:%d, fetching full transaction...\n",
+                     txid.ToString(), key.n);
 
-                    // CRITICAL: Before processing, validate this UTXO still exists in current chainstate
-                    // CoinsDB may contain spent-but-not-pruned coins
-                    if (validation_view) {
-                        Coin validation_coin;
-                        if (!validation_view->GetCoin(key, validation_coin) || validation_coin.IsSpent()) {
-                            LogPrintf("DigiDollar: Skipping spent DD vault: %s:%d\n", txid.ToString(), key.n);
-                            // Skip this output - mark txid as processed to avoid checking other outputs
-                            processed_txids.insert(txid);
-                            // Continue to next UTXO (main loop will call pcursor->Next())
-                            break; // Break out of the if(key.n == 0) block
-                        }
-                    }
-
-                    // This looks like a DD vault (output 0 of mint tx)
-                    // Now fetch the full transaction to check for OP_RETURN and extract DD amount
-
-                    CAmount collateral = coin.out.nValue;
-                    CAmount ddAmount = 0;
-                    bool exactAmount = false;
-
-                    // Get the full transaction from block storage
-                    uint256 hashBlock;
-                    CTransactionRef tx = node::GetTransaction(nullptr, mempool, txid, hashBlock, *blockman);
-
-                    if (tx) {
-                        // Check if this is actually a DigiDollar mint transaction
-                        // DD mint structure:
-                        // - Output 0: P2TR collateral vault (has value > 0, 34 bytes, OP_1)
-                        // - Output 1: P2TR DD token (value = 0, 34 bytes, OP_1, simple key-path)
-                        // - Output 2: OP_RETURN with DD metadata (contains exact DD amount)
-
-                        bool isValidDDMint = false;
-
-                        // Find the DD OP_RETURN output (searches all vouts)
-                        int ddOpReturnIdx = DigiDollar::FindDDOpReturn(*tx);
-                        if (ddOpReturnIdx >= 0) {
-                            const CScript& ddScript = tx->vout[ddOpReturnIdx].scriptPubKey;
-
-                            // Log the OP_RETURN script for debugging
-                            LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found OP_RETURN for tx %s at vout[%d], size=%d, first bytes: %02x %02x %02x %02x\n",
-                                     txid.ToString(), ddOpReturnIdx, ddScript.size(),
-                                     ddScript.size() > 0 ? ddScript[0] : 0,
-                                     ddScript.size() > 1 ? ddScript[1] : 0,
-                                     ddScript.size() > 2 ? ddScript[2] : 0,
-                                     ddScript.size() > 3 ? ddScript[3] : 0);
-
-                            // CRITICAL: Check txType to ensure this is a MINT (1), not REDEEM (3) or TRANSFER (2)
-                            DigiDollarTxType txType = DigiDollar::GetDigiDollarTxType(*tx);
-                            if (txType != DD_TX_MINT) {
-                                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Skipping tx %s - txType=%d (not MINT)\n",
-                                         txid.ToString(), static_cast<int>(txType));
-                                processed_txids.insert(txid);
-                                pcursor->Next();
-                                continue;
-                            }
-
-                            // Try to extract DD amount from OP_RETURN
-                            if (DigiDollar::ExtractDDAmount(ddScript, ddAmount)) {
-                                isValidDDMint = true;
-                                exactAmount = true;
-                                dd_amount_extracted++;
-                                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Extracted exact DD amount %s from tx %s\n",
-                                         FormatMoney(ddAmount), txid.ToString());
-                            } else {
-                                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: FAILED to extract DD amount from tx %s OP_RETURN\n",
-                                         txid.ToString());
-                            }
-                        }
-
-                        if (!isValidDDMint) {
-                            // Not a valid DD mint - skip this UTXO
-                            processed_txids.insert(txid);
-                            pcursor->Next();
-                            continue;
-                        }
-                    } else {
-                        // Could not fetch transaction - fall back to estimation
-                        LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Could not fetch tx %s, using estimation\n", txid.ToString());
-
-                        // Estimate DD supply from collateral
-                        // Using oracle price to estimate
-                        CAmount oraclePrice = GetLastOraclePrice();
-                        if (oraclePrice == 0) {
-                            oraclePrice = 50; // Default $0.50 per DGB (50 cents)
-                        }
-                        // Oracle price is in cents (100 = $1.00)
-                        CAmount collateralValue = (collateral * oraclePrice) / COIN; // in cents
-                        ddAmount = (collateralValue * 100) / 150; // Reverse 150% ratio (conservative estimate)
-                        dd_amount_estimated++;
-                    }
-
-                    // Add to totals
-                    s_currentMetrics.totalCollateral += collateral;
-                    s_currentMetrics.totalDDSupply += ddAmount;
-                    vaults_found++;
+            // CRITICAL: Before processing, validate this UTXO still exists in current chainstate
+            // CoinsDB may contain spent-but-not-pruned coins
+            if (validation_view) {
+                Coin validation_coin;
+                if (!validation_view->GetCoin(key, validation_coin) || validation_coin.IsSpent()) {
+                    LogPrintf("DigiDollar: Skipping spent DD vault candidate: %s:%d\n", txid.ToString(), key.n);
                     processed_txids.insert(txid);
-
-                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found DD vault - collateral=%s, DD=%s (%s)\n",
-                             FormatMoney(collateral), FormatMoney(ddAmount),
-                             exactAmount ? "exact" : "estimated");
-
-                    // ALWAYS log vault findings (not just BCLog::DIGIDOLLAR)
-                    LogPrintf("DigiDollar: UTXO Scanner found vault: %s:0 - Collateral=%s DGB, DD=%s cents\n",
-                             txid.ToString(), FormatMoney(collateral), FormatMoney(ddAmount));
+                    pcursor->Next();
+                    continue;
                 }
             }
+
+            CAmount collateral = 0;
+            CAmount ddAmount = 0;
+
+            // Get the full transaction from block storage
+            uint256 hashBlock;
+            CTransactionRef tx = node::GetTransaction(nullptr, mempool, txid, hashBlock, *blockman);
+
+            if (tx) {
+                if (!DigiDollar::ExtractMintAccountingAmounts(*tx, ddAmount, collateral)) {
+                    processed_txids.insert(txid);
+                    pcursor->Next();
+                    continue;
+                }
+                dd_amount_extracted++;
+                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Extracted exact DD amount %s from tx %s\n",
+                         FormatMoney(ddAmount), txid.ToString());
+            } else {
+                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Could not fetch tx %s, skipping unverified DD vault candidate\n",
+                         txid.ToString());
+                processed_txids.insert(txid);
+                pcursor->Next();
+                continue;
+            }
+
+            // Add to totals
+            s_currentMetrics.totalCollateral += collateral;
+            s_currentMetrics.totalDDSupply += ddAmount;
+            vaults_found++;
+            processed_txids.insert(txid);
+
+            LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found DD vault - collateral=%s, DD=%s (exact)\n",
+                     FormatMoney(collateral), FormatMoney(ddAmount));
+
+            // ALWAYS log vault findings (not just BCLog::DIGIDOLLAR)
+            LogPrintf("DigiDollar: UTXO Scanner found vault: %s:%d - Collateral=%s DGB, DD=%s cents\n",
+                     txid.ToString(), key.n, FormatMoney(collateral), FormatMoney(ddAmount));
         }
 
         pcursor->Next();
     }
 
-    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Scan complete - %d UTXOs scanned, %d output0s checked, %d P2TR found\n",
-             utxos_scanned, output0_checked, p2tr_found);
+    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Scan complete - %d UTXOs scanned, %d vault candidates checked, %d P2TR found\n",
+             utxos_scanned, vault_candidates_checked, p2tr_found);
     LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Results - Found %d vaults, %s DGB collateral, %s DD supply\n",
              vaults_found, FormatMoney(s_currentMetrics.totalCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply));

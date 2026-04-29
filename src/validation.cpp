@@ -389,6 +389,11 @@ void Chainstate::MaybeUpdateMempoolForReorg(
         AssertLockHeld(::cs_main);
         const CTransaction& tx = it->GetTx();
 
+        if (DigiDollar::HasDigiDollarMarker(tx) &&
+            !DigiDollar::IsDigiDollarEnabled(m_chain.Tip(), m_chainman)) {
+            return true;
+        }
+
         // The transaction must be final.
         if (!CheckFinalTxAtTip(*Assert(m_chain.Tip()), tx)) return true;
 
@@ -2413,11 +2418,9 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
                 if (ddTxType == DigiDollar::DD_TX_MINT) {
                     // Undo a MINT: subtract its DD supply and collateral from metrics
                     CAmount ddAmount = 0;
-                    int ddIdx = DigiDollar::FindDDOpReturn(tx);
-                    if (ddIdx >= 0 &&
-                        DigiDollar::ExtractDDAmount(tx.vout[ddIdx].scriptPubKey, ddAmount) &&
-                        ddAmount > 0) {
-                        DigiDollar::SystemHealthMonitor::OnMintDisconnected(ddAmount, tx.vout[0].nValue);
+                    CAmount collateralAmount = 0;
+                    if (DigiDollar::ExtractMintAccountingAmounts(tx, ddAmount, collateralAmount)) {
+                        DigiDollar::SystemHealthMonitor::OnMintDisconnected(ddAmount, collateralAmount);
                     }
                 } else if (ddTxType == DigiDollar::DD_TX_REDEEM && !txundo.vprevout.empty()) {
                     // Undo a REDEEM: the vault is restored, add back to metrics.
@@ -2432,10 +2435,8 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
                         if (m_blockman.ReadBlockFromDisk(mintBlock, *pMintBlock)) {
                             for (const auto& btx : mintBlock.vtx) {
                                 if (btx->GetHash() == tx.vin[0].prevout.hash) {
-                                    int btxDdIdx = DigiDollar::FindDDOpReturn(*btx);
-                                    if (btxDdIdx >= 0) {
-                                        DigiDollar::ExtractDDAmount(btx->vout[btxDdIdx].scriptPubKey, ddAmount);
-                                    }
+                                    CAmount unusedCollateral = 0;
+                                    DigiDollar::ExtractMintAccountingAmounts(*btx, ddAmount, unusedCollateral);
                                     break;
                                 }
                             }
@@ -2624,6 +2625,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             return FatalError(m_chainman.GetNotifications(), state, "Corrupt block found indicating potential hardware failure; shutting down");
         }
         return error("%s: Consensus::CheckBlock: %s", __func__, state.ToString());
+    }
+
+    if (!OracleDataValidator::ValidateBlockOracleData(block, pindex->pprev, params.GetConsensus(), state)) {
+        return error("%s: OracleDataValidator::ValidateBlockOracleData: %s", __func__, state.ToString());
     }
 
     if (!CheckPhase3OracleBundleVersion(block, pindex->pprev, params.GetConsensus(), state)) {
@@ -2970,12 +2975,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 // works off current data instead of stale ScanUTXOSet results.
                 auto ddTxType = DigiDollar::GetDigiDollarTxType(tx);
                 if (ddTxType == DigiDollar::DD_TX_MINT) {
-                    // MINT: extract DD amount from OP_RETURN (output 2) and collateral from output 0
+                    // MINT: extract DD amount and collateral without assuming output order.
                     CAmount mintDDAmount = 0;
-                    if (tx.vout.size() >= 3 &&
-                        DigiDollar::ExtractDDAmount(tx.vout[2].scriptPubKey, mintDDAmount) &&
-                        mintDDAmount > 0) {
-                        DigiDollar::SystemHealthMonitor::OnMintConnected(mintDDAmount, tx.vout[0].nValue);
+                    CAmount mintCollateral = 0;
+                    if (DigiDollar::ExtractMintAccountingAmounts(tx, mintDDAmount, mintCollateral)) {
+                        DigiDollar::SystemHealthMonitor::OnMintConnected(mintDDAmount, mintCollateral);
                     }
                 } else if (ddTxType == DigiDollar::DD_TX_REDEEM && !tx.vin.empty()) {
                     // REDEEM: decrement by the original MINT's DD amount and collateral.
@@ -2986,9 +2990,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                         CAmount redeemDDAmount = 0;
                         // Look up the original MINT tx to extract DD amount from its OP_RETURN
                         CTransactionRef origMintTx;
-                        if (txLookup(tx.vin[0].prevout.hash, vaultCoin.nHeight, origMintTx) &&
-                            origMintTx->vout.size() >= 3) {
-                            DigiDollar::ExtractDDAmount(origMintTx->vout[2].scriptPubKey, redeemDDAmount);
+                        if (txLookup(tx.vin[0].prevout.hash, vaultCoin.nHeight, origMintTx)) {
+                            CAmount unusedCollateral = 0;
+                            DigiDollar::ExtractMintAccountingAmounts(*origMintTx, redeemDDAmount, unusedCollateral);
                         }
                         if (redeemDDAmount > 0 && redeemCollateral > 0) {
                             DigiDollar::SystemHealthMonitor::OnRedeemConnected(redeemDDAmount, redeemCollateral);
@@ -4393,17 +4397,6 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
 
     if (fCheckPOW && fCheckMerkleRoot)
         block.fChecked = true;
-
-    // Validate oracle data (if present and after activation)
-    // Note: Oracle validation uses a pindex_prev of nullptr in CheckBlock context
-    // Full oracle validation is performed in ContextualCheckBlock
-    if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams, state)) {
-        return false; // State already set by ValidateBlockOracleData
-    }
-
-    if (!CheckPhase3OracleBundleVersion(block, nullptr, consensusParams, state)) {
-        return false;
-    }
 
     return true;
 }

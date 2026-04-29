@@ -169,6 +169,20 @@ bool ExtractDDAmountFromBlockDb(const COutPoint& prevout, uint32_t coinHeight,
                                 const TxLookupFn& txLookup, CAmount& amount);
 
 /**
+ * Extract the DD minted amount and locked collateral from a mint transaction.
+ * This is used by block connect/disconnect accounting, where output order must
+ * not be assumed beyond the mint validator's consensus rules.
+ *
+ * @param tx Mint transaction to inspect
+ * @param ddAmount Output: DD amount minted, in cents
+ * @param collateralAmount Output: DGB collateral locked, in satoshis
+ * @return true if both values were recovered from the transaction
+ */
+bool ExtractMintAccountingAmounts(const CTransaction& tx,
+                                  CAmount& ddAmount,
+                                  CAmount& collateralAmount);
+
+/**
  * Check if script is a DigiDollar collateral locking script
  *
  * @param script Script to check

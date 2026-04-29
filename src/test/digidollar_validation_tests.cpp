@@ -22,6 +22,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <vector>
+
 BOOST_AUTO_TEST_SUITE(digidollar_validation_tests)
 
 struct DigiDollarValidationTestSetup : public TestingSetup {
@@ -51,6 +53,16 @@ struct DigiDollarValidationTestSetup : public TestingSetup {
     int mockHeight;
     DigiDollar::ValidationContext validationContext;
 };
+
+static CScript MakeDDOpReturnScript(int tx_type, const std::vector<CAmount>& amounts)
+{
+    CScript opReturn;
+    opReturn << OP_RETURN << std::vector<unsigned char>{'D', 'D'} << CScriptNum(tx_type);
+    for (const CAmount amount : amounts) {
+        opReturn << CScriptNum(amount);
+    }
+    return opReturn;
+}
 
 // ============================================================================
 // Script Type Detection Tests
@@ -3055,6 +3067,75 @@ BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_utxo_valid, DigiDollarValidat
     BOOST_CHECK_MESSAGE(result, "Valid transfer should pass, got error: " + state.GetRejectReason());
 }
 
+BOOST_FIXTURE_TEST_CASE(transfer_rejects_first_opreturn_amount_spoof, DigiDollarValidationTestSetup)
+{
+    const CAmount realAmount = 10000;
+    const CAmount forgedAmount = 50000;
+
+    CKey sourceKey;
+    sourceKey.MakeNewKey(true);
+    CKey receiverKey;
+    receiverKey.MakeNewKey(true);
+    CKey inflatedKey;
+    inflatedKey.MakeNewKey(true);
+
+    const CScript sourceScript = DigiDollar::CreateDigiDollarP2TR(XOnlyPubKey(sourceKey.GetPubKey()), realAmount);
+    const CScript receiverScript = DigiDollar::CreateDigiDollarP2TR(XOnlyPubKey(receiverKey.GetPubKey()), realAmount);
+    const CScript inflatedScript = DigiDollar::CreateDigiDollarP2TR(XOnlyPubKey(inflatedKey.GetPubKey()), forgedAmount);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    const uint256 sourceTxId = uint256S("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd");
+    const COutPoint sourceOut(sourceTxId, 0);
+    coinsView.AddCoin(sourceOut, Coin(CTxOut(0, sourceScript), 500, false), false);
+
+    CMutableTransaction spoofedTransfer;
+    spoofedTransfer.nVersion = 0x02000770;
+    spoofedTransfer.vin.resize(1);
+    spoofedTransfer.vin[0].prevout = sourceOut;
+    spoofedTransfer.vout.push_back(CTxOut(0, MakeDDOpReturnScript(1, {forgedAmount})));
+    spoofedTransfer.vout.push_back(CTxOut(0, receiverScript));
+    spoofedTransfer.vout.push_back(CTxOut(0, MakeDDOpReturnScript(2, {realAmount})));
+
+    const CTransaction spoofedTx(spoofedTransfer);
+    TxValidationState spoofedState;
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView);
+
+    const bool spoofedAccepted = DigiDollar::ValidateTransferTransaction(spoofedTx, ctxWithCoins, spoofedState);
+    BOOST_CHECK_MESSAGE(!spoofedAccepted,
+                        "Transfer with conflicting DD OP_RETURN metadata must be rejected");
+
+    // Reachability proof for the pre-fix bug: if the spoofed transfer is accepted,
+    // later amount extraction reads the first DD OP_RETURN and treats the output as
+    // forgedAmount instead of the real transfer amount.
+    CCoinsView followupBaseView;
+    CCoinsViewCache followupCoinsView(&followupBaseView);
+    const COutPoint spoofedOutput(spoofedTx.GetHash(), 1);
+    followupCoinsView.AddCoin(spoofedOutput, Coin(CTxOut(0, receiverScript), 1001, false), false);
+
+    auto lookupSpoofed = [spoofedRef = MakeTransactionRef(spoofedTx)](const uint256& txid,
+                                                                      uint32_t coinHeight,
+                                                                      CTransactionRef& tx_out) {
+        if (coinHeight != 1001 || txid != spoofedRef->GetHash()) return false;
+        tx_out = spoofedRef;
+        return true;
+    };
+
+    CMutableTransaction inflatedTransfer;
+    inflatedTransfer.nVersion = 0x02000770;
+    inflatedTransfer.vin.resize(1);
+    inflatedTransfer.vin[0].prevout = spoofedOutput;
+    inflatedTransfer.vout.push_back(CTxOut(0, inflatedScript));
+    inflatedTransfer.vout.push_back(CTxOut(0, MakeDDOpReturnScript(2, {forgedAmount})));
+
+    TxValidationState inflatedState;
+    DigiDollar::ValidationContext ctxWithLookup(1002, 500000, 150, Params(), &followupCoinsView, false, lookupSpoofed);
+    const bool inflatedAccepted = DigiDollar::ValidateTransferTransaction(CTransaction(inflatedTransfer), ctxWithLookup, inflatedState);
+    BOOST_CHECK_MESSAGE(!inflatedAccepted,
+                        "Follow-up transfer must not be able to spend 10000 cents as 50000 cents");
+}
+
 BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_nullptr_fallback, DigiDollarValidationTestSetup)
 {
     // Test: When coins view is nullptr, should fall back to current behavior (Phase 1 compat)
@@ -3090,6 +3171,61 @@ BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_nullptr_fallback, DigiDollarV
     // to inputDD = outputDD, silently passing conservation. Now we reject.
     BOOST_CHECK_MESSAGE(!result, "Should reject when DD input amounts cannot be determined");
     BOOST_CHECK_EQUAL(state.GetRejectReason(), "dd-input-amounts-unknown");
+}
+
+BOOST_FIXTURE_TEST_CASE(mint_accounting_extraction_allows_change_before_opreturn, DigiDollarValidationTestSetup)
+{
+    const CAmount ddAmount = 10000;
+    const int64_t lockBlocks = DigiDollar::LockDaysToBlocks(30);
+    const int64_t lockHeight = mockHeight + lockBlocks;
+    const CAmount collateral = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, validationContext);
+    BOOST_REQUIRE_GT(collateral, 0);
+
+    DigiDollar::MintParams params;
+    params.ddAmount = ddAmount;
+    params.lockHeight = lockHeight;
+    params.ownerKey = testXOnlyKey;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+    BOOST_REQUIRE(!collateralScript.empty());
+    BOOST_REQUIRE(!ddScript.empty());
+
+    CPubKey ownerPubKey = testKey.GetPubKey();
+    XOnlyPubKey ownerXOnly(ownerPubKey);
+    CScript opReturn;
+    opReturn << OP_RETURN
+             << std::vector<unsigned char>{'D', 'D'}
+             << CScriptNum(1)
+             << CScriptNum(ddAmount)
+             << CScriptNum(lockHeight)
+             << CScriptNum(1)
+             << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
+
+    CScript dgbChangeScript;
+    dgbChangeScript << OP_0 << std::vector<unsigned char>(20, 0x11);
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770;
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("9999999999999999999999999999999999999999999999999999999999999999"), 0)));
+    mtx.vout.push_back(CTxOut(collateral, collateralScript));
+    mtx.vout.push_back(CTxOut(0, ddScript));
+    mtx.vout.push_back(CTxOut(COIN, dgbChangeScript));
+    mtx.vout.push_back(CTxOut(0, opReturn));
+    CTransaction tx(mtx);
+
+    TxValidationState state;
+    BOOST_REQUIRE_MESSAGE(DigiDollar::ValidateMintTransaction(tx, validationContext, state),
+                          "reordered mint must remain consensus-valid: " + state.GetRejectReason());
+
+    CAmount extractedDD = 0;
+    CAmount extractedCollateral = 0;
+    BOOST_CHECK_MESSAGE(DigiDollar::ExtractMintAccountingAmounts(tx, extractedDD, extractedCollateral),
+                        "block-connect accounting must recover valid mint amounts independent of output order");
+    BOOST_CHECK_EQUAL(extractedDD, ddAmount);
+    BOOST_CHECK_EQUAL(extractedCollateral, collateral);
 }
 
 // ============================================================================

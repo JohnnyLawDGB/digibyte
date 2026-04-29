@@ -1932,6 +1932,12 @@ bool OracleBundleManager::ProcessRemoteMusigPartialSig(const OracleMusigPartialS
     return true;
 }
 
+bool OracleBundleManager::HasSeenAttestation(const uint256& hash) const
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    return seen_attestation_hashes.count(hash) > 0;
+}
+
 bool OracleBundleManager::RegisterSeenAttestation(const uint256& hash)
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);

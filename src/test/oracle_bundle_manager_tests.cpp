@@ -368,6 +368,33 @@ BOOST_AUTO_TEST_CASE(register_seen_hash_dedup)
     BOOST_CHECK(!manager.HasOracleMessage(random_hash));
 }
 
+BOOST_AUTO_TEST_CASE(attestation_replay_hash_binds_signature)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    CKey key;
+    key.MakeNewKey(true);
+
+    COraclePriceMessage valid_attestation(2, 7500, GetTime());
+    BOOST_REQUIRE(valid_attestation.SignPhase2(key));
+
+    COraclePriceMessage invalid_attestation = valid_attestation;
+    invalid_attestation.schnorr_sig[0] ^= 0x01;
+    BOOST_REQUIRE(!invalid_attestation.VerifyPhase2());
+
+    OracleAttestationMsg invalid_msg;
+    invalid_msg.attestation = invalid_attestation;
+    OracleAttestationMsg valid_msg;
+    valid_msg.attestation = valid_attestation;
+
+    BOOST_CHECK_MESSAGE(invalid_msg.GetHash() != valid_msg.GetHash(),
+        "An invalid attestation signature must not share the valid attestation replay hash");
+    BOOST_CHECK(manager.RegisterSeenAttestation(invalid_msg.GetHash()));
+    BOOST_CHECK_MESSAGE(manager.RegisterSeenAttestation(valid_msg.GetHash()),
+        "Registering an invalid attestation must not poison the later valid attestation");
+}
+
 BOOST_AUTO_TEST_CASE(register_seen_hash_caps_untrusted_p2p_hashes)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();

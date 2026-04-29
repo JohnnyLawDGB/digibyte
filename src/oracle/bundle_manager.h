@@ -169,9 +169,10 @@ public:
 
     /**
      * Track seen attestation hashes for replay prevention.
-     * @param hash Phase2 signature hash of the attestation
+     * @param hash P2P attestation message hash
      * @return true if this is a new (unseen) attestation
      */
+    bool HasSeenAttestation(const uint256& hash) const;
     bool RegisterSeenAttestation(const uint256& hash);
 
     /**

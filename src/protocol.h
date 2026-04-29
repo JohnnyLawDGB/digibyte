@@ -679,8 +679,13 @@ public:
 
     uint256 GetHash() const
     {
-        // Use Phase2 signature hash for dedup (oracle_id + price + timestamp)
-        return attestation.GetPhase2SignatureHash();
+        CHashWriter hasher(0);
+        hasher << std::string{"oracle-attestation-v1"};
+        hasher << attestation.oracle_id;
+        hasher << attestation.price_micro_usd;
+        hasher << attestation.timestamp;
+        hasher << attestation.schnorr_sig;
+        return hasher.GetHash();
     }
 };
 

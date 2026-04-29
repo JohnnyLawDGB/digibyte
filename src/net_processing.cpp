@@ -5884,7 +5884,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
 
         // ── Step 2: Replay prevention ──
-        if (!bundleManager.RegisterSeenAttestation(att_hash)) {
+        if (bundleManager.HasSeenAttestation(att_hash)) {
             LogPrint(BCLog::NET, "Ignoring duplicate/replay oracle attestation from oracle %d peer=%d\n",
                      att_msg.attestation.oracle_id, pfrom.GetId());
             return;
@@ -5948,6 +5948,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // ── Step 8: Store attestation ──
         if (!bundleManager.AddConsensusAttestation(att_msg.attestation)) {
             LogPrint(BCLog::NET, "Failed to store oracle attestation from oracle %d peer=%d\n",
+                     att_msg.attestation.oracle_id, pfrom.GetId());
+            return;
+        }
+        if (!bundleManager.RegisterSeenAttestation(att_hash)) {
+            LogPrint(BCLog::NET, "Ignoring duplicate/replay oracle attestation after validation from oracle %d peer=%d\n",
                      att_msg.attestation.oracle_id, pfrom.GetId());
             return;
         }

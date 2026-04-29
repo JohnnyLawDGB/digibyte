@@ -26,6 +26,7 @@
 #include <test/util/setup_common.h>
 #include <random.h>
 #include <script/script.h>
+#include <script/standard.h>
 
 #include <thread>
 #include <mutex>
@@ -287,6 +288,58 @@ BOOST_AUTO_TEST_CASE(rh08_03_watch_only_output_excluded_from_dd_ownership)
     // Verify the function checks ISMINE_SPENDABLE (code inspection confirms this,
     // but this test ensures the behavior holds)
     BOOST_TEST_MESSAGE("RH-08-03: Watch-only contamination properly blocked via ISMINE_SPENDABLE checks.");
+}
+
+BOOST_AUTO_TEST_CASE(rh08_03b_foreign_mint_with_wallet_dgb_output_not_claimed)
+{
+    // ATTACK: A foreign valid DD mint pays ordinary DGB change/payment to this
+    // wallet. Rescan must not treat that normal DGB output as proof that this
+    // wallet owns the DD token or collateral position.
+
+    LOCK(m_wallet.cs_wallet);
+    m_wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+    m_wallet.SetupDescriptorScriptPubKeyMans();
+
+    DigiDollarWallet dd_wallet(&m_wallet);
+
+    CMutableTransaction mtx;
+    mtx.SetDigiDollarType(DD_TX_MINT);
+    mtx.vin.resize(1);
+    uint256 prev_txid;
+    GetRandBytes(prev_txid);
+    mtx.vin[0].prevout = COutPoint(prev_txid, 0);
+
+    CKey foreign_key;
+    foreign_key.MakeNewKey(true);
+    XOnlyPubKey foreign_xonly(foreign_key.GetPubKey());
+    CTxDestination foreign_dest{WitnessV1Taproot(foreign_xonly)};
+    CScript foreign_script = GetScriptForDestination(foreign_dest);
+
+    const CAmount dd_amount = 10000;
+    const int64_t block_height = 0;
+    const int64_t unlock_height = block_height + DigiDollar::LockDaysToBlocks(0);
+    mtx.vout.push_back(CTxOut(100 * COIN, foreign_script)); // foreign collateral
+    mtx.vout.push_back(CTxOut(0, foreign_script));          // foreign DD token
+    mtx.vout.push_back(CTxOut(0, CScript() << OP_RETURN
+                                           << std::vector<unsigned char>{'D', 'D'}
+                                           << CScriptNum(1)
+                                           << CScriptNum(dd_amount)
+                                           << CScriptNum(unlock_height)
+                                           << CScriptNum(0)
+                                           << std::vector<unsigned char>(foreign_xonly.begin(), foreign_xonly.end())));
+
+    CTxDestination our_dgb_dest = *Assert(m_wallet.GetNewDestination(OutputType::BECH32, ""));
+    mtx.vout.push_back(CTxOut(COIN, GetScriptForDestination(our_dgb_dest)));
+
+    CTransactionRef tx = MakeTransactionRef(std::move(mtx));
+    dd_wallet.ProcessDDTxForRescan(tx, block_height);
+
+    BOOST_CHECK_MESSAGE(dd_wallet.GetDDTimeLocks(false).empty(),
+        "SECURITY BUG [DD-RH-071]: wallet claimed a foreign DD collateral position "
+        "only because the mint paid an ordinary DGB output to this wallet");
+    BOOST_CHECK_MESSAGE(!dd_wallet.HasDDUTXO(COutPoint(tx->GetHash(), 1)),
+        "SECURITY BUG [DD-RH-071]: wallet claimed a foreign DD token output "
+        "without owning the DD spending key");
 }
 
 // =============================================================================

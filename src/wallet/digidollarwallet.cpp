@@ -583,10 +583,10 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
         }
     }
 
-    // T4-03a: Also check encrypted owner keys for TRANSFER change output matching
-    // We can check pubkey-derived tweaked keys without decrypting the secret
+    // T4-03a: Also check encrypted owner keys. We can check pubkey-derived
+    // tweaked keys without decrypting the secret, which lets locked encrypted
+    // wallets recognize their own DD outputs during rescan without exposing keys.
     for (const auto& [key_txid, crypted_pair] : dd_crypted_owner_keys) {
-        if (key_txid == txid) continue;  // Already checked via GetOwnerKey above
         const CPubKey& pubkey = crypted_pair.first;
         XOnlyPubKey owner_xonly(pubkey);
         auto tweaked = owner_xonly.CreateTapTweak(nullptr);
@@ -2213,54 +2213,27 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
         LOCK(m_wallet->cs_wallet);
 
         // For restored wallets, IsMine(vout[0]) fails because the collateral uses
-        // a custom MAST tree that the wallet doesn't know about. Instead, check if
-        // we own any of the transaction's inputs or other outputs.
+        // a custom MAST tree that the wallet doesn't know about. Ownership must
+        // still be proven by the DD token output itself. Ordinary DGB inputs or
+        // change/payment outputs in the same transaction are not proof that this
+        // wallet owns the DD position.
         bool is_our_mint = false;
 
-        // Check if we funded any of the inputs
-        for (const CTxIn& txin : tx.vin) {
-            auto it = m_wallet->mapWallet.find(txin.prevout.hash);
-            if (it != m_wallet->mapWallet.end()) {
-                // We have the input transaction - check if we owned that output
-                if (txin.prevout.n < it->second.tx->vout.size()) {
-                    // SECURITY [T4-04]: Require ISMINE_SPENDABLE to prevent watch-only
-                    // addresses from claiming ownership of DD mint transactions during rescan.
-                    // Without this, importing a watch-only address and rescanning would
-                    // contaminate dd_utxos and collateral_positions with foreign UTXOs.
-                    if (m_wallet->IsMine(it->second.tx->vout[txin.prevout.n]) & wallet::ISMINE_SPENDABLE) {
-                        is_our_mint = true;
-                        LogPrintf("DigiDollar: ProcessDDTxForRescan - Our spendable input found, this is our mint\n");
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Also check if we own any other outputs (DD tokens, change)
-        // CRITICAL FIX: Use IsDDOutputMine() for 0-value P2TR outputs (DD tokens)
-        // because m_wallet->IsMine() returns false for these in descriptor wallets.
-        // This was causing self-minted DigiDollars to be missed during wallet rescan.
-        if (!is_our_mint) {
-            for (size_t i = 1; i < tx.vout.size(); ++i) {
-                if (tx.vout[i].scriptPubKey.IsUnspendable()) continue; // Skip OP_RETURN
-                // First try standard IsMine (works for non-DD outputs like change)
-                // SECURITY [T4-04]: Require ISMINE_SPENDABLE — watch-only must not match
-                if (m_wallet->IsMine(tx.vout[i]) & wallet::ISMINE_SPENDABLE) {
-                    is_our_mint = true;
-                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our spendable output found at vout[%zu] via IsMine\n", i);
-                    break;
-                }
-                // Then try IsDDOutputMine for 0-value P2TR DD token outputs
-                if (tx.vout[i].nValue == 0 && IsDDOutputMine(tx.vout[i], tx.GetHash())) {
-                    is_our_mint = true;
-                    LogPrintf("DigiDollar: ProcessDDTxForRescan - Our DD output found at vout[%zu] via IsDDOutputMine\n", i);
-                    break;
-                }
+        // Mint transactions place the DD token at vout[1]. Only claim the mint
+        // if this wallet can prove spendability of that 0-value P2TR DD output.
+        if (tx.vout.size() >= 2) {
+            const CTxOut& dd_txout = tx.vout[1];
+            const bool looks_like_dd_token = dd_txout.nValue == 0 &&
+                                             dd_txout.scriptPubKey.size() == 34 &&
+                                             dd_txout.scriptPubKey[0] == OP_1;
+            if (looks_like_dd_token && IsDDOutputMine(dd_txout, tx.GetHash())) {
+                is_our_mint = true;
+                LogPrintf("DigiDollar: ProcessDDTxForRescan - Our DD mint token found at vout[1]\n");
             }
         }
 
         if (!is_our_mint) {
-            LogPrintf("DigiDollar: ProcessDDTxForRescan - Not our mint transaction, skipping\n");
+            LogPrintf("DigiDollar: ProcessDDTxForRescan - Mint DD token is not ours, skipping\n");
             return;
         }
 

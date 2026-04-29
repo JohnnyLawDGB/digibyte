@@ -10,6 +10,7 @@
 #include <chainparams.h>
 #include <test/util/setup_common.h>
 #include <chrono>
+#include <cmath>
 
 using namespace DigiDollar;
 using namespace DigiDollar::DCA;
@@ -206,7 +207,7 @@ BOOST_AUTO_TEST_CASE(apply_dca_all_lock_tiers)
 
     for (int baseRatio : baseRatios) {
         int adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
-        int expectedRatio = baseRatio * 1.5; // 1.5x multiplier for critical system
+        int expectedRatio = static_cast<int>(std::ceil(baseRatio * 1.5)); // 1.5x multiplier for critical system
         BOOST_CHECK_EQUAL(adjustedRatio, expectedRatio);
     }
 }
@@ -318,7 +319,7 @@ BOOST_AUTO_TEST_CASE(integration_with_consensus_params)
 
     for (const auto& [lockBlocks, baseRatio] : collateralRatios) {
         int adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
-        int expectedRatio = baseRatio * expectedMultiplier;
+        int expectedRatio = static_cast<int>(std::ceil(baseRatio * expectedMultiplier));
         BOOST_CHECK_EQUAL(adjustedRatio, expectedRatio);
     }
 }
@@ -608,7 +609,7 @@ BOOST_AUTO_TEST_CASE(test_dca_integration_stress)
 
         // Verify all calculations completed correctly
         for (size_t i = 0; i < baseRatios.size(); ++i) {
-            int expected = baseRatios[i] * 1.5; // Critical multiplier
+            int expected = static_cast<int>(std::ceil(baseRatios[i] * 1.5)); // Critical multiplier
             BOOST_CHECK_EQUAL(adjustedRatios[i], expected);
         }
 

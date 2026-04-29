@@ -233,10 +233,10 @@ BOOST_AUTO_TEST_CASE(redteam_dca_multiplier_precision)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(500, 99), 1000);   // 500 * 2.0
     
     // Test for floating-point precision issues
-    // 333 * 1.2 = 399.6 -> should truncate to 399, not round to 400
+    // 333 * 1.2 = 399.6 -> should round up to 400, never down to 399
     int adjusted = DynamicCollateralAdjustment::ApplyDCA(333, 149);
-    BOOST_CHECK_MESSAGE(adjusted == 399,
-        "DCA precision error: 333 * 1.2 = " + std::to_string(adjusted) + " (expected 399)");
+    BOOST_CHECK_MESSAGE(adjusted == 400,
+        "DCA precision error: 333 * 1.2 = " + std::to_string(adjusted) + " (expected 400)");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_txbuilder_validation_consistency)

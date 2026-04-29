@@ -10,6 +10,7 @@
 #include <util/string.h>
 
 #include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 
@@ -142,8 +143,9 @@ int DynamicCollateralAdjustment::ApplyDCA(int baseRatio, int systemHealth)
     // Apply multiplier to base ratio
     double adjustedRatio = baseRatio * multiplier;
 
-    // Truncate to integer (no rounding)
-    int finalRatio = static_cast<int>(adjustedRatio);
+    // Round up so fractional DCA multipliers never undercut the intended
+    // collateral requirement.
+    int finalRatio = static_cast<int>(std::ceil(adjustedRatio));
 
     LogPrint(BCLog::DIGIDOLLAR, "DCA: Applied %.1fx multiplier to %d%% base ratio -> %d%% final ratio\n",
              multiplier, baseRatio, finalRatio);

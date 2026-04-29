@@ -86,11 +86,11 @@ BOOST_AUTO_TEST_CASE(rh32_tier_boundary_manipulation)
         int at150 = DynamicCollateralAdjustment::ApplyDCA(base, 150);
         int at149 = DynamicCollateralAdjustment::ApplyDCA(base, 149);
         // The jump should be exactly 20% more at 149 vs 150
-        // [RH-32-F2] Due to truncation, check for potential off-by-one
+        // [RH-32-F2] Fractional DCA multipliers must round up so the final ratio
+        // never undercuts the intended collateral requirement.
         double expected149 = base * 1.2;
         BOOST_CHECK_EQUAL(at150, base); // 1.0x = no change
-        // Allow truncation: at149 should be floor(base * 1.2)
-        BOOST_CHECK_EQUAL(at149, static_cast<int>(expected149));
+        BOOST_CHECK_EQUAL(at149, static_cast<int>(std::ceil(expected149)));
     }
 }
 
@@ -104,14 +104,13 @@ BOOST_AUTO_TEST_CASE(rh32_applydca_truncation_attack)
     // 225 * 1.2 = 270.0 (exact in IEEE754 double)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(225, 149), 270);
 
-    // 212 * 1.2 = 254.4 → truncates to 254 (not 255)
-    // Attacker saves 0.4% on 7-year tier at warning level
+    // 212 * 1.2 = 254.4 → must round up to 255
     int result = DynamicCollateralAdjustment::ApplyDCA(212, 149);
-    BOOST_CHECK_EQUAL(result, 254); // Truncation: 254, not 255
+    BOOST_CHECK_EQUAL(result, 255);
 
-    // 275 * 1.5 = 412.5 → truncates to 412
+    // 275 * 1.5 = 412.5 → must round up to 413
     result = DynamicCollateralAdjustment::ApplyDCA(275, 119);
-    BOOST_CHECK_EQUAL(result, 412); // Truncation
+    BOOST_CHECK_EQUAL(result, 413);
 
     // 212 * 1.5 = 318.0 (exact)
     result = DynamicCollateralAdjustment::ApplyDCA(212, 119);

@@ -7,7 +7,7 @@
 from decimal import Decimal
 
 from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import assert_equal
+from test_framework.util import assert_equal, assert_raises_rpc_error
 
 
 class DigiDollarRPCAmountFiltersTest(DigiByteTestFramework):
@@ -59,11 +59,23 @@ class DigiDollarRPCAmountFiltersTest(DigiByteTestFramework):
         assert_equal(large_positions[0]["position_id"], tier0_mint["position_id"])
         assert_equal(large_positions[0]["dd_minted"], 20000)
 
-        self.log.info("DD-RH-024: redemption info amount parameter uses DD cents")
-        partial_info = node0.getredemptioninfo(tier0_mint["position_id"], 5000)
-        assert_equal(partial_info["redeemable_dd"], 5000)
-        whole_dollar_info = node0.getredemptioninfo(tier0_mint["position_id"], "50.00")
-        assert_equal(whole_dollar_info["redeemable_dd"], 5000)
+        self.log.info("DD-RH-072: redemption info must not advertise unsupported partial redemption")
+        full_info = node0.getredemptioninfo(tier0_mint["position_id"])
+        assert_equal(full_info["redeemable_dd"], 20000)
+        assert_raises_rpc_error(
+            -8,
+            "Exact-amount redemption required",
+            node0.getredemptioninfo,
+            tier0_mint["position_id"],
+            5000,
+        )
+        assert_raises_rpc_error(
+            -8,
+            "Exact-amount redemption required",
+            node0.getredemptioninfo,
+            tier0_mint["position_id"],
+            "50.00",
+        )
 
         self.log.info("DD-RH-022: integral decimal strings are decimal dollars, not cents")
         node1_addr = node1.getdigidollaraddress()

@@ -374,6 +374,11 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         """Test importing DD descriptors as watch-only."""
         self.log.info("Testing watch-only descriptor import...")
 
+        self.log.info("Creating an unlocked tier-0 source position for watch-only redemption preflight checks")
+        watchonly_redeem_mint = self.source_wallet.mintdigidollar(10000, 0)
+        self.generate(self.nodes[0], 241)
+        self.sync_all()
+
         # Export public descriptors (no private keys) from source wallet
         public_descriptors = self.source_wallet.listdescriptors(False)['descriptors']
         self.log.info(f"Exporting {len(public_descriptors)} public descriptors")
@@ -450,6 +455,10 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
             assert_equal(position["iswatchonly"], True)
             assert_equal(position["spendable"], False)
             assert_equal(position["can_redeem"], False)
+
+        redemption_info = watchonly_wallet.getredemptioninfo(watchonly_redeem_mint["position_id"])
+        assert_equal(redemption_info["can_redeem"], False)
+        assert_equal(redemption_info["redeemable_dd"], watchonly_redeem_mint["dd_minted"])
 
         watchonly_addresses_default = watchonly_wallet.listdigidollaraddresses()
         assert_equal(watchonly_addresses_default, [])

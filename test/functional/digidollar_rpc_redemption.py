@@ -84,16 +84,18 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         node = self.nodes[0]
         
         test_position_id = self.position_id
-        
+
         result_full = node.getredemptioninfo(test_position_id)
-        result_partial = node.getredemptioninfo(test_position_id, 5000)
-        
-        assert result_partial['redeemable_dd'] <= result_full['total_dd_minted']
-        
-        if result_partial['redeemable_dd'] == 5000:
-            self.log.info("Partial redemption correctly capped at requested amount")
-        else:
-            self.log.info(f"Redeemable DD: {result_partial['redeemable_dd']} (requested 5000)")
+        assert_equal(result_full['redeemable_dd'], result_full['total_dd_minted'])
+        assert_raises_rpc_error(
+            -8,
+            "Exact-amount redemption required",
+            node.getredemptioninfo,
+            test_position_id,
+            5000,
+        )
+        result_exact = node.getredemptioninfo(test_position_id, self.position_amount)
+        assert_equal(result_exact['redeemable_dd'], self.position_amount)
 
     def test_redemption_info_invalid_params(self):
         self.log.info("Testing redemption info with invalid parameters...")

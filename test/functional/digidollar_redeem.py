@@ -288,7 +288,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         position_id = short_lock_result['position_id']
 
         # Get redemption info immediately (timelock active)
-        immediate_info = self.nodes[2].getredemptioninfo(position_id, 10000)  # $100 in cents
+        immediate_info = self.nodes[2].getredemptioninfo(position_id, 50000)  # Full vault amount
 
         assert 'can_redeem' in immediate_info
         assert 'timelock_remaining' in immediate_info
@@ -320,7 +320,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.sync_all()
 
         # Check redemption info after timelock expiry
-        expired_info = self.nodes[2].getredemptioninfo(position_id, 10000)  # $100 in cents
+        expired_info = self.nodes[2].getredemptioninfo(position_id, 50000)  # Full vault amount
 
         # After expiry, penalty should be reduced or eliminated
         if expired_info['can_redeem'] and 'penalty_rate' in expired_info and 'penalty_rate' in immediate_info:
@@ -428,8 +428,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             self.log.info("Position has no DD remaining, skipping collateral return test...")
             return
 
-        # Test with different redemption amounts (in cents)
-        test_amounts_cents = [5000, 10000, 50000]  # $50, $100, $500
+        # Redemption is exact/full-vault only.
+        test_amounts_cents = [position.get('dd_minted', position.get('dd_remaining', 0))]
 
         for amount_cents in test_amounts_cents:
             # Skip if not enough DD balance
@@ -459,8 +459,9 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             if abs(actual_dgb - predicted_dgb) > tolerance:
                 self.log.info(f"Warning: DGB return prediction mismatch: predicted {predicted_dgb}, actual {actual_dgb}")
                 self.log.info("This may be due to position state changes from previous tests")
-            # Don't fail the test - just log the mismatch
-            # The important thing is that redemption actually works
+            # Don't fail the test - just log the mismatch.
+            # The important thing is that exact full-vault redemption works.
+            break
 
     def test_redemption_validation(self):
         """Test redemption validation rules."""
@@ -593,7 +594,8 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             stress_positions = self.nodes[0].listdigidollarpositions()
             if len(stress_positions) > 0:
                 stress_position_id = stress_positions[0]['position_id']
-                stress_info = self.nodes[0].getredemptioninfo(stress_position_id, 10000)  # $100
+                stress_amount = stress_positions[0].get('dd_minted', 0)
+                stress_info = self.nodes[0].getredemptioninfo(stress_position_id, stress_amount)
                 self.log.info(f"Redemption during stress: {stress_info}")
 
                 # During stress, penalty rates should be higher (if implemented)

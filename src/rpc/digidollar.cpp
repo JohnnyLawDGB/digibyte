@@ -2934,7 +2934,7 @@ RPCHelpMan getredemptioninfo()
                 "Shows whether position can be redeemed and potential return amounts.\n",
                 {
                     {"position_id", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Position ID (transaction hash of mint)"},
-                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Amount of DD to redeem (default: all)"}
+                    {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Amount of DD to redeem. If provided, it must equal the full position amount because partial redemption is not supported."}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -2954,7 +2954,7 @@ RPCHelpMan getredemptioninfo()
                 },
                 RPCExamples{
                     HelpExampleCli("getredemptioninfo", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"") +
-                    HelpExampleCli("getredemptioninfo", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\" 5000") +
+                    HelpExampleCli("getredemptioninfo", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\" 10000") +
                     HelpExampleRpc("getredemptioninfo", "\"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
@@ -3011,11 +3011,15 @@ RPCHelpMan getredemptioninfo()
 
             int currentHeight = pwallet->GetLastBlockHeight();
             int blocksRemaining = std::max(0, static_cast<int>(foundPosition.unlock_height - currentHeight));
+            const int confirmations = dd_wallet->GetDDTransactionConfirmations(positionId);
+            const bool walletPrivateKeysDisabled = pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
 
             // Determine status
             std::string status;
             if (!foundPosition.is_active) {
                 status = "redeemed";
+            } else if (confirmations <= 0) {
+                status = "pending";
             } else if (blocksRemaining == 0) {
                 status = "unlocked";
             } else {
@@ -3036,12 +3040,21 @@ RPCHelpMan getredemptioninfo()
                 }
             }
 
-            // Determine if position can be redeemed
-            // Requires: active, unlocked, and has collateral (received DD has dgb_collateral=0)
-            bool canRedeem = foundPosition.is_active && blocksRemaining == 0 && foundPosition.dgb_collateral > 0;
+            if (ddAmount > 0 && ddAmount != foundPosition.dd_minted) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Exact-amount redemption required: must redeem full vault amount of %d cents (requested: %d cents). "
+                              "Partial redemption is not supported - the entire vault must be closed at once.",
+                              foundPosition.dd_minted, ddAmount));
+            }
 
-            // Redeemable amount (exact-amount required, no partial)
-            CAmount redeemableDD = ddAmount > 0 ? std::min(ddAmount, foundPosition.dd_minted) : foundPosition.dd_minted;
+            // Determine if position can be redeemed. Read-only/watch-only wallets
+            // can monitor positions, but cannot sign a redemption.
+            bool canRedeem = confirmations > 0 && foundPosition.is_active && blocksRemaining == 0 &&
+                             foundPosition.dgb_collateral > 0 && !walletPrivateKeysDisabled;
+
+            // Redeemable amount is always the full vault amount; partial
+            // redemption is rejected above and by redeemdigidollar.
+            CAmount redeemableDD = foundPosition.dd_minted;
 
             // Estimate DGB return: the locked collateral minus estimated fees
             CAmount estimatedFee = dd_wallet->EstimateRedemptionFee(

@@ -1529,20 +1529,86 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
     CAmount totalDGBOutputs = 0;
     CAmount totalDDOutputs = 0;
 
-    // First pass: Find OP_RETURN metadata and extract DD output amounts
-    // The OP_RETURN contains the authoritative DD amounts for P2TR outputs in this transaction
+    // First pass: Find the single authoritative DD OP_RETURN for redemption
+    // change. Legacy OP_DIGIDOLLAR metadata is intentionally rejected here:
+    // if redemption validation reads one format while later source extraction
+    // reads another, DD burn accounting can be bypassed.
     CAmount ddAmountFromOpReturn = 0;
     bool foundOpReturn = false;
+    int ddOpReturnCount = 0;
+    bool foundLegacyDDOpReturn = false;
     for (const auto& output : tx.vout) {
         if (output.nValue == 0 && output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
-            CAmount amount = 0;
-            if (ExtractDDAmount(output.scriptPubKey, amount) && amount > 0) {
-                ddAmountFromOpReturn = amount;
+            CScript::const_iterator pc = output.scriptPubKey.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
+
+            if (!output.scriptPubKey.GetOp(pc, opcode)) continue; // OP_RETURN
+            if (!output.scriptPubKey.GetOp(pc, opcode, data)) continue;
+
+            if (opcode == OP_DIGIDOLLAR) {
+                ddOpReturnCount++;
+                if (ddOpReturnCount > 1) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-multiple-dd-opreturn",
+                                       "Redemption transaction has conflicting DD OP_RETURN metadata");
+                }
+                foundLegacyDDOpReturn = true;
+                continue;
+            }
+
+            if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+                ddOpReturnCount++;
+                if (ddOpReturnCount > 1) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-multiple-dd-opreturn",
+                                       "Redemption transaction has conflicting DD OP_RETURN metadata");
+                }
+
+                if (!output.scriptPubKey.GetOp(pc, opcode, data) || data.empty()) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-opreturn-type",
+                                       "Redemption OP_RETURN missing transaction type");
+                }
+
+                int64_t opReturnTxType = 0;
+                try {
+                    CScriptNum txTypeNum(data, true);
+                    opReturnTxType = txTypeNum.GetInt64();
+                } catch (const scriptnum_error&) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-opreturn-type",
+                                       "Malformed redemption OP_RETURN transaction type");
+                }
+
+                if (opReturnTxType != static_cast<int64_t>(DD_TX_REDEEM)) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-opreturn-type",
+                                       "Redemption OP_RETURN type must match nVersion type");
+                }
+
+                if (!output.scriptPubKey.GetOp(pc, opcode, data) || data.empty()) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-opreturn-amount",
+                                       "Redemption OP_RETURN missing DD amount");
+                }
+
+                try {
+                    CScriptNum amountNum(data, true, 8);
+                    ddAmountFromOpReturn = amountNum.GetInt64();
+                } catch (const scriptnum_error&) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-opreturn-amount",
+                                       "Malformed redemption OP_RETURN DD amount");
+                }
+
+                if (ddAmountFromOpReturn <= 0) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-opreturn-amount",
+                                       "Redemption OP_RETURN DD amount must be positive");
+                }
+
                 foundOpReturn = true;
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Found OP_RETURN with DD amount: %lld cents\n", (long long)amount);
-                break;  // Only use first OP_RETURN with DD amount
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Found redemption OP_RETURN with DD amount: %lld cents\n",
+                         (long long)ddAmountFromOpReturn);
             }
         }
+    }
+    if (foundLegacyDDOpReturn) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-legacy-dd-opreturn",
+                           "Legacy OP_DIGIDOLLAR OP_RETURN is not valid redemption metadata");
     }
 
     for (size_t outIdx = 0; outIdx < tx.vout.size(); ++outIdx) {

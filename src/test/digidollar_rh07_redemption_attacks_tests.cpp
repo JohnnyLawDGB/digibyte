@@ -82,6 +82,16 @@ static CScript RH07_MakeDDRedeemOpReturn(CAmount ddAmount) {
     return script;
 }
 
+static CScript RH07_MakeLegacyDDAmountOpReturn(CAmount ddAmount) {
+    CScript script;
+    std::vector<unsigned char> amountBytes(8);
+    for (int i = 0; i < 8; ++i) {
+        amountBytes[i] = static_cast<unsigned char>((static_cast<uint64_t>(ddAmount) >> (8 * i)) & 0xff);
+    }
+    script << OP_RETURN << OP_DIGIDOLLAR << amountBytes;
+    return script;
+}
+
 // Helper: Build DD TRANSFER OP_RETURN
 static CScript RH07_MakeDDTransferOpReturn(const std::vector<CAmount>& amounts) {
     CScript script;
@@ -393,6 +403,70 @@ BOOST_AUTO_TEST_CASE(rh07_02c_full_burn_passes)
     BOOST_CHECK_MESSAGE(result,
         "VALID [RH-07-02c]: Full DD burn should release full collateral. "
         "Reason: " + state.GetRejectReason());
+}
+
+BOOST_AUTO_TEST_CASE(rh07_02d_legacy_opreturn_redeem_change_preserves_burn)
+{
+    auto regTestParams = CChainParams::RegTest({});
+    const int currentHeight = 2000;
+    const int64_t lockHeight = 1500;
+    const CAmount lockedCollateral = 200 * COIN;
+    const CAmount redeemedPositionDD = 10000;
+    const CAmount otherDD = 90000;
+    const CAmount totalDDInputs = redeemedPositionDD + otherDD;
+
+    MockMintContext redeemedMint(lockedCollateral, redeemedPositionDD, lockHeight);
+    MockMintContext otherMint(300 * COIN, otherDD, lockHeight);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    COutPoint collateralOutpoint(redeemedMint.mintTxHash, 0);
+    COutPoint redeemedDDOutpoint(redeemedMint.mintTxHash, 1);
+    COutPoint otherDDOutpoint(otherMint.mintTxHash, 1);
+
+    coinsView.AddCoin(collateralOutpoint, Coin(CTxOut(lockedCollateral, redeemedMint.collateralScript), 400, false), false);
+    coinsView.AddCoin(redeemedDDOutpoint, Coin(CTxOut(0, RH07_MakeP2TR(redeemedMint.ddXOnly)), 400, false), false);
+    coinsView.AddCoin(otherDDOutpoint, Coin(CTxOut(0, RH07_MakeP2TR(otherMint.ddXOnly)), 400, false), false);
+
+    CKey changeKey;
+    changeKey.MakeNewKey(true);
+    XOnlyPubKey changeXOnly(changeKey.GetPubKey());
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x03000770; // DD_TX_REDEEM
+    mtx.nLockTime = lockHeight;
+    mtx.vin.push_back(CTxIn(collateralOutpoint, CScript(), 0xFFFFFFFE));
+    mtx.vin.push_back(CTxIn(redeemedDDOutpoint, CScript(), 0xFFFFFFFE));
+    mtx.vin.push_back(CTxIn(otherDDOutpoint, CScript(), 0xFFFFFFFE));
+    mtx.vout.push_back(CTxOut(lockedCollateral, RH07_MakeP2TR(redeemedMint.ownerXOnly)));
+    mtx.vout.push_back(CTxOut(0, RH07_MakeP2TR(changeXOnly)));
+    mtx.vout.push_back(CTxOut(0, RH07_MakeLegacyDDAmountOpReturn(otherDD)));
+    mtx.vout.push_back(CTxOut(0, RH07_MakeDDRedeemOpReturn(totalDDInputs)));
+
+    CTransaction tx(mtx);
+    auto txLookup = [&](const uint256& txid, uint32_t h, CTransactionRef& out) -> bool {
+        if (txid == redeemedMint.mintTxHash) { out = redeemedMint.mintTxRef; return true; }
+        if (txid == otherMint.mintTxHash) { out = otherMint.mintTxRef; return true; }
+        if (txid == tx.GetHash()) { out = MakeTransactionRef(tx); return true; }
+        return false;
+    };
+
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(currentHeight, 50000, 150, *regTestParams, &coinsView, false, txLookup);
+
+    bool result = DigiDollar::ValidateRedemptionTransaction(tx, ctx, state);
+    if (result) {
+        CAmount extractedChange = 0;
+        BOOST_REQUIRE(DigiDollar::ExtractDDAmountFromBlockDb(COutPoint(tx.GetHash(), 1), currentHeight, txLookup, extractedChange));
+        BOOST_CHECK_EQUAL(extractedChange, totalDDInputs);
+    }
+
+    BOOST_CHECK_MESSAGE(!result,
+        "ATTACK [RH-07-02d]: redemption with conflicting legacy/current OP_RETURN metadata must be rejected. "
+        "Otherwise validation treats change as 90000 DD, burns 10000 DD to release collateral, "
+        "but later source extraction treats the same change output as 100000 DD.");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-redeem-multiple-dd-opreturn");
 }
 
 // ============================================================================

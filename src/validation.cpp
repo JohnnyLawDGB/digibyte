@@ -437,6 +437,44 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 }
             }
         }
+
+        if (DigiDollar::HasDigiDollarMarker(tx)) {
+            CCoinsViewMemPool view_mempool{&CoinsTip(), *m_mempool};
+            CCoinsViewCache dd_view{&view_mempool};
+            auto txLookup = [this](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+                AssertLockHeld(cs_main);
+                const CBlockIndex* pblockindex = m_chain[coinHeight];
+                if (!pblockindex) return false;
+                CBlock block;
+                if (!m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
+                for (const auto& btx : block.vtx) {
+                    if (btx->GetHash() == txid) {
+                        tx_out = btx;
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            TxValidationState dd_state;
+            DigiDollar::ValidationContext ddContext(
+                m_chain.Height() + 1,
+                GetOraclePriceForTransaction(tx),
+                DigiDollar::GetSystemCollateralRatio(),
+                m_chainman.GetParams(),
+                &dd_view,
+                false,
+                txLookup,
+                m_mempool
+            );
+
+            if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, dd_state)) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Removing reorg-resurrected tx %s after DD revalidation failed: %s\n",
+                         tx.GetHash().ToString(), dd_state.GetRejectReason());
+                return true;
+            }
+        }
+
         // Transaction is still valid and cached LockPoints are updated.
         return false;
     };
@@ -776,8 +814,15 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return false; // state filled in by CheckTransaction
     }
 
-    // DigiDollar consensus validation with blockchain context
-    if (DigiDollar::HasDigiDollarMarker(tx)) {
+    // Only accept nLockTime-using transactions that can be mined in the next
+    // block; keep this before DigiDollar contextual validation so non-final DD
+    // transactions cannot force oracle/block-db validation work.
+    if (!CheckFinalTxAtTip(*Assert(m_active_chainstate.m_chain.Tip()), tx)) {
+        return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "non-final");
+    }
+
+    const bool is_digidollar_tx = DigiDollar::HasDigiDollarMarker(tx);
+    if (is_digidollar_tx) {
         // RH-36c: Early reject invalid DD tx types BEFORE expensive oracle/block-DB lookups.
         // Transactions with the 0x0770 marker but invalid type (>= DD_TX_MAX) would
         // otherwise trigger full oracle price lookup + block reads before eventual rejection.
@@ -792,41 +837,6 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         if (!DigiDollar::IsDigiDollarEnabled(m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman)) {
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "digidollar-not-active",
                                "DigiDollar features not yet activated");
-        }
-
-        // Create validation context with current blockchain state
-        // Pass coins tip for UTXO lookup in DD redemption validation
-        // Include block-db tx lookup for DD amount extraction without txindex
-        auto txLookup = [this](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
-            AssertLockHeld(cs_main);
-            const CBlockIndex* pblockindex = m_active_chainstate.m_chain[coinHeight];
-            if (!pblockindex) return false;
-            CBlock block;
-            if (!m_active_chainstate.m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
-            for (const auto& btx : block.vtx) {
-                if (btx->GetHash() == txid) {
-                    tx_out = btx;
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        DigiDollar::ValidationContext ddContext(
-            m_active_chainstate.m_chain.Height() + 1,  // Height for next block
-            GetOraclePriceForTransaction(tx),           // Current oracle price
-            DigiDollar::GetSystemCollateralRatio(),     // System health
-            args.m_chainparams,                          // Chain parameters
-            &m_active_chainstate.CoinsTip(),             // Coins view for UTXO lookup
-            false,                                       // Don't skip oracle validation in mempool
-            txLookup,                                    // Block-db tx lookup for DD amounts
-            &m_pool                                      // Mempool for unconfirmed DD input lookup
-        );
-
-        if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, state)) {
-            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Transaction validation failed (txid: %s): %s\n",
-                     hash.ToString(), state.GetRejectReason());
-            return false; // state filled in by DigiDollar validation
         }
     }
 
@@ -843,13 +853,6 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // Transactions smaller than 65 non-witness bytes are not relayed to mitigate CVE-2017-12842.
     if (::GetSerializeSize(tx, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) < MIN_STANDARD_TX_NONWITNESS_SIZE)
         return state.Invalid(TxValidationResult::TX_NOT_STANDARD, "tx-size-small");
-
-    // Only accept nLockTime-using transactions that can be mined in the next
-    // block; we don't want our mempool filled up with transactions that can't
-    // be mined yet.
-    if (!CheckFinalTxAtTip(*Assert(m_active_chainstate.m_chain.Tip()), tx)) {
-        return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "non-final");
-    }
 
     if (m_pool.exists(GenTxid::Wtxid(tx.GetWitnessHash()))) {
         // Exact transaction already exists in the mempool.
@@ -939,6 +942,43 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // The mempool holds txs for the next block, so pass height+1 to CheckTxInputs
     if (!Consensus::CheckTxInputs(tx, state, m_view, m_active_chainstate.m_chain.Height() + 1, ws.m_base_fees)) {
         return false; // state filled in by CheckTxInputs
+    }
+
+    // DigiDollar contextual validation must use the mempool-aware view after
+    // inputs have been cached. Passing CoinsTip() here would miss unconfirmed
+    // parents and let stale txindex data resolve DD amounts across reorgs.
+    if (is_digidollar_tx) {
+        auto txLookup = [this](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+            AssertLockHeld(cs_main);
+            const CBlockIndex* pblockindex = m_active_chainstate.m_chain[coinHeight];
+            if (!pblockindex) return false;
+            CBlock block;
+            if (!m_active_chainstate.m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
+            for (const auto& btx : block.vtx) {
+                if (btx->GetHash() == txid) {
+                    tx_out = btx;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        DigiDollar::ValidationContext ddContext(
+            m_active_chainstate.m_chain.Height() + 1,  // Height for next block
+            GetOraclePriceForTransaction(tx),           // Current oracle price
+            DigiDollar::GetSystemCollateralRatio(),     // System health
+            args.m_chainparams,                         // Chain parameters
+            &m_view,                                    // Mempool-aware coins view
+            false,                                      // Don't skip oracle validation in mempool
+            txLookup,                                   // Block-db tx lookup for DD amounts
+            &m_pool                                     // Mempool for unconfirmed DD input lookup
+        );
+
+        if (!DigiDollar::ValidateDigiDollarTransaction(tx, ddContext, state)) {
+            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Transaction validation failed (txid: %s): %s\n",
+                     hash.ToString(), state.GetRejectReason());
+            return false; // state filled in by DigiDollar validation
+        }
     }
 
     // Check for non-standard pay-to-script-hash in inputs

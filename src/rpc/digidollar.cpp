@@ -1624,7 +1624,7 @@ RPCHelpMan redeemdigidollar()
         {
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
-            CAmount ddAmount = request.params[1].getInt<int64_t>(); // DD amount in cents (not BTC format)
+            CAmount ddAmount = ParseDigiDollarRpcAmount(request.params[1]);
             std::string redeemAddress = OptionalParamIsSet(request, 2) ? request.params[2].get_str() : "";
 
             // Validate parameters

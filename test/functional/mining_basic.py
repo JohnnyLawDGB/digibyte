@@ -167,7 +167,11 @@ class MiningTest(DigiByteTestFramework):
         tmpl = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
         self.log.info("getblocktemplate: Test capability advertised")
         assert 'proposal' in tmpl['capabilities']
-        assert 'coinbasetxn' not in tmpl
+        if 'default_oracle_commitment' in tmpl:
+            assert 'coinbasetxn' in tmpl
+            assert 'data' in tmpl['coinbasetxn']
+        else:
+            assert 'coinbasetxn' not in tmpl
 
         next_height = int(tmpl["height"])
         coinbase_tx = create_coinbase(height=next_height)

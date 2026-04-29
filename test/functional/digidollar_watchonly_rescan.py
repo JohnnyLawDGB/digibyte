@@ -112,12 +112,12 @@ class DigiDollarWatchOnlyRescanTest(DigiByteTestFramework):
 
         # Get the minted amount for comparison
         alice_dd_balance = alice_balance_after.get("confirmed", 0) if isinstance(alice_balance_after, dict) else alice_balance_after
-        assert_greater_than(alice_dd_balance, 0, "Alice should have DD balance after mint")
+        assert alice_dd_balance > 0, "Alice should have DD balance after mint"
 
         # Get Alice's positions
         alice_positions = self.nodes[0].listdigidollarpositions()
         self.log.info(f"Alice has {len(alice_positions)} positions")
-        assert_greater_than(len(alice_positions), 0, "Alice should have at least one position")
+        assert len(alice_positions) > 0, "Alice should have at least one position"
 
         # ---- Step 2: Get an address Alice owns (from the mint tx) ----
         self.log.info("Step 2: Getting Alice's address from mint transaction...")
@@ -139,7 +139,7 @@ class DigiDollarWatchOnlyRescanTest(DigiByteTestFramework):
         bob_balance_before = self.nodes[1].getdigidollarbalance()
         bob_dd_before = bob_balance_before.get("confirmed", 0) if isinstance(bob_balance_before, dict) else bob_balance_before
         self.log.info(f"Bob DD balance before import: {bob_dd_before}")
-        assert_equal(bob_dd_before, 0, "Bob should have 0 DD balance before import")
+        assert bob_dd_before == 0, "Bob should have 0 DD balance before import"
 
         # Import Alice's address(es) as watch-only on Bob's node
         for addr in alice_addresses:
@@ -182,19 +182,21 @@ class DigiDollarWatchOnlyRescanTest(DigiByteTestFramework):
         self.log.info(f"Bob DD balance after rescan: {bob_dd_after}")
 
         # CRITICAL ASSERTION: Bob's DD balance must still be 0
-        assert_equal(bob_dd_after, 0,
-                     f"SECURITY BUG [T4-04]: Watch-only DD balance contamination! "
-                     f"Bob's DD balance should be 0 but got {bob_dd_after}. "
-                     f"Watch-only addresses inflated the DD balance.")
+        assert bob_dd_after == 0, (
+            f"SECURITY BUG [T4-04]: Watch-only DD balance contamination! "
+            f"Bob's DD balance should be 0 but got {bob_dd_after}. "
+            f"Watch-only addresses inflated the DD balance."
+        )
 
         # ---- Step 6: Verify Bob has no DD positions ----
         self.log.info("Step 6: Verifying Bob has no collateral positions...")
 
         bob_positions = self.nodes[1].listdigidollarpositions()
         self.log.info(f"Bob has {len(bob_positions)} positions (should be 0)")
-        assert_equal(len(bob_positions), 0,
-                     f"SECURITY BUG [T4-04]: Watch-only position contamination! "
-                     f"Bob has {len(bob_positions)} positions but should have 0.")
+        assert len(bob_positions) == 0, (
+            f"SECURITY BUG [T4-04]: Watch-only position contamination! "
+            f"Bob has {len(bob_positions)} positions but should have 0."
+        )
 
         # ---- Step 7: Verify Alice's balance is unchanged (control) ----
         self.log.info("Step 7: Verifying Alice's DD balance is unchanged (control)...")
@@ -202,12 +204,10 @@ class DigiDollarWatchOnlyRescanTest(DigiByteTestFramework):
         alice_balance_final = self.nodes[0].getdigidollarbalance()
         alice_dd_final = alice_balance_final.get("confirmed", 0) if isinstance(alice_balance_final, dict) else alice_balance_final
         self.log.info(f"Alice DD balance (control): {alice_dd_final}")
-        assert_equal(alice_dd_final, alice_dd_balance,
-                     "Alice's DD balance should not have changed")
+        assert alice_dd_final == alice_dd_balance, "Alice's DD balance should not have changed"
 
         alice_positions_final = self.nodes[0].listdigidollarpositions()
-        assert_equal(len(alice_positions_final), len(alice_positions),
-                     "Alice's positions should not have changed")
+        assert len(alice_positions_final) == len(alice_positions), "Alice's positions should not have changed"
 
         self.log.info("=== PASS: Watch-only DD addresses correctly excluded from DD balance ===")
         self.log.info(f"  Alice (owner): {alice_dd_balance} DD cents, {len(alice_positions)} positions")

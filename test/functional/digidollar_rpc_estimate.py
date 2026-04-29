@@ -48,6 +48,7 @@ LOCK_TIERS = {
     6: (1095, 250),
     7: (1825, 225),
     8: (2555, 212),
+    9: (3650, 200),
 }
 
 # Days to tier mapping for boundary tests
@@ -312,18 +313,17 @@ class DigiDollarEstimateTest(DigiByteTestFramework):
         self.log.info(f"  365-day tier verified: {result['base_ratio']}% ratio")
 
     def test_estimate_various_amounts(self):
-        """Test estimation with $1, $100, $1000, $10000 amounts."""
+        """Test estimation with valid regtest mint amounts."""
         self.log.info("Testing various DD amounts...")
 
         lock_tier = 4  # 365 days, 300% ratio
         base_ratio = LOCK_TIERS[lock_tier][1]
 
-        # Test amounts in cents: $1, $100, $1000, $10000
+        # Regtest caps a single mint at $1,000 (100000 cents).
         test_amounts = [
             (100, "$1"),
             (10000, "$100"),
             (100000, "$1,000"),
-            (1000000, "$10,000"),
         ]
 
         previous_dgb = Decimal('0')
@@ -526,6 +526,15 @@ class DigiDollarEstimateTest(DigiByteTestFramework):
             None,
             self.nodes[0].estimatecollateral,
             -10000,
+            4
+        )
+
+        self.log.info("  Testing amount above regtest maximum...")
+        assert_raises_rpc_error(
+            -8,
+            "Maximum mint amount is $1000",
+            self.nodes[0].estimatecollateral,
+            100001,
             4
         )
 

@@ -25,9 +25,13 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         node = self.nodes[0]
         
         self.log.info("Generating initial blocks for test setup...")
-        self.generate(node, 110)
-        
-        node.setmockoracleprice(6000)
+        self.generate(node, 340)
+
+        node.setmockoracleprice(500000)
+        mint_result = node.mintdigidollar(10000, 0)
+        self.position_id = mint_result["position_id"]
+        self.position_amount = mint_result["dd_minted"]
+        self.generate(node, 1)
         
         self.test_redemption_info_basic()
         self.test_redemption_info_fields()
@@ -41,7 +45,7 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         self.log.info("Testing basic redemption info response...")
         node = self.nodes[0]
         
-        test_position_id = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        test_position_id = self.position_id
         result = node.getredemptioninfo(test_position_id)
         
         assert 'position_id' in result, "Missing 'position_id' field"
@@ -59,7 +63,7 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         self.log.info("Testing redemption info field types...")
         node = self.nodes[0]
         
-        test_position_id = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        test_position_id = self.position_id
         result = node.getredemptioninfo(test_position_id)
         
         assert isinstance(result['position_id'], str), "position_id should be string"
@@ -79,7 +83,7 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         self.log.info("Testing redemption info with specific DD amount...")
         node = self.nodes[0]
         
-        test_position_id = "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+        test_position_id = self.position_id
         
         result_full = node.getredemptioninfo(test_position_id)
         result_partial = node.getredemptioninfo(test_position_id, 5000)
@@ -104,6 +108,10 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         self.log.info("  Testing too long position ID...")
         long_id = "a" * 128
         assert_raises_rpc_error(-8, None, node.getredemptioninfo, long_id)
+
+        self.log.info("  Testing unknown valid-looking position ID...")
+        unknown_id = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        assert_raises_rpc_error(-8, "not found in wallet", node.getredemptioninfo, unknown_id)
         
         self.log.info("Invalid parameter tests passed")
 
@@ -111,26 +119,16 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         self.log.info("Testing redemption info with real minted position...")
         node = self.nodes[0]
         
-        try:
-            mint_result = node.mintdigidollar(10000, 4)
-            position_id = mint_result['position_id']
-            
-            self.generate(node, 1)
-            
-            result = node.getredemptioninfo(position_id)
-            
-            assert_equal(result['position_id'], position_id)
-            assert 'can_redeem' in result
-            assert 'dgb_return' in result
-            
-            self.log.info(f"Real position redemption info retrieved successfully")
-            self.log.info(f"  Position ID: {position_id[:16]}...")
-            self.log.info(f"  Can redeem: {result['can_redeem']}")
-            self.log.info(f"  DGB return: {result['dgb_return']}")
-            
-        except Exception as e:
-            self.log.info(f"Minting not available in this test mode: {e}")
-            self.log.info("Skipping real position test")
+        result = node.getredemptioninfo(self.position_id)
+
+        assert_equal(result['position_id'], self.position_id)
+        assert 'can_redeem' in result
+        assert 'dgb_return' in result
+
+        self.log.info(f"Real position redemption info retrieved successfully")
+        self.log.info(f"  Position ID: {self.position_id[:16]}...")
+        self.log.info(f"  Can redeem: {result['can_redeem']}")
+        self.log.info(f"  DGB return: {result['dgb_return']}")
 
 
 if __name__ == '__main__':

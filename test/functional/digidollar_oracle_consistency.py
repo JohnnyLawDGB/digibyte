@@ -79,8 +79,9 @@ class OracleRPCConsistencyTest(DigiByteTestFramework):
         # Every oracle in getalloracleprices must have the same price in getoracles
         for oid, price in allprices_prices.items():
             if oid in oracles_prices:
-                assert_equal(oracles_prices[oid], price,
-                    f"Oracle {oid} price mismatch: getoracles={oracles_prices[oid]} vs getalloracleprices={price}")
+                assert oracles_prices[oid] == price, (
+                    f"Oracle {oid} price mismatch: getoracles={oracles_prices[oid]} vs getalloracleprices={price}"
+                )
 
     def test_blocks_param_accepted(self, node):
         """getoracles should accept blocks parameter without error."""
@@ -128,15 +129,17 @@ class OracleRPCConsistencyTest(DigiByteTestFramework):
             p_status = prices_by_id[oid]["status"]
 
             # Status must match
-            assert_equal(o_status, p_status,
-                f"Oracle {oid} status mismatch: getoracles='{o_status}' vs getalloracleprices='{p_status}'")
+            assert o_status == p_status, (
+                f"Oracle {oid} status mismatch: getoracles='{o_status}' vs getalloracleprices='{p_status}'"
+            )
 
             # If reporting, price must match
             if o_status == "reporting":
                 o_price = oracles_by_id[oid]["last_price_micro_usd"]
                 p_price = prices_by_id[oid]["price_micro_usd"]
-                assert_equal(o_price, p_price,
-                    f"Oracle {oid} price mismatch: getoracles={o_price} vs getalloracleprices={p_price}")
+                assert o_price == p_price, (
+                    f"Oracle {oid} price mismatch: getoracles={o_price} vs getalloracleprices={p_price}"
+                )
 
 
 if __name__ == '__main__':

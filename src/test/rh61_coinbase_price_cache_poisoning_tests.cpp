@@ -542,3 +542,47 @@ BOOST_AUTO_TEST_CASE(load_prices_from_chain_skips_recent_pre_activation_oracle_o
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(rh67_invalid_block_oracle_cache_side_effect_tests, TestChain100Setup)
+
+BOOST_AUTO_TEST_CASE(rejected_block_does_not_update_oracle_cache)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.Clear();
+    mgr.SetEnabled(false);
+
+    const uint64_t baseline_price = 123456ULL;
+    const uint64_t attacker_price = 654321ULL;
+    mgr.UpdatePriceCache(100, baseline_price, GetTime());
+    BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), static_cast<CAmount>(baseline_price));
+
+    CScript coinbase_script = CScript() << OP_TRUE;
+    CBlock block = CreateBlock({}, coinbase_script, m_node.chainman->ActiveChainstate());
+    const int32_t rejected_height = m_node.chainman->ActiveChain().Height() + 1;
+
+    CMutableTransaction coinbase(*block.vtx[0]);
+    coinbase.vout.push_back(CTxOut(0, BuildCompactOracleScript(attacker_price, GetTime())));
+    coinbase.vout[0].nValue = MAX_MONEY;
+    block.vtx[0] = MakeTransactionRef(std::move(coinbase));
+
+    COracleBundle extracted;
+    BOOST_REQUIRE(mgr.ExtractOracleBundle(*block.vtx[0], extracted));
+    BOOST_REQUIRE_EQUAL(extracted.median_price_micro_usd, attacker_price);
+
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+    block.nNonce = 0;
+    while (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, m_node.chainman->GetConsensus())) {
+        ++block.nNonce;
+    }
+
+    bool new_block = false;
+    (void)m_node.chainman->ProcessNewBlock(std::make_shared<const CBlock>(block),
+                                           /*force_processing=*/true,
+                                           /*min_pow_checked=*/true,
+                                           &new_block);
+    BOOST_CHECK_EQUAL(m_node.chainman->ActiveChain().Height(), rejected_height - 1);
+    BOOST_CHECK_EQUAL(mgr.GetOraclePriceForHeight(rejected_height), 0U);
+    BOOST_CHECK_EQUAL(mgr.GetLatestPrice(), static_cast<CAmount>(baseline_price));
+}
+
+BOOST_AUTO_TEST_SUITE_END()

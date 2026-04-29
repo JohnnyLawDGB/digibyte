@@ -2823,12 +2823,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // from the block itself, not the P2P-gossiped cached price which may differ
     // between partitioned nodes.
     //
-    // W9-C-01 fix: gate the price-cache update on BIP9 DEPLOYMENT_DIGIDOLLAR
-    // being ACTIVE for this block. Pre-fix, UpdatePriceCache fired for every
-    // block that contained an OP_RETURN OP_ORACLE output, regardless of
+    // W9-C-01 fix: gate the price-cache extraction on BIP9 DEPLOYMENT_DIGIDOLLAR
+    // being ACTIVE for this block. Pre-fix, oracle price handling fired for
+    // every block that contained an OP_RETURN OP_ORACLE output, regardless of
     // activation state AND regardless of whether ValidateBlockOracleData had
-    // actually validated the oracle data (which short-circuits `return true`
-    // on mainnet — see bundle_manager.cpp:2230-2232 / prior C1).
+    // actually validated the oracle data.
     //
     // Pre-fix consequence: any miner could stamp an arbitrary price_micro_usd
     // into the coinbase and poison OracleBundleManager::cached_price for the
@@ -2836,11 +2835,12 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // the attacker value. Rh61 demonstrates driving GetLatestPrice from
     // 50,000 to 7,777,777 in a single mined block.
     //
-    // Post-fix: cache is only updated after DD is BIP9-active. Combined with
-    // resolving the mainnet validator short-circuit (C1), a fully gated flow
-    // produces a trustworthy price. Until C1 is resolved, this fix limits
-    // the attack window to post-activation blocks (22,014,720+ on mainnet).
+    // The extracted price is used only as a local variable during DD tx
+    // validation. Global oracle cache mutation is deferred until after all
+    // block checks succeed, so an invalid block cannot poison GetLatestPrice().
     CAmount blockOraclePrice = 0;
+    COracleBundle blockOracleBundle;
+    bool hasBlockOracleBundle = false;
     const bool dd_bip9_active =
         (pindex->pprev != nullptr) &&
         DigiDollar::IsDigiDollarEnabled(pindex->pprev, m_chainman.GetParams().GetConsensus());
@@ -2850,25 +2850,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         if (oracleManager.ExtractOracleBundle(*block.vtx[0], extractedBundle) &&
             extractedBundle.median_price_micro_usd > 0) {
             blockOraclePrice = static_cast<CAmount>(extractedBundle.median_price_micro_usd);
-
-            if (!fJustCheck) {
-                // Update oracle price cache for this height (ALL networks, not just testnet/regtest)
-                oracleManager.UpdatePriceCache(pindex->nHeight, extractedBundle.median_price_micro_usd, extractedBundle.timestamp);
-
-                // In RegTest mode, also update MockOracleManager for backward compatibility
-                if (m_chainman.GetParams().GetChainType() == ChainType::REGTEST) {
-                    MockOracleManager::GetInstance().SetMockPrice(extractedBundle.median_price_micro_usd);
-                }
-
-                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle price: %llu micro-USD ($%.6f) — deterministic\n",
-                         pindex->nHeight, extractedBundle.median_price_micro_usd,
-                         extractedBundle.median_price_micro_usd / 1000000.0);
-
-                // Clear pending messages/attestations now that bundle is confirmed on-chain.
-                // This prevents stale data reuse while NOT draining messages during template
-                // creation (AddOracleBundleToBlock), which fires every ~15 sec for all blocks.
-                oracleManager.ClearPendingMessages();
-            }
+            blockOracleBundle = std::move(extractedBundle);
+            hasBlockOracleBundle = true;
         }
     }
 
@@ -3114,8 +3097,29 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         time_5 - time_start // in microseconds (µs)
     );
 
-    // NOTE: Oracle price cache is now updated BEFORE the DD validation loop (T8-03)
-    // to ensure deterministic pricing. See blockOraclePrice extraction above.
+    if (hasBlockOracleBundle) {
+        OracleBundleManager& oracleManager = OracleBundleManager::GetInstance();
+        // Update oracle price cache for this height (ALL networks, not just testnet/regtest).
+        // This is deliberately after every block validity check above; rejected
+        // blocks must not leave global oracle-cache side effects behind.
+        oracleManager.UpdatePriceCache(pindex->nHeight,
+                                       blockOracleBundle.median_price_micro_usd,
+                                       blockOracleBundle.timestamp);
+
+        // In RegTest mode, also update MockOracleManager for backward compatibility.
+        if (m_chainman.GetParams().GetChainType() == ChainType::REGTEST) {
+            MockOracleManager::GetInstance().SetMockPrice(blockOracleBundle.median_price_micro_usd);
+        }
+
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle price: %llu micro-USD ($%.6f) — deterministic\n",
+                 pindex->nHeight, blockOracleBundle.median_price_micro_usd,
+                 blockOracleBundle.median_price_micro_usd / 1000000.0);
+
+        // Clear pending messages/attestations now that bundle is confirmed on-chain.
+        // This prevents stale data reuse while NOT draining messages during template
+        // creation (AddOracleBundleToBlock), which fires every ~15 sec for all blocks.
+        oracleManager.ClearPendingMessages();
+    }
 
     return true;
 }

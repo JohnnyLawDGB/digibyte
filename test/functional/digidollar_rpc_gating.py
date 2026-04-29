@@ -3,10 +3,10 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
-Test DigiDollar RPC gating — all 27 gated RPCs must be blocked before activation.
+Test DigiDollar RPC gating — all 28 gated RPCs must be blocked before activation.
 
 Verifies that:
-  - All 27 gated DD/Oracle RPCs return "DigiDollar is not yet active" pre-activation
+  - All 28 gated DD/Oracle RPCs return "DigiDollar is not yet active" pre-activation
   - getdigidollardeploymentinfo (ungated) works at any time
   - After BIP9 activation, key RPCs become functional
 
@@ -64,6 +64,7 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             ("validateddaddress", lambda: node.validateddaddress(dummy_addr)),
             # Oracle query RPCs
             ("getoracleprice", lambda: node.getoracleprice()),
+            ("getmockoracleprice", lambda: node.getmockoracleprice()),
             ("getalloracleprices", lambda: node.getalloracleprices()),
             ("getoracles", lambda: node.getoracles()),
             ("listoracle", lambda: node.listoracle()),
@@ -119,20 +120,20 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
-        # ── Phase 1: Verify all 27 gated RPCs are blocked at DEFINED state ──
-        self.log.info("Phase 1: Testing all 27 gated RPCs at DEFINED state (height 0)...")
+        # ── Phase 1: Verify all 28 gated RPCs are blocked at DEFINED state ──
+        self.log.info("Phase 1: Testing all 28 gated RPCs at DEFINED state (height 0)...")
         info = node.getdeploymentinfo()
         assert_equal(info["deployments"]["digidollar"]["bip9"]["status"], "defined")
 
         gated_rpcs = self.get_gated_rpc_calls(node)
-        assert_equal(len(gated_rpcs), 27)
+        assert_equal(len(gated_rpcs), 28)
 
         blocked_count = 0
         for name, call in gated_rpcs:
             self.test_rpc_gated(node, name, call)
             blocked_count += 1
 
-        self.log.info(f"  All {blocked_count}/27 gated RPCs correctly blocked")
+        self.log.info(f"  All {blocked_count}/28 gated RPCs correctly blocked")
 
         # ── Phase 2: Verify ungated RPC works pre-activation ──
         self.log.info("Phase 2: Verifying getdigidollardeploymentinfo works without activation...")

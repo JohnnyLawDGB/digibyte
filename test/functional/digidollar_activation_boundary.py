@@ -15,6 +15,8 @@ Uses -digidollaractivationheight=200 to enable real BIP9 signaling with
 min_activation_height=200 on regtest.
 """
 
+from test_framework.address import address_to_scriptpubkey
+from test_framework.messages import COutPoint, CTransaction, CTxIn, CTxOut
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
@@ -170,6 +172,19 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         positions = node.listdigidollarpositions()
         assert len(positions) > 0, "Expected at least one DD position"
         self.log.info(f"  Positions: {len(positions)}")
+
+        # A non-final DD transaction must be rejected before the expensive DD
+        # parser/validation path. Before DD-RH-120 this returned a DD-specific
+        # structural error because ATMP ran DD validation before finality.
+        future_dd = CTransaction()
+        future_dd.nVersion = (2 << 24) | 0x0770  # DD_TX_TRANSFER
+        future_dd.nLockTime = node.getblockcount() + 20
+        future_dd.vin = [CTxIn(COutPoint(1, 0), b"", 0xFFFFFFFE)]
+        future_dd.vout = [CTxOut(100000, address_to_scriptpubkey(node.getnewaddress()))]
+        nonfinal = node.testmempoolaccept([future_dd.serialize().hex()], maxfeerate=0)[0]
+        assert not nonfinal["allowed"], nonfinal
+        assert_equal(nonfinal["reject-reason"], "non-final")
+        self.log.info("  Non-final DD tx rejected before DD validation")
 
         # Final verification: deployment info still ACTIVE
         dep = node.getdigidollardeploymentinfo()

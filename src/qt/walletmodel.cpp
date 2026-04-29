@@ -863,15 +863,19 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
         LogPrintf("DigiDollar Qt: Found %d available UTXOs totaling %d satoshis (%.8f DGB)\n",
                   availableUtxos.size(), totalAvailable, totalAvailable / 100000000.0);
 
-        // Step 6: Generate owner key for the mint position
+        // Step 6: Derive owner key for the mint position from the wallet.
+        // This keeps Qt-created positions recoverable from wallet descriptors.
         CKey ownerKey;
-        ownerKey.MakeNewKey(true); // Generate compressed key
+        {
+            LOCK(pWallet->cs_wallet);
+            ownerKey = pWallet->GetHDKeyForDigiDollar("dd-owner");
+        }
+        if (!ownerKey.IsValid()) {
+            return DigiDollarMintResult(TransactionCreationFailed, "", "",
+                "Failed to generate owner key for DD mint");
+        }
         CPubKey ownerPubKey = ownerKey.GetPubKey();
         CKeyID ownerKeyID = ownerPubKey.GetID();
-
-        // Store the owner key in DigiDollarWallet (works for both legacy and descriptor wallets)
-        // The key will be stored in dd_owner_keys map indexed by position ID
-        // Note: Position ID will be the mint transaction hash
 
         LogPrintf("DigiDollar Qt: Step 6 - Generated owner key - PubKey: %s, KeyID: %s\n",
                   HexStr(ownerPubKey), HexStr(ownerKeyID));

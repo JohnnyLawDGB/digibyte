@@ -369,6 +369,59 @@ void DigiDollarWidgetTests::mintWidgetCollateralMatchesBuilderSafetyMargin()
     MockOracleManager::GetInstance().Reset();
 }
 
+void DigiDollarWidgetTests::qtMintStoresDescriptorRecoverableOwnerKey()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    MockOracleManager::GetInstance().SetEnabled(true);
+    MockOracleManager::GetInstance().SetMockPrice(500000);
+
+    test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    std::shared_ptr<wallet::CWallet> wallet = wallet::CreateSyncedWallet(
+        *test.m_node.chain,
+        WITH_LOCK(Assert(test.m_node.chainman)->GetMutex(), return test.m_node.chainman->ActiveChain()),
+        test.coinbaseKey);
+    wallet->SetBroadcastTransactions(true);
+    wallet->EnsureDDWallet();
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    mini_gui.walletModel->pollBalanceChanged();
+
+    WalletModel::DigiDollarMintResult result = mini_gui.walletModel->mintDigiDollar(10000, 0);
+    QVERIFY2(result.status == WalletModel::OK, result.reasonFailed.toUtf8().constData());
+
+    uint256 position_id;
+    position_id.SetHex(result.positionId.toStdString());
+
+    CTxOut dd_txout;
+    {
+        LOCK(wallet->cs_wallet);
+        const wallet::CWalletTx* wtx = wallet->GetWalletTx(position_id);
+        QVERIFY(wtx != nullptr);
+        QVERIFY(wtx->tx->vout.size() > 1);
+        dd_txout = wtx->tx->vout[1];
+    }
+
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+    CKey recovered_key;
+    QVERIFY(dd_wallet->GetDDOutputSpendingKey(dd_txout, recovered_key));
+
+    MockOracleManager::GetInstance().Reset();
+}
+
 void DigiDollarWidgetTests::sendWidgetTests()
 {
 #ifdef Q_OS_MACOS

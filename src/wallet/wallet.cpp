@@ -2676,6 +2676,89 @@ util::Result<CTxDestination> CWallet::GetNewChangeDestination(const OutputType t
     return op_dest;
 }
 
+CKey CWallet::GetHDKeyForDigiDollar(const std::string& label)
+{
+    AssertLockHeld(cs_wallet);
+
+    CKey key;
+
+    auto op_dest = GetNewDestination(OutputType::BECH32M, label);
+    if (!op_dest) {
+        LogPrintf("DigiDollar: BECH32M not available, trying BECH32 for label '%s'\n", label);
+        op_dest = GetNewDestination(OutputType::BECH32, label);
+    }
+
+    if (op_dest) {
+        CTxDestination dest = *op_dest;
+        CScript script = GetScriptForDestination(dest);
+
+        if (auto* taproot_dest = std::get_if<WitnessV1Taproot>(&dest)) {
+            XOnlyPubKey output_key(*taproot_dest);
+            LogPrintf("DigiDollar: GetHDKeyForDigiDollar - descriptor produced output_key=%s for label '%s'\n",
+                     HexStr(output_key), label);
+
+            for (auto* spk_man : GetAllScriptPubKeyMans()) {
+                if (auto* desc_spk = dynamic_cast<DescriptorScriptPubKeyMan*>(spk_man)) {
+                    auto provider = desc_spk->GetSigningProviderWithKeys(script);
+                    if (provider) {
+                        TaprootSpendData spenddata;
+                        if (provider->GetTaprootSpendData(output_key, spenddata)) {
+                            LogPrintf("DigiDollar: GetHDKeyForDigiDollar - spenddata.internal_key=%s\n",
+                                     HexStr(spenddata.internal_key));
+                            if (spenddata.internal_key.IsFullyValid() &&
+                                provider->GetKeyByXOnly(spenddata.internal_key, key)) {
+                                XOnlyPubKey key_xonly(key.GetPubKey());
+                                auto key_tweaked = key_xonly.CreateTapTweak(nullptr);
+                                if (key_tweaked) {
+                                    LogPrintf("DigiDollar: GetHDKeyForDigiDollar - returned key pubkey_xonly=%s, tweaked=%s (matches descriptor: %s)\n",
+                                             HexStr(key_xonly), HexStr(key_tweaked->first),
+                                             (key_tweaked->first == output_key) ? "YES" : "NO");
+                                }
+                                LogPrintf("DigiDollar: Successfully derived HD key from Taproot descriptor wallet for label '%s'\n", label);
+                                return key;
+                            }
+                        }
+                        if (provider->GetKeyByXOnly(output_key, key)) {
+                            LogPrintf("DigiDollar: Successfully derived HD key from Taproot output key for label '%s'\n", label);
+                            return key;
+                        }
+                    }
+                }
+            }
+            LogPrintf("DigiDollar: WARNING - Could not extract Taproot key from HD destination for label '%s'\n", label);
+        } else {
+            for (auto* spk_man : GetAllScriptPubKeyMans()) {
+                if (auto* legacy_spk = dynamic_cast<LegacyScriptPubKeyMan*>(spk_man)) {
+                    CKeyID keyid = GetKeyForDestination(*legacy_spk, dest);
+                    if (!keyid.IsNull() && legacy_spk->GetKey(keyid, key)) {
+                        LogPrintf("DigiDollar: Successfully derived HD key from legacy wallet for label '%s'\n", label);
+                        return key;
+                    }
+                }
+
+                if (auto* desc_spk = dynamic_cast<DescriptorScriptPubKeyMan*>(spk_man)) {
+                    auto provider = desc_spk->GetSigningProviderWithKeys(script);
+                    if (provider) {
+                        CKeyID keyid = GetKeyForDestination(*provider, dest);
+                        if (!keyid.IsNull() && provider->GetKey(keyid, key)) {
+                            LogPrintf("DigiDollar: Successfully derived HD key from descriptor wallet for label '%s'\n", label);
+                            return key;
+                        }
+                    }
+                }
+            }
+            LogPrintf("DigiDollar: WARNING - Could not extract key from HD destination for label '%s'\n", label);
+        }
+    } else {
+        LogPrintf("DigiDollar: WARNING - Could not get HD destination for label '%s': %s\n",
+                 label, util::ErrorString(op_dest).original);
+    }
+
+    LogPrintf("DigiDollar: Falling back to random key for label '%s'\n", label);
+    key.MakeNewKey(true);
+    return key;
+}
+
 std::optional<int64_t> CWallet::GetOldestKeyPoolTime() const
 {
     LOCK(cs_wallet);

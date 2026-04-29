@@ -93,114 +93,6 @@ namespace {
         }
     }
 
-    /**
-     * Generate an HD-derived key from the wallet for DigiDollar use.
-     * This allows DD keys to be recovered from the wallet seed.
-     *
-     * @param pwallet The wallet to derive the key from
-     * @param label Label to identify the key's purpose (e.g., "dd-owner", "dd-address")
-     * @return CKey The derived key, or an invalid key if derivation fails
-     */
-    CKey GetHDKeyForDigiDollar(wallet::CWallet* pwallet, const std::string& label) {
-        AssertLockHeld(pwallet->cs_wallet);
-
-        CKey key;
-
-        // Try to get an HD-derived destination from the wallet
-        // Try BECH32M (Taproot) first for modern wallets
-        auto op_dest = pwallet->GetNewDestination(OutputType::BECH32M, label);
-        if (!op_dest) {
-            // Fallback to BECH32 (SegWit v0) for legacy descriptor wallets
-            LogPrintf("DigiDollar: BECH32M not available, trying BECH32 for label '%s'\n", label);
-            op_dest = pwallet->GetNewDestination(OutputType::BECH32, label);
-        }
-
-        if (op_dest) {
-            CTxDestination dest = *op_dest;
-            CScript script = GetScriptForDestination(dest);
-
-            // Check if this is a Taproot (WitnessV1Taproot) address
-            // Taproot addresses need special handling - use GetKeyByXOnly instead of GetKey
-            if (auto* taproot_dest = std::get_if<WitnessV1Taproot>(&dest)) {
-                XOnlyPubKey output_key(*taproot_dest);
-                LogPrintf("DigiDollar: GetHDKeyForDigiDollar - descriptor produced output_key=%s for label '%s'\n",
-                         HexStr(output_key), label);
-
-                // For Taproot, we need to find the key using GetSigningProviderWithKeys (includes private keys)
-                // GetSolvingProvider doesn't include private keys, so GetKeyByXOnly would fail
-                for (auto* spk_man : pwallet->GetAllScriptPubKeyMans()) {
-                    if (auto* desc_spk = dynamic_cast<wallet::DescriptorScriptPubKeyMan*>(spk_man)) {
-                        // Use GetSigningProviderWithKeys to get provider with private keys
-                        auto provider = desc_spk->GetSigningProviderWithKeys(script);
-                        if (provider) {
-                            TaprootSpendData spenddata;
-                            if (provider->GetTaprootSpendData(output_key, spenddata)) {
-                                LogPrintf("DigiDollar: GetHDKeyForDigiDollar - spenddata.internal_key=%s\n",
-                                         HexStr(spenddata.internal_key));
-                                if (spenddata.internal_key.IsFullyValid()) {
-                                    if (provider->GetKeyByXOnly(spenddata.internal_key, key)) {
-                                        // DEBUG: Verify the key we got matches what DD will produce
-                                        XOnlyPubKey key_xonly(key.GetPubKey());
-                                        auto key_tweaked = key_xonly.CreateTapTweak(nullptr);
-                                        if (key_tweaked) {
-                                            LogPrintf("DigiDollar: GetHDKeyForDigiDollar - returned key pubkey_xonly=%s, tweaked=%s (matches descriptor: %s)\n",
-                                                     HexStr(key_xonly), HexStr(key_tweaked->first),
-                                                     (key_tweaked->first == output_key) ? "YES" : "NO");
-                                        }
-                                        LogPrintf("DigiDollar: Successfully derived HD key from Taproot descriptor wallet for label '%s'\n", label);
-                                        return key;
-                                    }
-                                }
-                            }
-                            // Fallback: try to get key by output key directly
-                            if (provider->GetKeyByXOnly(output_key, key)) {
-                                LogPrintf("DigiDollar: Successfully derived HD key from Taproot (output key) for label '%s' - WARNING: using output key directly!\n", label);
-                                return key;
-                            }
-                        }
-                    }
-                }
-                LogPrintf("DigiDollar: WARNING - Could not extract Taproot key from HD destination for label '%s'\n", label);
-            } else {
-                // Non-Taproot addresses (SegWit v0, legacy)
-                // Try to extract the key from the destination
-                // This works for both legacy and descriptor wallets
-                for (auto* spk_man : pwallet->GetAllScriptPubKeyMans()) {
-                    // Try legacy wallet path first (direct GetKey access)
-                    if (auto* legacy_spk = dynamic_cast<wallet::LegacyScriptPubKeyMan*>(spk_man)) {
-                        CKeyID keyid = GetKeyForDestination(*legacy_spk, dest);
-                        if (!keyid.IsNull() && legacy_spk->GetKey(keyid, key)) {
-                            LogPrintf("DigiDollar: Successfully derived HD key from legacy wallet for label '%s'\n", label);
-                            return key;
-                        }
-                    }
-
-                    // Try descriptor wallet path (use GetSigningProviderWithKeys for private keys)
-                    if (auto* desc_spk = dynamic_cast<wallet::DescriptorScriptPubKeyMan*>(spk_man)) {
-                        auto provider = desc_spk->GetSigningProviderWithKeys(script);
-                        if (provider) {
-                            CKeyID keyid = GetKeyForDestination(*provider, dest);
-                            if (!keyid.IsNull() && provider->GetKey(keyid, key)) {
-                                LogPrintf("DigiDollar: Successfully derived HD key from descriptor wallet for label '%s'\n", label);
-                                return key;
-                            }
-                        }
-                    }
-                }
-                LogPrintf("DigiDollar: WARNING - Could not extract key from HD destination for label '%s'\n", label);
-            }
-        } else {
-            LogPrintf("DigiDollar: WARNING - Could not get HD destination for label '%s': %s\n",
-                     label, util::ErrorString(op_dest).original);
-        }
-
-        // Fallback to random key if HD derivation fails
-        // This maintains backward compatibility with wallets that don't support HD
-        LogPrintf("DigiDollar: Falling back to random key for label '%s'\n", label);
-        key.MakeNewKey(true);
-        return key;
-    }
-
     bool TryStartOracleFromPrivateKey(OracleManager& oracle_manager, uint32_t oracle_id, const std::string& private_key_hex, const std::string& key_source, bool allow_initialized_without_running, std::string& status_message, bool* initialized_out = nullptr)
     {
         bool initialized = false;
@@ -1027,7 +919,7 @@ RPCHelpMan mintdigidollar()
             CKey ownerKey;
             {
                 LOCK(pwallet->cs_wallet);
-                ownerKey = GetHDKeyForDigiDollar(pwallet.get(), "dd-owner");
+                ownerKey = pwallet->GetHDKeyForDigiDollar("dd-owner");
                 if (!ownerKey.IsValid()) {
                     throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate owner key for DD mint");
                 }
@@ -2227,7 +2119,7 @@ RPCHelpMan getdigidollaraddress()
             // This allows the key to be recovered from wallet seed
             LogPrintf("DigiDollar: getdigidollaraddress - generating HD key for DD address\n");
 
-            CKey dd_key = GetHDKeyForDigiDollar(pwallet.get(), "dd-address");
+            CKey dd_key = pwallet->GetHDKeyForDigiDollar("dd-address");
             if (!dd_key.IsValid()) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate key for DD address");
             }

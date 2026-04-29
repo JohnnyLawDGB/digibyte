@@ -83,7 +83,7 @@ public:
      * @param height Block height for the bundle
      * @return Mock oracle bundle with valid structure
      */
-    COracleBundle CreateMockBundle(int height);
+    COracleBundle CreateMockBundle(int height, int64_t block_time = 0);
 
     /**
      * Simulate price volatility for testing

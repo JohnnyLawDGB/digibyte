@@ -869,7 +869,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     // If still no consensus, create empty bundle (graceful degradation)
     if (!bundle.HasConsensus(required_bundle_messages)) {
         if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
-            COracleBundle mock_bundle = MockOracleManager::GetInstance().CreateMockBundle(block_height);
+            COracleBundle mock_bundle = MockOracleManager::GetInstance().CreateMockBundle(block_height, block.GetBlockTime());
             if (required_bundle_messages == 1 && mock_bundle.messages.size() > 1) {
                 mock_bundle.messages.resize(1);
                 mock_bundle.median_price_micro_usd = mock_bundle.messages[0].price_micro_usd;
@@ -2610,7 +2610,7 @@ oracle_post_validation:
     }
 
     // Verify oracle timestamp is not in the future (with 60 second tolerance for clock skew)
-    if (bundle.timestamp > block.nTime + 60) {
+    if (bundle.timestamp > static_cast<int64_t>(block.nTime) + 60) {
         LogPrintf("Oracle: Oracle timestamp in future: oracle=%lld, block=%u\n",
                  (long long)bundle.timestamp, block.nTime);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-timestamp",

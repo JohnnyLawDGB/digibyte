@@ -134,13 +134,13 @@ int64_t MockOracleManager::GetLastUpdateHeight() const
     return lastUpdateHeight;
 }
 
-COracleBundle MockOracleManager::CreateMockBundle(int height)
+COracleBundle MockOracleManager::CreateMockBundle(int height, int64_t block_time)
 {
     LOCK(cs_price);
 
     COracleBundle bundle;
     bundle.epoch = GetCurrentEpoch(height);
-    const int64_t bundle_timestamp = GetTime();
+    const int64_t bundle_timestamp = block_time > 0 ? block_time : GetTime();
 
     // Determine how many oracle messages to create based on chain config
     // Use min(available test keys, ORACLE_CONSENSUS_REQUIRED) for backward compat

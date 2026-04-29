@@ -18689,17 +18689,12 @@ BOOST_AUTO_TEST_CASE(redteam_t10_04f_collateral_calc_truncation_to_zero)
     BOOST_CHECK(collateral > 0);
     BOOST_TEST_MESSAGE("  1 cent at $1M/DGB → " + std::to_string(collateral) + " sats ✅");
 
-    // True truncation: 1 cent at $100M/DGB → 0
-    // numerator = 2 * 10^12, denominator = 10^14 → result = 0.02 → truncated to 0
+    // Extreme fractional result: 1 cent at $100M/DGB rounds up to 1 satoshi
+    // numerator = 2 * 10^12, denominator = 10^14 → result = 0.02 → ceil to 1
     DigiDollar::ValidationContext ctx100m(700, 100000000000000LL, 200, params);
     collateral = DigiDollar::CalculateRequiredCollateral(1, 5760, ctx100m);
-    BOOST_CHECK_EQUAL(collateral, 0);
-    BOOST_TEST_MESSAGE("  1 cent at $100M/DGB → 0 sats (truncated) ✅");
-
-    // This is caught by: if (requiredCollateral <= 0) → "collateral-calculation-failed"
-    // At $100M/DGB, DGB market cap would be $1.68 quadrillion. Not realistic.
-    // Defense holds for any oracle price up to ~$1M/DGB (still absurd)
-    BOOST_TEST_MESSAGE("  Truncation only at absurd prices (>$1M/DGB) — caught by <= 0 check ✅");
+    BOOST_CHECK_EQUAL(collateral, 1);
+    BOOST_TEST_MESSAGE("  1 cent at $100M/DGB → 1 sat (rounded up) ✅");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t10_04g_zero_oracle_price_handling)

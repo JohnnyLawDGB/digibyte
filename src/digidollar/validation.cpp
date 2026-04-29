@@ -437,7 +437,8 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
     // Use __int128 to avoid uint64 overflow for large DD amounts (overflows at ~$18K@1000%)
     __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
                          static_cast<__int128>(effectiveRatio) * 100;
-    __int128 result = numerator / static_cast<__int128>(ctx.oraclePriceMicroUSD);
+    __int128 denominator = static_cast<__int128>(ctx.oraclePriceMicroUSD);
+    __int128 result = (numerator + denominator - 1) / denominator;
     // Overflow guard: if result exceeds MAX_MONEY, cap at MAX_MONEY.
     // This prevents silent uint64_t truncation that could wrap required
     // collateral to near-zero, allowing mints with almost no collateral.

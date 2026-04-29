@@ -246,6 +246,29 @@ BOOST_AUTO_TEST_CASE(rh32_fractional_satoshi_rounding)
     BOOST_CHECK_GT(required, 0);
 }
 
+BOOST_AUTO_TEST_CASE(rh32_required_collateral_rounds_up)
+{
+    // The consensus collateral requirement must round fractional satoshis up.
+    // Otherwise a mint can be accepted one satoshi below the intended ratio.
+    SelectParams(ChainType::REGTEST);
+    const CChainParams& chainparams = Params();
+
+    const CAmount ddAmount = 10000; // $100
+    const int64_t oneHourBlocks = 240;
+    ValidationContext ctx(1000, 6310, 150, chainparams);
+
+    const int effectiveRatio = GetEffectiveCollateralRatio(1000, 150, chainparams);
+    __int128 numerator = static_cast<__int128>(ddAmount) * COIN * effectiveRatio * 100;
+    __int128 expectedCeil128 = (numerator + ctx.oraclePriceMicroUSD - 1) / ctx.oraclePriceMicroUSD;
+    CAmount expectedCeil = static_cast<CAmount>(expectedCeil128);
+
+    CAmount required = CalculateRequiredCollateral(ddAmount, oneHourBlocks, ctx);
+    BOOST_CHECK_EQUAL(required, expectedCeil);
+    BOOST_CHECK_MESSAGE(!ValidateCollateralRatio(expectedCeil - 1, ddAmount, oneHourBlocks, ctx),
+                        "one satoshi below the rounded-up requirement must reject");
+    BOOST_CHECK(ValidateCollateralRatio(expectedCeil, ddAmount, oneHourBlocks, ctx));
+}
+
 // ============================================================================
 // Attack Vector 5: DCA tier lookup with duplicate timestamps
 // ============================================================================

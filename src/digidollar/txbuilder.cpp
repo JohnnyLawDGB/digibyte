@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <functional>
 #include <map>
 
@@ -169,8 +170,9 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     // at 1000% ratio (or >$36K at 500%) causes silent overflow, producing a tiny
     // collateral requirement and allowing massively under-collateralized positions.
     __int128 numerator = static_cast<__int128>(usdValue) * static_cast<__int128>(COIN) *
-                         static_cast<__int128>(static_cast<uint64_t>(adjustedRatio)) * 100;
-    __int128 result128 = numerator / static_cast<__int128>(oraclePrice);
+                         static_cast<__int128>(static_cast<uint64_t>(std::ceil(adjustedRatio))) * 100;
+    __int128 denominator = static_cast<__int128>(oraclePrice);
+    __int128 result128 = (numerator + denominator - 1) / denominator;
 
     // Overflow guard: cap at MAX_MONEY before casting to uint64_t.
     // Without this, extreme values could silently truncate to near-zero.

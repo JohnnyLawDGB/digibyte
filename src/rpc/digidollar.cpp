@@ -678,7 +678,8 @@ static RPCHelpMan calculatecollateralrequirement()
             // Use __int128 to avoid uint64 overflow for large DD amounts
             __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
                                  static_cast<__int128>(effectiveRatio) * 100;
-            __int128 result128 = numerator / static_cast<__int128>(oraclePriceMicroUSD);
+            __int128 denominator = static_cast<__int128>(oraclePriceMicroUSD);
+            __int128 result128 = (numerator + denominator - 1) / denominator;
             if (result128 > static_cast<__int128>(MAX_MONEY)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Required collateral exceeds maximum money supply");
             }
@@ -2795,7 +2796,8 @@ static RPCHelpMan estimatecollateral()
             // Use __int128 to avoid uint64 overflow for large DD amounts
             __int128 numerator = static_cast<__int128>(ddAmount) * static_cast<__int128>(COIN) *
                                  static_cast<__int128>(effectiveRatio) * 100;
-            __int128 result128_est = numerator / static_cast<__int128>(oraclePriceMicroUSD);
+            __int128 denominator = static_cast<__int128>(oraclePriceMicroUSD);
+            __int128 result128_est = (numerator + denominator - 1) / denominator;
             if (result128_est > static_cast<__int128>(MAX_MONEY)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Required collateral exceeds maximum money supply");
             }

@@ -39,6 +39,7 @@ FUZZ_TARGET(musig2_nonce_message)
             assert(msg.epoch == msg2.epoch);
             assert(msg.oracle_id == msg2.oracle_id);
             assert(msg.pubnonce == msg2.pubnonce);
+            assert(msg.signature == msg2.signature);
         } catch (const std::exception&) {
             // Deserialization failure on fuzz input is expected
         }
@@ -52,9 +53,12 @@ FUZZ_TARGET(musig2_nonce_message)
 
         size_t nonce_len = fdp.ConsumeIntegralInRange<size_t>(0, 128);
         msg.pubnonce = fdp.ConsumeBytes<unsigned char>(nonce_len);
+        size_t signature_len = fdp.ConsumeIntegralInRange<size_t>(0, 128);
+        msg.signature = fdp.ConsumeBytes<unsigned char>(signature_len);
 
         (void)msg.IsValid();
         (void)msg.GetHash();
+        (void)msg.GetSignatureHash();
 
         // Serialize / deserialize roundtrip
         CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
@@ -65,5 +69,6 @@ FUZZ_TARGET(musig2_nonce_message)
         assert(decoded.epoch == msg.epoch);
         assert(decoded.oracle_id == msg.oracle_id);
         assert(decoded.pubnonce == msg.pubnonce);
+        assert(decoded.signature == msg.signature);
     }
 }

@@ -38,6 +38,7 @@ FUZZ_TARGET(musig2_partialsig_message)
             assert(msg.epoch == msg2.epoch);
             assert(msg.oracle_id == msg2.oracle_id);
             assert(msg.partial_sig == msg2.partial_sig);
+            assert(msg.signature == msg2.signature);
         } catch (const std::exception&) {
             // Expected on malformed fuzz input
         }
@@ -49,11 +50,14 @@ FUZZ_TARGET(musig2_partialsig_message)
         msg.epoch = fdp.ConsumeIntegral<int32_t>();
         msg.oracle_id = fdp.ConsumeIntegral<uint8_t>();
 
-        size_t sig_len = fdp.ConsumeIntegralInRange<size_t>(0, 64);
+        size_t sig_len = fdp.ConsumeIntegralInRange<size_t>(0, 128);
         msg.partial_sig = fdp.ConsumeBytes<unsigned char>(sig_len);
+        size_t signature_len = fdp.ConsumeIntegralInRange<size_t>(0, 128);
+        msg.signature = fdp.ConsumeBytes<unsigned char>(signature_len);
 
         (void)msg.IsValid();
         (void)msg.GetHash();
+        (void)msg.GetSignatureHash();
 
         CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
         ss << msg;
@@ -63,5 +67,6 @@ FUZZ_TARGET(musig2_partialsig_message)
         assert(decoded.epoch == msg.epoch);
         assert(decoded.oracle_id == msg.oracle_id);
         assert(decoded.partial_sig == msg.partial_sig);
+        assert(decoded.signature == msg.signature);
     }
 }

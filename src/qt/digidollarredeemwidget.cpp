@@ -11,10 +11,12 @@
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
 #include <wallet/ddcoincontrol.h>
+#include <wallet/digidollarwallet.h>
 #include <consensus/amount.h>
 #include <univalue.h>
 #include <logging.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include <QLabel>
@@ -268,6 +270,7 @@ void DigiDollarRedeemWidget::setupPositionInfoSection()
     // DD Minted
     m_ddMintedLabel = new QLabel(tr("DD Minted:"), this);
     m_ddMintedValue = new QLabel("0.00000000 DD", this);
+    m_ddMintedValue->setObjectName("ddMintedValue");
     m_ddMintedValue->setFont(monospaceFont);
     m_positionInfoLayout->addWidget(m_ddMintedLabel, 1, 0);
     m_positionInfoLayout->addWidget(m_ddMintedValue, 1, 1);
@@ -716,9 +719,10 @@ void DigiDollarRedeemWidget::updateRedeemButtons()
     bool amountValid = validateAmount();
     bool redeemableValid = validateRedeemable();
     bool balanceValid = validateDDBalance();
+    bool timelockExpired = m_positionFound && m_positionBlocksRemaining <= 0;
 
-    // Only enable button if ALL validations pass, including DD balance check
-    m_redeemButton->setEnabled(positionValid && amountValid && redeemableValid && balanceValid);
+    // Only enable button if ALL validations pass, including timelock and DD balance checks.
+    m_redeemButton->setEnabled(positionValid && timelockExpired && amountValid && redeemableValid && balanceValid);
     // m_redeemAllButton removed - exact-amount redemption only
 }
 
@@ -785,6 +789,27 @@ void DigiDollarRedeemWidget::loadPositionDetails()
         return;
     }
 
+    auto loadPositionFromWallet = [&]() -> bool {
+        DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
+        if (!ddWallet) return false;
+
+        const int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
+        for (const auto& pos : ddWallet->GetDDTimeLocks(false)) {
+            if (pos.dd_timelock_id != positionId) continue;
+
+            m_positionFound = true;
+            m_positionDDMinted = pos.dd_minted / 100.0;
+            m_positionDGBCollateral = pos.dgb_collateral / static_cast<double>(COIN);
+            m_positionLockTier = static_cast<int>(pos.lock_tier);
+            m_positionBlocksRemaining = std::max<int64_t>(0, pos.unlock_height - currentHeight);
+            m_positionHealth = 0.0;
+            m_redeemableAmount = m_positionBlocksRemaining <= 0 ? m_positionDDMinted : 0.0;
+            m_amountEdit->setText(m_positionBlocksRemaining <= 0 ? QString::number(m_positionDDMinted, 'f', 2) : QString());
+            return true;
+        }
+        return false;
+    };
+
     // Query position from RPC
     try {
         UniValue params(UniValue::VARR);
@@ -802,42 +827,58 @@ void DigiDollarRedeemWidget::loadPositionDetails()
                     // Found the position!
                     m_positionFound = true;
                     m_positionDDMinted = pos.find_value("dd_minted").getInt<int64_t>() / 100.0; // cents to DD
-                    m_positionDGBCollateral = pos.find_value("dgb_collateral").get_real();
+                    const UniValue& collateral = pos.find_value("dgb_collateral");
+                    if (collateral.isStr()) {
+                        bool ok = false;
+                        m_positionDGBCollateral = QString::fromStdString(collateral.get_str()).toDouble(&ok);
+                        if (!ok) throw std::runtime_error("invalid dgb_collateral amount");
+                    } else {
+                        m_positionDGBCollateral = collateral.get_real();
+                    }
                     m_positionLockTier = pos.find_value("lock_tier").getInt<int>();
                     m_positionBlocksRemaining = pos.find_value("blocks_remaining").getInt<int>();
                     m_positionHealth = pos.find_value("health_ratio").get_real();
-                    m_redeemableAmount = m_positionDDMinted; // Can redeem full amount
-                    // Auto-fill the exact amount in the amount edit field
-                    m_amountEdit->setText(QString::number(m_positionDDMinted, 'f', 2));
+                    m_redeemableAmount = m_positionBlocksRemaining <= 0 ? m_positionDDMinted : 0.0;
+                    // Auto-fill only when normal redemption is actually available.
+                    m_amountEdit->setText(m_positionBlocksRemaining <= 0 ? QString::number(m_positionDDMinted, 'f', 2) : QString());
                     break;
                 }
             }
 
             if (!m_positionFound) {
-                // Position not found in list
-                m_positionDDMinted = 0.0;
-                m_positionDGBCollateral = 0.0;
-                m_positionLockTier = 0;
-                m_positionBlocksRemaining = 0;
-                m_positionHealth = 0.0;
-                m_redeemableAmount = 0.0;
+                if (!loadPositionFromWallet()) {
+                    // Position not found in list
+                    m_positionDDMinted = 0.0;
+                    m_positionDGBCollateral = 0.0;
+                    m_positionLockTier = 0;
+                    m_positionBlocksRemaining = 0;
+                    m_positionHealth = 0.0;
+                    m_redeemableAmount = 0.0;
+                }
             }
         }
     } catch (const UniValue& e) {
         LogPrintf("DigiDollar Qt: Failed to load position details (RPC) - %s\n", e.write());
-        m_positionFound = false;
-        m_positionDDMinted = 0.0;
-        m_positionDGBCollateral = 0.0;
-        m_positionLockTier = 0;
+        if (!loadPositionFromWallet()) {
+            m_positionFound = false;
+            m_positionDDMinted = 0.0;
+            m_positionDGBCollateral = 0.0;
+            m_positionLockTier = 0;
+            m_positionBlocksRemaining = 0;
+            m_positionHealth = 0.0;
+            m_redeemableAmount = 0.0;
+        }
     } catch (const std::exception& e) {
         LogPrintf("DigiDollar Qt: Failed to load position details - %s\n", e.what());
-        m_positionFound = false;
-        m_positionDDMinted = 0.0;
-        m_positionDGBCollateral = 0.0;
-        m_positionLockTier = 0;
-        m_positionBlocksRemaining = 0;
-        m_positionHealth = 0.0;
-        m_redeemableAmount = 0.0;
+        if (!loadPositionFromWallet()) {
+            m_positionFound = false;
+            m_positionDDMinted = 0.0;
+            m_positionDGBCollateral = 0.0;
+            m_positionLockTier = 0;
+            m_positionBlocksRemaining = 0;
+            m_positionHealth = 0.0;
+            m_redeemableAmount = 0.0;
+        }
     }
 }
 
@@ -864,6 +905,7 @@ bool DigiDollarRedeemWidget::validateAmount() const
 bool DigiDollarRedeemWidget::validateRedeemable() const
 {
     if (!m_positionFound) return false;
+    if (m_positionBlocksRemaining > 0 || m_redeemableAmount <= 0.0) return false;
 
     QString amountText = m_amountEdit->text();
     if (amountText.isEmpty()) return false;
@@ -877,6 +919,9 @@ bool DigiDollarRedeemWidget::validateRedeemable() const
 bool DigiDollarRedeemWidget::validateDDBalance() const
 {
     if (!m_positionFound || !m_walletModel) {
+        return false;
+    }
+    if (m_positionBlocksRemaining > 0) {
         return false;
     }
 

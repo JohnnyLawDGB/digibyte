@@ -653,6 +653,10 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
         return DigiDollarSendResult(InvalidAddress, "", "Invalid DigiDollar address format");
     }
 
+    if (m_wallet->privateKeysDisabled()) {
+        return DigiDollarSendResult(TransactionCreationFailed, "", "Private keys are disabled for this wallet");
+    }
+
     // Check if wallet is locked
     if (getEncryptionStatus() == Locked) {
         return DigiDollarSendResult(TransactionCreationFailed, "", "Wallet is locked. Please unlock to send DigiDollar.");
@@ -721,7 +725,7 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
     // Validate lock tier
     if (lockTier < 0 || lockTier > 9) {
         LogPrintf("DigiDollar Qt: ERROR - Invalid lock tier: %d\n", lockTier);
-        return DigiDollarMintResult(InvalidAmount, "", "", "Invalid lock tier. Must be between 0 and 8 (0 = 1 hour testing).");
+        return DigiDollarMintResult(InvalidAmount, "", "", "Invalid lock tier. Must be between 0 and 9 (0 = 1 hour testing).");
     }
     LogPrintf("DigiDollar Qt: Lock tier validation passed\n");
 
@@ -1240,6 +1244,11 @@ CAmount WalletModel::getDigiDollarBalance() const
     // Balance is stored in cents (e.g., 10000 = $100.00 DD)
 
     try {
+        if (m_wallet->privateKeysDisabled()) {
+            LogPrintf("DigiDollar Qt: getDigiDollarBalance returning 0 for private-key-disabled wallet\n");
+            return 0;
+        }
+
         // Get DigiDollar wallet instance from wallet interface
         DigiDollarWallet* ddWallet = m_wallet->getDigiDollarWallet();
         if (!ddWallet) {
@@ -1323,26 +1332,9 @@ bool WalletModel::validateDigiDollarAddress(const QString& address) const
 
 CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier) const
 {
-    // Collateral ratios from consensus (10-tier lock period system with 1-hour testing tier)
-    // Higher ratios for shorter locks (treasury model)
-    const double tierRatios[10] = {
-        1000.0, // Tier 0 (1 hour) - 1000% (TESTING ONLY)
-        500.0,  // Tier 1 (30 days) - 500%
-        400.0,  // Tier 2 (90 days) - 400%
-        350.0,  // Tier 3 (180 days) - 350%
-        300.0,  // Tier 4 (1 year) - 300%
-        250.0,  // Tier 5 (2 years) - 250%
-        225.0,  // Tier 6 (3 years) - 225%
-        212.0,  // Tier 7 (5 years) - 212%
-        206.0,  // Tier 8 (7 years) - 206%
-        200.0   // Tier 9 (10 years) - 200%
-    };
-
     if (lockTier < 0 || lockTier > 9) {
         return 0;
     }
-
-    double collateralRatio = tierRatios[lockTier];
 
     // Get oracle price based on network type
     // MockOracleManager for RegTest only, RPC for testnet/mainnet
@@ -1370,17 +1362,10 @@ CAmount WalletModel::calculateRequiredCollateral(CAmount ddAmount, int lockTier)
         return 0;
     }
 
-    double dgbPriceUSD = oraclePriceMicroUSD / 1000000.0;  // Convert micro-USD to USD
-    double ddValueUSD = ddAmount / 100.0; // ddAmount is in cents, convert to dollars
-
-    // Calculate required USD value of collateral
-    double requiredCollateralUSD = ddValueUSD * (collateralRatio / 100.0);
-
-    // Calculate required DGB amount and convert to satoshis
-    double requiredDGB_decimal = requiredCollateralUSD / dgbPriceUSD;
-    CAmount requiredDGB_satoshis = static_cast<CAmount>(requiredDGB_decimal * 100000000);
-
-    return requiredDGB_satoshis;
+    static constexpr int LOCK_DAYS_FOR_TIER[10] = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650};
+    const int currentHeight = m_client_model ? m_client_model->getNumBlocks() : 0;
+    DigiDollar::MintTxBuilder builder(Params(), currentHeight, oraclePriceMicroUSD);
+    return builder.CalculateRequiredCollateral(ddAmount, LOCK_DAYS_FOR_TIER[lockTier]);
 }
 
 UniValue WalletModel::executeRpc(const std::string& command, const UniValue& params) const

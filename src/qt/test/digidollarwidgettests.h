@@ -22,7 +22,9 @@ public:
 
 private Q_SLOTS:
     void overviewWidgetTests();
+    void watchOnlyDigiDollarBalanceHiddenInWalletModel();
     void mintWidgetTests();
+    void mintWidgetCollateralMatchesBuilderSafetyMargin();
     void sendWidgetTests();
     void sendWidgetNoteFieldTests();
     void receiveWidgetTests();
@@ -48,6 +50,10 @@ private Q_SLOTS:
     void overviewRecentTransactionsSendShowsNegativeSign();
     void transactionsWidgetShowsRpcHistorySignsAndFields();
     void positionsWidgetLockTierColumnFitsLongestLabel();
+    void positionsWidgetInitialLoadNotThrottled();
+    void positionsWidgetHealthUsesMicroUsdOraclePrice();
+    void positionsWidgetDisablesRedeemForPrivateKeyDisabledWallet();
+    void redeemWidgetKeepsTimelockedPositionDisabled();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

@@ -10,6 +10,7 @@
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
 #include <consensus/amount.h>
+#include <digidollar/txbuilder.h>
 #include <logging.h>
 #include <node/interface_ui.h>
 #include <kernel/chainparams.h>
@@ -864,15 +865,16 @@ void DigiDollarMintWidget::calculateRequiredCollateral()
 {
     if (m_mintAmount > 0 && m_oraclePrice > 0) {
         // Use the already-fetched oracle price (from RPC on testnet/mainnet, mock on regtest)
-        // This ensures the GUI displays the same value as what will be used in the actual mint
+        // and the same builder math as the actual mint.
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);
 
-        // Calculate required collateral using the current oracle price
-        // m_mintAmount is DD dollars, m_oraclePrice is USD per DGB
-        // Formula: (DD_value_USD * collateral_ratio) / DGB_price_USD
-        double ddValueUSD = m_mintAmount;  // DD is 1:1 with USD
-        double requiredCollateralUSD = ddValueUSD * (m_collateralRatio / 100.0);
-        m_requiredCollateral = requiredCollateralUSD / m_oraclePrice;  // Convert to DGB
+        static constexpr int LOCK_DAYS_FOR_TIER[10] = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650};
+        const CAmount ddAmountCents = static_cast<CAmount>(std::llround(m_mintAmount * 100));
+        const CAmount oraclePriceMicroUSD = static_cast<CAmount>(std::llround(m_oraclePrice * 1000000.0));
+        const int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
+        DigiDollar::MintTxBuilder builder(Params(), currentHeight, oraclePriceMicroUSD);
+        const CAmount requiredCollateralSats = builder.CalculateRequiredCollateral(ddAmountCents, LOCK_DAYS_FOR_TIER[m_selectedTier]);
+        m_requiredCollateral = requiredCollateralSats > 0 ? requiredCollateralSats / static_cast<double>(COIN) : 0.0;
     } else {
         m_requiredCollateral = 0.0;
         m_collateralRatio = getCollateralRatioForTier(m_selectedTier);

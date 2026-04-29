@@ -260,7 +260,7 @@ void DigiDollarPositionsWidget::updateView()
 void DigiDollarPositionsWidget::updatePositions()
 {
     // Bail out during shutdown to prevent deadlock on cs_dd_wallet (Bug #23)
-    if (ShutdownRequested() || !m_walletModel) {
+    if (ShutdownRequested() || !m_walletModel || !m_clientModel) {
         return;
     }
 
@@ -494,10 +494,9 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         // Calculate health ratio using actual oracle price
         pos.health = CalculatePositionHealth(wp.dd_minted, wp.dgb_collateral, oraclePrice);
 
-        // Can redeem if timelock expired AND position is still active
-        // NOTE: We trust that the user owns this vault (has collateral locked). The redemption
-        // process will validate the DD balance at redemption time.
-        pos.canRedeem = (pos.blocksRemaining == 0) && wp.is_active;
+        // Can redeem if timelock expired, position is active, and the wallet can sign.
+        // Private-key-disabled/watch-only wallets may observe vaults but cannot unlock them.
+        pos.canRedeem = !m_walletModel->wallet().privateKeysDisabled() && (pos.blocksRemaining == 0) && wp.is_active;
 
         // Track redeemed status
         pos.isRedeemed = !wp.is_active;
@@ -1048,15 +1047,14 @@ double DigiDollarPositionsWidget::CalculatePositionHealth(CAmount ddAmount, CAmo
         return 0.0; // No DD = no health to display
     }
 
-    // Calculate DGB collateral value in USD cents
-    // dgbCollateral is in satoshis (1 DGB = 100,000,000 satoshis)
-    // oraclePrice format: CENTS per DGB (e.g., 1 = $0.01 per DGB)
+    // Calculate DGB collateral value in USD cents.
+    // dgbCollateral is in satoshis and oraclePrice is micro-USD per DGB.
 
     // Step 1: Calculate DGB amount in whole coins
     double dgbAmount = dgbCollateral / 100000000.0;
 
-    // Step 2: oraclePrice is already in cents per DGB
-    double centsPerDGB = static_cast<double>(oraclePrice);
+    // Step 2: Convert micro-USD to cents per DGB.
+    double centsPerDGB = static_cast<double>(oraclePrice) / 10000.0;
 
     // Step 3: Calculate value in cents
     CAmount collateralValueCents = static_cast<CAmount>(dgbAmount * centsPerDGB);

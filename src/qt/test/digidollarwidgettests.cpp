@@ -29,6 +29,7 @@
 #include <wallet/digidollarwallet.h>
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
+#include <oracle/mock_oracle.h>
 
 #include <memory>
 
@@ -48,6 +49,7 @@ using wallet::AddWallet;
 using wallet::CreateMockableWalletDatabase;
 using wallet::RemoveWallet;
 using wallet::WALLET_FLAG_DESCRIPTORS;
+using wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS;
 using wallet::WalletContext;
 using wallet::WalletRescanReserver;
 
@@ -219,6 +221,14 @@ void TestTransactionsWidget(interfaces::Node& node, const std::shared_ptr<wallet
     transactionsWidget.updateView();
 }
 
+void AddMockDigiDollarPosition(const std::shared_ptr<wallet::CWallet>& wallet, const uint256& id, CAmount dd_amount, CAmount collateral, uint32_t tier, int64_t unlock_height)
+{
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+    dd_wallet->AddCollateralPosition(WalletCollateralPosition(id, dd_amount, collateral, tier, unlock_height));
+}
+
 } // namespace
 
 void DigiDollarWidgetTests::overviewWidgetTests()
@@ -241,6 +251,36 @@ void DigiDollarWidgetTests::overviewWidgetTests()
     TestOverviewWidget(m_node, wallet);
 }
 
+void DigiDollarWidgetTests::watchOnlyDigiDollarBalanceHiddenInWalletModel()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->EnsureDDWallet();
+    wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+    dd_wallet->AddDDUTXO(COutPoint(uint256::ONE, 1), 10000);
+    QCOMPARE(dd_wallet->GetTotalDDBalance(), 10000);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    QCOMPARE(mini_gui.walletModel->getDigiDollarBalance(), 0);
+}
+
 void DigiDollarWidgetTests::mintWidgetTests()
 {
 #ifdef Q_OS_MACOS
@@ -259,6 +299,49 @@ void DigiDollarWidgetTests::mintWidgetTests()
 
     const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
     TestMintWidget(m_node, wallet);
+}
+
+void DigiDollarWidgetTests::mintWidgetCollateralMatchesBuilderSafetyMargin()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    MockOracleManager::GetInstance().SetEnabled(true);
+    MockOracleManager::GetInstance().SetMockPrice(500000); // $0.50/DGB in micro-USD
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    QCOMPARE(mini_gui.walletModel->calculateRequiredCollateral(10000, 1), 1010 * COIN);
+
+    DigiDollarMintWidget mintWidget;
+    mintWidget.setWalletModel(mini_gui.walletModel.get());
+    mintWidget.setClientModel(mini_gui.clientModel.get());
+    mintWidget.show();
+    mintWidget.updateView();
+
+    QLineEdit* amountEdit = mintWidget.findChild<QLineEdit*>("amountEdit");
+    QVERIFY(amountEdit != nullptr);
+    amountEdit->setText("100.00");
+    QCoreApplication::processEvents();
+
+    QLabel* collateralValue = mintWidget.findChild<QLabel*>("collateralValue");
+    QVERIFY(collateralValue != nullptr);
+    QCOMPARE(collateralValue->text(), QString("1010.00000000 DGB"));
+
+    MockOracleManager::GetInstance().Reset();
 }
 
 void DigiDollarWidgetTests::sendWidgetTests()
@@ -321,6 +404,55 @@ void DigiDollarWidgetTests::redeemWidgetTests()
     TestRedeemWidget(m_node, wallet);
 }
 
+void DigiDollarWidgetTests::redeemWidgetKeepsTimelockedPositionDisabled()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-timelocked-redeem");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 200);
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+    dd_wallet->AddDDUTXO(COutPoint(uint256::ONE, 1), 10000);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.setPosition(QString::fromStdString(uint256::ONE.GetHex()));
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+
+    QLabel* ddMintedValue = redeemWidget.findChild<QLabel*>("ddMintedValue");
+    QVERIFY(ddMintedValue != nullptr);
+    QCOMPARE(ddMintedValue->text(), QString("100.00 DD"));
+
+    QLabel* redeemableValue = redeemWidget.findChild<QLabel*>("redeemableValue");
+    QVERIFY(redeemableValue != nullptr);
+    QCOMPARE(redeemableValue->text(), QString("0.00 DD"));
+}
+
 void DigiDollarWidgetTests::positionsWidgetTests()
 {
 #ifdef Q_OS_MACOS
@@ -339,6 +471,117 @@ void DigiDollarWidgetTests::positionsWidgetTests()
 
     const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
     TestPositionsWidget(m_node, wallet);
+}
+
+void DigiDollarWidgetTests::positionsWidgetInitialLoadNotThrottled()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarPositionsWidget positionsWidget;
+    positionsWidget.setWalletModel(mini_gui.walletModel.get());
+    positionsWidget.setClientModel(mini_gui.clientModel.get());
+
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+}
+
+void DigiDollarWidgetTests::positionsWidgetHealthUsesMicroUsdOraclePrice()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    MockOracleManager::GetInstance().SetEnabled(true);
+    MockOracleManager::GetInstance().SetMockPrice(500000); // $0.50/DGB in micro-USD
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarPositionsWidget positionsWidget;
+    positionsWidget.setClientModel(mini_gui.clientModel.get());
+    positionsWidget.setWalletModel(mini_gui.walletModel.get());
+
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+
+    QWidget* healthWidget = table->cellWidget(0, DigiDollarPositionsWidget::COL_HEALTH);
+    QVERIFY(healthWidget != nullptr);
+    QProgressBar* healthBar = healthWidget->findChild<QProgressBar*>();
+    QVERIFY(healthBar != nullptr);
+    QCOMPARE(healthBar->value(), 150);
+
+    MockOracleManager::GetInstance().Reset();
+}
+
+void DigiDollarWidgetTests::positionsWidgetDisablesRedeemForPrivateKeyDisabledWallet()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+    wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarPositionsWidget positionsWidget;
+    positionsWidget.setClientModel(mini_gui.clientModel.get());
+    positionsWidget.setWalletModel(mini_gui.walletModel.get());
+
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+
+    QPushButton* redeemButton = qobject_cast<QPushButton*>(
+        table->cellWidget(0, DigiDollarPositionsWidget::COL_ACTIONS));
+    QVERIFY(redeemButton != nullptr);
+    QCOMPARE(redeemButton->text(), QString("Locked"));
+    QVERIFY(!redeemButton->isEnabled());
 }
 
 void DigiDollarWidgetTests::transactionsWidgetTests()

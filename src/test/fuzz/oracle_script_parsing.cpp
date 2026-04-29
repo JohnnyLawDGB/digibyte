@@ -4,14 +4,24 @@
 
 #include <primitives/oracle.h>
 #include <oracle/bundle_manager.h>
+#include <chainparams.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <script/script.h>
+#include <util/chaintype.h>
 
 #include <cstdint>
 #include <vector>
 
-FUZZ_TARGET(oracle_script_extract)
+namespace {
+void initialize_oracle_script_parsing()
+{
+    ECC_Start();
+    SelectParams(ChainType::REGTEST);
+}
+} // namespace
+
+FUZZ_TARGET(oracle_script_extract, .init = initialize_oracle_script_parsing)
 {
     // Fuzz the oracle bundle extraction from coinbase scripts
     // This tests CreateOracleScript/ExtractOracleBundle round-trip
@@ -32,21 +42,22 @@ FUZZ_TARGET(oracle_script_extract)
     CTxOut oracle_out;
     oracle_out.nValue = 0;
 
-    CScript script;
-    script << OP_RETURN;
-
-    // Add DGB oracle tag (0x44 0x47 0x42 = "DGB")
-    if (fuzzed_data.ConsumeBool()) {
-        // Use real tag
-        std::vector<unsigned char> tag = {0x44, 0x47, 0x42};
-        script << tag;
+    CScript script{OP_RETURN};
+    const bool use_oracle_marker = fuzzed_data.ConsumeBool();
+    if (use_oracle_marker) {
+        script << OP_ORACLE;
+    } else if (fuzzed_data.ConsumeBool()) {
+        script << static_cast<opcodetype>(fuzzed_data.ConsumeIntegralInRange<uint8_t>(0, 255));
     }
 
-    // Add fuzzed payload
     auto payload = fuzzed_data.ConsumeBytes<unsigned char>(
         fuzzed_data.ConsumeIntegralInRange<size_t>(0, 1000));
     if (!payload.empty()) {
-        script << payload;
+        if (use_oracle_marker && fuzzed_data.ConsumeBool()) {
+            script.insert(script.end(), payload.begin(), payload.end());
+        } else {
+            script << payload;
+        }
     }
 
     oracle_out.scriptPubKey = script;
@@ -58,7 +69,7 @@ FUZZ_TARGET(oracle_script_extract)
     (void)manager.ExtractOracleBundle(CTransaction(tx), extracted);
 }
 
-FUZZ_TARGET(oracle_script_create_roundtrip)
+FUZZ_TARGET(oracle_script_create_roundtrip, .init = initialize_oracle_script_parsing)
 {
     FuzzedDataProvider fuzzed_data(buffer.data(), buffer.size());
 

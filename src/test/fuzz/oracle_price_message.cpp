@@ -5,13 +5,23 @@
 #include <primitives/oracle.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
+#include <chainparams.h>
 #include <streams.h>
 #include <key.h>
+#include <util/chaintype.h>
 
 #include <cstdint>
 #include <vector>
 
-FUZZ_TARGET(oracle_price_message)
+namespace {
+void initialize_oracle_price_message()
+{
+    ECC_Start();
+    SelectParams(ChainType::REGTEST);
+}
+} // namespace
+
+FUZZ_TARGET(oracle_price_message, .init = initialize_oracle_price_message)
 {
     DataStream ds{buffer};
 
@@ -34,7 +44,7 @@ FUZZ_TARGET(oracle_price_message)
     }
 }
 
-FUZZ_TARGET(oracle_price_message_sign_verify)
+FUZZ_TARGET(oracle_price_message_sign_verify, .init = initialize_oracle_price_message)
 {
     FuzzedDataProvider fuzzed_data(buffer.data(), buffer.size());
 

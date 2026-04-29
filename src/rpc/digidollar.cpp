@@ -4623,9 +4623,18 @@ static RPCHelpMan getmockoracleprice()
                 RPCExamples{
                     HelpExampleCli("getmockoracleprice", "") +
                     HelpExampleRpc("getmockoracleprice", "")
-                },
+        },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // Check DigiDollar activation
+            {
+                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+                ChainstateManager& chainman = EnsureChainman(node);
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+                }
+            }
             // Only allow in RegTest mode
             if (Params().GetChainType() != ChainType::REGTEST) {
                 throw JSONRPCError(RPC_METHOD_NOT_FOUND,

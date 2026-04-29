@@ -394,6 +394,44 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_invalid_mint_amount, DigiDollarVa
     BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-dd-mint-amount");
 }
 
+BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_rejects_opreturn_type_mismatch, DigiDollarValidationTestSetup)
+{
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770; // DD_TX_MINT
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
+
+    DigiDollar::MintParams params;
+    params.ddAmount = 10000;
+    params.lockHeight = mockHeight + 30 * 24 * 60 * 4;
+    params.ownerKey = testXOnlyKey;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+    CAmount requiredCollateral = (static_cast<uint64_t>(params.ddAmount) * COIN * 500 * 100) / mockOraclePrice;
+
+    CScript opReturn = CScript() << OP_RETURN
+                                 << std::vector<unsigned char>{'D', 'D'}
+                                 << CScriptNum(2) // ATTACK: OP_RETURN claims TRANSFER, nVersion claims MINT.
+                                 << CScriptNum(params.ddAmount)
+                                 << CScriptNum(params.lockHeight)
+                                 << CScriptNum(1)
+                                 << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
+
+    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, params.ddAmount);
+    mtx.vout.resize(3);
+    mtx.vout[0] = CTxOut(0, opReturn);
+    mtx.vout[1] = CTxOut(requiredCollateral, collateralScript);
+    mtx.vout[2] = CTxOut(0, ddScript);
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    BOOST_CHECK(!DigiDollar::ValidateDigiDollarTransaction(tx, validationContext, state));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-mint-opreturn-type");
+}
+
 BOOST_FIXTURE_TEST_CASE(transaction_validation_invalid_mint_does_not_mutate_volatility_state, DigiDollarValidationTestSetup)
 {
     DigiDollar::Volatility::VolatilityMonitor::ClearHistory();

@@ -870,6 +870,12 @@ bool ValidateMintTransaction(const CTransaction& tx,
                         LogPrintf("DigiDollar: Extracted tx type from OP_RETURN: %d\n", txType);
                     } catch (const std::exception&) {}
                 }
+                if (txType != static_cast<int64_t>(DD_TX_MINT)) {
+                    LogPrintf("DigiDollar: Mint OP_RETURN type mismatch: got %lld, expected %d\n",
+                              static_cast<long long>(txType), static_cast<int>(DD_TX_MINT));
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-opreturn-type",
+                                       "Mint transaction OP_RETURN type must match nVersion type");
+                }
 
                 // Extract DD amount in cents
                 if (output.scriptPubKey.GetOp(pc, opcode, data)) {

@@ -280,6 +280,47 @@ namespace {
         }
         return static_cast<CAmount>(val);
     }
+
+    std::string ExpectedDigiDollarAddressPrefix()
+    {
+        switch (Params().GetChainType()) {
+        case ChainType::REGTEST:
+            return "RD";
+        case ChainType::TESTNET:
+            return "TD";
+        case ChainType::MAIN:
+        case ChainType::SIGNET:
+            return "DD";
+        }
+        return "DD";
+    }
+
+    std::string DigiDollarAddressNetworkForPrefix(const std::string& prefix)
+    {
+        if (prefix == "DD") return "mainnet";
+        if (prefix == "TD") return "testnet";
+        if (prefix == "RD") return "regtest";
+        return "unknown";
+    }
+
+    bool ValidateDigiDollarAddressForCurrentNetwork(const std::string& address, std::string& error)
+    {
+        CDigiDollarAddress dd_address(address);
+        if (!dd_address.IsValid()) {
+            error = "Invalid DigiDollar address";
+            return false;
+        }
+
+        const std::string prefix = address.substr(0, 2);
+        const std::string expected = ExpectedDigiDollarAddressPrefix();
+        if (prefix != expected) {
+            error = strprintf("DigiDollar address is for %s network (%s prefix), but this node expects %s prefix",
+                              DigiDollarAddressNetworkForPrefix(prefix), prefix, expected);
+            return false;
+        }
+
+        return true;
+    }
 }
 
 RPCHelpMan getdigidollarstats()
@@ -1341,10 +1382,11 @@ RPCHelpMan senddigidollar()
             }
 
             // Parse and validate DD address
-            CDigiDollarAddress dd_address(addressStr);
-            if (!dd_address.IsValid()) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
+            std::string address_error;
+            if (!ValidateDigiDollarAddressForCurrentNetwork(addressStr, address_error)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, address_error);
             }
+            CDigiDollarAddress dd_address(addressStr);
             LogPrintf("DigiDollar RPC: DD address validated\n");
 
             // Check balance
@@ -1488,10 +1530,11 @@ RPCHelpMan sendmanydigidollar()
             const std::vector<std::string>& keys = amounts.getKeys();
             const std::vector<UniValue>& values = amounts.getValues();
             for (size_t i = 0; i < keys.size(); ++i) {
-                CDigiDollarAddress dd_address(keys[i]);
-                if (!dd_address.IsValid()) {
-                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address: " + keys[i]);
+                std::string address_error;
+                if (!ValidateDigiDollarAddressForCurrentNetwork(keys[i], address_error)) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, address_error + ": " + keys[i]);
                 }
+                CDigiDollarAddress dd_address(keys[i]);
 
                 CAmount amount = ParseDigiDollarRpcAmount(values[i]);
                 if (amount <= 0) {
@@ -2326,6 +2369,12 @@ RPCHelpMan validateddaddress()
                 else if (prefix == "TD") network = "testnet";
                 else if (prefix == "RD") network = "regtest";
                 else network = "unknown";
+                const std::string expected = ExpectedDigiDollarAddressPrefix();
+                if (prefix != expected) {
+                    isValid = false;
+                    error = strprintf("DigiDollar address is for %s network (%s prefix), but this node expects %s prefix",
+                                      network, prefix, expected);
+                }
             } else {
                 error = "Invalid DigiDollar address";
             }
@@ -2521,8 +2570,9 @@ static RPCHelpMan importdigidollaraddress()
             bool rescan = request.params.size() > 2 ? request.params[2].get_bool() : false;
             bool p2sh = request.params.size() > 3 ? request.params[3].get_bool() : false;
 
-            if (!CDigiDollarAddress(addressStr).IsValid()) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
+            std::string address_error;
+            if (!ValidateDigiDollarAddressForCurrentNetwork(addressStr, address_error)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, address_error);
             }
 
             bool success = false;
@@ -2628,9 +2678,9 @@ RPCHelpMan getdigidollarbalance()
 
             if (!addressStr.empty()) {
                 // Get balance for specific address
-                CDigiDollarAddress dd_address(addressStr);
-                if (!dd_address.IsValid()) {
-                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
+                std::string address_error;
+                if (!ValidateDigiDollarAddressForCurrentNetwork(addressStr, address_error)) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, address_error);
                 }
 
                 if (includeWatchOnly || !pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {

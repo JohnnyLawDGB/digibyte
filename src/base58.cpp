@@ -283,6 +283,25 @@ bool CDigiDollarAddress::IsValid() const
     return fValid && vchData.size() == 32 && vchVersion.size() == 2;
 }
 
+bool CDigiDollarAddress::IsValidForCurrentNetwork() const
+{
+    if (!IsValid()) {
+        return false;
+    }
+
+    switch (Params().GetChainType()) {
+    case ChainType::REGTEST:
+        return vchVersion == DD_P2TR_REGTEST;
+    case ChainType::TESTNET:
+        return vchVersion == DD_P2TR_TESTNET;
+    case ChainType::MAIN:
+    case ChainType::SIGNET:
+        return vchVersion == DD_P2TR_MAINNET;
+    }
+
+    return false;
+}
+
 bool CDigiDollarAddress::IsValidDigiDollarAddress(const std::string& str)
 {
     // Reject embedded null bytes
@@ -291,6 +310,16 @@ bool CDigiDollarAddress::IsValidDigiDollarAddress(const std::string& str)
     }
 
     return CDigiDollarAddress(str).IsValid();
+}
+
+bool CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(const std::string& str)
+{
+    // Reject embedded null bytes
+    if (str.find('\0') != std::string::npos) {
+        return false;
+    }
+
+    return CDigiDollarAddress(str).IsValidForCurrentNetwork();
 }
 
 //

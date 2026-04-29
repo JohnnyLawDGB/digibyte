@@ -68,8 +68,10 @@ public:
     CTxDestination GetDigiDollarDestination() const;
     std::string ToString() const;
     bool IsValid() const;
+    bool IsValidForCurrentNetwork() const;
 
     static bool IsValidDigiDollarAddress(const std::string& str);
+    static bool IsValidDigiDollarAddressForCurrentNetwork(const std::string& str);
 
     // Serialization support
     template<typename Stream>

@@ -15,11 +15,55 @@ Addresses are P2TR (Taproot) encoded in base58check format.
 """
 
 from test_framework.test_framework import DigiByteTestFramework
+from test_framework.messages import hash256
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
     assert_raises_rpc_error,
 )
+
+
+B58CHARS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+DD_VERSION_MAINNET = bytes.fromhex("5285")
+DD_VERSION_TESTNET = bytes.fromhex("b129")
+DD_VERSION_REGTEST = bytes.fromhex("a3a4")
+
+
+def b58check_decode_raw(address):
+    value = 0
+    for char in address:
+        value *= 58
+        assert char in B58CHARS
+        value += B58CHARS.index(char)
+    raw = value.to_bytes((value.bit_length() + 7) // 8, 'big')
+    pad = 0
+    for char in address:
+        if char == B58CHARS[0]:
+            pad += 1
+        else:
+            break
+    raw = b'\x00' * pad + raw
+    assert hash256(raw[:-4])[:4] == raw[-4:]
+    return raw[:-4]
+
+
+def b58check_encode_raw(payload):
+    raw = payload + hash256(payload)[:4]
+    value = int.from_bytes(raw, 'big')
+    result = ''
+    while value > 0:
+        result = B58CHARS[value % 58] + result
+        value //= 58
+    while raw and raw[0] == 0:
+        result = B58CHARS[0] + result
+        raw = raw[1:]
+    return result
+
+
+def reencode_digidollar_address(address, version):
+    payload = b58check_decode_raw(address)
+    assert payload[:2] in (DD_VERSION_MAINNET, DD_VERSION_TESTNET, DD_VERSION_REGTEST)
+    return b58check_encode_raw(version + payload[2:])
 
 
 class DigiDollarAddressTest(DigiByteTestFramework):
@@ -44,6 +88,7 @@ class DigiDollarAddressTest(DigiByteTestFramework):
 
         self.log.info("=== validateddaddress tests ===")
         self.test_validate_valid_regtest_address()
+        self.test_reject_cross_network_addresses()
         self.test_validate_invalid_prefix()
         self.test_validate_invalid_checksum()
         self.test_validate_empty_address()
@@ -97,6 +142,23 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         assert_equal(result['prefix'], 'RD')
 
         self.log.info("Valid regtest address validation passed")
+
+    def test_reject_cross_network_addresses(self):
+        self.log.info("Testing validateddaddress rejects cross-network DD prefixes...")
+
+        regtest_address = self.nodes[0].getdigidollaraddress()
+        mainnet_address = reencode_digidollar_address(regtest_address, DD_VERSION_MAINNET)
+        testnet_address = reencode_digidollar_address(regtest_address, DD_VERSION_TESTNET)
+
+        assert mainnet_address.startswith("DD")
+        assert testnet_address.startswith("TD")
+
+        for wrong_network_address in (mainnet_address, testnet_address):
+            result = self.nodes[0].validateddaddress(wrong_network_address)
+            assert_equal(result["isvalid"], False)
+            assert "network" in result["error"].lower()
+
+        self.log.info("Cross-network DD addresses are rejected on regtest")
 
     def test_validate_invalid_prefix(self):
         self.log.info("Testing validateddaddress with invalid prefix...")

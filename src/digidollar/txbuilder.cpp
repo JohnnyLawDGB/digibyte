@@ -446,7 +446,7 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
 // ============================================================================
 
 bool TransferTxBuilder::ValidateDDAddress(const std::string& address) const {
-    return CDigiDollarAddress::IsValidDigiDollarAddress(address);
+    return CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(address);
 }
 
 CAmount TransferTxBuilder::GetDDFromUTXO(const COutPoint& outpoint) const {

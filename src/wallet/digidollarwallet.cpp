@@ -1153,7 +1153,7 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
         CAmount totalAmount = 0;
         for (const auto& [to, amount] : recipients) {
             // Validate recipient address
-            if (!to.IsValid()) {
+            if (!to.IsValidForCurrentNetwork()) {
                 error = "Invalid recipient address";
                 LogPrintf("DigiDollar: Invalid recipient address\n");
                 return false;
@@ -1846,7 +1846,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
 }
 
 bool DigiDollarWallet::ValidateDDAddress(const std::string& address) const {
-    return CDigiDollarAddress::IsValidDigiDollarAddress(address);
+    return CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(address);
 }
 
 // =============================================================================
@@ -5057,7 +5057,7 @@ bool DigiDollarWallet::ValidateMintParams(const CAmount& dd_amount, uint32_t loc
 }
 
 bool DigiDollarWallet::ValidateTransferParams(const CDigiDollarAddress& to, const CAmount& amount) const {
-    if (!to.IsValid()) {
+    if (!to.IsValidForCurrentNetwork()) {
         LogPrintf("DigiDollar: Invalid recipient address\n");
         return false;
     }

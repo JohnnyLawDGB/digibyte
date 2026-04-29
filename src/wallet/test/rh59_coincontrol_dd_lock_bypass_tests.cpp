@@ -7,21 +7,21 @@
 // =============================================================================
 //
 // POST-WALK-BACK NOTE (RC31):
-//   The original framing of this test ("VULN CONFIRMED") was wrong. Bitcoin
-//   Core intentionally ignores lockunspent on manually selected outputs
+//   The original framing of RH-59-01 ("VULN CONFIRMED") was wrong. Bitcoin
+//   Core intentionally ignores normal lockunspent on manually selected outputs
 //   (wallet_basic.py:188: "The lock on a manually selected output is
 //   ignored"). The earlier audit commit that added an IsLockedCoin() check
 //   in FetchSelectedInputs broke a dozen upstream functional tests and was
 //   reverted. This test file is retained as a pin on the coin-selection
 //   behavior — it asserts the actual (documented) Bitcoin invariant that
 //   preset-input path accepts SelectExternal outpoints unconditionally —
-//   but the `VULN CONFIRMED` strings below are historical artifacts of
-//   the original audit narrative, NOT live vulnerabilities.
+//   but only for ordinary locks.
 //
-// Real DD-collateral safety is enforced at the consensus layer, not at
-// coin selection. A wallet-level bypass would still be rejected at block
-// validation by ValidateRedemptionTransaction, which checks CLTV +
-// position state regardless of how the coins were selected.
+// DD token/collateral locks are different. They are protocol-accounting
+// locks, not user convenience locks, and a normal DGB transaction must not
+// be allowed to manually select them. DD spends must go through the DD-aware
+// transfer/redeem builders so the wallet state and consensus metadata stay
+// in sync.
 //
 // Red Hornet Wave-7 sub-agent 7B (angle C) --
 // IsLockedByDD bypass via pre-selected coin-control inputs.
@@ -161,37 +161,31 @@ BOOST_AUTO_TEST_CASE(rh59_01_fetch_selected_inputs_ignores_locked_coin)
     }
 
     BOOST_CHECK_MESSAGE(accepted.count(locked_outpoint) == 1,
-        "VULN CONFIRMED (RH-59-01): FetchSelectedInputs accepted a UTXO "
-        "that is in setLockedCoins. No IsLockedCoin() / IsLockedByDD() "
-        "check exists in src/wallet/spend.cpp:258-303. Any RPC exposing "
-        "preset prevouts (fundrawtransaction, walletcreatefundedpsbt, "
-        "send, sendall) bypasses the DD lock.");
+        "RH-59-01: FetchSelectedInputs accepted a UTXO that is in "
+        "setLockedCoins, preserving Bitcoin Core's documented manual "
+        "coin-control override behavior.");
 
     BOOST_TEST_MESSAGE("RH-59-01: preset-input path accepted locked "
-                       "outpoint. Fix direction: reject outpoints for "
-                       "which IsLockedCoin(outpoint)==true AND "
-                       "(!IsDDInternalFlow) at spend.cpp:264.");
+                       "outpoint. Ordinary lockunspent remains a wallet "
+                       "selection hint; DD-RH-053 covers only DD protocol "
+                       "locks.");
 }
 
 // =============================================================================
 // RH-59-02: DD-specific bypass via IsLockedByDD
 // =============================================================================
 //
-// Repeats the preset-input probe but with a DD-aware wallet underneath so
-// `IsLockedByDD()` also reports the outpoint as locked. The gate is still
-// not consulted.
-//
-// NOTE: WalletTestingSetup does not wire a DigiDollarWallet onto m_wallet
-// (CWallet::Create at src/wallet/wallet.cpp:3043 does, but the fixture
-// skips Create). The existing digidollar_wallet_security_tests construct
-// a stack DigiDollarWallet tied to &m_wallet; we do the same to populate
-// dd_utxos and verify IsLockedByDD, then point out that even if the
-// wallet WERE wired, FetchSelectedInputs never asks.
+// Repeats the preset-input probe with the real wallet-owned DD sidecar so
+// `FetchSelectedInputs()` can see the DD lock through `wallet.GetDDWallet()`.
+// The hardened behavior is to reject these selected inputs even though
+// ordinary manual `lockunspent` selections remain allowed.
 // =============================================================================
 BOOST_AUTO_TEST_CASE(rh59_02_dd_wallet_locked_outpoint_also_bypassable)
 {
     // Populate a DigiDollarWallet with a collateral position.
-    DigiDollarWallet dd_wallet(&m_wallet);
+    m_wallet.EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = m_wallet.GetDDWallet();
+    BOOST_REQUIRE(dd_wallet != nullptr);
 
     uint256 mint_txid;
     GetRandBytes(mint_txid);
@@ -203,13 +197,13 @@ BOOST_AUTO_TEST_CASE(rh59_02_dd_wallet_locked_outpoint_also_bypassable)
     pos.lock_tier = 4;
     pos.unlock_height = 1000000;     // still locked on any reasonable regtest tip
     pos.is_active = true;
-    dd_wallet.AddCollateralPosition(pos);
+    dd_wallet->AddCollateralPosition(pos);
 
     COutPoint collateral(mint_txid, 0);
     COutPoint dd_token(mint_txid, 1);
 
-    BOOST_REQUIRE(dd_wallet.IsLockedByDD(collateral));
-    BOOST_REQUIRE(dd_wallet.IsLockedByDD(dd_token));
+    BOOST_REQUIRE(dd_wallet->IsLockedByDD(collateral));
+    BOOST_REQUIRE(dd_wallet->IsLockedByDD(dd_token));
 
     // Also install the regular setLockedCoins entry that init-time DD
     // scanning (src/wallet/digidollarwallet.cpp:135) would create.
@@ -255,35 +249,22 @@ BOOST_AUTO_TEST_CASE(rh59_02_dd_wallet_locked_outpoint_also_bypassable)
         return FetchSelectedInputs(m_wallet, coin_control, csp);
     }();
 
-    BOOST_REQUIRE_MESSAGE(res.has_value(),
-        "Preset input path produced an error; exploit assumes it succeeds. Error: "
-        << (res.has_value() ? std::string{} : util::ErrorString(res).original));
-
-    std::set<COutPoint> accepted;
-    for (const std::shared_ptr<COutput>& out : res->coins) {
-        accepted.insert(out->outpoint);
-    }
-    BOOST_CHECK_MESSAGE(accepted.count(collateral) == 1,
-        "VULN CONFIRMED (RH-59-02a): DD-collateral outpoint accepted "
-        "despite IsLockedByDD()==true AND IsLockedCoin()==true.");
-    BOOST_CHECK_MESSAGE(accepted.count(dd_token) == 1,
-        "VULN CONFIRMED (RH-59-02b): DD-token outpoint accepted despite "
-        "IsLockedByDD()==true AND IsLockedCoin()==true. The DD-token "
-        "case is the dangerous one: the owner's key-path P2TR sig makes "
-        "the tx consensus-valid even though DigiDollarWallet::dd_utxos "
-        "still lists the token -- this is the primary path to an "
-        "out-of-sync DD balance.");
+    BOOST_CHECK_MESSAGE(!res.has_value(),
+        "DD-RH-053: preset-input path accepted a DD-locked outpoint. "
+        "Ordinary lockunspent can be overridden manually, but DD token and "
+        "collateral outpoints must only be spent by DigiDollar-aware flows.");
 
     // Tightens the finding: even after we forcibly deactivate the
     // position (so IsLockedByDD now returns false for collateral), the
     // token stays in dd_utxos and the regular lock remains. The bypass
     // is stable.
-    dd_wallet.UpdatePositionStatus(mint_txid, false);
-    BOOST_CHECK(!dd_wallet.IsLockedByDD(collateral));
-    BOOST_CHECK(dd_wallet.IsLockedByDD(dd_token)); // token still in dd_utxos
+    dd_wallet->UpdatePositionStatus(mint_txid, false);
+    BOOST_CHECK(!dd_wallet->IsLockedByDD(collateral));
+    BOOST_CHECK(dd_wallet->IsLockedByDD(dd_token)); // token still in dd_utxos
 
-    BOOST_TEST_MESSAGE("RH-59-02: preset-input path drives both DD "
-                       "collateral and DD token through unchecked.");
+    BOOST_TEST_MESSAGE("DD-RH-053: preset-input path rejects DD-locked "
+                       "collateral/token outpoints while RH-59-01 preserves "
+                       "ordinary manual lockunspent override behavior.");
 }
 
 // =============================================================================

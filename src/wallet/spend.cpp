@@ -21,6 +21,7 @@
 #include <util/trace.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
+#include <wallet/digidollarwallet.h>
 #include <wallet/fees.h>
 #include <wallet/receive.h>
 #include <wallet/spend.h>
@@ -262,6 +263,12 @@ util::Result<PreSelectedInputs> FetchSelectedInputs(const CWallet& wallet, const
     const bool can_grind_r = wallet.CanGrindR();
     std::map<COutPoint, CAmount> map_of_bump_fees = wallet.chain().CalculateIndividualBumpFees(coin_control.ListSelected(), coin_selection_params.m_effective_feerate);
     for (const COutPoint& outpoint : coin_control.ListSelected()) {
+        if (const DigiDollarWallet* dd_wallet = wallet.GetDDWallet()) {
+            if (dd_wallet->IsLockedByDD(outpoint)) {
+                return util::Error{strprintf(_("Pre-selected input %s is locked by DigiDollar; use DigiDollar transfer or redeem RPCs"), outpoint.ToString())};
+            }
+        }
+
         int input_bytes = -1;
         CTxOut txout;
         if (auto ptr_wtx = wallet.GetWalletTx(outpoint.hash)) {

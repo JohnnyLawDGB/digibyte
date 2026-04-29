@@ -16,6 +16,8 @@
 #include <undo.h>
 #include <validation.h>
 
+#include <limits>
+
 static constexpr uint8_t DB_BLOCK_HASH{'D'};
 static constexpr uint8_t DB_BLOCK_HEIGHT{'H'};
 static constexpr uint8_t DB_VAULT_OUTPOINT{'V'};
@@ -213,107 +215,76 @@ bool DigiDollarStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
 
         // Process DD MINT transactions
         if (txType == DigiDollar::DD_TX_MINT) {
-            // DD Mint structure:
-            // Output 0: P2TR collateral vault (34 bytes, OP_1, value > 0)
-            // Output 1: P2TR DD token (34 bytes, OP_1, value = 0)
-            // Output 2: OP_RETURN with DD metadata
-
-            if (tx->vout.size() < 3) {
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Skipping malformed DD_TX_MINT (outputs=%d) txid=%s\n",
-                         tx->vout.size(), tx->GetHash().ToString());
-                continue;
-            }
-
-            // Validate output structure
-            const CTxOut& vault_output = tx->vout[0];
-            const CTxOut& token_output = tx->vout[1];
-            const CTxOut& opreturn_output = tx->vout[2];
-
-            // Verify collateral vault output (P2TR with value)
-            if (vault_output.scriptPubKey.size() != 34 ||
-                vault_output.scriptPubKey[0] != OP_1 ||
-                vault_output.nValue <= 0) {
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Invalid vault output in DD_TX_MINT txid=%s\n",
-                         tx->GetHash().ToString());
-                continue;
-            }
-
-            // Verify DD token output (P2TR with zero value)
-            if (token_output.scriptPubKey.size() != 34 ||
-                token_output.scriptPubKey[0] != OP_1 ||
-                token_output.nValue != 0) {
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Invalid token output in DD_TX_MINT txid=%s\n",
-                         tx->GetHash().ToString());
-                continue;
-            }
-
-            // Verify OP_RETURN output
-            if (opreturn_output.scriptPubKey.empty() ||
-                opreturn_output.scriptPubKey[0] != OP_RETURN) {
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Invalid OP_RETURN in DD_TX_MINT txid=%s\n",
-                         tx->GetHash().ToString());
-                continue;
-            }
-
-            // Extract DD amount from OP_RETURN
             CAmount ddAmount = 0;
-            if (!DigiDollar::ExtractDDAmount(opreturn_output.scriptPubKey, ddAmount)) {
-                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Failed to extract DD amount from DD_TX_MINT txid=%s\n",
+            CAmount collateralAmount = 0;
+            if (!DigiDollar::ExtractMintAccountingAmounts(*tx, ddAmount, collateralAmount)) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Failed to extract accounting amounts from DD_TX_MINT txid=%s\n",
+                         tx->GetHash().ToString());
+                continue;
+            }
+
+            uint32_t vault_index = std::numeric_limits<uint32_t>::max();
+            for (uint32_t i = 0; i < tx->vout.size(); ++i) {
+                const CTxOut& output = tx->vout[i];
+                if (output.nValue == collateralAmount &&
+                    output.scriptPubKey.size() == 34 &&
+                    output.scriptPubKey[0] == OP_1) {
+                    vault_index = i;
+                    break;
+                }
+            }
+            if (vault_index == std::numeric_limits<uint32_t>::max()) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Failed to locate vault output in DD_TX_MINT txid=%s\n",
                          tx->GetHash().ToString());
                 continue;
             }
 
             // Update running totals
             m_total_dd_supply += ddAmount;
-            m_total_collateral += vault_output.nValue;
+            m_total_collateral += collateralAmount;
             m_vault_count++;
 
             // Store vault info for later redemption tracking
-            COutPoint vault_outpoint(tx->GetHash(), 0);
+            COutPoint vault_outpoint(tx->GetHash(), vault_index);
             VaultInfo vault_info;
             vault_info.dd_amount = ddAmount;
-            vault_info.collateral = vault_output.nValue;
+            vault_info.collateral = collateralAmount;
             if (!m_db->Write(DBVaultKey(vault_outpoint), vault_info)) {
-                return error("%s: Failed to write vault info for %s:0", __func__, tx->GetHash().ToString());
+                return error("%s: Failed to write vault info for %s:%u", __func__, tx->GetHash().ToString(), vault_index);
             }
 
             LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Block %d - DD MINT: +%d DD, +%d DGB collateral (total: %d DD, %d DGB, %d vaults)\n",
-                     block.height, ddAmount, vault_output.nValue, m_total_dd_supply, m_total_collateral, m_vault_count);
+                     block.height, ddAmount, collateralAmount, m_total_dd_supply, m_total_collateral, m_vault_count);
         }
 
         // Process inputs to detect vault redemptions
-        // When a DD vault (output 0 of a mint tx) is spent, we need to subtract from totals
+        // When a DD vault output from a mint tx is spent, subtract it from totals.
         const CTxUndo& tx_undo = block_undo.vtxundo[tx_idx - 1]; // -1 because coinbase has no undo
 
         for (size_t input_idx = 0; input_idx < tx->vin.size(); ++input_idx) {
             const CTxIn& txin = tx->vin[input_idx];
             const Coin& coin = tx_undo.vprevout[input_idx];
 
-            // Check if this input is spending a DD vault output
-            // DD vault outputs are output 0 of DD_TX_MINT transactions
-            if (txin.prevout.n == 0) {
-                // Check if the spent output is a P2TR vault (34 bytes, OP_1, value > 0)
-                if (coin.out.scriptPubKey.size() == 34 &&
-                    coin.out.scriptPubKey[0] == OP_1 &&
-                    coin.out.nValue > 0) {
+            // Look up vault info from database. This binds redemption accounting
+            // to the actual collateral outpoint stored at mint time instead of
+            // assuming the vault was vout[0].
+            VaultInfo vault_info;
+            if (coin.out.scriptPubKey.size() == 34 &&
+                coin.out.scriptPubKey[0] == OP_1 &&
+                coin.out.nValue > 0 &&
+                m_db->Read(DBVaultKey(txin.prevout), vault_info)) {
+                // This is a DD vault being redeemed
+                m_total_dd_supply -= vault_info.dd_amount;
+                m_total_collateral -= vault_info.collateral;
+                m_vault_count--;
 
-                    // Look up vault info from database
-                    VaultInfo vault_info;
-                    if (m_db->Read(DBVaultKey(txin.prevout), vault_info)) {
-                        // This is a DD vault being redeemed
-                        m_total_dd_supply -= vault_info.dd_amount;
-                        m_total_collateral -= vault_info.collateral;
-                        m_vault_count--;
+                // Keep immutable mint metadata for reorg safety.
+                // A disconnected redeem may be mined again on a
+                // different branch; deleting this entry would make
+                // the alternate redeem invisible to the stats index.
 
-                        // Keep immutable mint metadata for reorg safety.
-                        // A disconnected redeem may be mined again on a
-                        // different branch; deleting this entry would make
-                        // the alternate redeem invisible to the stats index.
-
-                        LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Block %d - DD REDEMPTION: -%d DD, -%d DGB collateral (total: %d DD, %d DGB, %d vaults)\n",
-                                 block.height, vault_info.dd_amount, vault_info.collateral, m_total_dd_supply, m_total_collateral, m_vault_count);
-                    }
-                }
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Block %d - DD REDEMPTION: -%d DD, -%d DGB collateral (total: %d DD, %d DGB, %d vaults)\n",
+                         block.height, vault_info.dd_amount, vault_info.collateral, m_total_dd_supply, m_total_collateral, m_vault_count);
             }
         }
     }

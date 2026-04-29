@@ -277,6 +277,7 @@ BASE_SCRIPTS = [
     'digidollar_rpc.py',
     'digidollar_redeem_stats.py',
     'digidollar_stats_reorg.py',
+    'digidollar_stats_reordered_mint.py',
     'digidollar_redemption_amounts.py',
     'digidollar_protection.py',
     'digidollar_activation.py',

@@ -999,6 +999,22 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
             return CScript();
         }
 
+        const Consensus::Params& cparams = Params().GetConsensus();
+        const uint16_t total_oracles = static_cast<uint16_t>(std::max(1, cparams.nOracleTotalOracles));
+        const std::vector<uint8_t> participants = MuSig2OracleAggregator::DecodeBitmap(
+            bundle.participation_bitmap, total_oracles);
+        if (participants.empty()) {
+            LogPrintf("Oracle: CreateOracleScript v0x03 error: malformed participation_bitmap size=%zu for total_oracles=%u\n",
+                     bundle.participation_bitmap.size(), total_oracles);
+            return CScript();
+        }
+        const int required = std::max(1, cparams.nOracleConsensusRequired);
+        if (static_cast<int>(participants.size()) < required) {
+            LogPrintf("Oracle: CreateOracleScript v0x03 error: participation count %zu below threshold %d\n",
+                     participants.size(), required);
+            return CScript();
+        }
+
         std::vector<unsigned char> v03_data = bundle.SerializeV03Data();
         if (v03_data.empty()) {
             LogPrintf("Oracle: CreateOracleScript v0x03 error: SerializeV03Data failed\n");
@@ -1462,14 +1478,12 @@ bool OracleBundleManager::ValidateV03BundleFormat(const CScript& script, uint8_t
 
     // Validate format based on version
     if (version == 0x03) {
-        // v0x03: version(1) + bitmap_len(1) + bitmap(>=1) + price(8) + timestamp(8) + sig(64) >= 83
-        if (data.size() < 83) return false;
+        // v0x03: version(1) + bitmap_len(1) + bitmap(>=1) + epoch(4) + price(8) + timestamp(8) + sig(64)
+        if (data.size() < 87) return false;
         uint8_t bitmap_len = data[1];
         if (bitmap_len == 0) return false;
-        // Check total data size: 1(version) + 1(bitmap_len) + bitmap_len + 8 + 8 + 64
-        size_t expected = 1 + 1 + bitmap_len + 8 + 8 + 64;
-        if (data.size() < expected) return false;
-        return true;
+        size_t expected = 1 + 1 + bitmap_len + 4 + 8 + 8 + 64;
+        return data.size() == expected;
     } else if (version == 0x02) {
         // v0x02: version(1) + num_msgs(1) + price(8) + timestamp(8) = 18 minimum
         if (data.size() < 18) return false;

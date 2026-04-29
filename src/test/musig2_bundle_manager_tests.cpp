@@ -32,7 +32,7 @@ COracleBundle MakeV03Bundle()
     bundle.version = 3;
     bundle.median_price_micro_usd = 51000;
     bundle.timestamp = 1700000000;
-    bundle.participation_bitmap = {0xFF, 0x01};
+    bundle.participation_bitmap = {0x7F};
 
     bundle.aggregate_sig.resize(64);
     for (size_t i = 0; i < 64; ++i) {
@@ -209,9 +209,9 @@ BOOST_AUTO_TEST_CASE(extract_oracle_bundle_v03)
 
     BOOST_CHECK_EQUAL(extracted.version, 3);
     BOOST_CHECK(extracted.IsMuSig2());
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 9);
+    BOOST_CHECK_EQUAL(extracted.messages.size(), 7);
     BOOST_CHECK_EQUAL(extracted.messages.front().oracle_id, 0);
-    BOOST_CHECK_EQUAL(extracted.messages.back().oracle_id, 8);
+    BOOST_CHECK_EQUAL(extracted.messages.back().oracle_id, 6);
     BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, bundle.median_price_micro_usd);
     BOOST_CHECK_EQUAL(extracted.timestamp, bundle.timestamp);
     BOOST_CHECK(extracted.participation_bitmap == bundle.participation_bitmap);

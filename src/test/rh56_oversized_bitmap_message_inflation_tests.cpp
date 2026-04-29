@@ -3,9 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 /**
- * RH-56: Oversized participation-bitmap inflates bundle.messages in
- *        OracleBundleManager::ExtractOracleBundle before consensus validation
- *        (Wave-4 adversarial PoC — participation-bitmap attack)
+ * RH-56: Oversized participation-bitmaps must not inflate bundle.messages in
+ *        OracleBundleManager::ExtractOracleBundle before consensus validation.
  *
  * Target: src/oracle/bundle_manager.cpp:1127-1131 (ExtractOracleBundle v0x03 path)
  *         src/oracle/musig2_aggregator.cpp:63-80  (DecodeBitmap)
@@ -14,7 +13,7 @@
  * Angle: (D) Out-of-range IDs + (B) ExtractOracleBundle cache asymmetry.
  *        Carries W1-L-08 from the Wave-1 mapper report into a concrete PoC.
  *
- * Justification paragraph:
+ * Historical bug:
  *   The v0x03 on-chain serialization is `bitmap_len(1) + bitmap(variable) + …`
  *   with `bitmap_len` a single byte, so any bitmap length 1..255 passes
  *   `COracleBundle::DeserializeV03Data` as long as the outer payload size
@@ -60,12 +59,8 @@
  *      oracle_ids 0..255. IDs >= nOracleTotalOracles (17 mainnet / 7 regtest)
  *      have default-constructed `oracle_pubkey`.
  *   4. ValidatePhaseThreeBundle later rejects the block (bitmap size mismatch),
- *      so the block does NOT enter the chain. Defense holds at consensus
- *      layer.
- *   5. HARM: any caller reading bundle.messages before validation (debug logs,
- *      RPC paths, mining template inspection) sees 256 bogus messages and
- *      allocates memory proportionally. In a P2P block-spam scenario this is
- *      a 256x amplification over the legitimate 9-of-17 path.
+ *      so the block does NOT enter the chain. The fix makes extraction reject
+ *      the same malformed bitmap before creating synthetic messages.
  *
  * Impact: LOW-MEDIUM (hardening gap + caller-trust trap)
  *   No consensus split, no forgery, no fund theft. A memory-amplification
@@ -79,19 +74,11 @@
  *   bundle.messages stays empty, and the caller sees a clean "extract failed"
  *   instead of a polluted bundle.
  *
- * This test asserts the PRE-FIX invariant:
- *   - ExtractOracleBundle returns true on a 32-byte bitmap.
- *   - bundle.messages.size() == 256 (BUG — should be bounded by
- *     nOracleTotalOracles after the fix).
- *   - Out-of-range IDs (>= nOracleTotalOracles) present in bundle.messages.
- *   - ValidatePhaseThreeBundle still rejects (defense-in-depth holds today).
- *   - Smaller bitmaps produce the same bounded set of IDs as the validator,
- *     but the larger one produces a superset.
- *
- * When the fix lands (tie total_oracles to params.nOracleTotalOracles), the
- * primary BOOST_CHECK_MESSAGE lines flip: ExtractOracleBundle should return
- * false or produce an empty messages list — this test must then be rewritten
- * against the fixed API.
+ * This test asserts the fixed invariant:
+ *   - ExtractOracleBundle rejects a bitmap whose byte length does not match
+ *     params.nOracleTotalOracles.
+ *   - No out-of-range synthetic oracle messages are created for malformed
+ *     v0x03 data.
  */
 
 #include <boost/test/unit_test.hpp>
@@ -172,17 +159,16 @@ CMutableTransaction MakeOracleCoinbase(const CScript& oracle_script, int32_t hei
 BOOST_FIXTURE_TEST_SUITE(rh56_oversized_bitmap_message_inflation_tests, RegTestingSetup)
 
 // ============================================================================
-// rh56_extract_inflates_messages_with_oversized_bitmap
+// rh56_extract_rejects_oversized_bitmap
 //
-// Demonstrates the ExtractOracleBundle side-effect:
+// Regression for the ExtractOracleBundle side-effect:
 //   - bitmap_len = 32, every byte 0xFF → 256 claimed participants
-//   - ExtractOracleBundle returns true
-//   - bundle.messages.size() == 256 (BUG: should be <= nOracleTotalOracles)
-//   - Messages with oracle_id >= nOracleTotalOracles carry null pubkeys
+//   - ExtractOracleBundle must reject because the bitmap byte length does not
+//     match nOracleTotalOracles
 // ============================================================================
-BOOST_AUTO_TEST_CASE(rh56_extract_inflates_messages_with_oversized_bitmap)
+BOOST_AUTO_TEST_CASE(rh56_extract_rejects_oversized_bitmap)
 {
-    BOOST_TEST_MESSAGE("=== RH-56: ExtractOracleBundle 256-message inflation via 32-byte bitmap ===");
+    BOOST_TEST_MESSAGE("=== RH-56: ExtractOracleBundle rejects 32-byte oversized bitmap ===");
 
     const Consensus::Params& params = Params().GetConsensus();
     const int total_on_consensus = params.nOracleTotalOracles;
@@ -206,54 +192,10 @@ BOOST_AUTO_TEST_CASE(rh56_extract_inflates_messages_with_oversized_bitmap)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(cb), bundle);
 
-    // PRIMARY ASSERTION: ExtractOracleBundle succeeds despite the oversized bitmap.
-    // Pre-fix: true. Post-fix (clamp total_oracles to params.nOracleTotalOracles):
-    // DecodeBitmap size-check fails → extract returns false OR messages.empty().
-    BOOST_CHECK_MESSAGE(extracted,
-        "URGENT-STOP-CONDITION rh56: ExtractOracleBundle unexpectedly rejected "
-        "the 32-byte oversized bitmap. If this flips to reject, the clamp-to-"
-        "params.nOracleTotalOracles fix may already be in place — update this "
-        "test against the new API.");
-
-    if (extracted) {
-        BOOST_TEST_MESSAGE("  bundle.version = " << static_cast<int>(bundle.version));
-        BOOST_TEST_MESSAGE("  bundle.messages.size() = " << bundle.messages.size());
-        BOOST_TEST_MESSAGE("  bundle.participation_bitmap.size() = " << bundle.participation_bitmap.size());
-
-        BOOST_REQUIRE_EQUAL(bundle.version, 3);
-        BOOST_REQUIRE_EQUAL(bundle.participation_bitmap.size(), 32u);
-
-        // 256 bits were set → 256 synthetic oracle messages pushed. This is
-        // the inflation symptom — the validator's consensus total is 7 on
-        // regtest, 17 on mainnet; an honest bundle would have at most that
-        // many messages.
-        BOOST_CHECK_MESSAGE(bundle.messages.size() == 256,
-            "Pre-fix bug: bundle.messages should contain 256 inflated entries "
-            "(size=" << bundle.messages.size() << ")");
-
-        // Count messages whose oracle_id >= params.nOracleTotalOracles.
-        // These cannot correspond to any real chainparams oracle and must
-        // carry a default-constructed (invalid) pubkey.
-        size_t out_of_range = 0;
-        size_t null_pubkey_count = 0;
-        for (const auto& m : bundle.messages) {
-            if (m.oracle_id >= static_cast<uint32_t>(total_on_consensus)) {
-                ++out_of_range;
-                if (!m.oracle_pubkey.IsFullyValid()) ++null_pubkey_count;
-            }
-        }
-        BOOST_TEST_MESSAGE("  out-of-range IDs (>= " << total_on_consensus << "): " << out_of_range);
-        BOOST_TEST_MESSAGE("  of those, null/invalid pubkey: " << null_pubkey_count);
-
-        // Expect ALL out-of-range IDs to have null pubkeys (GetOracleNode → nullptr).
-        BOOST_CHECK_MESSAGE(out_of_range > 0,
-            "Pre-fix bug: out-of-range oracle IDs should be present in "
-            "inflated bundle.messages");
-        BOOST_CHECK_MESSAGE(null_pubkey_count == out_of_range,
-            "Pre-fix bug: all out-of-range IDs should carry default-constructed "
-            "(invalid) pubkeys (null=" << null_pubkey_count << ", out_of_range="
-            << out_of_range << ")");
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "ExtractOracleBundle must reject oversized v0x03 bitmaps before "
+        "inflating synthetic oracle messages (messages=" << bundle.messages.size()
+        << ", consensus_total=" << total_on_consensus << ")");
 }
 
 // ============================================================================

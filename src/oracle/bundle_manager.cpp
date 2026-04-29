@@ -1195,11 +1195,14 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         // v0x03 stores one aggregate signature, so per-oracle schnorr_sig is empty.
                         bundle.messages.clear();
                         const Consensus::Params& params = Params().GetConsensus();
-                        const uint16_t total_oracles = static_cast<uint16_t>(std::max<size_t>(
-                            bundle.participation_bitmap.size() * 8,
-                            static_cast<size_t>(std::max(1, params.nOracleTotalOracles))));
+                        const uint16_t total_oracles = static_cast<uint16_t>(std::max(1, params.nOracleTotalOracles));
                         std::vector<uint8_t> oracle_ids = MuSig2OracleAggregator::DecodeBitmap(
                             bundle.participation_bitmap, total_oracles);
+                        if (oracle_ids.empty()) {
+                            LogPrintf("Oracle: Rejecting v0x03 MuSig2 bundle with malformed participation bitmap (bytes=%zu, total_oracles=%u)\n",
+                                      bundle.participation_bitmap.size(), total_oracles);
+                            return false;
+                        }
                         const CChainParams& chainparams = Params();
                         for (uint8_t oracle_id : oracle_ids) {
                             COraclePriceMessage msg;

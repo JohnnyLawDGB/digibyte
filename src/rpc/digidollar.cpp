@@ -2848,11 +2848,6 @@ static RPCHelpMan estimatecollateral()
             }
             uint64_t requiredDGB = static_cast<uint64_t>(result128_est);
 
-            // Calculate USD value of collateral
-            // USD_micro = (DGB_sats * oracle_micro_usd) / COIN
-            CAmount usdValueMicroUSD = (static_cast<int64_t>(requiredDGB) * oraclePriceMicroUSD) / COIN;
-            CAmount usdValueCents = usdValueMicroUSD / 10000;
-
             UniValue result(UniValue::VOBJ);
             result.pushKV("required_dgb", ValueFromAmount(static_cast<CAmount>(requiredDGB)));
             result.pushKV("dd_amount", int64_t{ddAmount});
@@ -2866,8 +2861,7 @@ static RPCHelpMan estimatecollateral()
             result.pushKV("system_health", systemHealth);
             result.pushKV("health_tier", healthTier.status);
             // Fix: ddAmount is in cents, so USD value = ddAmount / 100.0
-            // Previously used ValueFromAmount(usdValueCents) which divides by
-            // COIN (100,000,000) — treating cents as satoshis, producing a
+            // Previously this path treated cents as satoshis, producing a
             // value ~100,000x too small (e.g., $0.001 instead of $100).
             result.pushKV("usd_value", ddAmount / 100.0);
 

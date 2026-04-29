@@ -1,14 +1,20 @@
 #include <consensus/amount.h>
+#include <chainparams.h>
 #include <primitives/block.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <util/chaintype.h>
 
 #include <cassert>
 #include <cstdint>
 
 extern int GetAlgoWorkFactor(int nHeight, int algo);
 
-FUZZ_TARGET(fuzz_algo_work_factor_phase2a)
+namespace {
+void initialize_algo_work_factor() { SelectParams(ChainType::REGTEST); }
+}
+
+FUZZ_TARGET(fuzz_algo_work_factor_phase2a, .init = initialize_algo_work_factor)
 {
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
     const int height = fdp.ConsumeIntegral<int>();

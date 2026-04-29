@@ -1577,7 +1577,7 @@ RPCHelpMan redeemdigidollar()
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
             CAmount ddAmount = request.params[1].getInt<int64_t>(); // DD amount in cents (not BTC format)
-            std::string redeemAddress = request.params.size() > 2 ? request.params[2].get_str() : "";
+            std::string redeemAddress = request.params.size() > 2 && !request.params[2].isNull() ? request.params[2].get_str() : "";
 
             // Validate parameters
             if (ddAmount <= 0) {
@@ -1702,26 +1702,39 @@ RPCHelpMan redeemdigidollar()
             static const CAmount MIN_DD_FEE_RATE = 35000000; // 0.35 DGB/kB ensures min 0.1 DGB for typical tx
             redeemParams.feeRate = MIN_DD_FEE_RATE;
 
-            // CRITICAL FIX: Get a wallet address for the returned collateral
-            // This ensures the wallet recognizes the returned DGB as belonging to it
-            // Try BECH32M first (Taproot), fallback to BECH32 for legacy wallets
-            CTxDestination changeDest;
+            // Use the caller's requested DGB return address if supplied. If no
+            // address is supplied, create a wallet destination so the returned
+            // collateral remains visible to this wallet.
+            std::string actualUnlockAddress;
             {
                 LOCK(pwallet->cs_wallet);
                 std::string label = "";  // Empty label
-                auto op_dest = pwallet->GetNewDestination(OutputType::BECH32M, label);
-                if (!op_dest) {
-                    // Legacy wallet fallback: try BECH32 (SegWit v0)
-                    LogPrintf("DigiDollar: BECH32M not available, trying BECH32 for legacy wallet\n");
-                    op_dest = pwallet->GetNewDestination(OutputType::BECH32, label);
-                }
-                if (op_dest) {
-                    changeDest = *op_dest;
-                    redeemParams.collateralDest = changeDest;
-                    LogPrintf("DigiDollar: Using wallet destination for returned collateral\n");
+
+                if (!redeemAddress.empty()) {
+                    CTxDestination requestedDest = DecodeDestination(redeemAddress);
+                    if (!IsValidDestination(requestedDest)) {
+                        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid redemption address");
+                    }
+                    redeemParams.collateralDest = requestedDest;
+                    actualUnlockAddress = redeemAddress;
+                    LogPrintf("DigiDollar: Using requested destination for returned collateral\n");
                 } else {
-                    LogPrintf("DigiDollar: WARNING - Could not get wallet address, using owner key (wallet may not recognize)\n");
-                    LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_dest).original);
+                    auto op_dest = pwallet->GetNewDestination(OutputType::BECH32M, label);
+                    if (!op_dest) {
+                        // Legacy wallet fallback: try BECH32 (SegWit v0)
+                        LogPrintf("DigiDollar: BECH32M not available, trying BECH32 for legacy wallet\n");
+                        op_dest = pwallet->GetNewDestination(OutputType::BECH32, label);
+                    }
+                    if (op_dest) {
+                        redeemParams.collateralDest = *op_dest;
+                        actualUnlockAddress = EncodeDestination(*op_dest);
+                        LogPrintf("DigiDollar: Using wallet destination for returned collateral\n");
+                    } else {
+                        CTxDestination ownerFallback{WitnessV1Taproot(XOnlyPubKey(ownerKey.GetPubKey()))};
+                        actualUnlockAddress = EncodeDestination(ownerFallback);
+                        LogPrintf("DigiDollar: WARNING - Could not get wallet address, using owner key (wallet may not recognize)\n");
+                        LogPrintf("DigiDollar: Error: %s\n", util::ErrorString(op_dest).original);
+                    }
                 }
 
                 // CRITICAL FIX: Get a SEPARATE address for DGB fee change
@@ -1908,7 +1921,7 @@ RPCHelpMan redeemdigidollar()
             redeemTxHistory.confirmations = 0;   // Pending confirmation
             redeemTxHistory.timestamp = GetTime();
             redeemTxHistory.incoming = false;    // Redemption = outgoing DD (burning)
-            redeemTxHistory.address = redeemAddress.empty() ? "self" : redeemAddress;
+            redeemTxHistory.address = actualUnlockAddress.empty() ? "self" : actualUnlockAddress;
             redeemTxHistory.category = "redeem";
             redeemTxHistory.fee = redeemResult.totalFees;  // Bug #17 fix: record actual fee, not 0
 
@@ -1922,7 +1935,7 @@ RPCHelpMan redeemdigidollar()
             result.pushKV("position_id", positionIdStr);
             result.pushKV("dd_redeemed", int64_t{ddAmount});
             result.pushKV("dgb_unlocked", ValueFromAmount(dgbUnlocked));
-            result.pushKV("unlock_address", redeemAddress.empty() ? "auto" : redeemAddress);
+            result.pushKV("unlock_address", actualUnlockAddress.empty() ? "auto" : actualUnlockAddress);
             result.pushKV("fee_paid", ValueFromAmount(redeemResult.totalFees));
             result.pushKV("redemption_path", "normal");
             result.pushKV("position_closed", positionClosed);

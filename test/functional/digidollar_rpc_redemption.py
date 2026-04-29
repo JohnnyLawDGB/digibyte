@@ -38,6 +38,7 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         self.test_redemption_info_with_amount()
         self.test_redemption_info_invalid_params()
         self.test_redemption_info_real_position()
+        self.test_redeem_uses_requested_unlock_address()
         
         self.log.info("All redemption info tests passed!")
 
@@ -131,6 +132,25 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         self.log.info(f"  Position ID: {self.position_id[:16]}...")
         self.log.info(f"  Can redeem: {result['can_redeem']}")
         self.log.info(f"  DGB return: {result['dgb_return']}")
+
+    def test_redeem_uses_requested_unlock_address(self):
+        self.log.info("Testing redeemdigidollar pays the requested unlock address...")
+        node = self.nodes[0]
+
+        position = next(p for p in node.listdigidollarpositions(False) if p["position_id"] == self.position_id)
+        blocks_needed = max(0, position["unlock_height"] - node.getblockcount())
+        if blocks_needed:
+            self.generate(node, blocks_needed)
+
+        unlock_address = node.getnewaddress("dd-rh-076-requested-unlock", "bech32")
+        unlock_script = node.getaddressinfo(unlock_address)["scriptPubKey"]
+
+        redeem = node.redeemdigidollar(self.position_id, self.position_amount, unlock_address)
+        assert_equal(redeem["unlock_address"], unlock_address)
+
+        decoded = node.getrawtransaction(redeem["txid"], True)
+        output_scripts = [vout["scriptPubKey"]["hex"] for vout in decoded["vout"]]
+        assert unlock_script in output_scripts, "redemption transaction did not pay the requested unlock address"
 
 
 if __name__ == '__main__':

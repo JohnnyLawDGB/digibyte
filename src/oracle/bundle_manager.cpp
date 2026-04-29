@@ -549,6 +549,13 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
     int32_t epoch = GetCurrentEpoch(block_height);
     LogPrintf("Oracle: Current epoch=%d for height %d\n", epoch, block_height);
+    const Consensus::Params& consensus_params = Params().GetConsensus();
+    const bool chainparams_phase_one =
+        !force_phase2 &&
+        block_height < consensus_params.nDigiDollarPhase2Height &&
+        min_oracle_count == consensus_params.nOracleRequiredMessages;
+    const int32_t required_bundle_messages =
+        chainparams_phase_one ? 1 : min_oracle_count;
 
     // Cleanup stale MuSig2 sessions at epoch boundary (keep current epoch only).
     // This prevents unbounded growth of the global session map when epoch advances.
@@ -608,18 +615,18 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     // Phase 1/2 bundling (existing logic below)
     COracleBundle bundle = GetCurrentBundle(epoch);
     LogPrintf("Oracle: GetCurrentBundle(epoch=%d) returned bundle with %zu messages, HasConsensus=%d\n",
-             epoch, bundle.messages.size(), bundle.HasConsensus(min_oracle_count));
+             epoch, bundle.messages.size(), bundle.HasConsensus(required_bundle_messages));
 
     // If no consensus yet, try previous epoch
-    if (!bundle.HasConsensus(min_oracle_count)) {
+    if (!bundle.HasConsensus(required_bundle_messages)) {
         bundle = GetCurrentBundle(epoch - 1);
         LogPrintf("Oracle: Tried previous epoch, bundle now has %zu messages, HasConsensus=%d\n",
-                 bundle.messages.size(), bundle.HasConsensus(min_oracle_count));
+                 bundle.messages.size(), bundle.HasConsensus(required_bundle_messages));
     }
 
     // Phase One: If still no consensus and min_oracle_count == 1, use pending messages directly
     // This allows unit tests to work without full epoch consensus flow
-    if (!bundle.HasConsensus(min_oracle_count) && min_oracle_count == 1) {
+    if (!bundle.HasConsensus(required_bundle_messages) && required_bundle_messages == 1) {
         LogPrintf("Oracle: Phase One mode - checking pending messages\n");
         std::lock_guard<std::recursive_mutex> lock(mtx_messages);
         std::vector<COraclePriceMessage> pending;
@@ -631,9 +638,9 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
         if (!pending.empty()) {
             bundle = COracleBundle(epoch);
-            bundle.messages = pending;
+            bundle.messages.push_back(pending.front());
             bundle.median_price_micro_usd = pending[0].price_micro_usd;
-            LogPrintf("Oracle: Phase One - Using %zu pending message(s) for block %d\n",
+            LogPrintf("Oracle: Phase One - Using 1 of %zu pending message(s) for block %d\n",
                      pending.size(), block_height);
             // NOTE: Do NOT clear pending_messages here. CreateNewBlock() fires every
             // ~15 seconds but oracle messages broadcast every ~60 seconds. Clearing
@@ -649,8 +656,8 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
     // T5-03: Each oracle signs H(oracle_id, consensus_price, consensus_timestamp) — the same
     // consensus values stored on-chain. This ensures signatures verify after round-trip through
     // the Phase 2 on-chain format (which stores ONE consensus price + N signatures).
-    if (!bundle.HasConsensus(min_oracle_count) && min_oracle_count > 1) {
-        LogPrintf("Oracle: Phase Two mode - checking for consensus attestations (%d-of-N)\n", min_oracle_count);
+    if (!bundle.HasConsensus(required_bundle_messages) && required_bundle_messages > 1) {
+        LogPrintf("Oracle: Phase Two mode - checking for consensus attestations (%d-of-N)\n", required_bundle_messages);
 
         struct PhaseTwoAttempt {
             bool has_bundle{false};
@@ -664,7 +671,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
         auto try_build_phase_two_bundle_locked = [&]() -> PhaseTwoAttempt {
             PhaseTwoAttempt result;
-            const size_t near_quorum_threshold = min_oracle_count > 1 ? static_cast<size_t>(min_oracle_count - 1) : 0;
+            const size_t near_quorum_threshold = required_bundle_messages > 1 ? static_cast<size_t>(required_bundle_messages - 1) : 0;
 
             std::vector<COraclePriceMessage> all_individual;
             all_individual.reserve(pending_messages.size());
@@ -673,7 +680,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             }
             result.individual_count = all_individual.size();
 
-            if (result.individual_count < static_cast<size_t>(min_oracle_count)) {
+            if (result.individual_count < static_cast<size_t>(required_bundle_messages)) {
                 result.near_quorum = result.individual_count >= near_quorum_threshold;
                 return result;
             }
@@ -727,7 +734,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             }
 
             // Try to generate attestation from local oracle node (if available).
-            if (static_cast<int>(valid_attestations.size()) < min_oracle_count) {
+            if (static_cast<int>(valid_attestations.size()) < required_bundle_messages) {
                 OracleManager& om = OracleManager::GetInstance();
                 for (const auto& pair : pending_messages) {
                     const uint32_t id = pair.first;
@@ -747,7 +754,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             }
 
             result.valid_attestation_count = valid_attestations.size();
-            if (result.valid_attestation_count >= static_cast<size_t>(min_oracle_count)) {
+            if (result.valid_attestation_count >= static_cast<size_t>(required_bundle_messages)) {
                 result.has_bundle = true;
                 result.candidate = COracleBundle(epoch);
                 result.candidate.messages = std::move(valid_attestations);
@@ -772,7 +779,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             const auto deadline = wait_started + near_quorum_wait_timeout;
 
             LogPrintf("Oracle: Near-quorum wait triggered for block %d (attempt #%llu): %zu individual, %zu attestations, need %d\n",
-                     block_height, wait_attempt, attempt.individual_count, attempt.valid_attestation_count, min_oracle_count);
+                     block_height, wait_attempt, attempt.individual_count, attempt.valid_attestation_count, required_bundle_messages);
 
             while (!attempt.has_bundle && attempt.near_quorum) {
                 const auto now = std::chrono::steady_clock::now();
@@ -814,21 +821,38 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             lock.unlock();
 
             LogPrintf("Oracle: Phase Two - %zu valid consensus attestations from %zu individual messages (need %d), broadcasting proposal\n",
-                     valid_attestation_count, individual_count, min_oracle_count);
+                     valid_attestation_count, individual_count, required_bundle_messages);
             BroadcastConsensusProposal(epoch, consensus_price, consensus_timestamp);
         } else {
             LogPrintf("Oracle: Phase Two - Not enough individual messages for consensus (%zu, need %d)\n",
-                     attempt.individual_count, min_oracle_count);
+                     attempt.individual_count, required_bundle_messages);
         }
     }
 
     // If still no consensus, create empty bundle (graceful degradation)
-    if (!bundle.HasConsensus(min_oracle_count)) {
+    if (!bundle.HasConsensus(required_bundle_messages)) {
+        if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
+            COracleBundle mock_bundle = MockOracleManager::GetInstance().CreateMockBundle(block_height);
+            if (required_bundle_messages == 1 && mock_bundle.messages.size() > 1) {
+                mock_bundle.messages.resize(1);
+                mock_bundle.median_price_micro_usd = mock_bundle.messages[0].price_micro_usd;
+                mock_bundle.version = 1;
+            } else {
+                mock_bundle.version = 2;
+            }
+            if (mock_bundle.HasConsensus(required_bundle_messages)) {
+                LogPrintf("Oracle: Using regtest mock oracle bundle for block %d with %zu messages\n",
+                          block_height, mock_bundle.messages.size());
+                bundle = std::move(mock_bundle);
+            }
+        }
+    }
+
+    if (!bundle.HasConsensus(required_bundle_messages)) {
         LogPrintf("Oracle: No consensus bundle available for block %d, creating empty oracle data\n", block_height);
         bundle = COracleBundle(epoch);
     }
 
-    const Consensus::Params& consensus_params = Params().GetConsensus();
     if (consensus_params.IsPhaseThreeActive(block_height)) {
         LogPrintf("Oracle: Phase Three active at height %d, checking MuSig2 session for epoch %d\n", block_height, epoch);
 

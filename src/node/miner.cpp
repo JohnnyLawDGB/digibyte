@@ -190,7 +190,7 @@ bool BlockAssembler::ValidateDDForBlockInclusion(const CTransaction& tx, const C
 
     DigiDollar::ValidationContext dd_context(
         pindexPrev->nHeight + 1,
-        GetOraclePriceForTransaction(tx, pindexPrev->nHeight + 1),
+        GetOraclePriceForTransaction(tx),
         DigiDollar::GetSystemCollateralRatio(),
         chainparams,
         &m_chainstate.CoinsTip(),

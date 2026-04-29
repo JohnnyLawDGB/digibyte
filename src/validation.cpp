@@ -141,9 +141,12 @@ static bool CheckPhase3OracleBundleVersion(const CBlock& block, const CBlockInde
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     if (!manager.ExtractOracleBundle(*block.vtx[0], bundle)) return true;
 
-    // Accept v0x02 (individual oracle sigs) and v0x03 (MuSig2 aggregate).
-    // MuSig2 is the target but v0x02 is valid during session warm-up.
-    if (bundle.version != 2 && bundle.version != 3) {
+    // Accept v0x01 until Phase Two, then v0x02 (individual oracle sigs)
+    // and v0x03 (MuSig2 aggregate). MuSig2 is the target but v0x02 is valid
+    // during session warm-up.
+    const bool phase_one_bundle =
+        bundle.version == 1 && block_height < params.nDigiDollarPhase2Height;
+    if (!phase_one_bundle && bundle.version != 2 && bundle.version != 3) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-version",
                              strprintf("Unsupported oracle bundle version v0x%02x at height %d", bundle.version, block_height));
     }
@@ -2840,29 +2843,31 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     const bool dd_bip9_active =
         (pindex->pprev != nullptr) &&
         DigiDollar::IsDigiDollarEnabled(pindex->pprev, m_chainman.GetParams().GetConsensus());
-    if (!fJustCheck && !block.vtx.empty() && dd_bip9_active) {
+    if (!block.vtx.empty() && dd_bip9_active) {
         OracleBundleManager& oracleManager = OracleBundleManager::GetInstance();
         COracleBundle extractedBundle;
         if (oracleManager.ExtractOracleBundle(*block.vtx[0], extractedBundle) &&
             extractedBundle.median_price_micro_usd > 0) {
             blockOraclePrice = static_cast<CAmount>(extractedBundle.median_price_micro_usd);
 
-            // Update oracle price cache for this height (ALL networks, not just testnet/regtest)
-            oracleManager.UpdatePriceCache(pindex->nHeight, extractedBundle.median_price_micro_usd, extractedBundle.timestamp);
+            if (!fJustCheck) {
+                // Update oracle price cache for this height (ALL networks, not just testnet/regtest)
+                oracleManager.UpdatePriceCache(pindex->nHeight, extractedBundle.median_price_micro_usd, extractedBundle.timestamp);
 
-            // In RegTest mode, also update MockOracleManager for backward compatibility
-            if (m_chainman.GetParams().GetChainType() == ChainType::REGTEST) {
-                MockOracleManager::GetInstance().SetMockPrice(extractedBundle.median_price_micro_usd);
+                // In RegTest mode, also update MockOracleManager for backward compatibility
+                if (m_chainman.GetParams().GetChainType() == ChainType::REGTEST) {
+                    MockOracleManager::GetInstance().SetMockPrice(extractedBundle.median_price_micro_usd);
+                }
+
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle price: %llu micro-USD ($%.6f) — deterministic\n",
+                         pindex->nHeight, extractedBundle.median_price_micro_usd,
+                         extractedBundle.median_price_micro_usd / 1000000.0);
+
+                // Clear pending messages/attestations now that bundle is confirmed on-chain.
+                // This prevents stale data reuse while NOT draining messages during template
+                // creation (AddOracleBundleToBlock), which fires every ~15 sec for all blocks.
+                oracleManager.ClearPendingMessages();
             }
-
-            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle price: %llu micro-USD ($%.6f) — deterministic\n",
-                     pindex->nHeight, extractedBundle.median_price_micro_usd,
-                     extractedBundle.median_price_micro_usd / 1000000.0);
-
-            // Clear pending messages/attestations now that bundle is confirmed on-chain.
-            // This prevents stale data reuse while NOT draining messages during template
-            // creation (AddOracleBundleToBlock), which fires every ~15 sec for all blocks.
-            oracleManager.ClearPendingMessages();
         }
     }
 

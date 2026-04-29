@@ -154,7 +154,9 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
             f"DD tx {txid} should be in mempool post-activation"
         self.log.info(f"  TX in mempool: confirmed")
 
-        # Mine block containing the DD transaction
+        # Mine block containing the DD transaction. This also proves the miner
+        # can preselect DD mempool transactions and then commit the deterministic
+        # oracle bundle required by block validation.
         block_hash = node.generate(1)[0]
         block = node.getblock(block_hash)
         assert txid in block['tx'], "DD tx should be in mined block"

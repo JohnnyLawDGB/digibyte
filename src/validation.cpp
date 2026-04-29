@@ -76,6 +76,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 using kernel::CCoinsStats;
 using kernel::CoinStatsHashType;
@@ -2818,6 +2819,48 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     int64_t nSigOpsCost = 0;
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
 
+    struct DigiDollarHealthUpdateGuard {
+        enum class Type { Mint, Redeem };
+        struct Update {
+            Type type;
+            CAmount dd_amount;
+            CAmount collateral;
+        };
+
+        std::vector<Update> updates;
+        bool committed{false};
+
+        void RecordMint(CAmount dd_amount, CAmount collateral)
+        {
+            DigiDollar::SystemHealthMonitor::OnMintConnected(dd_amount, collateral);
+            updates.push_back({Type::Mint, dd_amount, collateral});
+        }
+
+        void RecordRedeem(CAmount dd_amount, CAmount collateral)
+        {
+            DigiDollar::SystemHealthMonitor::OnRedeemConnected(dd_amount, collateral);
+            updates.push_back({Type::Redeem, dd_amount, collateral});
+        }
+
+        void Commit()
+        {
+            committed = true;
+        }
+
+        ~DigiDollarHealthUpdateGuard()
+        {
+            if (committed) return;
+
+            for (auto it = updates.rbegin(); it != updates.rend(); ++it) {
+                if (it->type == Type::Mint) {
+                    DigiDollar::SystemHealthMonitor::OnMintDisconnected(it->dd_amount, it->collateral);
+                } else {
+                    DigiDollar::SystemHealthMonitor::OnRedeemDisconnected(it->dd_amount, it->collateral);
+                }
+            }
+        }
+    } dd_health_updates;
+
     // T8-03: Extract oracle price from THIS block's coinbase BEFORE validating
     // DD transactions. This ensures all nodes use the same deterministic price
     // from the block itself, not the P2P-gossiped cached price which may differ
@@ -2977,7 +3020,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                     CAmount mintDDAmount = 0;
                     CAmount mintCollateral = 0;
                     if (DigiDollar::ExtractMintAccountingAmounts(tx, mintDDAmount, mintCollateral)) {
-                        DigiDollar::SystemHealthMonitor::OnMintConnected(mintDDAmount, mintCollateral);
+                        dd_health_updates.RecordMint(mintDDAmount, mintCollateral);
                     }
                 } else if (ddTxType == DigiDollar::DD_TX_REDEEM && !tx.vin.empty()) {
                     // REDEEM: decrement by the original MINT's DD amount and collateral.
@@ -2993,7 +3036,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                             DigiDollar::ExtractMintAccountingAmounts(*origMintTx, redeemDDAmount, unusedCollateral);
                         }
                         if (redeemDDAmount > 0 && redeemCollateral > 0) {
-                            DigiDollar::SystemHealthMonitor::OnRedeemConnected(redeemDDAmount, redeemCollateral);
+                            dd_health_updates.RecordRedeem(redeemDDAmount, redeemCollateral);
                         }
                     }
                 }
@@ -3121,6 +3164,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         oracleManager.ClearPendingMessages();
     }
 
+    dd_health_updates.Commit();
     return true;
 }
 

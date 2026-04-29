@@ -146,16 +146,25 @@
 #include <chainparams.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <crypto/sha256.h>
 #include <digidollar/digidollar.h>
+#include <digidollar/health.h>
+#include <digidollar/scripts.h>
+#include <digidollar/validation.h>
+#include <key.h>
 #include <oracle/bundle_manager.h>
 #include <pow.h>
 #include <primitives/transaction.h>
+#include <primitives/oracle.h>
+#include <pubkey.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
+#include <timedata.h>
 #include <util/time.h>
 #include <validation.h>
 
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -221,6 +230,89 @@ CScript BuildCompactOracleScript(uint64_t attacker_price_micro_usd,
 {
     return BuildMaliciousCoinbase(attacker_price_micro_usd, ts, oracle_id)
         .vout[1].scriptPubKey;
+}
+
+CKey GetRegtestOracleKey(uint32_t oracle_id)
+{
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
+
+    CKey key;
+    key.Set(hash.begin(), hash.end(), true);
+    return key;
+}
+
+COraclePriceMessage BuildSignedPhaseTwoMessage(uint32_t oracle_id,
+                                               uint64_t price,
+                                               int64_t timestamp)
+{
+    CKey key = GetRegtestOracleKey(oracle_id);
+    COraclePriceMessage msg(oracle_id, price, timestamp);
+    msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+    if (!msg.SignPhase2(key) || !msg.VerifyPhase2()) {
+        throw std::runtime_error("failed to create signed regtest oracle message");
+    }
+    return msg;
+}
+
+CScript BuildPhaseTwoOracleScript(uint64_t price, int64_t timestamp, int32_t block_height)
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const int32_t epoch = GetCurrentEpoch(block_height);
+    const std::vector<OracleNodeInfo> active_oracles =
+        SelectOraclesForEpoch(Params().GetOracleNodes(), epoch);
+    if (active_oracles.size() < static_cast<size_t>(consensus.nOracleRequiredMessages)) {
+        throw std::runtime_error("not enough active regtest oracles");
+    }
+
+    COracleBundle bundle(epoch);
+    bundle.version = 2;
+    bundle.median_price_micro_usd = price;
+    bundle.timestamp = timestamp;
+    for (int i = 0; i < consensus.nOracleRequiredMessages; ++i) {
+        bundle.messages.push_back(BuildSignedPhaseTwoMessage(active_oracles.at(i).id, price, timestamp));
+    }
+
+    return OracleBundleManager::GetInstance().CreateOracleScript(bundle);
+}
+
+CMutableTransaction BuildDigiDollarMint(const COutPoint& prevout,
+                                        CAmount collateral_value,
+                                        CAmount dd_amount,
+                                        int next_height,
+                                        int lock_days = 30)
+{
+    CKey owner_key;
+    owner_key.MakeNewKey(true);
+    XOnlyPubKey owner_xonly(owner_key.GetPubKey());
+
+    const int64_t lock_blocks = DigiDollar::LockDaysToBlocks(lock_days);
+    const int64_t lock_height = next_height + lock_blocks;
+
+    DigiDollar::MintParams params;
+    params.ddAmount = dd_amount;
+    params.lockHeight = lock_height;
+    params.ownerKey = owner_xonly;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CMutableTransaction mint;
+    mint.SetDigiDollarType(DD_TX_MINT);
+    mint.vin.emplace_back(prevout);
+    mint.vout.emplace_back(collateral_value, DigiDollar::CreateCollateralP2TR(params));
+    mint.vout.emplace_back(0, DigiDollar::CreateDigiDollarP2TR(owner_xonly, dd_amount));
+
+    CScript op_return = CScript() << OP_RETURN
+                                  << std::vector<unsigned char>{'D', 'D'}
+                                  << CScriptNum(1)
+                                  << CScriptNum(dd_amount)
+                                  << CScriptNum(lock_height)
+                                  << CScriptNum(lock_days == 30 ? 1 : 0)
+                                  << std::vector<unsigned char>(owner_xonly.begin(), owner_xonly.end());
+    mint.vout.emplace_back(0, op_return);
+
+    return mint;
 }
 
 } // anonymous namespace
@@ -472,6 +564,95 @@ BOOST_AUTO_TEST_CASE(rh61_07_document_mainnet_validator_shortcircuit)
         "`return true` at src/oracle/bundle_manager.cpp:2253 for all "
         "non-TESTNET/REGTEST chains. No gate between miner and "
         "OracleBundleManager::cached_price.");
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(rh68_test_block_validity_health_metrics_side_effect_tests, TestChain100Setup)
+
+BOOST_AUTO_TEST_CASE(test_block_validity_does_not_update_health_metrics)
+{
+    OracleBundleManager& mgr = OracleBundleManager::GetInstance();
+    mgr.Clear();
+    mgr.SetEnabled(false);
+    DigiDollar::SystemHealthMonitor::ResetMetrics();
+
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const int32_t active_height = consensus.nDDActivationHeight + 10;
+    while (m_node.chainman->ActiveChain().Height() < active_height) {
+        mineBlocks(1);
+    }
+    BOOST_REQUIRE(DigiDollar::IsDigiDollarEnabled(m_node.chainman->ActiveChain().Tip(), *m_node.chainman));
+
+    const CAmount oracle_price = 10000000; // $10.00 per DGB
+    const CAmount dd_amount = 10000;       // $100.00 DD
+    const CAmount fee = 1000;
+    const int next_height = m_node.chainman->ActiveChain().Height() + 1;
+    const int64_t lock_blocks = DigiDollar::LockDaysToBlocks(30);
+    DigiDollar::ValidationContext dd_context(next_height, oracle_price, 300, Params());
+    const CAmount collateral = DigiDollar::CalculateRequiredCollateral(dd_amount, lock_blocks, dd_context);
+    BOOST_REQUIRE_GT(collateral, 0);
+
+    const CPubKey coinbase_pubkey = coinbaseKey.GetPubKey();
+    const CScript coinbase_script = CScript()
+        << std::vector<unsigned char>(coinbase_pubkey.begin(), coinbase_pubkey.end())
+        << OP_CHECKSIG;
+
+    CMutableTransaction funding = CreateValidMempoolTransaction(
+        m_coinbase_txns.front(), 0, 1, coinbaseKey,
+        CScript() << OP_TRUE, collateral + fee, /*submit=*/false);
+    CBlock funding_block = CreateAndProcessBlock({funding}, coinbase_script);
+    BOOST_REQUIRE_GE(funding_block.vtx.size(), 2U);
+
+    const COutPoint funding_out(funding_block.vtx[1]->GetHash(), 0);
+    CMutableTransaction mint = BuildDigiDollarMint(funding_out, collateral, dd_amount, next_height);
+    {
+        const CTransaction mint_tx(mint);
+        TxValidationState state;
+        BOOST_REQUIRE(DigiDollar::ValidateDigiDollarTransaction(mint_tx, dd_context, state));
+    }
+
+    const DigiDollar::SystemMetrics before = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    BOOST_REQUIRE_EQUAL(before.totalDDSupply, 0);
+    BOOST_REQUIRE_EQUAL(before.totalCollateral, 0);
+
+    CBlock block = CreateBlock({mint}, coinbase_script, m_node.chainman->ActiveChainstate());
+    const int32_t candidate_height = m_node.chainman->ActiveChain().Height() + 1;
+
+    CMutableTransaction coinbase(*block.vtx[0]);
+    CScript oracle_script = BuildPhaseTwoOracleScript(oracle_price, block.nTime, candidate_height);
+    BOOST_REQUIRE(!oracle_script.empty());
+    coinbase.vout.push_back(CTxOut(0, oracle_script));
+    block.vtx[0] = MakeTransactionRef(std::move(coinbase));
+
+    COracleBundle extracted;
+    BOOST_REQUIRE(mgr.ExtractOracleBundle(*block.vtx[0], extracted));
+    BOOST_REQUIRE_EQUAL(extracted.median_price_micro_usd, static_cast<uint64_t>(oracle_price));
+
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+    block.nNonce = 0;
+    while (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, m_node.chainman->GetConsensus())) {
+        ++block.nNonce;
+    }
+
+    BlockValidationState state;
+    {
+        LOCK(cs_main);
+        BOOST_REQUIRE_MESSAGE(TestBlockValidity(state,
+                                                Params(),
+                                                m_node.chainman->ActiveChainstate(),
+                                                block,
+                                                m_node.chainman->ActiveChain().Tip(),
+                                                GetAdjustedTime,
+                                                /*fCheckPOW=*/false,
+                                                /*fCheckMerkleRoot=*/false),
+                              state.ToString());
+    }
+
+    BOOST_CHECK_EQUAL(m_node.chainman->ActiveChain().Height(), candidate_height - 1);
+    const DigiDollar::SystemMetrics after = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+    BOOST_CHECK_EQUAL(after.totalDDSupply, before.totalDDSupply);
+    BOOST_CHECK_EQUAL(after.totalCollateral, before.totalCollateral);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

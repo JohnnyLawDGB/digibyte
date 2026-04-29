@@ -908,6 +908,34 @@ BOOST_AUTO_TEST_CASE(stale_messages_purged_naturally)
     LogPrintf("Test: stale_messages_purged_naturally PASSED\n");
 }
 
+BOOST_AUTO_TEST_CASE(phase2_rejects_stale_or_future_message_on_insert)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4);
+
+    const int64_t now = 1700000000;
+    SetMockTime(now);
+
+    COraclePriceMessage stale_msg = MakeRegtestOracleMessage(
+        0, 6000, now - ORACLE_MAX_AGE_SECONDS - 1);
+    BOOST_CHECK_MESSAGE(!manager.AddOracleMessage(stale_msg),
+        "Phase 2 live pending insertion must reject stale signed oracle messages");
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 0);
+
+    COraclePriceMessage future_msg = MakeRegtestOracleMessage(
+        1, 6000, now + 61);
+    BOOST_CHECK_MESSAGE(!manager.AddOracleMessage(future_msg),
+        "Phase 2 live pending insertion must reject future signed oracle messages");
+    BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 0);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 0);
+
+    SetMockTime(0);
+    manager.Clear();
+}
+
 /**
  * Test for Bug 1: Oracle Consensus Log Message Format
  * 

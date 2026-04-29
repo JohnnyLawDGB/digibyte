@@ -2212,6 +2212,18 @@ bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& messag
     if (message.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD) return false;
     if (message.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) return false;
 
+    const int64_t now = GetTime();
+    if (message.timestamp > now + 60) {
+        LogPrintf("Oracle: Rejecting future oracle message from oracle %d (timestamp=%lld, now=%lld)\n",
+                 message.oracle_id, message.timestamp, now);
+        return false;
+    }
+    if (message.timestamp < now - ORACLE_MAX_AGE_SECONDS) {
+        LogPrintf("Oracle: Rejecting stale oracle message from oracle %d (timestamp=%lld, now=%lld)\n",
+                 message.oracle_id, message.timestamp, now);
+        return false;
+    }
+
     // Verify oracle ID is in valid range and matches chainparams
     const CChainParams& params = Params();
     const OracleNodeInfo* oracle_config = params.GetOracleNode(message.oracle_id);

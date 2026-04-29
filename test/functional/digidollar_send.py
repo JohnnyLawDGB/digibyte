@@ -42,17 +42,23 @@ class DigiDollarBug11Bug18Test(DigiByteTestFramework):
         for node in self.nodes:
             node.setmockoracleprice(500000)
 
-        # Mint DD on node 0: $50.00 = 5000 cents, tier 4
+        # Mint two DD UTXOs on node 0. The second, smaller UTXO lets the
+        # send response prove change is based on selected inputs, not the
+        # whole wallet balance.
         self.log.info("Minting DigiDollar on node 0...")
-        mint_result = self.nodes[0].mintdigidollar(5000, 4)
-        mint_txid = mint_result['txid']
+        mint_results = [
+            self.nodes[0].mintdigidollar(5000, 4),
+            self.nodes[0].mintdigidollar(1000, 2),
+        ]
+        mint_txids = [result['txid'] for result in mint_results]
 
         # Broadcast and confirm
-        try:
-            raw_tx = self.nodes[0].gettransaction(mint_txid)['hex']
-            self.nodes[0].sendrawtransaction(hexstring=raw_tx, maxfeerate=0)
-        except Exception as e:
-            self.log.warning(f"Broadcast note: {e}")
+        for mint_txid in mint_txids:
+            try:
+                raw_tx = self.nodes[0].gettransaction(mint_txid)['hex']
+                self.nodes[0].sendrawtransaction(hexstring=raw_tx, maxfeerate=0)
+            except Exception as e:
+                self.log.warning(f"Broadcast note: {e}")
 
         time.sleep(2)
         self.nodes[0].generate(3)
@@ -91,6 +97,7 @@ class DigiDollarBug11Bug18Test(DigiByteTestFramework):
 
         # change_amount should be present and be an integer (cents)
         assert 'change_amount' in send_result
+        assert_equal(send_result['change_amount'], 900)
 
         self.log.info("Bug #11/25: Response format is correct!")
 

@@ -1316,8 +1316,9 @@ RPCHelpMan senddigidollar()
             // Execute transfer using backend function (Phase 2.1)
             std::string txid;
             std::string error;
+            CAmount dd_change = 0;
             LogPrintf("DigiDollar RPC: Calling TransferDigiDollar()...\n");
-            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error);
+            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error, &dd_change);
             LogPrintf("DigiDollar RPC: TransferDigiDollar() returned success=%d\n", success);
 
             if (!success) {
@@ -1355,7 +1356,7 @@ RPCHelpMan senddigidollar()
                     result.pushKV("inputs_used", 0);
                 }
             }
-            result.pushKV("change_amount", (balance > amount) ? (balance - amount) : 0);
+            result.pushKV("change_amount", dd_change);
 
             // Optional: Add comment to wallet transaction if provided
             if (!comment.empty()) {

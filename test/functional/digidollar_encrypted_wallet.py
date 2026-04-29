@@ -34,6 +34,7 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.setup_digidollar_env()
 
         self.test_mint_locked_wallet()
+        self.test_get_dd_address_locked_wallet()
         self.test_mint_after_unlock()
         self.test_send_locked_wallet()
         self.test_send_after_unlock()
@@ -93,6 +94,13 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         assert_raises_rpc_error(
             -13, "Please enter the wallet passphrase with walletpassphrase first",
             self.nodes[1].mintdigidollar, 10000, 0  # 100.00 DD, tier 0
+        )
+
+    def test_get_dd_address_locked_wallet(self):
+        self.log.info("test_get_dd_address_locked_wallet")
+        assert_raises_rpc_error(
+            -13, "Please enter the wallet passphrase with walletpassphrase first",
+            self.nodes[1].getdigidollaraddress
         )
 
     def test_mint_after_unlock(self):

@@ -1599,7 +1599,17 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
             // Check if this TX spent any DD collateral (i.e., was a redemption)
             // If so, re-lock the collateral since the redemption is no longer confirmed
             for (const CTxIn& txin : ptx->vin) {
-                if (dd_wallet->IsLockedByDD(txin.prevout)) {
+                bool reactivated_position = false;
+                if (txin.prevout.n == 0) {
+                    for (const auto& position : dd_wallet->GetDDTimeLocks(/*active_only=*/false)) {
+                        if (position.dd_timelock_id == txin.prevout.hash && !position.is_active) {
+                            reactivated_position = dd_wallet->UpdatePositionStatus(position.dd_timelock_id, true);
+                            break;
+                        }
+                    }
+                }
+
+                if (reactivated_position || dd_wallet->IsLockedByDD(txin.prevout)) {
                     // This input was DD collateral that got spent in a now-reorged block
                     // Re-lock it since the redemption is being undone
                     LockCoin(txin.prevout);

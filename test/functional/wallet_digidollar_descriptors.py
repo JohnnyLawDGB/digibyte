@@ -412,20 +412,28 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         success_count = sum(1 for r in import_results if r.get('success', False))
         self.log.info(f"Imported {success_count}/{len(import_requests)} public descriptors")
 
-        # Verify watch-only can view DD balance
+        # Default balance must exclude watch-only DD so it is not presented as
+        # spendable. The explicit include_watchonly flag can expose it for
+        # monitoring-only wallets.
         watchonly_balance_info = watchonly_wallet.getdigidollarbalance()
         watchonly_balance = watchonly_balance_info['total'] if isinstance(watchonly_balance_info, dict) else watchonly_balance_info
-        self.log.info(f"Watch-only wallet sees {watchonly_balance} DD cents")
+        self.log.info(f"Watch-only wallet default balance: {watchonly_balance} DD cents")
+        assert_equal(watchonly_balance, 0)
+
+        watchonly_included_info = watchonly_wallet.getdigidollarbalance("", 1, True)
+        watchonly_included = watchonly_included_info['total'] if isinstance(watchonly_included_info, dict) else watchonly_included_info
+        self.log.info(f"Watch-only wallet monitoring balance: {watchonly_included} DD cents")
+        assert_greater_than(watchonly_included, 0)
 
         # Verify watch-only CANNOT spend
-        if watchonly_balance > 0:
-            try:
-                # Attempt to send should fail
-                other_address = self.source_wallet.getdigidollaraddress()
-                watchonly_wallet.senddigidollar(other_address, 100)  # 1.00 DD = 100 cents
-                self.log.warning("Watch-only wallet should not be able to send")
-            except Exception as e:
-                self.log.info(f"Watch-only correctly prevented sending: {type(e).__name__}")
+        other_address = self.source_wallet.getdigidollaraddress()
+        assert_raises_rpc_error(
+            -4,
+            "Private keys are disabled",
+            watchonly_wallet.senddigidollar,
+            other_address,
+            100,
+        )
 
         # Verify watch-only CANNOT mint (requires signing)
         try:
@@ -434,12 +442,28 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         except Exception as e:
             self.log.info(f"Watch-only correctly prevented minting: {type(e).__name__}")
 
-        # Verify watch-only can list positions (read-only operation)
-        try:
-            positions = watchonly_wallet.listdigidollarpositions()
-            self.log.info(f"Watch-only wallet can view {len(positions)} positions")
-        except Exception as e:
-            self.log.info(f"Watch-only position listing: {e}")
+        # Verify watch-only can list positions for monitoring, but every
+        # position is clearly non-spendable.
+        positions = watchonly_wallet.listdigidollarpositions()
+        self.log.info(f"Watch-only wallet can view {len(positions)} positions")
+        for position in positions:
+            assert_equal(position["iswatchonly"], True)
+            assert_equal(position["spendable"], False)
+            assert_equal(position["can_redeem"], False)
+
+        watchonly_addresses_default = watchonly_wallet.listdigidollaraddresses()
+        assert_equal(watchonly_addresses_default, [])
+
+        watchonly_addresses = watchonly_wallet.listdigidollaraddresses(True)
+        self.log.info(f"Watch-only wallet can view {len(watchonly_addresses)} DD address balances")
+        assert_greater_than(len(watchonly_addresses), 0)
+        for addr_info in watchonly_addresses:
+            assert_equal(addr_info["ismine"], False)
+            assert_equal(addr_info["iswatchonly"], True)
+            validation = watchonly_wallet.validateddaddress(addr_info["address"])
+            assert_equal(validation["isvalid"], True)
+            assert_equal(validation["ismine"], False)
+            assert_equal(validation["iswatchonly"], True)
 
         # Verify watch-only can list private descriptors fails
         try:

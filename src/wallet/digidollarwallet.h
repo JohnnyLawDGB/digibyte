@@ -277,6 +277,16 @@ public:
     bool GetAddressKey(const XOnlyPubKey& output_key, CKey& key) const;
 
     /**
+     * Retrieve the internal signing key for a spendable DD P2TR output.
+     * Rebuilds the DD address-key cache from descriptor wallet metadata when
+     * a wallet has been restored from private descriptors.
+     * @param txout The DD token output
+     * @param key Output parameter for the private key
+     * @return true if a spendable key was found
+     */
+    bool GetDDOutputSpendingKey(const CTxOut& txout, CKey& key);
+
+    /**
      * Check if a DD output belongs to this wallet
      * Uses dd_owner_keys, dd_address_keys, and standard wallet IsMine
      * This is needed because IsMine() may fail for 0-value P2TR outputs

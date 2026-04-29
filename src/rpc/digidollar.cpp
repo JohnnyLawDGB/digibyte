@@ -1843,7 +1843,19 @@ RPCHelpMan redeemdigidollar()
             // Create transaction reference
             CTransactionRef redeemTx = MakeTransactionRef(redeemResult.tx);
 
-            // Commit transaction to wallet and broadcast
+            std::string broadcast_error;
+            const bool broadcast_success = pwallet->chain().broadcastTransaction(
+                redeemTx,
+                wallet::DEFAULT_TRANSACTION_MAXFEE,
+                pwallet->GetBroadcastTransactions(),
+                broadcast_error);
+            if (!broadcast_success) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Redemption transaction rejected by mempool: %s", broadcast_error));
+            }
+
+            // Only commit to the wallet after mempool acceptance succeeds. This
+            // keeps failed redemptions from erasing live DD UTXOs or closing positions.
             {
                 LOCK(pwallet->cs_wallet);
                 pwallet->CommitTransaction(redeemTx, {}, {});

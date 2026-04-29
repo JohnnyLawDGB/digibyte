@@ -1473,11 +1473,7 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                         ddInputIndices.push_back(i);
 
                         CAmount ddAmount = 0;
-                        if (ExtractDDAmount(coin.out.scriptPubKey, ddAmount) && ddAmount > 0) {
-                            totalDDInputs += ddAmount;
-                            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from registry)\n",
-                                     i, (long long)ddAmount);
-                        } else if (ExtractDDAmountFromPrevTx(input.prevout, ddAmount) && ddAmount > 0) {
+                        if (ExtractDDAmountFromPrevTx(input.prevout, ddAmount) && ddAmount > 0) {
                             totalDDInputs += ddAmount;
                             LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from txindex)\n",
                                      i, (long long)ddAmount);
@@ -1485,6 +1481,13 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                             // Universal fallback: load creating tx from block database
                             totalDDInputs += ddAmount;
                             LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from block db)\n",
+                                     i, (long long)ddAmount);
+                        } else if (ExtractDDAmount(coin.out.scriptPubKey, ddAmount) && ddAmount > 0) {
+                            // Last resort for unit tests and legacy in-memory flows.
+                            // The registry is keyed only by scriptPubKey, so repeated
+                            // sends to the same P2TR key can overwrite the amount.
+                            totalDDInputs += ddAmount;
+                            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from registry fallback)\n",
                                      i, (long long)ddAmount);
                         } else {
                             LogPrintf("DigiDollar: WARNING - Could not extract DD amount from DD input %d\n", i);

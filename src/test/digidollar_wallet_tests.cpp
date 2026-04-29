@@ -3659,7 +3659,7 @@ BOOST_FIXTURE_TEST_CASE(test_unknown_wallet_tx_dd_utxo_still_counted, TestingSet
  * outpoint does NOT exist in the UTXO set (simulating a redeemed vault),
  * then verifies ValidatePositionStates marks it inactive.
  */
-BOOST_FIXTURE_TEST_CASE(test_validate_position_states_marks_redeemed_inactive, TestingSetup)
+BOOST_FIXTURE_TEST_CASE(test_validate_position_states_marks_redeemed_inactive, TestChain100Setup)
 {
     // Create a wallet with chain access (needed for findCoins UTXO lookup)
     std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
@@ -3718,7 +3718,7 @@ BOOST_FIXTURE_TEST_CASE(test_validate_position_states_marks_redeemed_inactive, T
  * We test this by mining a block that creates a real UTXO, then checking
  * that the position stays active.
  */
-BOOST_FIXTURE_TEST_CASE(test_validate_position_states_keeps_active_positions, TestingSetup)
+BOOST_FIXTURE_TEST_CASE(test_validate_position_states_keeps_active_positions, TestChain100Setup)
 {
     std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
     std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));

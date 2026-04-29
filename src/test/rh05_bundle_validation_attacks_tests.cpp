@@ -216,9 +216,9 @@ BOOST_AUTO_TEST_CASE(attack_epoch_zero_oracle_set_mismatch)
         BOOST_TEST_MESSAGE("  >>> This allows oracles not active at current epoch to sign bundles");
     }
     
-    // The extraction always sets epoch=0 for v0x02 — this is documented in the code
-    // as "Epoch is not stored on-chain; set by caller" but the caller doesn't fix it
-    BOOST_CHECK_EQUAL(extracted.epoch, 0);
+    // Fixed behavior: extraction derives the epoch from the coinbase height
+    // instead of leaving v0x02 bundles at epoch 0.
+    BOOST_CHECK_EQUAL(extracted.epoch, expected_epoch);
 }
 
 // ============================================================================

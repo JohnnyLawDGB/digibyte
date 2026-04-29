@@ -156,6 +156,12 @@
 
 namespace {
 
+struct OracleManagerReset
+{
+    OracleManagerReset() { OracleBundleManager::GetInstance().Clear(); }
+    ~OracleManagerReset() { OracleBundleManager::GetInstance().Clear(); }
+};
+
 // Build a coinbase transaction whose SECOND output is a
 // `OP_RETURN OP_ORACLE <0x01> <oracle_id(1) || price(8LE) || ts(8LE)>`
 // payload. This is the Phase-1 compact format that
@@ -213,6 +219,7 @@ BOOST_FIXTURE_TEST_SUITE(rh61_coinbase_price_cache_poisoning_tests, RegTestingSe
 // an arbitrary miner-chosen price and no signature.
 BOOST_AUTO_TEST_CASE(rh61_01_extract_accepts_unsigned_price)
 {
+    OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
 
     const uint64_t ATTACKER_PRICE = 999999999ULL; // ~$999.99 micro-USD
@@ -239,6 +246,7 @@ BOOST_AUTO_TEST_CASE(rh61_01_extract_accepts_unsigned_price)
 // `GetLatestPrice()` returns the attacker's value afterwards.
 BOOST_AUTO_TEST_CASE(rh61_02_connectblock_path_poisons_global_cached_price)
 {
+    OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
 
     // Establish a "honest" baseline price so we can observe the overwrite.
@@ -284,6 +292,7 @@ BOOST_AUTO_TEST_CASE(rh61_02_connectblock_path_poisons_global_cached_price)
 // the staleness guard even if the rest of the oracle network is silent.
 BOOST_AUTO_TEST_CASE(rh61_03_staleness_guard_reset_by_attacker)
 {
+    OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
 
     const uint64_t ATTACKER_PRICE = 12345678ULL;
@@ -308,6 +317,7 @@ BOOST_AUTO_TEST_CASE(rh61_03_staleness_guard_reset_by_attacker)
 // data.
 BOOST_AUTO_TEST_CASE(rh61_04_per_height_cache_exposed)
 {
+    OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
 
     const uint64_t ATTACKER_PRICE_A = 111111ULL;
@@ -333,6 +343,7 @@ BOOST_AUTO_TEST_CASE(rh61_04_per_height_cache_exposed)
 // keeps no lineage.
 BOOST_AUTO_TEST_CASE(rh61_05_attacker_drives_price_down_for_err_toggle)
 {
+    OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
 
     const CAmount HEALTHY_PRICE   = 100000000LL; // $100 micro-USD
@@ -372,6 +383,7 @@ BOOST_AUTO_TEST_CASE(rh61_05_attacker_drives_price_down_for_err_toggle)
 // rewrite of 4599 must scan, not index.
 BOOST_AUTO_TEST_CASE(rh61_06_vout_position_flexibility_docs_W1_H_01)
 {
+    OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
 
     const uint64_t ATTACKER_PRICE = 55555555ULL;
@@ -425,6 +437,7 @@ BOOST_AUTO_TEST_CASE(rh61_06_vout_position_flexibility_docs_W1_H_01)
 // bundle with no signature check.
 BOOST_AUTO_TEST_CASE(rh61_07_document_mainnet_validator_shortcircuit)
 {
+    OracleManagerReset reset;
     // Regtest: we can directly poison the cache without any upstream
     // signature check firing (because we're calling the extractor and
     // UpdatePriceCache directly — mirroring the ConnectBlock caller).

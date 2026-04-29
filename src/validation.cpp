@@ -2476,12 +2476,13 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
     // T8-03: Revert oracle price cache for ALL networks (not just testnet/regtest)
-    // Mainnet needs deterministic oracle pricing too.
-    if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
-        const CTxOut& oracle_output = block.vtx[0]->vout[1];
-        if (oracle_output.scriptPubKey.IsUnspendable() && oracle_output.scriptPubKey.size() > 2) {
-            // This block had oracle data, need to revert the cache
-            OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    // Mainnet needs deterministic oracle pricing too. The oracle output is
+    // appended to coinbase by the miner, but valid coinbases may contain extra
+    // outputs before it, so disconnect must mirror ConnectBlock's all-output scan.
+    if (!block.vtx.empty()) {
+        OracleBundleManager& manager = OracleBundleManager::GetInstance();
+        COracleBundle disconnected_bundle;
+        if (manager.ExtractOracleBundle(*block.vtx[0], disconnected_bundle)) {
             manager.RemovePriceCache(pindex->nHeight);
 
             // In RegTest mode, also revert MockOracleManager by getting previous price

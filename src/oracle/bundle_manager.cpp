@@ -50,6 +50,15 @@ int32_t GetBestHeight() {
     return 0;
 }
 
+namespace {
+bool IsFreshLiveOracleTimestamp(int64_t timestamp, int64_t now)
+{
+    return timestamp > 0 &&
+           timestamp <= now + 60 &&
+           now - timestamp <= ORACLE_MAX_AGE_SECONDS;
+}
+} // namespace
+
 //! Global oracle bundle manager instance
 std::unique_ptr<OracleBundleManager> g_oracle_bundle_manager;
 
@@ -106,8 +115,8 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         int64_t now = GetTime();
         auto stale_it = pending_messages.begin();
         while (stale_it != pending_messages.end()) {
-            if (now - stale_it->second.timestamp > ORACLE_MAX_AGE_SECONDS) {
-                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Purging stale message from oracle %d (age %lld seconds)\n",
+            if (!IsFreshLiveOracleTimestamp(stale_it->second.timestamp, now)) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Purging stale/future message from oracle %d (age %lld seconds)\n",
                          stale_it->first, now - stale_it->second.timestamp);
                 stale_it = pending_messages.erase(stale_it);
             } else {
@@ -354,6 +363,13 @@ bool OracleBundleManager::AddConsensusAttestation(const COraclePriceMessage& att
         return false;
     }
 
+    const int64_t now = GetTime();
+    if (!IsFreshLiveOracleTimestamp(attestation.timestamp, now)) {
+        LogPrintf("Oracle: Rejecting consensus attestation from oracle %d: stale/future timestamp=%lld now=%lld\n",
+                 attestation.oracle_id, attestation.timestamp, now);
+        return false;
+    }
+
     // Verify Phase 2 signature (attestation signs consensus values)
     if (!attestation.VerifyPhase2()) {
         // Also try with chainparams pubkey binding
@@ -417,14 +433,16 @@ bool OracleBundleManager::ComputeConsensusValues(uint64_t& consensus_price, int6
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
-    if (static_cast<int>(pending_messages.size()) < min_oracle_count) {
-        return false;
-    }
-
-    // Build a temporary bundle from pending messages to compute consensus price
+    const int64_t now = GetTime();
     COracleBundle temp;
     for (const auto& [id, msg] : pending_messages) {
-        temp.messages.push_back(msg);
+        if (IsFreshLiveOracleTimestamp(msg.timestamp, now)) {
+            temp.messages.push_back(msg);
+        }
+    }
+
+    if (static_cast<int>(temp.messages.size()) < min_oracle_count) {
+        return false;
     }
 
     const Consensus::Params& cparams = Params().GetConsensus();
@@ -614,12 +632,25 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
     // Phase 1/2 bundling (existing logic below)
     COracleBundle bundle = GetCurrentBundle(epoch);
+    const int64_t now_for_bundle = GetTime();
+    if (bundle.HasConsensus(required_bundle_messages) &&
+        !IsFreshLiveOracleTimestamp(bundle.timestamp, now_for_bundle)) {
+        LogPrintf("Oracle: Ignoring stale cached bundle for epoch %d while building block %d\n",
+                 epoch, block_height);
+        bundle = COracleBundle(epoch);
+    }
     LogPrintf("Oracle: GetCurrentBundle(epoch=%d) returned bundle with %zu messages, HasConsensus=%d\n",
              epoch, bundle.messages.size(), bundle.HasConsensus(required_bundle_messages));
 
     // If no consensus yet, try previous epoch
     if (!bundle.HasConsensus(required_bundle_messages)) {
         bundle = GetCurrentBundle(epoch - 1);
+        if (bundle.HasConsensus(required_bundle_messages) &&
+            !IsFreshLiveOracleTimestamp(bundle.timestamp, now_for_bundle)) {
+            LogPrintf("Oracle: Ignoring stale cached bundle for previous epoch %d while building block %d\n",
+                     epoch - 1, block_height);
+            bundle = COracleBundle(epoch - 1);
+        }
         LogPrintf("Oracle: Tried previous epoch, bundle now has %zu messages, HasConsensus=%d\n",
                  bundle.messages.size(), bundle.HasConsensus(required_bundle_messages));
     }
@@ -632,7 +663,9 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         std::vector<COraclePriceMessage> pending;
         pending.reserve(pending_messages.size());
         for (const auto& pair : pending_messages) {
-            pending.push_back(pair.second);
+            if (IsFreshLiveOracleTimestamp(pair.second.timestamp, now_for_bundle)) {
+                pending.push_back(pair.second);
+            }
         }
         LogPrintf("Oracle: Phase One - %zu pending messages\n", pending.size());
 
@@ -676,7 +709,9 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             std::vector<COraclePriceMessage> all_individual;
             all_individual.reserve(pending_messages.size());
             for (const auto& pair : pending_messages) {
-                all_individual.push_back(pair.second);
+                if (IsFreshLiveOracleTimestamp(pair.second.timestamp, now_for_bundle)) {
+                    all_individual.push_back(pair.second);
+                }
             }
             result.individual_count = all_individual.size();
 
@@ -713,7 +748,8 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
 
             for (const auto& pair : pending_attestations) {
                 const COraclePriceMessage& att = pair.second;
-                if (att.price_micro_usd == result.consensus_price &&
+                if (IsFreshLiveOracleTimestamp(att.timestamp, now_for_bundle) &&
+                    att.price_micro_usd == result.consensus_price &&
                     att.timestamp == result.consensus_timestamp &&
                     att.VerifyPhase2()) {
                     valid_attestations.push_back(att);
@@ -739,6 +775,7 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
                 for (const auto& pair : pending_messages) {
                     const uint32_t id = pair.first;
                     if (seen_ids.count(id)) continue;
+                    if (!IsFreshLiveOracleTimestamp(pair.second.timestamp, now_for_bundle)) continue;
                     OracleNode* node = om.GetOracleNode(id);
                     if (node) {
                         COraclePriceMessage att = node->CreateConsensusAttestation(
@@ -2148,19 +2185,19 @@ bool OracleBundleManager::TryCreateBundle(int32_t epoch)
 {
     std::lock_guard<std::recursive_mutex> messages_lock(mtx_messages);
 
-    // Check if we have enough messages for consensus
-    if (pending_messages.size() < static_cast<size_t>(min_oracle_count)) {
-        return false;
-    }
-
     // Create bundle for current epoch
     COracleBundle bundle(epoch);
 
-    // Add messages to bundle
+    const int64_t now = GetTime();
     for (const auto& [oracle_id, message] : pending_messages) {
+        if (!IsFreshLiveOracleTimestamp(message.timestamp, now)) continue;
         if (!bundle.AddMessage(message)) {
             LogPrintf("Oracle: Failed to add message from oracle %d to bundle\n", oracle_id);
         }
+    }
+
+    if (bundle.messages.size() < static_cast<size_t>(min_oracle_count)) {
+        return false;
     }
 
     // Check if bundle has consensus

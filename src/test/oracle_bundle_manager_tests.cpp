@@ -12,6 +12,7 @@
 #include <key.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/exchange.h>
+#include <oracle/mock_oracle.h>
 #include <oracle/node.h>
 #include <primitives/oracle.h>
 #include <protocol.h>
@@ -933,6 +934,56 @@ BOOST_AUTO_TEST_CASE(phase2_rejects_stale_or_future_message_on_insert)
     BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 0);
 
     SetMockTime(0);
+    manager.Clear();
+}
+
+BOOST_AUTO_TEST_CASE(phase2_block_template_ignores_aged_pending_messages)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetForcePhase2(true);
+    manager.SetMinOracleCount(4);
+
+    MockOracleManager& mock = MockOracleManager::GetInstance();
+    const bool mock_was_enabled = mock.IsEnabled();
+    mock.SetEnabled(false);
+
+    const int64_t base_time = 1700000000;
+    SetMockTime(base_time);
+
+    const uint64_t consensus_price = 6000;
+    const int64_t consensus_timestamp = base_time;
+    for (uint32_t oracle_id = 0; oracle_id < 4; ++oracle_id) {
+        COraclePriceMessage msg = MakeRegtestOracleMessage(
+            oracle_id, consensus_price, consensus_timestamp);
+        BOOST_REQUIRE(manager.AddOracleMessage(msg));
+
+        COraclePriceMessage att = MakeRegtestOracleMessage(
+            oracle_id, consensus_price, consensus_timestamp);
+        BOOST_REQUIRE(manager.AddConsensusAttestation(att));
+    }
+    BOOST_REQUIRE_EQUAL(manager.GetPendingMessageCount(), 4);
+    BOOST_REQUIRE_EQUAL(manager.GetPendingAttestationCount(), 4);
+
+    SetMockTime(base_time + ORACLE_MAX_AGE_SECONDS + 1);
+
+    CBlock block;
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptSig << CScriptNum(200);
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 0;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+    block.nTime = base_time + ORACLE_MAX_AGE_SECONDS + 1;
+
+    BOOST_CHECK(manager.AddOracleBundleToBlock(block, 200));
+    BOOST_CHECK_EQUAL(block.vtx[0]->vout.size(), 1);
+
+    SetMockTime(0);
+    mock.SetEnabled(mock_was_enabled);
     manager.Clear();
 }
 

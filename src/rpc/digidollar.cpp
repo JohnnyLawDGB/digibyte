@@ -1983,7 +1983,8 @@ RPCHelpMan listdigidollarpositions()
                                 {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
                                 {RPCResult::Type::NUM, "unlock_height", "Block height when unlockable"},
                                 {RPCResult::Type::NUM, "blocks_remaining", "Blocks until unlock (0 if unlocked)"},
-                                {RPCResult::Type::STR, "status", "Position status (active/unlocked/redeemed)"},
+                                {RPCResult::Type::NUM, "confirmations", "Number of confirmations for the mint transaction"},
+                                {RPCResult::Type::STR, "status", "Position status (pending/active/unlocked/redeemed)"},
                                 {RPCResult::Type::NUM, "health_ratio", "Current collateral health ratio (%)"},
                                 {RPCResult::Type::BOOL, "can_redeem", "Whether position can be redeemed now"},
                                 {RPCResult::Type::BOOL, "spendable", "Whether this wallet can spend the position"},
@@ -2056,9 +2057,18 @@ RPCHelpMan listdigidollarpositions()
                 // Calculate remaining blocks
                 int blocksRemaining = std::max(0, static_cast<int>(pos.unlock_height - currentHeight));
                 position.pushKV("blocks_remaining", blocksRemaining);
+                const int confirmations = dd_wallet->GetDDTransactionConfirmations(pos.dd_timelock_id);
+                position.pushKV("confirmations", confirmations);
 
                 // Status
-                std::string status = pos.is_active ? (blocksRemaining == 0 ? "unlocked" : "active") : "redeemed";
+                std::string status;
+                if (!pos.is_active) {
+                    status = "redeemed";
+                } else if (confirmations <= 0) {
+                    status = "pending";
+                } else {
+                    status = blocksRemaining == 0 ? "unlocked" : "active";
+                }
                 position.pushKV("status", status);
 
                 // Health ratio: (dgb_collateral_value_in_usd / dd_minted_value_in_usd) * 100
@@ -2081,9 +2091,9 @@ RPCHelpMan listdigidollarpositions()
                 }
                 position.pushKV("health_ratio", healthRatio);
 
-                // can_redeem requires: unlocked, active, AND has collateral
+                // can_redeem requires: confirmed, unlocked, active, AND has collateral
                 // Received DD (dgb_collateral=0) cannot be redeemed - only spent/transferred
-                bool canRedeem = blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0 && !walletPrivateKeysDisabled;
+                bool canRedeem = confirmations > 0 && blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0 && !walletPrivateKeysDisabled;
                 position.pushKV("can_redeem", canRedeem);
                 position.pushKV("spendable", !walletPrivateKeysDisabled);
                 position.pushKV("iswatchonly", walletPrivateKeysDisabled);

@@ -372,6 +372,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
             LogPrintf("CreateNewBlock(): Warning - Failed to add oracle bundle to block %d\n", nHeight);
             // Continue with block creation even if oracle bundle fails (graceful degradation)
         }
+        // AddOracleBundleToBlock() mutates the coinbase after GenerateCoinbaseCommitment().
+        // Keep the template header internally consistent for GBT/miner consumers that use
+        // the returned block directly instead of first calling IncrementExtraNonce().
+        pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
     }
 
     LogPrintf("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);

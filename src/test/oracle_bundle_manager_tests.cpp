@@ -368,6 +368,29 @@ BOOST_AUTO_TEST_CASE(register_seen_hash_dedup)
     BOOST_CHECK(!manager.HasOracleMessage(random_hash));
 }
 
+BOOST_AUTO_TEST_CASE(consensus_hash_is_domain_separated_from_oracle_price)
+{
+    const uint32_t shared_id_and_epoch = 3;
+    const uint64_t price = 7500;
+    const int64_t timestamp = GetTime();
+
+    COraclePriceMessage price_message(shared_id_and_epoch, price, timestamp);
+    CKey key;
+    key.MakeNewKey(true);
+    BOOST_REQUIRE(price_message.SignPhase2(key));
+
+    OraclePriceMsg price_msg;
+    price_msg.price_message = price_message;
+
+    OracleConsensusMsg consensus_msg;
+    consensus_msg.epoch = static_cast<int32_t>(shared_id_and_epoch);
+    consensus_msg.consensus_price = price;
+    consensus_msg.consensus_timestamp = timestamp;
+
+    BOOST_CHECK_MESSAGE(consensus_msg.GetHash() != price_msg.GetHash(),
+        "Consensus proposals and oracle prices must not share the same replay-cache hash domain");
+}
+
 BOOST_AUTO_TEST_CASE(attestation_replay_hash_binds_signature)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();

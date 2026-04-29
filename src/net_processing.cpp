@@ -5767,7 +5767,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (bundleManager.HasOracleMessage(proposal_hash)) {
             return; // Already seen this proposal
         }
-        bundleManager.RegisterSeenHash(proposal_hash);
 
         // ── Step 3: Rate limit consensus proposals ──
         // Max 100 per hour per peer (generous — one per epoch × multiple peers)
@@ -5854,6 +5853,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── Step 8: Relay proposal to other peers ──
+        bundleManager.RegisterSeenHash(proposal_hash);
         AddKnownOracle(*peer, proposal_hash);
         m_connman.ForEachNode([this, &consensus_msg, &proposal_hash](CNode* pnode) {
             PeerRef relay_peer = GetPeerRef(pnode->GetId());

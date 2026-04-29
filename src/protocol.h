@@ -657,7 +657,10 @@ public:
     uint256 GetHash() const
     {
         CHashWriter hasher(0);
-        hasher << epoch << consensus_price << consensus_timestamp;
+        hasher << std::string{"oracle-consensus-v1"};
+        hasher << epoch;
+        hasher << consensus_price;
+        hasher << consensus_timestamp;
         return hasher.GetHash();
     }
 };

@@ -140,6 +140,7 @@ COracleBundle MockOracleManager::CreateMockBundle(int height)
 
     COracleBundle bundle;
     bundle.epoch = GetCurrentEpoch(height);
+    const int64_t bundle_timestamp = GetTime();
 
     // Determine how many oracle messages to create based on chain config
     // Use min(available test keys, ORACLE_CONSENSUS_REQUIRED) for backward compat
@@ -151,7 +152,7 @@ COracleBundle MockOracleManager::CreateMockBundle(int height)
         COraclePriceMessage msg;
         msg.oracle_id = i;
         msg.price_micro_usd = mockPriceMicroUSD;
-        msg.timestamp = GetTime();
+        msg.timestamp = bundle_timestamp;
         msg.block_height = height;
 
         // Sign with real Schnorr signature if test key is available
@@ -173,7 +174,7 @@ COracleBundle MockOracleManager::CreateMockBundle(int height)
     }
 
     bundle.median_price_micro_usd = mockPriceMicroUSD;
-    bundle.timestamp = GetTime();
+    bundle.timestamp = bundle_timestamp;
 
     LogPrint(BCLog::DIGIDOLLAR, "MockOracleManager: Created bundle for epoch %d with %d messages, price %lld micro-USD\n",
              bundle.epoch, num_messages, mockPriceMicroUSD);

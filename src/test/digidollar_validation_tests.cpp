@@ -394,6 +394,32 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_invalid_mint_amount, DigiDollarVa
     BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-dd-mint-amount");
 }
 
+BOOST_FIXTURE_TEST_CASE(transaction_validation_invalid_mint_does_not_mutate_volatility_state, DigiDollarValidationTestSetup)
+{
+    DigiDollar::Volatility::VolatilityMonitor::ClearHistory();
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770; // DD_TX_MINT
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
+
+    // Invalid amount is rejected before a mint can be accepted. It must not be
+    // able to append oracle prices or advance volatility state while failing.
+    CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, 50);
+    mtx.vout.resize(1);
+    mtx.vout[0] = CTxOut(0, ddScript);
+
+    CTransaction tx(mtx);
+    TxValidationState state;
+
+    BOOST_CHECK(!DigiDollar::ValidateDigiDollarTransaction(tx, validationContext, state));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-dd-mint-amount");
+
+    BOOST_CHECK(DigiDollar::Volatility::VolatilityMonitor::GetPriceHistory().empty());
+    BOOST_CHECK(!DigiDollar::Volatility::VolatilityMonitor::ShouldFreezeMinting());
+    BOOST_CHECK(!DigiDollar::Volatility::VolatilityMonitor::ShouldFreezeAll());
+}
+
 BOOST_FIXTURE_TEST_CASE(transaction_validation_non_dd_tx, DigiDollarValidationTestSetup)
 {
     // Test that non-DD transactions pass validation

@@ -2054,18 +2054,6 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
               txType == DD_TX_REDEEM ? "REDEEM" : "UNKNOWN",
               tx.GetHash().ToString());
 
-    // Update volatility monitoring state if we have valid context
-    if (ctx.nHeight > 0 && ctx.oraclePriceMicroUSD > 0) {
-        Volatility::VolatilityMonitor::UpdateState(ctx.nHeight);
-
-        // Record new oracle price if this is a mint transaction with fresh oracle data
-        if (txType == DD_TX_MINT) {
-            // In a full implementation, we would extract oracle data from the transaction
-            // For now, we use the context oracle price
-            Volatility::VolatilityMonitor::RecordPrice(ctx.oraclePriceMicroUSD, GetTime(), ctx.nHeight);
-        }
-    }
-
     // ERR Pre-validation: Check if minting should be blocked during ERR
     // SECURITY: Skip during IBD (skipOracleValidation=true) because oracle data
     // is unavailable during historical block replay. Without this guard,
@@ -2100,16 +2088,20 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
     // bypassing the peer-ban path via the outer net_processing catch at
     // net_processing.cpp:6388. Single wrap covers all three sub-validators
     // and both caller paths.
+    bool valid = false;
     try {
         switch (txType) {
             case DD_TX_MINT:
-                return ValidateMintTransaction(tx, ctx, state);
+                valid = ValidateMintTransaction(tx, ctx, state);
+                break;
 
             case DD_TX_TRANSFER:
-                return ValidateTransferTransaction(tx, ctx, state);
+                valid = ValidateTransferTransaction(tx, ctx, state);
+                break;
 
             case DD_TX_REDEEM:
-                return ValidateRedemptionTransaction(tx, ctx, state);
+                valid = ValidateRedemptionTransaction(tx, ctx, state);
+                break;
 
             default:
                 LogPrintf("DigiDollar: Unknown transaction type: %d\n", static_cast<int>(txType));
@@ -2120,6 +2112,24 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
                              "bad-dd-op-return-encoding",
                              "malformed CScriptNum in DD transaction");
     }
+
+    if (!valid) {
+        return false;
+    }
+
+    // Only accepted DigiDollar transactions may mutate volatility state. An
+    // attacker-controlled invalid mint must not poison price history or freeze
+    // later validation attempts before it is rejected.
+    if (ctx.nHeight > 0 && ctx.oraclePriceMicroUSD > 0) {
+        if (txType == DD_TX_MINT) {
+            // In a full implementation, we would extract oracle data from the transaction.
+            // For now, we use the context oracle price.
+            Volatility::VolatilityMonitor::RecordPrice(ctx.oraclePriceMicroUSD, GetTime(), ctx.nHeight);
+        }
+        Volatility::VolatilityMonitor::UpdateState(ctx.nHeight);
+    }
+
+    return true;
 }
 
 // ============================================================================

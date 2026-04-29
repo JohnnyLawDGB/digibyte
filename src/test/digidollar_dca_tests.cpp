@@ -126,34 +126,34 @@ BOOST_AUTO_TEST_CASE(dca_multiplier_healthy_system)
 
 BOOST_AUTO_TEST_CASE(dca_multiplier_warning_system)
 {
-    // Warning system (120-149% health) should have 1.2x multiplier
+    // Warning system (120-149% health) should have 1.25x multiplier
     double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(149);
-    BOOST_CHECK_EQUAL(multiplier, 1.2);
+    BOOST_CHECK_EQUAL(multiplier, 1.25);
 
     multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(135);
-    BOOST_CHECK_EQUAL(multiplier, 1.2);
+    BOOST_CHECK_EQUAL(multiplier, 1.25);
 
     multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(120);
-    BOOST_CHECK_EQUAL(multiplier, 1.2);
+    BOOST_CHECK_EQUAL(multiplier, 1.25);
 }
 
 BOOST_AUTO_TEST_CASE(dca_multiplier_critical_system)
 {
-    // Critical system (100-120% health) should have 1.5x multiplier
+    // Critical system (110-119% health) should have 1.5x multiplier
     double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(119);
     BOOST_CHECK_EQUAL(multiplier, 1.5);
 
     multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(110);
     BOOST_CHECK_EQUAL(multiplier, 1.5);
-
-    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(100);
-    BOOST_CHECK_EQUAL(multiplier, 1.5);
 }
 
 BOOST_AUTO_TEST_CASE(dca_multiplier_emergency_system)
 {
-    // Emergency system (<100% health) should have 2.0x multiplier
-    double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(99);
+    // Emergency floor (<110% health) should have 2.0x multiplier
+    double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(109);
+    BOOST_CHECK_EQUAL(multiplier, 2.0);
+
+    multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(99);
     BOOST_CHECK_EQUAL(multiplier, 2.0);
 
     multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(50);
@@ -167,10 +167,12 @@ BOOST_AUTO_TEST_CASE(dca_multiplier_boundary_conditions)
 {
     // Test exact boundary conditions
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.0);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.2);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.2);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.25);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.25);
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(119), 1.5);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 1.5);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(110), 1.5);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(109), 2.0);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 2.0);
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(99), 2.0);
 }
 
@@ -186,9 +188,9 @@ BOOST_AUTO_TEST_CASE(apply_dca_to_base_ratios)
     int adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(300, 200); // 300% base, 200% health
     BOOST_CHECK_EQUAL(adjustedRatio, 300); // No change
 
-    // Warning system (1.2x multiplier)
+    // Warning system (1.25x multiplier)
     adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(300, 130); // 300% base, 130% health
-    BOOST_CHECK_EQUAL(adjustedRatio, 360); // 300% * 1.2 = 360%
+    BOOST_CHECK_EQUAL(adjustedRatio, 375); // 300% * 1.25 = 375%
 
     // Critical system (1.5x multiplier)
     adjustedRatio = DynamicCollateralAdjustment::ApplyDCA(300, 110); // 300% base, 110% health
@@ -231,12 +233,12 @@ BOOST_AUTO_TEST_CASE(get_current_tier_information)
     tier = DynamicCollateralAdjustment::GetCurrentTier(130);
     BOOST_CHECK_EQUAL(tier.minCollateral, 120);
     BOOST_CHECK_EQUAL(tier.maxCollateral, 149);
-    BOOST_CHECK_EQUAL(tier.multiplier, 1.2);
+    BOOST_CHECK_EQUAL(tier.multiplier, 1.25);
     BOOST_CHECK_EQUAL(tier.status, "warning");
 
     // Critical tier
     tier = DynamicCollateralAdjustment::GetCurrentTier(110);
-    BOOST_CHECK_EQUAL(tier.minCollateral, 100);
+    BOOST_CHECK_EQUAL(tier.minCollateral, 110);
     BOOST_CHECK_EQUAL(tier.maxCollateral, 119);
     BOOST_CHECK_EQUAL(tier.multiplier, 1.5);
     BOOST_CHECK_EQUAL(tier.status, "critical");
@@ -244,7 +246,7 @@ BOOST_AUTO_TEST_CASE(get_current_tier_information)
     // Emergency tier
     tier = DynamicCollateralAdjustment::GetCurrentTier(50);
     BOOST_CHECK_EQUAL(tier.minCollateral, 0);
-    BOOST_CHECK_EQUAL(tier.maxCollateral, 99);
+    BOOST_CHECK_EQUAL(tier.maxCollateral, 109);
     BOOST_CHECK_EQUAL(tier.multiplier, 2.0);
     BOOST_CHECK_EQUAL(tier.status, "emergency");
 }
@@ -390,10 +392,10 @@ BOOST_AUTO_TEST_CASE(gradual_transition_hooks)
 
     // Test transitions at tier boundaries
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.0);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.2);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.25);
 
     // Future: implement smooth transitions between tiers
-    // For example: health 150.5 could give multiplier 1.1 instead of hard 1.2
+    // For example: health 150.5 could give multiplier 1.1 instead of hard 1.25
 }
 
 BOOST_AUTO_TEST_CASE(emergency_recovery_hooks)
@@ -458,9 +460,10 @@ BOOST_AUTO_TEST_CASE(test_dca_extreme_scenarios)
     {
         // Test boundary conditions with precision
         std::vector<std::pair<int, double>> precisionTests = {
-            {150, 1.0}, {149, 1.2}, // Boundary between warning and healthy
-            {120, 1.2}, {119, 1.5}, // Boundary between warning and critical
-            {100, 1.5}, {99, 2.0}   // Boundary between critical and emergency
+            {150, 1.0}, {149, 1.25}, // Boundary between warning and healthy
+            {120, 1.25}, {119, 1.5}, // Boundary between warning and critical
+            {110, 1.5}, {109, 2.0},  // Boundary between critical and emergency floor
+            {100, 2.0}, {99, 2.0}
         };
 
         for (auto& test : precisionTests) {
@@ -581,8 +584,8 @@ BOOST_AUTO_TEST_CASE(test_dca_system_state_transitions)
             double multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(health);
             // Verify decreasing multiplier as health improves
             if (health >= 151) BOOST_CHECK_EQUAL(multiplier, 1.0);
-            else if (health >= 120) BOOST_CHECK_EQUAL(multiplier, 1.2);
-            else if (health >= 100) BOOST_CHECK_EQUAL(multiplier, 1.5);
+            else if (health >= 120) BOOST_CHECK_EQUAL(multiplier, 1.25);
+            else if (health >= 110) BOOST_CHECK_EQUAL(multiplier, 1.5);
             else BOOST_CHECK_EQUAL(multiplier, 2.0);
         }
 
@@ -600,7 +603,7 @@ BOOST_AUTO_TEST_CASE(test_dca_integration_stress)
     {
         // Simulate many positions being calculated simultaneously
         std::vector<int> baseRatios = {500, 400, 350, 300, 250, 225, 212, 200};
-        int stressHealth = 105; // Critical system
+        int stressHealth = 105; // Emergency floor
 
         std::vector<int> adjustedRatios;
         for (int baseRatio : baseRatios) {
@@ -609,7 +612,7 @@ BOOST_AUTO_TEST_CASE(test_dca_integration_stress)
 
         // Verify all calculations completed correctly
         for (size_t i = 0; i < baseRatios.size(); ++i) {
-            int expected = static_cast<int>(std::ceil(baseRatios[i] * 1.5)); // Critical multiplier
+            int expected = static_cast<int>(std::ceil(baseRatios[i] * 2.0)); // Emergency floor multiplier
             BOOST_CHECK_EQUAL(adjustedRatios[i], expected);
         }
 

@@ -962,7 +962,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_healthy_system)
 
 BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)
 {
-    // Test minting with warning system (1.2x DCA multiplier)
+    // Test minting with warning system (1.25x DCA multiplier)
     const CChainParams& params = Params();
     int height = 1000;
     CAmount price = CreateTestOraclePrice();
@@ -970,8 +970,8 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)
     MockMintTxBuilder builder(params, height, price);
 
     // Create mock system state for warning system (130% collateralization)
-    // This should trigger 1.2x DCA multiplier
-    // $100 at 300% needs ~6000 DGB base (may need up to 7200 with DCA)
+    // This should trigger 1.25x DCA multiplier
+    // $100 at 300% needs ~6000 DGB base (may need up to 7500 with DCA)
 
     auto utxos = CreateTestUTXOsWithValues({8000 * COIN});
     builder.SetUTXOValue(utxos[0], 8000 * COIN);
@@ -990,8 +990,8 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)
 
     BOOST_CHECK(result.success);
 
-    // With warning system, DCA multiplier should be 1.2x
-    // Expected: $100 / $50 * 300% = 6 DGB base (7.2 DGB with 1.2x DCA)
+    // With warning system, DCA multiplier should be 1.25x
+    // Expected: $100 / $50 * 300% = 6 DGB base (7.5 DGB with 1.25x DCA)
     // For now, test without DCA integration until validation is updated
     CAmount baseCollateral = ((10000 * COIN) / 5000) * 300 / 100; // 6 DGB
     BOOST_CHECK(result.collateralRequired >= baseCollateral);

@@ -221,22 +221,24 @@ BOOST_AUTO_TEST_CASE(redteam_dca_multiplier_precision)
     
     // Test all tier boundaries for exact values
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.0);  // Healthy
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.2);  // Warning
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.2);  // Warning
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.25); // Warning
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.25); // Warning
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(119), 1.5);  // Critical
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 1.5);  // Critical
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(110), 1.5);  // Critical
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(109), 2.0);  // Emergency floor
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 2.0);  // Emergency floor
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(99), 2.0);   // Emergency
     
     // Test ApplyDCA for precision at boundaries
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(500, 150), 500);   // 500 * 1.0
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(500, 149), 600);   // 500 * 1.2
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(500, 149), 625);   // 500 * 1.25
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(500, 99), 1000);   // 500 * 2.0
-    
+
     // Test for floating-point precision issues
-    // 333 * 1.2 = 399.6 -> should round up to 400, never down to 399
+    // 333 * 1.25 = 416.25 -> should round up to 417, never down to 416
     int adjusted = DynamicCollateralAdjustment::ApplyDCA(333, 149);
-    BOOST_CHECK_MESSAGE(adjusted == 400,
-        "DCA precision error: 333 * 1.2 = " + std::to_string(adjusted) + " (expected 400)");
+    BOOST_CHECK_MESSAGE(adjusted == 417,
+        "DCA precision error: 333 * 1.25 = " + std::to_string(adjusted) + " (expected 417)");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_txbuilder_validation_consistency)
@@ -4837,7 +4839,7 @@ BOOST_AUTO_TEST_CASE(redteam_T2_05a_hardcoded_system_health)
 
     std::vector<HealthScenario> scenarios = {
         {150, 1.0, false, "Healthy system"},
-        {130, 1.2, false, "Warning level"},
+        {130, 1.25, false, "Warning level"},
         {110, 1.5, false, "Critical level"},
         {90,  2.0, true,  "Emergency - under-collateralized"},
         {50,  2.0, true,  "Catastrophic - 50% backed"},

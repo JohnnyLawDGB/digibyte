@@ -19,9 +19,10 @@ namespace DCA {
 
 // DCA health tiers (sorted from lowest to highest health for easier lookup)
 const std::vector<HealthTier> DynamicCollateralAdjustment::HEALTH_TIERS = {
-    HealthTier(0,   99,  2.0, "emergency"),  // <100%: Emergency (2.0x multiplier)
-    HealthTier(100, 119, 1.5, "critical"),   // 100-119%: Critical (1.5x multiplier)
-    HealthTier(120, 149, 1.2, "warning"),    // 120-149%: Warning (1.2x multiplier)
+    // Keep these bands in lockstep with ConsensusParams::dcaLevels.
+    HealthTier(0,   109, 2.0,  "emergency"), // <110%: Emergency floor (2.0x multiplier)
+    HealthTier(110, 119, 1.5,  "critical"),  // 110-119%: Critical (1.5x multiplier)
+    HealthTier(120, 149, 1.25, "warning"),   // 120-149%: Warning (1.25x multiplier)
     HealthTier(150, 30000, 1.0, "healthy")   // >=150%: Healthy (1.0x multiplier)
 };
 
@@ -395,11 +396,13 @@ bool DynamicCollateralAdjustment::ValidateMultiplierPrecision()
 
     std::vector<BoundaryTest> tests = {
         {150, 1.0, "healthy"},   // Boundary: healthy/warning
-        {149, 1.2, "warning"},   // Just below healthy
-        {120, 1.2, "warning"},   // Boundary: warning/critical
+        {149, 1.25, "warning"},  // Just below healthy
+        {120, 1.25, "warning"},  // Boundary: warning/critical
         {119, 1.5, "critical"},  // Just below warning
-        {100, 1.5, "critical"},  // Boundary: critical/emergency
-        {99, 2.0, "emergency"}   // Just below critical
+        {110, 1.5, "critical"},  // Boundary: critical/emergency floor
+        {109, 2.0, "emergency"}, // Just below critical
+        {100, 2.0, "emergency"},
+        {99, 2.0, "emergency"}
     };
 
     for (const auto& test : tests) {

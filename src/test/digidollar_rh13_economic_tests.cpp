@@ -88,19 +88,19 @@ BOOST_AUTO_TEST_CASE(rh13_01_dca_tier_oscillation_attack)
 {
     // VULNERABILITY: No hysteresis in DCA tiers.
     // Attack: Manipulate system health to oscillate around tier boundaries.
-    // At health=149, multiplier=1.2x. At health=150, multiplier=1.0x.
+    // At health=149, multiplier=1.25x. At health=150, multiplier=1.0x.
     // Rapid oscillation could create arbitrage opportunities.
 
     double m_149 = DynamicCollateralAdjustment::GetDCAMultiplier(149);
     double m_150 = DynamicCollateralAdjustment::GetDCAMultiplier(150);
 
-    BOOST_CHECK_EQUAL(m_149, 1.2);  // Warning tier
+    BOOST_CHECK_EQUAL(m_149, 1.25); // Warning tier
     BOOST_CHECK_EQUAL(m_150, 1.0);  // Healthy tier
 
     // An attacker could:
     // 1. Wait until health is at 150% (1.0x)
-    // 2. Mint a large position, dropping health to 149% (now 1.2x for everyone else)
-    // 3. Other users must pay 20% more collateral
+    // 2. Mint a large position, dropping health to 149% (now 1.25x for everyone else)
+    // 3. Other users must pay 25% more collateral
     // 4. Attacker's position was locked in at the 1.0x rate
     //
     // SEVERITY: LOW-MEDIUM — The attacker's own mint pushes health down,
@@ -111,12 +111,12 @@ BOOST_AUTO_TEST_CASE(rh13_01_dca_tier_oscillation_attack)
     double m_119 = DynamicCollateralAdjustment::GetDCAMultiplier(119);
     double m_120 = DynamicCollateralAdjustment::GetDCAMultiplier(120);
     BOOST_CHECK_EQUAL(m_119, 1.5);  // Critical
-    BOOST_CHECK_EQUAL(m_120, 1.2);  // Warning — 30% jump at boundary
+    BOOST_CHECK_EQUAL(m_120, 1.25); // Warning
 
     double m_99 = DynamicCollateralAdjustment::GetDCAMultiplier(99);
     double m_100 = DynamicCollateralAdjustment::GetDCAMultiplier(100);
     BOOST_CHECK_EQUAL(m_99, 2.0);   // Emergency
-    BOOST_CHECK_EQUAL(m_100, 1.5);  // Critical — 50% jump at boundary
+    BOOST_CHECK_EQUAL(m_100, 2.0);  // Emergency floor
 }
 
 // ============================================================================
@@ -614,7 +614,7 @@ BOOST_AUTO_TEST_CASE(rh13_extra_dca_err_interaction)
     // FINDING: DCA and ERR use DIFFERENT health tier definitions!
     //
     // DCA tiers (from dca.cpp HEALTH_TIERS):
-    //   Emergency: 0-99, Critical: 100-119, Warning: 120-149, Healthy: 150+
+    //   Emergency floor: 0-109, Critical: 110-119, Warning: 120-149, Healthy: 150+
     //
     // ERR tiers (from err.cpp ERR_TIERS):
     //   Activates at < 100%
@@ -623,34 +623,26 @@ BOOST_AUTO_TEST_CASE(rh13_extra_dca_err_interaction)
     // ConsensusParams dcaLevels:
     //   >150%: 100 mult, 120-150%: 125 mult, 110-120%: 150 mult, <110%: 200 mult
     //
-    // THREE different tier definitions! The DCA class uses its own HEALTH_TIERS,
-    // the ERR class uses ERR_TIERS, and ConsensusParams has dcaLevels.
+    // DCA is now aligned with ConsensusParams, while ERR still uses its own
+    // redemption burn schedule.
     //
-    // GetDCAMultiplier (DCA class) uses HEALTH_TIERS (e.g., 1.5x at 100-119%)
-    // GetDCAMultiplier (ConsensusParams function) uses dcaLevels (different ranges!)
+    // GetDCAMultiplier (DCA class) and ConsensusParams should agree.
     //
     // Which one is used in validation? GetEffectiveCollateralRatio in validation.cpp
     // calls DCA::DynamicCollateralAdjustment::GetDCAMultiplier — the class version.
-    // So the ConsensusParams dcaLevels are DEAD CODE for actual validation.
-    //
-    // SEVERITY: LOW — Confusing but not exploitable since only one path is used.
-    // However, if someone changes the ConsensusParams thinking it affects validation,
-    // they'd be wrong.
+    // This test protects the previously confusing boundary behavior.
 
     // Verify the class DCA is what's actually used
     double class_multiplier = DynamicCollateralAdjustment::GetDCAMultiplier(115);
-    // Class: 100-119 = critical = 1.5x
+    // Class: 110-119 = critical = 1.5x
     BOOST_CHECK_EQUAL(class_multiplier, 1.5);
 
     // ConsensusParams would give: 110-120 = 150/100 = 1.5x
-    // Same result here, but different at boundary 110:
+    // Same result here:
     double class_at_110 = DynamicCollateralAdjustment::GetDCAMultiplier(110);
-    // Class: 100-119 = critical = 1.5x (110 falls in critical)
     BOOST_CHECK_EQUAL(class_at_110, 1.5);
-    // ConsensusParams: 110-120 = 150 mult = 1.5x (would also be 1.5x)
-    // But ConsensusParams <110 = 200 mult = 2.0x
-    // So at health=109: class gives 1.5x, ConsensusParams gives 2.0x!
-    // Mismatch, but ConsensusParams isn't used, so no actual issue.
+    double class_at_109 = DynamicCollateralAdjustment::GetDCAMultiplier(109);
+    BOOST_CHECK_EQUAL(class_at_109, 2.0);
 }
 
 BOOST_AUTO_TEST_CASE(rh13_extra_no_supply_cap_enforcement)

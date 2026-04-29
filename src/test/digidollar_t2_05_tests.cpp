@@ -156,10 +156,12 @@ BOOST_AUTO_TEST_CASE(t2_05b_get_current_system_health_converts_units)
     // Verify DCA multiplier at different health levels
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(200), 1.0);  // Healthy
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.0);  // Boundary
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.2);  // Warning
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.2);  // Warning
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.25); // Warning
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.25); // Warning
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(119), 1.5);  // Critical
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 1.5);  // Critical
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(110), 1.5);  // Critical
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(109), 2.0);  // Emergency floor
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 2.0);  // Emergency floor
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(99), 2.0);   // Emergency
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(50), 2.0);   // Emergency
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(0), 2.0);    // Emergency
@@ -256,9 +258,9 @@ BOOST_AUTO_TEST_CASE(t2_05c_dca_multiplier_at_health_levels)
 {
     // Verify DCA multiplier table matches DIGIDOLLAR_ARCHITECTURE.md
     // System health > 150%: DCA multiplier = 1.0x (normal)
-    // System health 120-149%: DCA multiplier = 1.2x
-    // System health 100-119%: DCA multiplier = 1.5x
-    // System health < 100%: 2.0x (emergency)
+    // System health 120-149%: DCA multiplier = 1.25x
+    // System health 110-119%: DCA multiplier = 1.5x
+    // System health < 110%: 2.0x emergency floor
 
     // Healthy tier (>= 150%)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.0);
@@ -266,18 +268,19 @@ BOOST_AUTO_TEST_CASE(t2_05c_dca_multiplier_at_health_levels)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(300), 1.0);
 
     // Warning tier (120-149%)
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.2);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(135), 1.2);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.2);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.25);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(135), 1.25);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.25);
 
-    // Critical tier (100-119%)
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 1.5);
+    // Critical tier (110-119%)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(110), 1.5);
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(119), 1.5);
 
-    // Emergency tier (< 100%)
+    // Emergency floor (< 110%)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(0), 2.0);
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(50), 2.0);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 2.0);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(109), 2.0);
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(99), 2.0);
 }
 

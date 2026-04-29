@@ -573,7 +573,7 @@ BOOST_AUTO_TEST_CASE(rh21_dca_multiplier_at_exact_boundaries)
     // At 150: should be in healthy tier (1.0x) or warning boundary
     BOOST_CHECK_GE(m150, 1.0);
     BOOST_CHECK_GE(m151, 1.0);
-    // At 149: should be warning tier (1.2x)
+    // At 149: should be warning tier (1.25x)
     BOOST_CHECK_GE(m149, 1.0);
 
     // 120 boundary

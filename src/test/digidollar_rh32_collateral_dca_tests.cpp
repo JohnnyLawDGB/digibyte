@@ -10,7 +10,7 @@
  *            validation uses DCA::HEALTH_TIERS. Ranges and multipliers differ.
  *            Not exploitable (correct system is used), but confusing and fragile.
  * [RH-32-F2] TRUNCATION IN ApplyDCA — uses static_cast<int>(baseRatio * multiplier)
- *            which truncates. E.g., 225 * 1.2 = 270.0 exactly, but floating-point
+ *            which truncates. E.g., 225 * 1.25 = 281.25, but floating-point
  *            could yield 269.999... → 269. Attacker saves 1% collateral on some tiers.
  * [RH-32-F3] COLLATERAL RETURN 0 FOR OVERFLOW — CalculateRequiredCollateral (txbuilder)
  *            returns 0 when result > MAX_MONEY. This is correctly caught by caller
@@ -22,7 +22,7 @@
  *            both numerator and denominator by /1000 when large. For totalDD between
  *            1000-1999, this loses ~50% precision in the health calculation.
  * [RH-32-F6] DCA TIER BOUNDARY GAMING — An attacker can observe system health at 150%
- *            (1.0x) vs 149% (1.2x) and time mints to just after health dips below 150%
+ *            (1.0x) vs 149% (1.25x) and time mints to just after health dips below 150%
  *            then immediately back. No hysteresis exists. This is by design but worth noting.
  */
 
@@ -53,22 +53,23 @@ BOOST_AUTO_TEST_SUITE(digidollar_rh32_collateral_dca_tests)
 BOOST_AUTO_TEST_CASE(rh32_tier_boundary_manipulation)
 {
     // An attacker crafts DD amounts to exploit tier boundaries for lower collateral.
-    // At health=150 (healthy, 1.0x) vs health=149 (warning, 1.2x), the jump is 20%.
+    // At health=150 (healthy, 1.0x) vs health=149 (warning, 1.25x), the jump is 25%.
     // Verify the boundary is sharp and cannot be gamed with fractional health values.
 
     // Exact boundary: 150 = healthy (1.0x)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.0);
-    // Just below: 149 = warning (1.2x)
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.2);
+    // Just below: 149 = warning (1.25x)
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.25);
 
-    // Exact boundary: 120 = warning (1.2x)
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.2);
+    // Exact boundary: 120 = warning (1.25x)
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.25);
     // Just below: 119 = critical (1.5x)
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(119), 1.5);
 
-    // Exact boundary: 100 = critical (1.5x)
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 1.5);
-    // Just below: 99 = emergency (2.0x)
+    // Exact boundary: 110 = critical (1.5x)
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(110), 1.5);
+    // Just below: 109 = emergency floor (2.0x)
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(109), 2.0);
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(99), 2.0);
 
     // [RH-32-F6] No hysteresis — verify immediate transitions both directions
@@ -77,7 +78,7 @@ BOOST_AUTO_TEST_CASE(rh32_tier_boundary_manipulation)
     double m2 = DynamicCollateralAdjustment::GetDCAMultiplier(149);
     double m3 = DynamicCollateralAdjustment::GetDCAMultiplier(151);
     BOOST_CHECK_EQUAL(m1, 1.0);
-    BOOST_CHECK_EQUAL(m2, 1.2);
+    BOOST_CHECK_EQUAL(m2, 1.25);
     BOOST_CHECK_EQUAL(m3, 1.0); // Immediately back to 1.0x — no hysteresis
 
     // Verify ApplyDCA at boundaries with all base ratios
@@ -85,10 +86,10 @@ BOOST_AUTO_TEST_CASE(rh32_tier_boundary_manipulation)
     for (int base : baseRatios) {
         int at150 = DynamicCollateralAdjustment::ApplyDCA(base, 150);
         int at149 = DynamicCollateralAdjustment::ApplyDCA(base, 149);
-        // The jump should be exactly 20% more at 149 vs 150
+        // The jump should be exactly 25% more at 149 vs 150
         // [RH-32-F2] Fractional DCA multipliers must round up so the final ratio
         // never undercuts the intended collateral requirement.
-        double expected149 = base * 1.2;
+        double expected149 = base * 1.25;
         BOOST_CHECK_EQUAL(at150, base); // 1.0x = no change
         BOOST_CHECK_EQUAL(at149, static_cast<int>(std::ceil(expected149)));
     }
@@ -101,12 +102,12 @@ BOOST_AUTO_TEST_CASE(rh32_applydca_truncation_attack)
     // This truncates rather than rounds. For most values this is fine,
     // but edge cases could lose a percentage point.
 
-    // 225 * 1.2 = 270.0 (exact in IEEE754 double)
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(225, 149), 270);
+    // 225 * 1.25 = 281.25 -> must round up to 282
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::ApplyDCA(225, 149), 282);
 
-    // 212 * 1.2 = 254.4 → must round up to 255
+    // 212 * 1.25 = 265.0
     int result = DynamicCollateralAdjustment::ApplyDCA(212, 149);
-    BOOST_CHECK_EQUAL(result, 255);
+    BOOST_CHECK_EQUAL(result, 265);
 
     // 275 * 1.5 = 412.5 → must round up to 413
     result = DynamicCollateralAdjustment::ApplyDCA(275, 119);
@@ -120,7 +121,7 @@ BOOST_AUTO_TEST_CASE(rh32_applydca_truncation_attack)
     result = DynamicCollateralAdjustment::ApplyDCA(225, 50);
     BOOST_CHECK_EQUAL(result, 450);
 
-    // Worst case: base=212, multiplier=1.2 → loses 0.4/254.4 = 0.16%
+    // Worst case examples now use the 1.25x warning multiplier and must round up.
     // Not exploitable for significant value extraction, but worth documenting.
 }
 
@@ -524,24 +525,20 @@ BOOST_AUTO_TEST_CASE(rh32_dual_dca_system_divergence)
     // GetEffectiveCollateralRatio calls DCA::DynamicCollateralAdjustment::GetDCAMultiplier
     // which uses HEALTH_TIERS, NOT ConsensusParams::dcaLevels.
 
-    // At health=130%: DCA::HEALTH_TIERS says "warning" (1.2x)
+    // At health=130%: DCA::HEALTH_TIERS says "warning" (1.25x)
     // ConsensusParams::dcaLevels says >120% = 1.25x
     int base = 300;
     int effective = GetEffectiveCollateralRatio(base, 130, chainparams);
-    // Uses DCA::HEALTH_TIERS: 1.2x → 360
-    BOOST_CHECK_EQUAL(effective, 360);
+    BOOST_CHECK_EQUAL(effective, 375);
 
     // At health=115%: DCA::HEALTH_TIERS says "critical" (1.5x)
     // ConsensusParams::dcaLevels says 110-120% = 1.5x (same here by coincidence)
     effective = GetEffectiveCollateralRatio(base, 115, chainparams);
     BOOST_CHECK_EQUAL(effective, 450);
 
-    // At health=105%: DCA::HEALTH_TIERS says "critical" (1.5x)
-    // ConsensusParams::dcaLevels says 100-110% = 2.0x (DIFFERENT!)
+    // At health=105%: both validator and chainparams use the emergency floor.
     effective = GetEffectiveCollateralRatio(base, 105, chainparams);
-    // If using HEALTH_TIERS: 1.5x → 450
-    // If using dcaLevels: 2.0x → 600
-    BOOST_CHECK_EQUAL(effective, 450); // Proves HEALTH_TIERS is used
+    BOOST_CHECK_EQUAL(effective, 600);
 }
 
 // ============================================================================

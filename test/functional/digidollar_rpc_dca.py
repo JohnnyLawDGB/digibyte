@@ -10,8 +10,9 @@ Test Dynamic Collateral Adjustment (DCA) functionality including:
 
 DCA Health Tiers:
 - >= 150%: Healthy (multiplier 1.0)
-- 120-149%: Warning (multiplier 1.2)
-- 100-119%: Critical (multiplier 1.5)
+- 120-149%: Warning (multiplier 1.25)
+- 110-119%: Critical (multiplier 1.5)
+- 0-109%: Emergency floor (multiplier 2.0)
 - < 100%: Emergency (multiplier 2.0)
 """
 
@@ -126,18 +127,18 @@ class DigiDollarDCAMultiplierTest(DigiByteTestFramework):
             multiplier = float(result["multiplier"])
             tier_status = result["tier_status"]
 
-            # Warning tier should have 1.2x multiplier
-            assert_equal(multiplier, 1.2)
+            # Warning tier should have 1.25x multiplier
+            assert_equal(multiplier, 1.25)
             assert_equal(tier_status, "warning")
 
             self.log.info(f"Health {health}%: multiplier={multiplier}, tier={tier_status}")
 
     def test_dca_multiplier_critical_system(self):
-        """Test multiplier at critical level (100-119% health)."""
-        self.log.info("Testing DCA multiplier for critical system (100-119%)...")
+        """Test multiplier at critical level (110-119% health)."""
+        self.log.info("Testing DCA multiplier for critical system (110-119%)...")
 
         # Test critical tier health levels
-        critical_levels = [100, 105, 110, 115, 119]
+        critical_levels = [110, 115, 119]
 
         for health in critical_levels:
             result = self.nodes[0].getdcamultiplier(health)
@@ -179,10 +180,12 @@ class DigiDollarDCAMultiplierTest(DigiByteTestFramework):
             # (health, expected_multiplier, expected_tier)
             (200, 1.0, "healthy"),
             (150, 1.0, "healthy"),
-            (149, 1.2, "warning"),
-            (120, 1.2, "warning"),
+            (149, 1.25, "warning"),
+            (120, 1.25, "warning"),
             (119, 1.5, "critical"),
-            (100, 1.5, "critical"),
+            (110, 1.5, "critical"),
+            (109, 2.0, "emergency"),
+            (100, 2.0, "emergency"),
             (99, 2.0, "emergency"),
             (50, 2.0, "emergency"),
             (0, 2.0, "emergency"),
@@ -240,11 +243,13 @@ class DigiDollarDCAMultiplierTest(DigiByteTestFramework):
             (150, 1.0, "healthy"),
             (151, 1.0, "healthy"),
             # Upper boundary of warning (149) and lower (120)
-            (149, 1.2, "warning"),
-            (120, 1.2, "warning"),
+            (149, 1.25, "warning"),
+            (120, 1.25, "warning"),
             # Upper boundary of critical (119) and lower (100)
             (119, 1.5, "critical"),
-            (100, 1.5, "critical"),
+            (110, 1.5, "critical"),
+            (109, 2.0, "emergency"),
+            (100, 2.0, "emergency"),
             # Upper boundary of emergency (99)
             (99, 2.0, "emergency"),
         ]

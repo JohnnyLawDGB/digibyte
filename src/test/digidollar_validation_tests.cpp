@@ -2895,7 +2895,7 @@ BOOST_FIXTURE_TEST_CASE(test_mint_validation_dca_multiplier_integration, DigiDol
 
     std::vector<HealthScenario> scenarios = {
         {150, 1.0, "Healthy (150%)"},
-        {130, 1.2, "Warning (130%)"},
+        {130, 1.25, "Warning (130%)"},
         {110, 1.5, "Critical (110%)"},
         {90, 2.0, "Emergency (90%)"}
     };
@@ -2929,10 +2929,9 @@ BOOST_FIXTURE_TEST_CASE(test_system_health_validation_boundary_conditions, DigiD
 {
     // Test system health validation at critical boundaries
 
-    // 100% boundary - critical tier (100-119%), not healthy
-    // According to HEALTH_TIERS: 100-119% = critical = 1.5x multiplier
+    // 100% boundary - emergency floor, not healthy
     validationContext.systemCollateral = 100;
-    BOOST_CHECK_EQUAL(DigiDollar::GetEffectiveCollateralRatio(200, 100, Params()), 300); // 200 * 1.5 = 300
+    BOOST_CHECK_EQUAL(DigiDollar::GetEffectiveCollateralRatio(200, 100, Params()), 400); // 200 * 2.0 = 400
 
     // 99% - ERR activates
     validationContext.systemCollateral = 99;
@@ -2946,12 +2945,12 @@ BOOST_FIXTURE_TEST_CASE(test_system_health_validation_boundary_conditions, DigiD
     // 120% - warning tier
     validationContext.systemCollateral = 120;
     int ratio120 = DigiDollar::GetEffectiveCollateralRatio(200, 120, Params());
-    BOOST_CHECK_EQUAL(ratio120, 240); // 1.2x multiplier
+    BOOST_CHECK_EQUAL(ratio120, 250); // 1.25x multiplier
 
-    // 100% - critical tier boundary
+    // 100% - emergency floor
     validationContext.systemCollateral = 100;
     int ratio100 = DigiDollar::GetEffectiveCollateralRatio(200, 100, Params());
-    BOOST_CHECK_EQUAL(ratio100, 300); // 1.5x multiplier
+    BOOST_CHECK_EQUAL(ratio100, 400); // 2.0x multiplier
 }
 
 // ============================================================================

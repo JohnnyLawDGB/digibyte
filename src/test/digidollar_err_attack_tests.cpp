@@ -255,19 +255,19 @@ BOOST_FIXTURE_TEST_CASE(rh27_get_current_state_mutates_err, ERRAttackTestSetup)
 BOOST_FIXTURE_TEST_CASE(rh27_dca_multiplier_at_exact_boundaries, ERRAttackTestSetup)
 {
     // ATTACK: DCA tier boundaries — check for off-by-one
-    // Tier boundaries: 0-99 (2.0x), 100-119 (1.5x), 120-149 (1.2x), 150+ (1.0x)
+    // Tier boundaries: 0-109 (2.0x), 110-119 (1.5x), 120-149 (1.25x), 150+ (1.0x)
 
-    // At exact boundary: 100 should be critical (1.5x), not emergency (2.0x)
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(100), 1.5);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(99), 2.0);
+    // At exact boundary: 110 should be critical (1.5x); 109 is emergency floor (2.0x)
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(110), 1.5);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(109), 2.0);
 
     // At 120 boundary
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.2);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(120), 1.25);
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(119), 1.5);
 
     // At 150 boundary
     BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(150), 1.0);
-    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.2);
+    BOOST_CHECK_EQUAL(DynamicCollateralAdjustment::GetDCAMultiplier(149), 1.25);
 }
 
 BOOST_FIXTURE_TEST_CASE(rh27_dca_err_combined_effect, ERRAttackTestSetup)

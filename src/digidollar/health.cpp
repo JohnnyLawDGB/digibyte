@@ -446,24 +446,22 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 // Called from ConnectBlock/DisconnectBlock under cs_main.
 // ============================================================================
 
+static void AddClampedAmount(CAmount& total, CAmount amount, const char* label)
+{
+    if (amount <= 0) return;
+    if (total <= std::numeric_limits<CAmount>::max() - amount) {
+        total += amount;
+        return;
+    }
+    LogPrintf("Health: WARNING - %s would overflow, capping\n", label);
+    total = std::numeric_limits<CAmount>::max();
+}
+
 void SystemHealthMonitor::OnMintConnected(CAmount ddAmount, CAmount dgbCollateral)
 {
     std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
-    // SECURITY [RH-11]: Prevent supply overflow — cap at MAX_DIGIDOLLAR
-    if (ddAmount > 0 && s_currentMetrics.totalDDSupply <= MAX_DIGIDOLLAR - ddAmount) {
-        s_currentMetrics.totalDDSupply += ddAmount;
-    } else if (ddAmount > 0) {
-        LogPrintf("Health: WARNING - totalDDSupply would exceed MAX_DIGIDOLLAR, capping at %s\n",
-                 FormatMoney(MAX_DIGIDOLLAR));
-        s_currentMetrics.totalDDSupply = MAX_DIGIDOLLAR;
-    }
-    // Cap collateral at MAX_MONEY to prevent int64_t overflow
-    if (dgbCollateral > 0 && s_currentMetrics.totalCollateral <= std::numeric_limits<CAmount>::max() - dgbCollateral) {
-        s_currentMetrics.totalCollateral += dgbCollateral;
-    } else if (dgbCollateral > 0) {
-        LogPrintf("Health: WARNING - totalCollateral would overflow, capping\n");
-        s_currentMetrics.totalCollateral = std::numeric_limits<CAmount>::max();
-    }
+    AddClampedAmount(s_currentMetrics.totalDDSupply, ddAmount, "totalDDSupply");
+    AddClampedAmount(s_currentMetrics.totalCollateral, dgbCollateral, "totalCollateral");
     LogPrint(BCLog::DIGIDOLLAR, "Health: Mint connected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
@@ -492,17 +490,8 @@ void SystemHealthMonitor::OnMintDisconnected(CAmount ddAmount, CAmount dgbCollat
 void SystemHealthMonitor::OnRedeemDisconnected(CAmount ddAmount, CAmount dgbCollateral)
 {
     std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
-    // SECURITY [RH-11]: Same overflow protection as OnMintConnected
-    if (ddAmount > 0 && s_currentMetrics.totalDDSupply <= MAX_DIGIDOLLAR - ddAmount) {
-        s_currentMetrics.totalDDSupply += ddAmount;
-    } else if (ddAmount > 0) {
-        s_currentMetrics.totalDDSupply = MAX_DIGIDOLLAR;
-    }
-    if (dgbCollateral > 0 && s_currentMetrics.totalCollateral <= std::numeric_limits<CAmount>::max() - dgbCollateral) {
-        s_currentMetrics.totalCollateral += dgbCollateral;
-    } else if (dgbCollateral > 0) {
-        s_currentMetrics.totalCollateral = std::numeric_limits<CAmount>::max();
-    }
+    AddClampedAmount(s_currentMetrics.totalDDSupply, ddAmount, "totalDDSupply");
+    AddClampedAmount(s_currentMetrics.totalCollateral, dgbCollateral, "totalCollateral");
     LogPrint(BCLog::DIGIDOLLAR, "Health: Redeem disconnected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));

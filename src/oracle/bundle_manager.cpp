@@ -1173,6 +1173,20 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
         }
     }();
 
+    int oracle_output_count = 0;
+    for (const auto& output : coinbase_tx.vout) {
+        if (output.scriptPubKey.size() >= 2 &&
+            output.scriptPubKey[0] == OP_RETURN &&
+            output.scriptPubKey[1] == OP_ORACLE) {
+            ++oracle_output_count;
+        }
+    }
+    if (oracle_output_count > 1) {
+        LogPrintf("Oracle: Rejecting transaction with %d oracle outputs (expected at most 1)\n",
+                  oracle_output_count);
+        return false;
+    }
+
     // Look for OP_RETURN output with OP_ORACLE marker
     for (const auto& output : coinbase_tx.vout) {
         if (output.scriptPubKey.size() > 2 && output.scriptPubKey[0] == OP_RETURN) {
@@ -1193,32 +1207,32 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                                 data.insert(data.end(), script_it, script_it + chunk_size);
                                 script_it += chunk_size;
                             } else {
-                                break;
+                                return false;
                             }
                         } else if (*script_it == 0x4c) { // OP_PUSHDATA1: next byte is length
                             ++script_it;
-                            if (script_it >= output.scriptPubKey.end()) break;
+                            if (script_it >= output.scriptPubKey.end()) return false;
                             unsigned int chunk_size = *script_it;
                             ++script_it;
                             if (script_it + chunk_size <= output.scriptPubKey.end()) {
                                 data.insert(data.end(), script_it, script_it + chunk_size);
                                 script_it += chunk_size;
                             } else {
-                                break;
+                                return false;
                             }
                         } else if (*script_it == 0x4d) { // OP_PUSHDATA2: next 2 bytes are length (LE)
                             ++script_it;
-                            if (script_it + 2 > output.scriptPubKey.end()) break;
+                            if (script_it + 2 > output.scriptPubKey.end()) return false;
                             unsigned int chunk_size = *script_it | (*(script_it + 1) << 8);
                             script_it += 2;
                             if (script_it + chunk_size <= output.scriptPubKey.end()) {
                                 data.insert(data.end(), script_it, script_it + chunk_size);
                                 script_it += chunk_size;
                             } else {
-                                break;
+                                return false;
                             }
                         } else {
-                            break;
+                            return false;
                         }
                     }
 
@@ -1280,9 +1294,9 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         return true;
                     }
                     else if (data[0] == 0x01) {
-                        // Phase One compact format: oracle_id (1) + price (8) + timestamp (8) = 17 bytes
-                        if (data.size() < 18) { // 1 (version) + 17 (data)
-                            LogPrintf("Oracle: Invalid Phase One bundle size: %d\n", data.size());
+                        // Phase One compact format: version (1) + oracle_id (1) + price (8) + timestamp (8)
+                        if (data.size() != 18) {
+                            LogPrintf("Oracle: Invalid Phase One bundle size: %zu (expected 18)\n", data.size());
                             return false;
                         }
 
@@ -1349,10 +1363,11 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                             return false;
                         }
 
-                        // Validate we have enough data for all messages
+                        // Validate exact data size for all messages. Trailing bytes would
+                        // create alternate serializations for the same oracle bundle.
                         size_t expected_size = 1 + 1 + 8 + 8 + num_messages * 65; // version + header + per-msg
-                        if (data.size() < expected_size) {
-                            LogPrintf("Oracle: Phase Two data too short: %zu < %zu (for %d messages)\n",
+                        if (data.size() != expected_size) {
+                            LogPrintf("Oracle: Invalid Phase Two data size: %zu != %zu (for %d messages)\n",
                                      data.size(), expected_size, num_messages);
                             return false;
                         }
@@ -1468,7 +1483,7 @@ bool OracleBundleManager::ValidateV03BundleFormat(const CScript& script, uint8_t
                 return false;
             }
         } else {
-            break;
+            return false;
         }
     }
 
@@ -1485,14 +1500,15 @@ bool OracleBundleManager::ValidateV03BundleFormat(const CScript& script, uint8_t
         size_t expected = 1 + 1 + bitmap_len + 4 + 8 + 8 + 64;
         return data.size() == expected;
     } else if (version == 0x02) {
-        // v0x02: version(1) + num_msgs(1) + price(8) + timestamp(8) = 18 minimum
+        // v0x02: version(1) + num_msgs(1) + price(8) + timestamp(8) + N*(oracle_id(1)+sig(64))
         if (data.size() < 18) return false;
         uint8_t num_msgs = data[1];
+        if (num_msgs == 0 || num_msgs > ORACLE_ACTIVE_COUNT) return false;
         size_t expected = 1 + 1 + 8 + 8 + num_msgs * 65;
-        return data.size() >= expected;
+        return data.size() == expected;
     } else if (version == 0x01) {
         // v0x01: version(1) + oracle_id(1) + price(8) + timestamp(8) = 18
-        return data.size() >= 18;
+        return data.size() == 18;
     }
 
     return false;

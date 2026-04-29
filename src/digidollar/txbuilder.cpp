@@ -719,6 +719,17 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     LogPrintf("DigiDollar: Fee calculation - calculated: %d sats, minimum: %d sats, actual: %d sats\n",
               calculatedFee, MIN_DD_FEE, actualFee);
 
+    if (totalFeeIn <= 0) {
+        result.error = "Insufficient DGB fee input: no fee inputs selected";
+        return result;
+    }
+
+    if (totalFeeIn < actualFee) {
+        result.error = strprintf("Insufficient DGB fee input: selected=%d sats, required=%d sats",
+                                 totalFeeIn, actualFee);
+        return result;
+    }
+
     // Add DGB change output if needed (after we know actual fee)
     if (totalFeeIn > 0) {
         CAmount dgbChange = totalFeeIn - actualFee;

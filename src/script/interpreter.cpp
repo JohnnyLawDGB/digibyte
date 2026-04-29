@@ -436,6 +436,22 @@ static bool EvalChecksig(const valtype& sig, const valtype& pubkey, CScript::con
 // OP_CHECKPRICE to fail closed — no hardcoded fallback of any kind.
 GetOracleConsensusPriceFn g_get_oracle_consensus_price = nullptr;
 
+static bool IsDigiDollarOpcode(opcodetype opcode)
+{
+    return opcode >= OP_DIGIDOLLAR && opcode <= OP_ORACLE;
+}
+
+static bool IsOpSuccessForFlags(opcodetype opcode, unsigned int flags)
+{
+    // DigiDollar opcodes are BIP342 OP_SUCCESSx before activation, exactly as
+    // old Taproot nodes see them. Once SCRIPT_VERIFY_DIGIDOLLAR is active they
+    // are removed from OP_SUCCESSx and evaluated by the stricter new rules.
+    if (IsDigiDollarOpcode(opcode) && (flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
+        return false;
+    }
+    return IsOpSuccess(opcode);
+}
+
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror)
 {
     static const CScriptNum bnZero(0);
@@ -635,10 +651,14 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                 // DigiDollar specific opcodes
                 case OP_DIGIDOLLAR:
                 {
-                    // CRITICAL FIX: Check flag BEFORE stack validation to avoid consensus split
+                    if (sigversion != SigVersion::TAPSCRIPT) {
+                        return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
+                    }
+                    // Before activation, these bytes are still BIP342 OP_SUCCESSx.
+                    // ExecuteWitnessScript normally short-circuits before EvalScript;
+                    // keep direct EvalScript callers compatible too.
                     if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
-                        // Behave as NOP when flag is not set (soft fork compatibility)
-                        break;
+                        return set_success(serror);
                     }
 
                     // CRITICAL FIX: Read DD amount from SCRIPT (next element), not from stack
@@ -667,9 +687,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                 case OP_DDVERIFY:
                 {
+                    if (sigversion != SigVersion::TAPSCRIPT) {
+                        return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
+                    }
                     if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
-                        // Behave as NOP when flag is not set (soft fork compatibility)
-                        break;
+                        return set_success(serror);
                     }
 
                     // Verify DigiDollar conditions
@@ -685,10 +707,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                 case OP_CHECKPRICE:
                 {
-                    // CRITICAL FIX: Check flag BEFORE stack validation to avoid consensus split
+                    if (sigversion != SigVersion::TAPSCRIPT) {
+                        return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
+                    }
                     if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
-                        // Behave as NOP when flag is not set (soft fork compatibility)
-                        break;
+                        return set_success(serror);
                     }
 
                     // Stack: <price>
@@ -725,12 +748,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
 
                 case OP_CHECKCOLLATERAL:
                 {
-                    // CRITICAL FIX: Check flag BEFORE stack validation AND do NOT pop stack in NOP mode
-                    // Popping stack when flag not set causes CONSENSUS SPLIT!
+                    if (sigversion != SigVersion::TAPSCRIPT) {
+                        return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
+                    }
                     if (!(flags & SCRIPT_VERIFY_DIGIDOLLAR)) {
-                        // Behave as TRUE NOP when flag is not set (soft fork compatibility)
-                        // DO NOT touch stack - that would cause consensus split!
-                        break;
+                        return set_success(serror);
                     }
 
                     // Stack: <ratio> <threshold>
@@ -1963,7 +1985,7 @@ static bool ExecuteWitnessScript(const Span<const valtype>& stack_span, const CS
                 return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
             }
             // New opcodes will be listed here. May use a different sigversion to modify existing opcodes.
-            if (IsOpSuccess(opcode)) {
+            if (IsOpSuccessForFlags(opcode, flags)) {
                 if (flags & SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS) {
                     return set_error(serror, SCRIPT_ERR_DISCOURAGE_OP_SUCCESS);
                 }

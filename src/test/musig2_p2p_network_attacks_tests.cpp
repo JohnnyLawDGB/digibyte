@@ -500,13 +500,13 @@ BOOST_AUTO_TEST_CASE(attack_session_accumulation_bounded)
 // ============================================================================
 // ATTACK 8: Epoch boundary race — nonce for current+1 before block arrives
 //
-// Threat: Attacker sends nonce for epoch N+1 while most nodes are still
-// on epoch N. The session is created early. When the real epoch N+1
-// starts, honest oracles generate nonces, but the attacker's fake
-// nonce for some oracle_id is already in the session.
+// Threat: A valid, authenticated nonce for epoch N+1 arrives while most
+// nodes are still on epoch N. The session is created early so the nonce is
+// retained for the epoch-boundary ceremony.
 //
-// Defense: Same as attack #2 — first-writer-wins. The fake nonce blocks
-// the real one. This is the same unauthenticated nonce problem.
+// Defense: net_processing authenticates MuSig2 nonce messages before they
+// reach the orchestrator. Once authenticated, early nonces must be accepted
+// so fast P2P relay does not lose a valid participant.
 // ============================================================================
 BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
 {
@@ -517,10 +517,10 @@ BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
     BOOST_REQUIRE(session != nullptr);
     BOOST_CHECK_EQUAL(session->GetState(), MuSig2SessionState::CREATED);
 
-    // Attacker injects a nonce for oracle 0 via IngestRemoteNonce
-    OracleMusigNonceMsg fake_msg;
-    fake_msg.epoch = 11;
-    fake_msg.oracle_id = 0;
+    // An authenticated gateway injects a nonce for oracle 0 via IngestRemoteNonce.
+    OracleMusigNonceMsg remote_msg;
+    remote_msg.epoch = 11;
+    remote_msg.oracle_id = 0;
 
     // Generate a valid-looking pubnonce
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
@@ -547,25 +547,17 @@ BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
 
     unsigned char ser[66];
     BOOST_REQUIRE(secp256k1_musig_pubnonce_serialize(ctx, ser, &pubnonce));
-    fake_msg.pubnonce.assign(ser, ser + 66);
+    remote_msg.pubnonce.assign(ser, ser + 66);
 
     // Inject via orchestrator
-    orch.IngestRemoteNonce(fake_msg);
+    orch.IngestRemoteNonce(remote_msg);
 
-    // Session is still CREATED because IngestRemoteNonce calls
-    // session->AddPubnonce which requires state NONCES_COLLECTING.
-    // The session hasn't been initialized yet (no GenerateNonce called).
-    BOOST_CHECK_EQUAL(session->GetState(), MuSig2SessionState::CREATED);
-
-    // FINDING: The epoch boundary race is partially mitigated by the
-    // session state machine. IngestRemoteNonce can only add nonces
-    // to sessions in NONCES_COLLECTING state. A pre-created session
-    // in CREATED state won't accept remote nonces.
-    //
-    // However, once the orchestrator's OnBlockConnected runs and
-    // calls GenerateNonce (moving to NONCES_COLLECTING), subsequent
-    // IngestRemoteNonce calls WILL accept nonces. The window is
-    // between GenerateNonce and when honest nonces arrive.
+    // Regression for DD-RH-045: the orchestrator must initialize a passive
+    // session before adding the first remote nonce. Before the fix this stayed
+    // CREATED and silently dropped the early nonce.
+    BOOST_CHECK_EQUAL(session->GetNonceCount(), 1U);
+    BOOST_CHECK(session->GetState() == MuSig2SessionState::NONCES_COLLECTING ||
+                session->GetState() == MuSig2SessionState::NONCES_COMPLETE);
 
     secp256k1_context_destroy(ctx);
 }

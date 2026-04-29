@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <boost/test/unit_test.hpp>
+#include <arith_uint256.h>
+#include <crypto/sha256.h>
 #include <logging.h>
 #include <util/strencodings.h>
 
@@ -19,6 +21,27 @@
 #include <util/time.h>
 
 BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_tests, RegTestingSetup)
+
+static CKey GetRegtestBundleOracleKey(uint32_t oracle_id)
+{
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
+
+    CKey key;
+    key.Set(hash.begin(), hash.end(), true);
+    return key;
+}
+
+static COraclePriceMessage MakeRegtestOracleMessage(uint32_t oracle_id, uint64_t price, int64_t timestamp)
+{
+    CKey key = GetRegtestBundleOracleKey(oracle_id);
+    COraclePriceMessage msg(oracle_id, price, timestamp);
+    msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(msg.VerifyPhase2());
+    return msg;
+}
 
 /**
  * Test Phase One: 1-of-1 Consensus Bundle Creation
@@ -344,6 +367,21 @@ BOOST_AUTO_TEST_CASE(register_seen_hash_dedup)
     BOOST_CHECK(!manager.HasOracleMessage(random_hash));
 }
 
+BOOST_AUTO_TEST_CASE(register_seen_hash_caps_untrusted_p2p_hashes)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    constexpr int max_seen_hashes = 2048;
+    for (int i = 0; i <= max_seen_hashes; ++i) {
+        manager.RegisterSeenHash(ArithToUint256(i));
+    }
+
+    BOOST_CHECK(!manager.HasOracleMessage(ArithToUint256(0)));
+    BOOST_CHECK(manager.HasOracleMessage(ArithToUint256(1)));
+    BOOST_CHECK(manager.HasOracleMessage(ArithToUint256(max_seen_hashes)));
+}
+
 /**
  * Test that AddOracleMessage + RegisterSeenHash together prevent duplicate log spam
  *
@@ -426,6 +464,47 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_accepted)
     BOOST_CHECK_EQUAL(attestations[0].oracle_id, 0u);
     BOOST_CHECK_EQUAL(attestations[0].price_micro_usd, consensus_price);
     BOOST_CHECK_EQUAL(attestations[0].timestamp, consensus_timestamp);
+}
+
+BOOST_AUTO_TEST_CASE(consensus_attestation_requires_exact_local_consensus_values)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4);
+
+    const uint64_t consensus_price = 7000;
+    const int64_t consensus_timestamp = GetTime();
+
+    CKey oracle_key = GetRegtestBundleOracleKey(0);
+    OracleNode node;
+    node.Initialize(0, oracle_key, oracle_key.GetPubKey());
+
+    COraclePriceMessage no_local_consensus = node.CreateConsensusAttestation(consensus_price, consensus_timestamp);
+    BOOST_CHECK_MESSAGE(no_local_consensus.schnorr_sig.empty(),
+        "oracle must not sign externally proposed consensus values without local pending-message quorum");
+
+    for (uint32_t oracle_id = 0; oracle_id < 4; ++oracle_id) {
+        manager.InjectTestMessage(MakeRegtestOracleMessage(oracle_id, consensus_price, consensus_timestamp));
+    }
+
+    uint64_t computed_price = 0;
+    int64_t computed_timestamp = 0;
+    BOOST_REQUIRE(manager.ComputeConsensusValues(computed_price, computed_timestamp));
+    BOOST_CHECK_EQUAL(computed_price, consensus_price);
+    BOOST_CHECK_EQUAL(computed_timestamp, consensus_timestamp);
+
+    COraclePriceMessage valid_attestation = node.CreateConsensusAttestation(computed_price, computed_timestamp);
+    BOOST_CHECK(!valid_attestation.schnorr_sig.empty());
+    BOOST_CHECK(valid_attestation.VerifyPhase2());
+
+    COraclePriceMessage wrong_price = node.CreateConsensusAttestation(computed_price + 1, computed_timestamp);
+    BOOST_CHECK_MESSAGE(wrong_price.schnorr_sig.empty(),
+        "oracle must not sign a consensus price that differs from local consensus");
+
+    COraclePriceMessage wrong_timestamp = node.CreateConsensusAttestation(computed_price, computed_timestamp + 1);
+    BOOST_CHECK_MESSAGE(wrong_timestamp.schnorr_sig.empty(),
+        "oracle must not sign a consensus timestamp that differs from local consensus");
 }
 
 /**

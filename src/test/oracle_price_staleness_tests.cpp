@@ -20,7 +20,10 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <oracle/bundle_manager.h>
+#include <oracle/node.h>
 #include <primitives/oracle.h>
+#include <test/util/setup_common.h>
 #include <util/time.h>
 
 #include <cstdint>
@@ -243,6 +246,52 @@ BOOST_AUTO_TEST_CASE(oracle_constants_sane)
     // DGB price of $1.00 is within range
     BOOST_CHECK(1000000 >= ORACLE_MIN_PRICE_MICRO_USD);
     BOOST_CHECK(1000000 <= ORACLE_MAX_PRICE_MICRO_USD);
+}
+
+BOOST_FIXTURE_TEST_CASE(cache_reload_must_not_refresh_stale_oracle_timestamp, BasicTestingSetup)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    const int64_t oracle_timestamp = 1700000000;
+    const int64_t reload_time = oracle_timestamp + ORACLE_MAX_AGE_SECONDS + 1;
+    const CAmount stale_price = 500000;
+
+    SetMockTime(reload_time);
+
+    // Simulate the startup/reconnect path loading a historical oracle bundle.
+    // The cache must remain stale because the oracle data itself is older than
+    // ORACLE_MAX_AGE_SECONDS, even though the local node touched it just now.
+    manager.UpdatePriceCache(1000, stale_price, oracle_timestamp);
+
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 0);
+    OracleBundleManager::OracleStats stats = manager.GetStats();
+    BOOST_CHECK_EQUAL(stats.latest_price, 0);
+    BOOST_CHECK(!stats.has_consensus);
+
+    SetMockTime(0);
+    manager.Clear();
+}
+
+BOOST_FIXTURE_TEST_CASE(recent_broadcast_price_does_not_authorize_stale_rebroadcast, BasicTestingSetup)
+{
+    OracleNode node;
+    const int64_t now = 1700000000;
+    const CAmount price = 500000;
+
+    SetMockTime(now);
+    node.SetBroadcastInterval(0);
+    node.InjectTestPriceState(
+        price,
+        now - ORACLE_MAX_AGE_SECONDS - 1,
+        price,
+        now - 60);
+
+    BOOST_CHECK(node.HasValidPrice());
+    BOOST_CHECK(!node.ShouldBroadcastForTesting());
+
+    SetMockTime(0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

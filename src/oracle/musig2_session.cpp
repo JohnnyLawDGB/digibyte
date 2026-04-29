@@ -55,6 +55,7 @@ MuSig2SigningSession::MuSig2SigningSession(MuSig2SigningSession&& other) noexcep
 
     m_keyagg_cache = other.m_keyagg_cache;
     m_pubnonces = std::move(other.m_pubnonces);
+    m_participants_frozen = other.m_participants_frozen;
     m_aggnonce = other.m_aggnonce;
     m_session = other.m_session;
     m_partial_sigs = std::move(other.m_partial_sigs);
@@ -91,6 +92,7 @@ MuSig2SigningSession& MuSig2SigningSession::operator=(MuSig2SigningSession&& oth
 
     m_keyagg_cache = other.m_keyagg_cache;
     m_pubnonces = std::move(other.m_pubnonces);
+    m_participants_frozen = other.m_participants_frozen;
     m_aggnonce = other.m_aggnonce;
     m_session = other.m_session;
     m_partial_sigs = std::move(other.m_partial_sigs);
@@ -188,6 +190,7 @@ bool MuSig2SigningSession::AddPubnonce(uint8_t oracle_id,
 
     // Reject duplicate oracle ID
     if (m_pubnonces.count(oracle_id)) return false;
+    if (m_participants_frozen) return false;
 
     // Reject oracle IDs outside configured active set to prevent malformed
     // participation bitmaps and invalid signer transitions.
@@ -248,7 +251,10 @@ std::vector<uint8_t> MuSig2SigningSession::GetNonceParticipants() const
 void MuSig2SigningSession::TrimNoncesToThreshold()
 {
     LOCK(m_mutex);
-    if (m_pubnonces.size() <= m_min_signers) return;
+    if (m_pubnonces.size() <= m_min_signers) {
+        m_participants_frozen = true;
+        return;
+    }
 
     // Keep only the first m_min_signers nonces (lowest oracle IDs).
     // std::map is sorted by key, so we keep the lowest IDs.
@@ -256,6 +262,7 @@ void MuSig2SigningSession::TrimNoncesToThreshold()
     std::advance(it, m_min_signers);
     size_t removed = std::distance(it, m_pubnonces.end());
     m_pubnonces.erase(it, m_pubnonces.end());
+    m_participants_frozen = true;
     LogPrintf("Oracle: Trimmed nonces from %zu to %zu (threshold=%zu)\n",
              m_pubnonces.size() + removed, m_pubnonces.size(), m_min_signers);
 }

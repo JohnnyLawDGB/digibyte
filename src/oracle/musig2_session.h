@@ -231,6 +231,7 @@ private:
 
     //! Collected public nonces, keyed by oracle_id
     std::map<uint8_t, secp256k1_musig_pubnonce> m_pubnonces GUARDED_BY(m_mutex);
+    bool m_participants_frozen GUARDED_BY(m_mutex){false};
 
     //! Aggregate nonce (computed from collected pubnonces)
     secp256k1_musig_aggnonce m_aggnonce GUARDED_BY(m_mutex);

@@ -905,6 +905,52 @@ BOOST_AUTO_TEST_CASE(test_stale_message_mixed_bundle)
 }
 
 /**
+ * Bug: Pending-message price cache used a different even-count median than
+ * consensus bundle validation.
+ *
+ * A live 4-of-7 pending set [10000, 10000, 20000, 20000] must expose the same
+ * price that a block would later validate: (10000 + 20000) / 2 = 15000.
+ */
+BOOST_AUTO_TEST_CASE(test_pending_cache_uses_consensus_median)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4);
+
+    std::vector<CKey> keys(4);
+    for (int i = 0; i < 4; i++) {
+        std::string seed = "digibyte_regtest_oracle_" + std::to_string(i);
+        uint256 hash;
+        CSHA256().Write((const unsigned char*)seed.data(), seed.size()).Finalize(hash.begin());
+        keys[i].Set(hash.begin(), hash.end(), true);
+    }
+
+    const int64_t now = GetTime();
+    const std::array<uint64_t, 4> prices{{10000, 10000, 20000, 20000}};
+
+    COracleBundle expected_bundle;
+    for (int i = 0; i < 4; i++) {
+        COraclePriceMessage msg;
+        msg.oracle_id = i;
+        msg.price_micro_usd = prices[i];
+        msg.timestamp = now + i;
+        msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
+        BOOST_REQUIRE(msg.SignPhase2(keys[i]));
+
+        expected_bundle.messages.push_back(msg);
+        BOOST_REQUIRE(manager.AddOracleMessage(msg));
+    }
+
+    const CAmount consensus_price = manager.CalculateConsensusPrice(expected_bundle, Params().GetConsensus());
+    BOOST_REQUIRE_EQUAL(consensus_price, 15000);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), consensus_price);
+
+    manager.Clear();
+    manager.SetEnabled(false);
+}
+
+/**
  * Final cleanup test - MUST RUN LAST
  * Cleans up Oracle singleton state to prevent interference with other test suites
  * This test is placed in oracle_p2p_tests (last oracle test alphabetically) to ensure

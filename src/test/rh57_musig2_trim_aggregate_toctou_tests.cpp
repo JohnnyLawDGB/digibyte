@@ -282,18 +282,14 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     BOOST_REQUIRE(KeyAgg(ctx, pk_ptrs_trim, agg_pk_trim, cache_trim));
 
     // ────────────────────────────────────────────────────────
-    // Phase 4: ★ THE RACE ★
-    //
-    // Attacker submits oracle 4's (previously-trimmed) pubnonce BEFORE
-    // the orchestrator reaches AggregateNonces. AddPubnonce admits it
-    // because nothing in its check set notices that 4 was trimmed or
-    // that the orchestrator has already decided on a participant set.
+    // Phase 4: attack attempt. Oracle 4 was trimmed out of the selected
+    // participant set and must not be able to re-enter before AggregateNonces.
     // ────────────────────────────────────────────────────────
     bool late_accepted = session.AddPubnonce(4, ext_pn[4]);
-    BOOST_CHECK_MESSAGE(late_accepted,
-        "RH-57 exploit precondition: AddPubnonce MUST accept a late "
-        "pubnonce between Trim and Aggregate — it has no defense.");
-    BOOST_CHECK_EQUAL(session.GetNonceCount(), static_cast<size_t>(T + 1));
+    BOOST_CHECK_MESSAGE(!late_accepted,
+        "RH-57 defense: AddPubnonce must reject a late pubnonce after "
+        "TrimNoncesToThreshold freezes the participant set.");
+    BOOST_CHECK_EQUAL(session.GetNonceCount(), static_cast<size_t>(T));
 
     // ────────────────────────────────────────────────────────
     // Phase 5: orchestrator step 3 — SetKeyAggCache to the 4-key cache
@@ -306,15 +302,13 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
 
     bool agg_ok = session.AggregateNonces(msg32);
     BOOST_CHECK_MESSAGE(agg_ok,
-        "Session proceeds to SIGNING state even though the aggnonce was "
-        "built from 5 pubnonces and the keyagg cache represents only 4 "
-        "participants — the mismatch is silent.");
+        "Session should proceed to SIGNING with the frozen 4-participant set.");
     BOOST_CHECK(session.GetState() == MuSig2SessionState::SIGNING);
 
     // ────────────────────────────────────────────────────────
-    // Phase 6: complete the signing protocol and show the aggregate
-    //          does NOT verify under the 4-participant aggregate
-    //          pubkey that validators reconstruct from the bitmap.
+    // Phase 6: complete the signing protocol and prove the aggregate verifies
+    //          under the same 4-participant aggregate pubkey validators
+    //          reconstruct from the bitmap.
     // ────────────────────────────────────────────────────────
     // Local (oracle 0) partial sig via the session's own API.
     secp256k1_musig_partial_sig psig0;
@@ -322,26 +316,19 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     BOOST_CHECK(session.AddPartialSignature(0, psig0));
 
     // Remote oracles 1..3 partial sigs via the raw secp256k1 API, using
-    // the same corrupted session state (aggnonce over 5, cache over 4).
-    // To produce these externally we replay the orchestrator's internal
-    // state — aggnonce over all 5 pubnonces, cache over 4 participants.
-    std::vector<const secp256k1_musig_pubnonce*> pn_corr_ptrs;
-    for (uint8_t id : trimmed_ids) pn_corr_ptrs.push_back(&ext_pn[id]);
-    pn_corr_ptrs.push_back(&ext_pn[4]);  // the raced-in late nonce
-    BOOST_CHECK_EQUAL(pn_corr_ptrs.size(), static_cast<size_t>(T + 1));
+    // the same frozen participant set.
+    std::vector<const secp256k1_musig_pubnonce*> pn_ptrs;
+    for (uint8_t id : trimmed_ids) pn_ptrs.push_back(&ext_pn[id]);
+    BOOST_CHECK_EQUAL(pn_ptrs.size(), static_cast<size_t>(T));
 
-    secp256k1_musig_aggnonce aggn_corr;
-    BOOST_REQUIRE(secp256k1_musig_nonce_agg(ctx, &aggn_corr,
-                                            pn_corr_ptrs.data(),
-                                            pn_corr_ptrs.size()));
+    secp256k1_musig_aggnonce aggn;
+    BOOST_REQUIRE(secp256k1_musig_nonce_agg(ctx, &aggn,
+                                            pn_ptrs.data(),
+                                            pn_ptrs.size()));
     secp256k1_musig_session raw_sess;
-    BOOST_REQUIRE(secp256k1_musig_nonce_process(ctx, &raw_sess, &aggn_corr,
+    BOOST_REQUIRE(secp256k1_musig_nonce_process(ctx, &raw_sess, &aggn,
                                                 msg32, &cache_trim));
 
-    // Remote partial sigs from oracles 1,2,3 produced against the same
-    // corrupted raw session. Each oracle dutifully signs — they're
-    // honest, they have no way to see the orchestrator's keyagg/aggnonce
-    // mismatch.
     for (uint8_t id : {1, 2, 3}) {
         secp256k1_musig_partial_sig psig;
         BOOST_REQUIRE(secp256k1_musig_partial_sign(ctx, &psig, &ext_sn[id],
@@ -357,35 +344,20 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     BOOST_CHECK(final_agg_ok);
     BOOST_CHECK_EQUAL(sig64.size(), 64u);
 
-    // ★ THE HARM ★
-    // Validator reconstructs aggregate pubkey from the bitmap {0,1,2,3}
-    // and verifies the 64-byte sig against msg32. Because the miner's
-    // aggnonce carries contributions from 5 secnonces but the
-    // participants-only cache + pubkey are for 4, the sig fails BIP-340
-    // Schnorr verification. Block-level rejection.
     int verify_under_trimmed = secp256k1_schnorrsig_verify(
         ctx, sig64.data(), msg32, 32, &agg_pk_trim);
 
-    // Defensive: also check against the full-set aggregate in case
-    // someone argues "well, maybe it verifies under the full cache".
     int verify_under_full = secp256k1_schnorrsig_verify(
         ctx, sig64.data(), msg32, 32, &agg_pk_all);
 
-    BOOST_CHECK_MESSAGE(verify_under_trimmed == 0,
-        "RH-57 CONFIRMED: corrupted aggregate fails Schnorr verify under "
-        "the validator-reconstructed (4-participant) aggregate pubkey. "
-        "Per-epoch DoS on oracle attestation.");
+    BOOST_CHECK_MESSAGE(verify_under_trimmed == 1,
+        "RH-57 defense: aggregate should verify under the validator-reconstructed "
+        "4-participant aggregate pubkey.");
     BOOST_CHECK_MESSAGE(verify_under_full == 0,
-        "Sanity: corrupted aggregate also fails under full-set pubkey — "
-        "the sig is just plain broken, not merely addressed to the wrong "
-        "aggregator.");
+        "Sanity: threshold signature should not verify under the full-set pubkey.");
 
-    BOOST_TEST_MESSAGE("rh57 CONFIRMED: Trim→Aggregate TOCTOU — late "
-                       "AddPubnonce produces a non-verifying aggregate. "
-                       "Schnorr verify under trimmed aggregate pubkey = "
-                       << verify_under_trimmed
-                       << "; under full aggregate pubkey = "
-                       << verify_under_full);
+    BOOST_TEST_MESSAGE("rh57 defense holds: late AddPubnonce rejected and "
+                       "aggregate verifies under trimmed aggregate pubkey.");
 
     secp256k1_context_destroy(ctx);
 }
@@ -438,21 +410,18 @@ BOOST_AUTO_TEST_CASE(rh57_trim_does_not_freeze_pubnonces)
     // Trim to threshold.
     session.TrimNoncesToThreshold();
 
-    // Invariant 1: state is still NONCES_COMPLETE (not a new FROZEN / SELECTED state).
-    BOOST_CHECK_MESSAGE(session.GetState() == MuSig2SessionState::NONCES_COMPLETE,
-        "RH-57: TrimNoncesToThreshold does not transition to a new "
-        "participant-set-frozen state — AddPubnonce still accepts late "
-        "arrivals.");
+    // Invariant: after trimming, the participant set is frozen even though
+    // the public state remains NONCES_COMPLETE until AggregateNonces().
+    BOOST_CHECK(session.GetState() == MuSig2SessionState::NONCES_COMPLETE);
 
-    // Invariant 2: every trimmed oracle id can re-enter via AddPubnonce.
-    // This is the direct attacker primitive.
+    // Trimmed oracle IDs must not be able to re-enter via late AddPubnonce.
     for (uint8_t id : {4, 5, 6}) {
         bool ok = session.AddPubnonce(id, ext_pn[id]);
-        BOOST_CHECK_MESSAGE(ok,
+        BOOST_CHECK_MESSAGE(!ok,
             "RH-57: late AddPubnonce for trimmed oracle_id "
-            << (int)id << " is accepted — no defense in depth.");
+            << (int)id << " must be rejected after participant freeze.");
     }
-    BOOST_CHECK_EQUAL(session.GetNonceCount(), static_cast<size_t>(N));
+    BOOST_CHECK_EQUAL(session.GetNonceCount(), static_cast<size_t>(T));
 
     secp256k1_context_destroy(ctx);
 }

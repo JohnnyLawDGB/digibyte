@@ -119,6 +119,12 @@ public:
 
     bool BroadcastPriceMessage(const COraclePriceMessage& message);
 
+    /** Test-only: inject price freshness state without running the price thread. */
+    void InjectTestPriceState(CAmount current_price_in, int64_t last_update_time_in,
+                              CAmount last_broadcast_price_in, int64_t last_broadcast_timestamp_in);
+    /** Test-only: expose broadcast-gating decision for staleness regressions. */
+    bool ShouldBroadcastForTesting() const { return ShouldBroadcast(); }
+
 private:
     //! Main thread function
     void PriceThreadFunc();
@@ -126,6 +132,8 @@ private:
     //! Price fetching
     void FetchAndUpdatePrice();
     CAmount FetchMedianPrice();
+    bool HasFreshExchangePrice() const;
+    CAmount GetFreshExchangePrice() const;
 
     //! Price broadcasting
     void BroadcastCurrentPrice();

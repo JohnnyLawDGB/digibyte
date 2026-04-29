@@ -205,38 +205,37 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
         std::lock_guard<std::recursive_mutex> pending_lock(mtx_messages);
         int fresh_count = static_cast<int>(pending_messages.size());
         if (fresh_count >= min_oracle_count) {
-            // Calculate median of fresh pending messages for consensus price
-            std::vector<uint64_t> prices;
-            prices.reserve(pending_messages.size());
-            for (const auto& pair : pending_messages) {
-                prices.push_back(pair.second.price_micro_usd);
+            COracleBundle temp;
+            temp.messages.reserve(pending_messages.size());
+            for (const auto& [id, m] : pending_messages) {
+                temp.messages.push_back(m);
             }
-            std::sort(prices.begin(), prices.end());
-            uint64_t median_price = prices[prices.size() / 2];
+
+            const Consensus::Params& cparams = Params().GetConsensus();
+            const CAmount consensus_price = CalculateConsensusPrice(temp, cparams);
+            if (consensus_price <= 0) {
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: %d fresh messages reached threshold but no valid consensus price was calculated\n",
+                         fresh_count);
+                m_messages_updated_cv.notify_all();
+                return true;
+            }
 
             std::lock_guard<std::mutex> price_lock(mtx_bundles);
-            cached_price = static_cast<CAmount>(median_price);
+            cached_price = consensus_price;
             last_update_time = GetTime();
             LogPrintf("Oracle: Updated cached price with %d/%d oracles in consensus (min %d required): %llu micro-USD ($%.6f)\n",
                      fresh_count, (int)pending_messages.size(), min_oracle_count,
-                     median_price, median_price / 1000000.0);
+                     static_cast<uint64_t>(consensus_price), consensus_price / 1000000.0);
 
             // T5-03: When consensus is reached from individual messages, try to generate
             // consensus attestations from local oracle nodes. Each oracle signs
             // H(oracle_id, consensus_price, consensus_timestamp) so the signature verifies
             // when stored on-chain with the consensus values.
             if (min_oracle_count > 1) {
-                uint64_t att_consensus_price = 0;
+                uint64_t att_consensus_price = static_cast<uint64_t>(consensus_price);
                 int64_t att_consensus_timestamp = 0;
                 // Compute consensus values (median price + median timestamp)
-                COracleBundle temp;
-                for (const auto& [id, m] : pending_messages) {
-                    temp.messages.push_back(m);
-                }
-                const Consensus::Params& cparams = Params().GetConsensus();
-                CAmount cp = CalculateConsensusPrice(temp, cparams);
-                if (cp > 0) {
-                    att_consensus_price = static_cast<uint64_t>(cp);
+                {
                     std::vector<int64_t> ts;
                     for (const auto& m : temp.messages) ts.push_back(m.timestamp);
                     std::sort(ts.begin(), ts.end());
@@ -247,7 +246,7 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
                     // Proactive broadcast: send consensus proposal when quorum is reached
                     // This ensures remote oracles get the proposal BEFORE any block template is needed
                     // Use cached_epoch, or fallback to a conservative estimate if not set
-                    int32_t epoch_for_broadcast = (cached_epoch >= 0) ? cached_epoch : 
+                    int32_t epoch_for_broadcast = (cached_epoch >= 0) ? cached_epoch :
                                                    static_cast<int32_t>(GetTime() / (1440 * 15));  // 1440 blocks * 15 seconds/block
                     BroadcastConsensusProposal(epoch_for_broadcast, att_consensus_price, att_consensus_timestamp);
 
@@ -445,6 +444,35 @@ bool OracleBundleManager::ComputeConsensusValues(uint64_t& consensus_price, int6
         consensus_timestamp = (timestamps[mid - 1] + timestamps[mid]) / 2;
     } else {
         consensus_timestamp = timestamps[mid];
+    }
+
+    return true;
+}
+
+bool OracleBundleManager::ValidateConsensusProposal(uint64_t consensus_price, int64_t consensus_timestamp) const
+{
+    if (consensus_price < ORACLE_MIN_PRICE_MICRO_USD ||
+        consensus_price > ORACLE_MAX_PRICE_MICRO_USD) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Rejecting consensus proposal with out-of-range price=%llu\n",
+                 consensus_price);
+        return false;
+    }
+
+    uint64_t local_price = 0;
+    int64_t local_timestamp = 0;
+    if (!ComputeConsensusValues(local_price, local_timestamp)) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Rejecting consensus proposal price=%llu timestamp=%lld: no local quorum\n",
+                 consensus_price, consensus_timestamp);
+        return false;
+    }
+
+    if (local_price != consensus_price || local_timestamp != consensus_timestamp) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Rejecting consensus proposal price=%llu timestamp=%lld: local price=%llu timestamp=%lld\n",
+                 consensus_price, consensus_timestamp, local_price, local_timestamp);
+        return false;
     }
 
     return true;
@@ -1870,10 +1898,12 @@ OracleBundleManager::OracleStats OracleBundleManager::GetStats() const
     {
         std::lock_guard<std::mutex> lock(mtx_bundles);
         stats.active_bundles = epoch_bundles.size();
-        stats.latest_price = cached_price;
+        const bool fresh_price = cached_price > 0 && last_update_time > 0 &&
+            (GetTime() - last_update_time) <= ORACLE_MAX_AGE_SECONDS;
+        stats.latest_price = fresh_price ? cached_price : 0;
         stats.latest_epoch = cached_epoch;
         stats.last_update = last_update_time;
-        stats.has_consensus = cached_price > 0;
+        stats.has_consensus = stats.latest_price > 0;
     }
 
     return stats;
@@ -1976,7 +2006,7 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
         COracleBundle bundle;
         if (manager.ExtractOracleBundle(coinbase, bundle)) {
             if (bundle.median_price_micro_usd > 0) {
-                manager.UpdatePriceCache(height, bundle.median_price_micro_usd);
+                manager.UpdatePriceCache(height, bundle.median_price_micro_usd, bundle.timestamp);
                 prices_found++;
                 LogPrintf("Oracle: Found price %llu micro-USD at height %d\n",
                          bundle.median_price_micro_usd, height);
@@ -2019,6 +2049,7 @@ void OracleBundleManager::Clear()
     {
         std::lock_guard<std::mutex> lock(mtx_price_cache);
         height_to_price.clear();
+        height_to_price_time.clear();
     }
 
     m_messages_updated_cv.notify_all();
@@ -2185,16 +2216,21 @@ bool OracleBundleManager::HasRequiredSignatures(const COracleBundle& bundle, int
     return valid_signatures >= static_cast<size_t>(min_oracle_count);
 }
 
-void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd)
+void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd, int64_t source_time)
 {
+    const int64_t effective_update_time = source_time > 0 ? source_time : GetTime();
+
     // Update the height-to-price map
     {
         std::lock_guard<std::mutex> lock(mtx_price_cache);
         height_to_price[height] = price_micro_usd;
+        height_to_price_time[height] = effective_update_time;
 
         // Keep cache size limited (last 1000 blocks)
         if (height_to_price.size() > 1000) {
+            const int erase_height = height_to_price.begin()->first;
             height_to_price.erase(height_to_price.begin());
+            height_to_price_time.erase(erase_height);
         }
     }
 
@@ -2204,11 +2240,11 @@ void OracleBundleManager::UpdatePriceCache(int height, uint64_t price_micro_usd)
     {
         std::lock_guard<std::mutex> lock(mtx_bundles);
         cached_price = static_cast<CAmount>(price_micro_usd);
-        last_update_time = GetTime();
+        last_update_time = effective_update_time;
     }
 
-    LogPrintf("Oracle: Price cache updated for height %d: %llu micro-USD ($%.6f) - cached_price updated\n",
-             height, price_micro_usd, price_micro_usd / 1000000.0);
+    LogPrintf("Oracle: Price cache updated for height %d: %llu micro-USD ($%.6f), source_time=%lld - cached_price updated\n",
+             height, price_micro_usd, price_micro_usd / 1000000.0, (long long)effective_update_time);
 }
 
 uint64_t OracleBundleManager::GetOraclePriceForHeight(int height) const
@@ -2233,11 +2269,16 @@ void OracleBundleManager::RemovePriceCache(int height)
     auto it = height_to_price.find(height);
     if (it != height_to_price.end()) {
         height_to_price.erase(it);
+        height_to_price_time.erase(height);
         // Revert cached_price to highest remaining height's price
         if (!height_to_price.empty()) {
+            const int restored_height = height_to_price.rbegin()->first;
             cached_price = height_to_price.rbegin()->second;
+            auto time_it = height_to_price_time.find(restored_height);
+            last_update_time = time_it != height_to_price_time.end() ? time_it->second : 0;
         } else {
             cached_price = 0;
+            last_update_time = 0;
         }
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Removed price cache for height %d, cached_price reverted to %d\n", height, cached_price);
     }
@@ -2717,6 +2758,12 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
     // Pre-condition: must be a v0x03 bundle
     if (bundle.version != 3) {
         error = "ValidatePhaseThreeBundle called with non-v0x03 bundle (version=" + std::to_string(bundle.version) + ")";
+        return false;
+    }
+
+    if (bundle.median_price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
+        bundle.median_price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
+        error = "v0x03 consensus price out of range (" + std::to_string(bundle.median_price_micro_usd) + ")";
         return false;
     }
 

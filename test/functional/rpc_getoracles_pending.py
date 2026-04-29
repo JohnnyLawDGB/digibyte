@@ -14,11 +14,29 @@ Validates that:
 """
 
 from test_framework.test_framework import DigiByteTestFramework
+from test_framework.messages import msg_getoracles
+from test_framework.p2p import P2PInterface, p2p_lock
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
     assert_greater_than_or_equal,
 )
+
+ORACLE_MAX_AGE_SECONDS = 3600
+REGTEST_ORACLE_EPOCH_BLOCKS = 10
+
+
+class OraclePriceReceiver(P2PInterface):
+    def __init__(self):
+        super().__init__()
+        self.oracle_prices = []
+
+    def on_oracleprice(self, message):
+        self.oracle_prices.append(message)
+
+    def clear_prices(self):
+        with p2p_lock:
+            self.oracle_prices.clear()
 
 
 class GetOraclesPendingTest(DigiByteTestFramework):
@@ -37,9 +55,9 @@ class GetOraclesPendingTest(DigiByteTestFramework):
         self.log.info("=== Testing getoracles and getalloracleprices RPCs ===")
         node = self.nodes[0]
 
-        # Generate blocks past maturity
+        # Generate blocks past DigiDollar/oracle activation.
         self.log.info("Generating initial blocks...")
-        self.generate(node, 110)
+        self.generate(node, 660)
 
         # Set mock oracle price so the system is active
         node.setmockoracleprice(6000)
@@ -50,6 +68,7 @@ class GetOraclesPendingTest(DigiByteTestFramework):
         self.test_getalloracleprices_returns_all(node)
         self.test_getalloracleprices_field_types(node)
         self.test_oracle_names_present(node)
+        self.test_getoracles_p2p_does_not_resend_stale_pending(node)
 
         self.log.info("=== All getoracles/getalloracleprices tests passed! ===")
 
@@ -218,6 +237,31 @@ class GetOraclesPendingTest(DigiByteTestFramework):
                 assert_equal(oracle["name"], expected_names[oid])
 
         self.log.info(f"  All {len(expected_names)} oracle names verified")
+
+    def test_getoracles_p2p_does_not_resend_stale_pending(self, node):
+        """GETORACLES should serve fresh pending data but skip stale entries."""
+        self.log.info("Test: P2P getoracles skips stale pending oracle messages")
+
+        base_time = 1777417000
+        node.setmocktime(base_time)
+        node.submitoracleprice(0, 50000)
+
+        peer = node.add_p2p_connection(OraclePriceReceiver())
+        epoch = node.getblockcount() // REGTEST_ORACLE_EPOCH_BLOCKS
+
+        peer.send_message(msg_getoracles(epoch=epoch, oracle_id=0))
+        peer.wait_until(lambda: len(peer.oracle_prices) == 1, timeout=5)
+
+        with p2p_lock:
+            assert_equal(peer.oracle_prices[0].timestamp, base_time)
+
+        peer.clear_prices()
+        node.setmocktime(base_time + ORACLE_MAX_AGE_SECONDS + 1)
+        peer.send_and_ping(msg_getoracles(epoch=epoch, oracle_id=0))
+
+        with p2p_lock:
+            assert_equal(len(peer.oracle_prices), 0)
+        self.log.info("  Stale pending oracle message was not resent")
 
 
 if __name__ == '__main__':

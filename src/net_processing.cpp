@@ -5615,22 +5615,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         vRecv >> bundle_msg;
 
         // ── Step 2: Duplicate check (silent return) ──
-        static std::set<uint256> seen_bundle_hashes;
-        static int64_t last_bundle_cleanup = 0;
-        int64_t now = GetTime();
-
-        if (now - last_bundle_cleanup > 7200) {
-            seen_bundle_hashes.clear();
-            last_bundle_cleanup = now;
-        }
-
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
         uint256 bundle_hash = bundle_msg.GetHash();
-        if (seen_bundle_hashes.count(bundle_hash) > 0) {
+        if (bundleManager.HasOracleMessage(bundle_hash)) {
             LogPrint(BCLog::NET, "Ignoring duplicate oracle bundle epoch=%d peer=%d\n",
                      bundle_msg.bundle.epoch, pfrom.GetId());
             return;
         }
-        seen_bundle_hashes.insert(bundle_hash);
+        bundleManager.RegisterSeenHash(bundle_hash);
 
         // ── Step 3: Signature verification EARLY on all messages in the bundle ──
         // Verify every message signature before touching the rate limiter.
@@ -5681,6 +5673,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // ── Step 4: Rate limiting (novel, sig-verified bundles only) ──
         // Max 50 novel bundles per hour per peer.
         static std::map<NodeId, std::pair<int64_t, int>> bundle_rate_limit;
+        int64_t now = GetTime();
 
         if (bundle_rate_limit.size() > 100) {
             auto it = bundle_rate_limit.begin();
@@ -5725,7 +5718,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── Step 6: Store + relay (only relay if at least one message stored) ──
-        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
         int stored_count = 0;
         for (const auto& msg : bundle_msg.bundle.messages) {
             if (bundleManager.AddOracleMessage(msg)) {
@@ -5815,25 +5807,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── Step 6: Cross-validate against our own price data ──
-        // The proposal's price should be within IQR tolerance of our own pending messages.
-        // This prevents a rogue node from proposing arbitrary prices.
-        {
-            uint64_t our_consensus_price = 0;
-            int64_t our_consensus_timestamp = 0;
-            if (bundleManager.ComputeConsensusValues(our_consensus_price, our_consensus_timestamp)) {
-                // Check proposed price is within 10% of our computed consensus
-                int64_t price_diff = std::abs(static_cast<int64_t>(consensus_msg.consensus_price) -
-                                              static_cast<int64_t>(our_consensus_price));
-                int64_t tolerance = static_cast<int64_t>(our_consensus_price) / 10; // 10%
-                if (tolerance < 1) tolerance = 1;
-                if (price_diff > tolerance) {
-                    LogPrint(BCLog::NET, "Oracle consensus proposal price %llu too far from our %llu (diff=%lld, tol=%lld) peer=%d\n",
-                             consensus_msg.consensus_price, our_consensus_price, price_diff, tolerance, pfrom.GetId());
-                    Misbehaving(*peer, 5, "consensus proposal price mismatch");
-                    return;
-                }
-            }
-            // If we can't compute our own consensus, we can still relay and let oracles decide
+        // Consensus attestations are valid block material, so only sign/relay a
+        // proposal when it exactly matches the locally computed pending-message
+        // consensus.
+        if (!bundleManager.ValidateConsensusProposal(consensus_msg.consensus_price,
+                                                     consensus_msg.consensus_timestamp)) {
+            LogPrint(BCLog::NET, "Oracle consensus proposal rejected: price=%llu timestamp=%lld peer=%d\n",
+                     consensus_msg.consensus_price, consensus_msg.consensus_timestamp, pfrom.GetId());
+            return;
         }
 
         // ── Step 7: If we run a local oracle, create attestation and broadcast ──
@@ -6256,11 +6237,18 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         std::vector<COraclePriceMessage> pending = bundleManager.GetPendingMessages();
 
         // Send each matching oracle message to the requesting peer
+        const int64_t now = GetTime();
         int sent_count = 0;
+        int skipped_stale_count = 0;
         for (const auto& msg : pending) {
             // If specific oracle requested, only send that one
             if (request.oracle_id != 0xFFFFFFFF && msg.oracle_id != request.oracle_id)
                 continue;
+
+            if (msg.timestamp < now - ORACLE_MAX_AGE_SECONDS || msg.timestamp > now + 60) {
+                skipped_stale_count++;
+                continue;
+            }
 
             OraclePriceMsg price_msg;
             price_msg.price_message = msg;
@@ -6268,8 +6256,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             sent_count++;
         }
 
-        LogPrint(BCLog::NET, "Sent %d oracle messages to peer=%d for epoch %d request\n",
-                 sent_count, pfrom.GetId(), request.epoch);
+        LogPrint(BCLog::NET, "Sent %d oracle messages to peer=%d for epoch %d request (skipped %d stale/future)\n",
+                 sent_count, pfrom.GetId(), request.epoch, skipped_stale_count);
         return;
     }
 

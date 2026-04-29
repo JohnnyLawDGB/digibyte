@@ -14,6 +14,31 @@
 #include <algorithm>
 #include <cassert>
 
+namespace {
+
+std::vector<unsigned char> EncodeBitmapForCache(
+    const std::vector<uint8_t>& oracle_ids,
+    uint16_t total_oracles)
+{
+    if (oracle_ids.empty()) return {};
+    if (total_oracles == 0 || total_oracles > 256) return {};
+
+    size_t num_bytes = (total_oracles + 7) / 8;
+    std::vector<unsigned char> bitmap(num_bytes, 0);
+
+    for (uint8_t id : oracle_ids) {
+        if (id >= total_oracles) return {};
+        size_t byte_idx = id / 8;
+        uint8_t bit_mask = 1 << (id % 8);
+        if (bitmap[byte_idx] & bit_mask) return {};
+        bitmap[byte_idx] |= bit_mask;
+    }
+
+    return bitmap;
+}
+
+} // namespace
+
 MuSig2OracleAggregator::MuSig2OracleAggregator()
 {
     m_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
@@ -69,6 +94,12 @@ std::vector<uint8_t> MuSig2OracleAggregator::DecodeBitmap(
     size_t expected_bytes = (total_oracles + 7) / 8;
     if (bitmap.size() != expected_bytes) return {};
 
+    const uint16_t used_bits_in_last_byte = total_oracles % 8;
+    if (used_bits_in_last_byte != 0) {
+        const unsigned char unused_mask = static_cast<unsigned char>(0xffU << used_bits_in_last_byte);
+        if ((bitmap.back() & unused_mask) != 0) return {};
+    }
+
     std::vector<uint8_t> oracle_ids;
     for (uint16_t i = 0; i < total_oracles; ++i) {
         if (bitmap[i / 8] & (1 << (i % 8))) {
@@ -94,10 +125,15 @@ bool MuSig2OracleAggregator::ComputeAggregatePubkey(
     sorted_ids.erase(std::unique(sorted_ids.begin(), sorted_ids.end()), sorted_ids.end());
 
     const auto& nodes = Params().GetOracleNodes();
-    uint16_t total = static_cast<uint16_t>(nodes.size());
+    const Consensus::Params& consensus = Params().GetConsensus();
+    int required = std::max(1, consensus.nOracleConsensusRequired);
+    if (static_cast<int>(sorted_ids.size()) < required) return false;
+
+    uint16_t total = static_cast<uint16_t>(std::max(1, consensus.nOracleTotalOracles));
+    if (nodes.size() < static_cast<size_t>(total)) return false;
 
     // Encode bitmap for caching
-    auto bitmap = EncodeBitmap(sorted_ids, total);
+    auto bitmap = EncodeBitmapForCache(sorted_ids, total);
     if (bitmap.empty()) return false;
 
     // Check cache first

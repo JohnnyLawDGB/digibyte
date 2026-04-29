@@ -4,13 +4,24 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <chainparams.h>
 #include <consensus/amount.h>
+#include <crypto/sha256.h>
+#include <hash.h>
+#include <oracle/musig2_aggregator.h>
 #include <oracle/bundle_manager.h>
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
+#include <random.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
 
+#include <secp256k1.h>
+#include <secp256k1_musig.h>
+#include <secp256k1_schnorrsig.h>
+
+#include <array>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -46,6 +57,119 @@ CTransaction MakeCoinbaseTx(const CScript& oracle_script)
     coinbase.vout.push_back(oracle_out);
 
     return CTransaction(coinbase);
+}
+
+std::array<unsigned char, 32> RegtestOracleSecret(uint8_t oracle_id)
+{
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
+
+    std::array<unsigned char, 32> secret{};
+    std::memcpy(secret.data(), hash.begin(), secret.size());
+    return secret;
+}
+
+std::vector<unsigned char> EncodeBitmapForRegtest(const std::vector<uint8_t>& oracle_ids)
+{
+    const uint16_t total = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
+    std::vector<unsigned char> bitmap((total + 7) / 8, 0);
+    for (uint8_t id : oracle_ids) {
+        bitmap[id / 8] |= static_cast<unsigned char>(1U << (id % 8));
+    }
+    return bitmap;
+}
+
+bool SignRegtestV03Bundle(COracleBundle& bundle, const std::vector<uint8_t>& oracle_ids)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    const size_t n_signers = oracle_ids.size();
+    std::vector<std::array<unsigned char, 32>> seckeys(n_signers);
+    std::vector<secp256k1_keypair> keypairs(n_signers);
+    std::vector<secp256k1_pubkey> pubkeys(n_signers);
+
+    for (size_t i = 0; i < n_signers; ++i) {
+        seckeys[i] = RegtestOracleSecret(oracle_ids[i]);
+        if (!secp256k1_keypair_create(ctx, &keypairs[i], seckeys[i].data())) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+        if (!secp256k1_keypair_pub(ctx, &pubkeys[i], &keypairs[i])) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+    }
+
+    std::vector<const secp256k1_pubkey*> pubkey_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        pubkey_ptrs[i] = &pubkeys[i];
+    }
+
+    secp256k1_xonly_pubkey agg_pk{};
+    secp256k1_musig_keyagg_cache cache{};
+    if (!secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_secnonce> secnonces(n_signers);
+    std::vector<secp256k1_musig_pubnonce> pubnonces(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        unsigned char session_rand[32];
+        GetStrongRandBytes(Span{session_rand, 32});
+        if (!secp256k1_musig_nonce_gen(ctx, &secnonces[i], &pubnonces[i],
+                                       session_rand, seckeys[i].data(), &pubkeys[i],
+                                       nullptr, &cache, nullptr)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+    }
+
+    std::vector<const secp256k1_musig_pubnonce*> nonce_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        nonce_ptrs[i] = &pubnonces[i];
+    }
+
+    secp256k1_musig_aggnonce aggnonce{};
+    if (!secp256k1_musig_nonce_agg(ctx, &aggnonce, nonce_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const uint256 msg_hash = ComputeOracleBundleHash(bundle);
+    unsigned char msg32[32];
+    std::memcpy(msg32, msg_hash.begin(), sizeof(msg32));
+
+    secp256k1_musig_session session{};
+    if (!secp256k1_musig_nonce_process(ctx, &session, &aggnonce, msg32, &cache)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_partial_sig> partial_sigs(n_signers);
+    std::vector<const secp256k1_musig_partial_sig*> partial_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        if (!secp256k1_musig_partial_sign(ctx, &partial_sigs[i], &secnonces[i],
+                                          &keypairs[i], &cache, &session)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+        partial_ptrs[i] = &partial_sigs[i];
+    }
+
+    bundle.participation_bitmap = EncodeBitmapForRegtest(oracle_ids);
+    bundle.aggregate_sig.assign(64, 0);
+    if (!secp256k1_musig_partial_sig_agg(ctx, bundle.aggregate_sig.data(),
+                                         &session, partial_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const bool verifies = secp256k1_schnorrsig_verify(ctx, bundle.aggregate_sig.data(), msg32, 32, &agg_pk);
+    secp256k1_context_destroy(ctx);
+    return verifies;
 }
 
 } // namespace
@@ -108,6 +232,52 @@ BOOST_AUTO_TEST_CASE(v03_round_trip_serialization)
     BOOST_CHECK_EQUAL(decoded.timestamp, original.timestamp);
     BOOST_CHECK(decoded.participation_bitmap == original.participation_bitmap);
     BOOST_CHECK(decoded.aggregate_sig == original.aggregate_sig);
+}
+
+BOOST_AUTO_TEST_CASE(validate_v03_rejects_signed_out_of_range_price)
+{
+    const Consensus::Params& params = Params().GetConsensus();
+    BOOST_REQUIRE_EQUAL(params.nOracleRequiredMessages, 4);
+    BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 7);
+
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.epoch = GetCurrentEpoch(/*block_height=*/0);
+    bundle.median_price_micro_usd = 0;
+    bundle.timestamp = 1700000000;
+
+    const std::vector<uint8_t> oracle_ids{0, 1, 2, 3};
+    BOOST_REQUIRE(SignRegtestV03Bundle(bundle, oracle_ids));
+
+    std::string error;
+    BOOST_CHECK(!OracleBundleManager::ValidatePhaseThreeBundle(bundle, /*block_height=*/0, params, error));
+    BOOST_CHECK(error.find("price") != std::string::npos);
+}
+
+BOOST_AUTO_TEST_CASE(validate_v03_rejects_unused_bitmap_bits)
+{
+    const Consensus::Params& params = Params().GetConsensus();
+    BOOST_REQUIRE_EQUAL(params.nOracleRequiredMessages, 4);
+    BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 7);
+
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.epoch = GetCurrentEpoch(/*block_height=*/0);
+    bundle.median_price_micro_usd = 51000;
+    bundle.timestamp = 1700000000;
+
+    const std::vector<uint8_t> oracle_ids{0, 1, 2, 3};
+    BOOST_REQUIRE(SignRegtestV03Bundle(bundle, oracle_ids));
+    BOOST_REQUIRE_EQUAL(bundle.participation_bitmap.size(), 1U);
+    BOOST_REQUIRE_EQUAL(bundle.participation_bitmap[0], 0x0f);
+
+    // Regtest has 7 oracle slots, so bit 7 in the final bitmap byte is unused.
+    // Flipping it must not be a second valid encoding for the same signer set.
+    bundle.participation_bitmap[0] |= 0x80;
+
+    std::string error;
+    BOOST_CHECK(!OracleBundleManager::ValidatePhaseThreeBundle(bundle, /*block_height=*/0, params, error));
+    BOOST_CHECK(error.find("bitmap") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -5,11 +5,72 @@
 #include <boost/test/unit_test.hpp>
 
 #include <chainparams.h>
+#include <crypto/sha256.h>
+#include <oracle/musig2_aggregator.h>
+#include <oracle/musig2_messages.h>
 #include <oracle/signing_orchestrator.h>
 #include <primitives/block.h>
+#include <primitives/oracle.h>
 #include <test/util/setup_common.h>
 
+#include <secp256k1.h>
+#include <secp256k1_musig.h>
+
 BOOST_FIXTURE_TEST_SUITE(musig2_signing_orchestration_tests, RegTestingSetup)
+
+static CKey GetRegtestMusigOracleKey(uint32_t oracle_id)
+{
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
+
+    CKey key;
+    key.Set(hash.begin(), hash.end(), true);
+    return key;
+}
+
+static std::vector<uint8_t> GetActiveOracleIdsForMusigTest()
+{
+    std::vector<uint8_t> ids;
+    const uint32_t total = static_cast<uint32_t>(Params().GetConsensus().nOracleTotalOracles);
+    for (const auto& node : Params().GetOracleNodes()) {
+        if (node.is_active && node.id < total) {
+            ids.push_back(static_cast<uint8_t>(node.id));
+        }
+    }
+    return ids;
+}
+
+static OracleMusigNonceMsg MakeSignedMusigNonceMsg(int32_t epoch, uint8_t oracle_id)
+{
+    CKey key = GetRegtestMusigOracleKey(oracle_id);
+    CPubKey pubkey = key.GetPubKey();
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    secp256k1_pubkey secp_pubkey;
+    BOOST_REQUIRE(secp256k1_ec_pubkey_parse(ctx, &secp_pubkey, pubkey.data(), pubkey.size()));
+
+    MuSig2OracleAggregator aggregator;
+    secp256k1_xonly_pubkey agg_pk;
+    secp256k1_musig_keyagg_cache keyagg_cache;
+    BOOST_REQUIRE(aggregator.ComputeAggregatePubkey(GetActiveOracleIdsForMusigTest(), agg_pk, keyagg_cache));
+
+    MuSig2SigningSession temp_session(epoch, static_cast<uint8_t>(Params().GetConsensus().nOracleConsensusRequired));
+    secp256k1_musig_pubnonce pubnonce;
+    BOOST_REQUIRE(temp_session.GenerateNonce(oracle_id, key, secp_pubkey, keyagg_cache, pubnonce));
+
+    OracleMusigNonceMsg msg;
+    msg.epoch = epoch;
+    msg.oracle_id = oracle_id;
+    msg.pubnonce.resize(66);
+    BOOST_REQUIRE(secp256k1_musig_pubnonce_serialize(ctx, msg.pubnonce.data(), &pubnonce));
+    secp256k1_context_destroy(ctx);
+
+    BOOST_REQUIRE(msg.Sign(key));
+    return msg;
+}
 
 // Regression test for the "MuSig2 v0x02 fallback every block" bug.
 //
@@ -78,6 +139,59 @@ BOOST_AUTO_TEST_CASE(no_prestart_mid_epoch)
 
     BOOST_CHECK(orch.HasSession(current_epoch));
     BOOST_CHECK(!orch.HasSession(next_epoch));
+}
+
+BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_accepts_first_nonce)
+{
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 42;
+    const uint8_t oracle_id = 1;
+
+    BOOST_REQUIRE(!orch.HasSession(epoch));
+
+    OracleMusigNonceMsg msg = MakeSignedMusigNonceMsg(epoch, oracle_id);
+    orch.IngestRemoteNonce(msg);
+
+    BOOST_REQUIRE(orch.HasSession(epoch));
+    MuSig2SigningSession* session = orch.GetOrCreateSigningSession(epoch, epoch * 10);
+    BOOST_REQUIRE(session != nullptr);
+    BOOST_CHECK_EQUAL(session->GetNonceCount(), 1U);
+    BOOST_CHECK(session->GetState() == MuSig2SessionState::NONCES_COLLECTING ||
+                session->GetState() == MuSig2SessionState::NONCES_COMPLETE);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+struct MainParamsMuSig2Setup : public BasicTestingSetup {
+    MainParamsMuSig2Setup() : BasicTestingSetup(ChainType::MAIN) {}
+};
+
+BOOST_FIXTURE_TEST_SUITE(musig2_signing_orchestration_mainnet_tests, MainParamsMuSig2Setup)
+
+BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_timeout_uses_chain_epoch_length)
+{
+    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
+    BOOST_REQUIRE_GT(epoch_length, 0);
+    BOOST_REQUIRE_NE(epoch_length, 50);
+
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 3;
+    const int32_t epoch_start_height = epoch * epoch_length;
+
+    OracleMusigNonceMsg msg = musig2_signing_orchestration_tests::MakeSignedMusigNonceMsg(epoch, 1);
+    orch.IngestRemoteNonce(msg);
+
+    MuSig2SigningSession* session = orch.GetOrCreateSigningSession(epoch, epoch_start_height);
+    BOOST_REQUIRE(session != nullptr);
+    BOOST_REQUIRE_EQUAL(session->GetNonceCount(), 1U);
+
+    std::shared_ptr<const CBlock> empty_block;
+    orch.OnBlockConnected(empty_block, epoch_start_height);
+
+    session = orch.GetOrCreateSigningSession(epoch, epoch_start_height);
+    BOOST_REQUIRE(session != nullptr);
+    BOOST_CHECK_MESSAGE(session->GetState() != MuSig2SessionState::FAILED,
+        "lazy-created MuSig2 session must use the active chain epoch length for timeout binding");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

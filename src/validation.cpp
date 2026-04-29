@@ -2839,7 +2839,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             blockOraclePrice = static_cast<CAmount>(extractedBundle.median_price_micro_usd);
 
             // Update oracle price cache for this height (ALL networks, not just testnet/regtest)
-            oracleManager.UpdatePriceCache(pindex->nHeight, extractedBundle.median_price_micro_usd);
+            oracleManager.UpdatePriceCache(pindex->nHeight, extractedBundle.median_price_micro_usd, extractedBundle.timestamp);
 
             // In RegTest mode, also update MockOracleManager for backward compatibility
             if (m_chainman.GetParams().GetChainType() == ChainType::REGTEST) {

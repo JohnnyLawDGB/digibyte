@@ -223,6 +223,21 @@ bool OracleNode::HasValidPrice() const
     return false;
 }
 
+bool OracleNode::HasFreshExchangePrice() const
+{
+    std::lock_guard<std::mutex> lock(mtx_price);
+    return current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS;
+}
+
+CAmount OracleNode::GetFreshExchangePrice() const
+{
+    std::lock_guard<std::mutex> lock(mtx_price);
+    if (current_price > 0 && (GetTime() - last_update_time) < ORACLE_MAX_AGE_SECONDS) {
+        return current_price;
+    }
+    return 0;
+}
+
 COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timestamp)
 {
     COraclePriceMessage message(oracle_id, price, timestamp);
@@ -245,6 +260,14 @@ COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timest
 
 COraclePriceMessage OracleNode::CreateConsensusAttestation(uint64_t consensus_price, int64_t consensus_timestamp)
 {
+    OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+    if (!bundleManager.ValidateConsensusProposal(consensus_price, consensus_timestamp)) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Refusing consensus attestation for oracle %d: price=%llu timestamp=%lld is not local consensus\n",
+                 oracle_id, consensus_price, consensus_timestamp);
+        return COraclePriceMessage();
+    }
+
     COraclePriceMessage message(oracle_id, consensus_price, consensus_timestamp);
 
     // Set oracle public key (XOnlyPubKey)
@@ -289,6 +312,16 @@ bool OracleNode::BroadcastPriceMessage(const COraclePriceMessage& message)
     // Update last broadcast time
     last_broadcast_time = GetTime();
     return true;
+}
+
+void OracleNode::InjectTestPriceState(CAmount current_price_in, int64_t last_update_time_in,
+                                      CAmount last_broadcast_price_in, int64_t last_broadcast_timestamp_in)
+{
+    std::lock_guard<std::mutex> lock(mtx_price);
+    current_price = current_price_in;
+    last_update_time = last_update_time_in;
+    last_broadcast_price = last_broadcast_price_in;
+    last_broadcast_timestamp = last_broadcast_timestamp_in;
 }
 
 void OracleNode::PriceThreadFunc()
@@ -374,7 +407,7 @@ CAmount OracleNode::FetchMedianPrice()
 
 void OracleNode::BroadcastCurrentPrice()
 {
-    CAmount price = GetCurrentPrice();
+    CAmount price = GetFreshExchangePrice();
     int64_t timestamp = GetTime();
 
     if (price > 0) {
@@ -428,7 +461,7 @@ void OracleNode::BroadcastCurrentPrice()
 bool OracleNode::ShouldBroadcast() const
 {
     int64_t now = GetTime();
-    return (now - last_broadcast_time) >= broadcast_interval && HasValidPrice();
+    return (now - last_broadcast_time) >= broadcast_interval && HasFreshExchangePrice();
 }
 
 bool OracleNode::ValidateOracleId() const

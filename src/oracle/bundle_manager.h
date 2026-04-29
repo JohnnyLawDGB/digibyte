@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -98,6 +99,8 @@ public:
     //! @param[out] consensus_timestamp Computed consensus timestamp (median of message timestamps)
     //! @return true if enough messages exist for consensus computation
     bool ComputeConsensusValues(uint64_t& consensus_price, int64_t& consensus_timestamp) const;
+    //! Return true only when proposed consensus values exactly match locally computed pending-message consensus.
+    bool ValidateConsensusProposal(uint64_t consensus_price, int64_t consensus_timestamp) const;
 
     //! Bundle management
     COracleBundle GetCurrentBundle(int32_t epoch) const;
@@ -217,8 +220,9 @@ public:
      * Update oracle price cache for a specific height
      * @param height Block height
      * @param price_micro_usd Price in micro-USD
+     * @param source_time Oracle bundle timestamp, or 0 to use current node time
      */
-    void UpdatePriceCache(int height, uint64_t price_micro_usd);
+    void UpdatePriceCache(int height, uint64_t price_micro_usd, int64_t source_time = 0);
 
     /**
      * Get oracle price for a specific height
@@ -252,6 +256,7 @@ private:
 
     //! Price cache (block height -> price in micro-USD)
     std::map<int, uint64_t> height_to_price;
+    std::map<int, int64_t> height_to_price_time;
     mutable std::mutex mtx_price_cache;
 
     //! P2P connection manager for broadcasting

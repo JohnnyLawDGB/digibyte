@@ -66,6 +66,15 @@ BOOST_AUTO_TEST_CASE(test_bitmap_encode_decode_9_of_17)
     BOOST_CHECK(decoded == oracle_ids);
 }
 
+BOOST_AUTO_TEST_CASE(test_bitmap_rejects_unused_high_bits)
+{
+    // For 17 oracle slots, only bit 0 of the final byte is valid.
+    // Bits 1..7 must be zero so each participant set has one canonical bitmap.
+    std::vector<unsigned char> bitmap = {0xFF, 0x01, 0x80};
+    auto decoded = MuSig2OracleAggregator::DecodeBitmap(bitmap, /*total_oracles=*/17);
+    BOOST_CHECK(decoded.empty());
+}
+
 BOOST_AUTO_TEST_CASE(test_bitmap_variable_length_30_oracles)
 {
     // Select 10 oracles spread across 30 slots
@@ -371,6 +380,32 @@ BOOST_AUTO_TEST_CASE(rh01_aggregate_null_inputs)
 
     BOOST_CHECK(!agg.AggregatePubkeys(nullptr, 0, pk, cache));
     BOOST_CHECK(!agg.AggregatePubkeys(nullptr, 5, pk, cache));
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(musig2_aggregator_regtest_tests, RegTestingSetup)
+
+BOOST_AUTO_TEST_CASE(regtest_aggregate_pubkey_uses_configured_threshold)
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    BOOST_REQUIRE_EQUAL(consensus.nOracleConsensusRequired, 4);
+    BOOST_REQUIRE_EQUAL(consensus.nOracleTotalOracles, 7);
+
+    MuSig2OracleAggregator agg;
+    secp256k1_xonly_pubkey pk{};
+    secp256k1_musig_keyagg_cache cache{};
+
+    std::vector<uint8_t> threshold_ids = {0, 1, 2, 3};
+    BOOST_CHECK_MESSAGE(
+        agg.ComputeAggregatePubkey(threshold_ids, pk, cache),
+        "regtest 4-of-7 MuSig2 aggregation must accept exactly the configured threshold");
+
+    agg.ClearCache();
+    std::vector<uint8_t> below_threshold_ids = {0, 1, 2};
+    BOOST_CHECK_MESSAGE(
+        !agg.ComputeAggregatePubkey(below_threshold_ids, pk, cache),
+        "regtest MuSig2 aggregation must still reject below-threshold participant sets");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

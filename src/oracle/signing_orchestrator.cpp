@@ -23,6 +23,16 @@
 
 std::unique_ptr<OracleSigningOrchestrator> g_signing_orchestrator;
 
+namespace {
+int32_t GetEpochStartHeight(int32_t epoch)
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    int32_t epoch_length = consensus.nDDOracleEpochBlocks;
+    if (epoch_length <= 0) epoch_length = 1440;
+    return epoch * epoch_length;
+}
+} // namespace
+
 // ============================================================================
 // Construction / lifecycle
 // ============================================================================
@@ -80,12 +90,33 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
         auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
-        session->SetCreationHeight(msg.epoch * 50);
+        session->SetCreationHeight(GetEpochStartHeight(msg.epoch));
         session->SetTimeoutBlocks(100);
         LogPrintf("Oracle: Lazily created MuSig2 session for epoch %d on remote nonce arrival\n", msg.epoch);
         it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
     }
     if (it == m_signing_sessions.end() || !it->second) return;
+
+    if (it->second->GetState() == MuSig2SessionState::CREATED) {
+        std::vector<uint8_t> all_oracle_ids;
+        const uint32_t total_oracles = static_cast<uint32_t>(std::max(1, Params().GetConsensus().nOracleTotalOracles));
+        for (const auto& node : Params().GetOracleNodes()) {
+            if (node.is_active && node.id < total_oracles) {
+                all_oracle_ids.push_back(static_cast<uint8_t>(node.id));
+            }
+        }
+
+        MuSig2OracleAggregator aggregator;
+        secp256k1_xonly_pubkey agg_pk;
+        secp256k1_musig_keyagg_cache cache;
+        if (!aggregator.ComputeAggregatePubkey(all_oracle_ids, agg_pk, cache) ||
+            !it->second->InitializePassive(cache)) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Failed to initialize passive MuSig2 session for epoch %d on remote nonce arrival\n",
+                     msg.epoch);
+            return;
+        }
+    }
 
     // Deserialize pubnonce
     if (msg.pubnonce.size() != 66) return;
@@ -112,7 +143,7 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
         auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
-        session->SetCreationHeight(msg.epoch * 50);
+        session->SetCreationHeight(GetEpochStartHeight(msg.epoch));
         session->SetTimeoutBlocks(100);
         LogPrintf("Oracle: Lazily created MuSig2 session for epoch %d on remote partial sig arrival\n", msg.epoch);
         it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
@@ -274,7 +305,7 @@ MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32
     const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
     auto session = std::make_unique<MuSig2SigningSession>(
         epoch, min_signers);
-    session->SetCreationHeight(block_height > 0 ? block_height : epoch * 50);
+    session->SetCreationHeight(block_height > 0 ? block_height : GetEpochStartHeight(epoch));
     session->SetTimeoutBlocks(100);
 
     MuSig2SigningSession* ptr = session.get();

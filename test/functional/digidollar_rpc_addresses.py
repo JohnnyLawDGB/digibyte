@@ -124,12 +124,9 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         result = self.nodes[0].validateddaddress(corrupted_address)
 
         assert 'isvalid' in result
-
-        if not result['isvalid']:
-            assert 'error' in result
-            self.log.info(f"Corrupted address correctly marked invalid: {result['error']}")
-        else:
-            self.log.info("Basic validation passed for corrupted address (checksum validation not fully implemented)")
+        assert_equal(result['isvalid'], False)
+        assert 'error' in result
+        self.log.info(f"Corrupted address correctly marked invalid: {result['error']}")
 
     def test_validate_empty_address(self):
         self.log.info("Testing validateddaddress with empty address...")
@@ -234,18 +231,16 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         assert_greater_than(current_balance, 0)
         self.log.info(f"Current DD balance: {current_balance} cents")
 
-        try:
-            result_with_filter = self.nodes[0].listdigidollaraddresses(False, 1000)
+        result_with_filter = self.nodes[0].listdigidollaraddresses(False, 1000)
+        assert isinstance(result_with_filter, list)
+        self.log.info(f"Addresses with balance >= 1000 cents: {len(result_with_filter)}")
+        assert_greater_than(len(result_with_filter), 0)
 
-            assert isinstance(result_with_filter, list)
-            self.log.info(f"Addresses with balance >= 1000 cents: {len(result_with_filter)}")
+        for addr_info in result_with_filter:
+            assert addr_info['balance'] >= 1000, f"Balance {addr_info['balance']} below filter"
 
-            for addr_info in result_with_filter:
-                if 'balance' in addr_info:
-                    assert addr_info['balance'] >= 1000, f"Balance {addr_info['balance']} below filter"
-
-        except Exception as e:
-            self.log.info(f"Balance filter test encountered: {e}")
+        result_above_balance = self.nodes[0].listdigidollaraddresses(False, mint_amount + 1)
+        assert_equal(result_above_balance, [])
 
         result_all = self.nodes[0].listdigidollaraddresses()
         assert isinstance(result_all, list)
@@ -324,7 +319,10 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         assert 'address' in result
         assert_equal(result['address'], external_address)
         assert 'success' in result
-        assert_equal(result['success'], True)
+        assert_equal(result['success'], False)
+        assert_equal(result['rescan_performed'], False)
+        assert_equal(result['transactions_found'], 0)
+        assert 'not implemented' in result['warning']
 
         self.log.info(f"Import result: {result}")
         self.log.info("Valid address import test passed")
@@ -342,7 +340,8 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         assert 'label' in result
         assert_equal(result['label'], label)
         assert 'success' in result
-        assert_equal(result['success'], True)
+        assert_equal(result['success'], False)
+        assert 'not implemented' in result['warning']
 
         self.log.info(f"Import with label result: {result}")
         self.log.info("Import with label test passed")
@@ -354,7 +353,7 @@ class DigiDollarAddressTest(DigiByteTestFramework):
 
         result1 = self.nodes[0].importdigidollaraddress(external_address, "first_import")
         assert 'success' in result1
-        assert_equal(result1['success'], True)
+        assert_equal(result1['success'], False)
         self.log.info(f"First import: success={result1['success']}")
 
         try:
@@ -362,6 +361,7 @@ class DigiDollarAddressTest(DigiByteTestFramework):
 
             if 'success' in result2:
                 self.log.info(f"Second import: success={result2['success']}")
+                assert_equal(result2['success'], False)
                 if 'warning' in result2:
                     self.log.info(f"Warning: {result2['warning']}")
 
@@ -387,9 +387,9 @@ class DigiDollarAddressTest(DigiByteTestFramework):
                 result = self.nodes[0].importdigidollaraddress(invalid_address)
 
                 if 'success' in result and not result['success']:
-                    self.log.info(f"  Correctly rejected: {result.get('error', 'no error message')}")
+                    raise AssertionError(f"Invalid address returned non-error result: {result}")
                 else:
-                    self.log.info(f"  Unexpected success for invalid address")
+                    raise AssertionError(f"Unexpected success for invalid address: {result}")
 
             except Exception as e:
                 error_msg = str(e)

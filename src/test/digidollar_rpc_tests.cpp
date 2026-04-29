@@ -4,12 +4,19 @@
 
 #include <chainparams.h>
 #include <consensus/digidollar.h>
+#include <crypto/sha256.h>
 #include <digidollar/health.h>
+#include <key.h>
+#include <oracle/bundle_manager.h>
+#include <oracle/mock_oracle.h>
+#include <primitives/oracle.h>
+#include <pubkey.h>
 #include <rpc/server.h>
 #include <rpc/client.h>
 #include <rpc/digidollar.h>
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
+#include <util/time.h>
 #include <univalue.h>
 #include <node/context.h>
 
@@ -17,6 +24,17 @@
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(digidollar_rpc_tests)
+
+static CKey RegtestOracleKey(uint32_t oracle_id)
+{
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
+
+    CKey key;
+    key.Set(hash.begin(), hash.end(), true);
+    return key;
+}
 
 class DigiDollarRPCTestSetup : public TestingSetup {
 public:
@@ -287,6 +305,51 @@ BOOST_FIXTURE_TEST_CASE(test_getoracleprice_basic, DigiDollarRPCTestSetup)
     BOOST_CHECK_GE(result["price_cents"].get_real(), 0.0);
 }
 
+BOOST_FIXTURE_TEST_CASE(test_getoracleprice_ignores_stale_pending_messages, DigiDollarRPCTestSetup)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    MockOracleManager& mock = MockOracleManager::GetInstance();
+    const bool mock_was_enabled = mock.IsEnabled();
+    struct Cleanup {
+        OracleBundleManager& manager;
+        MockOracleManager& mock;
+        bool mock_was_enabled;
+        ~Cleanup()
+        {
+            SetMockTime(0);
+            manager.Clear();
+            manager.SetEnabled(false);
+            mock.SetEnabled(mock_was_enabled);
+        }
+    } cleanup{manager, mock, mock_was_enabled};
+
+    mock.SetEnabled(false);
+
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(4);
+
+    const int64_t base_time = GetTime();
+    SetMockTime(base_time);
+
+    CKey key = RegtestOracleKey(0);
+    COraclePriceMessage msg;
+    msg.oracle_id = 0;
+    msg.price_micro_usd = 500000;
+    msg.timestamp = base_time;
+    msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(manager.AddOracleMessage(msg));
+
+    SetMockTime(base_time + ORACLE_MAX_AGE_SECONDS + 1);
+
+    UniValue result = CallRPC("getoracleprice");
+    BOOST_CHECK_EQUAL(result["oracle_count"].getInt<int>(), 0);
+    BOOST_CHECK_EQUAL(result["last_update_time"].getInt<int64_t>(), 0);
+    BOOST_CHECK_EQUAL(result["status"].get_str(), "error");
+    BOOST_CHECK(result["is_stale"].get_bool());
+}
+
 // Test 15: getprotectionstatus - Basic Response
 BOOST_FIXTURE_TEST_CASE(test_getprotectionstatus_basic, DigiDollarRPCTestSetup)
 {
@@ -505,10 +568,13 @@ BOOST_FIXTURE_TEST_CASE(test_emergency_status, DigiDollarRPCTestSetup)
     BOOST_CHECK(result.exists("is_emergency"));
     bool isEmergency = result["is_emergency"].get_bool();
     int healthPct = result["health_percentage"].getInt<int>();
+    int64_t totalDD = result["total_dd_supply"].getInt<int64_t>();
 
-    // Emergency should be true when health < 100%
-    if (healthPct < 100) {
+    // Emergency should be true when health < 100% and there are DD liabilities.
+    if (totalDD > 0 && healthPct < 100) {
         BOOST_CHECK_EQUAL(isEmergency, true);
+    } else if (totalDD == 0) {
+        BOOST_CHECK_EQUAL(isEmergency, false);
     }
 }
 

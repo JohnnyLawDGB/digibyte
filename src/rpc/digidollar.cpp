@@ -15,6 +15,7 @@
 #include <consensus/digidollar.h>
 #include <consensus/dca.h>
 #include <consensus/err.h>
+#include <consensus/volatility.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/health.h>
 #include <index/digidollarstatsindex.h>
@@ -49,6 +50,7 @@
 
 #include <util/time.h>
 #include <univalue.h>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -199,23 +201,28 @@ namespace {
         return key;
     }
 
-    bool TryStartOracleFromPrivateKey(OracleManager& oracle_manager, uint32_t oracle_id, const std::string& private_key_hex, const std::string& key_source, bool allow_initialized_without_running, std::string& status_message)
+    bool TryStartOracleFromPrivateKey(OracleManager& oracle_manager, uint32_t oracle_id, const std::string& private_key_hex, const std::string& key_source, bool allow_initialized_without_running, std::string& status_message, bool* initialized_out = nullptr)
     {
+        bool initialized = false;
         OracleNode* oracle = oracle_manager.GetOracleNode(oracle_id);
         if (!oracle) {
             if (!oracle_manager.AddOracleNode(oracle_id, private_key_hex)) {
                 status_message = strprintf("Failed to initialize oracle with %s", key_source);
                 return false;
             }
+            initialized = true;
             oracle_manager.EnableOracle(oracle_id, true);
             oracle = oracle_manager.GetOracleNode(oracle_id);
             if (!oracle) {
                 status_message = strprintf("Oracle initialized with %s but manager returned no oracle instance", key_source);
+                if (initialized_out) *initialized_out = initialized;
                 return false;
             }
         } else {
+            initialized = true;
             oracle_manager.EnableOracle(oracle_id, true);
         }
+        if (initialized_out) *initialized_out = initialized;
 
         oracle->Start();
         if (oracle->IsRunning()) {
@@ -225,7 +232,7 @@ namespace {
 
         if (allow_initialized_without_running) {
             status_message = strprintf("Oracle initialized with %s (price thread not active on this network)", key_source);
-            return true;
+            return false;
         }
 
         status_message = strprintf("Oracle initialized with %s but failed to start price thread", key_source);
@@ -235,10 +242,12 @@ namespace {
     CAmount ParseDigiDollarRpcAmount(const UniValue& amount_param)
     {
         double val;
+        bool string_decimal_dollars = false;
         if (amount_param.isStr()) {
             try {
                 size_t consumed = 0;
                 const std::string amount_str = amount_param.get_str();
+                string_decimal_dollars = amount_str.find('.') != std::string::npos;
                 val = std::stod(amount_str, &consumed);
                 if (consumed != amount_str.size()) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount is not a valid number");
@@ -261,7 +270,7 @@ namespace {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount out of range");
         }
 
-        if (val != std::floor(val)) {
+        if (string_decimal_dollars || val != std::floor(val)) {
             const double cents = std::round(val * 100);
             if (cents < static_cast<double>(std::numeric_limits<CAmount>::min()) ||
                 cents > static_cast<double>(std::numeric_limits<CAmount>::max())) {
@@ -426,7 +435,7 @@ RPCHelpMan getdigidollarstats()
             auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
 
             // Check emergency status
-            bool isEmergency = DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+            bool isEmergency = totalDD > 0 && DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("health_percentage", systemHealth);
@@ -854,6 +863,9 @@ RPCHelpMan mintdigidollar()
 
             // Ensure wallet is unlocked
             wallet::EnsureWalletIsUnlocked(*pwallet);
+            if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+            }
 
             // Parse parameters
             CAmount ddAmount = request.params[0].getInt<int64_t>();
@@ -1299,6 +1311,9 @@ RPCHelpMan senddigidollar()
 
             // Ensure wallet is unlocked
             wallet::EnsureWalletIsUnlocked(*pwallet);
+            if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+            }
 
             LogPrintf("DigiDollar RPC: Got wallet\n");
 
@@ -1448,6 +1463,9 @@ RPCHelpMan sendmanydigidollar()
             }
 
             wallet::EnsureWalletIsUnlocked(*pwallet);
+            if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+            }
 
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) {
@@ -1587,6 +1605,9 @@ RPCHelpMan redeemdigidollar()
 
             // Ensure wallet is unlocked
             wallet::EnsureWalletIsUnlocked(*pwallet);
+            if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+            }
 
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
@@ -1935,7 +1956,7 @@ RPCHelpMan listdigidollarpositions()
                 "Shows active and inactive positions with their current status.\n",
                 {
                     {"active_only", RPCArg::Type::BOOL, RPCArg::Default{true}, "Only show active positions"},
-                    {"tier_filter", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Filter by specific lock tier (1-9)"},
+                    {"tier_filter", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Filter by specific lock tier (0-9)"},
                     {"min_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Minimum DD amount filter"}
                 },
                 RPCResult{
@@ -1953,6 +1974,8 @@ RPCHelpMan listdigidollarpositions()
                                 {RPCResult::Type::STR, "status", "Position status (active/unlocked/redeemed)"},
                                 {RPCResult::Type::NUM, "health_ratio", "Current collateral health ratio (%)"},
                                 {RPCResult::Type::BOOL, "can_redeem", "Whether position can be redeemed now"},
+                                {RPCResult::Type::BOOL, "spendable", "Whether this wallet can spend the position"},
+                                {RPCResult::Type::BOOL, "iswatchonly", "Whether the position is watch-only"},
                                 {RPCResult::Type::STR, "created_date", "ISO date when position was created"},
                                 {RPCResult::Type::STR, "unlock_date", "ISO date when position unlocks"}
                             }
@@ -1987,7 +2010,7 @@ RPCHelpMan listdigidollarpositions()
             int tierFilter = request.params.size() > 1 && !request.params[1].isNull() ?
                             request.params[1].getInt<int>() : -1;
             CAmount minAmount = request.params.size() > 2 && !request.params[2].isNull() ?
-                               AmountFromValue(request.params[2]) : 0;
+                               ParseDigiDollarRpcAmount(request.params[2]) : 0;
 
             // Get wallet
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
@@ -2000,13 +2023,14 @@ RPCHelpMan listdigidollarpositions()
             LOCK(pwallet->cs_wallet);
             std::vector<WalletCollateralPosition> positions = dd_wallet->GetDDTimeLocks(false);
             int currentHeight = pwallet->GetLastBlockHeight();
+            const bool walletPrivateKeysDisabled = pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
 
             UniValue result(UniValue::VARR);
 
             for (const auto& pos : positions) {
                 // Apply filters
                 if (activeOnly && !pos.is_active) continue;
-                if (tierFilter > 0 && pos.lock_tier != static_cast<uint32_t>(tierFilter)) continue;
+                if (tierFilter >= 0 && pos.lock_tier != static_cast<uint32_t>(tierFilter)) continue;
                 if (minAmount > 0 && pos.dd_minted < minAmount) continue;
 
                 UniValue position(UniValue::VOBJ);
@@ -2047,8 +2071,10 @@ RPCHelpMan listdigidollarpositions()
 
                 // can_redeem requires: unlocked, active, AND has collateral
                 // Received DD (dgb_collateral=0) cannot be redeemed - only spent/transferred
-                bool canRedeem = blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0;
+                bool canRedeem = blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0 && !walletPrivateKeysDisabled;
                 position.pushKV("can_redeem", canRedeem);
+                position.pushKV("spendable", !walletPrivateKeysDisabled);
+                position.pushKV("iswatchonly", walletPrivateKeysDisabled);
 
                 // Dates: estimate from block heights using 15-second block time
                 int64_t now = GetTime();
@@ -2118,6 +2144,11 @@ RPCHelpMan getdigidollaraddress()
             }
             std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) return UniValue::VNULL;
+
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+            if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+            }
 
             LOCK(pwallet->cs_wallet);
 
@@ -2281,18 +2312,16 @@ RPCHelpMan validateddaddress()
             std::string network;
             std::string prefix;
 
-            if (addressStr.length() < 26 || addressStr.length() > 60) {
-                isValid = false;
-                error = addressStr.length() < 26 ? "Address too short" : "Address too long";
-            } else if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
-                isValid = false;
-                error = "Invalid address prefix (must be DD/TD/RD)";
-            } else {
+            CDigiDollarAddress ddAddress(addressStr);
+            isValid = ddAddress.IsValid();
+            if (isValid) {
                 prefix = addressStr.substr(0, 2);
                 if (prefix == "DD") network = "mainnet";
                 else if (prefix == "TD") network = "testnet";
                 else if (prefix == "RD") network = "regtest";
                 else network = "unknown";
+            } else {
+                error = "Invalid DigiDollar address";
             }
 
             result.pushKV("isvalid", isValid);
@@ -2300,17 +2329,22 @@ RPCHelpMan validateddaddress()
             result.pushKV("network", network);
             result.pushKV("prefix", prefix);
             bool isMine = false;
+            bool isWatchOnly = false;
             if (isValid) {
                 try {
                     auto pw = wallet::GetWalletForJSONRPCRequest(request);
                     if (pw) {
+                        const bool privateKeysDisabled = pw->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
                         DigiDollarWallet* ddw = pw->GetDDWallet();
-                        if (ddw) isMine = ddw->IsMyDDAddress(addressStr);
+                        if (ddw && ddw->IsMyDDAddress(addressStr)) {
+                            isWatchOnly = privateKeysDisabled;
+                            isMine = !isWatchOnly;
+                        }
                     }
                 } catch (...) {}
             }
             result.pushKV("ismine", isMine);
-            result.pushKV("iswatchonly", false);
+            result.pushKV("iswatchonly", isWatchOnly);
             result.pushKV("error", error);
 
             return result;
@@ -2378,7 +2412,8 @@ RPCHelpMan listdigidollaraddresses()
 
             // Parse parameters
             bool includeWatchOnly = request.params.size() > 0 ? request.params[0].get_bool() : false;
-            CAmount minBalance = request.params.size() > 1 ? AmountFromValue(request.params[1]) : 0;
+            CAmount minBalance = request.params.size() > 1 ? ParseDigiDollarRpcAmount(request.params[1]) : 0;
+            const bool privateKeysDisabled = pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
 
             UniValue result(UniValue::VARR);
 
@@ -2412,9 +2447,8 @@ RPCHelpMan listdigidollaraddresses()
             for (const auto& [addr, balance] : addressBalances) {
                 if (balance < minBalance) continue;
 
-                // All UTXO-tracked addresses are owned by this wallet
-                bool isMine = true;
-                bool isWatchOnly = false;
+                bool isWatchOnly = privateKeysDisabled;
+                bool isMine = !isWatchOnly;
 
                 if (!includeWatchOnly && isWatchOnly) continue;
 
@@ -2481,30 +2515,27 @@ static RPCHelpMan importdigidollaraddress()
             bool rescan = request.params.size() > 2 ? request.params[2].get_bool() : false;
             bool p2sh = request.params.size() > 3 ? request.params[3].get_bool() : false;
 
-            if (addressStr.length() < 26 || addressStr.length() > 60) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address length");
-            }
-            if (addressStr.substr(0, 2) != "DD" && addressStr.substr(0, 2) != "TD" && addressStr.substr(0, 2) != "RD") {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address prefix");
+            if (!CDigiDollarAddress(addressStr).IsValid()) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
             }
 
-            bool success = true;
+            bool success = false;
             int transactionsFound = 0;
-            std::string warning;
+            std::string warning = "DigiDollar watch-only import is not implemented; no address was imported";
 
             if (rescan) {
-                transactionsFound = 3;
+                warning += "; rescan was not performed";
             }
 
             if (p2sh) {
-                warning = "P2SH import is experimental and may not work with all DigiDollar features";
+                warning += "; P2SH import is not supported";
             }
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("address", addressStr);
             result.pushKV("label", label);
             result.pushKV("success", success);
-            result.pushKV("rescan_performed", rescan);
+            result.pushKV("rescan_performed", false);
             result.pushKV("transactions_found", transactionsFound);
             result.pushKV("warning", warning);
 
@@ -2578,6 +2609,7 @@ RPCHelpMan getdigidollarbalance()
             std::string addressStr = request.params.size() > 0 && !request.params[0].isNull() ?
                                    request.params[0].get_str() : "";
             int minConf = request.params.size() > 1 ? request.params[1].getInt<int>() : 1;
+            bool includeWatchOnly = request.params.size() > 2 ? request.params[2].get_bool() : false;
 
             // Validate parameters
             if (minConf < 0) {
@@ -2595,14 +2627,56 @@ RPCHelpMan getdigidollarbalance()
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid DigiDollar address");
                 }
 
-                confirmedBalance = dd_wallet->GetDDBalance(dd_address);
-                unconfirmedBalance = 0; // TODO: Track unconfirmed balance separately
-                addressCount = 1;
+                if (includeWatchOnly || !pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                    std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs();
+                    for (const auto& utxo : utxos) {
+                        CTxOut txout;
+                        int depth = 0;
+                        {
+                            LOCK(pwallet->cs_wallet);
+                            const wallet::CWalletTx* wtx = pwallet->GetWalletTx(utxo.outpoint.hash);
+                            if (!wtx || utxo.outpoint.n >= wtx->tx->vout.size()) continue;
+                            depth = pwallet->GetTxDepthInMainChain(*wtx);
+                            txout = wtx->tx->vout[utxo.outpoint.n];
+                        }
+                        if (depth < minConf) continue;
+
+                        CTxDestination dest;
+                        if (!ExtractDestination(txout.scriptPubKey, dest)) continue;
+                        if (EncodeDigiDollarAddress(dest) != addressStr) continue;
+
+                        confirmedBalance += utxo.dd_amount;
+                    }
+                    addressCount = confirmedBalance > 0 ? 1 : 0;
+                }
             } else {
                 // Get total wallet balance
-                confirmedBalance = dd_wallet->GetTotalDDBalance();
-                unconfirmedBalance = dd_wallet->GetPendingDDBalance();
-                addressCount = dd_wallet->GetBalanceCount();
+                if (includeWatchOnly || !pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                    std::map<std::string, CAmount> confirmedAddressBalances;
+                    std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs();
+                    for (const auto& utxo : utxos) {
+                        CTxOut txout;
+                        int depth = 0;
+                        {
+                            LOCK(pwallet->cs_wallet);
+                            const wallet::CWalletTx* wtx = pwallet->GetWalletTx(utxo.outpoint.hash);
+                            if (!wtx || utxo.outpoint.n >= wtx->tx->vout.size()) continue;
+                            depth = pwallet->GetTxDepthInMainChain(*wtx);
+                            txout = wtx->tx->vout[utxo.outpoint.n];
+                        }
+                        if (depth < minConf) continue;
+
+                        CTxDestination dest;
+                        if (!ExtractDestination(txout.scriptPubKey, dest)) continue;
+                        const std::string ddAddr = EncodeDigiDollarAddress(dest);
+                        if (ddAddr.empty()) continue;
+
+                        confirmedBalance += utxo.dd_amount;
+                        confirmedAddressBalances[ddAddr] += utxo.dd_amount;
+                    }
+                    unconfirmedBalance = minConf <= 1 ? dd_wallet->GetPendingDDBalance() : 0;
+                    addressCount = confirmedAddressBalances.size();
+                }
             }
 
             UniValue result(UniValue::VOBJ);
@@ -2882,7 +2956,7 @@ RPCHelpMan getredemptioninfo()
             // Parse parameters
             std::string positionIdStr = request.params[0].get_str();
             CAmount ddAmount = request.params.size() > 1 && !request.params[1].isNull() ?
-                              AmountFromValue(request.params[1]) : 0;
+                              ParseDigiDollarRpcAmount(request.params[1]) : 0;
 
             // Validate position ID format
             if (!IsHex(positionIdStr) || positionIdStr.length() != 64) {
@@ -3225,8 +3299,10 @@ static RPCHelpMan getoracleprice()
                 // Also count oracles with pending P2P messages not yet on-chain.
                 // Track the freshest pending timestamp for time-based staleness.
                 {
+                    int64_t now = GetTime();
                     std::vector<COraclePriceMessage> pending = oracle_manager.GetPendingMessages();
                     for (const auto& msg : pending) {
+                        if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
                         reportingOracleIds.insert(msg.oracle_id);
                         if (msg.timestamp > freshestPendingTime) {
                             freshestPendingTime = msg.timestamp;
@@ -3454,7 +3530,7 @@ static RPCHelpMan getprotectionstatus()
             }
 
             auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
-            bool isEmergency = DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+            bool isEmergency = totalDD > 0 && DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
 
             UniValue result(UniValue::VOBJ);
 
@@ -3473,35 +3549,49 @@ static RPCHelpMan getprotectionstatus()
             err.pushKV("threshold", 100);
             err.pushKV("current_ratio", systemHealth);
             std::string errStatus;
-            if (systemHealth >= 150) {
+            if (totalDD == 0 || systemHealth >= 100) {
                 errStatus = "normal";
-            } else if (systemHealth >= 100) {
-                errStatus = "caution";
+            } else if (systemHealth >= 95) {
+                errStatus = "warning";
+            } else if (systemHealth >= 85) {
+                errStatus = "active";
             } else {
-                errStatus = "emergency";
+                errStatus = "critical";
             }
             err.pushKV("status", errStatus);
             result.pushKV("err", err);
 
-            // Volatility protection (no real tracking yet — report honestly)
+            // Volatility protection
+            auto volatilityState = Volatility::VolatilityMonitor::GetCurrentState();
+            double currentVolatility = std::max({
+                volatilityState.hourlyVolatility,
+                volatilityState.dailyVolatility,
+                volatilityState.weeklyVolatility});
+            bool mintingRestricted = Volatility::VolatilityMonitor::ShouldFreezeMinting();
+            bool allOperationsRestricted = Volatility::VolatilityMonitor::ShouldFreezeAll();
+
             UniValue volatility(UniValue::VOBJ);
-            volatility.pushKV("protection_active", false);
-            volatility.pushKV("current_volatility", 0.0);
-            volatility.pushKV("protection_threshold", 10.0);
-            volatility.pushKV("minting_restricted", false);
+            volatility.pushKV("protection_active", mintingRestricted || allOperationsRestricted);
+            volatility.pushKV("current_volatility", currentVolatility);
+            volatility.pushKV("protection_threshold", Volatility::VolatilityThresholds::FREEZE_MINT_1H);
+            volatility.pushKV("minting_restricted", mintingRestricted);
             result.pushKV("volatility", volatility);
 
             // Overall status
             UniValue overall(UniValue::VOBJ);
             std::string overallStatus;
-            if (isEmergency) {
+            if (totalDD == 0) {
+                overallStatus = "secure";
+            } else if (isEmergency && systemHealth < 85) {
                 overallStatus = "emergency";
+            } else if (isEmergency) {
+                overallStatus = "critical";
             } else if (systemHealth >= 150) {
                 overallStatus = "secure";
             } else if (systemHealth >= 100) {
-                overallStatus = "caution";
+                overallStatus = "warning";
             } else {
-                overallStatus = "at_risk";
+                overallStatus = "critical";
             }
             overall.pushKV("status", overallStatus);
 
@@ -3917,14 +4007,14 @@ static RPCHelpMan listoracle()
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::BOOL, "running", "Whether an oracle is running locally"},
-                        {RPCResult::Type::NUM, "oracle_id", /*optional=*/ "Oracle ID (if running)"},
-                        {RPCResult::Type::STR, "name", /*optional=*/ "Oracle operator name"},
-                        {RPCResult::Type::STR_HEX, "pubkey", /*optional=*/ "Oracle public key"},
-                        {RPCResult::Type::NUM, "price_micro_usd", /*optional=*/ "Current price being reported"},
-                        {RPCResult::Type::NUM, "price_usd", /*optional=*/ "Current price in USD"},
-                        {RPCResult::Type::NUM, "last_update", /*optional=*/ "Last update timestamp"},
-                        {RPCResult::Type::BOOL, "enabled", /*optional=*/ "Whether oracle is enabled"},
-                        {RPCResult::Type::STR, "message", /*optional=*/ "Status message"}
+                        {RPCResult::Type::NUM, "oracle_id", /*optional=*/ true, "Oracle ID (if running)"},
+                        {RPCResult::Type::STR, "name", /*optional=*/ true, "Oracle operator name"},
+                        {RPCResult::Type::STR_HEX, "pubkey", /*optional=*/ true, "Oracle public key"},
+                        {RPCResult::Type::NUM, "price_micro_usd", /*optional=*/ true, "Current price being reported"},
+                        {RPCResult::Type::NUM, "price_usd", /*optional=*/ true, "Current price in USD"},
+                        {RPCResult::Type::NUM, "last_update", /*optional=*/ true, "Last update timestamp"},
+                        {RPCResult::Type::BOOL, "enabled", /*optional=*/ true, "Whether oracle is enabled"},
+                        {RPCResult::Type::STR, "message", /*optional=*/ true, "Status message"}
                     }
                 },
                 RPCExamples{
@@ -3977,8 +4067,10 @@ static RPCHelpMan listoracle()
                     } else {
                         // Check pending P2P messages (our own broadcast may be there)
                         OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
+                        int64_t now = GetTime();
                         std::vector<COraclePriceMessage> pending = bundle_manager.GetPendingMessages();
                         for (const auto& msg : pending) {
+                            if (now - msg.timestamp > ORACLE_MAX_AGE_SECONDS) continue;
                             if (msg.oracle_id == id) {
                                 price = msg.price_micro_usd;
                                 update_time = msg.timestamp;
@@ -4081,6 +4173,10 @@ RPCHelpMan createoraclekey()
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded. A descriptor wallet is required.");
 
+            if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+            }
+
             // Ensure wallet is unlocked
             wallet::EnsureWalletIsUnlocked(*pwallet);
 
@@ -4153,7 +4249,8 @@ RPCHelpMan startoracle()
                         {RPCResult::Type::STR, "status", "Oracle status after start attempt"},
                         {RPCResult::Type::STR, "message", "Status message or error description"},
                         {RPCResult::Type::BOOL, "was_already_running", "Whether oracle was already running"},
-                        {RPCResult::Type::STR, "warning", "Any warnings about the operation"}
+                        {RPCResult::Type::BOOL, "initialized", "Whether an oracle instance/key was initialized on this node"},
+                        {RPCResult::Type::STR, "warning", /*optional=*/ true, "Any warnings about the operation"}
                     }
                 },
                 RPCExamples{
@@ -4200,6 +4297,7 @@ RPCHelpMan startoracle()
             OracleManager& oracle_manager = OracleManager::GetInstance();
             bool was_already_running = oracle_manager.IsOracleRunning(oracle_id);
             bool success = false;
+            bool initialized = was_already_running;
             std::string status_message;
             std::string warning;
 
@@ -4209,16 +4307,23 @@ RPCHelpMan startoracle()
                     status_message = "Oracle was already running";
                 } else {
                     // Try to start oracle
-                    if (!private_key_hex.empty()) {
-                        success = TryStartOracleFromPrivateKey(oracle_manager, oracle_id, private_key_hex, "provided private key", /*allow_initialized_without_running=*/false, status_message);
-                    } else {
-                        // Try to start existing oracle (if already configured)
-                        OracleNode* existing_oracle = oracle_manager.GetOracleNode(oracle_id);
-                        if (existing_oracle) {
-                            existing_oracle->Start();
-                            success = existing_oracle->IsRunning();
-                            status_message = success ? "Existing oracle started" : "Failed to start existing oracle";
+                        if (!private_key_hex.empty()) {
+                            success = TryStartOracleFromPrivateKey(oracle_manager, oracle_id, private_key_hex, "provided private key", /*allow_initialized_without_running=*/false, status_message, &initialized);
                         } else {
+                            // Try to start existing oracle (if already configured)
+                            OracleNode* existing_oracle = oracle_manager.GetOracleNode(oracle_id);
+                            if (existing_oracle) {
+                                initialized = true;
+                                existing_oracle->Start();
+                                success = existing_oracle->IsRunning();
+                                if (success) {
+                                    status_message = "Existing oracle started";
+                                } else if (Params().GetChainType() != ChainType::TESTNET) {
+                                    status_message = "Oracle initialized (price thread not active on this network)";
+                                } else {
+                                    status_message = "Failed to start existing oracle";
+                                }
+                            } else {
                             // Try to load oracle key from wallet
                             bool loaded_from_wallet = false;
                             try {
@@ -4230,8 +4335,10 @@ RPCHelpMan startoracle()
                                     if (pwallet->GetOracleKey(oracle_id, wallet_key)) {
                                         const std::string wallet_key_hex = HexStr(Span<const unsigned char>(wallet_key.begin(), wallet_key.end()));
                                         const std::string key_source = strprintf("key loaded from wallet '%s'", pwallet->GetName());
-                                        success = TryStartOracleFromPrivateKey(oracle_manager, oracle_id, wallet_key_hex, key_source, /*allow_initialized_without_running=*/true, status_message);
-                                        loaded_from_wallet = success;
+                                        bool wallet_initialized = false;
+                                        success = TryStartOracleFromPrivateKey(oracle_manager, oracle_id, wallet_key_hex, key_source, /*allow_initialized_without_running=*/true, status_message, &wallet_initialized);
+                                        loaded_from_wallet = wallet_initialized;
+                                        initialized = initialized || wallet_initialized;
                                     }
                                 }
                             } catch (const std::exception& e) {
@@ -4263,6 +4370,7 @@ RPCHelpMan startoracle()
             result.pushKV("status", final_status);
             result.pushKV("message", status_message);
             result.pushKV("was_already_running", was_already_running);
+            result.pushKV("initialized", initialized);
             if (!warning.empty()) {
                 result.pushKV("warning", warning);
             }

@@ -36,6 +36,19 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         node.createwallet("oracle_test")
         wallet = node.get_wallet_rpc("oracle_test")
 
+        # --- DD-RH-028: listoracle no-running path must satisfy RPC schema ---
+        self.log.info("Test: listoracle should return a clean no-oracle-running result")
+        list_result = node.listoracle()
+        assert_equal(list_result["running"], False)
+        assert "No oracle is running" in list_result["message"]
+
+        # --- DD-RH-026: createoraclekey must reject disabled-private-key wallets ---
+        self.log.info("Test: createoraclekey should reject disabled-private-key wallets")
+        node.createwallet(wallet_name="oracle_watchonly", disable_private_keys=True)
+        watch_wallet = node.get_wallet_rpc("oracle_watchonly")
+        assert_equal(watch_wallet.getwalletinfo()["private_keys_enabled"], False)
+        assert_raises_rpc_error(-4, "Private keys are disabled", watch_wallet.createoraclekey, 0)
+
         # --- Test 1: createoraclekey 0 succeeds ---
         self.log.info("Test: createoraclekey 0 should succeed")
         result = wallet.createoraclekey(0)
@@ -80,12 +93,17 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         # key won't match. We expect a pubkey mismatch error.
         self.log.info("Test: startoracle 0 from wallet should fail with pubkey mismatch on regtest")
         try:
-            wallet.startoracle(0)
-            # If it didn't throw, that's unexpected on regtest but not necessarily wrong
-            self.log.info("startoracle 0 succeeded (unexpected on regtest, but ok)")
+            start_result = wallet.startoracle(0)
+            self.log.info(f"startoracle 0 returned: {start_result}")
+            assert_equal(start_result["oracle_id"], 0)
+            assert_equal(start_result["success"], False)
+            assert_equal(start_result["status"], "stopped")
+            assert_equal(start_result["initialized"], True)
+            assert "price thread not active" in start_result["message"]
         except Exception as e:
             err_msg = str(e)
             self.log.info(f"startoracle 0 failed as expected: {err_msg}")
+            assert "internal bug detected" not in err_msg.lower(), err_msg
             # Should mention pubkey mismatch or similar
             assert "pubkey" in err_msg.lower() or "mismatch" in err_msg.lower() or "key" in err_msg.lower(), \
                 f"Expected pubkey-related error, got: {err_msg}"
@@ -102,11 +120,17 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         # startoracle 0 should still attempt to load the key from wallet
         # (same pubkey mismatch error proves key was loaded from wallet)
         try:
-            wallet.startoracle(0)
-            self.log.info("startoracle 0 succeeded after reload")
+            start_result = wallet.startoracle(0)
+            self.log.info(f"startoracle 0 after reload returned: {start_result}")
+            assert_equal(start_result["oracle_id"], 0)
+            assert_equal(start_result["success"], False)
+            assert_equal(start_result["status"], "stopped")
+            assert_equal(start_result["initialized"], True)
+            assert "price thread not active" in start_result["message"]
         except Exception as e:
             err_msg = str(e)
             self.log.info(f"startoracle 0 after reload failed as expected: {err_msg}")
+            assert "internal bug detected" not in err_msg.lower(), err_msg
             assert "pubkey" in err_msg.lower() or "mismatch" in err_msg.lower() or "key" in err_msg.lower(), \
                 f"Expected pubkey-related error after reload, got: {err_msg}"
 

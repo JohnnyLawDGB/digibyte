@@ -140,6 +140,10 @@ BOOST_AUTO_TEST_CASE(rh40_address_version_byte_mismatch)
     // For now, verify that base58check catches most junk:
     BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddress("DDaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
 
+    // Base58Check-valid payload with the right visible "DD" prefix but the wrong
+    // decoded payload shape must not pass the static helper.
+    BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddress("DDnSzdtfNGYSefbqX91EbkZwRXuJ3J6EA"));
+
     // Construct a valid DD address, then verify the static method accepts it
     // (This tests the happy path to ensure our attack tests aren't false positives)
     // We can't easily forge a "DD"-prefixed address with wrong version bytes

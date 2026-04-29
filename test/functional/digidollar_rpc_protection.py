@@ -95,6 +95,12 @@ class DigiDollarRPCProtectionTest(DigiByteTestFramework):
         
         valid_statuses = ['normal', 'warning', 'active', 'critical']
         assert err['status'] in valid_statuses, f"Invalid ERR status: {err['status']}"
+
+        stats = node.getdigidollarstats()
+        if stats['total_dd_supply'] == 0:
+            assert_equal(err['active'], False)
+            assert_equal(err['status'], 'normal')
+            assert_equal(err['current_ratio'], stats['health_percentage'])
         
         self.log.info(f"ERR status: {err['status']}, active={err['active']}")
         self.log.info(f"ERR ratio: {err['current_ratio']}% (threshold: {err['threshold']}%)")
@@ -139,6 +145,11 @@ class DigiDollarRPCProtectionTest(DigiByteTestFramework):
         
         valid_overall_statuses = ['secure', 'warning', 'critical', 'emergency']
         assert overall['status'] in valid_overall_statuses, f"Invalid overall status: {overall['status']}"
+
+        stats = node.getdigidollarstats()
+        if stats['total_dd_supply'] == 0:
+            assert_equal(overall['status'], 'secure')
+            assert 'err' not in overall['active_protections']
         
         self.log.info(f"Overall system status: {overall['status']}")
         self.log.info(f"Active protections: {overall['active_protections']}")

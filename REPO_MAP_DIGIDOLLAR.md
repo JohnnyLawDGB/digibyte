@@ -24,7 +24,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ## DigiDollar Core
 
 ### src/digidollar/digidollar.h
-- `MAX_DIGIDOLLAR` → static constant: 21 billion DGB equivalent in cents (21B × 100), hard cap on total DD supply
+- `MAX_DIGIDOLLAR` → static constant: per-output serialization bound (21B DGB equivalent in cents); DigiDollar has no global supply cap — total DD in circulation is theoretically unlimited, constrained only by available DGB collateral and the per-block minting rate
 - `CDigiDollarOutput` (class) → represents a DigiDollar UTXO with Taproot-based redemption paths
   - `CDigiDollarOutput()` → default constructor, zeroes amount/locktime, nulls collateral ID
   - `CDigiDollarOutput(nDDAmountIn, collateralIdIn, nLockTimeIn)` → parameterized constructor linking DD to specific collateral
@@ -49,7 +49,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ### src/digidollar/health.h
 - `DigiDollar::SystemMetrics` (struct) → aggregates all system-wide DD health data: supply, collateral, per-tier breakdown, DCA/ERR/volatility status, oracle status
   - `TierMetrics` (nested struct) → per-tier stats: lockDays, ddMinted, dgbLocked, positions count, healthRatio
-- `DigiDollar::AlertThresholds` (struct) → static constexpr thresholds for alerts: MAX_DD_SUPPLY (100M), MIN_HEALTH_RATIO (120%), CRITICAL (110%), MIN_ORACLES (5), MAX_VOLATILITY (30%), STALE_ORACLE_BLOCKS (100)
+- `DigiDollar::AlertThresholds` (struct) → static constexpr monitoring alert thresholds: ALERT_DD_SUPPLY (monitoring trigger at 100M, not a supply cap), MIN_HEALTH_RATIO (120%), CRITICAL (110%), MIN_ORACLES (5), MAX_VOLATILITY (30%), STALE_ORACLE_BLOCKS (100)
 - `DigiDollar::SystemHealthMonitor` (class) → real-time system health tracking and alerting
   - `GetSystemMetrics()` → returns current SystemMetrics after updating tiers/protection/oracle status
   - `GetTierBreakdown()` → returns per-tier metrics vector with health ratios per lock period

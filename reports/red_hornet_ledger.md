@@ -2900,3 +2900,774 @@ PRINT_ALL_FUZZ_TARGETS_AND_ABORT=1 src/test/fuzz/fuzz 2>&1 | rg 'digidollar|orac
 **Agent C result summary:** returned final-report structure and open-risk summary; content was integrated into the final package.
 
 **Wave 20 status:** complete. `DD-RH-050` fixed, `DD-RH-051` test coverage repaired, final configured and scoped DD/oracle suites passed, no new architecture item added, scope stayed within DigiDollar/oracle.
+
+---
+
+# Red Hornet Continuation Campaign — 2026-04-29
+
+**Scope:** DigiDollar and DigiDollar-oracle only, on branch `feature/digidollar-v1`.
+
+**Required context loaded by main agent in order:**
+`CLAUDE.md`, `ARCHITECTURE.md`, `REPO_MAP.md`, `REPO_MAP_GUIDE.md`, `DIGIDOLLAR_ARCHITECTURE.md`, `DIGIDOLLAR_ORACLE_ARCHITECTURE.md`, `REPO_MAP_DIGIDOLLAR.md`, `DIGIDOLLAR_EXPLAINER.md`, `DIGIDOLLAR_ORACLE_EXPLAINER.md`, `DIGIDOLLAR_ACTIVATION_EXPLAINER.md`, `DIGIDOLLAR_WALLET_INTEGRATION.md`, `DIGIDOLLAR_EXCHANGE_INTEGRATION.md`, `DIGIDOLLAR_OPRETURN_PQC_MINT_PLAN.md`, `ORACLE_DISCOVERY_ARCHITECTURE.md`, `DIGIDOLLAR_ORACLE_SETUP.md`, `docs/ORACLE_OPERATOR_GUIDE.md`, `digidollar/DIGIDOLLAR_FLOWCHART.md`, `digidollar/DIGIDOLLAR_ORACLE_PHASE_ONE_SPEC.md`, `digidollar/ORACLE_PHASE_2_SPEC_PRD.md`, `digidollar/4_tier_collateral.md`, `RELEASE_v9.26.0-rc33.md`.
+
+**Initial worktree check:**
+
+```bash
+git status --short --branch
+```
+
+Result: clean worktree, `## feature/digidollar-v1...origin/feature/digidollar-v1`.
+
+**Attack-surface enumeration command required for every wave:**
+
+```bash
+find src/digidollar src/oracle src/wallet src/rpc src/qt src/test src/test/fuzz test/functional -type f \
+  | grep -Ei 'digidollar|oracle|musig2|rh|red|attack|security|wallet|qt' \
+  | sort
+```
+
+Initial result: 909 matching files.
+
+**Report paths for this continuation:**
+- Running ledger: `reports/red_hornet_ledger.md`
+- Final review package: `reports/red_hornet_final_report.md`
+
+**Commit policy:** no local commits unless explicitly authorized during this continuation. Fixes, if any, remain uncommitted with proposed commit split recorded by vulnerability ID.
+
+## Continuation Wave 1 — Threat Model, Baseline, Attack-Test Inventory
+
+**Assignments:**
+- Agent A / exploit-path attacker: production invariant map and high-risk exploit assignments.
+- Agent B / invariant/test breaker: redteam, regression, fuzz, wallet, Qt, and functional coverage inventory.
+- Agent C / boundary adversary: baseline test artifact discovery and scoped security-relevant test run.
+
+**Wave attack-surface enumeration:** required `find ... | grep ... | sort` command run; 909 matching files. Scope stayed within DigiDollar/oracle and direct boundary files.
+
+**Confirmed vulnerabilities:** none newly assigned in this continuation wave.
+
+**ARCHITECTURAL_REVIEW_REQUIRED:**
+- `DD-RH-069` carryover remains high priority and appears reachable: after timelock, collateral can be spent through the normal Taproot script path as a non-DigiDollar DGB transaction, so the DD validation path requiring a DD burn is not entered. Key references: `src/digidollar/scripts.cpp:61`, `src/validation.cpp:779`, `src/validation.cpp:2947`, `src/digidollar/validation.cpp:2107`. Exploit sketch: owner mints, waits until lock height, spends the collateral vault script path without the DD marker/metadata, and leaves the DD token UTXO live. This needs a consensus/script/protocol decision before implementation; no production change made without Jared approval.
+- Existing carryovers reaffirmed: strict post-activation `OP_ORACLE` handling, Phase 3 acceptance of legacy v0x02 bundles, `skipOracleValidation` during IBD/catch-up, MuSig2 domain separation, ERR behavior, watch-only storage, and mint owner-key storage timing.
+
+**Rejected false positives / narrowed claims:**
+- Baseline checkout does not have local build artifacts (`./src/test/test_digibyte`, `src/Makefile`, `test/config.ini` absent). This is an environment/build-state blocker, not a product vulnerability.
+- The attack-surface command intentionally over-includes generic Qt/wallet files because the required grep contains `qt|wallet`; this was recorded but not treated as scope expansion.
+
+**Theoretical / not yet reachable risks:**
+- Need deeper proof for oracle fail-open/fail-closed behavior across activation, malformed `OP_ORACLE`, IBD, reindex, and reorg.
+- Need adversarial multi-node functional proof for MuSig2 signer reselection, nonce/partial churn, and mined bundle recovery across restarts/reorgs.
+- OP_RETURN/PQC/P2MR mint hardening remains design-plan work, not an implemented v2 surface.
+
+**Test/coverage evidence:**
+- Agent B found coverage: 67 `src/test/digidollar_*_tests.cpp`, 16 `src/test/oracle_*_tests.cpp`, 19 `src/test/musig2_*_tests.cpp`, 19 `src/test/rh*_tests.cpp`, 16 DigiDollar/oracle fuzz files with 35 targets, and 65 focused functional scripts.
+- Agent C used Guix RC33 x86_64 artifacts because the working tree is unconfigured. Scoped C++ baseline passed: 135 selected tests / 628 assertions across DigiDollar, oracle, MuSig2, and RH suites.
+- Agent C functional smoke passed with process-substituted config: `digidollar_activation_boundary.py`, `digidollar_oracle_rpc_staleness.py`, `rpc_getoracles_pending.py`.
+
+**Commands/results recorded:**
+```bash
+git status --short --branch
+# clean: ## feature/digidollar-v1...origin/feature/digidollar-v1
+
+find src/digidollar src/oracle src/wallet src/rpc src/qt src/test src/test/fuzz test/functional -type f \
+  | grep -Ei 'digidollar|oracle|musig2|rh|red|attack|security|wallet|qt' \
+  | sort
+# 909 matching files
+```
+
+**Fixes landed:** none.
+
+**Commit status:** no commits; ledger edit only.
+
+**Wave 1 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.
+
+## Continuation Wave 2 — Inflation and Supply Integrity
+
+**Assignments:**
+- Agent A / exploit-path attacker: mint/transfer production paths for unauthorized DD creation and collateral-release accounting.
+- Agent B / invariant/test breaker: conservation/supply assertions and missing negative cases.
+- Agent C / boundary adversary: RPC/wallet/functional supply-accounting drift and restart/cache candidates.
+
+**Wave attack-surface enumeration:** required `find ... | grep ... | sort` command run; 909 matching files. Scope stayed within DigiDollar/oracle and direct RPC/wallet boundary surfaces.
+
+**Confirmed vulnerabilities fixed in working tree:**
+
+### DD-RH-105 — Medium — transfer conservation ignores an unresolved zero-value input when another DD input resolves
+
+- **Affected invariant:** transfer validation cannot create, hide, or route DD value unless every DD-like input amount is known.
+- **Exploit path:** `ValidateTransferTransaction()` summed only inputs whose DD amount could be resolved, then accepted if at least one DD input was found. A transaction with one resolved DD input and one unresolved zero-value P2TR input could pass conservation without proving the second input's DD amount.
+- **Exact code reference:** `src/digidollar/validation.cpp:1373` pre-fix only counted resolved inputs and deferred rejection until `ddInputCount == 0`; fixed zero-value unresolved rejection starts at `src/digidollar/validation.cpp:1377`.
+- **Attack test:** `src/test/digidollar_validation_tests.cpp:3133`.
+- **Fail-before evidence:** `./src/test/test_digibyte --run_test=digidollar_validation_tests/transfer_rejects_unresolved_zero_value_input_when_other_input_resolves --log_level=all --report_level=short` failed with 1 selected test failed, 2/2 assertions failed; observed acceptance and empty reject reason.
+- **Fix summary:** if coins view shows an input is zero-value and txindex/block-db/metadata cannot resolve a positive DD amount, reject immediately with `dd-input-amounts-unknown`, even if earlier inputs resolved.
+- **Pass-after evidence:** same selected test passed: 1 test, 2 assertions.
+- **Additional regression coverage:** `digidollar_validation_tests` passed 103 tests / 265 assertions; `digidollar_transfer_tests` passed 43 tests / 168 assertions; `digidollar_redteam_tests` passed 356 tests / 1756 assertions; `digidollar_rh42_formal_invariant_tests` passed 15 tests / 7897668 assertions.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `digidollar validation: fix DD-RH-105 unresolved transfer input`.
+
+### DD-RH-106 — High — rejected mint can poison collateral script metadata and lower redemption burn requirement
+
+- **Affected invariant:** collateral cannot be released unless the DD burned is at least the amount minted by the original collateral-creating mint transaction.
+- **Exploit path:** `CreateCollateralP2TR()` registers process-local metadata keyed by collateral script, but normal collateral script creation does not bind `ddAmount`; same owner and lock height produce the same script. `ValidateMintTransaction()` reconstructs expected collateral script before later mint failures, so a rejected undercollateralized mint with the same script and a smaller DD amount overwrote metadata. `ValidateCollateralReleaseAmount()` trusted metadata before looking up the creating mint transaction, so a redemption could burn the smaller poisoned amount and release all collateral.
+- **Exact code references:** metadata registration in `src/digidollar/scripts.cpp:165` and keying in `src/digidollar/scripts.cpp:227`; mint-side side effect in `src/digidollar/validation.cpp:1118`; pre-fix metadata-first redemption amount extraction at `src/digidollar/validation.cpp:1840`; fixed authoritative tx lookup before metadata starts at `src/digidollar/validation.cpp:1848`.
+- **Attack test:** `src/test/digidollar_validation_tests.cpp:3330`.
+- **Fail-before evidence:** `./src/test/test_digibyte --run_test=digidollar_validation_tests/redemption_uses_authoritative_mint_amount_before_script_metadata --log_level=all --report_level=short` failed with 1 selected test failed, 2/8 assertions failed; rejected poison mint had overwritten metadata to the smaller DD amount and redemption was accepted instead of `bad-collateral-release-partial-burn`.
+- **Fix summary:** `ValidateCollateralReleaseAmount()` now prefers txindex and validation-context block-db lookup of the collateral-creating mint transaction before falling back to process-local script metadata.
+- **Pass-after evidence:** same selected test passed: 1 test, 8 assertions.
+- **Additional regression coverage:** `digidollar_validation_tests` passed 103 tests / 265 assertions; `digidollar_no_partial_redeem_tests` passed 10 tests / 52 assertions; `digidollar_rh07_redemption_attacks` passed 18 tests / 27 assertions; `digidollar_rh06_mint_attacks` passed 36 tests / 69 assertions; `digidollar_redteam_tests` passed 356 tests / 1756 assertions.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `digidollar redemption: fix DD-RH-106 metadata-poisoned burn accounting`.
+
+**ARCHITECTURAL_REVIEW_REQUIRED:**
+- `ARCH-RH-002` carryover reaffirmed by Agent A: `fSkipOracle`/IBD catch-up can still bypass oracle/collateral-dependent mint checks in production validation (`src/validation.cpp:2990`, `src/digidollar/validation.cpp:1147`). This is a deployment/consensus policy decision; no implementation change made without Jared approval.
+- `DD-RH-069` carryover still open from Wave 1: normal collateral path after timelock can bypass DD redemption validation if spent as non-DD. No implementation change made without Jared approval.
+
+**Rejected false positives / downgraded items:**
+- Agent B's stats/health mint accounting helper concern remains a test-gap candidate only; consensus-valid chains already route through mint validation before stats indexing.
+- Agent C's address-filtered `getdigidollarbalance(..., minconf=0)` pending-balance discrepancy and `sendmanydigidollar` `"multiple"` history row are user-surface/accounting risks, not yet proven loss-of-funds or consensus supply bugs.
+
+**Theoretical / not yet reachable risks:**
+- Restart/state divergence between persisted DigiDollar stats index and in-memory health/ERR cache needs a focused Wave 7/9 proof.
+- RPC/wallet display of pending address-filtered DD and multi-recipient history may mislead users; carry forward to Waves 9-11.
+
+**Commands/results recorded:**
+
+```bash
+./autogen.sh
+# passed
+
+./configure --disable-bench --with-gui=no
+# passed; local build configured without GUI, wallet/tests enabled
+
+make -C src -j2 test/test_digibyte
+# passed; linked src/test/test_digibyte
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests/transfer_rejects_unresolved_zero_value_input_when_other_input_resolves --log_level=all --report_level=short
+# pre-fix failed: 1 test failed, 2/2 assertions failed
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests/redemption_uses_authoritative_mint_amount_before_script_metadata --log_level=all --report_level=short
+# pre-fix failed: 1 test failed, 2/8 assertions failed
+
+make -C src -j2 test/test_digibyte
+# post-fix incremental rebuild passed
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests/transfer_rejects_unresolved_zero_value_input_when_other_input_resolves --report_level=short
+# passed: 1 test, 2 assertions
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests/redemption_uses_authoritative_mint_amount_before_script_metadata --report_level=short
+# passed: 1 test, 8 assertions
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests --report_level=short
+# passed: 103 tests, 265 assertions, 2 Boost warning-status cases
+
+./src/test/test_digibyte --run_test=digidollar_transfer_tests --report_level=short
+# passed: 43 tests, 168 assertions
+
+./src/test/test_digibyte --run_test=digidollar_no_partial_redeem_tests --report_level=short
+# passed: 10 tests, 52 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh07_redemption_attacks --report_level=short
+# passed: 18 tests, 27 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh06_mint_attacks --report_level=short
+# passed: 36 tests, 69 assertions
+
+./src/test/test_digibyte --run_test=digidollar_redteam_tests --report_level=short
+# passed: 356 tests, 1756 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh17_mempool_attacks_tests --report_level=short
+# passed: 10 tests, 34 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh42_formal_invariant_tests --report_level=short
+# passed: 15 tests, 7897668 assertions
+```
+
+**Fixes landed:** DD-RH-105 and DD-RH-106 in working tree.
+
+**Commit status:** no commits; user has not authorized local commits. Current modified files: `reports/red_hornet_ledger.md`, `src/digidollar/validation.cpp`, `src/test/digidollar_validation_tests.cpp`.
+
+**Wave 2 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.
+
+## Continuation Wave 3 — Collateral Accounting, Rounding, Overflow
+
+**Assignments:**
+- Agent A / exploit-path attacker: collateral math, cents/COIN conversions, overflow clamps, DCA health source, and redemption-release math.
+- Agent B / invariant/test breaker: ratio, MAX_MONEY, `__int128`, invalid amount, price, rounding, and stale/insecure test assertions.
+- Agent C / boundary adversary: wallet/RPC/Qt/txbuilder collateral, change, fee, lock-tier, and quote behavior.
+
+**Wave attack-surface enumeration:** required `find ... | grep ... | sort` command run. Current post-build tree has 1669 matching paths because configured build/test artifacts and logs are now present. Scope stayed within DigiDollar/oracle and direct wallet/RPC/Qt/validation boundary files.
+
+**Confirmed vulnerabilities fixed in working tree:**
+
+### DD-RH-109 — Medium — transfer builder can return success while selected DGB fee inputs underpay the reported fee
+
+- **Affected invariant:** wallet/txbuilder fee accounting must not report a higher fee than the transaction can actually pay, and must not construct DigiDollar transfers that silently underfund the intended miner fee.
+- **Exploit path:** `TransferDigiDollarMany` estimates fee inputs before final transfer size is known, and `TransferTxBuilder::BuildTransferTransaction()` computed `actualFee` after all DD outputs were present but never rejected `totalFeeIn < actualFee`. The builder omitted DGB change and still returned `result.totalFees = actualFee`, so callers could believe a 0.1 DGB or selected-rate fee was paid even when the fee inputs were much smaller.
+- **Exact code reference:** pre-fix fee calculation accepted underfunded inputs at `src/digidollar/txbuilder.cpp:714`; fixed rejection starts at `src/digidollar/txbuilder.cpp:722`.
+- **Attack test:** `src/test/digidollar_txbuilder_tests.cpp:238`.
+- **Fail-before evidence:** `./src/test/test_digibyte --run_test=digidollar_txbuilder_tests/transfer_rejects_underfunded_fee_inputs --log_level=all --report_level=short` failed with 1 selected test failed, 2/2 assertions failed; observed `result.success == true` with a 1-sat fee input and a 0.1 DGB reported fee.
+- **Fix summary:** `BuildTransferTransaction()` now rejects when no DGB fee inputs are selected or when selected fee input value is below the calculated/minimum required fee.
+- **Tests upgraded:** `src/test/digidollar_transfer_tests.cpp` now funds direct builder tests with realistic 1 DGB fee UTXOs and updates the change-output expectation where DGB fee change is now present.
+- **Pass-after evidence:** selected attack test passed; `digidollar_txbuilder_tests` passed 18 tests / 63 assertions; `digidollar_transfer_tests` passed 43 tests / 168 assertions; `digidollar_validation_tests` passed 103 tests / 265 assertions with the existing 2 Boost warning-status cases.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `digidollar txbuilder: fix DD-RH-109 underfunded transfer fees`.
+
+**ARCHITECTURAL_REVIEW_REQUIRED:**
+
+### DD-RH-107 — High — non-canonical lock periods receive the next longer tier's lower collateral ratio
+
+- **Affected invariant:** a DD mint cannot be under-collateralized by manipulating lock duration around tier boundaries.
+- **Exploit path:** `GetCollateralRatioForLockTime()` uses `lower_bound(lockBlocks)` and returns the first tier with lock time greater than or equal to the requested period. A raw mint with `lockTier=0` and `lockHeight=currentHeight+241` passes the tier-0 consistency check because 241 blocks is at least `240 - 10`, but collateral math passes `lockPeriod=241` into the ratio helper and receives the 30-day 500% ratio instead of the 1-hour 1000% ratio. Similar boundary gaming exists at every tier: `30d+1` gets the 90-day ratio, etc.
+- **Exact code references:** `src/consensus/digidollar.cpp:26`, `src/consensus/digidollar.cpp:34`, `src/digidollar/validation.cpp:930`, `src/digidollar/validation.cpp:943`, `src/digidollar/validation.cpp:1157`.
+- **Proof status:** reachable from current validation logic; existing tests currently assert this behavior as design in `src/test/digidollar_rh20_time_ordering_tests.cpp` and `src/test/digidollar_rh32_collateral_dca_tests.cpp`.
+- **Why no fix landed:** changing the helper to choose the previous/shorter tier or requiring exact canonical lock periods changes consensus economics and existing policy tests. Needs Jared approval before implementation.
+- **Recommended decision:** define whether only canonical tier durations are valid, or whether intermediate durations should receive the shorter tier's more conservative ratio. Then add a consensus regression such as `fresh_mint_tier0_plus_one_block_must_not_get_30day_ratio`.
+
+### DD-RH-108 — High — DCA health source can be stale/unit-inflated relative to the oracle price used for mint collateral
+
+- **Affected invariant:** the DCA multiplier used for mint collateral must be a deterministic function of current chain DD supply, current locked collateral, and the same oracle price used for the mint.
+- **Exploit path:** block and mempool validation pass `DigiDollar::GetSystemCollateralRatio()` into `ValidationContext`, while mint collateral math uses `ctx.oraclePriceMicroUSD` directly. Cached health can remain at a healthy value after incremental mint/redeem mutations, and volatility price history records `ctx.oraclePriceMicroUSD` while `SystemHealthMonitor::GetLastOraclePrice()` treats the last price as the health-calculation price unit. A stressed system can therefore validate at the base ratio when actual health requires a DCA multiplier.
+- **Exact code references:** `src/validation.cpp:818`, `src/validation.cpp:2998`, `src/digidollar/validation.cpp:463`, `src/digidollar/validation.cpp:2213`, `src/digidollar/validation.cpp:2336`, `src/digidollar/health.cpp:449`, `src/digidollar/health.cpp:773`.
+- **Proof status:** independently reported by Agents A and B. It needs a deterministic consensus-safe health-source design before production changes.
+- **Why no fix landed:** forcing recomputation or changing price units in consensus validation affects activation/IBD/reindex/reorg behavior and overlaps existing `skipOracleValidation` architecture decisions.
+- **Recommended decision:** define one canonical chain-derived health calculation for validation, including exact price units and IBD/catch-up behavior; then add failing tests for stale health after incremental mints and for micro-USD/cents unit confusion.
+
+**Rejected false positives / downgraded items:**
+- `ValidateCollateralReleaseAmount()` returning true when `ctx.coins == nullptr` was not counted as reachable: live mempool and block validation pass coin views through `src/validation.cpp:818` and `src/validation.cpp:3000`.
+- `estimatecollateral` floors a fractional DCA multiplier in `src/rpc/digidollar.cpp:2833`; this is a reachable quote drift, but not a consensus acceptance bug because mint validation uses consensus DCA calculation. Carry forward to RPC/UX waves.
+- `Transfer OP_RETURN` "output_count" wording is a stale comment; builder and validator both use `DD type amount...`.
+- DD transfer dust/change through RPC is guarded by wallet coin selection; direct builder sub-min DD change remains rejected by validation.
+
+**Theoretical / not yet reachable / carry-forward risks:**
+- Legacy `OP_RETURN OP_DIGIDOLLAR` amount parsing uses a signed left shift on attacker-controlled high-bit bytes in `src/digidollar/validation.cpp:135`. This is C++ UB and consensus-risk shaped, but no deterministic non-sanitizer failing test was produced in Wave 3. Carry forward to fuzz/sanitizer work before counting as a confirmed vulnerability.
+- `CalculateRequiredCollateral()` caps overflowed requirements to `MAX_MONEY` at `src/digidollar/validation.cpp:501`, while RPC quote paths throw and the txbuilder returns 0. Current parameters make this impractical, but it should be turned into an explicit policy/design decision instead of silent cap semantics.
+- `mintdigidollar` and Qt mint flows persist wallet DD position data after `CommitTransaction()`, while wallet commit only logs mempool rejection. Exact references: `src/wallet/wallet.cpp:2500`, `src/rpc/digidollar.cpp:1143`, `src/rpc/digidollar.cpp:1162`, `src/rpc/digidollar.cpp:1174`, and the Qt path in `src/qt/walletmodel.cpp`. This is a credible wallet-corruption boundary risk, but Wave 3 did not produce a deterministic functional reproducer; carry forward to Waves 8, 11, and 12.
+- `calculatecollateralrequirement` optional price help text says cents while implementation treats it as micro-USD. This is a low RPC quote/unit trap; carry forward to Wave 11.
+
+**Commands/results recorded:**
+
+```bash
+find src/digidollar src/oracle src/wallet src/rpc src/qt src/test src/test/fuzz test/functional -type f \
+  | grep -Ei 'digidollar|oracle|musig2|rh|red|attack|security|wallet|qt' \
+  | sort | wc -l
+# 1669 matching paths in the post-build tree
+
+make -C src -j2 test/test_digibyte
+# passed after adding the DD-RH-109 attack test to the binary
+
+./src/test/test_digibyte --run_test=digidollar_txbuilder_tests/transfer_rejects_underfunded_fee_inputs --log_level=all --report_level=short
+# pre-fix failed: 1 selected test failed, 2/2 assertions failed
+
+make -C src -j2 test/test_digibyte && \
+./src/test/test_digibyte --run_test=digidollar_txbuilder_tests/transfer_rejects_underfunded_fee_inputs --report_level=short
+# post-fix passed: 1 selected test, 2 assertions
+
+./src/test/test_digibyte --run_test=digidollar_txbuilder_tests --report_level=short
+# passed: 18 tests, 63 assertions
+
+./src/test/test_digibyte --run_test=digidollar_transfer_tests --report_level=short
+# initially failed after the new guard because stale tests used 0.001 DGB fee UTXOs; after test fixture update passed: 43 tests, 168 assertions
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests --report_level=short
+# passed: 103 tests, 265 assertions, 2 Boost warning-status cases
+
+git diff --check
+# passed
+```
+
+**Fixes landed:** DD-RH-109 in working tree. DD-RH-107 and DD-RH-108 recorded as `ARCHITECTURAL_REVIEW_REQUIRED`.
+
+**Commit status:** no commits; user has not authorized local commits. Proposed commit split includes DD-RH-105, DD-RH-106, and DD-RH-109 as separate commits. Wave 3 touched `src/digidollar/txbuilder.cpp`, `src/test/digidollar_txbuilder_tests.cpp`, and `src/test/digidollar_transfer_tests.cpp`; unrelated pre-existing/current modifications outside this wave were not reverted.
+
+**Wave 3 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.
+
+## Continuation Wave 4 — Timelock, ERR, DCA, Volatility Bypass
+
+**Assignments:**
+- Agent A / exploit-path attacker: redemption paths, ERR/DCA/volatility state transitions, and production validation bypasses.
+- Agent B / invariant/test breaker: height/time edges, stale redemption tests, ERR burn requirements, DCA thresholds, volatility threshold assertions.
+- Agent C / boundary adversary: RPC/Qt/user-facing redemption state, restart/cache protection boundaries, and misleading redeemability flows.
+
+**Wave attack-surface enumeration:** required `find ... | grep ... | sort` command run. Current post-build tree has 1669 matching paths because generated `.deps`, `.o`, `.Po`, logs, and `.dirstamp` files are present. Review stayed within DigiDollar/oracle and directly gated wallet/RPC/Qt/validation surfaces.
+
+**Confirmed vulnerabilities fixed in working tree:** none in Wave 4. The strongest findings require consensus/protocol or wallet-state design approval before implementation.
+
+**ARCHITECTURAL_REVIEW_REQUIRED:**
+
+### DD-RH-108 — High — stale/default system health can bypass DCA and ERR redemption protection
+
+- **Affected invariant:** DCA and ERR decisions must use the same current, deterministic system health as mint/redemption validation.
+- **Exploit path:** mempool/block validation passes `DigiDollar::GetSystemCollateralRatio()` into the validation context (`src/validation.cpp:818`, `src/validation.cpp:2998`). The helper returns cached health when present and falls back to a healthy `150%` value when oracle/collateral data is missing (`src/digidollar/validation.cpp:2336`, `src/digidollar/validation.cpp:2360`). Incremental health updates mutate supply/collateral without recomputing health from the current oracle price (`src/digidollar/health.cpp:299`, `src/digidollar/health.cpp:449`). A restart/cache gap or stale monitor can therefore validate mints at too-low DCA collateral and route redemptions down the normal path when live protection status is emergency.
+- **Exact related code:** mint DCA uses `ctx.systemCollateral` at `src/digidollar/validation.cpp:515`; mint freeze/status depends on global volatility at `src/digidollar/validation.cpp:761`; redemption chooses ERR versus normal at `src/digidollar/validation.cpp:1692`; normal redemption rejects ERR only when `ctx.systemCollateral < 100` at `src/digidollar/validation.cpp:1739`; ERR path is currently incomplete at `src/digidollar/validation.cpp:1809`.
+- **Proof status:** independently reported in Waves 3 and 4. Wave 4 expanded impact from undercollateralized mints to normal redemption acceptance/failure under stale health. No deterministic regression was added yet because the required fix depends on the approved authoritative health source and cache/IBD semantics.
+- **Recommended decision:** define one consensus-safe health calculation for validation, including price units, cache invalidation, restart/reindex behavior, and skip-oracle historical handling; then add attack tests for stale health after incremental mints, restart before health refresh, and normal redemption attempted while live protection status is emergency.
+
+### DD-RH-110 — High — ERR redemption state is split across incompatible RPC, wallet, and consensus paths
+
+- **Affected invariant:** when system health is under 100%, all wallet/RPC/consensus paths must agree whether a position is redeemable, which redemption path is valid, and how much DD must be burned.
+- **Exploit path:** `getprotectionstatus` computes emergency from current stats/current price and reports `err.active` from that live health (`src/rpc/digidollar.cpp:3501`, `src/rpc/digidollar.cpp:3511`). `getredemptioninfo` instead calls `EmergencyRedemptionRatio::GetCurrentState()` (`src/rpc/digidollar.cpp:2975`), whose inactive-state path only records health and does not activate ERR (`src/consensus/err.cpp:141`). `redeemdigidollar` hardcodes `RedemptionPath::NORMAL` (`src/rpc/digidollar.cpp:1657`) and consensus currently rejects all ERR redemptions as incomplete (`src/digidollar/validation.cpp:1809`). The user-visible result can be `getprotectionstatus.err.active == true` while redemption info/wallet flows still indicate normal redeemability or produce a normal-path transaction.
+- **Reproducer plan:** on regtest, enable/set mock oracle, mint and confirm a tier-0 vault, mine to unlock height, crash price so `getprotectionstatus.err.active` is true, call `getredemptioninfo <position>`, then call `redeemdigidollar`. Expected behavior is a single authoritative "ERR not implemented/not redeemable" result or an implemented ERR transaction; current code has split status and hardcoded normal construction.
+- **Why no fix landed:** choosing whether RED phase should block all redemptions under ERR, permit normal redemptions until ERR is implemented, or implement ERR burn semantics is a protocol/wallet UX decision. No consensus or RPC schema behavior was changed without Jared approval.
+
+### DD-RH-111 — Medium — first high-volatility mint can pass before volatility freeze state is updated
+
+- **Affected invariant:** a mint that introduces a price movement at or above the freeze threshold should not be accepted merely because the monitor only records accepted transactions after validation.
+- **Exploit path:** mint validation checks `VolatilityMonitor::ShouldFreezeMinting()` before recording the mint's oracle price (`src/digidollar/validation.cpp:761`). The price history is only mutated after a transaction is accepted (`src/digidollar/validation.cpp:2206`), and `VolatilityMonitor::RecordPrice()` may also skip too-frequent samples (`src/consensus/volatility.cpp:39`). A candidate mint with a large price move can be the transaction that causes freeze, but the current pre-check still sees the old non-frozen state.
+- **Proof status:** static reachable path identified by Agent A. A small fix would need a pure "would this candidate price freeze?" API or another consensus-safe prevalidation mechanism; mutating global volatility state before validation would let invalid transactions poison the monitor.
+- **Recommended decision:** add a non-mutating volatility check that evaluates the candidate price and timestamp against the current history, then add a failing mint-validation attack test seeded with a prior price and a candidate price crossing the freeze threshold.
+
+**Rejected false positives / downgraded items:**
+- Partial burn for full collateral was rejected as already blocked by `ValidateCollateralReleaseAmount()` after DD-RH-106's authoritative mint lookup fix.
+- Timelock key-path bypass was rejected for current standard-script validation: the mint collateral output uses NUMS P2TR construction plus CLTV script leaves, and block validation still runs standard script checks.
+- RPC amount NaN/Inf/trailing-garbage was rejected: `ParseDigiDollarRpcAmount` checks full string consumption, finite values, and range.
+- Unconfirmed DD replay/chaining was rejected for consensus and wallet selection: transfer and redemption reject mempool-created DD inputs, and wallet DD selection skips unconfirmed coins.
+
+**Theoretical / not yet reachable / carry-forward risks:**
+- Existing redemption tests still assert RED-phase failures for expired normal redemption and stale ERR behavior in `src/test/digidollar_redeem_tests.cpp`. This is a test-suite quality issue until Jared chooses the intended RED/ERR redemption behavior.
+- Volatility cooldown/threshold tests do not pin exact `ShouldFreezeMinting()`/`ShouldFreezeAll()` behavior at threshold and cooldown boundaries. Carry forward to Wave 19 fuzz/adversarial expansion unless a Wave 4 design decision is approved earlier.
+- DCA boundary comments/docs still conflict with runtime behavior (`src/consensus/dca.cpp:119`, `src/consensus/dca.h:42`, `DIGIDOLLAR_ARCHITECTURE.md:386`). This is not counted as a live exploit until a canonical policy source is selected.
+- `getredemptioninfo` and Qt redeem enablement do not check actual spendable DD burn inputs before reporting redeemability (`src/rpc/digidollar.cpp:2993`, `src/qt/digidollarpositionswidget.cpp:497`). This is a reachable user-surface deception risk; carry forward to wallet/RPC/Qt waves for a deterministic functional/Qt test.
+- Qt's details context menu omits tier 0 and labels it as the default `1 year` (`src/qt/digidollarpositionswidget.cpp:365`, `src/qt/digidollarpositionswidget.cpp:375`), while the table mapping knows tier 0 is 240 blocks (`src/qt/digidollarpositionswidget.cpp:1075`). Carry forward to Wave 12 for a focused UI regression/fix.
+- Stale oracle cache rollback needs a test that restores an old source-time cache entry and asserts `GetLatestPrice()` returns stale/zero rather than a rolled-back old price.
+
+**Commands/results recorded:**
+
+```bash
+find src/digidollar src/oracle src/wallet src/rpc src/qt src/test src/test/fuzz test/functional -type f \
+  | grep -Ei 'digidollar|oracle|musig2|rh|red|attack|security|wallet|qt' \
+  | sort | wc -l
+# 1669 matching paths in the post-build tree
+
+git status --short --branch
+# dirty working tree; Red Hornet fixes remain uncommitted and unrelated pre-existing/user edits were not reverted
+```
+
+**Fixes landed:** none in Wave 4.
+
+**Commit status:** no Wave 4 commits. Existing proposed commit split from Waves 2-3 remains DD-RH-105, DD-RH-106, and DD-RH-109.
+
+**Wave 4 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.
+
+## Continuation Wave 5 — Script, OP_RETURN, Metadata, Address Abuse
+
+**Assignments:**
+- Agent A / exploit-path attacker: malformed script/template/OP_RETURN exploit paths.
+- Agent B / invariant/test breaker: parser/classifier fuzz and regression coverage gaps.
+- Agent C / boundary adversary: wallet/index/scan confusion and address display/routing attacks.
+
+**Wave attack-surface enumeration:** required local `find ... | grep ... | sort` command run successfully. Current post-build tree has 1669 matching paths because generated build artifacts are present. Agent B and C also reported that their prompted command had a trailing `sort .` typo and failed with `sort: read failed: .: Is a directory`; they reran the corrected pipeline. Review stayed within DigiDollar/oracle and directly gated wallet/RPC/Qt/validation surfaces.
+
+### DD-RH-112 — Medium — malformed transfer OP_RETURN script numbers escape validation
+
+- **Affected invariant:** malformed DD/oracle inputs must deterministically reject, not throw through consensus/mempool validation.
+- **Exploit path:** `ValidateTransferTransaction()` parsed the transfer OP_RETURN type and output amounts with `CScriptNum(data, true)` / `CScriptNum(data, true, 8)` without catching `scriptnum_error`. A DD transfer carrying `OP_RETURN "DD" <5-byte non-minimal type> ...` or a 9-byte amount push threw out of validation instead of returning invalid state.
+- **Exact code references:** fixed parser at `src/digidollar/validation.cpp:1258` and `src/digidollar/validation.cpp:1275`; attack test at `src/test/digidollar_transfer_tests.cpp:1179`.
+- **Reproducer:** `transfer_rejects_malformed_opreturn_without_throwing` first failed with two unexpected exceptions and empty reject reason.
+- **Expected secure behavior:** return false with `transfer-malformed-op-return`.
+- **Fix summary:** catch `scriptnum_error` for transfer OP_RETURN tx type and amount fields and return `TX_CONSENSUS` invalid state.
+- **Test evidence:**
+  - Pre-fix: `make -C src -j2 test/test_digibyte && ./src/test/test_digibyte --run_test=digidollar_transfer_tests/transfer_rejects_malformed_opreturn_without_throwing --log_level=all --report_level=short` failed: 1 selected test failed, 6/6 assertions failed.
+  - Post-fix: same target with `--report_level=short` passed: 1 selected test, 6 assertions.
+
+### DD-RH-113 — High — legacy OP_DIGIDOLLAR OP_RETURN can undercount mint accounting
+
+- **Affected invariant:** DD supply and collateral accounting must match the modern mint metadata validated by consensus.
+- **Exploit path:** a valid DD mint could include a valid legacy `OP_RETURN OP_DIGIDOLLAR <smaller amount>` before the modern `OP_RETURN "DD" <MINT> <real amount> ...`. Mint validation counted only the modern marker, but `ExtractMintAccountingAmounts()` called `FindDDOpReturn()`, which returned the first legacy marker. Health scanning then adds the spoofed DD amount at `src/digidollar/health.cpp:397` and `src/digidollar/health.cpp:415`, undercounting supply and overstating system health.
+- **Exact code references:** `FindDDOpReturn()` now prefers modern metadata and falls back to legacy-only transactions at `src/digidollar/validation.cpp:178`; accounting caller at `src/digidollar/validation.cpp:403`; attack test at `src/test/digidollar_validation_tests.cpp:3375`.
+- **Reproducer:** `mint_accounting_ignores_legacy_opreturn_spoof` built a valid 20,000-cent mint with a preceding valid legacy 10,000-cent marker. Pre-fix, `ExtractMintAccountingAmounts()` returned `10000` instead of `20000`.
+- **Expected secure behavior:** block-connect accounting must recover the same DD amount that mint validation accepted.
+- **Fix summary:** record the first legacy marker as fallback only; immediately return the first modern `"DD"` marker when present.
+- **Test evidence:**
+  - Pre-fix: `make -C src -j2 test/test_digibyte && ./src/test/test_digibyte --run_test=digidollar_validation_tests/mint_accounting_ignores_legacy_opreturn_spoof --report_level=short` failed with `extractedDD == ddAmount [10000 != 20000]`.
+  - Post-fix: same target passed: 1 selected test, 7 assertions.
+
+### DD-RH-114 — High — non-canonical OP_1 scripts were accepted as DD transfer outputs
+
+- **Affected invariant:** DD outputs must be canonical P2TR witness programs, not arbitrary scripts that start with `OP_1`.
+- **Exploit path:** transfer output validation treated any zero-value script with `size == 34 && script[0] == OP_1` as a DD output. A malformed script such as `OP_1 OP_DROP OP_TRUE OP_NOP...` padded to 34 bytes is not P2TR and can be spent as a true legacy script, yet DD amount mapping would assign it transfer value.
+- **Exact code references:** canonical witness-program helper at `src/digidollar/validation.cpp:60`; transfer reject at `src/digidollar/validation.cpp:1302`; previous-tx amount mapping at `src/digidollar/validation.cpp:344`; mint/redeem/collateral accounting canonicalization at `src/digidollar/validation.cpp:428`, `src/digidollar/validation.cpp:805`, `src/digidollar/validation.cpp:1669`, and `src/digidollar/validation.cpp:2053`; attack test at `src/test/digidollar_validation_tests.cpp:3145`.
+- **Reproducer:** `transfer_rejects_noncanonical_taproot_like_output` spent a valid DD input to a zero-value 34-byte `OP_1 OP_DROP OP_TRUE ...` output with a matching DD amount. Pre-fix, validation returned success and no reject reason.
+- **Expected secure behavior:** reject with `bad-dd-script`.
+- **Fix summary:** added `IsCanonicalP2TROutput()` using `CScript::IsWitnessProgram()` and `WITNESS_V1_TAPROOT_SIZE`; replaced loose P2TR classifications in DD consensus/accounting paths; transfer validation now explicitly rejects 34-byte OP_1 impostors.
+- **Test evidence:**
+  - Pre-fix: `make -C src -j2 test/test_digibyte && ./src/test/test_digibyte --run_test=digidollar_validation_tests/transfer_rejects_noncanonical_taproot_like_output --report_level=short` failed because the transfer was accepted.
+  - Post-fix: same target passed: 1 selected test, 4 assertions.
+
+**Additional tests/results:**
+
+```bash
+./src/test/test_digibyte --run_test=digidollar_transfer_tests --report_level=short
+# passed: 44 tests, 174 assertions
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests --report_level=short
+# passed: 103 tests + 2 warning-status tests, 276 assertions, exit 0
+
+./src/test/test_digibyte --run_test=digidollar_rh12_script_attacks_tests --report_level=short
+# passed: 12 tests, 25 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh49_find_opreturn_tests --report_level=short
+# exit 200: no matching test cases or all disabled; source exists but this suite is not registered/enabled in the current test binary
+
+./src/test/test_digibyte --run_test=digidollar_script_attacks_tests --report_level=short
+# failed independently of DD-RH-112/113/114: 4 failed tests, 1 abort, error-code expectations at lines 68/90, stack-size expectations at 180/181, and crash in attack_boundary_amounts at line 417
+
+git diff --check -- src/digidollar/validation.cpp src/test/digidollar_validation_tests.cpp src/test/digidollar_transfer_tests.cpp
+# passed
+```
+
+**Rejected false positives / downgraded items:**
+- Multiple modern DD OP_RETURNs remain blocked for mint, transfer, and redemption.
+- Transfer OP_RETURN amount-count spoofing is blocked: validation now enforces matched canonical DD output count and OP_RETURN amount count.
+- Coinbase DD minting remains blocked by coinbase DD marker rejection and DD source extraction rejecting coinbase sources.
+- Phase-one unsigned compact oracle price spoof remains not reachable post-DD activation under current mainnet/testnet/signet/regtest deployment parameters.
+- Unknown/truncated `OP_ORACLE` fail-open is accepted transition behavior; normal tip DD mints still fail without a block oracle price.
+
+**Theoretical / not yet reachable / carry-forward risks:**
+- Legacy DD amount parsing still uses signed left shift on attacker-controlled 8-byte legacy payloads at `src/digidollar/validation.cpp:137`, and oracle v0x02 timestamp parsing has the same UB shape in `src/oracle/bundle_manager.cpp:1318` and `src/oracle/bundle_manager.cpp:1384`. Count only after UBSan/fuzz reproducer; carry forward to Waves 17-19.
+- Mint OP_RETURN trailing data after owner pubkey is not rejected at `src/digidollar/validation.cpp:983`. Add `mint_rejects_trailing_data_after_owner_pubkey`.
+- Planned PQC v2 mint OP_RETURN shape can be positionally misread by current v1 parser; this is `ARCHITECTURAL_REVIEW_REQUIRED` until the v2 format/version gate is approved.
+- Wallet restore/rescan assumes fixed mint output indexes despite consensus allowing reordered collateral/DD outputs: `src/wallet/digidollarwallet.cpp:2124`, `src/wallet/digidollarwallet.cpp:2226`, `src/wallet/digidollarwallet.cpp:2330`, `src/wallet/digidollarwallet.cpp:2355`, `src/wallet/digidollarwallet.cpp:3949`, and `src/wallet/digidollarwallet.cpp:4664`. This is reachable wallet-storage risk but needs wallet-storage design approval; carry to Wave 9.
+- Wallet incoming DD scan can throw on malformed OP_RETURN and can credit the first of duplicate DD OP_RETURNs: `src/wallet/digidollarwallet.cpp:6994`, `src/wallet/digidollarwallet.cpp:7002`, `src/wallet/digidollarwallet.cpp:7007`. Carry to Waves 9-11.
+- Restored send history and generic raw tx RPC display DD recipients/outputs as base-chain DGB addresses, not DD addresses: `src/wallet/digidollarwallet.cpp:2475`, `src/core_write.cpp:166`, `src/core_write.cpp:186`. Carry to Waves 11-12.
+- Qt `WalletModel::validateDigiDollarAddress()` checks prefix/length/base58 but not checksum/network at `src/qt/walletmodel.cpp:1318`. Carry to Wave 12.
+- Oracle bundle script extraction concatenates split pushes at `src/oracle/bundle_manager.cpp:1202`; add noncanonical split-push rejection tests in oracle waves.
+
+**Fixes landed:** DD-RH-112, DD-RH-113, and DD-RH-114 in working tree.
+
+**Commit status:** no commits; user has not authorized local commits. Proposed commit split: one commit for DD-RH-112 transfer OP_RETURN exception handling, one for DD-RH-113 modern OP_RETURN accounting preference, and one for DD-RH-114 canonical P2TR classification. Existing Wave 2-3 proposed splits remain separate.
+
+**Wave 5 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.
+
+## Continuation Wave 6 — Activation and Consensus-Split Risks
+
+**Assignments:**
+- Agent A / exploit-path attacker: validation, chainparams, deployment gates, and shared hooks.
+- Agent B / invariant/test breaker: enabled/disabled boundary tests and mempool/block validation mismatch coverage.
+- Agent C / boundary adversary: multi-node activation, reorg, RPC, Qt, wallet, and oracle P2P boundary behavior.
+
+**Wave attack-surface enumeration:** required local `find ... | grep ... | sort` command run successfully. Current post-build tree has 1669 matching paths because generated build artifacts are present. Review stayed within DigiDollar/oracle and directly gated RPC, P2P, validation, Qt, wallet, chainparams, and miner surfaces.
+
+### DD-RH-115 — High — post-activation mint validity depended on local IBD/catch-up state
+
+- **Affected invariant:** DD mint acceptance must be deterministic and cannot depend on a node-local sync flag.
+- **Exploit path:** `ConnectBlock()` passed `fSkipOracle` into `DigiDollar::ValidationContext` based on `IsInitialBlockDownload()` / header catch-up state. `ValidateMintTransaction()` then skipped both zero-price rejection and collateral-ratio validation when `ctx.skipOracleValidation == true`. A post-activation block containing an undercollateralized mint could therefore be rejected by caught-up nodes and accepted by IBD/catch-up nodes.
+- **Exact code references:** block context wiring at `src/validation.cpp:2993`; pre-fix mint price gate at `src/digidollar/validation.cpp:768`; pre-fix collateral skip at `src/digidollar/validation.cpp:1162`; fixed mandatory price gate at `src/digidollar/validation.cpp:768`; fixed mandatory collateral validation at `src/digidollar/validation.cpp:1164`.
+- **Reproducer:** `src/test/digidollar_skip_oracle_tests.cpp:92` builds a validly structured mint for 10,000 cents of DD with only 1,000 satoshis of collateral. Pre-fix, the `skipOracleValidation=true` context returned success and no reject reason; the strict context rejected with `insufficient-collateral`.
+- **Expected secure behavior:** the same mint must reject with `insufficient-collateral` regardless of local IBD/catch-up state. A zero oracle price must reject with `bad-oracle-price` in every sync state.
+- **Fix summary:** mint oracle price and collateral calculations are now mandatory. `skipOracleValidation` no longer skips mint price/collateral consensus checks; it remains limited to the existing local protection checks that still need a broader deterministic design.
+- **Tests added/upgraded:** `src/test/digidollar_skip_oracle_tests.cpp` now asserts that undercollateralized and zero-price mints reject even when `skipOracleValidation=true`.
+- **Fail-before evidence:** `make -C src -j2 test/test_digibyte && ./src/test/test_digibyte --run_test=digidollar_skip_oracle_tests/skip_oracle_allows_insufficient_collateral_exploit --log_level=all --report_level=short` failed with exit 201, 1 selected test failed, 2/4 assertions failed; observed `skipOracle=true` returned `result: 1` and empty reject reason.
+- **Pass-after evidence:** same selected test passed after the fix; full `digidollar_skip_oracle_tests` passed 6 tests / 18 assertions.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `digidollar validation: fix DD-RH-115 skip-oracle mint bypass`.
+
+### DD-RH-116 — Low — `getmockoracleprice` was callable before DigiDollar activation
+
+- **Affected invariant:** user/operator RPC surfaces that influence or expose DigiDollar/oracle state should follow the same pre-activation gate unless explicitly deployment-monitoring-only.
+- **Exploit path:** `setmockoracleprice` and `enablemockoracle` checked DigiDollar activation before running, but `getmockoracleprice` only checked regtest. This let scripts observe mock oracle state while every other DigiDollar/oracle RPC in the gating test was blocked.
+- **Exact code references:** pre-fix ungated handler at `src/rpc/digidollar.cpp:4627`; fixed activation check at `src/rpc/digidollar.cpp:4629`; functional test list updated at `test/functional/digidollar_rpc_gating.py:66`.
+- **Reproducer:** adding `getmockoracleprice` to `digidollar_rpc_gating.py` made the pre-activation phase fail because the RPC returned successfully instead of raising "DigiDollar is not yet active".
+- **Expected secure behavior:** `getmockoracleprice` rejects pre-activation like the paired mock-oracle mutation RPCs.
+- **Fix summary:** added the same activation check used by `setmockoracleprice` and `enablemockoracle`.
+- **Tests added/upgraded:** `test/functional/digidollar_rpc_gating.py` now verifies all 28 gated DD/oracle RPCs, including `getmockoracleprice`.
+- **Fail-before evidence:** `test/functional/test_runner.py --jobs=1 digidollar_rpc_gating.py` failed at `getmockoracleprice should have been rejected pre-activation`.
+- **Pass-after evidence:** `make -C src -j2 digibyted && test/functional/test_runner.py --jobs=1 digidollar_rpc_gating.py` passed; the activation trio also passed.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `rpc digidollar: fix DD-RH-116 mock oracle activation gate`.
+
+**ARCHITECTURAL_REVIEW_REQUIRED:**
+
+### DD-RH-117 — Medium — oracle P2P activation uses static height instead of DigiDollar BIP9 state
+
+- **Affected invariant:** oracle P2P discovery and price-message handling should not become reachable before the DigiDollar deployment predicate that consumes oracle data.
+- **Exploit path:** `Consensus::IsOracleActive()` checks only `nOracleActivationHeight`, while DD validation/RPC/mining use the BIP9 `DEPLOYMENT_DIGIDOLLAR` predicate. Mainnet has `nOracleActivationHeight = 3000000` and `nDDActivationHeight = 22014720`; regtest overrides can also make DD active while oracle P2P remains inactive. P2P call sites include `VERACK` auto-`GETORACLES`, `ORACLEPRICE`, `ORACLEBUNDLE`, and `GETORACLES` handling.
+- **Exact code references:** `src/consensus/params.h:244`, `src/kernel/chainparams.cpp:307`, `src/kernel/chainparams.cpp:309`, `src/net_processing.cpp:4031`, `src/net_processing.cpp:5440`, `src/net_processing.cpp:5607`, and `src/net_processing.cpp:6192`.
+- **Proof status:** reachable P2P surface mismatch reported by all Wave 6 agents. Not counted as a direct consensus split because block oracle extraction and DD transaction validation remain BIP9-gated.
+- **Why no fix landed:** changing P2P activation semantics is a protocol/operator behavior decision. Needs Jared approval on whether oracle P2P should be gated by DD BIP9 active, `DD active && oracle height`, or a documented separate oracle deployment.
+- **Recommended decision:** align oracle P2P activation with DD BIP9 unless there is a deliberate reason to pre-warm oracle P2P. Then add a unit/functional boundary test for "oracle P2P not reachable before DD deployment active."
+
+**Rejected false positives / downgraded items:**
+- Pre-activation DD txs remain rejected by both mempool and block validation (`digidollar-not-active`), and reorg-below-activation mempool filtering is already covered.
+- Miner template inclusion of stale invalid DD transactions is guarded by DD pre-validation and `TestBlockValidity` retry logic.
+- Oracle cache pre-activation poisoning was not reachable through block connection; extraction/cache updates are DD activation gated.
+- `CheckPhase3OracleBundleVersion()` and `ValidateBlockOracleData()` null-`pindex_prev` static-height fallbacks were not shown reachable in production `ConnectBlock`, which passes `pindex->pprev`.
+
+**Theoretical / not yet reachable / carry-forward risks:**
+- Qt DigiDollar activation status uses a height heuristic for visible text while actual enablement uses BIP9 state (`src/qt/digidollartab.cpp:401`, `src/qt/digidollartab.cpp:425`). Carry to Wave 12 for a Qt regression/fix because it is a user-deception surface, not a consensus split.
+- `skipOracleValidation` still gates volatility/ERR local protection checks. DD-RH-115 removed the direct price/collateral mint split, but DD-RH-108 remains the architectural item for deterministic system-health/volatility sources.
+- Malformed `OP_ORACLE` extraction can fail open as transition behavior when no DD transaction depends on the price (`src/oracle/bundle_manager.cpp:2525`). Carry to oracle waves.
+- Phase-2 oracle bundle format remains accepted after Phase 3 height under current chainparams; no production exploit shown because `nDigiDollarPhase3Height` is currently `0`.
+- `OracleNode::Start()` is testnet-only despite mainnet oracle parameters; operator-readiness risk only, no direct exploit in Wave 6.
+
+**Commands/results recorded:**
+
+```bash
+find src/digidollar src/oracle src/wallet src/rpc src/qt src/test src/test/fuzz test/functional -type f \
+  | grep -Ei 'digidollar|oracle|musig2|rh|red|attack|security|wallet|qt' \
+  | sort | wc -l
+# 1669 matching paths in the post-build tree
+
+make -C src -j2 test/test_digibyte && \
+./src/test/test_digibyte --run_test=digidollar_skip_oracle_tests/skip_oracle_allows_insufficient_collateral_exploit --log_level=all --report_level=short
+# pre-fix DD-RH-115 failed: exit 201, 1 selected test failed, 2/4 assertions failed
+
+make -C src -j2 test/test_digibyte && \
+./src/test/test_digibyte --run_test=digidollar_skip_oracle_tests/skip_oracle_allows_insufficient_collateral_exploit --report_level=short
+# post-fix passed: 1 selected test, 4 assertions
+
+./src/test/test_digibyte --run_test=digidollar_skip_oracle_tests --report_level=short
+# passed: 6 tests, 18 assertions
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests --report_level=short
+# passed: 103 tests + 2 warning-status tests, 276 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh18_cross_feature_tests --report_level=short
+# passed: 9 tests, 36 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh31_consensus_fork_tests --report_level=short
+# passed: 24 tests, 33 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh47_consensus_fork_deep_tests --report_level=short
+# passed: 30 tests, 93 assertions
+
+./src/test/test_digibyte --run_test=digidollar_consensus_tests --report_level=short
+# passed: 13 tests, 125 assertions
+
+./src/test/test_digibyte --run_test=digidollar_activation_tests --report_level=short
+# passed: 5 tests, 17 assertions
+
+./src/test/test_digibyte --run_test=musig2_activation_tests --report_level=short
+# passed: 20 tests, 103 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh06_mint_attacks --report_level=short
+# passed: 36 tests, 69 assertions
+
+test/functional/test_runner.py --jobs=1 digidollar_rpc_gating.py
+# pre-fix DD-RH-116 failed at getmockoracleprice pre-activation gate
+
+make -C src -j2 digibyted && test/functional/test_runner.py --jobs=1 digidollar_rpc_gating.py
+# post-fix passed
+
+test/functional/test_runner.py --jobs=1 digidollar_activation.py digidollar_activation_boundary.py digidollar_rpc_gating.py
+# passed: all 3 functional tests
+
+git diff --check -- src/digidollar/validation.cpp src/test/digidollar_skip_oracle_tests.cpp src/rpc/digidollar.cpp test/functional/digidollar_rpc_gating.py reports/red_hornet_ledger.md
+# passed
+```
+
+**Fixes landed:** DD-RH-115 and DD-RH-116 in working tree.
+
+**Commit status:** no commits; user has not authorized local commits. Proposed commit split: one commit for DD-RH-115 mint validation determinism, one commit for DD-RH-116 mock oracle RPC gating. Existing Wave 2-5 proposed splits remain separate.
+
+**Wave 6 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.
+
+## Continuation Wave 7 — Reorg, Replay, Rollback, Cache Corruption
+
+**Assignments:**
+- Agent A / exploit-path attacker: production connect/disconnect state mutation, rollback order, cached DD metrics, oracle price caches, block/chain reorg state, and `ConnectBlock`/`DisconnectBlock`.
+- Agent B / invariant/test breaker: duplicate/reversed/missing connect/disconnect state updates, DD supply/collateral metrics, oracle cache rollback, reorg/reindex/restart/rescan, and mempool re-add tests.
+- Agent C / boundary adversary: restart/reindex/rescan/reorg functional boundaries, wallet restore/rescan, RPC stats after restart, oracle cache persistence/rollback, multi-node DD reorgs, and mempool resurrection.
+
+**Wave attack-surface enumeration:** required local `find ... | grep ... | sort` command run successfully. Current post-build tree has 1669 matching paths because generated build artifacts are present. All three sub-agents confirmed they read the required context files in order and ran the live enumeration. Review stayed within DigiDollar/oracle and directly gated validation, wallet, index, RPC, and oracle-cache surfaces.
+
+### DD-RH-118 — Medium — cached DD supply can drift downward after valid reorg near `MAX_DIGIDOLLAR`
+
+- **Affected invariant:** reorg connect/disconnect cycles must exactly restore DD supply/collateral accounting for valid chain states.
+- **Exploit path:** `SystemHealthMonitor::OnMintConnected()` capped `totalDDSupply` at `MAX_DIGIDOLLAR`, but `OnMintDisconnected()` subtracted the full mint amount. If valid aggregate supply was near `MAX_DIGIDOLLAR`, connecting a normal valid-size mint that crossed the cap recorded only the capped delta; disconnecting that block then subtracted the full mint and permanently undercounted cached supply. The same lossy cap existed on `OnRedeemDisconnected()`.
+- **Exact code references:** pre-fix lossy cap was at `src/digidollar/health.cpp:452`; fixed helper and call sites are at `src/digidollar/health.cpp:449`, `src/digidollar/health.cpp:463`, and `src/digidollar/health.cpp:493`; attack regression is at `src/test/digidollar_rh16_reorg_attacks_tests.cpp:206`; overflow guard expectation was updated at `src/test/digidollar_rh11_consensus_tests.cpp:47`.
+- **Reproducer:** `rh16_overflow_after_reorg_reconnect` sets cached supply to `MAX_DIGIDOLLAR - 50`, connects a normal `10000000`-cent mint, disconnects it, and expects supply to return to `MAX_DIGIDOLLAR - 50`.
+- **Fail-before evidence:** after rebuilding, `./src/test/test_digibyte --run_test=digidollar_rh16_reorg_attacks_tests/rh16_overflow_after_reorg_reconnect --log_level=all --report_level=short` failed with `got 2099990000000 expected 2099999999950`.
+- **Expected secure behavior:** cached supply must return to the exact pre-connect value. Arithmetic overflow protection must guard `CAmount` overflow, not silently apply a lossy business cap to reversible state transitions.
+- **Fix summary:** replaced the `MAX_DIGIDOLLAR` supply cap in connect/disconnect add paths with a true `CAmount` overflow clamp. Valid aggregate accounting remains exact and reversible until `std::numeric_limits<CAmount>::max()` would overflow.
+- **Tests added/upgraded:** upgraded `rh16_overflow_after_reorg_reconnect` to use a valid per-mint amount and assert exact reorg restoration; upgraded `rh11_supply_overflow_no_protection` to verify exact accounting until true `CAmount` overflow, then clamp.
+- **Pass-after evidence:** selected DD-RH-118 regression passed; selected RH-11 overflow test passed; full `digidollar_rh16_reorg_attacks_tests`, `digidollar_rh11_consensus_tests`, `digidollar_rh34_multiblock_state_tests`, `digidollar_rh42_formal_invariant_tests`, and `digidollar_health_tests` passed.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `digidollar health: fix DD-RH-118 reorg supply cap drift`.
+
+**ARCHITECTURAL_REVIEW_REQUIRED:**
+
+### DD-RH-119 — High — `MAX_DIGIDOLLAR` is documented inconsistently as output bound vs global supply cap
+
+- **Affected invariant:** DD global supply policy must be deterministic and consistently enforced if it exists.
+- **Observed conflict:** `src/digidollar/digidollar.h:18` defines `MAX_DIGIDOLLAR` as a maximum amount, production validation uses it as a per-output/per-structure bound at `src/digidollar/validation.cpp:467`, and mint consensus uses `maxMintAmount` as the per-mint cap at `src/consensus/digidollar.h:65`. `REPO_MAP_DIGIDOLLAR.md:27` calls the same constant a hard cap on total DD supply, but no consensus rule rejects a valid mint because aggregate supply would exceed it.
+- **Why no consensus fix landed:** adding or removing a global DD supply cap is an economic/consensus decision. Wave 7 fixed the local cache corruption without choosing new issuance policy.
+- **Recommended decision:** Jared should decide whether DigiDollar has a consensus-enforced aggregate supply cap. If yes, add a deterministic chain-state/index-derived consensus check and activation tests. If no, update docs and keep `MAX_DIGIDOLLAR` as an amount/output serialization bound only.
+
+**Rejected false positives / downgraded items:**
+- Invalid-block oracle cache poisoning through `ConnectBlock` was rejected: block oracle cache mutation is deferred until after full block validation at `src/validation.cpp:3143`, and existing `rh67`/`rh61` coverage passed.
+- Missed rollback for DD health updates on ordinary `ConnectBlock` failures was rejected: the `DigiDollarHealthUpdateGuard` reverses uncommitted mint/redeem updates before `Commit()` at `src/validation.cpp:2822`; `rh68` coverage passed.
+- Redeem input-0 mismatch was rejected: current redemption validation treats input 0 as collateral and requires DD inputs after it, so disconnect's vault-coin assumption is not attacker-reachable without another confirmed validation bug.
+- Transfer missing supply updates was rejected: DD transfers are supply-neutral and should not mutate supply/collateral metrics.
+- Mempool resurrection of disconnected DD transactions was rejected as intentional reorg behavior: re-addition routes through normal mempool admission and DD validation rechecks deployment, UTXO, oracle, and unconfirmed-parent constraints.
+- Wallet rescan/restart DD loss was rejected for the inspected paths: existing functional tests cover mint/redeem/transfer reorg, reindex, rescan, and persistence restart.
+
+**Theoretical / not yet reachable / carry-forward risks:**
+- DD-RH-069 remains the critical architectural item: collateral can be unlocked by the normal Taproot timelock+owner leaf in a non-DD transaction after lock expiry, bypassing DD burn validation. This is a script/consensus redesign, so no fix was landed without Jared approval.
+- DD-RH-108 remains active: DCA/ERR mint and redemption behavior still depends on process-local cached health/volatility in several paths. Wave 7 found the restart variant again, where a node with an empty cache can compute "max healthy" from zero cached supply at `src/digidollar/validation.cpp:2382`. Needs deterministic chain/index-derived health design.
+- Overburned DD in redemption is a reachable accounting lead but not yet counted as a confirmed vulnerability in Wave 7. Validation permits `ddBurned > originalDDMinted` at `src/digidollar/validation.cpp:2001`, while in-memory and stats-index accounting subtract only the original vault amount at `src/validation.cpp:3031` and `src/index/digidollarstatsindex.cpp:276`. This appears conservative/liveness-skewing rather than inflationary, but needs a targeted regression that distinguishes actual DD UTXO supply from reported supply.
+- Oracle startup reload only scans the last 20 blocks at `src/oracle/bundle_manager.cpp:2103` while price freshness is also wall-clock based at `src/oracle/bundle_manager.cpp:1523`. A restarted node may forget a still-time-fresh bundle that is more than 20 blocks behind tip. This appears fail-closed for minting; carry to oracle staleness waves.
+- No combined multi-node functional test covers mint, transfer, redeem, branch split, longer competing chain, reconnect, wallet rescan, stats comparison, and mempool checks in one scenario.
+- No direct stats-index restart test asserts `getdigidollarstats` immediately after node restart with `-digidollarstatsindex=1`.
+- No deep oracle cache reorg test exceeds the current cache retention window.
+
+**Commands/results recorded:**
+
+```bash
+find src/digidollar src/oracle src/wallet src/rpc src/qt src/test src/test/fuzz test/functional -type f \
+  | grep -Ei 'digidollar|oracle|musig2|rh|red|attack|security|wallet|qt' \
+  | sort | wc -l
+# 1669 matching paths in the post-build tree
+
+make -C src -j2 test/test_digibyte && \
+./src/test/test_digibyte --run_test=digidollar_rh16_reorg_attacks_tests/rh16_overflow_after_reorg_reconnect --log_level=all --report_level=short
+# pre-fix DD-RH-118 failed after rebuild: got 2099990000000 expected 2099999999950
+
+make -C src -j2 test/test_digibyte && \
+./src/test/test_digibyte --run_test=digidollar_rh16_reorg_attacks_tests/rh16_overflow_after_reorg_reconnect --report_level=short && \
+./src/test/test_digibyte --run_test=digidollar_rh11_consensus_tests/rh11_supply_overflow_no_protection --report_level=short
+# passed: both selected tests
+
+./src/test/test_digibyte --run_test=digidollar_rh16_reorg_attacks_tests --report_level=short
+# passed: 11 tests, 43 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh11_consensus_tests --report_level=short
+# passed: 15 tests, 538 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh34_multiblock_state_tests --report_level=short
+# passed: 21 tests, 1358 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh42_formal_invariant_tests --report_level=short
+# passed: 15 tests, 7897668 assertions
+
+./src/test/test_digibyte --run_test=digidollar_health_tests --report_level=short
+# passed: 21 tests, 567 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh25_serialization_cache_tests --report_level=short
+# passed: 6 tests, 26 assertions
+
+./src/test/test_digibyte --run_test=rh68_test_block_validity_health_metrics_side_effect_tests --report_level=short
+# passed: 1 test, 13 assertions
+
+./src/test/test_digibyte --run_test=rh67_invalid_block_oracle_cache_side_effect_tests --report_level=short
+# passed: 1 test, 6 assertions
+
+./src/test/test_digibyte --run_test=rh66_startup_oracle_price_loading_tests --report_level=short
+# passed: 1 test, 14 assertions
+
+./src/test/test_digibyte --run_test=rh63_oracle_validator_escape_hatches_tests --report_level=short
+# passed: 7 tests, 35 assertions
+
+./src/test/test_digibyte --run_test=rh61_coinbase_price_cache_poisoning_tests --report_level=short
+# passed: 7 tests, 19 assertions
+
+test/functional/test_runner.py --jobs=1 digidollar_stats_reorg.py digidollar_oracle_reorg_cache.py wallet_digidollar_reorg.py wallet_digidollar_transfer_reorg.py wallet_digidollar_mint_reorg.py wallet_digidollar_pending_redeem_restart.py wallet_digidollar_reindex.py
+# passed: all 7 functional tests
+
+test/functional/test_runner.py --jobs=1 digidollar_stats_reordered_mint.py wallet_digidollar_rescan.py wallet_digidollar_persistence_restart.py digidollar_network_tracking.py digidollar_redeem_stats.py digidollar_persistence.py
+# passed: all 7 functional entries; wallet_digidollar_persistence_restart.py ran legacy-wallet and descriptors variants
+
+git diff --check -- src/digidollar/health.cpp src/test/digidollar_rh16_reorg_attacks_tests.cpp src/test/digidollar_rh11_consensus_tests.cpp reports/red_hornet_ledger.md
+# passed
+
+git status --short --branch
+# dirty working tree; DD-RH-118 and earlier Red Hornet fixes remain uncommitted, unrelated pre-existing/user edits were not reverted
+```
+
+**Fixes landed:** DD-RH-118 in working tree.
+
+**Commit status:** no commits; user has not authorized local commits. Proposed commit split: one commit for DD-RH-118 health monitor reversible accounting. Existing Wave 2-6 proposed splits remain separate.
+
+**Wave 7 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.
+
+## Continuation Wave 8 — Mempool Relay, Conflict, Replacement
+
+**Assignments:**
+- Agent A / exploit-path attacker: DD mempool admission, RBF/full-RBF replacement, conflict removal, package accept, and oracle-mempool boundaries.
+- Agent B / invariant/test breaker: mempool attack tests, replacement/package coverage, malformed conflict cases, and missing negative assertions.
+- Agent C / boundary adversary: multi-node/reorg/restart mempool behavior, persisted mempool reload, wallet-visible pending DD state, and txindex/reorg replay.
+
+**Wave attack-surface enumeration:** required local `find ... | grep ... | sort` command run successfully. Current post-build tree has 1670 matching paths after adding the new functional regression. All three sub-agents confirmed they read the required context files in order and ran the live enumeration. Review stayed within DigiDollar/oracle and directly gated mempool, validation, wallet, RPC, and functional-test surfaces.
+
+### DD-RH-120 — Low — non-final DD transactions forced DD contextual validation before cheap finality rejection
+
+- **Affected invariant:** malformed or non-final DD/oracle inputs must not create practical validation DoS beyond intended mempool policy cost.
+- **Exploit path:** `MemPoolAccept::PreChecks()` ran full DigiDollar contextual validation before `CheckFinalTxAtTip()`. A peer could send structurally DD-marked, non-final transactions and force DD parsing/oracle/block-db work, receiving a DD structural reject instead of the cheap `non-final` policy reject.
+- **Exact code references:** finality now runs before DD contextual validation at `src/validation.cpp:817`; cheap DD marker/type gating remains at `src/validation.cpp:824`; full DD contextual validation now runs after input caching at `src/validation.cpp:947`. Regression is at `test/functional/digidollar_activation_boundary.py:176`.
+- **Reproducer:** `digidollar_activation_boundary.py` constructs a future-locktime DD transfer with sequence `0xfffffffe` and calls `testmempoolaccept`.
+- **Fail-before evidence:** `test/functional/test_runner.py --jobs=1 digidollar_activation_boundary.py` failed with `AssertionError: not(transfer-no-op-return-data == non-final)`.
+- **Expected secure behavior:** non-final DD transactions are rejected as `non-final` before expensive DD validation.
+- **Fix summary:** moved `CheckFinalTxAtTip()` immediately after `CheckTransaction()` and before DD contextual validation.
+- **Tests added/upgraded:** `test/functional/digidollar_activation_boundary.py` now asserts the non-final DD reject reason.
+- **Pass-after evidence:** activation boundary functional test passed; DD mempool attack/relay unit tests passed.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `validation: fix DD-RH-120 non-final DD mempool ordering`.
+
+### DD-RH-121 — Medium — DD transfer descendants can persist after multi-block reorg through stale txindex and missing final-tip DD revalidation
+
+- **Affected invariant:** reorgs, restarts, rescans, cache invalidation, wallet reloads, and mempool conflicts cannot corrupt DD supply/collateral/accounting state; DD transfer inputs must remain confirmed before their OP_RETURN amount is trusted.
+- **Exploit path:** during `invalidateblock`/multi-block disconnect, `MaybeUpdateMempoolForReorg()` re-added the transfer block while the mint ancestor was still temporarily visible as a confirmed UTXO. After the mint block disconnected, the mint was re-added to mempool but the transfer stayed accepted as if it spent a confirmed DD input. Because DD amount extraction can also read stale historical txindex data, the transfer survived with an unconfirmed DD parent and was visible in wallet/mempool state.
+- **Exact code references:** reorg re-add loop at `src/validation.cpp:358`; final-tip DD revalidation added at `src/validation.cpp:441`; DD revalidation uses a mempool-aware coin view at `src/validation.cpp:442`; failing transfer rejection now occurs through `ValidateDigiDollarTransaction()` at `src/validation.cpp:471`; ordinary ATMP DD validation also now uses the mempool-aware cached view at `src/validation.cpp:947`. Attack regression is `test/functional/wallet_digidollar_transfer_ancestor_reorg.py:6`.
+- **Reproducer:** with `-txindex=1 -persistmempool=1`, mine a DD mint at the low regtest fallback oracle price, mine a DD transfer spending that mint, then invalidate the mint ancestor block. Before the fix, both the mint and transfer returned to mempool even though the transfer's DD input was now from an unconfirmed mint.
+- **Fail-before evidence:** `test/functional/test_runner.py --jobs=1 wallet_digidollar_transfer_ancestor_reorg.py` failed with `AssertionError: DD transfer descendant must not return to mempool while its DD input comes from an unconfirmed mint`.
+- **Expected secure behavior:** after the final reorg tip is known, any DD mempool entry resurrected from disconnected blocks must still validate against the final chain plus mempool view. A transfer whose DD input is only available from a mempool parent must be removed and must not survive restart through `mempool.dat`.
+- **Fix summary:** kept cheap DD type/activation rejects early, moved ordinary DD mempool validation to use the mempool-aware cached coin view after input loading, and added DD-specific final-tip revalidation in `MaybeUpdateMempoolForReorg()` before `removeForReorg()` finishes.
+- **Tests added/upgraded:** added `test/functional/wallet_digidollar_transfer_ancestor_reorg.py` and registered it in `test/functional/test_runner.py`.
+- **Pass-after evidence:** the new ancestor-reorg regression passed; surrounding transfer/reorg/restart functional tests passed; DD mempool unit suites passed.
+- **Status:** fixed in working tree, uncommitted. Proposed commit: `validation: fix DD-RH-121 reorg DD descendant resurrection`.
+
+**Rejected false positives / downgraded items:**
+- DD tx replacement by a higher-fee non-DD transaction is owner-authorized cancellation/confusion, not theft or inflation: the replacement must spend the same inputs and pass generic RBF/full-RBF policy. No fix landed.
+- Invalid replacement cannot evict a valid DD tx because conflicts are removed only after replacement prechecks, policy checks, scripts, and finalization succeed.
+- Wallet-built DD mint/transfer transactions do not opt into BIP125 by default; redemption uses `0xfffffffe` for CLTV and does not signal BIP125 opt-in. The redemption sequence comment is misleading, not itself a funds-loss bug.
+- Package accept did not show a DD bypass in this wave: package-created coins are tagged `MEMPOOL_HEIGHT`, and DD transfer/redeem validation rejects unconfirmed zero-value DD inputs when the mempool view is visible.
+- Oracle P2P pending objects do not interact directly with tx mempool admission; they remain in scope for oracle/P2P waves.
+
+**Theoretical / not yet reachable / carry-forward risks:**
+- No end-to-end DD RBF/replacement functional test proves DD-to-non-DD and non-DD-to-DD replacement behavior under both opt-in and full-RBF. Coverage gap, not a confirmed vulnerability.
+- No DD-specific package submission negative test proves an unconfirmed DD parent/child package remains rejected through `submitpackage`/package evaluation.
+- DD redemption with an unconfirmed collateral parent should receive a targeted reorg regression in Wave 9 or Wave 4 follow-up. DD-RH-121 fixed final-tip DD revalidation broadly, but the current regression proves the transfer path only.
+- Existing full `digidollar_redteam_tests` still has an unrelated stale failure in `redteam_nums_key_legitimate_collateral_accepted` (`insufficient-collateral`). Not counted as a Wave 8 regression failure because targeted DD mempool suites passed.
+
+**Commands/results recorded:**
+
+```bash
+find src/digidollar src/oracle src/wallet src/rpc src/qt src/test src/test/fuzz test/functional -type f \
+  | grep -Ei 'digidollar|oracle|musig2|rh|red|attack|security|wallet|qt' \
+  | sort | wc -l
+# 1670 matching paths after adding wallet_digidollar_transfer_ancestor_reorg.py
+
+./src/test/test_digibyte --run_test=digidollar_rh17_mempool_attacks_tests --report_level=short
+# passed: 10 tests, 34 assertions
+
+./src/test/test_digibyte --run_test=digidollar_rh33_mempool_relay_tests --report_level=short
+# passed: 12 tests, 318 assertions
+
+./src/test/test_digibyte --run_test=digidollar_transfer_tests --report_level=short
+# passed: 44 tests, 174 assertions
+
+./src/test/test_digibyte --run_test=digidollar_txbuilder_tests --report_level=short
+# passed: 18 tests, 63 assertions
+
+test/functional/test_runner.py --jobs=1 wallet_digidollar_transfer_ancestor_reorg.py
+# pre-fix DD-RH-121 failed: transfer descendant returned to mempool with unconfirmed DD parent
+
+make -C src -j2 digibyted test/test_digibyte
+# passed; pre-existing redundant CheckMinimalPush declaration warning remained
+
+test/functional/test_runner.py --jobs=1 wallet_digidollar_transfer_ancestor_reorg.py
+# post-fix passed
+
+test/functional/test_runner.py --jobs=1 digidollar_activation_boundary.py
+# pre-fix DD-RH-120 failed with transfer-no-op-return-data instead of non-final
+# post-fix passed
+
+test/functional/test_runner.py --jobs=1 wallet_digidollar_transfer_reorg.py wallet_digidollar_pending_redeem_restart.py digidollar_stats_reorg.py
+# passed: all 3 functional tests
+
+test/functional/test_runner.py --jobs=1 -t /tmp/dgb_redhornet_networkrelay_ digidollar_network_relay.py
+# passed: 68 seconds
+
+./src/test/test_digibyte --run_test=digidollar_validation_tests --report_level=short
+# passed: 103 tests + 2 warning-status tests, 276 assertions
+
+test/functional/test_runner.py --jobs=1 digidollar_network_relay.py
+# infrastructure-only failure: parallel test_runner invocation reused the same timestamped tmpdir and raised FileExistsError; rerun with -t passed
+```
+
+**Fixes landed:** DD-RH-120 and DD-RH-121 in working tree.
+
+**Commit status:** no commits; user has not authorized local commits. Proposed commit split: one commit for DD-RH-120 mempool ordering, one commit for DD-RH-121 reorg descendant resurrection. Existing Wave 2-7 proposed splits remain separate.
+
+**Wave 8 status:** complete. Ledger updated at `reports/red_hornet_ledger.md`.

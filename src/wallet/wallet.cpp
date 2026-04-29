@@ -1389,6 +1389,12 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
 
     RecursiveUpdateTxState(hashTx, try_updating_state);
 
+    if (m_dd_wallet) {
+        const size_t dd_utxos = m_dd_wallet->ScanForDDUTXOs();
+        WalletLogPrintf("DigiDollar: Rebuilt DD UTXOs after abandoning %s - %d tracked\n",
+                        hashTx.ToString(), dd_utxos);
+    }
+
     return true;
 }
 
@@ -1649,6 +1655,12 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
                 RecursiveUpdateTxState(wtx.tx->GetHash(), try_updating_state);
             }
         }
+    }
+
+    if (dd_wallet) {
+        const size_t dd_utxos = dd_wallet->ScanForDDUTXOs();
+        WalletLogPrintf("DigiDollar: Rebuilt DD UTXOs after block disconnect at height %d - %d tracked\n",
+                        block.height, dd_utxos);
     }
 }
 

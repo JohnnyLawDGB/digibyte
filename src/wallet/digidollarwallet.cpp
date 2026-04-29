@@ -3739,6 +3739,10 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
 
         // Iterate through all wallet transactions
         for (const auto& [txid, wtx] : m_wallet->mapWallet) {
+            if (wtx.isAbandoned() || wtx.isConflicted()) {
+                continue;
+            }
+
             // First, find the OP_RETURN output and extract DD amounts
             std::vector<CAmount> ddAmounts;
             int ddTxType = 0;  // 0=none, 1=MINT, 2=TRANSFER

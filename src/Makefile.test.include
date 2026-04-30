@@ -83,6 +83,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_rh33_mempool_relay_tests.cpp \
   test/digidollar_rh34_multiblock_state_tests.cpp \
   test/digidollar_err_tests.cpp \
+  test/digidollar_health_dca_tests.cpp \
   test/digidollar_health_tests.cpp \
   test/digidollar_t2_05_tests.cpp \
   test/digidollar_opcodes_tests.cpp \
@@ -310,7 +311,9 @@ DIGIBYTE_TESTS += \
   wallet/test/group_outputs_tests.cpp \
   wallet/test/digidollar_persistence_wallet_tests.cpp \
   wallet/test/digidollar_wallet_security_tests.cpp \
-  wallet/test/rh59_coincontrol_dd_lock_bypass_tests.cpp
+  wallet/test/rh59_coincontrol_dd_lock_bypass_tests.cpp \
+  test/digidollar_rpc_unit_tests.cpp \
+  test/digidollar_wallet_hd_tests.cpp
 
 FUZZ_SUITE_LD_COMMON +=\
  $(SQLITE_LIBS) \

@@ -66,6 +66,21 @@ struct DigiDollarERRTestSetup : public TestingSetup {
     std::vector<XOnlyPubKey> oracleXOnlyKeys;
 };
 
+static CTransaction BuildWave1ERRRedemptionTx(const CKey& owner_key, int dd_input_count, uint32_t lock_time, CAmount collateral_out)
+{
+    CMutableTransaction mtx;
+    mtx.nVersion = DigiDollar::DD_TX_VERSION | DigiDollar::DD_TX_REDEEM;
+    mtx.nLockTime = lock_time;
+
+    for (int i = 0; i < dd_input_count; ++i) {
+        mtx.vin.emplace_back(COutPoint(uint256::ONE, static_cast<uint32_t>(i)), CScript(), 0xfffffffe);
+    }
+
+    CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(owner_key.GetPubKey()))};
+    mtx.vout.emplace_back(collateral_out, GetScriptForDestination(dest));
+    return CTransaction(mtx);
+}
+
 // ============================================================================
 // ERR Activation Tests (GREEN Phase)
 // ============================================================================
@@ -1342,6 +1357,74 @@ BOOST_FIXTURE_TEST_CASE(bug7_err_healthy_system_no_err, DigiDollarERRTestSetup)
     DigiDollar::ERR::ERRState state = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
     BOOST_CHECK_MESSAGE(!state.isActive,
         "ERR should NOT be active with healthy system (150%)");
+}
+
+// ============================================================================
+// Wave 1 P0.2 ERR Red-Phase Coverage
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(wave1_valid_err_redemption_does_not_return_incomplete, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(90, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight, 10000, 90, Params());
+
+    const CTransaction tx = BuildWave1ERRRedemptionTx(testKey, 2, mockHeight - 1, 2 * COIN);
+    TxValidationState state;
+    const bool accepted = DigiDollar::ValidateERRRedemption(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(accepted,
+        "valid ERR redemption rejected with reason=" << state.GetRejectReason());
+    BOOST_CHECK_NE(state.GetRejectReason(), "err-validation-incomplete");
+}
+
+BOOST_FIXTURE_TEST_CASE(wave1_err_requires_extra_burn_not_original_only, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(90, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight, 10000, 90, Params());
+
+    const CAmount original_dd = 10000;
+    const CAmount required_burn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(original_dd, 90);
+    BOOST_REQUIRE_GT(required_burn, original_dd);
+
+    const CTransaction original_only = BuildWave1ERRRedemptionTx(testKey, 1, mockHeight - 1, COIN);
+    const bool original_only_accepted =
+        DigiDollar::ERR::EmergencyRedemptionRatio::ValidateERRRedemption(original_only, original_dd, COIN);
+    BOOST_CHECK_MESSAGE(!original_only_accepted,
+        "ERR accepted original-only DD burn even though required burn is "
+        << required_burn << " cents for original " << original_dd << " cents");
+
+    const CTransaction required_extra = BuildWave1ERRRedemptionTx(testKey, 2, mockHeight - 1, 2 * COIN);
+    TxValidationState state;
+    const bool extra_burn_accepted = DigiDollar::ValidateERRRedemption(required_extra, ctx, state);
+    BOOST_CHECK_MESSAGE(extra_burn_accepted,
+        "ERR redemption with required extra burn rejected with reason=" << state.GetRejectReason());
+    BOOST_CHECK_NE(state.GetRejectReason(), "err-validation-incomplete");
+}
+
+BOOST_FIXTURE_TEST_CASE(wave1_err_before_timelock_fails, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(85, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight - 1, 10000, 85, Params());
+
+    const CTransaction tx = BuildWave1ERRRedemptionTx(testKey, 2, mockHeight, 2 * COIN);
+    TxValidationState state;
+    const bool accepted = DigiDollar::ValidateEmergencyRedemptionConditions(tx, ctx, state);
+
+    BOOST_CHECK(!accepted);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "err-timelock-active");
+}
+
+BOOST_FIXTURE_TEST_CASE(wave1_normal_redemption_blocked_while_err_active, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(85, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight, 10000, 85, Params());
+
+    const CTransaction tx = BuildWave1ERRRedemptionTx(testKey, 1, mockHeight - 1, COIN);
+    TxValidationState state;
+    const bool accepted = DigiDollar::ValidateNormalRedemptionConditions(tx, ctx, state);
+
+    BOOST_CHECK(!accepted);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "redemption-err-active");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -908,4 +908,52 @@ BOOST_FIXTURE_TEST_CASE(bug7_volatility_state_survives_restart, DigiDollarVolati
     }
 }
 
+// ============================================================================
+// Wave 1 P0.7 Volatility Red-Phase Coverage
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(wave1_candidate_crossing_freeze_threshold_rejected_before_state_mutation, DigiDollarVolatilityTestSetup)
+{
+    VolatilityMonitor::RecordPrice(basePrice, mockTimestamp, mockHeight);
+    const std::vector<PricePoint> before_history = VolatilityMonitor::GetPriceHistory();
+    BOOST_REQUIRE_EQUAL(before_history.size(), 1U);
+
+    const CAmount freeze_candidate = basePrice * 121 / 100;
+    VolatilityMonitor::RecordPrice(freeze_candidate, mockTimestamp + 3600, mockHeight + 1);
+
+    const std::vector<PricePoint> after_history = VolatilityMonitor::GetPriceHistory();
+    const VolatilityState after_state = VolatilityMonitor::GetCurrentState();
+
+    BOOST_CHECK_MESSAGE(after_history.size() == before_history.size(),
+        "freeze-threshold candidate mutated price history; before="
+        << before_history.size() << " after=" << after_history.size());
+    BOOST_REQUIRE(!after_history.empty());
+    BOOST_CHECK_EQUAL(after_history.back().price, before_history.back().price);
+    BOOST_CHECK_MESSAGE(!after_state.mintingFrozen && !after_state.allOperationsFrozen,
+        "freeze-threshold candidate poisoned volatility state before acceptance");
+}
+
+BOOST_FIXTURE_TEST_CASE(wave1_invalid_candidate_price_does_not_poison_volatility_state, DigiDollarVolatilityTestSetup)
+{
+    VolatilityMonitor::RecordPrice(basePrice, mockTimestamp, mockHeight);
+    const std::vector<PricePoint> before_history = VolatilityMonitor::GetPriceHistory();
+    BOOST_REQUIRE_EQUAL(before_history.size(), 1U);
+
+    VolatilityMonitor::RecordPrice(0, mockTimestamp + 3600, mockHeight + 1);
+    VolatilityMonitor::RecordPrice(-basePrice, mockTimestamp + 7200, mockHeight + 2);
+
+    const std::vector<PricePoint> after_history = VolatilityMonitor::GetPriceHistory();
+    const VolatilityState after_state = VolatilityMonitor::GetCurrentState();
+
+    BOOST_CHECK_MESSAGE(after_history.size() == before_history.size(),
+        "invalid candidate prices mutated history; before="
+        << before_history.size() << " after=" << after_history.size());
+    BOOST_REQUIRE(!after_history.empty());
+    BOOST_CHECK_EQUAL(after_history.back().price, before_history.back().price);
+    BOOST_CHECK_SMALL(after_state.hourlyVolatility, 0.01);
+    BOOST_CHECK_SMALL(after_state.dailyVolatility, 0.01);
+    BOOST_CHECK(!after_state.mintingFrozen);
+    BOOST_CHECK(!after_state.allOperationsFrozen);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

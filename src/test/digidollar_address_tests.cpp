@@ -285,4 +285,41 @@ BOOST_AUTO_TEST_CASE(address_format_consistency_test)
     }
 }
 
+BOOST_AUTO_TEST_CASE(network_specific_digidollar_address_validation_test)
+{
+    struct ParamsRestorer {
+        ChainType original;
+        ~ParamsRestorer() { SelectParams(original); }
+    } restore{Params().GetChainType()};
+
+    uint256 hash;
+    hash.SetHex("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+    XOnlyPubKey xonly_pubkey(hash);
+    WitnessV1Taproot taproot_dest(xonly_pubkey);
+    CTxDestination dest = taproot_dest;
+
+    CDigiDollarAddress main_addr;
+    CDigiDollarAddress test_addr;
+    CDigiDollarAddress regtest_addr;
+    BOOST_REQUIRE(main_addr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS));
+    BOOST_REQUIRE(test_addr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS_TESTNET));
+    BOOST_REQUIRE(regtest_addr.SetDigiDollar(dest, CChainParams::DIGIDOLLAR_ADDRESS_REGTEST));
+
+    const std::string mainnet_dd = main_addr.ToString();
+    const std::string testnet_td = test_addr.ToString();
+    const std::string regtest_rd = regtest_addr.ToString();
+
+    SelectParams(ChainType::MAIN);
+    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(mainnet_dd));
+    BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(testnet_td));
+
+    SelectParams(ChainType::TESTNET);
+    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(testnet_td));
+    BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(mainnet_dd));
+
+    SelectParams(ChainType::REGTEST);
+    BOOST_CHECK(CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(regtest_rd));
+    BOOST_CHECK(!CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(mainnet_dd));
+}
+
 BOOST_AUTO_TEST_SUITE_END()

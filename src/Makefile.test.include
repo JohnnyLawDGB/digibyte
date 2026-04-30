@@ -75,6 +75,7 @@ DIGIBYTE_TESTS =\
   test/base64_tests.cpp \
   test/digidollar_activation_tests.cpp \
   test/digidollar_address_tests.cpp \
+  test/digidollar_burn_enforcement_tests.cpp \
   test/digidollar_consensus_tests.cpp \
   test/digidollar_dca_tests.cpp \
   test/digidollar_err_attack_tests.cpp \
@@ -193,6 +194,7 @@ DIGIBYTE_TESTS =\
   test/digidollar_restore_tests.cpp \
   test/digidollar_timelock_tests.cpp \
   test/digidollar_lock_height_tests.cpp \
+  test/digidollar_locktier_tests.cpp \
   test/bech32_tests.cpp \
   test/bip32_tests.cpp \
   test/blockchain_tests.cpp \

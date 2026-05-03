@@ -190,7 +190,8 @@ class TransferTxBuilder : public TxBuilder {
 public:
     using TxBuilder::TxBuilder;
     TxBuilderResult BuildTransferTransaction(const TxBuilderTransferParams& params);
-    bool ValidateTransferParams(const TxBuilderTransferParams& params) const;
+    // If reason is non-null and validation fails, populates with a specific error message.
+    bool ValidateTransferParams(const TxBuilderTransferParams& params, std::string* reason = nullptr) const;
     CAmount CalculateTotalDDInput(const std::vector<CTxOut>& inputs,
                                   const std::vector<CAmount>& amounts) const;
     CScript CreateDDTransferScript(const CPubKey& recipient, CAmount amount) const;

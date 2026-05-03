@@ -1136,7 +1136,9 @@ bool DigiDollarWallet::IsLockedByDD(const COutPoint& outpoint) const
 
 bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiDollarAddress, CAmount>>& recipients,
                                              std::string& txid, std::string& error,
-                                             CAmount* dd_change_out) {
+                                             CAmount* dd_change_out,
+                                             CAmount* dgb_fee_out,
+                                             int* inputs_used_out) {
     auto locks = LockDDWallet();
     // Clear previous results
     txid.clear();
@@ -1209,9 +1211,27 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
         CAmount selectedDDTotal = 0;
         std::vector<CAmount> selected_dd_amounts;
         if (!SelectDDCoins(totalAmount, params.ddUtxos, selectedDDTotal, &selected_dd_amounts)) {
-            // CRITICAL: Do NOT use mock UTXOs - they cause "bad-txns-inputs-missingorspent" errors!
-            error = "No spendable DD UTXOs found. Make sure mint transaction is confirmed.";
-            LogPrintf("DigiDollar: Transfer failed - no DD UTXOs available\n");
+            // SelectDDCoins fails for three distinct reasons; report each precisely so
+            // integrators don't chase the wrong cause. The historical message conflated
+            // all three under "mint not confirmed yet."
+            auto utxos = GetDDUTXOs();
+            if (utxos.empty()) {
+                error = "No spendable DD UTXOs found. Make sure mint transaction is confirmed.";
+            } else {
+                CAmount totalSpendable = 0;
+                for (const auto& u : utxos) totalSpendable += u.dd_amount;
+                const CAmount minOut = Params().GetDigiDollarParams().minOutputAmount;
+                if (totalSpendable < totalAmount) {
+                    error = strprintf(
+                        "Insufficient DD balance for transfer: have %lld cents across %zu spendable UTXOs, need %lld cents",
+                        static_cast<long long>(totalSpendable), utxos.size(), static_cast<long long>(totalAmount));
+                } else {
+                    error = strprintf(
+                        "Cannot construct DD transfer: no input combination yields valid change (would produce sub-minimum dust output below %lld cents). Try a different amount or consolidate UTXOs.",
+                        static_cast<long long>(minOut));
+                }
+            }
+            LogPrintf("DigiDollar: Transfer failed - SelectDDCoins rejected; error=%s\n", error);
             return false;
         }
 
@@ -1448,6 +1468,12 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
             return false;
         }
 
+        // Capture authoritative fee + input count from the freshly-built tx so the RPC
+        // response doesn't need to round-trip through mapWallet (which is racy: the tx
+        // may not be indexed by the time the response is built).
+        if (dgb_fee_out) *dgb_fee_out = result.totalFees;
+        if (inputs_used_out) *inputs_used_out = static_cast<int>(result.tx.vin.size());
+
         // Sign the transaction before broadcasting
         LogPrintf("DigiDollar: Signing transaction with %d DD inputs and %d fee inputs\n",
                   params.ddUtxos.size(), params.feeUtxos.size());
@@ -1646,8 +1672,11 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
 
 bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
                                           std::string& txid, std::string& error,
-                                          CAmount* dd_change_out) {
-    return TransferDigiDollarMany({{to, amount}}, txid, error, dd_change_out);
+                                          CAmount* dd_change_out,
+                                          CAmount* dgb_fee_out,
+                                          int* inputs_used_out) {
+    return TransferDigiDollarMany({{to, amount}}, txid, error, dd_change_out,
+                                  dgb_fee_out, inputs_used_out);
 }
 
 CAmount DigiDollarWallet::GetDDBalanceLegacy() const {

@@ -534,7 +534,7 @@ static RPCHelpMan calculatecollateralrequirement()
                 "the exact amount of DGB needed for a given DD mint amount and lock period.\n",
                 {
                     {"dd_amount_cents", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint in cents (e.g., 10000 = $100)"},
-                    {"lock_days", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock period in days (30, 90, 180, 365, 1095, 1825, 2555, or 3650)"},
+                    {"lock_days", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock period in days. Must be one of the consensus tiers: 30, 90, 180, 365, 730, 1095, 1825, 2555, or 3650. (For the sub-day testing tier, use estimatecollateral with lock_tier 0.)"},
                     {"oracle_price", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "DGB price in cents per DGB (uses current price if omitted)"}
                 },
                 RPCResult{
@@ -620,11 +620,34 @@ static RPCHelpMan calculatecollateralrequirement()
             // Convert lock days to blocks
             int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
 
+            // Strict validation: lockDays must map to an exact tier. The underlying
+            // GetCollateralRatioForLockTime is intentionally lenient (silently buckets
+            // intermediate durations to the next tier), but the advisory RPC must match
+            // the strict tier set actually accepted by mintdigidollar. Otherwise callers
+            // get a quote for a position they cannot construct.
+            if (ddParams.collateralRatios.find(lockBlocks) == ddParams.collateralRatios.end()) {
+                std::string validDays;
+                bool first = true;
+                for (const auto& [blocks, ratio] : ddParams.collateralRatios) {
+                    // Skip sub-day tiers (e.g. 240-block testing tier) — they cannot
+                    // be selected via lockDays since the RPC requires lockDays > 0.
+                    int days = static_cast<int>(blocks / DigiDollar::BLOCKS_PER_DAY);
+                    if (days < 1) continue;
+                    if (!first) validDays += ", ";
+                    validDays += strprintf("%d", days);
+                    first = false;
+                }
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Invalid lock period: %d days. Valid periods (in days): %s. "
+                              "For sub-day tiers (e.g. 1-hour testing), use estimatecollateral with lock_tier 0.",
+                              lockDays, validDays));
+            }
+
             // Get base collateral ratio
             int baseRatio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddParams);
             if (baseRatio <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
-                    strprintf("Invalid lock period: %d days. Valid periods: 30, 90, 180, 365, 1095, 1825, 2555, 3650", lockDays));
+                    strprintf("Invalid lock period: %d days", lockDays));
             }
 
             // Get current system health
@@ -774,7 +797,7 @@ RPCHelpMan mintdigidollar()
                 "Creates a new DigiDollar position by locking DGB as collateral.\n"
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
-                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint in cents (min 10000/$100, max 10000000/$100K)", RPCArgOptions{.skip_type_check = true}},
+                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint in cents (limits per network: mainnet 10000-10000000 / $100-$100K; testnet 10000-1000000 / $100-$10K; regtest 1-100000 / $0.01-$1K). Use getdigidollarstats or estimatecollateral to check current chain limits.", RPCArgOptions{.skip_type_check = true}},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)", RPCArgOptions{.skip_type_check = true}},
                     {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)", RPCArgOptions{.skip_type_check = true}}
                 },
@@ -1317,8 +1340,11 @@ RPCHelpMan senddigidollar()
             std::string txid;
             std::string error;
             CAmount dd_change = 0;
+            CAmount dgb_fee = 0;
+            int inputs_used = 0;
             LogPrintf("DigiDollar RPC: Calling TransferDigiDollar()...\n");
-            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error, &dd_change);
+            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error,
+                                                         &dd_change, &dgb_fee, &inputs_used);
             LogPrintf("DigiDollar RPC: TransferDigiDollar() returned success=%d\n", success);
 
             if (!success) {
@@ -1331,31 +1357,15 @@ RPCHelpMan senddigidollar()
                     strprintf("Transfer failed: %s", error));
             }
 
-            // Build result
+            // Build result. Fee/inputs come straight from the freshly-built tx via
+            // out-parameters so we don't race against mapWallet indexing.
             UniValue result(UniValue::VOBJ);
             result.pushKV("txid", txid);
             result.pushKV("to_address", addressStr);
             result.pushKV("amount", amount);  // Bug #11/25 fix: raw integer cents, not ValueFromAmount
             result.pushKV("status", "success");
-
-            // Bug #11/25 fix: Compute actual fee, inputs, and change from the wallet transaction
-            {
-                uint256 hash;
-                hash.SetHex(txid);
-                LOCK(pwallet->cs_wallet);
-                auto it = pwallet->mapWallet.find(hash);
-                if (it != pwallet->mapWallet.end()) {
-                    const wallet::CWalletTx& wtx = it->second;
-                    CAmount debit = wallet::CachedTxGetDebit(*pwallet, wtx, wallet::ISMINE_ALL);
-                    CAmount credit = wallet::CachedTxGetCredit(*pwallet, wtx, wallet::ISMINE_ALL);
-                    CAmount fee = debit - credit;
-                    result.pushKV("fee_paid", ValueFromAmount(fee > 0 ? fee : 0));
-                    result.pushKV("inputs_used", static_cast<int>(wtx.tx->vin.size()));
-                } else {
-                    result.pushKV("fee_paid", ValueFromAmount(0));
-                    result.pushKV("inputs_used", 0);
-                }
-            }
+            result.pushKV("fee_paid", ValueFromAmount(dgb_fee > 0 ? dgb_fee : 0));
+            result.pushKV("inputs_used", inputs_used);
             result.pushKV("change_amount", dd_change);
 
             // Optional: Add comment to wallet transaction if provided
@@ -1476,7 +1486,11 @@ RPCHelpMan sendmanydigidollar()
 
             std::string txid;
             std::string error;
-            bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error);
+            CAmount dd_change = 0;
+            CAmount dgb_fee = 0;
+            int inputs_used = 0;
+            bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error,
+                                                             &dd_change, &dgb_fee, &inputs_used);
             if (!success) {
                 if (error.find("dd-input-amounts-unknown") != std::string::npos) {
                     throw JSONRPCError(RPC_WALLET_ERROR,
@@ -1491,6 +1505,9 @@ RPCHelpMan sendmanydigidollar()
             result.pushKV("amounts", result_amounts);
             result.pushKV("total_amount", total_amount);
             result.pushKV("status", "success");
+            result.pushKV("fee_paid", ValueFromAmount(dgb_fee > 0 ? dgb_fee : 0));
+            result.pushKV("inputs_used", inputs_used);
+            result.pushKV("change_amount", dd_change);
             if (OptionalParamIsSet(request, 2) && !request.params[2].get_str().empty()) {
                 result.pushKV("comment", request.params[2].get_str());
             }
@@ -2670,7 +2687,7 @@ static RPCHelpMan estimatecollateral()
                 "\nEstimate DGB collateral requirement for minting DigiDollar.\n"
                 "Calculates the required DGB amount based on DD amount, lock tier, and current system conditions.\n",
                 {
-                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint in cents (min 10000/$100, max 10000000/$100K)"},
+                    {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint in cents (limits per network: mainnet 10000-10000000 / $100-$100K; testnet 10000-1000000 / $100-$10K; regtest 1-100000 / $0.01-$1K)."},
                     {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)"},
                     {"oracle_price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Custom DGB price in micro-USD (1,000,000 = $1.00). Uses current oracle if omitted."}
                 },
@@ -3175,7 +3192,7 @@ static RPCHelpMan getoracleprice()
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::NUM, "price_micro_usd", "Current DGB price in micro-USD (1,000,000 = $1.00)"},
-                        {RPCResult::Type::NUM, "price_cents", "Current DGB price in cents per DGB"},
+                        {RPCResult::Type::NUM, "price_cents", "Current DGB price in cents per DGB (round-half-up; for sub-cent precision use price_micro_usd)"},
                         {RPCResult::Type::NUM, "price_usd", "Current DGB price in USD (full precision)"},
                         {RPCResult::Type::NUM, "last_update_height", "Block height of last price update"},
                         {RPCResult::Type::NUM, "last_update_time", "Timestamp of last update"},
@@ -3229,8 +3246,10 @@ static RPCHelpMan getoracleprice()
                     if (mockPrice > 0) {
                         usingMockOracle = true;
                         priceMicroUSD = mockPrice;
-                        // Convert micro-USD to cents with full precision
-                        priceCents = priceMicroUSD / 10000;  // integer division: micro-USD to cents
+                        // Convert micro-USD to cents using round-half-up so sub-cent prices
+                        // don't silently floor to 0. (e.g. 5000 µUSD = $0.005 → 1 cent, not 0)
+                        // For full precision, callers should use price_micro_usd.
+                        priceCents = (priceMicroUSD + 5000) / 10000;
                         priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
                         // Mock oracle is always "current" - use current time
                         lastBundleTime = GetTime();
@@ -3246,8 +3265,10 @@ static RPCHelpMan getoracleprice()
             if (!usingMockOracle) {
                 // Get the raw micro-USD price from the oracle (full precision)
                 priceMicroUSD = oracle_manager.GetLatestPrice();
-                // Derive cents from the same micro-USD source (integer division)
-                priceCents = priceMicroUSD / 10000;
+                // Derive cents using round-half-up so sub-cent prices don't silently floor
+                // to 0. (e.g. 5000 µUSD = $0.005 → 1 cent, not 0). For full precision
+                // callers should use price_micro_usd.
+                priceCents = (priceMicroUSD + 5000) / 10000;
                 // Calculate true USD price from micro-USD (full precision)
                 priceUSD = static_cast<double>(priceMicroUSD) / 1000000.0;
 

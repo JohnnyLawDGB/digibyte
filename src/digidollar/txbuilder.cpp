@@ -457,11 +457,16 @@ CAmount TransferTxBuilder::GetDDFromUTXO(const COutPoint& outpoint) const {
     return 5000; // Default: $50.00 in cents for testing
 }
 
-bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& params) const {
+bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& params, std::string* reason) const {
+    auto fail = [&](const std::string& msg) {
+        LogPrintf("DigiDollar: ValidateTransferParams FAILED - %s\n", msg);
+        if (reason) *reason = msg;
+        return false;
+    };
+
     // Must have recipients
     if (params.recipients.empty()) {
-        LogPrintf("DigiDollar: ValidateTransferParams FAILED - No recipients\n");
-        return false;
+        return fail("No recipients specified");
     }
 
     // Validate all recipient addresses and amounts
@@ -471,25 +476,26 @@ bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& pa
     for (const auto& [address, amount] : params.recipients) {
         // Validate address format
         if (!ValidateDDAddress(address)) {
-            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Invalid address: %s\n", address);
-            return false;
+            return fail(strprintf("Invalid DD address: %s", address));
         }
 
         // Validate amount ranges
         if (amount <= 0) {
-            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Non-positive amount: %d\n", amount);
-            return false; // No zero or negative amounts
+            return fail(strprintf("Recipient amount must be positive (got %lld cents)",
+                                  static_cast<long long>(amount)));
         }
 
         if (amount < minOutput) {
-            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Below dust threshold: %d < %d\n", amount, minOutput);
-            return false; // Below dust threshold
+            return fail(strprintf("Recipient amount %lld cents is below DD minimum output (%lld cents / $%.2f)",
+                                  static_cast<long long>(amount),
+                                  static_cast<long long>(minOutput),
+                                  static_cast<double>(minOutput) / 100.0));
         }
 
         // Check maximum single transfer limit ($100,000)
         if (amount > 10000000) { // $100,000.00 in cents
-            LogPrintf("DigiDollar: ValidateTransferParams FAILED - Exceeds max transfer: %d > 10000000\n", amount);
-            return false;
+            return fail(strprintf("Recipient amount %lld cents exceeds maximum single-transfer limit ($100,000 / 10000000 cents)",
+                                  static_cast<long long>(amount)));
         }
 
         totalOutput += amount;
@@ -497,20 +503,18 @@ bool TransferTxBuilder::ValidateTransferParams(const TxBuilderTransferParams& pa
 
     // Must have DD inputs
     if (params.ddUtxos.empty()) {
-        LogPrintf("DigiDollar: ValidateTransferParams FAILED - No DD UTXOs\n");
-        return false;
+        return fail("No DD UTXOs provided to fund the transfer");
     }
 
     // Validate key
     if (!params.spenderKey.IsValid()) {
-        LogPrintf("DigiDollar: ValidateTransferParams FAILED - Invalid spender key\n");
-        return false;
+        return fail("Spender key is missing or invalid");
     }
 
     // Validate fee rate
     if (!ValidateFeeRate(params.feeRate)) {
-        LogPrintf("DigiDollar: ValidateTransferParams FAILED - Invalid fee rate: %d\n", params.feeRate);
-        return false;
+        return fail(strprintf("Invalid DGB fee rate: %lld sat/kB",
+                              static_cast<long long>(params.feeRate)));
     }
 
     LogPrintf("DigiDollar: ValidateTransferParams PASSED\n");
@@ -588,10 +592,13 @@ bool TransferTxBuilder::SelectDDInputs(const std::vector<CTxOut>& available, CAm
 TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTransferParams& params) {
     TxBuilderResult result;
 
-    // Validate parameters
-    if (!ValidateTransferParams(params)) {
-        result.error = "Invalid transfer parameters";
-        return result;
+    // Validate parameters; capture specific reason instead of generic catch-all.
+    {
+        std::string reason;
+        if (!ValidateTransferParams(params, &reason)) {
+            result.error = reason.empty() ? "Invalid transfer parameters" : reason;
+            return result;
+        }
     }
 
     // Calculate totals and check DD conservation

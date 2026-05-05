@@ -5163,12 +5163,6 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
         return false;
     }
 
-    // Greedy selection: Sort by amount (smallest first for better privacy)
-    std::sort(available_utxos.begin(), available_utxos.end(),
-              [](const DDUtxo& a, const DDUtxo& b) {
-                  return a.dd_amount < b.dd_amount;
-              });
-
     // DD outputs have a consensus-enforced minimum amount. Since DD conservation
     // is exact, any change output must be either zero (exact spend) or at least
     // minOutputAmount. A naive "first total >= target" selector can pick a UTXO
@@ -5176,19 +5170,48 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
     // only fails at mempool admission with transfer-dd-amount-below-minimum.
     const CAmount min_change = Params().GetDigiDollarParams().minOutputAmount;
 
-    // Select UTXOs until target amount met
-    // FIXED: Now selects ALL DD UTXOs (both minted and received)
-    // Signing logic properly handles both types:
-    //  - Minted DD: Uses custom owner keys from dd_owner_keys map
-    //  - Received DD: Uses wallet's regular key management
+    auto valid_change = [&](CAmount sel) {
+        CAmount c = sel - target_amount;
+        return sel >= target_amount && (c == 0 || c >= min_change);
+    };
+
+    // Pass 1: best-fit single UTXO. Find the smallest single UTXO that covers
+    // the target with valid change (exact-match or change >= min_change). Using
+    // a single input when one fits avoids the "consume-all" behavior that turned
+    // every transfer into a wallet-balance reveal and let an attacker inflate
+    // future fees by bombing the address with dust UTXOs.
+    {
+        std::vector<DDUtxo> sorted_asc(available_utxos);
+        std::sort(sorted_asc.begin(), sorted_asc.end(),
+                  [](const DDUtxo& a, const DDUtxo& b) { return a.dd_amount < b.dd_amount; });
+        for (const auto& utxo : sorted_asc) {
+            if (valid_change(utxo.dd_amount)) {
+                selected_utxos.push_back(utxo.outpoint);
+                selected_total = utxo.dd_amount;
+                if (amounts) amounts->push_back(utxo.dd_amount);
+                LogPrintf("DigiDollar: SelectDDCoins - Best-fit single UTXO %s:%u (%lld cents, change %lld)\n",
+                          utxo.outpoint.hash.ToString(), utxo.outpoint.n,
+                          static_cast<long long>(utxo.dd_amount),
+                          static_cast<long long>(selected_total - target_amount));
+                LogPrintf("DigiDollar: SelectDDCoins - SUCCESS: 1 UTXO, change %lld cents\n",
+                          static_cast<long long>(selected_total - target_amount));
+                return true;
+            }
+        }
+    }
+
+    // Pass 2: largest-first greedy. No single UTXO fit; combine starting from
+    // the largest available so we converge on the target with the fewest inputs
+    // and the smallest residual change above min. Smallest-first would consume
+    // every dust UTXO regardless of need (T5-A); largest-first uses the minimum
+    // necessary, then the existing dust-change guard rejects unsalvageable cases.
+    std::sort(available_utxos.begin(), available_utxos.end(),
+              [](const DDUtxo& a, const DDUtxo& b) { return a.dd_amount > b.dd_amount; });
     for (const auto& utxo : available_utxos) {
-        CAmount current_change = selected_total - target_amount;
-        if (selected_total >= target_amount && (current_change == 0 || current_change >= min_change)) break;
+        if (valid_change(selected_total)) break;
 
         selected_utxos.push_back(utxo.outpoint);
         selected_total += utxo.dd_amount;
-
-        // Store individual amounts if requested (CRITICAL FIX #7)
         if (amounts) amounts->push_back(utxo.dd_amount);
 
         LogPrintf("DigiDollar: SelectDDCoins - Selected UTXO %s:%u (%lld cents, total: %lld)\n",
@@ -5197,7 +5220,7 @@ bool DigiDollarWallet::SelectDDCoins(const CAmount& target_amount, std::vector<C
     }
 
     CAmount change = selected_total - target_amount;
-    bool success = selected_total >= target_amount && (change == 0 || change >= min_change);
+    bool success = valid_change(selected_total);
 
     if (!success) {
         LogPrintf("DigiDollar: SelectDDCoins - FAILED: need %lld, selected %lld, change %lld (minimum DD change is %lld unless exact)\n",

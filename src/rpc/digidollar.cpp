@@ -1744,8 +1744,19 @@ RPCHelpMan redeemdigidollar()
                 std::vector<WalletCollateralPosition> positions = ddWallet->GetDDTimeLocks(false);
 
                 bool found = false;
+                bool foundButClosed = false;
                 for (const auto& pos : positions) {
                     if (pos.dd_timelock_id == positionId) {
+                        if (!pos.is_active) {
+                            // Position has already been redeemed (or marked inactive).
+                            // Refuse to build a duplicate redeem tx — the original may
+                            // still be in mempool or already confirmed, and a duplicate
+                            // would over-release collateral and be rejected by consensus
+                            // (bad-collateral-release-excessive). If a prior redeem was
+                            // dropped/reorged the wallet will reactivate the position.
+                            foundButClosed = true;
+                            break;
+                        }
                         // Found the position in wallet's cache!
                         redeemParams.collateralAmount = pos.dgb_collateral;
                         redeemParams.ddMinted = pos.dd_minted;
@@ -1759,6 +1770,11 @@ RPCHelpMan redeemdigidollar()
                         found = true;
                         break;
                     }
+                }
+                if (foundButClosed) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER,
+                        strprintf("Position %s has already been redeemed. If a prior redeem transaction was dropped or reorged out, the wallet will reactivate the position automatically.",
+                                  positionIdStr));
                 }
 
                 if (!found) {
@@ -3721,6 +3737,31 @@ static OracleScanResult ScanOracleDataFromChain(
                 od.has_data = true;
                 od.price_source = "local";
             }
+        }
+    }
+
+    // 4. Consensus fallback. If no fresh on-chain bundle was found in the scan
+    // window, derive consensus from the assembled oracle_data so the response
+    // doesn't report consensus_price=0 while listing N oracles all agreeing.
+    // Use the median of reporting oracles; this matches the IQR-median consensus
+    // logic used elsewhere and is internally consistent with the oracle list
+    // we are about to return.
+    if (res.consensus_price == 0) {
+        std::vector<uint64_t> prices;
+        prices.reserve(res.oracle_data.size());
+        for (const auto& [id, od] : res.oracle_data) {
+            if (od.has_data && od.price_micro_usd > 0) {
+                prices.push_back(od.price_micro_usd);
+            }
+        }
+        if (!prices.empty()) {
+            std::sort(prices.begin(), prices.end());
+            // Median (lower for even-count to remain deterministic).
+            res.consensus_price = prices[prices.size() / 2];
+        } else {
+            // Last resort: same source getoracleprice uses, so the two RPCs agree.
+            CAmount latest = OracleIntegration::GetCurrentOraclePriceMicroUSD();
+            if (latest > 0) res.consensus_price = static_cast<uint64_t>(latest);
         }
     }
 

@@ -4,6 +4,8 @@
 
 #include <digidollar/scripts.h>
 #include <digidollar/validation.h>
+#include <coins.h>
+#include <primitives/transaction.h>
 #include <script/standard.h>
 #include <script/script.h>
 #include <key.h>
@@ -70,8 +72,8 @@ CScript CreateNormalRedemptionPath(const MintParams& params)
     // Normal redemption after timelock
     script << params.lockHeight << OP_CHECKLOCKTIMEVERIFY << OP_DROP;
 
-    // Owner signature verification
-    // DD amount validation happens at transaction validation layer, not in script
+    // DD marker/amount ABI followed by owner signature verification.
+    script << OP_DIGIDOLLAR << CScriptNum(params.ddAmount) << OP_DDVERIFY;
     script << ToByteVector(params.ownerKey) << OP_CHECKSIG;
 
     // // LogPrintf("DigiDollar: Created normal redemption path for %d DD at height %d\n",
@@ -96,11 +98,13 @@ CScript CreateERRPath(const MintParams& params)
     // This ensures collateral is NEVER unlocked until timelock expires
     script << params.lockHeight << OP_CHECKLOCKTIMEVERIFY << OP_DROP;
 
-    // Check if system collateral ratio < 100%
-    script << OP_CHECKCOLLATERAL << CScriptNum(100) << OP_LESSTHAN << OP_VERIFY;
+    // Check if system collateral ratio < 100%.
+    // The witness stack provides <signature> <collateralRatio>; OP_CHECKCOLLATERAL
+    // verifies ratio >= threshold, so OP_NOT flips it into ratio < 100.
+    script << CScriptNum(100) << OP_CHECKCOLLATERAL << OP_NOT << OP_VERIFY;
 
     // DigiDollar verification
-    script << OP_DIGIDOLLAR << OP_DDVERIFY;
+    script << OP_DIGIDOLLAR << CScriptNum(params.ddAmount) << OP_DDVERIFY;
 
     // Owner signature
     script << ToByteVector(params.ownerKey) << OP_CHECKSIG;
@@ -122,8 +126,8 @@ CScript CreateCollateralP2TR(const MintParams& params)
         TaprootBuilder builder;
 
         // DigiDollar uses exactly 2 MAST redemption paths:
-        // 1. Normal path: CLTV + owner signature (system health >= 100%)
-        // 2. ERR path: CLTV + OP_CHECKCOLLATERAL + owner signature (system health < 100%)
+        // 1. Normal path: CLTV + DD amount verification + owner signature
+        // 2. ERR path: CLTV + collateral ratio check + DD amount verification + owner signature
         //
         // CRITICAL: Both paths REQUIRE the timelock (CLTV) to expire first.
         // There is NO early redemption, NO forced liquidation, NO exceptions.
@@ -243,6 +247,27 @@ bool GetScriptMetadata(const CScript& script, ScriptMetadata& metadata) {
     if (it != g_scriptMetadataMap.end()) {
         metadata = it->second;
         return true;
+    }
+    return false;
+}
+
+bool IsRegisteredCollateralVaultScript(const CScript& script)
+{
+    ScriptMetadata metadata;
+    return GetScriptMetadata(script, metadata) &&
+           metadata.type == DigiDollar::ScriptType::COLLATERAL_LOCK;
+}
+
+bool SpendsRegisteredCollateralVault(const CTransaction& tx, const CCoinsViewCache& coins)
+{
+    for (const CTxIn& txin : tx.vin) {
+        Coin coin;
+        if (!coins.GetCoin(txin.prevout, coin)) {
+            continue;
+        }
+        if (IsRegisteredCollateralVaultScript(coin.out.scriptPubKey)) {
+            return true;
+        }
     }
     return false;
 }

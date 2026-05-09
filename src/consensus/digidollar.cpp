@@ -15,25 +15,13 @@ namespace DigiDollar {
 
 int GetCollateralRatioForLockTime(int64_t lockBlocks, const ConsensusParams& params)
 {
-    // First check for exact matches
-    auto exact_it = params.collateralRatios.find(lockBlocks);
-    if (exact_it != params.collateralRatios.end()) {
-        return exact_it->second;
-    }
+    const auto it = params.collateralRatios.find(lockBlocks);
+    return it == params.collateralRatios.end() ? 0 : it->second;
+}
 
-    // For non-exact matches, find the first tier with lock time >= lockBlocks
-    // Use lower_bound to find the first tier with lock time >= lockBlocks
-    auto it = params.collateralRatios.lower_bound(lockBlocks);
-
-    if (it == params.collateralRatios.end()) {
-        // Lock time is longer than the longest tier, use the longest tier's ratio
-        return params.collateralRatios.rbegin()->second;
-    }
-
-    // Use the tier we found (which has lock time >= lockBlocks)
-    // Design: intermediate lock durations get the next tier's (better) ratio.
-    // E.g. locking for 15 days gives you the 30-day tier ratio (500%).
-    return it->second;
+bool IsCanonicalLockTier(int64_t lockBlocks, const ConsensusParams& params)
+{
+    return params.collateralRatios.find(lockBlocks) != params.collateralRatios.end();
 }
 
 double GetDCAMultiplier(int systemCollateral, const ConsensusParams& params)
@@ -188,14 +176,13 @@ int GetLockTierIndex(int64_t lockBlocks, const ConsensusParams& params)
 {
     int index = 0;
     for (const auto& [tierLockTime, ratio] : params.collateralRatios) {
-        if (lockBlocks <= tierLockTime) {
+        if (lockBlocks == tierLockTime) {
             return index;
         }
         ++index;
     }
 
-    // If lock time is longer than all tiers, return the last (longest) tier
-    return static_cast<int>(params.collateralRatios.size()) - 1;
+    return -1;
 }
 
 std::string FormatLockPeriod(int64_t lockBlocks)
@@ -246,7 +233,7 @@ DigiDollarTxType GetDigiDollarTxType(const CTransaction& tx)
 }
 
 // Note: IsDDTokenScript() and ExtractDDAmount() are defined in
-// digidollar/validation.cpp, where they can use the Phase 1 metadata registry.
+// digidollar/validation.cpp, where they can use the DD metadata registry.
 // The consensus module only provides transaction version field parsing.
 
 } // namespace DigiDollar

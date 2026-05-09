@@ -1167,7 +1167,6 @@ bool BlockManager::WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValid
 
 bool BlockManager::ReadBlockFromDisk(CBlock& block, const FlatFilePos& pos) const
 {
-    LogPrintf("ReadBlockFromDisk: Called with pos=%s\n", pos.ToString());
     block.SetNull();
 
     // Open history file to read

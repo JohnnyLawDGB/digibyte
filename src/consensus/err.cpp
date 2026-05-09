@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 
 namespace DigiDollar {
@@ -31,14 +32,29 @@ std::vector<COutPoint> EmergencyRedemptionRatio::s_errQueue;
 std::map<COutPoint, std::pair<CAmount, uint32_t>> EmergencyRedemptionRatio::s_queuedRedemptions;
 std::mutex EmergencyRedemptionRatio::s_errMutex;
 
+namespace {
+
+constexpr int ERR_RATIO_NORMAL_BPS = 10000;
+constexpr int ERR_RATIO_95_BPS = 9500;
+constexpr int ERR_RATIO_90_BPS = 9000;
+constexpr int ERR_RATIO_85_BPS = 8500;
+constexpr int ERR_RATIO_MIN_BPS = 8000;
+
+double RatioBpsToDouble(int ratio_bps)
+{
+    return static_cast<double>(ratio_bps) / 10000.0;
+}
+
+} // namespace
+
 // ERR adjustment tier thresholds and ratios
 // CRITICAL: ERR returns 100% collateral ALWAYS. Ratios determine DD burn multiplier.
-// Formula: RequiredDD = OriginalDD / ratio (lower ratio = MORE DD burn required)
-static const std::vector<std::pair<int, double>> ERR_TIERS = {
-    {95, 0.95},  // 95-100% health: 1/0.95 = 1.053x DD burn (105.3% of original)
-    {90, 0.90},  // 90-95% health: 1/0.90 = 1.111x DD burn (111.1% of original)
-    {85, 0.85},  // 85-90% health: 1/0.85 = 1.176x DD burn (117.6% of original)
-    {0,  0.80}   // <85% health: 1/0.80 = 1.250x DD burn (125.0% of original, maximum)
+// Formula: RequiredDD = ceil(OriginalDD * 10000 / ratioBps)
+static const std::vector<std::pair<int, int>> ERR_TIERS = {
+    {95, ERR_RATIO_95_BPS},   // 95-100% health: 1/0.95 = 1.053x DD burn
+    {90, ERR_RATIO_90_BPS},   // 90-95% health: 1/0.90 = 1.111x DD burn
+    {85, ERR_RATIO_85_BPS},   // 85-90% health: 1/0.85 = 1.176x DD burn
+    {0,  ERR_RATIO_MIN_BPS}   // <85% health: 1/0.80 = 1.250x DD burn
 };
 
 // Oracle consensus requirements
@@ -54,18 +70,23 @@ bool EmergencyRedemptionRatio::ShouldActivateERR(int systemHealth)
 
 double EmergencyRedemptionRatio::CalculateERRAdjustment(int systemHealth)
 {
+    return RatioBpsToDouble(CalculateERRRatioBps(systemHealth));
+}
+
+int EmergencyRedemptionRatio::CalculateERRRatioBps(int systemHealth)
+{
     // At >= 100% health, no ERR adjustment needed (ratio = 1.0)
     // This means ERR returns same as normal redemption (full collateral, burn original DD)
     if (systemHealth >= 100) {
-        return 1.0;
+        return ERR_RATIO_NORMAL_BPS;
     }
 
     // Find the appropriate ERR tier based on system health
-    // Returns a ratio (0.80-0.95) used to calculate required DD burn
-    // RequiredDD = OriginalDD / ratio (so lower ratio = more DD required)
+    // Returns a ratio in basis points used to calculate required DD burn.
+    // RequiredDD = ceil(OriginalDD * 10000 / ratioBps)
     //
     // IMPORTANT: Check tiers from highest to lowest threshold to match correctly
-    // ERR_TIERS: {95, 0.95}, {90, 0.90}, {85, 0.85}, {0, 0.80}
+    // ERR_TIERS: {95, 9500}, {90, 9000}, {85, 8500}, {0, 8000}
     for (const auto& tier : ERR_TIERS) {
         if (systemHealth >= tier.first) {
             return tier.second;
@@ -73,7 +94,7 @@ double EmergencyRedemptionRatio::CalculateERRAdjustment(int systemHealth)
     }
 
     // Fallback to minimum ratio (80%) = maximum DD burn (125%)
-    return 0.80;
+    return ERR_RATIO_MIN_BPS;
 }
 
 CAmount EmergencyRedemptionRatio::GetRequiredDDBurn(CAmount originalDDMinted, int systemHealth)
@@ -91,31 +112,26 @@ CAmount EmergencyRedemptionRatio::GetRequiredDDBurn(CAmount originalDDMinted, in
         return originalDDMinted;
     }
 
-    double adjustmentRatio = CalculateERRAdjustment(systemHealth);
-
-    // Prevent division by zero
-    if (adjustmentRatio <= 0) {
-        adjustmentRatio = 0.80;
+    int ratioBps = CalculateERRRatioBps(systemHealth);
+    if (ratioBps <= 0) {
+        ratioBps = ERR_RATIO_MIN_BPS;
     }
 
-    // Calculate required DD burn (divide by ratio to get MORE DD)
-    // Use ceiling to ensure we don't shortchange the system
-    // Guard against double→int64 overflow: when originalDDMinted is very large
-    // and adjustmentRatio < 1.0, the result can exceed CAmount (int64_t) range.
-    double requiredDD_d = std::ceil(static_cast<double>(originalDDMinted) / adjustmentRatio);
-    CAmount requiredDD;
-    if (requiredDD_d >= static_cast<double>(std::numeric_limits<CAmount>::max())) {
-        requiredDD = std::numeric_limits<CAmount>::max();
-    } else if (requiredDD_d < 0) {
-        requiredDD = 0;
-    } else {
-        requiredDD = static_cast<CAmount>(requiredDD_d);
-    }
+    // Consensus-visible burn math: ceil(originalDD * 10000 / ratioBps).
+    // Use signed 128-bit arithmetic so large valid CAmount values cannot overflow.
+    const __int128 numerator = static_cast<__int128>(originalDDMinted) * ERR_RATIO_NORMAL_BPS;
+    const __int128 required = (numerator + ratioBps - 1) / ratioBps;
+    const __int128 max_amount = std::numeric_limits<CAmount>::max();
+    const CAmount requiredDD = required > max_amount
+        ? std::numeric_limits<CAmount>::max()
+        : static_cast<CAmount>(required);
 
-    LogPrint(BCLog::DIGIDOLLAR, "ERR: GetRequiredDDBurn - original: %lld, health: %d%%, ratio: %.2f, required: %lld (%.1f%% increase)\n",
-             static_cast<long long>(originalDDMinted), systemHealth, adjustmentRatio,
+    const __int128 increaseBps = (static_cast<__int128>(requiredDD - originalDDMinted) * 10000) / originalDDMinted;
+    LogPrint(BCLog::DIGIDOLLAR, "ERR: GetRequiredDDBurn - original: %lld, health: %d%%, ratio_bps: %d, required: %lld (%lld.%02lld%% increase)\n",
+             static_cast<long long>(originalDDMinted), systemHealth, ratioBps,
              static_cast<long long>(requiredDD),
-             ((static_cast<double>(requiredDD) / originalDDMinted) - 1.0) * 100);
+             static_cast<long long>(increaseBps / 100),
+             static_cast<long long>(increaseBps % 100));
 
     return requiredDD;
 }
@@ -134,8 +150,7 @@ CAmount EmergencyRedemptionRatio::GetAdjustedRedemption(CAmount normalRedemption
 
 bool EmergencyRedemptionRatio::HasOracleConsensus(const COracleBundle& bundle, const Consensus::Params& params)
 {
-    // Use the chainparams-specified oracle consensus threshold
-    return bundle.HasConsensus(params.nOracleRequiredMessages);
+    return OracleBundleManager::ValidateBundle(bundle, /*block_height=*/0, params);
 }
 
 ERRState EmergencyRedemptionRatio::GetCurrentState()
@@ -160,11 +175,13 @@ ERRState EmergencyRedemptionRatio::GetCurrentState()
         } else {
             // Update current health and adjustment ratio
             s_currentState.systemHealth = currentHealth;
-            s_currentState.adjustmentRatio = CalculateERRAdjustment(currentHealth);
+            s_currentState.adjustmentRatioBps = CalculateERRRatioBps(currentHealth);
+            s_currentState.adjustmentRatio = RatioBpsToDouble(s_currentState.adjustmentRatioBps);
         }
     } else {
         // ERR is inactive, update health for monitoring
         s_currentState.systemHealth = currentHealth;
+        s_currentState.adjustmentRatioBps = 0;
         s_currentState.adjustmentRatio = 0.0;
     }
 
@@ -256,9 +273,10 @@ bool EmergencyRedemptionRatio::ActivateERR(const COracleBundle& oracleBundle, ui
         return false;
     }
 
-    // Validate oracle consensus using chainparams threshold
-    if (!HasOracleConsensus(oracleBundle, params)) {
-        LogPrint(BCLog::DIGIDOLLAR, "ERR: Activation denied - insufficient oracle consensus\n");
+    std::string oracle_error;
+    if (!OracleBundleManager::ValidateMuSig2Bundle(oracleBundle, activationHeight, params, oracle_error)) {
+        LogPrint(BCLog::DIGIDOLLAR, "ERR: Activation denied - invalid MuSig2 oracle bundle: %s\n",
+                 oracle_error);
         return false;
     }
 
@@ -266,7 +284,8 @@ bool EmergencyRedemptionRatio::ActivateERR(const COracleBundle& oracleBundle, ui
     ERRState newState;
     newState.isActive = true;
     newState.systemHealth = currentHealth;
-    newState.adjustmentRatio = CalculateERRAdjustment(currentHealth);
+    newState.adjustmentRatioBps = CalculateERRRatioBps(currentHealth);
+    newState.adjustmentRatio = RatioBpsToDouble(newState.adjustmentRatioBps);
     newState.activationHeight = activationHeight;
     newState.oracleConsensusHash = CalculateOracleConsensusHash(oracleBundle);
     newState.activationTimestamp = GetTime();
@@ -351,8 +370,26 @@ bool EmergencyRedemptionRatio::ValidateERRRedemption(const CTransaction& tx, CAm
         }
     }
     // Note: DD inputs would need to be looked up from UTXO set
-    // For now, we validate that the transaction structure is correct
-    // The actual DD burn verification happens during full validation
+    // For now, infer burn capacity from the provided expected amount per DD input.
+    // Full validation must replace this with UTXO-backed DD input accounting.
+    if (tx.vin.empty()) {
+        LogPrint(BCLog::DIGIDOLLAR, "ERR: Validation failed - no inputs\n");
+        return false;
+    }
+
+    const __int128 inferredInputs = static_cast<__int128>(originalDDMinted) * tx.vin.size();
+    ddInputs = inferredInputs > std::numeric_limits<CAmount>::max()
+        ? std::numeric_limits<CAmount>::max()
+        : static_cast<CAmount>(inferredInputs);
+
+    const CAmount inferredBurn = ddInputs > ddOutputs ? ddInputs - ddOutputs : 0;
+    if (inferredBurn < requiredDDBurn) {
+        LogPrint(BCLog::DIGIDOLLAR, "ERR: Validation failed - DD burn %lld < required %lld for original %lld\n",
+                 static_cast<long long>(inferredBurn),
+                 static_cast<long long>(requiredDDBurn),
+                 static_cast<long long>(originalDDMinted));
+        return false;
+    }
 
     // Validate collateral output is the FULL amount (ERR doesn't reduce collateral!)
     CAmount actualCollateralOutput = 0;
@@ -459,10 +496,10 @@ bool EmergencyRedemptionRatio::ValidateERRConfig(std::string& error)
         return false;
     }
 
-    // Check tier ratios are reasonable
+    // Check tier ratios are reasonable basis-point values.
     for (const auto& tier : ERR_TIERS) {
-        if (tier.second < 0.5 || tier.second > 1.0) {
-            error = "ERR tier ratio out of range: " + std::to_string(tier.second);
+        if (tier.second < 5000 || tier.second > ERR_RATIO_NORMAL_BPS) {
+            error = "ERR tier ratio out of range: " + std::to_string(tier.second) + " bps";
             return false;
         }
     }
@@ -544,7 +581,8 @@ void EmergencyRedemptionRatio::ReconstructERRState(int currentSystemHealth, uint
         // System is under-collateralized — activate ERR
         newState.isActive = true;
         newState.systemHealth = currentSystemHealth;
-        newState.adjustmentRatio = CalculateERRAdjustment(currentSystemHealth);
+        newState.adjustmentRatioBps = CalculateERRRatioBps(currentSystemHealth);
+        newState.adjustmentRatio = RatioBpsToDouble(newState.adjustmentRatioBps);
         newState.activationHeight = currentHeight;
         newState.activationTimestamp = GetTime();
 

@@ -149,6 +149,7 @@ std::string GetOpName(opcodetype opcode)
     case OP_DDVERIFY               : return "OP_DDVERIFY";
     case OP_CHECKPRICE             : return "OP_CHECKPRICE";
     case OP_CHECKCOLLATERAL        : return "OP_CHECKCOLLATERAL";
+    case OP_ORACLE                 : return "OP_ORACLE";
 
     case OP_INVALIDOPCODE          : return "OP_INVALIDOPCODE";
 
@@ -341,16 +342,10 @@ bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator en
 
 bool IsOpSuccess(const opcodetype& opcode)
 {
-    // CRITICAL: Exclude DigiDollar opcodes (0xbb-0xbf) from OP_SUCCESSx range
-    // These opcodes are used for DigiDollar redemption scripts and must be executed.
-    // OP_ORACLE (0xbf) is a marker opcode used in coinbase OP_RETURN outputs; if it
-    // were OP_SUCCESS in Tapscript, any leaf containing it would be unconditionally
-    // spendable. See rh54_op_oracle_opsuccess_tests for PoC.
-    if (opcode >= OP_DIGIDOLLAR && opcode <= OP_ORACLE) {
-        return false;  // 0xbb OP_DIGIDOLLAR, 0xbc OP_DDVERIFY, 0xbd OP_CHECKPRICE,
-                       // 0xbe OP_CHECKCOLLATERAL, 0xbf OP_ORACLE
-    }
-
+    // BIP342 raw OP_SUCCESSx set. DigiDollar uses 0xbb..0xbf, which are in
+    // this range, as future-upgrade Tapscript opcodes. They remain OP_SUCCESSx
+    // until SCRIPT_VERIFY_DIGIDOLLAR is active; the interpreter applies that
+    // activation flag when deciding whether to short-circuit or execute them.
     return opcode == 80 || opcode == 98 || (opcode >= 126 && opcode <= 129) ||
            (opcode >= 131 && opcode <= 134) || (opcode >= 137 && opcode <= 138) ||
            (opcode >= 141 && opcode <= 142) || (opcode >= 149 && opcode <= 153) ||

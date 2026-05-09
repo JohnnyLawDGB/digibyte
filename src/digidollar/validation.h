@@ -71,13 +71,15 @@ struct ValidationContext {
     bool skipOracleValidation;       // Skip oracle-dependent validation (for historical blocks)
     TxLookupFn txLookup;             // Look up tx from block database (for DD amount extraction)
     const CTxMemPool* mempool;       // Mempool context; DD amount resolution remains confirmed-only
+    int64_t nBlockTime;              // Candidate block timestamp for deterministic volatility recording
 
     ValidationContext(int height, CAmount price_micro_usd, int collateral, const CChainParams& chainParams,
                       const CCoinsViewCache* coins_view = nullptr, bool skip_oracle = false,
-                      TxLookupFn tx_lookup = nullptr, const CTxMemPool* pool = nullptr)
+                      TxLookupFn tx_lookup = nullptr, const CTxMemPool* pool = nullptr,
+                      int64_t block_time = 0)
         : nHeight(height), oraclePriceMicroUSD(price_micro_usd), systemCollateral(collateral),
           params(chainParams), coins(coins_view), skipOracleValidation(skip_oracle),
-          txLookup(std::move(tx_lookup)), mempool(pool) {}
+          txLookup(std::move(tx_lookup)), mempool(pool), nBlockTime(block_time) {}
 };
 
 // ============================================================================
@@ -111,8 +113,32 @@ bool ValidateDigiDollarScript(const CScript& script,
  * @return true if transaction is valid, false otherwise
  */
 bool ValidateDigiDollarTransaction(const CTransaction& tx,
-                                  const ValidationContext& ctx,
-                                  TxValidationState& state);
+                                   const ValidationContext& ctx,
+                                   TxValidationState& state);
+
+/**
+ * Record deterministic volatility input after a mint block has fully connected.
+ *
+ * Validation itself must remain side-effect free because mempool admission,
+ * miner template probing, and failed block validation can all call the same
+ * transaction validator.
+ */
+void RecordAcceptedMintVolatility(const ValidationContext& ctx);
+
+/**
+ * Check whether a transaction spends a confirmed DigiDollar collateral vault,
+ * including non-DD-looking spends that must still be rejected unless they are
+ * proper DD redemptions.
+ */
+bool SpendsDigiDollarCollateralVault(const CTransaction& tx,
+                                     const ValidationContext& ctx);
+
+/**
+ * Check whether a transaction must enter DigiDollar validation. This includes
+ * canonical DD transactions and non-DD transactions that spend DD collateral.
+ */
+bool RequiresDigiDollarValidation(const CTransaction& tx,
+                                  const ValidationContext& ctx);
 
 // ============================================================================
 // Script Analysis Functions
@@ -181,6 +207,24 @@ bool ExtractDDAmountFromBlockDb(const COutPoint& prevout, uint32_t coinHeight,
 bool ExtractMintAccountingAmounts(const CTransaction& tx,
                                   CAmount& ddAmount,
                                   CAmount& collateralAmount);
+
+/**
+ * Extract actual DD burned and collateral released by a redemption transaction.
+ * The spent coins vector must align one-for-one with tx.vin and contain the
+ * pre-spend coins from the coins view or block undo data.
+ *
+ * @param tx Redemption transaction to inspect
+ * @param spentCoins Pre-spend coins corresponding to tx.vin
+ * @param txLookup Callback that loads creating transactions for DD inputs
+ * @param ddBurned Output: DD destroyed by the redemption, in cents
+ * @param collateralAmount Output: DGB collateral input value, in satoshis
+ * @return true if the redemption accounting amounts were recovered
+ */
+bool ExtractRedemptionAccountingAmounts(const CTransaction& tx,
+                                        const std::vector<Coin>& spentCoins,
+                                        const TxLookupFn& txLookup,
+                                        CAmount& ddBurned,
+                                        CAmount& collateralAmount);
 
 /**
  * Check if script is a DigiDollar collateral locking script
@@ -512,10 +556,11 @@ bool ValidateERRAdjustmentAmount(CAmount originalCollateral,
                                 int systemHealth);
 
 /**
- * Validate oracle consensus for ERR activation
+ * Legacy fail-closed transaction-level oracle consensus helper
  *
- * Checks that sufficient oracle signatures (9-of-17, RC30) exist
- * to authorize ERR activation for under-collateralized system.
+ * V1 ERR activation uses the block's validated MuSig2 v0x03 oracle bundle
+ * and deterministic system health in ValidationContext. This helper remains
+ * for older tests/external callers and returns false if called directly.
  *
  * @param tx Transaction containing oracle consensus data
  * @param ctx Validation context

@@ -21,18 +21,51 @@
 #include <pow.h>
 #include <primitives/transaction.h>
 #include <timedata.h>
+#include <txmempool.h>
 #include <util/moneystr.h>
 #include <validation.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/signing_orchestrator.h>
+#include <primitives/oracle.h>
+#include <util/time.h>
 #include <consensus/digidollar.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/validation.h>
 
 #include <algorithm>
+#include <set>
 #include <string_view>
 #include <utility>
 
 namespace node {
+namespace {
+bool TransactionTouchesDigiDollarForMiner(const CTransaction& tx)
+{
+    // Keep marker-only parity with consensus and OracleDataValidator block
+    // detection. Collateral-vault spends need UTXO context and are caught by
+    // RequiresDigiDollarValidation() inside ValidateDDForBlockInclusion().
+    return DigiDollar::HasDigiDollarMarker(tx);
+}
+
+bool TransactionNeedsOraclePriceForMiner(const CTransaction& tx)
+{
+    if (!DigiDollar::HasDigiDollarMarker(tx)) return false;
+    const DigiDollar::DigiDollarTxType tx_type = DigiDollar::GetDigiDollarTxType(tx);
+    return tx_type == DigiDollar::DD_TX_MINT || tx_type == DigiDollar::DD_TX_REDEEM;
+}
+
+bool BlockNeedsOraclePriceForMiner(const CBlock& block)
+{
+    for (size_t i{1}; i < block.vtx.size(); ++i) {
+        if (TransactionNeedsOraclePriceForMiner(*block.vtx[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev, int algo)
 {
     int64_t nOldTime = pblock->nTime;
@@ -63,7 +96,8 @@ void RegenerateCommitments(CBlock& block, ChainstateManager& chainman)
     chainman.GenerateCoinbaseCommitment(block, prev_block);
 
     // Re-add oracle bundle (was stripped with other OP_RETURN outputs above)
-    if (prev_block) {
+    // when the regenerated block needs one for price-dependent DD activity.
+    if (prev_block && BlockNeedsOraclePriceForMiner(block)) {
         if (DigiDollar::IsDigiDollarEnabled(prev_block, chainman)) {
             OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
             int32_t nHeight = prev_block->nHeight + 1;
@@ -110,6 +144,8 @@ BlockAssembler::BlockAssembler(Chainstate& chainstate, const CTxMemPool* mempool
 void BlockAssembler::resetBlock()
 {
     inBlock.clear();
+    m_dd_tx_lookup_cache.clear();
+    m_dd_tx_lookup_loaded_heights.clear();
 
     // Reserve space for coinbase tx
     nBlockWeight = 4000;
@@ -123,9 +159,19 @@ void BlockAssembler::resetBlock()
 static bool IsRetryableDigiDollarBlockFailure(const BlockValidationState& state, std::string_view what = {})
 {
     const std::string& reject_reason = state.GetRejectReason();
+    // DD-FA-FUNC-016: include bad-oracle-timestamp so a miner that assembled a
+    // DD-touching block under a bundle that has just aged out of the
+    // wall-clock freshness window can gracefully degrade to a non-DD block
+    // (after RemoveDDTransactionsFromBlock + retry) instead of throwing.
     if (reject_reason == "insufficient-collateral" ||
         reject_reason == "bad-oracle-price" ||
-        reject_reason == "invalid-oracle-price") {
+        reject_reason == "invalid-oracle-price" ||
+        reject_reason == "bad-oracle-missing" ||
+        reject_reason == "bad-oracle-malformed" ||
+        reject_reason == "bad-oracle-musig2" ||
+        reject_reason == "bad-oracle-legacy" ||
+        reject_reason == "bad-oracle-bundle" ||
+        reject_reason == "bad-oracle-timestamp") {
         return true;
     }
 
@@ -135,45 +181,80 @@ static bool IsRetryableDigiDollarBlockFailure(const BlockValidationState& state,
 
     return what.find("insufficient-collateral") != std::string_view::npos ||
            what.find("bad-oracle-price") != std::string_view::npos ||
-           what.find("invalid-oracle-price") != std::string_view::npos;
+           what.find("invalid-oracle-price") != std::string_view::npos ||
+           what.find("bad-oracle-") != std::string_view::npos;
 }
 
 bool BlockAssembler::IsDDTransactionForMiner(const CTransaction& tx) const
 {
-    if (DigiDollar::HasDigiDollarMarker(tx)) {
+    return TransactionTouchesDigiDollarForMiner(tx);
+}
+
+bool BlockAssembler::LookupPreviousTxForDDValidation(const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out)
+{
+    AssertLockHeld(::cs_main);
+
+    const auto cache_key = std::make_pair(coinHeight, txid);
+    auto tx_it = m_dd_tx_lookup_cache.find(cache_key);
+    if (tx_it != m_dd_tx_lookup_cache.end()) {
+        tx_out = tx_it->second;
         return true;
     }
 
-    // Backstop: if a tx carries DD OP_RETURN metadata but marker bits are missing,
-    // skip it from templates instead of risking a miner-side validity failure.
-    for (const CTxOut& output : tx.vout) {
-        if (output.scriptPubKey.empty() || output.scriptPubKey[0] != OP_RETURN) {
-            continue;
-        }
-
-        CScript::const_iterator pc = output.scriptPubKey.begin();
-        opcodetype opcode;
-        std::vector<unsigned char> data;
-        if (!output.scriptPubKey.GetOp(pc, opcode) || opcode != OP_RETURN) {
-            continue;
-        }
-        if (output.scriptPubKey.GetOp(pc, opcode, data) &&
-            data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
-            return true;
-        }
+    if (coinHeight == MEMPOOL_HEIGHT || m_dd_tx_lookup_loaded_heights.count(coinHeight)) {
+        return false;
     }
 
-    return false;
+    const CBlockIndex* pblockindex = m_chainstate.m_chain[coinHeight];
+    if (!pblockindex) return false;
+
+    CBlock block;
+    if (!m_chainstate.m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
+
+    for (const auto& btx : block.vtx) {
+        m_dd_tx_lookup_cache.emplace(std::make_pair(coinHeight, btx->GetHash()), btx);
+    }
+    m_dd_tx_lookup_loaded_heights.insert(coinHeight);
+
+    tx_it = m_dd_tx_lookup_cache.find(cache_key);
+    if (tx_it == m_dd_tx_lookup_cache.end()) {
+        return false;
+    }
+
+    tx_out = tx_it->second;
+    return true;
 }
 
 bool BlockAssembler::ValidateDDForBlockInclusion(const CTransaction& tx, const CBlockIndex* pindexPrev)
 {
     AssertLockHeld(::cs_main);
-    if (!IsDDTransactionForMiner(tx)) {
+    const int block_height = pindexPrev->nHeight + 1;
+    assert(m_mempool);
+
+    auto txLookup = [this](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
+        return LookupPreviousTxForDDValidation(txid, coinHeight, tx_out);
+    };
+
+    CCoinsViewMemPool mempool_view(&m_chainstate.CoinsTip(), *m_mempool);
+    CCoinsViewCache coins_view(&mempool_view);
+
+    DigiDollar::ValidationContext dd_probe(
+        block_height,
+        0,
+        DigiDollar::GetSystemCollateralRatio(),
+        chainparams,
+        &coins_view,
+        true,
+        txLookup,
+        m_mempool
+    );
+
+    if (!IsDDTransactionForMiner(tx) &&
+        !DigiDollar::RequiresDigiDollarValidation(tx, dd_probe)) {
         return true;
     }
 
-    // If the tx has DD-looking metadata but not the canonical marker bits,
+    // If the tx has DD-looking metadata or spends DD collateral but lacks the marker bits,
     // keep miner behavior conservative and skip it.
     if (!DigiDollar::HasDigiDollarMarker(tx)) {
         return false;
@@ -183,27 +264,100 @@ bool BlockAssembler::ValidateDDForBlockInclusion(const CTransaction& tx, const C
         return false;
     }
 
-    auto txLookup = [this](const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) -> bool {
-        AssertLockHeld(::cs_main);
-        const CBlockIndex* pblockindex = m_chainstate.m_chain[coinHeight];
-        if (!pblockindex) return false;
-        CBlock block;
-        if (!m_chainstate.m_blockman.ReadBlockFromDisk(block, *pblockindex)) return false;
-        for (const auto& btx : block.vtx) {
-            if (btx->GetHash() == txid) {
-                tx_out = btx;
-                return true;
+    const bool needs_oracle_price = TransactionNeedsOraclePriceForMiner(tx);
+    if (!needs_oracle_price) {
+        DigiDollar::ValidationContext dd_context(
+            block_height,
+            0,
+            DigiDollar::GetSystemCollateralRatio(),
+            chainparams,
+            &coins_view,
+            true,
+            txLookup,
+            m_mempool
+        );
+
+        TxValidationState tx_state;
+        if (!DigiDollar::ValidateDigiDollarTransaction(tx, dd_context, tx_state)) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "CreateNewBlock(): skipping DD transfer %s during package selection: %s\n",
+                     tx.GetHash().ToString(), tx_state.GetRejectReason());
+            return false;
+        }
+        return true;
+    }
+
+    const int32_t epoch = GetCurrentEpoch(block_height);
+    OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+    COracleBundle block_bundle = oracle_manager.GetCurrentBundle(epoch);
+    std::string oracle_error;
+    bool have_valid_bundle = oracle_manager.IsEnabled() &&
+        OracleBundleManager::ValidateMuSig2Bundle(block_bundle, block_height,
+                                                  chainparams.GetConsensus(), oracle_error);
+
+    // The miner must use the same live MuSig2 readiness source as
+    // AddOracleBundleToBlock(). GetCurrentBundle(epoch) only reflects bundles
+    // already materialized in the manager; a freshly-completed signing session
+    // is enough to build a valid DD block and will be embedded in the coinbase
+    // later in CreateNewBlock(). Without this, DD mempool txs are skipped even
+    // while AddOracleBundleToBlock() can stamp a valid v0x03 bundle.
+    if (!have_valid_bundle && oracle_manager.IsEnabled() && g_signing_orchestrator) {
+        COracleBundle session_bundle(epoch);
+        session_bundle.version = 3;
+        uint64_t signed_price = 0;
+        int64_t signed_timestamp = 0;
+        if (g_signing_orchestrator->GetCompletedSession(
+                epoch, session_bundle.aggregate_sig,
+                session_bundle.participation_bitmap,
+                signed_price, signed_timestamp)) {
+            session_bundle.median_price_micro_usd = signed_price;
+            session_bundle.timestamp = signed_timestamp;
+
+            std::string session_error;
+            if (OracleBundleManager::ValidateMuSig2Bundle(session_bundle, block_height,
+                                                          chainparams.GetConsensus(), session_error)) {
+                block_bundle = std::move(session_bundle);
+                have_valid_bundle = true;
+                oracle_error.clear();
+            } else {
+                oracle_error = session_error;
             }
         }
+    }
+
+    if (!have_valid_bundle) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "CreateNewBlock(): skipping DD tx %s because no valid MuSig2 oracle bundle is ready for height %d: %s\n",
+                 tx.GetHash().ToString(), block_height, oracle_error);
         return false;
-    };
+    }
+
+    // DD-FA-FUNC-016 (Wave 13): mirror the wall-clock freshness check
+    // performed by HasRecentValidMuSig2OracleQuote in mempool acceptance
+    // (validation.cpp:154-217). ValidateMuSig2Bundle above only checks
+    // signature/epoch/roster/range; it does not enforce age-vs-now.
+    // Without this guard the miner would pick DD txs into a template using
+    // a stale bundle that mempool already refused, then ConnectBlock would
+    // reject the assembled block via OracleDataValidator::ValidateBlockOracleData
+    // (block.nTime - bundle.timestamp > ORACLE_MAX_AGE_SECONDS). Pin parity
+    // with the mempool gate so all three contexts agree on the same fixture.
+    const int64_t now = GetTime();
+    if (block_bundle.timestamp <= 0 || block_bundle.timestamp > now + 60 ||
+        now - block_bundle.timestamp > ORACLE_MAX_AGE_SECONDS) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "CreateNewBlock(): skipping DD tx %s: bundle age %lld s outside wall-clock freshness window (max %d s)\n",
+                 tx.GetHash().ToString(),
+                 static_cast<long long>(now - block_bundle.timestamp),
+                 ORACLE_MAX_AGE_SECONDS);
+        return false;
+    }
 
     DigiDollar::ValidationContext dd_context(
-        pindexPrev->nHeight + 1,
-        GetOraclePriceForTransaction(tx),
+        block_height,
+        GetOraclePriceForTransaction(tx, block_height, static_cast<CAmount>(block_bundle.median_price_micro_usd)),
         DigiDollar::GetSystemCollateralRatio(),
         chainparams,
-        &m_chainstate.CoinsTip(),
+        &coins_view,
         false,
         txLookup,
         m_mempool
@@ -241,7 +395,7 @@ bool BlockAssembler::RemoveDDTransactionsFromBlock(const CBlockIndex* pindexPrev
     CAmount kept_fee_total{0};
     size_t removed{0};
     for (size_t i{1}; i < block.vtx.size(); ++i) {
-        if (IsDDTransactionForMiner(*block.vtx[i])) {
+        if (TransactionNeedsOraclePriceForMiner(*block.vtx[i])) {
             ++removed;
             continue;
         }
@@ -278,7 +432,8 @@ bool BlockAssembler::RemoveDDTransactionsFromBlock(const CBlockIndex* pindexPrev
     block.vtx[0] = MakeTransactionRef(std::move(stripped_coinbase));
     pblocktemplate->vchCoinbaseCommitment = m_chainstate.m_chainman.GenerateCoinbaseCommitment(block, pindexPrev);
 
-    if (DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman)) {
+    if (DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman) &&
+        BlockNeedsOraclePriceForMiner(block)) {
         OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
         if (!oracle_manager.AddOracleBundleToBlock(block, nHeight)) {
             LogPrintf("CreateNewBlock(): Warning - Failed to add oracle bundle during DD retry for block %d\n", nHeight);
@@ -365,12 +520,21 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblocktemplate->vchCoinbaseCommitment = m_chainstate.m_chainman.GenerateCoinbaseCommitment(*pblock, pindexPrev);
     pblocktemplate->vTxFees[0] = -nFees;
 
-    // Add oracle bundle to block (after DigiDollar activation)
+    // Stamp a fresh MuSig2 oracle bundle when available after DigiDollar activation.
+    // Price-dependent DD operations (mint/redeem) require it. Price-independent
+    // DD transfers do not; they must keep flowing during oracle outages.
     if (DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman)) {
         OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
-        if (!oracle_manager.AddOracleBundleToBlock(*pblock, nHeight)) {
-            LogPrintf("CreateNewBlock(): Warning - Failed to add oracle bundle to block %d\n", nHeight);
-            // Continue with block creation even if oracle bundle fails (graceful degradation)
+        const bool block_needs_oracle_price = BlockNeedsOraclePriceForMiner(*pblock);
+        if (oracle_manager.AddOracleBundleToBlock(*pblock, nHeight)) {
+            // AddOracleBundleToBlock() mutates the coinbase after GenerateCoinbaseCommitment().
+            // Keep the template header internally consistent for GBT/miner consumers that use
+            // the returned block directly instead of first calling IncrementExtraNonce().
+            pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
+        } else if (block_needs_oracle_price) {
+            LogPrintf("CreateNewBlock(): removing oracle-priced DD transactions because no valid MuSig2 oracle bundle is ready for block %d\n",
+                      nHeight);
+            RemoveDDTransactionsFromBlock(pindexPrev);
         }
     }
 
@@ -665,11 +829,26 @@ void BlockAssembler::addPackageTxs(const CTxMemPool& mempool, int& nPackagesSele
         const CBlockIndex* const pindexPrev = m_chainstate.m_chain.Tip();
         assert(pindexPrev != nullptr);
         CTxMemPool::setEntries added_ancestors;
+        std::set<uint256> skipped_package_txids;
 
         for (size_t i = 0; i < sortedEntries.size(); ++i) {
             const CTransaction& tx = sortedEntries[i]->GetTx();
-            if (IsDDTransactionForMiner(tx) && !ValidateDDForBlockInclusion(tx, pindexPrev)) {
+            const uint256 txid = tx.GetHash();
+            bool depends_on_skipped_package_tx = false;
+            for (const CTxIn& input : tx.vin) {
+                if (skipped_package_txids.count(input.prevout.hash)) {
+                    depends_on_skipped_package_tx = true;
+                    break;
+                }
+            }
+            if (failedTx.count(sortedEntries[i]) || depends_on_skipped_package_tx) {
                 failedTx.insert(sortedEntries[i]);
+                skipped_package_txids.insert(txid);
+                continue;
+            }
+            if (!ValidateDDForBlockInclusion(tx, pindexPrev)) {
+                failedTx.insert(sortedEntries[i]);
+                skipped_package_txids.insert(txid);
                 continue;
             }
             AddToBlock(sortedEntries[i]);

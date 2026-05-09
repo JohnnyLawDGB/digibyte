@@ -22,7 +22,7 @@ static constexpr bool DEFAULT_DIGIDOLLARSTATSINDEX{true};
  * These stats track the total DigiDollar supply, locked collateral, and active vaults.
  */
 struct DigiDollarStats {
-    CAmount total_dd_supply{0};      //!< Total DigiDollar supply in circulation (in satoshis)
+    CAmount total_dd_supply{0};      //!< Total DigiDollar supply in circulation (in cents)
     CAmount total_collateral{0};     //!< Total DGB locked as collateral (in satoshis)
     uint64_t vault_count{0};         //!< Number of active DigiDollar vaults
     int height{0};                   //!< Block height for these statistics

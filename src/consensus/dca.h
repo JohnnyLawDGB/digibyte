@@ -22,11 +22,13 @@ namespace DCA {
 struct HealthTier {
     int minCollateral;     // Minimum system collateral % for this tier
     int maxCollateral;     // Maximum system collateral % for this tier
+    int multiplierBps;     // DCA multiplier in basis points (10000 = 1.0x)
     double multiplier;     // DCA multiplier for this tier (1.0 = no adjustment)
     std::string status;    // Human-readable status: "healthy", "warning", "critical", "emergency"
 
-    HealthTier(int min, int max, double mult, const std::string& stat)
-        : minCollateral(min), maxCollateral(max), multiplier(mult), status(stat) {}
+    HealthTier(int min, int max, int multBps, const std::string& stat)
+        : minCollateral(min), maxCollateral(max), multiplierBps(multBps),
+          multiplier(multBps / 10000.0), status(stat) {}
 };
 
 /**
@@ -83,6 +85,14 @@ public:
      * - <100%: 2.0x (emergency level)
      */
     static double GetDCAMultiplier(int systemHealth);
+
+    /**
+     * Get DCA multiplier in basis points for consensus-safe integer math.
+     *
+     * @param systemHealth Current system health percentage
+     * @return Collateral multiplier in basis points (10000 = 1.0x)
+     */
+    static int GetDCAMultiplierBps(int systemHealth);
 
     /**
      * Apply DCA adjustment to base collateral ratio.

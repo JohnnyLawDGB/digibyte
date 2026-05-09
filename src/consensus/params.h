@@ -186,22 +186,21 @@ struct Params {
     int nDDOracleUpdateInterval{4};     // Blocks between price updates
     int nDDActivationHeight{0};         // Height at which DigiDollar activates
 
-    /** Oracle system parameters (Phase One: Testnet only) */
+    /** Oracle system parameters. DigiDollar V1 block data uses MuSig2 bundles only. */
     int nOracleActivationHeight{std::numeric_limits<int>::max()};  // Height when oracle system activates
     int nOracleEpochLength{1440};               // Blocks per oracle epoch (default: 1440 = 24 hours)
-    int nOracleRequiredMessages{1};             // Messages required for consensus (Phase One: 1)
-    int nOracleTotalOracles{1};                 // Total active oracles (Phase One: 1)
+    int nOracleRequiredMessages{1};             // Off-chain signed price messages required before MuSig2 aggregation
+    int nOracleTotalOracles{1};                 // Total active oracle operators
     std::vector<std::string> vOraclePublicKeys; // Hardcoded oracle public keys (hex encoded XOnlyPubKey, sorted)
-    int nDigiDollarPhase2Height{std::numeric_limits<int>::max()};  // Height when Phase Two activates (multi-oracle consensus)
-    int nDigiDollarPhase3Height{std::numeric_limits<int>::max()};  // Height when Phase Three activates (MuSig2 aggregate signatures)
+    int nDigiDollarMuSig2Height{std::numeric_limits<int>::max()};  // Height when MuSig2 aggregate signatures are valid
 
-    /** Phase 3 (MuSig2) oracle configuration */
-    int nOraclePubkeyCount{0};                  // Number of oracle pubkeys for Phase 3 MuSig2
+    /** MuSig2 oracle configuration */
+    int nOraclePubkeyCount{0};                  // Number of oracle pubkeys for MuSig2
     int nOracleConsensusRequired{0};            // Minimum oracles required for MuSig2 aggregate signature
 
-    /** Check if Phase Three (MuSig2 aggregate signatures) is active at given height */
-    bool IsPhaseThreeActive(int32_t block_height) const {
-        return block_height >= nDigiDollarPhase3Height;
+    /** Check if MuSig2 aggregate oracle signatures are active at given height */
+    bool IsMuSig2OracleActive(int32_t block_height) const {
+        return block_height >= nDigiDollarMuSig2Height;
     }
 
     /**
@@ -246,14 +245,14 @@ inline bool IsOracleActive(const Params& params, int nHeight) {
 }
 
 /**
- * Check if Phase 3 (MuSig2) is active at given height
+     * Check if MuSig2 is active at given height
  */
-inline bool IsPhase3Active(const Params& params, int nHeight) {
-    return params.IsPhaseThreeActive(nHeight);
+inline bool IsMuSig2Active(const Params& params, int nHeight) {
+    return params.IsMuSig2OracleActive(nHeight);
 }
 
 /**
- * Validate oracle configuration for Phase 3 MuSig2.
+ * Validate MuSig2 oracle configuration.
  */
 inline bool ValidateOracleConfiguration(const Params& params) {
     if (static_cast<int>(params.vOraclePublicKeys.size()) != params.nOraclePubkeyCount) return false;

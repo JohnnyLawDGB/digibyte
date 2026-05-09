@@ -35,6 +35,9 @@ struct PricePoint {
 
 /** Current volatility state */
 struct VolatilityState {
+    int64_t hourlyVolatilityBps;    //!< 1-hour volatility in basis points
+    int64_t dailyVolatilityBps;     //!< 24-hour volatility in basis points
+    int64_t weeklyVolatilityBps;    //!< 7-day volatility in basis points
     double hourlyVolatility;      //!< 1-hour volatility percentage
     double dailyVolatility;       //!< 24-hour volatility percentage
     double weeklyVolatility;      //!< 7-day volatility percentage
@@ -44,6 +47,9 @@ struct VolatilityState {
     uint32_t cooldownEndHeight;   //!< Height when cooldown period ends
 
     VolatilityState() :
+        hourlyVolatilityBps(0),
+        dailyVolatilityBps(0),
+        weeklyVolatilityBps(0),
         hourlyVolatility(0.0),
         dailyVolatility(0.0),
         weeklyVolatility(0.0),
@@ -55,10 +61,15 @@ struct VolatilityState {
 
 /** Volatility thresholds for triggering freeze mechanisms */
 struct VolatilityThresholds {
-    static constexpr double WARNING_1H = 10.0;          //!< 10% in 1 hour: warning
-    static constexpr double FREEZE_MINT_1H = 20.0;      //!< 20% in 1 hour: freeze new mints
-    static constexpr double FREEZE_ALL_24H = 30.0;      //!< 30% in 24 hours: freeze all operations
-    static constexpr double EMERGENCY_7D = 50.0;        //!< 50% in 7 days: emergency mode
+    static constexpr int64_t WARNING_1H_BPS = 1000;          //!< 10% in 1 hour: warning
+    static constexpr int64_t FREEZE_MINT_1H_BPS = 2000;      //!< 20% in 1 hour: freeze new mints
+    static constexpr int64_t FREEZE_ALL_24H_BPS = 3000;      //!< 30% in 24 hours: freeze all operations
+    static constexpr int64_t EMERGENCY_7D_BPS = 5000;        //!< 50% in 7 days: emergency mode
+
+    static constexpr double WARNING_1H = WARNING_1H_BPS / 100.0;
+    static constexpr double FREEZE_MINT_1H = FREEZE_MINT_1H_BPS / 100.0;
+    static constexpr double FREEZE_ALL_24H = FREEZE_ALL_24H_BPS / 100.0;
+    static constexpr double EMERGENCY_7D = EMERGENCY_7D_BPS / 100.0;
 
     static constexpr uint32_t COOLDOWN_BLOCKS = 8640;   //!< Cooldown period in blocks (8640 × 15s = 36 hours)
 };
@@ -90,7 +101,7 @@ private:
     static void UpdateVolatilityState() EXCLUSIVE_LOCKS_REQUIRED(cs_volatility);
     static void CleanOldHistory() EXCLUSIVE_LOCKS_REQUIRED(cs_volatility);
     static std::vector<PricePoint> GetPricesInWindow(int64_t timeWindow) EXCLUSIVE_LOCKS_REQUIRED(cs_volatility);
-    static double CalculateStandardDeviation(const std::vector<double>& values);
+    static int64_t CalculateStandardDeviationBps(const std::vector<int64_t>& values);
 
 public:
     // ========================================================================
@@ -112,6 +123,12 @@ public:
     static std::vector<PricePoint> GetPriceHistory();
 
     /**
+     * Check whether a candidate price would cross the mint freeze threshold
+     * without mutating volatility history or freeze state.
+     */
+    static bool WouldCandidateFreezeMinting(CAmount price);
+
+    /**
      * Clear all price history (primarily for testing)
      */
     static void ClearHistory();
@@ -126,6 +143,15 @@ public:
      * @return Volatility as a percentage (e.g., 15.5 for 15.5%)
      */
     static double CalculateVolatility(int64_t timeWindow);
+
+    /**
+     * Calculate volatility for a specific time window using deterministic
+     * integer basis points. Consensus-visible freeze decisions must use this
+     * path rather than floating point percentages.
+     * @param timeWindow Time window in seconds
+     * @return Volatility in basis points (100 bps = 1%)
+     */
+    static int64_t CalculateVolatilityBps(int64_t timeWindow);
 
     /**
      * Get current volatility state
@@ -192,6 +218,12 @@ public:
      */
     static void ReconstructFromBlockData(const std::vector<PricePoint>& blockPrices, uint32_t currentHeight);
 
+    /**
+     * Remove volatility price points for a disconnected block.
+     * @param height Disconnected block height
+     */
+    static void RemovePriceForHeight(uint32_t height);
+
     // ========================================================================
     // Diagnostic Functions
     // ========================================================================
@@ -235,6 +267,14 @@ std::string FormatVolatility(double volatility);
 double CalculatePercentageChange(CAmount oldPrice, CAmount newPrice);
 
 /**
+ * Calculate percentage change between two prices in basis points.
+ * @param oldPrice Previous price
+ * @param newPrice Current price
+ * @return Percentage change in basis points (100 bps = 1%)
+ */
+int64_t CalculatePercentageChangeBps(CAmount oldPrice, CAmount newPrice);
+
+/**
  * Check if a price change exceeds a threshold
  * @param oldPrice Previous price
  * @param newPrice Current price
@@ -242,6 +282,15 @@ double CalculatePercentageChange(CAmount oldPrice, CAmount newPrice);
  * @return True if change exceeds threshold
  */
 bool ExceedsThreshold(CAmount oldPrice, CAmount newPrice, double threshold);
+
+/**
+ * Check if a price change exceeds an integer basis-point threshold.
+ * @param oldPrice Previous price
+ * @param newPrice Current price
+ * @param thresholdBps Threshold in basis points
+ * @return True if change exceeds threshold
+ */
+bool ExceedsThresholdBps(CAmount oldPrice, CAmount newPrice, int64_t thresholdBps);
 
 } // namespace Volatility
 } // namespace DigiDollar

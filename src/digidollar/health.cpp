@@ -114,13 +114,11 @@ std::vector<int> SystemHealthMonitor::GetHealthHistory(int blocks)
     const int MAX_HISTORY_REQUEST = 100000;
     int blocksToFetch = std::min(blocks, MAX_HISTORY_REQUEST);
 
-    // Get current chain tip
-    // TODO: Fix chainstate access - temporary mock implementation
-    // In a production system, this should receive a ChainstateManager reference
-    const CBlockIndex* tip = nullptr;
-
-    // For now, use mock data to prevent compilation errors
-    // This should be replaced with proper chainstate access
+    // TODO: Fix chainstate access - temporary mock implementation.
+    // In a production system, this should receive a ChainstateManager
+    // reference and read the actual tip via Active().Tip(). For now, use
+    // mock data to prevent compilation errors. This should be replaced with
+    // proper chainstate access.
     int64_t currentHeight = 1000000; // Mock current height
 
     // Collect history from most recent to oldest
@@ -206,7 +204,8 @@ UniValue SystemHealthMonitor::GetHealthReport()
     // Oracle status
     UniValue oracles(UniValue::VOBJ);
     oracles.pushKV("active_count", metrics.activeOracles);
-    oracles.pushKV("last_price", ValueFromAmount(metrics.lastOraclePrice));
+    oracles.pushKV("last_price", int64_t{metrics.lastOraclePrice});
+    oracles.pushKV("last_price_micro_usd", int64_t{metrics.lastOraclePrice});
     oracles.pushKV("last_update", metrics.lastOracleUpdate);
 
     // TODO: Fix chainstate access - temporary mock implementation
@@ -301,6 +300,8 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
     // Reset counters
     s_currentMetrics.totalDDSupply = 0;
     s_currentMetrics.totalCollateral = 0;
+    s_currentMetrics.systemHealth = 0;
+    s_currentMetrics.hasCanonicalHealth = false;
 
     // Reset tier counters
     for (auto& tier : s_currentMetrics.tiers) {
@@ -446,24 +447,24 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 // Called from ConnectBlock/DisconnectBlock under cs_main.
 // ============================================================================
 
+static void AddClampedAmount(CAmount& total, CAmount amount, const char* label)
+{
+    if (amount <= 0) return;
+    if (total <= std::numeric_limits<CAmount>::max() - amount) {
+        total += amount;
+        return;
+    }
+    LogPrintf("Health: WARNING - %s would overflow, capping\n", label);
+    total = std::numeric_limits<CAmount>::max();
+}
+
 void SystemHealthMonitor::OnMintConnected(CAmount ddAmount, CAmount dgbCollateral)
 {
     std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
-    // SECURITY [RH-11]: Prevent supply overflow — cap at MAX_DIGIDOLLAR
-    if (ddAmount > 0 && s_currentMetrics.totalDDSupply <= MAX_DIGIDOLLAR - ddAmount) {
-        s_currentMetrics.totalDDSupply += ddAmount;
-    } else if (ddAmount > 0) {
-        LogPrintf("Health: WARNING - totalDDSupply would exceed MAX_DIGIDOLLAR, capping at %s\n",
-                 FormatMoney(MAX_DIGIDOLLAR));
-        s_currentMetrics.totalDDSupply = MAX_DIGIDOLLAR;
-    }
-    // Cap collateral at MAX_MONEY to prevent int64_t overflow
-    if (dgbCollateral > 0 && s_currentMetrics.totalCollateral <= std::numeric_limits<CAmount>::max() - dgbCollateral) {
-        s_currentMetrics.totalCollateral += dgbCollateral;
-    } else if (dgbCollateral > 0) {
-        LogPrintf("Health: WARNING - totalCollateral would overflow, capping\n");
-        s_currentMetrics.totalCollateral = std::numeric_limits<CAmount>::max();
-    }
+    AddClampedAmount(s_currentMetrics.totalDDSupply, ddAmount, "totalDDSupply");
+    AddClampedAmount(s_currentMetrics.totalCollateral, dgbCollateral, "totalCollateral");
+    s_currentMetrics.systemHealth = 0;
+    s_currentMetrics.hasCanonicalHealth = false;
     LogPrint(BCLog::DIGIDOLLAR, "Health: Mint connected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
@@ -474,6 +475,8 @@ void SystemHealthMonitor::OnRedeemConnected(CAmount ddAmount, CAmount dgbCollate
     std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
     s_currentMetrics.totalDDSupply = std::max<CAmount>(0, s_currentMetrics.totalDDSupply - ddAmount);
     s_currentMetrics.totalCollateral = std::max<CAmount>(0, s_currentMetrics.totalCollateral - dgbCollateral);
+    s_currentMetrics.systemHealth = 0;
+    s_currentMetrics.hasCanonicalHealth = false;
     LogPrint(BCLog::DIGIDOLLAR, "Health: Redeem connected - DD -%s, Collateral -%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
@@ -484,6 +487,8 @@ void SystemHealthMonitor::OnMintDisconnected(CAmount ddAmount, CAmount dgbCollat
     std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
     s_currentMetrics.totalDDSupply = std::max<CAmount>(0, s_currentMetrics.totalDDSupply - ddAmount);
     s_currentMetrics.totalCollateral = std::max<CAmount>(0, s_currentMetrics.totalCollateral - dgbCollateral);
+    s_currentMetrics.systemHealth = 0;
+    s_currentMetrics.hasCanonicalHealth = false;
     LogPrint(BCLog::DIGIDOLLAR, "Health: Mint disconnected - DD -%s, Collateral -%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
@@ -492,17 +497,10 @@ void SystemHealthMonitor::OnMintDisconnected(CAmount ddAmount, CAmount dgbCollat
 void SystemHealthMonitor::OnRedeemDisconnected(CAmount ddAmount, CAmount dgbCollateral)
 {
     std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44: thread safety
-    // SECURITY [RH-11]: Same overflow protection as OnMintConnected
-    if (ddAmount > 0 && s_currentMetrics.totalDDSupply <= MAX_DIGIDOLLAR - ddAmount) {
-        s_currentMetrics.totalDDSupply += ddAmount;
-    } else if (ddAmount > 0) {
-        s_currentMetrics.totalDDSupply = MAX_DIGIDOLLAR;
-    }
-    if (dgbCollateral > 0 && s_currentMetrics.totalCollateral <= std::numeric_limits<CAmount>::max() - dgbCollateral) {
-        s_currentMetrics.totalCollateral += dgbCollateral;
-    } else if (dgbCollateral > 0) {
-        s_currentMetrics.totalCollateral = std::numeric_limits<CAmount>::max();
-    }
+    AddClampedAmount(s_currentMetrics.totalDDSupply, ddAmount, "totalDDSupply");
+    AddClampedAmount(s_currentMetrics.totalCollateral, dgbCollateral, "totalCollateral");
+    s_currentMetrics.systemHealth = 0;
+    s_currentMetrics.hasCanonicalHealth = false;
     LogPrint(BCLog::DIGIDOLLAR, "Health: Redeem disconnected - DD +%s, Collateral +%s (totals: DD=%s, Collateral=%s)\n",
              FormatMoney(ddAmount), FormatMoney(dgbCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
@@ -543,11 +541,14 @@ void SystemHealthMonitor::AggregateWalletStats(
 
 void SystemHealthMonitor::UpdateTierMetrics()
 {
-    // Calculate current DGB price for health calculations
-    CAmount currentPrice = GetLastOraclePrice();
-    if (currentPrice == 0) {
-        currentPrice = 50; // Default $0.50 per DGB (50 cents)
-    }
+    // Calculate current DGB price for health calculations. Oracle and
+    // volatility paths store prices in micro-USD; DCA health math consumes
+    // millicents, so convert at this boundary instead of treating micro-USD
+    // as cents and inflating canonical health.
+    const CAmount currentPriceMicroUSD = GetLastOraclePrice();
+    const CAmount currentPriceMillicents = currentPriceMicroUSD > 0
+        ? currentPriceMicroUSD / 10
+        : 0;
 
     // Update per-tier metrics
     // Note: In real implementation, this would analyze actual positions by tier
@@ -568,7 +569,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
         s_currentMetrics.tiers[0].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[0].ddMinted,
             s_currentMetrics.tiers[0].dgbLocked,
-            currentPrice
+            currentPriceMicroUSD
         );
 
         // Tier 1: 90-day (mock data) - 125% ratio
@@ -578,7 +579,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
         s_currentMetrics.tiers[1].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[1].ddMinted,
             s_currentMetrics.tiers[1].dgbLocked,
-            currentPrice
+            currentPriceMicroUSD
         );
 
         // Tier 2: 180-day (mock data) - 120% ratio
@@ -588,7 +589,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
         s_currentMetrics.tiers[2].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[2].ddMinted,
             s_currentMetrics.tiers[2].dgbLocked,
-            currentPrice
+            currentPriceMicroUSD
         );
 
         // Tier 3: 365-day (mock data) - 250% ratio
@@ -598,7 +599,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
         s_currentMetrics.tiers[3].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[3].ddMinted,
             s_currentMetrics.tiers[3].dgbLocked,
-            currentPrice
+            currentPriceMicroUSD
         );
 
         // Tier 4: 365-day (mock data) - 300% ratio
@@ -608,7 +609,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
         s_currentMetrics.tiers[4].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[4].ddMinted,
             s_currentMetrics.tiers[4].dgbLocked,
-            currentPrice
+            currentPriceMicroUSD
         );
 
         // Tier 5: 1825-day (mock data) - 180% ratio
@@ -618,7 +619,7 @@ void SystemHealthMonitor::UpdateTierMetrics()
         s_currentMetrics.tiers[5].healthRatio = HealthUtils::CalculateHealthRatio(
             s_currentMetrics.tiers[5].ddMinted,
             s_currentMetrics.tiers[5].dgbLocked,
-            currentPrice
+            currentPriceMicroUSD
         );
 
         // Calculate totals from tier data (for mock mode)
@@ -631,12 +632,15 @@ void SystemHealthMonitor::UpdateTierMetrics()
     }
     */
 
-    // Update overall system health
-    s_currentMetrics.systemHealth = CalculateSystemHealth(
-        s_currentMetrics.totalDDSupply,
+    // Update overall system health. Use the same DCA helper as validation so
+    // sub-cent DGB prices keep precision and missing oracle data with active
+    // DD supply fails closed to 0% health.
+    s_currentMetrics.systemHealth = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
         s_currentMetrics.totalCollateral,
-        currentPrice
+        s_currentMetrics.totalDDSupply,
+        currentPriceMillicents
     );
+    s_currentMetrics.hasCanonicalHealth = true;
 
     LogPrint(BCLog::DIGIDOLLAR, "Tier metrics updated: %zu tiers analyzed, total DD=%s, total collateral=%s\n",
              s_currentMetrics.tiers.size(),
@@ -664,9 +668,10 @@ void SystemHealthMonitor::UpdateOracleStatus()
     s_currentMetrics.lastOraclePrice = GetLastOraclePrice();
     s_currentMetrics.lastOracleUpdate = GetLastOracleUpdate();
 
-    LogPrint(BCLog::DIGIDOLLAR, "Oracle status updated: %d active, price=%s, last_update=%lld\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle status updated: %d active, price=%lld micro-USD ($%.6f), last_update=%lld\n",
              s_currentMetrics.activeOracles,
-             FormatMoney(s_currentMetrics.lastOraclePrice),
+             static_cast<long long>(s_currentMetrics.lastOraclePrice),
+             static_cast<double>(s_currentMetrics.lastOraclePrice) / 1000000.0,
              static_cast<long long>(s_currentMetrics.lastOracleUpdate));
 }
 
@@ -697,37 +702,15 @@ int SystemHealthMonitor::CalculateSystemHealth(CAmount ddSupply, CAmount collate
         return 0; // Cannot calculate without valid price
     }
 
-    // Calculate collateral value in cents
-    // price is in cents (100 = $1.00 DGB price)
-    // collateral is in satoshis
-    // Formula: (satoshis * price_cents) / COIN = cents
-    // Guard against overflow: divide first when collateral is large
-    CAmount collateralValue;
-    const CAmount maxSafe = std::numeric_limits<CAmount>::max() / price;
-    if (collateral > maxSafe) {
-        collateralValue = (collateral / COIN) * price;
-    } else {
-        collateralValue = (collateral * price) / COIN;
-    }
+    __int128 numerator = static_cast<__int128>(collateral) *
+                         static_cast<__int128>(price) * 100;
+    __int128 denominator = static_cast<__int128>(COIN) *
+                           static_cast<__int128>(ddSupply);
+    __int128 health = numerator / denominator;
 
-    // Health = (Collateral Value / DD Value) * 100
-    // Guard against overflow in numerator
-    int health;
-    const CAmount maxSafeMul = std::numeric_limits<CAmount>::max() / 100;
-    if (collateralValue > maxSafeMul) {
-        // When ddSupply is 1-99, ddSupply/100 is 0 due to integer division.
-        // Return max health since collateral dwarfs the tiny supply.
-        CAmount scaledSupply = ddSupply / 100;
-        if (scaledSupply == 0) {
-            return 300;
-        }
-        health = static_cast<int>(collateralValue / scaledSupply);
-    } else {
-        health = static_cast<int>((collateralValue * 100) / ddSupply);
-    }
-
-    // Cap at reasonable maximum
-    return std::min(health, 300);
+    if (health < 0) return 0;
+    if (health > 300) return 300;
+    return static_cast<int>(health);
 }
 
 double SystemHealthMonitor::GetCurrentVolatility()
@@ -772,7 +755,7 @@ int SystemHealthMonitor::GetActiveOracleCount()
 
 CAmount SystemHealthMonitor::GetLastOraclePrice()
 {
-    // Get actual price from oracle system
+    // Get actual price from oracle system in micro-USD.
     // TODO: Implement proper oracle system integration
     // For now, check if we have volatility data which implies oracle data
     using namespace DigiDollar::Volatility;
@@ -782,7 +765,7 @@ CAmount SystemHealthMonitor::GetLastOraclePrice()
             return history.back().price;
         }
     }
-    return 50; // Default $0.50 per DGB (50 cents)
+    return 0;
 }
 
 int64_t SystemHealthMonitor::GetLastOracleUpdate()
@@ -804,7 +787,7 @@ int64_t SystemHealthMonitor::GetLastOracleUpdate()
 // Alert checking implementations
 bool SystemHealthMonitor::CheckSupplyAlert(const SystemMetrics& metrics)
 {
-    return metrics.totalDDSupply > AlertThresholds::MAX_DD_SUPPLY;
+    return metrics.totalDDSupply > AlertThresholds::ALERT_DD_SUPPLY;
 }
 
 bool SystemHealthMonitor::CheckHealthAlert(const SystemMetrics& metrics)

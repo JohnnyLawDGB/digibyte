@@ -12,18 +12,48 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 namespace DigiDollar {
 namespace DCA {
 
+namespace {
+static constexpr int DCA_BPS_SCALE = 10000;
+
+int ResolveCanonicalHealthForDCA(int requestedHealth, bool& staleHealth)
+{
+    staleHealth = false;
+    const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
+    if (metrics.hasCanonicalHealth && metrics.totalDDSupply > 0 && metrics.systemHealth > 0) {
+        staleHealth = requestedHealth != metrics.systemHealth;
+        return metrics.systemHealth;
+    }
+    return requestedHealth;
+}
+
+bool TryMultiplyInt128(__int128 a, __int128 b, __int128& result)
+{
+    if (a < 0 || b < 0) return false;
+    if (a == 0 || b == 0) {
+        result = 0;
+        return true;
+    }
+    if (a > std::numeric_limits<__int128>::max() / b) {
+        return false;
+    }
+    result = a * b;
+    return true;
+}
+} // namespace
+
 // DCA health tiers (sorted from lowest to highest health for easier lookup)
 const std::vector<HealthTier> DynamicCollateralAdjustment::HEALTH_TIERS = {
     // Keep these bands in lockstep with ConsensusParams::dcaLevels.
-    HealthTier(0,   109, 2.0,  "emergency"), // <110%: Emergency floor (2.0x multiplier)
-    HealthTier(110, 119, 1.5,  "critical"),  // 110-119%: Critical (1.5x multiplier)
-    HealthTier(120, 149, 1.25, "warning"),   // 120-149%: Warning (1.25x multiplier)
-    HealthTier(150, 30000, 1.0, "healthy")   // >=150%: Healthy (1.0x multiplier)
+    HealthTier(0,   109, 20000, "emergency"), // <110%: Emergency floor (2.0x multiplier)
+    HealthTier(110, 119, 15000, "critical"),  // 110-119%: Critical (1.5x multiplier)
+    HealthTier(120, 149, 12500, "warning"),   // 120-149%: Warning (1.25x multiplier)
+    HealthTier(150, 30000, 10000, "healthy")  // >=150%: Healthy (1.0x multiplier)
 };
 
 int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
@@ -52,63 +82,32 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
         return 30000; // Maximum health when no liabilities exist
     }
 
-    // Calculate total collateral value in USD cents
-    // totalCollateral is in satoshis (1 DGB = 100,000,000 satoshis)
-    // oraclePrice is in milli-cents per DGB (e.g., 5000 = $0.05 = 5 cents per DGB)
-    // Note: oraclePrice = actual_price_in_dollars * 100,000
-    // Convert: (satoshis * millicents/DGB) / satoshis/DGB / 1000 = cents
-    //
-    // Use __int128 to prevent signed integer overflow.
-    // Both totalCollateral and oraclePrice can be up to MAX_MONEY (~2.1e18),
-    // and their product (~4.4e36) exceeds int64_t max (~9.2e18).
-    // The previous divide-first fallback also overflowed when both values
-    // were extreme (e.g., (MAX_MONEY / COIN) * MAX_MONEY = ~4.4e28).
-    __int128 collateralValueMillicents128 = static_cast<__int128>(totalCollateral) * static_cast<__int128>(oraclePrice);
-    collateralValueMillicents128 /= COIN;
-
-    // Clamp to CAmount range before converting back
-    CAmount collateralValueMillicents;
-    if (collateralValueMillicents128 > std::numeric_limits<CAmount>::max()) {
-        collateralValueMillicents = std::numeric_limits<CAmount>::max();
-    } else {
-        collateralValueMillicents = static_cast<CAmount>(collateralValueMillicents128);
-    }
-
-    // Convert from millicents to cents
-    CAmount collateralValueCents = collateralValueMillicents / 1000;
-
-    // Calculate system health percentage
-    // health = (collateral_value_usd / total_dd_usd) * 100
-    // Both values are in cents, so we get percentage directly
-    if (collateralValueCents == 0) {
-        LogPrint(BCLog::DIGIDOLLAR, "DCA: Zero collateral value, system health is 0%%\n");
+    // totalCollateral is in satoshis, oraclePrice is in milli-cents per DGB
+    // (100,000 = $1.00), and totalDD is in cents. Floor the final ratio so
+    // health never rounds up across a DCA boundary.
+    __int128 numerator = 0;
+    if (!TryMultiplyInt128(static_cast<__int128>(totalCollateral),
+                           static_cast<__int128>(oraclePrice),
+                           numerator) ||
+        !TryMultiplyInt128(numerator, 100, numerator)) {
+        LogPrintf("DCA: Cannot calculate system health - collateral/price multiplication overflow\n");
         return 0;
     }
 
-    // Calculate health with overflow protection
-    CAmount healthCalculation;
-    const CAmount maxSafeDividend = std::numeric_limits<CAmount>::max() / 100;
-    if (collateralValueCents > maxSafeDividend) {
-        // Scale down both numerator and denominator to avoid overflow.
-        // SECURITY FIX (DGB-SEC-003): Guard against totalDD/1000==0 which
-        // causes division by zero when totalDD is between 1 and 999.
-        CAmount scaledDD = totalDD / 1000;
-        if (scaledDD == 0) {
-            // totalDD is between 1 and 999 cents (< $10) — collateral dwarfs it,
-            // so health is at maximum.
-            healthCalculation = 30000;
-        } else {
-            healthCalculation = (collateralValueCents / 1000) * 100 / scaledDD;
-        }
-    } else {
-        healthCalculation = (collateralValueCents * 100) / totalDD;
+    __int128 denominator = static_cast<__int128>(COIN) * 1000 *
+                           static_cast<__int128>(totalDD);
+    __int128 healthCalculation = numerator / denominator;
+
+    if (healthCalculation <= 0) {
+        LogPrint(BCLog::DIGIDOLLAR, "DCA: Zero collateral value, system health is 0%%\n");
+        return 0;
     }
 
     // Cap at reasonable maximum (300% = very healthy system)
     // Clamp healthCalculation BEFORE casting to int to prevent int overflow
     // when healthCalculation exceeds INT_MAX (e.g., massive collateral with
     // tiny DD supply).
-    int systemHealth = static_cast<int>(std::min(healthCalculation, static_cast<CAmount>(30000)));
+    int systemHealth = healthCalculation > 30000 ? 30000 : static_cast<int>(healthCalculation);
 
     LogPrint(BCLog::DIGIDOLLAR, "DCA: System health calculated: %d%% (collateral: %lld DGB, DD: %lld cents, price: %lld millicents/DGB)\n",
              systemHealth, totalCollateral / COIN, totalDD, oraclePrice);
@@ -118,6 +117,11 @@ int DynamicCollateralAdjustment::CalculateSystemHealth(CAmount totalCollateral,
 
 double DynamicCollateralAdjustment::GetDCAMultiplier(int systemHealth)
 {
+    return GetDCAMultiplierBps(systemHealth) / 10000.0;
+}
+
+int DynamicCollateralAdjustment::GetDCAMultiplierBps(int systemHealth)
+{
     // RH-36b: Clamp health to valid range [0, 30000] before tier lookup.
     // Negative health (shouldn't happen but can from overflow/bugs) must map
     // to the lowest tier (emergency), not fall through to a hardcoded fallback.
@@ -126,36 +130,50 @@ double DynamicCollateralAdjustment::GetDCAMultiplier(int systemHealth)
     // Find the appropriate tier for this health level
     for (const auto& tier : HEALTH_TIERS) {
         if (systemHealth >= tier.minCollateral && systemHealth <= tier.maxCollateral) {
-            LogPrint(BCLog::DIGIDOLLAR, "DCA: System health %d%% -> %s tier (%.1fx multiplier)\n",
+            LogPrint(BCLog::DIGIDOLLAR, "DCA: System health %d%% -> %s tier (%.2fx multiplier)\n",
                      systemHealth, tier.status, tier.multiplier);
-            return tier.multiplier;
+            return tier.multiplierBps;
         }
     }
 
     // Fallback: if no tier matches (shouldn't happen), use emergency multiplier
     LogPrintf("DCA: Warning - no tier found for system health %d%%, using emergency multiplier\n", systemHealth);
-    return 2.0;
+    return 20000;
 }
 
 int DynamicCollateralAdjustment::ApplyDCA(int baseRatio, int systemHealth)
 {
-    double multiplier = GetDCAMultiplier(systemHealth);
+    if (baseRatio <= 0) {
+        return 0;
+    }
 
-    // Apply multiplier to base ratio
-    double adjustedRatio = baseRatio * multiplier;
+    bool staleHealth = false;
+    int resolvedHealth = ResolveCanonicalHealthForDCA(systemHealth, staleHealth);
+    if (staleHealth) {
+        LogPrintf("DCA: Stale system health %d%% supplied while canonical health is %d%%; failing closed\n",
+                  systemHealth, resolvedHealth);
+        return std::numeric_limits<int>::max();
+    }
 
-    // Round up so fractional DCA multipliers never undercut the intended
-    // collateral requirement.
-    int finalRatio = static_cast<int>(std::ceil(adjustedRatio));
+    int multiplierBps = GetDCAMultiplierBps(resolvedHealth);
 
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: Applied %.1fx multiplier to %d%% base ratio -> %d%% final ratio\n",
-             multiplier, baseRatio, finalRatio);
+    __int128 adjustedRatio = static_cast<__int128>(baseRatio) *
+                             static_cast<__int128>(multiplierBps);
+    __int128 finalRatio128 = (adjustedRatio + DCA_BPS_SCALE - 1) / DCA_BPS_SCALE;
+    int finalRatio = finalRatio128 > std::numeric_limits<int>::max()
+        ? std::numeric_limits<int>::max()
+        : static_cast<int>(finalRatio128);
+
+    LogPrint(BCLog::DIGIDOLLAR, "DCA: Applied %d bps multiplier to %d%% base ratio at %d%% health -> %d%% final ratio\n",
+             multiplierBps, baseRatio, resolvedHealth, finalRatio);
 
     return finalRatio;
 }
 
 HealthTier DynamicCollateralAdjustment::GetCurrentTier(int systemHealth)
 {
+    systemHealth = std::clamp(systemHealth, 0, 30000);
+
     // Find the appropriate tier for this health level
     for (const auto& tier : HEALTH_TIERS) {
         if (systemHealth >= tier.minCollateral && systemHealth <= tier.maxCollateral) {
@@ -205,8 +223,9 @@ int DynamicCollateralAdjustment::GetCurrentSystemHealth()
     // IMPORTANT: Use GetCachedMetrics() - doesn't trigger expensive updates
     const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
 
-    // If we have a cached health value, return it
-    if (metrics.systemHealth > 0) {
+    // Only use cached health once the current supply/collateral snapshot has
+    // been explicitly evaluated. Incremental block hooks invalidate this bit.
+    if (metrics.hasCanonicalHealth && metrics.systemHealth > 0) {
         return metrics.systemHealth;
     }
 
@@ -217,15 +236,13 @@ int DynamicCollateralAdjustment::GetCurrentSystemHealth()
 
     // Calculate health from cached metrics if available
     if (metrics.lastOraclePrice > 0 && metrics.totalCollateral > 0 && metrics.totalDDSupply > 0) {
-        // FIX [T2-05b]: lastOraclePrice is in cents (100 = $1.00)
-        // CalculateSystemHealth expects millicents (100,000 = $1.00)
-        // Convert: cents * 1000 = millicents
-        CAmount priceMillicents = metrics.lastOraclePrice * 1000;
+        // lastOraclePrice is tracked in micro-USD (1,000,000 = $1.00).
+        // CalculateSystemHealth expects millicents (100,000 = $1.00).
+        const CAmount priceMillicents = metrics.lastOraclePrice / 10;
         return CalculateSystemHealth(metrics.totalCollateral, metrics.totalDDSupply, priceMillicents);
     }
 
-    // Return max health as safe default when no data available
-    return 30000;
+    return -1;
 }
 
 bool DynamicCollateralAdjustment::IsOracleAvailable()
@@ -240,6 +257,9 @@ double DynamicCollateralAdjustment::GetCurrentDCAMultiplier()
 {
     // Get DCA multiplier based on current system health
     int systemHealth = GetCurrentSystemHealth();
+    if (systemHealth < 0) {
+        return 2.0;
+    }
     return GetDCAMultiplier(systemHealth);
 }
 

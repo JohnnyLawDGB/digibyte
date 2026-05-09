@@ -21,6 +21,10 @@
 
 namespace DigiDollar {
 
+// Apply the wallet mint collateral safety margin used by MintTxBuilder.
+// The input and output are DGB satoshis.
+CAmount ApplyCollateralSafetyMargin(CAmount requiredCollateral);
+
 // Result of transaction building
 struct TxBuilderResult {
     bool success;
@@ -42,8 +46,8 @@ struct TxBuilderMintParams {
     CAmount feeRate;            // Fee rate in sat/vB
     std::vector<COutPoint> utxos; // Available UTXOs for collateral
 
-    // Optional: Destination for DGB change output (if not set, generates random key - BAD!)
-    // CRITICAL: Must be set to a wallet-controlled address to avoid losing DGB!
+    // Optional: Destination for DGB change output. Production wallet/RPC/Qt
+    // paths must set this to a wallet-controlled address.
     std::optional<CTxDestination> dgbChangeDest;
 
     TxBuilderMintParams() : ddAmount(0), lockDays(0), lockTier(0), feeRate(1000) {} // Default 1000 sat/vB
@@ -176,12 +180,21 @@ public:
      */
     int64_t LockDaysToBlocks(int days) const;
 
+    /**
+     * Validate mint parameters before building a transaction. Rejects
+     * non-canonical lock durations, mismatched tier bytes, invalid amounts,
+     * invalid keys, and missing UTXOs. Mirrors the public TransferTxBuilder
+     * input-validation API and lets callers reject doomed mints early.
+     * @param params Mint parameters to validate
+     * @return true if every parameter is acceptable to the mint builder
+     */
+    bool ValidateMintParams(const TxBuilderMintParams& params) const;
+
 protected:
 
 private:
     CScript CreateCollateralScript(const TxBuilderMintParams& params) const;
     CScript CreateDDOutputScript(const CKey& owner, CAmount amount) const;
-    bool ValidateMintParams(const TxBuilderMintParams& params) const;
     CKey GenerateChangeKey() const;
 };
 

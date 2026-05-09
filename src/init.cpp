@@ -688,7 +688,7 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("getdigidollaraddress", "Get or create a DigiDollar receive address (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
     argsman.AddArg("validateddaddress", "Validate a DigiDollar address (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
     argsman.AddArg("listdigidollaraddresses", "List all DigiDollar addresses in wallet (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
-    argsman.AddArg("importdigidollaraddress", "Import a DigiDollar address for watch-only tracking (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("importdigidollaraddress", "Validate a DigiDollar address; V1 watch-only import is unsupported/no-op (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
     argsman.AddArg("getdigidollarstats", "Get network-wide DigiDollar statistics (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
     argsman.AddArg("getdigidollardeploymentinfo", "Get DigiDollar activation/deployment status (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
     argsman.AddArg("calculatecollateralrequirement", "Calculate DGB collateral needed for a DD mint (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
@@ -2180,7 +2180,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // Initialize Oracle Bundle Manager with consensus parameters
     OracleBundleManager::Initialize();
-    // Initialize MuSig2 signing orchestrator for Phase 3 oracle bundles
+    // Initialize MuSig2 signing orchestrator for V1 oracle bundles
     OracleSigningOrchestrator::Initialize();
     g_signing_orchestrator->SetConnman(node.connman.get());
     // Initialize oracle P2P connection for broadcasting

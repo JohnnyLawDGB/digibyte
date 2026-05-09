@@ -15,6 +15,9 @@
 #include <vector>
 #include <cstdint>
 
+class CCoinsViewCache;
+class CTransaction;
+
 namespace DigiDollar {
 
 /**
@@ -106,14 +109,15 @@ std::vector<XOnlyPubKey> GetOracleKeys(size_t count = 15);
 
 /**
  * Normal redemption path - redeemable after timelock expires
- * Script: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP OP_DIGIDOLLAR <amount> OP_EQUALVERIFY <ownerKey> OP_CHECKSIG
+ * Script: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP OP_DIGIDOLLAR <amount> OP_DDVERIFY <ownerKey> OP_CHECKSIG
  */
 CScript CreateNormalRedemptionPath(const MintParams& params);
 
 /**
  * ERR (Emergency Redemption Ratio) path - when system < 100% collateralized
  * CRITICAL: ERR path REQUIRES timelock expiry first (same as Normal path)
- * Script: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP OP_CHECKCOLLATERAL <100> OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG
+ * Initial witness stack: <signature> <collateralRatio>
+ * Script: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP <100> OP_CHECKCOLLATERAL OP_NOT OP_VERIFY OP_DIGIDOLLAR <amount> OP_DDVERIFY <ownerKey> OP_CHECKSIG
  */
 CScript CreateERRPath(const MintParams& params);
 
@@ -134,6 +138,12 @@ struct ScriptMetadata {
 
 void RegisterScriptMetadata(const CScript& script, ScriptType type, CAmount ddAmount, int64_t lockHeight);
 bool GetScriptMetadata(const CScript& script, ScriptMetadata& metadata);
+
+/**
+ * Phase 1 collateral-vault detector for validation's non-DD spend guard.
+ */
+bool IsRegisteredCollateralVaultScript(const CScript& script);
+bool SpendsRegisteredCollateralVault(const CTransaction& tx, const CCoinsViewCache& coins);
 
 } // namespace DigiDollar
 

@@ -105,6 +105,7 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
         vbparams.timeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         vbparams.min_activation_height = *digidollar_height;
         options.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = vbparams;
+        options.digidollar_activation_height = *digidollar_height;
         LogPrintf("Setting DigiDollar activation height for regtest to %d (BIP9 signaling mode)\n", *digidollar_height);
     }
 }

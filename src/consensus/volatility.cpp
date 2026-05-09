@@ -23,6 +23,69 @@
 namespace DigiDollar {
 namespace Volatility {
 
+namespace {
+
+int64_t SaturatingInt64(__int128 value)
+{
+    if (value > static_cast<__int128>(std::numeric_limits<int64_t>::max())) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    if (value < static_cast<__int128>(std::numeric_limits<int64_t>::min())) {
+        return std::numeric_limits<int64_t>::min();
+    }
+    return static_cast<int64_t>(value);
+}
+
+uint64_t IntegerSqrtFloor(unsigned __int128 value)
+{
+    uint64_t low = 0;
+    uint64_t high = std::numeric_limits<uint64_t>::max();
+    while (low < high) {
+        const uint64_t mid = low + (high - low) / 2 + 1;
+        const unsigned __int128 square = static_cast<unsigned __int128>(mid) * mid;
+        if (square <= value) {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    return low;
+}
+
+int64_t AbsBps(int64_t value)
+{
+    if (value == std::numeric_limits<int64_t>::min()) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return value < 0 ? -value : value;
+}
+
+double BpsToPercent(int64_t bps)
+{
+    return static_cast<double>(bps) / 100.0;
+}
+
+double CalculateStandardDeviationDouble(const std::vector<double>& values)
+{
+    if (values.size() < 2) {
+        return 0.0;
+    }
+
+    double sum = std::accumulate(values.begin(), values.end(), 0.0);
+    double mean = sum / values.size();
+
+    double squaredDiffSum = 0.0;
+    for (double value : values) {
+        double diff = value - mean;
+        squaredDiffSum += diff * diff;
+    }
+
+    double variance = squaredDiffSum / (values.size() - 1);
+    return std::sqrt(variance);
+}
+
+} // namespace
+
 // ============================================================================
 // Static Member Definitions
 // ============================================================================
@@ -39,6 +102,13 @@ uint32_t VolatilityMonitor::lastUpdateHeight = 0;
 void VolatilityMonitor::RecordPrice(CAmount price, int64_t timestamp, uint32_t height)
 {
     LOCK(cs_volatility);
+
+    if (price < static_cast<CAmount>(ORACLE_MIN_PRICE_MICRO_USD) ||
+        price > static_cast<CAmount>(ORACLE_MAX_PRICE_MICRO_USD)) {
+        LogPrintf("VolatilityMonitor: Rejecting invalid candidate price %lld\n",
+                  static_cast<long long>(price));
+        return;
+    }
 
     // Use current time if timestamp is 0
     if (timestamp == 0) {
@@ -58,6 +128,7 @@ void VolatilityMonitor::RecordPrice(CAmount price, int64_t timestamp, uint32_t h
                      timestamp - lastPrice.timestamp);
             return;
         }
+
     }
 
     // Add new price point
@@ -79,6 +150,20 @@ std::vector<PricePoint> VolatilityMonitor::GetPriceHistory()
     return std::vector<PricePoint>(priceHistory.begin(), priceHistory.end());
 }
 
+bool VolatilityMonitor::WouldCandidateFreezeMinting(CAmount price)
+{
+    LOCK(cs_volatility);
+
+    if (price < static_cast<CAmount>(ORACLE_MIN_PRICE_MICRO_USD) ||
+        price > static_cast<CAmount>(ORACLE_MAX_PRICE_MICRO_USD) ||
+        priceHistory.empty()) {
+        return false;
+    }
+
+    const int64_t candidateChangeBps = AbsBps(CalculatePercentageChangeBps(priceHistory.back().price, price));
+    return candidateChangeBps >= VolatilityThresholds::FREEZE_MINT_1H_BPS;
+}
+
 void VolatilityMonitor::ClearHistory()
 {
     LOCK(cs_volatility);
@@ -97,15 +182,11 @@ double VolatilityMonitor::CalculateVolatility(int64_t timeWindow)
         return 0.0;
     }
 
-    // Get prices in the specified time window
     auto windowPrices = GetPricesInWindow(timeWindow);
-
     if (windowPrices.size() < 2) {
         return 0.0;
     }
 
-    // Calculate volatility as the maximum absolute percentage change from the starting price
-    // This better reflects the actual price movement for freeze thresholds
     CAmount startPrice = windowPrices.front().price;
     double maxAbsChange = 0.0;
 
@@ -114,7 +195,6 @@ double VolatilityMonitor::CalculateVolatility(int64_t timeWindow)
         maxAbsChange = std::max(maxAbsChange, change);
     }
 
-    // Also calculate standard deviation for additional volatility metric
     std::vector<double> percentChanges;
     percentChanges.reserve(windowPrices.size() - 1);
 
@@ -123,11 +203,52 @@ double VolatilityMonitor::CalculateVolatility(int64_t timeWindow)
         percentChanges.push_back(std::abs(change));
     }
 
-    double stdDevVolatility = CalculateStandardDeviation(percentChanges);
+    double stdDevVolatility = CalculateStandardDeviationDouble(percentChanges);
+    return std::max(maxAbsChange, stdDevVolatility * 2.0);
+}
+
+int64_t VolatilityMonitor::CalculateVolatilityBps(int64_t timeWindow)
+{
+    LOCK(cs_volatility);
+
+    if (priceHistory.size() < 2) {
+        return 0;
+    }
+
+    // Get prices in the specified time window
+    auto windowPrices = GetPricesInWindow(timeWindow);
+
+    if (windowPrices.size() < 2) {
+        return 0;
+    }
+
+    // Calculate volatility as the maximum absolute percentage change from the starting price
+    // This better reflects the actual price movement for freeze thresholds
+    CAmount startPrice = windowPrices.front().price;
+    int64_t maxAbsChangeBps = 0;
+
+    for (size_t i = 1; i < windowPrices.size(); ++i) {
+        int64_t changeBps = AbsBps(CalculatePercentageChangeBps(startPrice, windowPrices[i].price));
+        maxAbsChangeBps = std::max(maxAbsChangeBps, changeBps);
+    }
+
+    // Also calculate standard deviation for additional volatility metric
+    std::vector<int64_t> percentChangeBps;
+    percentChangeBps.reserve(windowPrices.size() - 1);
+
+    for (size_t i = 1; i < windowPrices.size(); ++i) {
+        int64_t changeBps = AbsBps(CalculatePercentageChangeBps(windowPrices[i-1].price, windowPrices[i].price));
+        percentChangeBps.push_back(changeBps);
+    }
+
+    const int64_t stdDevVolatilityBps = CalculateStandardDeviationBps(percentChangeBps);
+    const int64_t doubledStdDevBps = stdDevVolatilityBps > std::numeric_limits<int64_t>::max() / 2
+        ? std::numeric_limits<int64_t>::max()
+        : stdDevVolatilityBps * 2;
 
     // Return the maximum of: max absolute change and 2x standard deviation
     // This captures both large single moves and sustained volatility
-    return std::max(maxAbsChange, stdDevVolatility * 2.0);
+    return std::max(maxAbsChangeBps, doubledStdDevBps);
 }
 
 VolatilityState VolatilityMonitor::GetCurrentState()
@@ -147,17 +268,20 @@ void VolatilityMonitor::UpdateState(uint32_t currentHeight)
     lastUpdateHeight = currentHeight;
 
     // Calculate volatility for different time windows
-    currentState.hourlyVolatility = CalculateVolatility(3600);      // 1 hour
-    currentState.dailyVolatility = CalculateVolatility(24 * 3600);  // 24 hours
-    currentState.weeklyVolatility = CalculateVolatility(7 * 24 * 3600); // 7 days
+    currentState.hourlyVolatilityBps = CalculateVolatilityBps(3600);      // 1 hour
+    currentState.dailyVolatilityBps = CalculateVolatilityBps(24 * 3600);  // 24 hours
+    currentState.weeklyVolatilityBps = CalculateVolatilityBps(7 * 24 * 3600); // 7 days
+    currentState.hourlyVolatility = BpsToPercent(currentState.hourlyVolatilityBps);
+    currentState.dailyVolatility = BpsToPercent(currentState.dailyVolatilityBps);
+    currentState.weeklyVolatility = BpsToPercent(currentState.weeklyVolatilityBps);
 
     // Update freeze state based on thresholds
-    bool shouldFreezeMint = (currentState.hourlyVolatility >= VolatilityThresholds::FREEZE_MINT_1H);
-    bool shouldFreezeAll = (currentState.dailyVolatility >= VolatilityThresholds::FREEZE_ALL_24H) ||
-                          (currentState.weeklyVolatility >= VolatilityThresholds::EMERGENCY_7D);
+    bool shouldFreezeMint = (currentState.hourlyVolatilityBps >= VolatilityThresholds::FREEZE_MINT_1H_BPS);
+    bool shouldFreezeAll = (currentState.dailyVolatilityBps >= VolatilityThresholds::FREEZE_ALL_24H_BPS) ||
+                          (currentState.weeklyVolatilityBps >= VolatilityThresholds::EMERGENCY_7D_BPS);
 
     // Log warnings
-    if (currentState.hourlyVolatility >= VolatilityThresholds::WARNING_1H) {
+    if (currentState.hourlyVolatilityBps >= VolatilityThresholds::WARNING_1H_BPS) {
         LogPrintf("VolatilityMonitor: WARNING - High volatility detected: 1h=%.2f%%, 24h=%.2f%%, 7d=%.2f%%\n",
                   currentState.hourlyVolatility, currentState.dailyVolatility, currentState.weeklyVolatility);
     }
@@ -191,9 +315,9 @@ void VolatilityMonitor::UpdateState(uint32_t currentHeight)
     if ((currentState.mintingFrozen || currentState.allOperationsFrozen) &&
         currentHeight > currentState.cooldownEndHeight) {
 
-        bool canUnfreeze = (currentState.hourlyVolatility < VolatilityThresholds::WARNING_1H) &&
-                          (currentState.dailyVolatility < VolatilityThresholds::FREEZE_MINT_1H) &&
-                          (currentState.weeklyVolatility < VolatilityThresholds::FREEZE_ALL_24H);
+        bool canUnfreeze = (currentState.hourlyVolatilityBps < VolatilityThresholds::WARNING_1H_BPS) &&
+                          (currentState.dailyVolatilityBps < VolatilityThresholds::FREEZE_MINT_1H_BPS) &&
+                          (currentState.weeklyVolatilityBps < VolatilityThresholds::FREEZE_ALL_24H_BPS);
 
         if (canUnfreeze) {
             LogPrintf("VolatilityMonitor: UNFREEZE - Volatility stabilized, unfreezing operations\n");
@@ -300,6 +424,29 @@ void VolatilityMonitor::ReconstructFromBlockData(const std::vector<PricePoint>& 
               currentState.allOperationsFrozen, currentState.mintingFrozen, priceHistory.size());
 }
 
+void VolatilityMonitor::RemovePriceForHeight(uint32_t height)
+{
+    LOCK(cs_volatility);
+
+    const auto old_size = priceHistory.size();
+    priceHistory.erase(std::remove_if(priceHistory.begin(), priceHistory.end(),
+                                      [height](const PricePoint& pp) { return pp.height == height; }),
+                       priceHistory.end());
+    if (priceHistory.size() == old_size) {
+        return;
+    }
+
+    currentState = VolatilityState();
+    lastUpdateHeight = priceHistory.empty() ? 0 : priceHistory.back().height;
+    CleanOldHistory();
+    if (!priceHistory.empty()) {
+        UpdateVolatilityState();
+    }
+
+    LogPrintf("VolatilityMonitor: Removed price data for height %u, remaining=%d\n",
+              height, priceHistory.size());
+}
+
 std::string VolatilityMonitor::GetDiagnosticInfo()
 {
     LOCK(cs_volatility);
@@ -371,20 +518,23 @@ void VolatilityMonitor::UpdateVolatilityState()
     }
 
     // Calculate volatility for different time windows
-    currentState.hourlyVolatility = CalculateVolatility(3600);      // 1 hour
-    currentState.dailyVolatility = CalculateVolatility(24 * 3600);  // 24 hours
-    currentState.weeklyVolatility = CalculateVolatility(7 * 24 * 3600); // 7 days
+    currentState.hourlyVolatilityBps = CalculateVolatilityBps(3600);      // 1 hour
+    currentState.dailyVolatilityBps = CalculateVolatilityBps(24 * 3600);  // 24 hours
+    currentState.weeklyVolatilityBps = CalculateVolatilityBps(7 * 24 * 3600); // 7 days
+    currentState.hourlyVolatility = BpsToPercent(currentState.hourlyVolatilityBps);
+    currentState.dailyVolatility = BpsToPercent(currentState.dailyVolatilityBps);
+    currentState.weeklyVolatility = BpsToPercent(currentState.weeklyVolatilityBps);
 
     // Get the most recent height from price history (if available)
     uint32_t currentHeight = priceHistory.empty() ? lastUpdateHeight : priceHistory.back().height;
 
     // Update freeze state based on thresholds
-    bool shouldFreezeMint = (currentState.hourlyVolatility >= VolatilityThresholds::FREEZE_MINT_1H);
-    bool shouldFreezeAll = (currentState.dailyVolatility >= VolatilityThresholds::FREEZE_ALL_24H) ||
-                          (currentState.weeklyVolatility >= VolatilityThresholds::EMERGENCY_7D);
+    bool shouldFreezeMint = (currentState.hourlyVolatilityBps >= VolatilityThresholds::FREEZE_MINT_1H_BPS);
+    bool shouldFreezeAll = (currentState.dailyVolatilityBps >= VolatilityThresholds::FREEZE_ALL_24H_BPS) ||
+                          (currentState.weeklyVolatilityBps >= VolatilityThresholds::EMERGENCY_7D_BPS);
 
     // Log warnings
-    if (currentState.hourlyVolatility >= VolatilityThresholds::WARNING_1H) {
+    if (currentState.hourlyVolatilityBps >= VolatilityThresholds::WARNING_1H_BPS) {
         LogPrintf("VolatilityMonitor: WARNING - High volatility detected: 1h=%.2f%%, 24h=%.2f%%, 7d=%.2f%%\n",
                   currentState.hourlyVolatility, currentState.dailyVolatility, currentState.weeklyVolatility);
     }
@@ -418,9 +568,9 @@ void VolatilityMonitor::UpdateVolatilityState()
     if ((currentState.mintingFrozen || currentState.allOperationsFrozen) &&
         currentHeight > currentState.cooldownEndHeight) {
 
-        bool canUnfreeze = (currentState.hourlyVolatility < VolatilityThresholds::WARNING_1H) &&
-                          (currentState.dailyVolatility < VolatilityThresholds::FREEZE_MINT_1H) &&
-                          (currentState.weeklyVolatility < VolatilityThresholds::FREEZE_ALL_24H);
+        bool canUnfreeze = (currentState.hourlyVolatilityBps < VolatilityThresholds::WARNING_1H_BPS) &&
+                          (currentState.dailyVolatilityBps < VolatilityThresholds::FREEZE_MINT_1H_BPS) &&
+                          (currentState.weeklyVolatilityBps < VolatilityThresholds::FREEZE_ALL_24H_BPS);
 
         if (canUnfreeze) {
             LogPrintf("VolatilityMonitor: UNFREEZE - Volatility stabilized, unfreezing operations\n");
@@ -482,25 +632,31 @@ std::vector<PricePoint> VolatilityMonitor::GetPricesInWindow(int64_t timeWindow)
     return windowPrices;
 }
 
-double VolatilityMonitor::CalculateStandardDeviation(const std::vector<double>& values)
+int64_t VolatilityMonitor::CalculateStandardDeviationBps(const std::vector<int64_t>& values)
 {
     if (values.size() < 2) {
-        return 0.0;
+        return 0;
     }
 
-    // Calculate mean
-    double sum = std::accumulate(values.begin(), values.end(), 0.0);
-    double mean = sum / values.size();
-
-    // Calculate variance
-    double squaredDiffSum = 0.0;
-    for (double value : values) {
-        double diff = value - mean;
-        squaredDiffSum += diff * diff;
+    __int128 sum = 0;
+    __int128 sumSquares = 0;
+    for (int64_t value : values) {
+        sum += value;
+        sumSquares += static_cast<__int128>(value) * value;
     }
 
-    double variance = squaredDiffSum / (values.size() - 1); // Sample variance
-    return std::sqrt(variance);
+    const __int128 count = values.size();
+    __int128 numerator = count * sumSquares - sum * sum;
+    if (numerator <= 0) {
+        return 0;
+    }
+    const __int128 denominator = count * (count - 1); // Sample variance
+    const unsigned __int128 variance = static_cast<unsigned __int128>(numerator / denominator);
+    const uint64_t sqrt = IntegerSqrtFloor(variance);
+    if (sqrt > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return static_cast<int64_t>(sqrt);
 }
 
 
@@ -524,10 +680,31 @@ double CalculatePercentageChange(CAmount oldPrice, CAmount newPrice)
     return (static_cast<double>(newPrice - oldPrice) / static_cast<double>(oldPrice)) * 100.0;
 }
 
+int64_t CalculatePercentageChangeBps(CAmount oldPrice, CAmount newPrice)
+{
+    if (oldPrice <= 0) {
+        return 0;
+    }
+
+    const __int128 delta = static_cast<__int128>(newPrice) - oldPrice;
+    const __int128 scaled = delta * 10000;
+    return SaturatingInt64(scaled / oldPrice);
+}
+
 bool ExceedsThreshold(CAmount oldPrice, CAmount newPrice, double threshold)
 {
+    if (oldPrice == 0) {
+        return false;
+    }
+
     double change = std::abs(CalculatePercentageChange(oldPrice, newPrice));
     return change >= threshold;
+}
+
+bool ExceedsThresholdBps(CAmount oldPrice, CAmount newPrice, int64_t thresholdBps)
+{
+    int64_t changeBps = AbsBps(CalculatePercentageChangeBps(oldPrice, newPrice));
+    return changeBps >= thresholdBps;
 }
 
 } // namespace Volatility

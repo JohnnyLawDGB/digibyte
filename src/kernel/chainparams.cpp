@@ -298,24 +298,22 @@ public:
         digidollarParams.activeOracles = 17;    // 17 active oracles (RC30)
         digidollarParams.oracleCount = 17;      // 17 oracles defined (RC30)
 
-        // Initialize DigiDollar Oracle Nodes (30 total, historical Phase One/Two providers)
+        // Initialize DigiDollar Oracle Nodes (30 configured operators)
         InitializeOracleNodes();
 
         // Mainnet-specific oracle and activation settings
-        consensus.nDDOracleEpochBlocks = 100;      // Rotate oracles every 100 blocks (~25 minutes)
+        consensus.nDDOracleEpochBlocks = 40;       // Rotate oracle signing epochs every 40 blocks (~10 minutes)
         consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)
         consensus.nDDActivationHeight = 22014720;   // DigiDollar activation height — aligned with BIP9 min_activation_height
 
-        // Oracle system — mainnet activates all phases at block 3,000,000
-        // Mainnet skips Phase 1 (single-oracle); goes directly to Phase 3 (MuSig2)
-        consensus.nOracleActivationHeight = 3000000;
-        consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 9;        // Phase Two (pre-MuSig2): 9-of-17 consensus
+        // Oracle system — DigiDollar V1 launches with MuSig2 bundles only.
+        consensus.nOracleActivationHeight = consensus.nDDActivationHeight;
+        consensus.nOracleEpochLength = 40;            // 10 minutes (40 blocks * 15 seconds)
+        consensus.nOracleRequiredMessages = 9;        // 9-of-17 off-chain price quorum before aggregation
         consensus.nOracleTotalOracles = 17;
-        consensus.nDigiDollarPhase2Height = 3000000;  // Phase Two and Three activate together
-        consensus.nDigiDollarPhase3Height = 0;  // Phase Three (MuSig2): active immediately on mainnet
+        consensus.nDigiDollarMuSig2Height = 0;  // MuSig2 active immediately on mainnet
 
-        // Phase 3 MuSig2 oracle configuration — 9-of-17 quorum (RC30)
+        // MuSig2 oracle configuration — 9-of-17 quorum (RC30)
         // Same oracle operator set as testnet. To add/replace operators:
         //   1. Generate keypair via `digibyte-cli generateoraclekey <id>`
         //   2. Add x-only pubkey to vOraclePublicKeys in slot order
@@ -347,8 +345,8 @@ public:
         consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
         consensus.vOraclePublicKeys.push_back("83b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7");  // 16: GTO90 (RC30)
 
-        LogPrintf("Oracle: Mainnet Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
-                 consensus.nDigiDollarPhase3Height, consensus.nOracleConsensusRequired,
+        LogPrintf("Oracle: Mainnet MuSig2 oracle bundles active at block %d, %d-of-%d quorum\n",
+                 consensus.nDigiDollarMuSig2Height, consensus.nOracleConsensusRequired,
                  consensus.nOraclePubkeyCount);
     }
 
@@ -357,7 +355,7 @@ private:
         // DigiDollar Oracle Nodes - 30 hardcoded trusted providers
         // These use compressed public keys (33 bytes) and unique endpoints
         vOracleNodes = {
-            // Oracle 0-9: Active Phase 3 operator set. Slots 0-16 must stay aligned
+            // Oracle 0-9: Active MuSig2 operator set. Slots 0-16 must stay aligned
             // with consensus.vOraclePublicKeys for MuSig2 bitmap/quorum validation.
             {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12028", true},
             {1,  ParsePubKey("023dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digidollar.org:9002", true},
@@ -561,7 +559,7 @@ public:
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
-        digidollarParams.oracleThreshold = 9;                         // 9-of-17 consensus for Phase Two (strict majority, RC30)
+        digidollarParams.oracleThreshold = 9;                         // 9-of-17 MuSig2 quorum (RC30)
         digidollarParams.activeOracles = 17;                          // 17 active oracles (RC30)
         digidollarParams.oracleCount = 17;                            // Total 17 oracles defined (RC30)
 
@@ -571,15 +569,13 @@ public:
         // Oracle system parameters — Testnet 9-of-17 consensus (RC30)
         // Oracle activation matches DigiDollar BIP9 activation — everything at block 600
         consensus.nOracleActivationHeight = 600;      // Same as nDDActivationHeight
-        consensus.nOracleEpochLength = 1440;          // 24 hours (1440 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 9;        // Phase Two: 9-of-17 consensus (RC30)
+        consensus.nOracleEpochLength = 40;            // 10 minutes (40 blocks * 15 seconds)
+        consensus.nOracleRequiredMessages = 9;        // 9-of-17 off-chain price quorum (RC30)
         consensus.nOracleTotalOracles = 17;           // 17 oracles active (RC30)
-        // Multi-oracle activates at same height as DigiDollar (no separate phases)
-        // Everything — DD minting, oracle consensus, multi-oracle — activates together
-        consensus.nDigiDollarPhase2Height = 600;  // Same as nDDActivationHeight
-        consensus.nDigiDollarPhase3Height = 0;  // Phase Three (MuSig2): active immediately on testnet
+        // Deprecated legacy height retained for old test fixtures; no legacy bundle mode.
+        consensus.nDigiDollarMuSig2Height = 0;  // MuSig2 active immediately on testnet
 
-        // Phase 3 MuSig2 oracle configuration — 9-of-17 quorum (RC30)
+        // MuSig2 oracle configuration — 9-of-17 quorum (RC30)
         consensus.nOraclePubkeyCount = 17;
         consensus.nOracleConsensusRequired = 9;
 
@@ -636,12 +632,12 @@ public:
         }
 
         LogPrintf("Oracle: Testnet oracle activation height: %d\n", consensus.nOracleActivationHeight);
-        LogPrintf("Oracle: %d oracles configured, %d-of-%d consensus, Phase Two at height %d\n",
+        LogPrintf("Oracle: %d oracles configured, %d-of-%d MuSig2 quorum, V1 activation height %d\n",
                  (int)consensus.vOraclePublicKeys.size(), consensus.nOracleRequiredMessages,
-                 consensus.nOracleTotalOracles, consensus.nDigiDollarPhase2Height);
+                 consensus.nOracleTotalOracles, consensus.nDDActivationHeight);
 
         // Testnet-specific oracle and activation settings
-        consensus.nDDOracleEpochBlocks = 50;       // Rotate oracles every 50 blocks (~12.5 minutes)
+        consensus.nDDOracleEpochBlocks = 40;       // Rotate oracle signing epochs every 40 blocks (~10 minutes)
         consensus.nDDOracleUpdateInterval = 2;     // Update price every 2 blocks (~30 seconds)
         consensus.nDDActivationHeight = 600;       // DigiDollar BIP9 activation at block 600 (DEFINED→STARTED→LOCKED_IN→ACTIVE)
     }
@@ -1111,19 +1107,22 @@ public:
         InitializeOracleNodes();
 
         // Regtest-specific oracle and activation settings
-        consensus.nDDOracleEpochBlocks = 10;       // Rotate oracles every 10 blocks
+        consensus.nDDOracleEpochBlocks = 40;       // Rotate oracle signing epochs every 40 blocks (~10 minutes)
         consensus.nDDOracleUpdateInterval = 1;     // Update price every block
         consensus.nDDActivationHeight = 650;       // DigiDollar active from height 650 (after Odocrypt at 600)
 
         // Oracle system parameters (RegTest uses MockOracleManager)
         consensus.nOracleActivationHeight = 650;   // Same as nDDActivationHeight — everything activates together
-        consensus.nOracleEpochLength = 144;        // 2.4 hours (144 blocks * 15 seconds)
-        consensus.nOracleRequiredMessages = 4;     // Phase Two: 4-of-7 (matches testnet)
-        consensus.nOracleTotalOracles = 7;         // Phase Two: 7 oracles (matches testnet)
-        consensus.nDigiDollarPhase2Height = 650;   // Same as nDDActivationHeight — everything activates together
-        consensus.nDigiDollarPhase3Height = 0;      // Phase Three: MuSig2 active immediately on regtest
+        if (opts.digidollar_activation_height) {
+            consensus.nDDActivationHeight = *opts.digidollar_activation_height;
+            consensus.nOracleActivationHeight = *opts.digidollar_activation_height;
+        }
+        consensus.nOracleEpochLength = 40;         // 10 minutes (40 blocks * 15 seconds)
+        consensus.nOracleRequiredMessages = 4;     // 4-of-7 off-chain price quorum (matches testnet)
+        consensus.nOracleTotalOracles = 7;         // 7 active oracles (matches testnet)
+        consensus.nDigiDollarMuSig2Height = 0;      // MuSig2 active immediately on regtest
 
-        // Phase 3 MuSig2 oracle configuration — 4-of-7 quorum (lower for testing)
+        // MuSig2 oracle configuration — 4-of-7 quorum (lower for testing)
         consensus.nOraclePubkeyCount = 7;
         consensus.nOracleConsensusRequired = 4;
 
@@ -1142,8 +1141,8 @@ public:
         consensus.vOraclePublicKeys.push_back("be6ad50e0bf26af3798af09a2824142fa79ff37f8730b7a54ba34c9fe6f1e8ec");  // oracle 5
         consensus.vOraclePublicKeys.push_back("584d30f3650d998b0b5f8be52f46164aee5f10d332421e63f070da8a38693a96");  // oracle 6
 
-        LogPrintf("Oracle: RegTest Phase 3 (MuSig2) at block %d, %d-of-%d quorum\n",
-                 consensus.nDigiDollarPhase3Height, consensus.nOracleConsensusRequired,
+        LogPrintf("Oracle: RegTest MuSig2 oracle bundles active at block %d, %d-of-%d quorum\n",
+                 consensus.nDigiDollarMuSig2Height, consensus.nOracleConsensusRequired,
                  consensus.nOraclePubkeyCount);
     }
 

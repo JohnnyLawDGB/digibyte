@@ -39,6 +39,7 @@ struct SystemMetrics {
     CAmount totalDDSupply;      //!< Total DigiDollar in circulation (cents)
     CAmount totalCollateral;    //!< Total DGB locked as collateral
     int systemHealth;           //!< Overall collateral ratio (percentage)
+    bool hasCanonicalHealth;    //!< True after health was calculated from the current metric snapshot
 
     // Per-tier breakdown structure
     struct TierMetrics {
@@ -62,13 +63,13 @@ struct SystemMetrics {
 
     // Oracle system status
     int activeOracles;          //!< Number of active oracles
-    CAmount lastOraclePrice;    //!< Last reported DGB price (cents: 100 = $1.00)
+    CAmount lastOraclePrice;    //!< Last reported DGB price in micro-USD (1,000,000 = $1.00)
     int64_t lastOracleUpdate;   //!< Block height of last oracle update
 
     // Historical tracking
     std::vector<int> healthHistory;  //!< Recent health percentages
 
-    SystemMetrics() : totalDDSupply(0), totalCollateral(0), systemHealth(0),
+    SystemMetrics() : totalDDSupply(0), totalCollateral(0), systemHealth(0), hasCanonicalHealth(false),
                      dcaMultiplier(1.0), errActive(false), volatility(0.0),
                      mintingFrozen(false), activeOracles(0), lastOraclePrice(0),
                      lastOracleUpdate(0) {}
@@ -79,7 +80,7 @@ struct SystemMetrics {
  * Defines when system should generate alerts
  */
 struct AlertThresholds {
-    static constexpr CAmount MAX_DD_SUPPLY = 10000000000;      // 100M DD ($100M)
+    static constexpr CAmount ALERT_DD_SUPPLY = 10000000000;    // 100M DD ($100M) monitoring alert, not a cap
     static constexpr int MIN_HEALTH_RATIO = 120;               // 120% minimum health
     static constexpr int CRITICAL_HEALTH_RATIO = 110;          // 110% critical health
     static constexpr int MAX_POSITIONS = 10000;                // Maximum positions
@@ -184,6 +185,12 @@ public:
     static void ResetMetrics() {
         std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44
         s_currentMetrics = SystemMetrics();
+    }
+
+    /** Set metrics directly for unit tests that need deterministic cached totals */
+    static void SetMetricsForTesting(const SystemMetrics& metrics) {
+        std::lock_guard<std::mutex> lock(s_metricsMutex); // RH-44
+        s_currentMetrics = metrics;
     }
 
     /**

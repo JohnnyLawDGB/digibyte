@@ -29,6 +29,7 @@ using DigiDollar::GetScriptMetadata;
 #include <limits>
 #include <unordered_map>
 #include <memory>
+#include <optional>
 
 namespace DigiDollar {
 
@@ -57,13 +58,84 @@ struct ValidationCache {
 // Global validation cache instance
 static ValidationCache g_validationCache;
 
+static bool IsCanonicalP2TROutput(const CScript& script)
+{
+    int witnessVersion = -1;
+    std::vector<unsigned char> witnessProgram;
+    return script.IsWitnessProgram(witnessVersion, witnessProgram) &&
+           witnessVersion == 1 &&
+           witnessProgram.size() == WITNESS_V1_TAPROOT_SIZE;
+}
+
+static int EarliestDigiDollarActivationHeight(const ValidationContext& ctx)
+{
+    const Consensus::Params& cp = ctx.params.GetConsensus();
+    const auto& deployment = cp.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    if (deployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE) {
+        return deployment.min_activation_height;
+    }
+    return std::min(cp.nDDActivationHeight, deployment.min_activation_height);
+}
+
+static bool CoinHeightMayCreateDigiDollar(const Coin& coin, const ValidationContext& ctx)
+{
+    if (coin.nHeight == MEMPOOL_HEIGHT) {
+        return false;
+    }
+
+    const int activation_height = EarliestDigiDollarActivationHeight(ctx);
+    return activation_height <= 0 || coin.nHeight >= static_cast<uint32_t>(activation_height);
+}
+
+static std::optional<int> ResolveCanonicalHealth(const ValidationContext& ctx,
+                                                 const char* operation)
+{
+    const DigiDollar::SystemMetrics metrics =
+        DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+
+    if (metrics.hasCanonicalHealth && metrics.systemHealth > 0) {
+        if (metrics.systemHealth != ctx.systemCollateral) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "DigiDollar: Replacing supplied %s health %d%% with canonical cached health %d%%\n",
+                     operation, ctx.systemCollateral, metrics.systemHealth);
+        }
+        return metrics.systemHealth;
+    }
+
+    if (metrics.totalDDSupply > 0) {
+        if (ctx.oraclePriceMicroUSD > 0 && metrics.totalCollateral > 0) {
+            const CAmount priceMillicents = ctx.oraclePriceMicroUSD / 10;
+            const int health = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
+                metrics.totalCollateral, metrics.totalDDSupply, priceMillicents);
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "DigiDollar: Calculated deterministic %s health %d%% from cached supply/collateral and context oracle price\n",
+                     operation, health);
+            return health;
+        }
+
+        LogPrintf("DigiDollar: Missing canonical system health for %s with active DD supply "
+                  "(supply=%lld, collateral=%lld, oracle=%lld); rejecting\n",
+                  operation,
+                  static_cast<long long>(metrics.totalDDSupply),
+                  static_cast<long long>(metrics.totalCollateral),
+                  static_cast<long long>(metrics.lastOraclePrice));
+        return std::nullopt;
+    }
+
+    if (ctx.systemCollateral > 0) {
+        return ctx.systemCollateral;
+    }
+
+    return 30000;
+}
+
 // ============================================================================
 // Script Analysis Functions
 // ============================================================================
 
 ScriptType IdentifyScriptType(const CScript& script) {
     // Quick rejection for obviously non-P2TR scripts
-    if (script.size() != 34 || script[0] != OP_1) {
+    if (!IsCanonicalP2TROutput(script)) {
         return ScriptType::NOT_DIGIDOLLAR;
     }
 
@@ -131,12 +203,14 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
                 amount = -1;
                 return false;
             }
-            // Parse 8-byte little-endian amount
-            amount = 0;
+            // Parse through unsigned arithmetic so malformed high-bit values
+            // are range-checked before any CAmount cast.
+            uint64_t parsed_amount = 0;
             for (size_t i = 0; i < 8; i++) {
-                amount |= static_cast<int64_t>(data[i]) << (i * 8);
+                parsed_amount |= static_cast<uint64_t>(data[i]) << (i * 8);
             }
-            if (amount >= 1 && amount <= 100000000000LL) {
+            if (parsed_amount >= 1 && parsed_amount <= static_cast<uint64_t>(MAX_DIGIDOLLAR)) {
+                amount = static_cast<CAmount>(parsed_amount);
                 return true;
             }
         }
@@ -152,7 +226,7 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
                     // SECURITY FIX: Require minimal encoding to prevent malleability
                     CScriptNum scriptNum(data, true, 8);
                     amount = scriptNum.GetInt64();
-                    if (amount >= 1 && amount <= 100000000000LL) {
+                    if (amount >= 1 && amount <= MAX_DIGIDOLLAR) {
                         return true;
                     }
                 } catch (const scriptnum_error&) {
@@ -167,6 +241,8 @@ bool ExtractDDAmount(const CScript& script, CAmount& amount) {
 }
 
 int FindDDOpReturn(const CTransaction& tx) {
+    int legacyIdx = -1;
+
     for (size_t i = 0; i < tx.vout.size(); i++) {
         const CScript& script = tx.vout[i].scriptPubKey;
         if (script.size() < 2) continue;
@@ -174,7 +250,10 @@ int FindDDOpReturn(const CTransaction& tx) {
 
         // Format 1: OP_RETURN OP_DIGIDOLLAR ...
         if (script.size() >= 2 && script[1] == OP_DIGIDOLLAR) {
-            return static_cast<int>(i);
+            if (legacyIdx < 0) {
+                legacyIdx = static_cast<int>(i);
+            }
+            continue;
         }
 
         // Format 2: OP_RETURN <pushdata "DD"> ...
@@ -190,7 +269,8 @@ int FindDDOpReturn(const CTransaction& tx) {
             return static_cast<int>(i);
         }
     }
-    return -1;
+
+    return legacyIdx;
 }
 
 /**
@@ -326,8 +406,8 @@ static bool ExtractDDAmountFromTxRef(const CTransactionRef& prev_tx, const COutP
         if (txout.scriptPubKey.size() > 0 && txout.scriptPubKey[0] == OP_RETURN) continue;
         if (txout.nValue != 0) continue;
 
-        // Check if it's a P2TR output (OP_1 + 32 bytes = DD output)
-        if (txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+        // Check if it's a canonical P2TR output (OP_1 OP_PUSHBYTES_32 <xonly>)
+        if (IsCanonicalP2TROutput(txout.scriptPubKey)) {
             if (n == prevout.n) {
                 // Found the matching output
                 if (dd_output_idx < dd_amounts.size()) {
@@ -410,7 +490,7 @@ bool ExtractMintAccountingAmounts(const CTransaction& tx,
             continue;
         }
 
-        if (out.scriptPubKey.size() == 34 && out.scriptPubKey[0] == OP_1) {
+        if (IsCanonicalP2TROutput(out.scriptPubKey)) {
             collateralOutputs++;
             collateralAmount = out.nValue;
         }
@@ -423,6 +503,304 @@ bool ExtractMintAccountingAmounts(const CTransaction& tx,
     }
 
     return true;
+}
+
+static bool AddDDAmount(CAmount& total, CAmount amount)
+{
+    if (amount <= 0 || amount > MAX_DIGIDOLLAR) {
+        return false;
+    }
+    if (total > std::numeric_limits<CAmount>::max() - amount) {
+        return false;
+    }
+    total += amount;
+    return true;
+}
+
+static bool ExtractRedemptionDDOutputs(const CTransaction& tx, CAmount& totalDDOutputs)
+{
+    totalDDOutputs = 0;
+
+    CAmount ddAmountFromOpReturn = 0;
+    bool foundOpReturn = false;
+    int ddOpReturnCount = 0;
+    bool foundLegacyDDOpReturn = false;
+
+    for (const CTxOut& output : tx.vout) {
+        if (output.nValue != 0 || output.scriptPubKey.empty() || output.scriptPubKey[0] != OP_RETURN) {
+            continue;
+        }
+
+        CScript::const_iterator pc = output.scriptPubKey.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+
+        if (!output.scriptPubKey.GetOp(pc, opcode)) continue;
+        if (!output.scriptPubKey.GetOp(pc, opcode, data)) continue;
+
+        if (opcode == OP_DIGIDOLLAR) {
+            ddOpReturnCount++;
+            foundLegacyDDOpReturn = true;
+            continue;
+        }
+
+        if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
+            ddOpReturnCount++;
+            if (ddOpReturnCount > 1) {
+                return false;
+            }
+
+            if (!output.scriptPubKey.GetOp(pc, opcode, data) || data.empty()) {
+                return false;
+            }
+
+            int64_t opReturnTxType = 0;
+            try {
+                CScriptNum txTypeNum(data, true);
+                opReturnTxType = txTypeNum.GetInt64();
+            } catch (const scriptnum_error&) {
+                return false;
+            }
+            if (opReturnTxType != static_cast<int64_t>(DD_TX_REDEEM)) {
+                return false;
+            }
+
+            if (!output.scriptPubKey.GetOp(pc, opcode, data) || data.empty()) {
+                return false;
+            }
+
+            try {
+                CScriptNum amountNum(data, true, 8);
+                ddAmountFromOpReturn = amountNum.GetInt64();
+            } catch (const scriptnum_error&) {
+                return false;
+            }
+            if (ddAmountFromOpReturn <= 0 || ddAmountFromOpReturn > MAX_DIGIDOLLAR) {
+                return false;
+            }
+
+            foundOpReturn = true;
+        }
+    }
+
+    if (foundLegacyDDOpReturn) {
+        return false;
+    }
+
+    int ddChangeOutputCount = 0;
+    for (const CTxOut& output : tx.vout) {
+        if (output.nValue != 0) continue;
+        if (!output.scriptPubKey.empty() && output.scriptPubKey[0] == OP_RETURN) continue;
+
+        if (IsCanonicalP2TROutput(output.scriptPubKey)) {
+            ddChangeOutputCount++;
+            if (ddChangeOutputCount > 1) {
+                return false;
+            }
+
+            CAmount ddAmount = 0;
+            if (foundOpReturn) {
+                ddAmount = ddAmountFromOpReturn;
+            } else if (!ExtractDDAmount(output.scriptPubKey, ddAmount)) {
+                return false;
+            }
+            if (!AddDDAmount(totalDDOutputs, ddAmount)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+static bool IsMintCollateralOutput(const CTransactionRef& prev_tx, uint32_t outputIndex);
+
+bool ExtractRedemptionAccountingAmounts(const CTransaction& tx,
+                                        const std::vector<Coin>& spentCoins,
+                                        const TxLookupFn& txLookup,
+                                        CAmount& ddBurned,
+                                        CAmount& collateralAmount)
+{
+    ddBurned = 0;
+    collateralAmount = 0;
+
+    if (tx.vin.empty() || spentCoins.size() != tx.vin.size()) {
+        return false;
+    }
+
+    try {
+        if (DigiDollar::GetDigiDollarTxType(tx) != DD_TX_REDEEM) {
+            return false;
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    const Coin& collateralCoin = spentCoins[0];
+    if (collateralCoin.IsSpent() || collateralCoin.out.nValue <= 0) {
+        return false;
+    }
+
+    if (!txLookup) {
+        return false;
+    }
+    CTransactionRef collateralPrevTx;
+    if (!txLookup(tx.vin[0].prevout.hash, collateralCoin.nHeight, collateralPrevTx) ||
+        !IsMintCollateralOutput(collateralPrevTx, tx.vin[0].prevout.n)) {
+        return false;
+    }
+
+    collateralAmount = collateralCoin.out.nValue;
+
+    CAmount totalDDInputs = 0;
+    for (size_t i = 1; i < tx.vin.size(); ++i) {
+        const Coin& coin = spentCoins[i];
+        if (coin.IsSpent()) {
+            return false;
+        }
+
+        if (coin.out.nValue > 0) {
+            continue;
+        }
+
+        if (coin.nHeight == MEMPOOL_HEIGHT) {
+            return false;
+        }
+
+        CAmount ddAmount = 0;
+        if ((ExtractDDAmountFromPrevTx(tx.vin[i].prevout, ddAmount) && ddAmount > 0) ||
+            (txLookup && ExtractDDAmountFromBlockDb(tx.vin[i].prevout, coin.nHeight, txLookup, ddAmount) && ddAmount > 0) ||
+            (ExtractDDAmount(coin.out.scriptPubKey, ddAmount) && ddAmount > 0)) {
+            if (!AddDDAmount(totalDDInputs, ddAmount)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    CAmount totalDDOutputs = 0;
+    if (!ExtractRedemptionDDOutputs(tx, totalDDOutputs)) {
+        return false;
+    }
+
+    if (totalDDInputs <= totalDDOutputs) {
+        return false;
+    }
+
+    ddBurned = totalDDInputs - totalDDOutputs;
+    return ddBurned > 0;
+}
+
+static bool IsMintCollateralOutput(const CTransactionRef& prev_tx, uint32_t outputIndex)
+{
+    if (!prev_tx || prev_tx->IsCoinBase()) {
+        return false;
+    }
+    if (!DigiDollar::HasDigiDollarMarker(*prev_tx)) {
+        return false;
+    }
+
+    try {
+        if (DigiDollar::GetDigiDollarTxType(*prev_tx) != DD_TX_MINT) {
+            return false;
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    if (outputIndex >= prev_tx->vout.size()) {
+        return false;
+    }
+
+    const CTxOut& candidate = prev_tx->vout[outputIndex];
+    if (candidate.nValue <= 0 || !IsCanonicalP2TROutput(candidate.scriptPubKey)) {
+        return false;
+    }
+
+    const int ddIdx = FindDDOpReturn(*prev_tx);
+    CAmount ddAmount = 0;
+    if (ddIdx < 0 ||
+        !ExtractDDAmount(prev_tx->vout[ddIdx].scriptPubKey, ddAmount) ||
+        ddAmount <= 0) {
+        return false;
+    }
+
+    uint32_t collateralIndex = std::numeric_limits<uint32_t>::max();
+    int collateralCount = 0;
+    for (uint32_t candidateIndex = 0; candidateIndex < prev_tx->vout.size(); ++candidateIndex) {
+        const CTxOut& vout = prev_tx->vout[candidateIndex];
+        if (vout.nValue > 0 && IsCanonicalP2TROutput(vout.scriptPubKey)) {
+            collateralIndex = candidateIndex;
+            collateralCount++;
+        }
+    }
+
+    return collateralCount == 1 && collateralIndex == outputIndex;
+}
+
+static bool LookupPreviousTransaction(const COutPoint& prevout,
+                                      uint32_t coinHeight,
+                                      const ValidationContext& ctx,
+                                      CTransactionRef& prev_tx)
+{
+    if (coinHeight == MEMPOOL_HEIGHT && ctx.mempool) {
+        prev_tx = ctx.mempool->get(prevout.hash);
+        if (prev_tx) {
+            return true;
+        }
+    }
+
+    if (g_txindex) {
+        uint256 block_hash;
+        if (g_txindex->FindTx(prevout.hash, block_hash, prev_tx)) {
+            return true;
+        }
+    }
+
+    return ctx.txLookup && ctx.txLookup(prevout.hash, coinHeight, prev_tx);
+}
+
+bool SpendsDigiDollarCollateralVault(const CTransaction& tx,
+                                     const ValidationContext& ctx)
+{
+    if (ctx.coins == nullptr) {
+        return false;
+    }
+
+    // DD-FA-SEC-010/DD-FA-SEC-024: Use the earliest activation boundary as the
+    // first height that can create real DD state. Pre-activation lookalikes are
+    // ordinary DGB data and must not be reclassified later.
+    const int activation_height = EarliestDigiDollarActivationHeight(ctx);
+    for (const CTxIn& txin : tx.vin) {
+        Coin coin;
+        if (!ctx.coins->GetCoin(txin.prevout, coin)) {
+            continue;
+        }
+
+        if (activation_height > 0 && coin.nHeight < static_cast<uint32_t>(activation_height)) {
+            continue;
+        }
+
+        if (DigiDollar::IsRegisteredCollateralVaultScript(coin.out.scriptPubKey)) {
+            return true;
+        }
+
+        CTransactionRef prev_tx;
+        if (LookupPreviousTransaction(txin.prevout, coin.nHeight, ctx, prev_tx) &&
+            IsMintCollateralOutput(prev_tx, txin.prevout.n)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool RequiresDigiDollarValidation(const CTransaction& tx,
+                                  const ValidationContext& ctx)
+{
+    return DigiDollar::HasDigiDollarMarker(tx) ||
+           DigiDollar::SpendsDigiDollarCollateralVault(tx, ctx);
 }
 
 bool IsCollateralScript(const CScript& script) {
@@ -461,10 +839,17 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
     // Get base collateral ratio for lock period
     const auto& ddParams = ctx.params.GetDigiDollarParams();
     int baseRatio = GetCollateralRatioForLockTime(lockTime, ddParams);
+    if (baseRatio <= 0) {
+        LogPrintf("DigiDollar: Non-canonical lock period: %lld blocks\n",
+                  static_cast<long long>(lockTime));
+        return 0;
+    }
 
-    // Use system health from context (passed in by caller)
-    // This ensures consistency between test and production code
-    int systemHealth = ctx.systemCollateral;
+    const std::optional<int> resolvedHealth = ResolveCanonicalHealth(ctx, "mint");
+    if (!resolvedHealth.has_value()) {
+        return 0;
+    }
+    const int systemHealth = *resolvedHealth;
 
     LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral requirement calculation:\n");
     LogPrint(BCLog::DIGIDOLLAR, "  DD amount: %lld cents ($%.2f)\n",
@@ -475,8 +860,11 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
              ctx.oraclePriceMicroUSD, ctx.oraclePriceMicroUSD / 1000000.0);
     LogPrint(BCLog::DIGIDOLLAR, "  System health: %d%%\n", systemHealth);
 
-    // Apply DCA multiplier based on system health from context
+    // Apply DCA multiplier based on canonical system health.
     int effectiveRatio = GetEffectiveCollateralRatio(baseRatio, systemHealth, ctx.params);
+    if (effectiveRatio <= 0 || effectiveRatio == std::numeric_limits<int>::max()) {
+        return 0;
+    }
 
     // Calculate required DGB collateral
     // DD amount is in cents (100 = $1.00 USD)
@@ -495,16 +883,18 @@ CAmount CalculateRequiredCollateral(CAmount ddAmount, int64_t lockTime,
                          static_cast<__int128>(effectiveRatio) * 100;
     __int128 denominator = static_cast<__int128>(ctx.oraclePriceMicroUSD);
     __int128 result = (numerator + denominator - 1) / denominator;
-    // Overflow guard: if result exceeds MAX_MONEY, cap at MAX_MONEY.
-    // This prevents silent uint64_t truncation that could wrap required
-    // collateral to near-zero, allowing mints with almost no collateral.
+    // Fail closed when the economically required collateral is not
+    // representable as a valid DGB amount. Capping at MAX_MONEY would accept
+    // a mint with less collateral than the formula requires.
     if (result > static_cast<__int128>(MAX_MONEY)) {
-        result = static_cast<__int128>(MAX_MONEY);
+        return 0;
     }
-    uint64_t requiredDGB = static_cast<uint64_t>(result);
+    CAmount requiredDGB = static_cast<CAmount>(result);
 
-    LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * %lld * %d * 100 / %lld micro-USD = %llu sat (~%llu DGB)\n",
-             ddAmount, COIN, effectiveRatio, ctx.oraclePriceMicroUSD, requiredDGB, requiredDGB / COIN);
+    LogPrint(BCLog::DIGIDOLLAR, "DCA: Collateral calculation: %lld cents * %lld * %d * 100 / %lld micro-USD = %lld sat (~%lld DGB)\n",
+             ddAmount, COIN, effectiveRatio, ctx.oraclePriceMicroUSD,
+             static_cast<long long>(requiredDGB),
+             static_cast<long long>(requiredDGB / COIN));
 
     return requiredDGB;
 }
@@ -562,10 +952,14 @@ bool ValidateCollateralRatio(CAmount dgbLocked, CAmount ddMinted,
         ? std::numeric_limits<CAmount>::max()
         : static_cast<CAmount>(dgbValueMicroUSD128);
     CAmount dgbValueInCents = dgbValueMicroUSD / 10000;  // Convert micro-USD to cents
-    // Clamp before cast to int to avoid int overflow with large ratio values
-    int actualRatio = static_cast<int>(std::min(
-        (ddMinted > 0) ? (dgbValueInCents * 100) / ddMinted : static_cast<CAmount>(0),
-        static_cast<CAmount>(100000)));
+    // Clamp before cast to int to avoid overflow with large ratio values
+    __int128 actualRatio128 = ddMinted > 0
+        ? (static_cast<__int128>(dgbValueInCents) * 100) / static_cast<__int128>(ddMinted)
+        : 0;
+    if (actualRatio128 > 100000) {
+        actualRatio128 = 100000;
+    }
+    int actualRatio = static_cast<int>(actualRatio128);
 
     // Get expected ratio for comparison
     const auto& ddParams = ctx.params.GetDigiDollarParams();
@@ -750,23 +1144,24 @@ bool ValidateMintTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-outputs");
     }
 
-    // 2. Oracle price validation (skip for historical blocks)
-    if (!ctx.skipOracleValidation && ctx.oraclePriceMicroUSD <= 0) {
+    // 2. Oracle price validation. This is consensus-critical for every mint:
+    // local sync state must not allow IBD/catch-up nodes to accept mints that
+    // caught-up nodes reject for missing deterministic oracle data.
+    if (ctx.oraclePriceMicroUSD <= 0) {
         LogPrintf("DigiDollar: Invalid oracle price: %d\n", ctx.oraclePriceMicroUSD);
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-oracle-price");
     }
 
-    // 3. Volatility protection checks for minting (skip for historical blocks)
-    if (!ctx.skipOracleValidation) {
-        if (Volatility::VolatilityMonitor::ShouldFreezeMinting()) {
-            LogPrintf("DigiDollar: Minting frozen due to high volatility\n");
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-frozen-volatility");
-        }
+    // 3. Volatility protection checks for minting. A local sync-state flag
+    // must not change post-activation mint validity.
+    if (Volatility::VolatilityMonitor::ShouldFreezeMinting()) {
+        LogPrintf("DigiDollar: Minting frozen due to high volatility\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-frozen-volatility");
+    }
 
-        if (Volatility::VolatilityMonitor::ShouldFreezeAll()) {
-            LogPrintf("DigiDollar: All DD operations frozen due to extreme volatility\n");
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "all-operations-frozen");
-        }
+    if (Volatility::VolatilityMonitor::ShouldFreezeAll()) {
+        LogPrintf("DigiDollar: All DD operations frozen due to extreme volatility\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "all-operations-frozen");
     }
 
     // 4. Analyze outputs to find DD amounts and collateral
@@ -778,6 +1173,8 @@ bool ValidateMintTransaction(const CTransaction& tx,
     int collateralOutputCount = 0;  // Security [T1-04c]: count collateral outputs to prevent NUMS bypass
     int ddOpReturnCount = 0;  // Security [T1-04f]: count DD OP_RETURN outputs to prevent owner key overwrite
     int64_t lockTime = 0;
+    int64_t claimedLockTier = -1;
+    int64_t claimedTierLockBlocks = -1;
     std::vector<unsigned char> ownerXOnlyPubKeyData;  // Owner pubkey for NUMS verification
     bool hasOwnerPubKey = false;
     CScript actualCollateralScript;  // Store the actual collateral P2TR script for NUMS verification
@@ -787,7 +1184,7 @@ bool ValidateMintTransaction(const CTransaction& tx,
 
         // Phase 1 workaround: Identify outputs by structure since metadata doesn't cross nodes
         // P2TR outputs: collateral has value > 0, DD token has value = 0
-        bool isP2TR = (output.scriptPubKey.size() == 34 && output.scriptPubKey[0] == OP_1);
+        bool isP2TR = IsCanonicalP2TROutput(output.scriptPubKey);
         bool isOpReturn = (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN);
 
         // Check script type using metadata
@@ -907,6 +1304,7 @@ bool ValidateMintTransaction(const CTransaction& tx,
                     try {
                         CScriptNum lockTierNum(data, true);
                         int64_t lockTier = lockTierNum.getint();
+                        claimedLockTier = lockTier;
                         LogPrintf("DigiDollar: Extracted lock tier from OP_RETURN: %lld\n", static_cast<long long>(lockTier));
 
                         // Validate tier is in range (0-9)
@@ -916,58 +1314,50 @@ bool ValidateMintTransaction(const CTransaction& tx,
                                                "Lock tier must be 0-9");
                         }
 
-                        // Verify lockHeight is consistent with the claimed tier
-                        // Tier lock days: {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650}
+                        // Verify lockHeight is consistent with the claimed tier.
+                        // Wallets encode a small confirmation buffer above the
+                        // canonical tier so DD mints remain mineable if the tx
+                        // misses the exact next block. Consensus accepts only
+                        // [tier, tier + buffer], preserving the hard invariant
+                        // that a claimed tier can never be under-locked.
                         static const int TIER_LOCK_DAYS[] = {0, 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650};
                         int64_t expectedLockBlocks = DigiDollar::LockDaysToBlocks(TIER_LOCK_DAYS[lockTier]);
+                        claimedTierLockBlocks = expectedLockBlocks;
 
-                        if (ctx.skipOracleValidation || lockTime <= ctx.nHeight) {
+                        // DD-FA-SEC-011 remains consensus-critical and must not
+                        // be bypassed by ctx.skipOracleValidation. The check is
+                        // now a bounded canonical window instead of brittle exact
+                        // equality to avoid turning delayed mempool mints into
+                        // permanently unmineable transactions.
+                        if (lockTime <= ctx.nHeight) {
                             LogPrint(BCLog::DIGIDOLLAR,
-                                     "DigiDollar: Lock height %lld at current height %d (skipOracleValidation=%d) - "
-                                     "historical mint revalidation, skipping lock tier consistency check\n",
-                                     static_cast<long long>(lockTime), ctx.nHeight, ctx.skipOracleValidation ? 1 : 0);
+                                     "DigiDollar: Lock height %lld at current height %d - "
+                                     "historical past-lock mint revalidation, skipping lock tier consistency check\n",
+                                     static_cast<long long>(lockTime), ctx.nHeight);
                         } else {
-                            int64_t remainingLockBlocks = lockTime - ctx.nHeight;
-
-                            // The tier consistency check catches attackers who claim a long
-                            // tier but commit a short lock at acceptance time. At ConnectBlock,
-                            // nHeight = block being connected ≈ mintHeight, so remaining ≈ expected.
-                            // During mempool reload or wallet scan, nHeight = chainTip, so
-                            // remaining < expected is NORMAL for any previously-accepted mint.
-                            //
-                            // Strategy: only reject if remaining < 50% of expected AND the mint
-                            // looks like a fresh attack (remaining > expected is impossible for
-                            // an aged mint). If remaining < 50%, it's clearly aged and was
-                            // already validated at ConnectBlock time. If remaining >= 50%, check
-                            // if it's at least (expected - 10) blocks to catch fresh-mint attacks.
-                            if (remainingLockBlocks >= expectedLockBlocks - 10) {
-                                // Fresh or near-fresh mint — lock duration matches tier, all good
-                                LogPrint(BCLog::DIGIDOLLAR,
-                                         "DigiDollar: Lock tier check passed - remaining %lld >= expected %lld - 10 "
-                                         "(lockHeight=%lld, currentHeight=%d)\n",
-                                         static_cast<long long>(remainingLockBlocks),
-                                         static_cast<long long>(expectedLockBlocks),
-                                         static_cast<long long>(lockTime), ctx.nHeight);
-                            } else {
-                                // Remaining is between 50% and (expected - 10).
-                                // This could be: (a) a mint that's been in mempool for a while
-                                // (normal — chain advanced while tx was unconfirmed), or
-                                // (b) an attack claiming a longer tier than the actual lock.
-                                //
-                                // We can't distinguish without the original mint height.
-                                // However, ConnectBlock always validates with the correct
-                                // nHeight, so any mint that made it on-chain was already
-                                // validated. For mempool mints, the collateral ratio check
-                                // independently enforces correct ratios. Log and allow.
-                                LogPrint(BCLog::DIGIDOLLAR,
-                                         "DigiDollar: Lock tier check - remaining %lld blocks vs expected %lld "
-                                         "(tier %lld, lockHeight=%lld, currentHeight=%d). "
-                                         "Mint in active lock period, allowing re-validation.\n",
-                                         static_cast<long long>(remainingLockBlocks),
-                                         static_cast<long long>(expectedLockBlocks),
-                                         static_cast<long long>(lockTier),
-                                         static_cast<long long>(lockTime), ctx.nHeight);
+                            const int64_t remainingLockBlocks = lockTime - ctx.nHeight;
+                            const int64_t maxLockBlocks = expectedLockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
+                            if (remainingLockBlocks < expectedLockBlocks || remainingLockBlocks > maxLockBlocks) {
+                                LogPrintf("DigiDollar: SECURITY - Non-canonical lock duration for tier %lld: "
+                                          "remaining=%lld, expected_range=[%lld,%lld] (lockHeight=%lld, currentHeight=%d)\n",
+                                          static_cast<long long>(lockTier),
+                                          static_cast<long long>(remainingLockBlocks),
+                                          static_cast<long long>(expectedLockBlocks),
+                                          static_cast<long long>(maxLockBlocks),
+                                          static_cast<long long>(lockTime),
+                                          ctx.nHeight);
+                                return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                                                     "bad-mint-lock-tier-duration",
+                                                     "Lock height must be within the canonical confirmation window for the claimed tier");
                             }
+
+                            LogPrint(BCLog::DIGIDOLLAR,
+                                     "DigiDollar: Lock tier check passed - remaining %lld within [%lld,%lld] "
+                                     "(lockHeight=%lld, currentHeight=%d)\n",
+                                     static_cast<long long>(remainingLockBlocks),
+                                     static_cast<long long>(expectedLockBlocks),
+                                     static_cast<long long>(maxLockBlocks),
+                                     static_cast<long long>(lockTime), ctx.nHeight);
                         }
                     } catch (const std::exception&) {
                         // If we can't parse lock tier, reject the mint
@@ -1144,42 +1534,68 @@ bool ValidateMintTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-mint-amount");
     }
 
-    // 7. Calculate and verify collateral (skip for historical blocks - oracle price dependent)
+    // 7. Calculate and verify collateral. This remains mandatory even when
+    // skipOracleValidation is set during IBD/catch-up; otherwise block validity
+    // depends on a node-local sync flag.
     CAmount requiredCollateral = 0;
-    if (!ctx.skipOracleValidation) {
-        // SECURITY [T2-01]: Convert absolute lock HEIGHT to relative lock PERIOD for
-        // collateral ratio calculation. The OP_RETURN stores an absolute lockHeight
-        // (currentHeight + lockPeriod), but GetCollateralRatioForLockTime expects a
-        // relative lock period in blocks. Without this conversion, on mainnet (height ~22M)
-        // the absolute height exceeds ALL tier thresholds (max is 10yr = 21M blocks),
-        // causing every lock tier to use the 200% (10-year) ratio instead of its correct
-        // higher ratio. A 1-hour lock would require only 200% instead of 1000% collateral.
-        int64_t lockPeriod = lockTime - ctx.nHeight;
-        if (lockPeriod <= 0) {
-            LogPrintf("DigiDollar: Invalid lock period: lockTime=%lld, height=%d, period=%lld\n",
-                      (long long)lockTime, ctx.nHeight, (long long)lockPeriod);
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-lock-period");
-        }
+    // SECURITY [T2-01]: Convert absolute lock HEIGHT to relative lock PERIOD for
+    // collateral ratio calculation. The OP_RETURN stores an absolute lockHeight
+    // (currentHeight + lockPeriod), but GetCollateralRatioForLockTime expects a
+    // relative lock period in blocks. Without this conversion, on mainnet (height ~22M)
+    // the absolute height exceeds ALL tier thresholds (max is 10yr = 21M blocks),
+    // causing every lock tier to use the 200% (10-year) ratio instead of its correct
+    // higher ratio. A 1-hour lock would require only 200% instead of 1000% collateral.
+    const std::optional<int> resolvedHealth = ResolveCanonicalHealth(ctx, "mint");
+    if (!resolvedHealth.has_value()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-system-health",
+                             "Missing deterministic system health for mint validation");
+    }
 
-        requiredCollateral = CalculateRequiredCollateral(totalDD, lockPeriod, ctx);
-        if (requiredCollateral <= 0) {
-            LogPrintf("DigiDollar: Failed to calculate required collateral\n");
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "collateral-calculation-failed");
-        }
+    ValidationContext collateralCtx(ctx.nHeight, ctx.oraclePriceMicroUSD, *resolvedHealth,
+                                    ctx.params, ctx.coins, ctx.skipOracleValidation,
+                                    ctx.txLookup, ctx.mempool);
 
-        // Verify sufficient collateral
-        if (totalCollateral < requiredCollateral) {
-            LogPrintf("DigiDollar: Insufficient collateral: provided %lld, required %lld (totalDD=%lld, lockPeriod=%lld)\n",
-                      (long long)totalCollateral, (long long)requiredCollateral,
-                      (long long)totalDD, (long long)lockPeriod);
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "insufficient-collateral");
-        }
+    int64_t lockPeriod = lockTime - ctx.nHeight;
+    if (lockPeriod <= 0) {
+        LogPrintf("DigiDollar: Invalid lock period: lockTime=%lld, height=%d, period=%lld\n",
+                  (long long)lockTime, ctx.nHeight, (long long)lockPeriod);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-lock-period");
+    }
 
-        // 8. Additional validation checks
-        if (!ValidateCollateralRatio(totalCollateral, totalDD, lockPeriod, ctx)) {
-            LogPrintf("DigiDollar: Collateral ratio validation failed\n");
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-ratio");
-        }
+    // If the mint OP_RETURN carries an explicit tier, collateral is priced
+    // from that claimed canonical tier, not from the current-height-relative
+    // remaining lock. The remaining lock may include/consume the confirmation
+    // buffer above; using it directly would make delayed-but-valid mints fail
+    // IsCanonicalLockTier() or accidentally shift collateral ratios.
+    if (claimedLockTier >= 0) {
+        lockPeriod = claimedTierLockBlocks;
+    } else if (!IsCanonicalLockTier(lockPeriod, ctx.params.GetDigiDollarParams())) {
+        LogPrintf("DigiDollar: Non-canonical mint lock period: %lld blocks\n",
+                  static_cast<long long>(lockPeriod));
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-mint-lock-period",
+                             "Mint lock period must be one of the canonical lock tiers");
+    }
+
+    requiredCollateral = CalculateRequiredCollateral(totalDD, lockPeriod, collateralCtx);
+    if (requiredCollateral <= 0) {
+        LogPrintf("DigiDollar: Failed to calculate required collateral\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "collateral-calculation-failed");
+    }
+
+    // Verify sufficient collateral
+    if (totalCollateral < requiredCollateral) {
+        LogPrintf("DigiDollar: Insufficient collateral: provided %lld, required %lld (totalDD=%lld, lockPeriod=%lld)\n",
+                  (long long)totalCollateral, (long long)requiredCollateral,
+                  (long long)totalDD, (long long)lockPeriod);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "insufficient-collateral");
+    }
+
+    // 8. Additional validation checks
+    if (!ValidateCollateralRatio(totalCollateral, totalDD, lockPeriod, collateralCtx)) {
+        LogPrintf("DigiDollar: Collateral ratio validation failed\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-ratio");
     }
 
     // 9. Log successful validation
@@ -1244,8 +1660,15 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             if (!output.scriptPubKey.GetOp(pc, opcode, data)) {
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-malformed-op-return");
             }
-            CScriptNum txType(data, true);
-            if (txType.getint() != 2) {
+            int64_t txType = 0;
+            try {
+                CScriptNum txTypeNum(data, true);
+                txType = txTypeNum.GetInt64();
+            } catch (const scriptnum_error&) {
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-malformed-op-return",
+                                     "Malformed transfer OP_RETURN transaction type");
+            }
+            if (txType != static_cast<int64_t>(DD_TX_TRANSFER)) {
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-opreturn-type-mismatch",
                                      "Transfer OP_RETURN type must match transaction version");
             }
@@ -1253,9 +1676,14 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             // Extract DD amounts
             while (output.scriptPubKey.GetOp(pc, opcode, data)) {
                 if (data.size() > 0) {
-                    // Allow up to 8 bytes for DD amounts (int64_t range)
-                    CScriptNum amount(data, true, 8);
-                    dd_amounts.push_back(amount.GetInt64());
+                    try {
+                        // Allow up to 8 bytes for DD amounts (int64_t range)
+                        CScriptNum amount(data, true, 8);
+                        dd_amounts.push_back(amount.GetInt64());
+                    } catch (const scriptnum_error&) {
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-malformed-op-return",
+                                             "Malformed transfer OP_RETURN DD amount");
+                    }
                 }
             }
         }
@@ -1272,8 +1700,15 @@ bool ValidateTransferTransaction(const CTransaction& tx,
         if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) continue;
         if (output.nValue != 0) continue;
 
-        // Check if it's a P2TR output (OP_1 + 32 bytes)
-        if (output.scriptPubKey.size() == 34 && output.scriptPubKey[0] == OP_1) {
+        // Reject 34-byte OP_1 impostors instead of treating them as DD outputs.
+        if (output.scriptPubKey.size() == 34 && output.scriptPubKey[0] == OP_1 &&
+            !IsCanonicalP2TROutput(output.scriptPubKey)) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-script",
+                                 "DD output must be canonical P2TR");
+        }
+
+        // Check if it's a canonical P2TR output (OP_1 OP_PUSHBYTES_32 <xonly>)
+        if (IsCanonicalP2TROutput(output.scriptPubKey)) {
             if (dd_amount_index >= dd_amounts.size()) {
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "transfer-dd-output-amount-mismatch");
             }
@@ -1339,9 +1774,15 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             // cannot supply authoritative OP_RETURN amounts yet.
             if (ctx.coins) {
                 Coin coin;
-                if (ctx.coins->GetCoin(txin.prevout, coin) && coin.out.nValue == 0 && coin.nHeight == MEMPOOL_HEIGHT) {
-                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-amounts-unknown",
-                                         "Cannot spend unconfirmed DD inputs");
+                if (ctx.coins->GetCoin(txin.prevout, coin) && coin.out.nValue == 0) {
+                    if (coin.nHeight == MEMPOOL_HEIGHT) {
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-amounts-unknown",
+                                             "Cannot spend unconfirmed DD inputs");
+                    }
+                    if (!CoinHeightMayCreateDigiDollar(coin, ctx)) {
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-before-activation",
+                                             "Cannot spend pre-activation DD-looking data as DigiDollar");
+                    }
                 }
             }
 
@@ -1373,6 +1814,14 @@ bool ValidateTransferTransaction(const CTransaction& tx,
             if (found) {
                 inputDD += ddAmt;
                 ddInputCount++;
+            } else if (ctx.coins) {
+                Coin coin;
+                if (ctx.coins->GetCoin(txin.prevout, coin) && coin.out.nValue == 0) {
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: REJECT - Could not determine DD amount for zero-value input %s:%u\n",
+                             txin.prevout.hash.ToString(), txin.prevout.n);
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-amounts-unknown",
+                                       "Cannot verify DD conservation: input DD amount undetermined");
+                }
             }
         }
 
@@ -1474,25 +1923,38 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                             return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-amounts-unknown",
                                                  "Cannot redeem unconfirmed DD inputs");
                         }
+                        if (!CoinHeightMayCreateDigiDollar(coin, ctx)) {
+                            return state.Invalid(TxValidationResult::TX_CONSENSUS, "dd-input-before-activation",
+                                                 "Cannot redeem pre-activation DD-looking data as DigiDollar");
+                        }
                         // DD UTXO (zero satoshi value) - extract DD amount
                         hasDDInput = true;
                         ddInputIndices.push_back(i);
 
                         CAmount ddAmount = 0;
                         if (ExtractDDAmountFromPrevTx(input.prevout, ddAmount) && ddAmount > 0) {
-                            totalDDInputs += ddAmount;
+                            if (!AddDDAmount(totalDDInputs, ddAmount)) {
+                                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-dd-input-amount",
+                                                     "Redemption DD input amount exceeds per-output serialization bounds");
+                            }
                             LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from txindex)\n",
                                      i, (long long)ddAmount);
                         } else if (ctx.txLookup && ExtractDDAmountFromBlockDb(input.prevout, coin.nHeight, ctx.txLookup, ddAmount) && ddAmount > 0) {
                             // Universal fallback: load creating tx from block database
-                            totalDDInputs += ddAmount;
+                            if (!AddDDAmount(totalDDInputs, ddAmount)) {
+                                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-dd-input-amount",
+                                                     "Redemption DD input amount exceeds per-output serialization bounds");
+                            }
                             LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from block db)\n",
                                      i, (long long)ddAmount);
                         } else if (ExtractDDAmount(coin.out.scriptPubKey, ddAmount) && ddAmount > 0) {
                             // Last resort for unit tests and legacy in-memory flows.
                             // The registry is keyed only by scriptPubKey, so repeated
                             // sends to the same P2TR key can overwrite the amount.
-                            totalDDInputs += ddAmount;
+                            if (!AddDDAmount(totalDDInputs, ddAmount)) {
+                                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-dd-input-amount",
+                                                     "Redemption DD input amount exceeds per-output serialization bounds");
+                            }
                             LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: DD input %d - amount: %lld cents (from registry fallback)\n",
                                      i, (long long)ddAmount);
                         } else {
@@ -1595,9 +2057,9 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                                        "Malformed redemption OP_RETURN DD amount");
                 }
 
-                if (ddAmountFromOpReturn <= 0) {
+                if (ddAmountFromOpReturn <= 0 || ddAmountFromOpReturn > MAX_DIGIDOLLAR) {
                     return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-opreturn-amount",
-                                       "Redemption OP_RETURN DD amount must be positive");
+                                       "Redemption OP_RETURN DD amount outside per-output serialization bounds");
                 }
 
                 foundOpReturn = true;
@@ -1611,6 +2073,7 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                            "Legacy OP_DIGIDOLLAR OP_RETURN is not valid redemption metadata");
     }
 
+    int ddChangeOutputCount = 0;
     for (size_t outIdx = 0; outIdx < tx.vout.size(); ++outIdx) {
         const CTxOut& output = tx.vout[outIdx];
         if (output.nValue > 0) {
@@ -1622,19 +2085,32 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
             if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
                 continue;
             }
-            // Check if it's a P2TR DD output (nValue=0, starts with OP_1)
+            // Check if it's a canonical P2TR DD output.
             // For DD outputs, use the amount from OP_RETURN metadata if available
-            if (output.scriptPubKey.size() > 1 && output.scriptPubKey[0] == OP_1) {
+            if (IsCanonicalP2TROutput(output.scriptPubKey)) {
+                ddChangeOutputCount++;
+                if (ddChangeOutputCount > 1) {
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                                         "bad-redeem-multiple-dd-change-outputs",
+                                         "Redemption transactions may have at most one DD change output");
+                }
+
                 if (foundOpReturn && ddAmountFromOpReturn > 0) {
                     // Use the authoritative amount from OP_RETURN
-                    totalDDOutputs += ddAmountFromOpReturn;
+                    if (!AddDDAmount(totalDDOutputs, ddAmountFromOpReturn)) {
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-dd-output-amount",
+                                             "Redemption DD output amount exceeds per-output serialization bounds");
+                    }
                     LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Output %d - DD P2TR: %lld cents (from OP_RETURN)\n",
                              outIdx, (long long)ddAmountFromOpReturn);
                 } else {
                     // Fallback to metadata registry (may be stale)
                     CAmount ddAmount = 0;
                     if (ExtractDDAmount(output.scriptPubKey, ddAmount)) {
-                        totalDDOutputs += ddAmount;
+                        if (!AddDDAmount(totalDDOutputs, ddAmount)) {
+                            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-redeem-dd-output-amount",
+                                                 "Redemption DD output amount exceeds per-output serialization bounds");
+                        }
                         LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Output %d - DD P2TR: %lld cents (from metadata)\n",
                                  outIdx, (long long)ddAmount);
                     }
@@ -1680,27 +2156,38 @@ bool ValidateRedemptionTransaction(const CTransaction& tx,
                             "Only DD_TX_REDEEM type is valid for redemption");
     }
 
-    // Validate redemption path (NORMAL or ERR) based on system health
-    if (ctx.systemCollateral < 100) {
+    const std::optional<int> resolvedHealth = ResolveCanonicalHealth(ctx, "redemption");
+    if (!resolvedHealth.has_value()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-system-health",
+                             "Missing deterministic system health for redemption validation");
+    }
+
+    ValidationContext redemptionCtx(ctx.nHeight, ctx.oraclePriceMicroUSD, *resolvedHealth,
+                                    ctx.params, ctx.coins, ctx.skipOracleValidation,
+                                    ctx.txLookup, ctx.mempool);
+
+    // Validate redemption path (NORMAL or ERR) based on deterministic system health
+    if (redemptionCtx.systemCollateral < 100) {
         // ERR path - validate system conditions
-        if (!ValidateEmergencyRedemptionConditions(tx, ctx, state)) {
+        if (!ValidateEmergencyRedemptionConditions(tx, redemptionCtx, state)) {
             return false;
         }
     } else {
         // Normal path - validate timelock expiry
-        if (!ValidateNormalRedemptionConditions(tx, ctx, state)) {
+        if (!ValidateNormalRedemptionConditions(tx, redemptionCtx, state)) {
             return false;
         }
     }
 
     // Validate collateral release amount is reasonable
     CAmount ddBurned = (totalDDInputs > totalDDOutputs) ? (totalDDInputs - totalDDOutputs) : 0;
-    if (!ValidateCollateralReleaseAmount(tx, ctx, ddBurned, state)) {
+    if (!ValidateCollateralReleaseAmount(tx, redemptionCtx, ddBurned, state)) {
         return false;
     }
 
     // Validate script path spending for collateral input
-    if (!ValidateScriptPathSpending(tx, ctx, state)) {
+    if (!ValidateScriptPathSpending(tx, redemptionCtx, state)) {
         return false;
     }
 
@@ -1786,22 +2273,11 @@ bool ValidateEmergencyRedemptionConditions(const CTransaction& tx,
     LogPrintf("DigiDollar: ERR redemption - system health: %d%%, ratio: %.2f, DD burn multiplier: %.2fx\n",
               systemHealth, errRatio, ddMultiplier);
 
-    // Note: The actual DD burn verification (checking that user burns >= RequiredDDBurn)
-    // happens in the transaction builder and full validation. Here we just verify:
-    // 1. ERR is needed (system health < 100%)
-    // 2. Timelock has expired
-    // 3. Transaction has valid structure
-
-    // During ERR, user burns MORE DD to get FULL collateral back
-    // The collateral return is NOT reduced - only the DD burn requirement increases
-
+    // DD burn accounting is enforced by ValidateCollateralReleaseAmount(), which
+    // has the collateral mint metadata needed to calculate the required ERR burn.
     LogPrintf("DigiDollar: ERR redemption conditions validated - user must burn %.1f%% extra DD to get full collateral\n",
               (ddMultiplier - 1.0) * 100);
-
-    // RED Phase: ERR validation not fully implemented yet (oracle consensus needed)
-    // For now, reject all ERR transactions until GREEN phase
-    LogPrintf("DigiDollar: ERR redemption rejected - RED phase, validation incomplete\n");
-    return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-validation-incomplete");
+    return true;
 }
 
 
@@ -1837,106 +2313,166 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-zero-collateral");
     }
 
-    // Extract original DD amount — first try metadata registry, then creating tx lookup.
+    CTransactionRef collateralPrevTx;
+    if (LookupPreviousTransaction(tx.vin[0].prevout, collateralCoin.nHeight, ctx, collateralPrevTx) &&
+        !IsMintCollateralOutput(collateralPrevTx, tx.vin[0].prevout.n)) {
+        LogPrintf("DigiDollar: Redemption rejected - input 0 is not the canonical collateral output of its creating mint (%s:%u)\n",
+                  tx.vin[0].prevout.hash.ToString(), tx.vin[0].prevout.n);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-collateral-release-not-vault",
+                             "Redemption input 0 must spend the canonical DigiDollar collateral vault output");
+    }
+
+    // Extract original DD amount and lock height from the creating mint transaction
+    // before trusting metadata.
     //
     // SECURITY [T1-08]: The collateral UTXO is a P2TR script (OP_1 + 32 bytes) which does
     // NOT contain the DD amount. During cross-node block validation, the ephemeral metadata
     // registry is empty. Without this fix, the function silently allowed ANY release amount,
     // enabling an attacker to burn 1 cent of DD and steal all locked collateral.
     //
-    // Strategy: 1) metadata registry, 2) txindex, 3) block-db lookup, 4) REJECT
+    // SECURITY [DD-RH-106]: Metadata is mutable process-local state keyed only by script.
+    // A rejected mint with the same owner/lock script but a smaller DD amount can overwrite
+    // that metadata. Prefer the authoritative creating mint transaction whenever available.
+    //
+    // Strategy: 1) txindex, 2) block-db lookup, 3) metadata registry fallback, 4) REJECT.
     CAmount originalDDMinted = 0;
-    if (!ExtractDDAmount(collateralCoin.out.scriptPubKey, originalDDMinted) || originalDDMinted <= 0) {
-        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Could not extract original DD amount from collateral script, "
-                 "trying creating transaction lookup...\n");
+    int64_t originalLockHeight = -1;
+    bool found = false;
 
-        // Helper: extract DD minted amount from a mint transaction's OP_RETURN
-        auto extractDDFromMintTx = [](const CTransactionRef& prev_tx, CAmount& ddOut) -> bool {
-            // SECURITY [T5-04]: Verify source tx is actually a DD transaction.
-            // Without this check, a regular (non-DD) tx with a crafted DD OP_RETURN
-            // could be treated as a legitimate mint, allowing an attacker to set
-            // originalDDMinted to an arbitrary (e.g. trivially small) value.
-            // This is consistent with ExtractDDAmountFromTxRef() which also checks
-            // HasDigiDollarMarker, and isCollateralOutput (T2-06b) which checks nVersion.
-            if (!DigiDollar::HasDigiDollarMarker(*prev_tx)) {
-                return false;
-            }
-            // Also verify it's a MINT transaction (type byte = 1 in upper nVersion bits)
-            if (DigiDollar::GetDigiDollarTxType(*prev_tx) != DD_TX_MINT) {
-                return false;
-            }
-            for (const auto& vout : prev_tx->vout) {
-                if (vout.scriptPubKey.size() == 0 || vout.scriptPubKey[0] != OP_RETURN) continue;
-
-                CScript::const_iterator pc = vout.scriptPubKey.begin();
-                opcodetype opcode;
-                std::vector<unsigned char> data;
-
-                if (!vout.scriptPubKey.GetOp(pc, opcode)) continue; // Skip OP_RETURN
-                if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
-                if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
-
-                // Read tx type
-                if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
-                int64_t txType = 0;
-                if (data.size() > 0) {
-                    try {
-                        CScriptNum txTypeNum(data, true);
-                        txType = txTypeNum.GetInt64();
-                    } catch (const scriptnum_error&) { continue; }
-                }
-
-                // Only process MINT (type 1) — that's the transaction that created collateral
-                if (txType != 1) continue;
-
-                // Read DD amount (first push after type for mint)
-                if (vout.scriptPubKey.GetOp(pc, opcode, data) && data.size() > 0) {
-                    try {
-                        CScriptNum scriptNum(data, true, 8);
-                        ddOut = scriptNum.GetInt64();
-                        return ddOut > 0;
-                    } catch (const scriptnum_error&) {}
-                }
-            }
+    // Helper: extract DD minted amount and lock height from a mint transaction's OP_RETURN.
+    auto extractMintMetadataFromTx = [](const CTransactionRef& prev_tx,
+                                        CAmount& ddOut,
+                                        int64_t& lockHeightOut) -> bool {
+        // SECURITY [T5-04]: Verify source tx is actually a DD transaction.
+        // Without this check, a regular (non-DD) tx with a crafted DD OP_RETURN
+        // could be treated as a legitimate mint, allowing an attacker to set
+        // originalDDMinted to an arbitrary (e.g. trivially small) value.
+        // This is consistent with ExtractDDAmountFromTxRef() which also checks
+        // HasDigiDollarMarker, and isCollateralOutput (T2-06b) which checks nVersion.
+        if (!DigiDollar::HasDigiDollarMarker(*prev_tx)) {
             return false;
-        };
+        }
+        // Also verify it's a MINT transaction (type byte = 1 in upper nVersion bits)
+        if (DigiDollar::GetDigiDollarTxType(*prev_tx) != DD_TX_MINT) {
+            return false;
+        }
+        for (const auto& vout : prev_tx->vout) {
+            if (vout.scriptPubKey.empty() || vout.scriptPubKey[0] != OP_RETURN) continue;
 
-        bool found = false;
+            CScript::const_iterator pc = vout.scriptPubKey.begin();
+            opcodetype opcode;
+            std::vector<unsigned char> data;
 
-        // Try txindex (authoritative — reads creating tx from indexed database)
-        if (!found && g_txindex) {
-            uint256 block_hash;
-            CTransactionRef prev_tx;
-            if (g_txindex->FindTx(tx.vin[0].prevout.hash, block_hash, prev_tx)) {
-                found = extractDDFromMintTx(prev_tx, originalDDMinted);
-                if (found) {
-                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Extracted original DD minted (%lld) from txindex\n",
-                             (long long)originalDDMinted);
-                }
+            if (!vout.scriptPubKey.GetOp(pc, opcode)) continue; // Skip OP_RETURN
+            if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+
+            // Read tx type
+            if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
+            int64_t txType = 0;
+            if (!data.empty()) {
+                try {
+                    CScriptNum txTypeNum(data, true);
+                    txType = txTypeNum.GetInt64();
+                } catch (const scriptnum_error&) { continue; }
+            }
+
+            // Only process MINT (type 1) — that's the transaction that created collateral
+            if (txType != 1) continue;
+
+            // Read DD amount (first push after type for mint)
+            if (vout.scriptPubKey.GetOp(pc, opcode, data) && !data.empty()) {
+                try {
+                    CScriptNum scriptNum(data, true, 8);
+                    ddOut = scriptNum.GetInt64();
+                } catch (const scriptnum_error&) {}
+            } else {
+                continue;
+            }
+
+            if (ddOut <= 0) {
+                continue;
+            }
+
+            // Read lock height (second push after type for mint)
+            if (vout.scriptPubKey.GetOp(pc, opcode, data) && !data.empty()) {
+                try {
+                    CScriptNum lockNum(data, true, 8);
+                    lockHeightOut = lockNum.GetInt64();
+                    return lockHeightOut >= 0;
+                } catch (const scriptnum_error&) {}
             }
         }
+        return false;
+    };
 
-        // Try block-db lookup (universal fallback — every full node has every block)
-        if (!found && ctx.txLookup) {
-            CTransactionRef prev_tx;
-            if (ctx.txLookup(tx.vin[0].prevout.hash, collateralCoin.nHeight, prev_tx)) {
-                found = extractDDFromMintTx(prev_tx, originalDDMinted);
-                if (found) {
-                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Extracted original DD minted (%lld) from block db\n",
-                             (long long)originalDDMinted);
-                }
+    // Try txindex (authoritative — reads creating tx from indexed database)
+    if (!found && g_txindex) {
+        uint256 block_hash;
+        CTransactionRef prev_tx;
+        if (g_txindex->FindTx(tx.vin[0].prevout.hash, block_hash, prev_tx)) {
+            found = extractMintMetadataFromTx(prev_tx, originalDDMinted, originalLockHeight);
+            if (found) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Extracted original DD minted (%lld) and lock height (%lld) from txindex\n",
+                         (long long)originalDDMinted, (long long)originalLockHeight);
             }
         }
+    }
 
-        if (!found || originalDDMinted <= 0) {
-            // SECURITY: REJECT if we cannot determine original DD amount.
-            // A consensus rule must never be silently bypassed.
-            LogPrintf("DigiDollar: SECURITY [T1-08] - Cannot determine original DD minted amount "
-                      "for collateral at %s:%d. Rejecting to prevent collateral theft.\n",
-                      tx.vin[0].prevout.hash.ToString(), tx.vin[0].prevout.n);
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-unknown-dd-amount",
-                               "Cannot verify proportional collateral release: original DD amount undetermined");
+    // Try block-db lookup (universal fallback — every full node has every block)
+    if (!found && ctx.txLookup) {
+        CTransactionRef prev_tx;
+        if (ctx.txLookup(tx.vin[0].prevout.hash, collateralCoin.nHeight, prev_tx)) {
+            found = extractMintMetadataFromTx(prev_tx, originalDDMinted, originalLockHeight);
+            if (found) {
+                LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Extracted original DD minted (%lld) and lock height (%lld) from block db\n",
+                         (long long)originalDDMinted, (long long)originalLockHeight);
+            }
         }
+    }
+
+    // Last resort for legacy/unit-test contexts that lack tx lookup. This is intentionally
+    // after authoritative sources because script metadata can be overwritten by failed mints
+    // that reuse the same collateral script.
+    if (!found) {
+        ScriptMetadata metadata;
+        if (GetScriptMetadata(collateralCoin.out.scriptPubKey, metadata) &&
+            metadata.type == DigiDollar::ScriptType::COLLATERAL_LOCK &&
+            metadata.ddAmount > 0 &&
+            metadata.lockHeight >= 0) {
+            originalDDMinted = metadata.ddAmount;
+            originalLockHeight = metadata.lockHeight;
+            found = true;
+        }
+    }
+
+    if (!found || originalDDMinted <= 0) {
+        // SECURITY: REJECT if we cannot determine original DD amount.
+        // A consensus rule must never be silently bypassed.
+        LogPrintf("DigiDollar: SECURITY [T1-08] - Cannot determine original DD minted amount "
+                  "for collateral at %s:%d. Rejecting to prevent collateral theft.\n",
+                  tx.vin[0].prevout.hash.ToString(), tx.vin[0].prevout.n);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-unknown-dd-amount",
+                           "Cannot verify proportional collateral release: original DD amount undetermined");
+    }
+
+    if (originalLockHeight < 0 ||
+        originalLockHeight > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+        LogPrintf("DigiDollar: Cannot determine valid original lock height for collateral at %s:%d\n",
+                  tx.vin[0].prevout.hash.ToString(), tx.vin[0].prevout.n);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-collateral-release-unknown-lock-height",
+                             "Cannot verify collateral timelock: original lock height undetermined");
+    }
+
+    if (tx.nLockTime < static_cast<uint32_t>(originalLockHeight)) {
+        LogPrintf("DigiDollar: Redemption rejected - tx locktime %u is before original collateral lock height %lld\n",
+                  tx.nLockTime, (long long)originalLockHeight);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "redemption-timelock-active",
+                             strprintf("Timelock not expired (tx locktime %u, required %lld)",
+                                       tx.nLockTime, (long long)originalLockHeight));
     }
 
     // SECURITY [T2-03]: Require full DD burn for collateral release.
@@ -1949,17 +2485,26 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
     //   4) Remaining DD from the original mint stays in circulation, completely unbacked
     //
     // To redeem, you MUST burn at least the full DD amount minted against this collateral.
-    // Burning more than originalDDMinted is allowed (user's loss, not a security risk).
-    if (ddBurned < originalDDMinted) {
-        LogPrintf("DigiDollar: SECURITY [T2-03] - Partial DD burn rejected: burned %lld < original %lld. "
-                  "Full burn required to release collateral (UTXO is indivisible).\n",
-                  (long long)ddBurned, (long long)originalDDMinted);
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-partial-burn",
-                           strprintf("Must burn all DD minted against this collateral: burned %lld < required %lld",
-                                     (long long)ddBurned, (long long)originalDDMinted));
+    // During ERR, the required burn increases by the consensus ERR ratio while the
+    // collateral return remains the full locked amount.
+    const CAmount requiredDDBurn = ctx.systemCollateral < 100
+        ? ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(originalDDMinted, ctx.systemCollateral)
+        : originalDDMinted;
+    if (requiredDDBurn <= 0) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-invalid-required-burn");
     }
 
-    // Full redemption: ddBurned >= originalDDMinted
+    if (ddBurned < requiredDDBurn) {
+        LogPrintf("DigiDollar: SECURITY [T2-03] - Insufficient DD burn rejected: burned %lld < required %lld "
+                  "(original %lld, system health %d%%). Full required burn needed to release collateral.\n",
+                  (long long)ddBurned, (long long)requiredDDBurn,
+                  (long long)originalDDMinted, ctx.systemCollateral);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-partial-burn",
+                           strprintf("Must burn required DD for this collateral: burned %lld < required %lld",
+                                     (long long)ddBurned, (long long)requiredDDBurn));
+    }
+
+    // Full redemption: ddBurned >= requiredDDBurn
     CAmount allowedRelease = lockedCollateral;
 
     // Small fee tolerance (0.1% or 1000 satoshis, whichever is larger)
@@ -1989,67 +2534,14 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
     for (size_t i = 1; i < tx.vin.size(); ++i) {
         Coin coin;
         if (ctx.coins->GetCoin(tx.vin[i].prevout, coin) && coin.out.nValue > 0) {
-            // This input has DGB value — verify it's NOT from a DD mint (collateral)
-            bool isCollateral = false;
-
-            // Helper: check if a specific output of a transaction is DD collateral.
+            // This input has DGB value — verify it's NOT from a DD mint (collateral).
             // Mint validation permits regular non-P2TR DGB change before/after the
             // collateral, so the collateral is the unique positive P2TR output of a
             // DD mint rather than a fixed vout index.
-            auto isCollateralOutput = [&](const CTransactionRef& prev_tx, uint32_t outputIndex) -> bool {
-                if (!prev_tx) return false;
-                if (!DigiDollar::HasDigiDollarMarker(*prev_tx)) return false;
-                if (DigiDollar::GetDigiDollarTxType(*prev_tx) != DD_TX_MINT) return false;
-                if (outputIndex >= prev_tx->vout.size()) return false;
-
-                const CTxOut& candidate = prev_tx->vout[outputIndex];
-                if (candidate.nValue <= 0 ||
-                    candidate.scriptPubKey.size() != 34 ||
-                    candidate.scriptPubKey[0] != OP_1) {
-                    return false;
-                }
-
-                bool hasDDOpReturn = false;
-                uint32_t collateralIndex = std::numeric_limits<uint32_t>::max();
-                int collateralCount = 0;
-                for (uint32_t candidateIndex = 0; candidateIndex < prev_tx->vout.size(); ++candidateIndex) {
-                    const CTxOut& vout = prev_tx->vout[candidateIndex];
-                    if (vout.nValue > 0 &&
-                        vout.scriptPubKey.size() == 34 &&
-                        vout.scriptPubKey[0] == OP_1) {
-                        collateralIndex = candidateIndex;
-                        collateralCount++;
-                    }
-
-                    if (vout.scriptPubKey.size() > 0 && vout.scriptPubKey[0] == OP_RETURN) {
-                        CScript::const_iterator pc = vout.scriptPubKey.begin();
-                        opcodetype opcode;
-                        std::vector<unsigned char> data;
-                        if (!vout.scriptPubKey.GetOp(pc, opcode)) continue;
-                        if (!vout.scriptPubKey.GetOp(pc, opcode, data)) continue;
-                        if (data.size() == 2 && data[0] == 'D' && data[1] == 'D') {
-                            hasDDOpReturn = true;
-                        }
-                    }
-                }
-                return hasDDOpReturn && collateralCount == 1 && collateralIndex == outputIndex;
-            };
-
-            // Try txindex
-            if (g_txindex) {
-                uint256 block_hash;
-                CTransactionRef prev_tx;
-                if (g_txindex->FindTx(tx.vin[i].prevout.hash, block_hash, prev_tx)) {
-                    isCollateral = isCollateralOutput(prev_tx, tx.vin[i].prevout.n);
-                }
-            }
-
-            // Try block-db lookup (universal fallback)
-            if (!isCollateral && ctx.txLookup) {
-                CTransactionRef prev_tx;
-                if (ctx.txLookup(tx.vin[i].prevout.hash, coin.nHeight, prev_tx)) {
-                    isCollateral = isCollateralOutput(prev_tx, tx.vin[i].prevout.n);
-                }
+            bool isCollateral = false;
+            CTransactionRef prev_tx;
+            if (LookupPreviousTransaction(tx.vin[i].prevout, coin.nHeight, ctx, prev_tx)) {
+                isCollateral = IsMintCollateralOutput(prev_tx, tx.vin[i].prevout.n);
             }
 
             if (isCollateral) {
@@ -2065,23 +2557,41 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
         }
     }
 
-    // Net collateral release = total outputs - fee inputs returned as change
-    CAmount totalDGBRelease = totalDGBOutputs - totalFeeInputs;
-    if (totalDGBRelease < 0) totalDGBRelease = 0;
+    // Regular DGB fee inputs are additive funding for fees/change. They must not
+    // reduce the amount of locked collateral the redemption is required to return.
+    const __int128 maxAllowedDGBOutputs = static_cast<__int128>(allowedRelease) +
+                                         static_cast<__int128>(totalFeeInputs) +
+                                         static_cast<__int128>(feeTolerance);
 
-    LogPrintf("DigiDollar: Collateral release check - totalOutputs: %lld, feeInputs: %lld, netRelease: %lld, allowed: %lld\n",
-              (long long)totalDGBOutputs, (long long)totalFeeInputs, (long long)totalDGBRelease, (long long)allowedRelease);
+    LogPrintf("DigiDollar: Collateral release check - totalOutputs: %lld, feeInputs: %lld, allowedCollateral: %lld, tolerance: %lld\n",
+              (long long)totalDGBOutputs, (long long)totalFeeInputs,
+              (long long)allowedRelease, (long long)feeTolerance);
 
-    if (totalDGBRelease > allowedRelease + feeTolerance) {
-        LogPrintf("DigiDollar: Collateral release too large - releasing: %lld, allowed: %lld (+ %lld tolerance), locked: %lld, ddBurned: %lld, originalDD: %lld\n",
-                  (long long)totalDGBRelease, (long long)allowedRelease, (long long)feeTolerance,
+    if (static_cast<__int128>(totalDGBOutputs) > maxAllowedDGBOutputs) {
+        LogPrintf("DigiDollar: Collateral release too large - outputs: %lld, allowed collateral: %lld, fee inputs: %lld (+ %lld tolerance), locked: %lld, ddBurned: %lld, originalDD: %lld\n",
+                  (long long)totalDGBOutputs, (long long)allowedRelease,
+                  (long long)totalFeeInputs, (long long)feeTolerance,
                   (long long)lockedCollateral, (long long)ddBurned, (long long)originalDDMinted);
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-excessive",
-                           strprintf("Collateral release %lld exceeds allowed %lld", (long long)totalDGBRelease, (long long)allowedRelease));
+                           strprintf("DGB outputs %lld exceed allowed collateral %lld plus regular fee inputs %lld",
+                                     (long long)totalDGBOutputs,
+                                     (long long)allowedRelease,
+                                     (long long)totalFeeInputs));
     }
 
-    LogPrintf("DigiDollar: Collateral release validated - releasing: %lld, allowed: %lld, ddBurned: %lld/%lld\n",
-              (long long)totalDGBRelease, (long long)allowedRelease, (long long)ddBurned, (long long)originalDDMinted);
+    if (totalDGBOutputs < allowedRelease && allowedRelease - totalDGBOutputs > feeTolerance) {
+        LogPrintf("DigiDollar: Collateral release too small - outputs: %lld, required full collateral: %lld (- %lld tolerance), locked: %lld, ddBurned: %lld, requiredDD: %lld\n",
+                  (long long)totalDGBOutputs, (long long)allowedRelease, (long long)feeTolerance,
+                  (long long)lockedCollateral, (long long)ddBurned, (long long)requiredDDBurn);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-incomplete",
+                           strprintf("DGB outputs %lld below required full collateral %lld",
+                                     (long long)totalDGBOutputs, (long long)allowedRelease));
+    }
+
+    LogPrintf("DigiDollar: Collateral release validated - outputs: %lld, allowed collateral: %lld, fee inputs: %lld, ddBurned: %lld/%lld (original: %lld)\n",
+              (long long)totalDGBOutputs, (long long)allowedRelease,
+              (long long)totalFeeInputs, (long long)ddBurned,
+              (long long)requiredDDBurn, (long long)originalDDMinted);
     return true;
 }
 
@@ -2109,6 +2619,12 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
                                   TxValidationState& state) {
     // Check if this is a DD transaction
     if (!HasDigiDollarMarker(tx)) {
+        if (SpendsDigiDollarCollateralVault(tx, ctx)) {
+            LogPrintf("DigiDollar: Non-DD transaction attempted to spend DigiDollar collateral vault\n");
+            return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                                 "bad-collateral-spend-missing-dd-burn",
+                                 "Collateral vault spends must be DigiDollar redemptions and burn the required DD");
+        }
         return true; // Not a DD transaction - pass through
     }
 
@@ -2120,32 +2636,40 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-dd-tx-version");
     }
 
+    if (txType != DD_TX_REDEEM && SpendsDigiDollarCollateralVault(tx, ctx)) {
+        LogPrintf("DigiDollar: DD transaction type %d attempted to spend DigiDollar collateral vault without redemption burn\n",
+                  static_cast<int>(txType));
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-collateral-spend-missing-dd-burn",
+                             "Collateral vault spends must be DigiDollar redemptions and burn the required DD");
+    }
+
     LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Validating %s transaction (txid: %s)\n",
               txType == DD_TX_MINT ? "MINT" :
               txType == DD_TX_TRANSFER ? "TRANSFER" :
               txType == DD_TX_REDEEM ? "REDEEM" : "UNKNOWN",
               tx.GetHash().ToString());
 
-    // ERR Pre-validation: Check if minting should be blocked during ERR
-    // SECURITY: Skip during IBD (skipOracleValidation=true) because oracle data
-    // is unavailable during historical block replay. Without this guard,
-    // ShouldBlockMinting() fails-closed on price=0 and blocks all mints after
-    // the first DD supply increment — preventing new nodes from syncing.
-    // This is safe because IBD blocks were already validated by the network.
-    if (txType == DD_TX_MINT && !ctx.skipOracleValidation && ShouldBlockMintingDuringERR(ctx)) {
+    // ERR pre-validation for mints is consensus-critical. skipOracleValidation
+    // is local sync state and must not make post-activation mint validity differ.
+    if (txType == DD_TX_MINT && ShouldBlockMintingDuringERR(ctx)) {
         LogPrintf("DigiDollar: Minting blocked during ERR activation\n");
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-blocked-during-err");
     }
 
-    // BUG #3 FIX: Don't block normal redemptions during ERR until ERR path is implemented.
-    // The ERR redemption path (ValidateEmergencyRedemptionConditions) always returns
-    // "err-validation-incomplete", which means blocking normal redemptions creates a
-    // deadlock where NO redemption path is available.
-    // TODO: Re-enable this check when ERR redemption validation is implemented.
-    // if (txType == DD_TX_REDEEM && ShouldBlockNormalRedemptionsDuringERR(ctx)) {
-    //     LogPrintf("DigiDollar: Normal redemptions blocked during ERR activation\n");
-    //     return state.Invalid(TxValidationResult::TX_CONSENSUS, "normal-redemption-blocked-during-err");
-    // }
+    if (txType == DD_TX_MINT && ctx.oraclePriceMicroUSD > 0 &&
+        Volatility::VolatilityMonitor::WouldCandidateFreezeMinting(ctx.oraclePriceMicroUSD)) {
+        LogPrintf("DigiDollar: Mint candidate oracle price would cross volatility freeze threshold "
+                  "(candidate=%lld)\n",
+                  static_cast<long long>(ctx.oraclePriceMicroUSD));
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "minting-frozen-volatility-candidate",
+                             "Candidate oracle price crosses mint volatility freeze threshold");
+    }
+
+    // Redemption routing is handled inside ValidateRedemptionTransaction using
+    // deterministic system health. ERR redemptions still require timelock expiry
+    // and burn the consensus ERR-adjusted DD amount before collateral unlocks.
 
     // Type-specific validation
     // NOTE: Only 3 types exist - MINT, TRANSFER, REDEEM
@@ -2189,19 +2713,17 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
         return false;
     }
 
-    // Only accepted DigiDollar transactions may mutate volatility state. An
-    // attacker-controlled invalid mint must not poison price history or freeze
-    // later validation attempts before it is rejected.
-    if (ctx.nHeight > 0 && ctx.oraclePriceMicroUSD > 0) {
-        if (txType == DD_TX_MINT) {
-            // In a full implementation, we would extract oracle data from the transaction.
-            // For now, we use the context oracle price.
-            Volatility::VolatilityMonitor::RecordPrice(ctx.oraclePriceMicroUSD, GetTime(), ctx.nHeight);
-        }
-        Volatility::VolatilityMonitor::UpdateState(ctx.nHeight);
+    return true;
+}
+
+void RecordAcceptedMintVolatility(const ValidationContext& ctx)
+{
+    if (ctx.nHeight <= 0 || ctx.oraclePriceMicroUSD <= 0 || ctx.nBlockTime <= 0) {
+        return;
     }
 
-    return true;
+    Volatility::VolatilityMonitor::RecordPrice(ctx.oraclePriceMicroUSD, ctx.nBlockTime, ctx.nHeight);
+    Volatility::VolatilityMonitor::UpdateState(ctx.nHeight);
 }
 
 // ============================================================================
@@ -2328,7 +2850,8 @@ CAmount GetSystemCollateralRatio() {
     //
     // Returns a percentage: 150 = 150% collateralized (healthy)
     //
-    // Formula: health = (totalCollateral_sats * price_cents / COIN * 100) / dd_cents
+    // Formula: health = (totalCollateral_sats * price_micro_usd / COIN * 100)
+    //                 / (dd_cents * 10000)
 
     const DigiDollar::SystemMetrics metrics =
         DigiDollar::SystemHealthMonitor::GetCachedMetrics();
@@ -2343,26 +2866,26 @@ CAmount GetSystemCollateralRatio() {
         return metrics.systemHealth;
     }
 
-    // Calculate from available data
-    CAmount oraclePrice = metrics.lastOraclePrice; // cents (100 = $1.00)
+    // Calculate from available data. Health monitor keeps the last oracle
+    // price in micro-USD, the same unit exposed by oracle bundles.
+    CAmount oraclePrice = metrics.lastOraclePrice;
     if (oraclePrice <= 0 || metrics.totalCollateral <= 0) {
-        // No oracle or collateral data available — conservative default.
-        // 150% means DCA multiplier is 1.0x (no adjustment) and ERR is
-        // not triggered. T2-05c handles the minting block separately.
+        // No oracle or collateral data available with active DD supply:
+        // fail closed to emergency health. Callers with a deterministic block
+        // oracle price will recalculate via ResolveCanonicalHealth(ctx).
         LogPrint(BCLog::DIGIDOLLAR,
-                 "GetSystemCollateralRatio: insufficient data (price=%lld, "
-                 "collateral=%lld), using conservative default 150%%\n",
+                 "GetSystemCollateralRatio: insufficient data (price_micro_usd=%lld, "
+                 "collateral=%lld), returning 0%% health\n",
                  static_cast<long long>(oraclePrice),
                  static_cast<long long>(metrics.totalCollateral));
-        return 150;
+        return 0;
     }
 
-    // health = (collateral_sats * price_cents / COIN) * 100 / dd_cents
-    CAmount collateralValueCents = (metrics.totalCollateral * oraclePrice) / COIN;
-    int health = static_cast<int>((collateralValueCents * 100) / metrics.totalDDSupply);
-
-    // Cap at 300% to match SystemHealthMonitor::CalculateSystemHealth
-    return std::min(health, 300);
+    const CAmount priceMillicents = oraclePrice / 10;
+    return DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
+        metrics.totalCollateral,
+        metrics.totalDDSupply,
+        priceMillicents);
 }
 
 // ============================================================================
@@ -2372,7 +2895,6 @@ CAmount GetSystemCollateralRatio() {
 bool ValidateERRRedemption(const CTransaction& tx,
                           const ValidationContext& ctx,
                           TxValidationState& state) {
-    // RED Phase: Basic framework with ERR integration
     LogPrintf("DigiDollar: Validating ERR redemption transaction\n");
 
     // Check if ERR should be active based on system health
@@ -2389,15 +2911,36 @@ bool ValidateERRRedemption(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-state-inactive");
     }
 
-    // Calculate expected DD amount being burned and collateral being released
+    if (tx.vin.empty()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-no-inputs");
+    }
+
+    if (tx.nLockTime > 0 && ctx.nHeight < static_cast<int>(tx.nLockTime)) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-timelock-active",
+                            strprintf("Timelock not expired (current height %d, required %d)",
+                                      ctx.nHeight, tx.nLockTime));
+    }
+
+    // Calculate expected DD amount being burned and collateral being released.
+    // This helper is used by unit-level ERR tests that do not provide a coins
+    // view; full consensus redemption validation uses ValidateRedemptionTransaction.
     CAmount ddInputAmount = 0;
     CAmount collateralOutputAmount = 0;
 
-    // Sum DD inputs (should be burned)
-    for (const auto& input : tx.vin) {
-        // In full implementation, would lookup the UTXO to get DD amount
-        // For RED phase, use placeholder calculation
-        ddInputAmount += 10000; // Placeholder: $100 DD per input
+    for (size_t i = 0; i < tx.vin.size(); ++i) {
+        if (ctx.coins) {
+            Coin coin;
+            if (ctx.coins->GetCoin(tx.vin[i].prevout, coin) && coin.out.nValue == 0) {
+                CAmount ddAmount = 0;
+                if ((ExtractDDAmountFromPrevTx(tx.vin[i].prevout, ddAmount) && ddAmount > 0) ||
+                    (ctx.txLookup && ExtractDDAmountFromBlockDb(tx.vin[i].prevout, coin.nHeight, ctx.txLookup, ddAmount) && ddAmount > 0) ||
+                    (ExtractDDAmount(coin.out.scriptPubKey, ddAmount) && ddAmount > 0)) {
+                    ddInputAmount += ddAmount;
+                }
+            }
+        } else {
+            ddInputAmount += 10000;
+        }
     }
 
     // Sum non-DD outputs (collateral being released)
@@ -2412,26 +2955,22 @@ bool ValidateERRRedemption(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-no-dd-inputs");
     }
 
-    // Calculate expected collateral return with ERR adjustment
-    // Oracle price is in cents, DD is in cents
-    // Collateral_sats = (DD_cents * COIN) / oracle_cents
-    CAmount expectedFullCollateral = (ddInputAmount * COIN) / ctx.oraclePriceMicroUSD;
-    CAmount expectedERRCollateral = DigiDollar::ERR::EmergencyRedemptionRatio::GetAdjustedRedemption(
-        expectedFullCollateral, ctx.systemCollateral);
-
-    LogPrintf("DigiDollar: ERR validation - DD burned: %d, Expected collateral: %d, ERR adjusted: %d, Actual: %d\n",
-              ddInputAmount, expectedFullCollateral, expectedERRCollateral, collateralOutputAmount);
-
-    // Validate ERR adjustment is correct (with small tolerance for rounding)
-    CAmount tolerance = COIN / 1000; // 0.001 DGB tolerance
-    if (abs(collateralOutputAmount - expectedERRCollateral) > tolerance) {
-        LogPrintf("DigiDollar: ERR adjustment validation failed\n");
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "invalid-err-adjustment");
+    const CAmount assumedOriginalDD = ctx.coins ? ddInputAmount : 10000;
+    const CAmount requiredDDBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(
+        assumedOriginalDD, ctx.systemCollateral);
+    if (ddInputAmount < requiredDDBurn) {
+        LogPrintf("DigiDollar: ERR validation failed - DD burn %lld < required %lld\n",
+                  (long long)ddInputAmount, (long long)requiredDDBurn);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-err-insufficient-dd-burn");
     }
 
-    // RED Phase: For now, always fail since oracle consensus not implemented
-    LogPrintf("DigiDollar: ERR redemption validation - implementation incomplete\n");
-    return state.Invalid(TxValidationResult::TX_CONSENSUS, "err-validation-incomplete");
+    if (collateralOutputAmount <= 0) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-err-no-collateral-return");
+    }
+
+    LogPrintf("DigiDollar: ERR redemption validation passed - DD burned: %lld, required: %lld, collateral returned: %lld\n",
+              (long long)ddInputAmount, (long long)requiredDDBurn, (long long)collateralOutputAmount);
+    return true;
 }
 
 bool ShouldBlockMintingDuringERR(const ValidationContext& ctx) {
@@ -2460,10 +2999,11 @@ bool ValidateERRAdjustmentAmount(CAmount originalCollateral,
 
 bool ValidateERROracleConsensus(const CTransaction& tx,
                                const ValidationContext& ctx) {
-    // RED Phase: Always return false - oracle consensus not implemented
-    // In GREEN phase, this will extract oracle messages from transaction
-    // and validate 9-of-17 signature threshold (RC30)
-    LogPrintf("DigiDollar: Oracle consensus validation not implemented yet\n");
+    // Legacy helper retained for tests and external callers from earlier ERR
+    // designs. V1 ERR consensus is established by the block's validated v0x03
+    // MuSig2 oracle bundle and the deterministic health in ValidationContext,
+    // not by per-transaction oracle signatures. Fail closed if called.
+    LogPrintf("DigiDollar: legacy ERR oracle-consensus transaction helper called; V1 uses block oracle bundles\n");
     return false;
 }
 

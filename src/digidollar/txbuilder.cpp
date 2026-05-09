@@ -5,8 +5,11 @@
 #include <digidollar/txbuilder.h>
 #include <digidollar/scripts.h>
 #include <digidollar/digidollar.h>
+#include <digidollar/health.h>
 #include <digidollar/validation.h>
+#include <consensus/dca.h>
 #include <consensus/digidollar.h>
+#include <consensus/err.h>
 #include <script/standard.h>
 #include <validation.h>
 #include <base58.h>
@@ -18,6 +21,7 @@
 #include <cassert>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <map>
 
 // Forward declare to avoid namespace conflicts
@@ -30,6 +34,33 @@ static const size_t ESTIMATED_TX_VSIZE = 500;      // Estimated transaction size
 static const int DEFAULT_SYSTEM_COLLATERAL = 150;   // Default system health (150%)
 static const double MAX_FEE_RATIO = 0.5;           // Maximum fee as ratio of total input
 static const size_t MAX_TX_INPUTS = 400;           // Maximum inputs per transaction to stay under MAX_STANDARD_TX_WEIGHT
+
+CAmount ApplyCollateralSafetyMargin(CAmount requiredCollateral)
+{
+    if (requiredCollateral <= 0) {
+        return 0;
+    }
+
+    __int128 padded128 = (static_cast<__int128>(requiredCollateral) * 101) / 100;
+    if (padded128 > static_cast<__int128>(MAX_MONEY)) {
+        return 0;
+    }
+    return static_cast<CAmount>(padded128);
+}
+
+int CalculatePositionCollateralRatio(CAmount dgbLocked, CAmount ddMinted, CAmount price)
+{
+    if (dgbLocked <= 0 || ddMinted <= 0 || price <= 0) {
+        return 0;
+    }
+
+    const __int128 dgbValueCents = (static_cast<__int128>(dgbLocked) * price) / COIN;
+    const __int128 ratio = (dgbValueCents * 100) / ddMinted;
+    if (ratio > std::numeric_limits<int>::max()) {
+        return std::numeric_limits<int>::max();
+    }
+    return static_cast<int>(ratio);
+}
 
 // ============================================================================
 // Base TxBuilder implementation
@@ -143,19 +174,26 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     const auto& ddParams = chainParams.GetDigiDollarParams();
     int baseRatio = GetCollateralRatioForLockTime(lockBlocks, ddParams);
 
-    // Apply DCA if needed (check actual system health)
-    int systemCollateral = GetCurrentSystemCollateral(); // Would query chain state
-    double dcaMultiplier = GetDCAMultiplier(systemCollateral, ddParams);
-    // baseRatio is already a percentage (e.g., 500 for 500%)
-    // dcaMultiplier is a decimal (e.g., 1.0 for no adjustment, 1.5 for 50% increase)
-    double adjustedRatio = baseRatio * dcaMultiplier;
+    // Apply DCA using the canonical cached health source shared by validation.
+    int systemCollateral = GetCurrentSystemCollateral();
+    if (systemCollateral < 0) {
+        LogPrintf("DigiDollar TxBuilder: Cannot calculate collateral without canonical system health\n");
+        return 0;
+    }
+    int effectiveRatio = DCA::DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemCollateral);
+    if (effectiveRatio <= 0 || effectiveRatio == std::numeric_limits<int>::max()) {
+        LogPrintf("DigiDollar TxBuilder: DCA calculation failed (baseRatio=%d, health=%d)\n",
+                  baseRatio, systemCollateral);
+        return 0;
+    }
+    double dcaMultiplier = DCA::DynamicCollateralAdjustment::GetDCAMultiplier(systemCollateral);
 
     // Calculate required DGB
     // DD amount is in cents (100 = $1.00), oracle price is in micro-USD (1,000,000 = $1.00)
     CAmount usdValue = ddAmount; // DD amount = USD value in cents
 
-    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %lld micro-USD ($%.6f), BaseRatio: %d%%, DCA: %.2f, AdjustedRatio: %.2f%%\n",
-              ddAmount, oraclePrice, oraclePrice / 1000000.0, baseRatio, dcaMultiplier, adjustedRatio);
+    LogPrintf("DigiDollar TxBuilder: CalculateRequiredCollateral - DD: %d cents, Price: %lld micro-USD ($%.6f), BaseRatio: %d%%, DCA: %.2f, EffectiveRatio: %d%%\n",
+              ddAmount, oraclePrice, oraclePrice / 1000000.0, baseRatio, dcaMultiplier, effectiveRatio);
 
     // Use 128-bit arithmetic to prevent overflow
     // Oracle price format: micro-USD (1,000,000 = $1.00 DGB price)
@@ -170,7 +208,7 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
     // at 1000% ratio (or >$36K at 500%) causes silent overflow, producing a tiny
     // collateral requirement and allowing massively under-collateralized positions.
     __int128 numerator = static_cast<__int128>(usdValue) * static_cast<__int128>(COIN) *
-                         static_cast<__int128>(static_cast<uint64_t>(std::ceil(adjustedRatio))) * 100;
+                         static_cast<__int128>(effectiveRatio) * 100;
     __int128 denominator = static_cast<__int128>(oraclePrice);
     __int128 result128 = (numerator + denominator - 1) / denominator;
 
@@ -183,11 +221,10 @@ CAmount MintTxBuilder::CalculateRequiredCollateral(CAmount ddAmount, int lockDay
 
     // Add a fixed 1% safety margin to reduce knife-edge failures from
     // small oracle price movements between mempool admission and block template checks.
-    __int128 padded128 = (static_cast<__int128>(requiredCollateral) * 101) / 100;
-    if (padded128 > static_cast<__int128>(MAX_MONEY)) {
+    const CAmount requiredWithSafetyMargin = ApplyCollateralSafetyMargin(requiredCollateral);
+    if (requiredWithSafetyMargin <= 0) {
         return 0;
     }
-    uint64_t requiredWithSafetyMargin = static_cast<uint64_t>(padded128);
 
     LogPrintf("DigiDollar TxBuilder: - Required collateral base: %llu sats (%.8f DGB), with 1%% safety margin: %llu sats (%.8f DGB)\n",
               requiredCollateral, requiredCollateral / 100000000.0,
@@ -205,7 +242,7 @@ CScript MintTxBuilder::CreateCollateralScript(const TxBuilderMintParams& params)
     // Use global namespace to access the correct MintParams from scripts.h
     ::DigiDollar::MintParams scriptParams;
     scriptParams.ddAmount = params.ddAmount;
-    scriptParams.lockHeight = currentHeight + LockDaysToBlocks(params.lockDays);
+    scriptParams.lockHeight = currentHeight + LockDaysToBlocks(params.lockDays) + MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
 
     CPubKey pubkey = params.ownerKey.GetPubKey();
     scriptParams.ownerKey = XOnlyPubKey(pubkey);
@@ -238,9 +275,11 @@ bool MintTxBuilder::ValidateMintParams(const TxBuilderMintParams& params) const 
         return false;
     }
 
-    // Validate lock period (0 = 1 hour testing tier, 30 days to 10 years)
-    if (params.lockDays != 0 && (params.lockDays < 30 || params.lockDays > 10 * 365)) {
-        LogPrintf("ValidateMintParams FAILED: lockDays out of range (%d)\n", params.lockDays);
+    const int64_t lockBlocks = LockDaysToBlocks(params.lockDays);
+    const int tierIndex = GetLockTierIndex(lockBlocks, ddParams);
+    if (tierIndex < 0 || static_cast<uint32_t>(tierIndex) != params.lockTier) {
+        LogPrintf("ValidateMintParams FAILED: non-canonical lock tier (lockDays=%d, lockBlocks=%lld, lockTier=%u, expectedTier=%d)\n",
+                 params.lockDays, static_cast<long long>(lockBlocks), params.lockTier, tierIndex);
         return false;
     }
 
@@ -273,12 +312,23 @@ bool MintTxBuilder::ValidateMintParams(const TxBuilderMintParams& params) const 
 }
 
 int TxBuilder::GetCurrentSystemCollateral() const {
-    // Placeholder implementation - in production this would:
-    // 1. Query the UTXO set for all DigiDollar collateral positions
-    // 2. Calculate total DGB locked vs total DD minted
-    // 3. Apply current oracle price to get system-wide collateral ratio
-    // For now, return a conservative default
-    return DEFAULT_SYSTEM_COLLATERAL;
+    int systemHealth = DCA::DynamicCollateralAdjustment::GetCurrentSystemHealth();
+    if (systemHealth >= 0) {
+        return systemHealth;
+    }
+
+    const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
+    if (metrics.totalDDSupply == 0) {
+        return 30000;
+    }
+    if (metrics.totalCollateral > 0 && metrics.totalDDSupply > 0 && oraclePrice > 0) {
+        return DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
+            metrics.totalCollateral,
+            metrics.totalDDSupply,
+            oraclePrice / 10);
+    }
+
+    return -1;
 }
 
 CKey MintTxBuilder::GenerateChangeKey() const {
@@ -361,7 +411,7 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
     // expected P2TR collateral output (with NUMS internal key) and verify the output
     // matches. This prevents attackers from using their own key as internal key,
     // which would allow key-path spending that bypasses CLTV timelocks.
-    int64_t lockHeight = currentHeight + LockDaysToBlocks(params.lockDays);
+    int64_t lockHeight = currentHeight + LockDaysToBlocks(params.lockDays) + MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
     CPubKey ownerPubKey = params.ownerKey.GetPubKey();
     XOnlyPubKey ownerXOnly(ownerPubKey);
     CScript metadataScript = CScript() << OP_RETURN
@@ -397,12 +447,14 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
             changeScript = GetScriptForDestination(params.dgbChangeDest.value());
             LogPrintf("DigiDollar: MINT using wallet-provided DGB change destination\n");
         } else {
-            // Fallback to random key (WARNING: wallet will NOT recognize this!)
+            // Fallback to a non-P2TR script so validation never confuses DGB
+            // change with DigiDollar collateral. Production wallet/RPC/Qt paths
+            // should still provide a wallet-controlled change destination.
             CKey changeKey = GenerateChangeKey();
             CPubKey changePubkey = changeKey.GetPubKey();
-            CTxDestination changeDest{WitnessV1Taproot(XOnlyPubKey(changePubkey))};
+            CTxDestination changeDest{WitnessV0KeyHash(changePubkey)};
             changeScript = GetScriptForDestination(changeDest);
-            LogPrintf("DigiDollar: WARNING - MINT using random key for DGB change (wallet may not recognize!)\n");
+            LogPrintf("DigiDollar: WARNING - MINT using non-wallet fallback DGB change destination\n");
         }
         tx.vout.push_back(CTxOut(change, changeScript));
 
@@ -719,6 +771,17 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     LogPrintf("DigiDollar: Fee calculation - calculated: %d sats, minimum: %d sats, actual: %d sats\n",
               calculatedFee, MIN_DD_FEE, actualFee);
 
+    if (totalFeeIn <= 0) {
+        result.error = "Insufficient DGB fee input: no fee inputs selected";
+        return result;
+    }
+
+    if (totalFeeIn < actualFee) {
+        result.error = strprintf("Insufficient DGB fee input: selected=%d sats, required=%d sats",
+                                 totalFeeIn, actualFee);
+        return result;
+    }
+
     // Add DGB change output if needed (after we know actual fee)
     if (totalFeeIn > 0) {
         CAmount dgbChange = totalFeeIn - actualFee;
@@ -980,9 +1043,9 @@ CCollateralPosition RedeemTxBuilder::GetCollateralPosition(const COutPoint& outp
     CCollateralPosition position;
     position.outpoint = outpoint;
 
-    // TEMPORARY: For now, just use wallet's cached position data
-    // TODO: Implement proper UTXO lookup via chainstate parameter
-    // This is a stopgap to fix the hardcoded 1000 DGB bug
+    // Fail-safe fallback when the caller did not provide wallet-cached
+    // collateral metadata. Production RPC/wallet callers pass the original
+    // amount, minted DD, and unlock height explicitly before building.
     Coin coin;
     if (false) {  // Disabled UTXO lookup - will use metadata from script instead
         LogPrintf("DigiDollar: GetCollateralPosition - UTXO not found or already spent: %s:%d\n",
@@ -1018,12 +1081,7 @@ CCollateralPosition RedeemTxBuilder::GetCollateralPosition(const COutPoint& outp
 
     // Calculate collateral ratio
     if (position.ddMinted > 0) {
-        // Ratio = (collateral_dgb_value_usd / dd_minted_usd) * 100
-        // Oracle price is in cents (100 = $1.00), DD is in cents (100 = $1.00)
-        // DGB_value_cents = (dgbLocked_sats * oracle_cents) / COIN
-        // ratio = (DGB_value_cents * 100) / ddMinted_cents
-        CAmount dgbValueCents = (position.dgbLocked * oraclePrice) / COIN;
-        position.collateralRatio = (dgbValueCents * 100) / position.ddMinted;
+        position.collateralRatio = CalculatePositionCollateralRatio(position.dgbLocked, position.ddMinted, oraclePrice);
     } else {
         position.collateralRatio = 0;
     }
@@ -1051,18 +1109,42 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     CCollateralPosition position;
     if (params.collateralAmount > 0) {
         // Use pre-queried position data from caller (RPC provided wallet's cached data)
+        if (params.ddMinted <= 0) {
+            result.error = "Original DD minted amount unavailable for redemption";
+            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+            return result;
+        }
         position.outpoint = params.collateralOutpoint;
         position.dgbLocked = params.collateralAmount;
         position.ddMinted = params.ddMinted;
         position.unlockHeight = params.unlockHeight;
-        position.collateralRatio = (position.dgbLocked / COIN * oraclePrice) * 100 / position.ddMinted;
+        position.collateralRatio = CalculatePositionCollateralRatio(position.dgbLocked, position.ddMinted, oraclePrice);
         LogPrintf("DigiDollar: Using pre-queried collateral position - dgbLocked: %d, ddMinted: %d, unlockHeight: %d\n",
                  position.dgbLocked, position.ddMinted, position.unlockHeight);
     } else {
-        // Fallback to UTXO lookup (not implemented yet - needs chainstate access)
+        // Fallback is fail-safe unless a caller has supplied a chainstate-backed
+        // position lookup in a derived builder.
         position = GetCollateralPosition(params.collateralOutpoint);
         LogPrintf("DigiDollar: Queried collateral position from UTXO - dgbLocked: %d, ddMinted: %d, unlockHeight: %d\n",
                  position.dgbLocked, position.ddMinted, position.unlockHeight);
+    }
+
+    CAmount ddToBurn = params.ddToRedeem;
+    if (params.path == RedemptionPath::ERR) {
+        const int systemHealth = GetCurrentSystemCollateral();
+        if (systemHealth < 0) {
+            result.error = "ERR system health unavailable";
+            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+            return result;
+        }
+        if (position.ddMinted <= 0) {
+            result.error = "Original DD minted amount unavailable for ERR redemption";
+            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+            return result;
+        }
+        ddToBurn = ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(position.ddMinted, systemHealth);
+        LogPrintf("DigiDollar: ERR redemption burn requirement - original: %lld, health: %d%%, required burn: %lld\n",
+                  (long long)position.ddMinted, systemHealth, (long long)ddToBurn);
     }
 
     // Step 3: Verify redemption conditions are met (pass position to avoid re-querying)
@@ -1073,7 +1155,8 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     }
 
     // Step 4: Calculate collateral return
-    CAmount dgbToRelease = CalculateCollateralReturn(params.ddToRedeem, position.dgbLocked, oraclePrice);
+    CAmount dgbToRelease = CalculateCollateralReturn(position.ddMinted > 0 ? position.ddMinted : params.ddToRedeem,
+                                                     position.dgbLocked, oraclePrice);
     if (dgbToRelease <= 0) {
         result.error = "Failed to calculate collateral return";
         LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
@@ -1156,9 +1239,9 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     for (const auto& amount : params.ddAmounts) {
         totalDDInput += amount;
     }
-    CAmount ddChange = totalDDInput - params.ddToRedeem;
+    CAmount ddChange = totalDDInput - ddToBurn;
     LogPrintf("DigiDollar: DD input total: %d cents, to burn: %d cents, change: %d cents\n",
-              totalDDInput, params.ddToRedeem, ddChange);
+              totalDDInput, ddToBurn, ddChange);
 
     // Add DD change output if wallet selected more DD UTXOs than needed
     // NOTE: DD is fungible - exact-amount enforcement is at the VAULT level (ddToRedeem == position.ddMinted)
@@ -1290,18 +1373,12 @@ CAmount RedeemTxBuilder::CalculateCollateralReturn(CAmount ddAmount, CAmount ori
     // Since we're redeeming the full position in most cases, we return the full collateral
     // For partial redemptions, this would be adjusted
 
-    // IMPORTANT: For ERR path (Emergency Redemption Route), return 0 as it's not implemented yet
-    // This is handled by the caller (BuildRedemptionTransaction) checking the path
-
     LogPrintf("DigiDollar: Calculating collateral return - DD amount: %d, Original collateral: %d, Current price: %d\n",
              ddAmount, originalCollateral, currentPrice);
 
-    // Return full proportional collateral
-    // In production, this would:
-    // 1. Calculate proportional amount based on DD being redeemed
-    // 2. Consider current oracle price vs original mint price
-    // 3. Apply haircuts for ERR path (when implemented)
-    // 4. Account for system collateral ratio
+    // V1 supports only full-position redemption. Normal redemption and ERR both
+    // return full collateral; ERR safety is enforced by requiring an increased
+    // DD burn in ValidateCollateralReleaseAmount()/BuildRedemptionTransaction.
 
     CAmount returnAmount = originalCollateral;
 

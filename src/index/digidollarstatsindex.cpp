@@ -201,6 +201,20 @@ bool DigiDollarStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
         return error("%s: Failed to read undo data for block %s", __func__, block.hash.ToString());
     }
 
+    DigiDollar::TxLookupFn tx_lookup = [this, pindex](const uint256& txid, uint32_t coin_height, CTransactionRef& tx_out) -> bool {
+        const CBlockIndex* block_index = pindex->GetAncestor(coin_height);
+        if (!block_index) return false;
+        CBlock source_block;
+        if (!m_chainstate->m_blockman.ReadBlockFromDisk(source_block, *block_index)) return false;
+        for (const CTransactionRef& candidate_tx : source_block.vtx) {
+            if (candidate_tx->GetHash() == txid) {
+                tx_out = candidate_tx;
+                return true;
+            }
+        }
+        return false;
+    };
+
     // Process each transaction in the block
     for (size_t tx_idx = 0; tx_idx < cblock.vtx.size(); ++tx_idx) {
         const CTransactionRef& tx = cblock.vtx[tx_idx];
@@ -260,6 +274,9 @@ bool DigiDollarStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
         // Process inputs to detect vault redemptions
         // When a DD vault output from a mint tx is spent, subtract it from totals.
         const CTxUndo& tx_undo = block_undo.vtxundo[tx_idx - 1]; // -1 because coinbase has no undo
+        bool redemption_accounting_loaded = false;
+        CAmount redemption_dd_burned = 0;
+        CAmount redemption_collateral = 0;
 
         for (size_t input_idx = 0; input_idx < tx->vin.size(); ++input_idx) {
             const CTxIn& txin = tx->vin[input_idx];
@@ -274,8 +291,30 @@ bool DigiDollarStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
                 coin.out.nValue > 0 &&
                 m_db->Read(DBVaultKey(txin.prevout), vault_info)) {
                 // This is a DD vault being redeemed
-                m_total_dd_supply -= vault_info.dd_amount;
-                m_total_collateral -= vault_info.collateral;
+                CAmount dd_to_subtract = vault_info.dd_amount;
+                CAmount collateral_to_subtract = vault_info.collateral;
+                if (txType == DigiDollar::DD_TX_REDEEM) {
+                    if (!redemption_accounting_loaded) {
+                        if (!DigiDollar::ExtractRedemptionAccountingAmounts(*tx, tx_undo.vprevout, tx_lookup,
+                                                                            redemption_dd_burned, redemption_collateral)) {
+                            return error("%s: Failed to extract redemption accounting for tx %s",
+                                         __func__, tx->GetHash().ToString());
+                        }
+                        redemption_accounting_loaded = true;
+                    }
+                    dd_to_subtract = redemption_dd_burned;
+                    collateral_to_subtract = redemption_collateral;
+                }
+
+                if (m_total_dd_supply < dd_to_subtract ||
+                    m_total_collateral < collateral_to_subtract ||
+                    m_vault_count == 0) {
+                    return error("%s: DigiDollar stats underflow while processing vault spend %s:%u",
+                                 __func__, txin.prevout.hash.ToString(), txin.prevout.n);
+                }
+
+                m_total_dd_supply -= dd_to_subtract;
+                m_total_collateral -= collateral_to_subtract;
                 m_vault_count--;
 
                 // Keep immutable mint metadata for reorg safety.
@@ -284,7 +323,7 @@ bool DigiDollarStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
                 // the alternate redeem invisible to the stats index.
 
                 LogPrint(BCLog::DIGIDOLLAR, "DigiDollarStatsIndex: Block %d - DD REDEMPTION: -%d DD, -%d DGB collateral (total: %d DD, %d DGB, %d vaults)\n",
-                         block.height, vault_info.dd_amount, vault_info.collateral, m_total_dd_supply, m_total_collateral, m_vault_count);
+                         block.height, dd_to_subtract, collateral_to_subtract, m_total_dd_supply, m_total_collateral, m_vault_count);
             }
         }
     }

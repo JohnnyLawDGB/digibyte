@@ -187,6 +187,19 @@ CDigiDollarAddress::CDigiDollarAddress() : fValid(false)
 
 CDigiDollarAddress::CDigiDollarAddress(const std::string& str) : fValid(false), original_str(str)
 {
+    // DD-FA-FUNC-019 (Wave 15): DecodeBase58 transparently strips leading and
+    // trailing ASCII whitespace, so a base58check address wrapped in spaces
+    // would otherwise decode silently. Reject any whitespace anywhere in the
+    // input so the canonical address echoed by validateddaddress, the
+    // to_address echoed by senddigidollar, and any other consumer cannot be a
+    // whitespace-corrupted variant of the user's intended target. This also
+    // catches embedded \t / \r / \n that copy-paste flows can introduce.
+    for (unsigned char c : str) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') {
+            return;
+        }
+    }
+
     std::vector<unsigned char> vchTemp;
     if (DecodeBase58Check(str, vchTemp, 256)) {
         if (vchTemp.size() >= 2) {

@@ -91,6 +91,16 @@ bool SerializeFileDB(const std::string& prefix, const fs::path& path, const Data
 template <typename Stream, typename Data>
 void DeserializeDB(Stream& stream, Data&& data, bool fCheckSum = true)
 {
+    if (!fCheckSum) {
+        MessageStartChars pchMsgTmp;
+        stream >> pchMsgTmp;
+        if (pchMsgTmp != Params().MessageStart()) {
+            throw std::runtime_error{"Invalid network magic number"};
+        }
+        stream >> data;
+        return;
+    }
+
     HashVerifier verifier{stream};
     // de-serialize file header (network specific magic number) and ..
     MessageStartChars pchMsgTmp;

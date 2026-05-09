@@ -34,12 +34,13 @@ namespace ERR {
 struct ERRState {
     bool isActive;                  // Whether ERR is currently active
     int systemHealth;               // Current system health percentage (0-30000)
-    double adjustmentRatio;         // Current ERR adjustment ratio (0.8-1.0)
+    int adjustmentRatioBps;         // Current ERR adjustment ratio in basis points (8000-10000)
+    double adjustmentRatio;         // Display/backcompat mirror of adjustmentRatioBps (0.8-1.0)
     uint32_t activationHeight;      // Block height when ERR was activated
     uint256 oracleConsensusHash;    // Hash of oracle consensus that triggered ERR
     uint64_t activationTimestamp;   // Timestamp when ERR was activated
 
-    ERRState() : isActive(false), systemHealth(0), adjustmentRatio(0.0),
+    ERRState() : isActive(false), systemHealth(0), adjustmentRatioBps(0), adjustmentRatio(0.0),
                  activationHeight(0), activationTimestamp(0) {}
 };
 
@@ -90,16 +91,27 @@ public:
      * Calculate ERR adjustment ratio based on system health severity.
      *
      * @param systemHealth Current system health percentage
-     * @return Adjustment ratio (0.80-0.95) - used to calculate required DD burn
+     * @return Display/backcompat adjustment ratio (0.80-1.00)
      *
-     * The ratio is used in the formula: RequiredDD = OriginalDD / ratio
+     * Consensus burn math uses CalculateERRRatioBps() instead.
      * Adjustment tiers:
+     * - Healthy:  1.00 → Burn original DD
      * - 95-100%: 0.95 → Burn 105.3% DD (1/0.95)
      * - 90-95%:  0.90 → Burn 111.1% DD (1/0.90)
      * - 85-90%:  0.85 → Burn 117.6% DD (1/0.85)
      * - <85%:    0.80 → Burn 125% DD (1/0.80) - maximum multiplier
      */
     static double CalculateERRAdjustment(int systemHealth);
+
+    /**
+     * Calculate ERR adjustment ratio in basis points.
+     *
+     * @param systemHealth Current system health percentage
+     * @return Ratio in basis points: 10000 healthy, then 9500/9000/8500/8000 during ERR
+     *
+     * Consensus-visible ERR burn math must use this integer representation.
+     */
+    static int CalculateERRRatioBps(int systemHealth);
 
     /**
      * Calculate the required DD burn amount for ERR redemption.

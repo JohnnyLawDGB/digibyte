@@ -147,7 +147,7 @@ public:
     const OracleNodeInfo* GetOracleNode(uint32_t id) const;
     /** Get number of active oracles per epoch */
     uint32_t GetActiveOracleCount() const;
-    /** Validate that active Phase 3 x-only keys match oracle node compressed keys slot-for-slot */
+    /** Validate that active MuSig2 x-only keys match oracle node compressed keys slot-for-slot */
     bool ValidateOracleNodeAlignment() const;
 
     /**
@@ -180,6 +180,7 @@ public:
     struct RegTestOptions {
         std::unordered_map<Consensus::DeploymentPos, VersionBitsParameters> version_bits_parameters{};
         std::unordered_map<Consensus::BuriedDeployment, int> activation_heights{};
+        std::optional<int> digidollar_activation_height{};
         bool fastprune{false};
     };
 

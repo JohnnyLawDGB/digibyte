@@ -27,6 +27,13 @@ namespace DigiDollar {
 static const int BLOCKS_PER_DAY = 24 * 60 * 4;  // 5760 blocks (15s blocks)
 static const CAmount CENT = 1000000;  // DigiDollar cent in satoshis
 
+// Mint transactions commit to an absolute collateral unlock height. Wallets
+// build against the next block height, but real mempool inclusion can be
+// delayed by oracle-bundle timing, block assembly, or fee/package ordering.
+// Allowing a small consensus window above the claimed tier keeps delayed mints
+// mineable without ever permitting a shorter-than-tier lock.
+static constexpr int64_t MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS = 100;
+
 // DigiDollar transaction types
 // NOTE: Only 4 types exist. NO partial redemption, NO emergency oracle override.
 // ERR (Emergency Redemption Ratio) uses DD_TX_REDEEM with health-based DD burn adjustment.
@@ -97,9 +104,14 @@ struct ConsensusParams {
 /**
  * Get collateral ratio for a given lock time in blocks.
  * Returns the appropriate collateral ratio percentage based on lock period.
- * For lock times between defined tiers, returns the higher ratio (more conservative).
+ * Returns 0 if lockBlocks is not one of the canonical lock tiers.
  */
 int GetCollateralRatioForLockTime(int64_t lockBlocks, const ConsensusParams& params);
+
+/**
+ * Check if a lock period is one of the exact consensus lock tiers.
+ */
+bool IsCanonicalLockTier(int64_t lockBlocks, const ConsensusParams& params);
 
 /**
  * Get DCA multiplier based on system health.
@@ -151,7 +163,7 @@ bool IsDigiDollarActive(int nHeight, const Consensus::Params& consensusParams);
 /**
  * Get the tier index for a lock period.
  * Returns the index in the collateral ratios map for the given lock period.
- * Returns -1 if no appropriate tier is found.
+ * Returns -1 if lockBlocks is not an exact canonical tier.
  */
 int GetLockTierIndex(int64_t lockBlocks, const ConsensusParams& params);
 

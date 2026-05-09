@@ -9,11 +9,15 @@
 #include <policy/policy.h>
 #include <primitives/block.h>
 #include <txmempool.h>
+#include <uint256.h>
 
 #include <memory>
 #include <functional>
+#include <map>
 #include <optional>
+#include <set>
 #include <stdint.h>
+#include <utility>
 
 #include <boost/multi_index/identity.hpp>
 #include <boost/multi_index/indexed_by.hpp>
@@ -152,6 +156,8 @@ private:
     const CChainParams& chainparams;
     const CTxMemPool* const m_mempool;
     Chainstate& m_chainstate;
+    std::map<std::pair<uint32_t, uint256>, CTransactionRef> m_dd_tx_lookup_cache;
+    std::set<uint32_t> m_dd_tx_lookup_loaded_heights;
 
 public:
     struct Options {
@@ -183,6 +189,8 @@ private:
     void AddToBlock(CTxMemPool::txiter iter);
     /** Return true if tx is a DigiDollar transaction for miner pre-validation. */
     bool IsDDTransactionForMiner(const CTransaction& tx) const;
+    /** Cached block-db lookup for DD validation during one block assembly pass. */
+    bool LookupPreviousTxForDDValidation(const uint256& txid, uint32_t coinHeight, CTransactionRef& tx_out) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     /** Validate DD collateral/state against the current chain tip for inclusion. */
     bool ValidateDDForBlockInclusion(const CTransaction& tx, const CBlockIndex* pindexPrev) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     /** Remove all DigiDollar transactions from current template and rebuild commitments. */

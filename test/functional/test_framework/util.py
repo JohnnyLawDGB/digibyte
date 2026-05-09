@@ -353,12 +353,21 @@ def rpc_url(datadir, i, chain, rpchost):
     host = '127.0.0.1'
     port = rpc_port(i)
     if rpchost:
-        parts = rpchost.split(':')
-        if len(parts) == 2:
-            host, port = parts
+        if rpchost.startswith('['):
+            host_end = rpchost.find(']')
+            assert host_end > 0
+            host = rpchost[1:host_end]
+            if len(rpchost) > host_end + 1:
+                assert rpchost[host_end + 1] == ':'
+                port = rpchost[host_end + 2:]
         else:
-            host = rpchost
-    return "http://%s:%s@%s:%d" % (rpc_u, rpc_p, host, int(port))
+            parts = rpchost.rsplit(':', 1)
+            if len(parts) == 2 and ':' not in parts[0] and parts[1].isdigit():
+                host, port = parts
+            else:
+                host = rpchost
+    url_host = f'[{host}]' if ':' in host else host
+    return "http://%s:%s@%s:%d" % (rpc_u, rpc_p, url_host, int(port))
 
 
 # Node functions

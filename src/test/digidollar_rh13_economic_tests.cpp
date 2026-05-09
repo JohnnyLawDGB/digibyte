@@ -203,59 +203,19 @@ BOOST_AUTO_TEST_CASE(rh13_03_tier_boundary_gaming)
     // 172800 blocks (30d): 500%
     // 518400 blocks (90d): 400%
 
-    // Attack: Lock for 241 blocks instead of 240 — does it get 500% instead of 1000%?
+    // Attack: Lock for 241 blocks instead of 240. V1 must reject it instead
+    // of giving it the cheaper 30-day collateral ratio.
     int ratio_240 = GetCollateralRatioForLockTime(240, params);
     int ratio_241 = GetCollateralRatioForLockTime(241, params);
 
     BOOST_CHECK_EQUAL(ratio_240, 1000);  // Exact match: 1000%
-
-    // For 241: lower_bound finds 30-day tier (172800 blocks), so ratio = 500%
-    // Wait — this means locking for 241 blocks (1hr + 15 seconds) gets you
-    // the 30-day ratio (500%) instead of 1000%!
-    //
-    // CRITICAL FINDING: GetCollateralRatioForLockTime uses lower_bound on the
-    // collateral map. For lockBlocks=241:
-    //   - No exact match
-    //   - lower_bound(241) returns the 30-day entry (172800 blocks)
-    //   - Returns 500%
-    //
-    // But the lock period is only 241 blocks (~1 hour), not 30 days!
-    // The function returns the ratio for the NEXT tier, not the CURRENT tier.
-    //
-    // HOWEVER: The lock period consistency check in ValidateMintTransaction
-    // should catch this — it verifies lockHeight matches the claimed tier.
-    // But let's verify...
+    BOOST_CHECK_EQUAL(ratio_241, 0);
+    BOOST_CHECK(!IsCanonicalLockTier(241, params));
 
     // Check what ratio a 1-block lock gets (below minimum)
     int ratio_1 = GetCollateralRatioForLockTime(1, params);
-    // lower_bound(1) returns the 240-block entry, so ratio = 1000%
-    BOOST_CHECK_EQUAL(ratio_1, 1000);  // Gets 1000% — correct, conservative
-
-    // The real question: what does 241 actually return?
-    // This determines if an attacker can game the boundary
-    if (ratio_241 == 500) {
-        // VULNERABILITY CONFIRMED: Lock 241 blocks, claim it's tier 0,
-        // but get 500% ratio. Combined with the 241-block actual lock period,
-        // you lock DGB for only ~1 hour at 5x instead of 10x collateral.
-        //
-        // BUT: The lock tier consistency check in validation.cpp compares
-        // remainingLockBlocks against expectedLockBlocks for the tier.
-        // If claiming tier 0 (1hr), expected = 240, remaining ≈ 241.
-        // That would actually PASS (241 >= 240-10).
-        //
-        // If claiming tier 1 (30d), expected = 172800, remaining ≈ 241.
-        // That would FAIL.
-        //
-        // So the attacker can't claim tier 1 for 241 blocks. But can they
-        // get the tier 1 ratio WITHOUT claiming tier 1?
-        //
-        // In CalculateRequiredCollateral, lockTime is passed to
-        // GetCollateralRatioForLockTime which returns 500% for 241 blocks.
-        // The tier check validates the CLAIMED tier, not the ACTUAL ratio.
-        // These are separate code paths!
-        //
-        // SEVERITY: MEDIUM — Need to verify full validation path
-    }
+    BOOST_CHECK_EQUAL(ratio_1, 0);
+    BOOST_CHECK(!IsCanonicalLockTier(1, params));
 }
 
 BOOST_AUTO_TEST_CASE(rh13_03_exact_boundary_values)
@@ -277,12 +237,10 @@ BOOST_AUTO_TEST_CASE(rh13_03_exact_boundary_values)
     BOOST_CHECK_EQUAL(ratio_exact_1yr, 300);
     BOOST_CHECK_EQUAL(ratio_exact_10yr, 200);
 
-    // Test lock time BEYOND max tier
+    // Test lock time beyond max tier.
     int ratio_20yr = GetCollateralRatioForLockTime(7300 * 5760, params);
-    // rbegin->second = 200 (10-year tier)
-    BOOST_CHECK_EQUAL(ratio_20yr, 200);
-    // FINDING: Lock for 20 years gets same 200% as 10 years — no additional benefit
-    // Not a vulnerability, but worth noting.
+    BOOST_CHECK_EQUAL(ratio_20yr, 0);
+    BOOST_CHECK(!IsCanonicalLockTier(7300 * 5760, params));
 }
 
 // ============================================================================
@@ -336,17 +294,17 @@ BOOST_AUTO_TEST_CASE(rh13_04_liquidation_cascade_health_calculation)
 
 // ============================================================================
 // ATTACK VECTOR 5: Supply Cap Boundary
-// What happens at exactly MAX_DD_SUPPLY? Off-by-one errors?
+// What happens at exactly ALERT_DD_SUPPLY? Off-by-one errors?
 // ============================================================================
 
 BOOST_AUTO_TEST_CASE(rh13_05_supply_cap_boundary)
 {
-    // MAX_DD_SUPPLY = 10000000000 (100M DD = $100M in cents)
+    // ALERT_DD_SUPPLY = 10000000000 (100M DD = $100M in cents)
 
-    // FINDING: MAX_DD_SUPPLY is only used in AlertThresholds for monitoring.
+    // FINDING: ALERT_DD_SUPPLY is only used in AlertThresholds for monitoring.
     // It is NOT enforced as a consensus supply cap!
     //
-    // CheckSupplyAlert returns true when supply > MAX_DD_SUPPLY, but this
+    // CheckSupplyAlert returns true when supply > ALERT_DD_SUPPLY, but this
     // is an alert, not a rejection. There's no ValidateSupplyCap() or
     // similar function that rejects transactions.
     //
@@ -364,7 +322,7 @@ BOOST_AUTO_TEST_CASE(rh13_05_supply_cap_boundary)
     // If DGB market cap is $1B and average collateral ratio is 300%,
     // max DD supply is ~$333M.
 
-    CAmount maxSupply = DigiDollar::AlertThresholds::MAX_DD_SUPPLY;
+    CAmount maxSupply = DigiDollar::AlertThresholds::ALERT_DD_SUPPLY;
     BOOST_CHECK_EQUAL(maxSupply, 10000000000);  // 100M DD
 
     // Verify alert triggers at boundary
@@ -501,14 +459,12 @@ BOOST_AUTO_TEST_CASE(rh13_09_health_calculation_overflow)
     CAmount maxMoney = MAX_MONEY;  // ~21B DGB in satoshis
     CAmount maxPrice = std::numeric_limits<CAmount>::max();
 
-    // CalculateSystemHealth uses __int128 for intermediate calculations
-    // Test extreme values
+    // Absurd prices outside valid oracle bounds must fail closed before
+    // multiplication can overflow.
     int health = DynamicCollateralAdjustment::CalculateSystemHealth(
         maxMoney, 1, maxPrice);  // Massive collateral, tiny DD
 
-    // Should be capped at 30000 (300%)
-    BOOST_CHECK(health <= 30000);
-    BOOST_CHECK(health > 0);  // Should not overflow to negative
+    BOOST_CHECK_EQUAL(health, 0);
 }
 
 BOOST_AUTO_TEST_CASE(rh13_09_health_calculation_tiny_dd)
@@ -658,9 +614,9 @@ BOOST_AUTO_TEST_CASE(rh13_extra_no_supply_cap_enforcement)
     //   - NUMS verification ✓
     //
     // NOT checked:
-    //   - Total system DD supply < MAX_DD_SUPPLY ✗
+    //   - Total system DD supply < ALERT_DD_SUPPLY ✗
     //
-    // MAX_DD_SUPPLY is only in AlertThresholds, used for monitoring alerts.
+    // ALERT_DD_SUPPLY is only in AlertThresholds, used for monitoring alerts.
     //
     // FINDING CONFIRMED: No consensus supply cap exists.
     // This should be documented as an intentional design decision or

@@ -44,7 +44,9 @@ std::vector<std::shared_ptr<CBlock>> CreateBlockChain(size_t total_height, const
         coinbase_tx.vin[0].scriptSig = CScript() << (height + 1) << OP_0;
         block.vtx = {MakeTransactionRef(std::move(coinbase_tx))};
 
-        block.nVersion = VERSIONBITS_LAST_OLD_BLOCK_VERSION;
+        // Regtest buried deployments are active from height 1, so generated
+        // headers must satisfy the CLTV-era minimum block version.
+        block.nVersion = 4 | GetVersionForAlgo(ALGO_SCRYPT);
         block.hashPrevBlock = (height >= 1 ? *ret.at(height - 1) : params.GenesisBlock()).GetHash();
         block.hashMerkleRoot = BlockMerkleRoot(block);
         block.nTime = ++time;

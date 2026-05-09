@@ -262,7 +262,7 @@ BOOST_AUTO_TEST_CASE(rh06_05a_int128_overflow_max_values)
     auto params = CChainParams::RegTest({});
 
     // MAX_DIGIDOLLAR (from consensus) should be bounded
-    const CAmount maxDD = 100000000000LL; // $1 billion in cents (from ExtractDDAmount hard cap)
+    const CAmount maxDD = MAX_DIGIDOLLAR; // per-output serialization bound
     const CAmount maxPrice = 1000000000000LL; // $1M/DGB in micro-USD
     // Emergency DCA at 50% health = 2.0x multiplier, with 1000% base = 2000% effective
 
@@ -698,13 +698,13 @@ BOOST_AUTO_TEST_CASE(rh06_13b_dca_at_negative_health)
 
 BOOST_AUTO_TEST_CASE(rh06_14a_extract_dd_amount_boundary)
 {
-    // Test ExtractDDAmount at its hard cap boundary (100000000000 = $1 billion in cents)
+    // Test ExtractDDAmount at the per-output serialization boundary.
     CAmount amount;
 
     // Build OP_RETURN with exactly max allowed amount
     CScript atMax = CScript() << OP_RETURN << OP_DIGIDOLLAR;
     std::vector<unsigned char> maxBytes(8, 0);
-    int64_t maxVal = 100000000000LL;
+    int64_t maxVal = MAX_DIGIDOLLAR;
     for (int i = 0; i < 8; i++) {
         maxBytes[i] = (maxVal >> (i * 8)) & 0xFF;
     }
@@ -714,17 +714,17 @@ BOOST_AUTO_TEST_CASE(rh06_14a_extract_dd_amount_boundary)
     BOOST_CHECK(ok);
     BOOST_CHECK_EQUAL(amount, maxVal);
 
-    // One above max should fail
+    // One above MAX_DIGIDOLLAR should fail
     CScript aboveMax = CScript() << OP_RETURN << OP_DIGIDOLLAR;
     std::vector<unsigned char> aboveBytes(8, 0);
-    int64_t aboveVal = 100000000001LL;
+    int64_t aboveVal = MAX_DIGIDOLLAR + 1;
     for (int i = 0; i < 8; i++) {
         aboveBytes[i] = (aboveVal >> (i * 8)) & 0xFF;
     }
     aboveMax << aboveBytes;
 
     ok = DigiDollar::ExtractDDAmount(aboveMax, amount);
-    BOOST_CHECK_MESSAGE(!ok, "EXPLOIT: Amount above $1B cap should be rejected by ExtractDDAmount");
+    BOOST_CHECK_MESSAGE(!ok, "EXPLOIT: Amount above MAX_DIGIDOLLAR should be rejected by ExtractDDAmount");
 }
 
 BOOST_AUTO_TEST_CASE(rh06_14b_extract_dd_amount_zero)

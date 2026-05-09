@@ -64,14 +64,11 @@ BOOST_AUTO_TEST_CASE(redteam_overflow_max_dd_min_price)
     
     CAmount required = DigiDollar::CalculateRequiredCollateral(MAX_DD, LOCK_BLOCKS, ctx);
     
-    // At minimum price, required collateral should be enormous (capped at MAX_MONEY)
-    // Exploit would be: required collateral overflows to near-zero
-    BOOST_CHECK_MESSAGE(required >= MAX_MONEY || required == MAX_MONEY,
-        "EXPLOIT FOUND: MAX_DD at MIN_PRICE should require MAX_MONEY collateral, got " + 
+    // At minimum price, required collateral is not representable as a valid
+    // DGB amount. Fail closed instead of capping to a satisfiable amount.
+    BOOST_CHECK_MESSAGE(required == 0,
+        "EXPLOIT FOUND: MAX_DD at MIN_PRICE should fail closed, got " +
         std::to_string(required));
-    
-    // Verify it's impossible to provide this much collateral
-    BOOST_CHECK_GT(required, 21000000 * COIN);  // More than all DGB in existence
 }
 
 BOOST_AUTO_TEST_CASE(redteam_overflow_emergency_dca)
@@ -183,9 +180,9 @@ BOOST_AUTO_TEST_CASE(redteam_128bit_overflow_boundary)
     
     CAmount required = DigiDollar::CalculateRequiredCollateral(LARGE_DD, LOCK_BLOCKS, ctx);
     
-    // Should be capped at MAX_MONEY, not overflow to garbage
-    BOOST_CHECK_MESSAGE(required == MAX_MONEY || required > 0,
-        "EXPLOIT: __int128 calculation returned unexpected value: " + std::to_string(required));
+    // Should fail closed, not overflow or cap to a satisfiable amount.
+    BOOST_CHECK_MESSAGE(required == 0,
+        "EXPLOIT: __int128 calculation should fail closed, got " + std::to_string(required));
 }
 
 BOOST_AUTO_TEST_CASE(redteam_rounding_attack)
@@ -321,9 +318,9 @@ BOOST_AUTO_TEST_CASE(redteam_int128_edge_cases)
     // This would overflow uint64_t but should be safe with __int128
     CAmount required = DigiDollar::CalculateRequiredCollateral(LARGE_DD, LOCK_BLOCKS, ctx);
     
-    // Should be capped at MAX_MONEY, not garbage value
-    BOOST_CHECK_MESSAGE(required == MAX_MONEY,
-        "EXPLOIT: Large calculation should cap at MAX_MONEY, got " + std::to_string(required));
+    // Should fail closed, not cap to a satisfiable amount or wrap.
+    BOOST_CHECK_MESSAGE(required == 0,
+        "EXPLOIT: Large calculation should fail closed, got " + std::to_string(required));
 }
 
 // =============================================================================
@@ -844,22 +841,19 @@ BOOST_AUTO_TEST_CASE(redteam_cltv_lockdays_zero_maps_to_240_blocks)
 BOOST_AUTO_TEST_CASE(redteam_cltv_collateral_ratio_for_zero_lockblocks)
 {
     // ATTACK: What ratio does lockBlocks=0 get?
-    // If it gets the best ratio (200%), that's an exploit.
-    // It should get the worst ratio (1000%) since it's shorter than any tier.
+    // V1 accepts only exact canonical lock tiers. A zero-block lock is not a
+    // tier and must therefore receive no ratio so validation rejects it.
 
     DigiDollar::ConsensusParams ddParams;
     int ratio = DigiDollar::GetCollateralRatioForLockTime(0, ddParams);
 
-    // Defense: lockBlocks=0 should get the highest (worst for attacker) ratio
-    // The first tier is 240 blocks (1 hour) at 1000%
-    // lower_bound(0) finds the first element, which is 1000%
-    BOOST_CHECK_MESSAGE(ratio >= 1000,
-        "EXPLOIT: lockBlocks=0 got ratio " + std::to_string(ratio) +
-        "% (expected >= 1000%). Attacker could mint more DD with less collateral.");
+    BOOST_CHECK_MESSAGE(ratio == 0,
+        "V1 must reject lockBlocks=0 as non-canonical, got ratio " +
+        std::to_string(ratio) + "%.");
 
-    // Also verify that lockBlocks=1 gets the same worst-case ratio
+    // Also verify that lockBlocks=1 is rejected as non-canonical.
     int ratio1 = DigiDollar::GetCollateralRatioForLockTime(1, ddParams);
-    BOOST_CHECK_GE(ratio1, 1000);
+    BOOST_CHECK_EQUAL(ratio1, 0);
 }
 
 // =============================================================================
@@ -999,8 +993,15 @@ BOOST_AUTO_TEST_CASE(redteam_nums_key_legitimate_collateral_accepted)
 
     const int nHeight = 1000;
     const CAmount ddAmount = 10000;  // $100
+    const CAmount oraclePriceMicroUSD = 500000; // $0.50/DGB
     // Use tier 1 = 30 days lock, consistent lockHeight and tier
     const int64_t lockHeight = nHeight + DigiDollar::LockDaysToBlocks(30);
+
+    DigiDollar::ValidationContext ctx(nHeight, oraclePriceMicroUSD, 150, *regTestParams);
+    ctx.skipOracleValidation = true;
+    const CAmount collateralAmount = DigiDollar::CalculateRequiredCollateral(
+        ddAmount, DigiDollar::LockDaysToBlocks(30), ctx);
+    BOOST_REQUIRE_GT(collateralAmount, 0);
 
     // Create LEGITIMATE collateral with NUMS key
     DigiDollar::MintParams params;
@@ -1030,13 +1031,11 @@ BOOST_AUTO_TEST_CASE(redteam_nums_key_legitimate_collateral_accepted)
                                  << CScriptNum(1)
                                  << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
     mintTx.vout.push_back(CTxOut(0, opReturn));
-    mintTx.vout.push_back(CTxOut(100 * COIN, collateral));
+    mintTx.vout.push_back(CTxOut(collateralAmount, collateral));
 
     CScript ddToken = DigiDollar::CreateDigiDollarP2TR(ownerXOnly, ddAmount);
     mintTx.vout.push_back(CTxOut(0, ddToken));
 
-    DigiDollar::ValidationContext ctx(nHeight, 1000, 150, *regTestParams);
-    ctx.skipOracleValidation = true;
     TxValidationState state;
 
     bool result = DigiDollar::ValidateMintTransaction(
@@ -1888,15 +1887,13 @@ BOOST_AUTO_TEST_CASE(redteam_nums_taprootbuilder_determinism)
     BOOST_CHECK_MESSAGE(result3 != reference,
         "Different owner keys should produce different P2TR outputs");
 
-    // NOTE: Different DD amounts produce the SAME P2TR output because
-    // ddAmount is NOT embedded in the CLTV script paths — it's only in
-    // the OP_RETURN metadata. This is by design: the collateral ratio
-    // check validates amounts, not the script itself.
+    // V1 burn enforcement embeds the DD amount in the normal and ERR script
+    // paths so spending collateral must prove the correct DD burn amount.
     DigiDollar::MintParams params4 = params;
     params4.ddAmount = 50000;
     CScript result4 = DigiDollar::CreateCollateralP2TR(params4);
-    BOOST_CHECK_MESSAGE(result4 == reference,
-        "DD amounts should NOT affect P2TR output (amount is in OP_RETURN, not script)");
+    BOOST_CHECK_MESSAGE(result4 != reference,
+        "DD amounts must affect the collateral P2TR output because the burn amount is in the script ABI");
 
     BOOST_TEST_MESSAGE("TaprootBuilder determinism verified over 100 iterations + parameter variation");
 }
@@ -2178,10 +2175,10 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05a_skip_oracle_bypasses_collateral)
  */
 BOOST_AUTO_TEST_CASE(redteam_T1_05b_phase1_oracle_no_signature)
 {
-    // Create a Phase 1 compact oracle script with FORGED price
+    // Create a legacy compact oracle script with FORGED price
     CScript forgedOracleScript;
     forgedOracleScript << OP_RETURN << OP_ORACLE;
-    forgedOracleScript << std::vector<unsigned char>{0x01};  // version = Phase 1
+    forgedOracleScript << std::vector<unsigned char>{0x01};  // legacy version
 
     // Forge: oracle_id=0, price=$100 (100,000,000 micro-USD), current timestamp
     std::vector<unsigned char> compact_data;
@@ -2210,36 +2207,15 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05b_phase1_oracle_no_signature)
 
     CTransaction coinbase(coinbase_tx);
 
-    // Extract oracle bundle — should succeed (no sig needed for compact format)
+    // DigiDollar V1 launches with MuSig2 only, so compact legacy oracle data
+    // must not parse or enter validation/cache paths.
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(coinbase, bundle);
 
-    BOOST_CHECK_MESSAGE(extracted,
-        "Phase 1 compact oracle extraction works (expected)");
-
-    if (extracted) {
-        BOOST_CHECK_EQUAL(bundle.messages.size(), 1);
-        BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, forged_price);
-
-        // The message should have NO signature (compact format)
-        const COraclePriceMessage& msg = bundle.messages[0];
-        BOOST_CHECK_MESSAGE(msg.schnorr_sig.empty(),
-            "Phase 1 compact format has no signature — expected");
-
-        // IsValid() should return true for compact format (empty sig = trusted)
-        // This is the vulnerability: no cryptographic verification
-        bool isValid = msg.IsValid(now);
-        BOOST_CHECK_MESSAGE(isValid,
-            "VULNERABILITY CONFIRMED: Phase 1 compact message with forged price ($100) "
-            "passes IsValid() because empty signature is implicitly trusted. "
-            "MITIGATION: Phase 2 activates at same height as DD on all networks, "
-            "so this code path is never exercised in production.");
-
-        BOOST_TEST_MESSAGE("Phase 1 compact format vulnerability: Forged price of $" +
-            std::to_string(forged_price / 1000000) + " accepted without signature verification. "
-            "This is acceptable ONLY because Phase 2 always activates simultaneously.");
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "DEFENSE HOLDS: DigiDollar V1 rejects legacy compact oracle extraction. "
+        "Only MuSig2 v0x03 bundles may be parsed from blocks.");
 }
 
 /**
@@ -2264,10 +2240,10 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05c_p2p_oracle_pubkey_binding)
     msg.nonce = 42;
 
     // Attacker signs with their own key
-    BOOST_REQUIRE(msg.SignPhase2(attackerKey));
+    BOOST_REQUIRE(msg.SignAttestation(attackerKey));
 
     // Verify passes with attacker's own key (expected — they signed it)
-    BOOST_CHECK(msg.VerifyPhase2());
+    BOOST_CHECK(msg.VerifyAttestation());
 
     // Now simulate the chainparams pubkey binding (what net_processing does)
     // Replace attacker's pubkey with a different authorized key
@@ -2277,7 +2253,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05c_p2p_oracle_pubkey_binding)
 
     // Verification MUST fail — signature was made with attacker's key,
     // but we're verifying against the authorized key
-    bool verifyResult = msg.VerifyPhase2();
+    bool verifyResult = msg.VerifyAttestation();
     BOOST_CHECK_MESSAGE(!verifyResult,
         "DEFENSE HOLDS: After pubkey binding to chainparams key, attacker's "
         "forged signature fails verification. P2P oracle forgery is not possible.");
@@ -2300,7 +2276,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05d_oracle_timestamp_validation)
         futureMsg.timestamp = now + 3600;  // 1 hour in future
         futureMsg.block_height = 1000;
         futureMsg.nonce = 1;
-        BOOST_REQUIRE(futureMsg.SignPhase2(validKey));
+        BOOST_REQUIRE(futureMsg.SignAttestation(validKey));
 
         BOOST_CHECK_MESSAGE(!futureMsg.IsValid(now),
             "DEFENSE HOLDS: Oracle message from far future rejected");
@@ -2314,7 +2290,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05d_oracle_timestamp_validation)
         staleMsg.timestamp = now - 7200;  // 2 hours old
         staleMsg.block_height = 1000;
         staleMsg.nonce = 2;
-        BOOST_REQUIRE(staleMsg.SignPhase2(validKey));
+        BOOST_REQUIRE(staleMsg.SignAttestation(validKey));
 
         BOOST_CHECK_MESSAGE(!staleMsg.IsValid(now),
             "DEFENSE HOLDS: Oracle message >1 hour old rejected");
@@ -2328,7 +2304,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05d_oracle_timestamp_validation)
         validMsg.timestamp = now - 30;  // 30 seconds ago
         validMsg.block_height = 1000;
         validMsg.nonce = 3;
-        BOOST_REQUIRE(validMsg.SignPhase2(validKey));
+        BOOST_REQUIRE(validMsg.SignAttestation(validKey));
 
         BOOST_CHECK_MESSAGE(validMsg.IsValid(now),
             "Valid oracle message within time bounds accepted");
@@ -2352,7 +2328,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05e_oracle_price_range)
         msg.timestamp = now;
         msg.block_height = 1000;
         msg.nonce = 1;
-        BOOST_REQUIRE(msg.SignPhase2(validKey));
+        BOOST_REQUIRE(msg.SignAttestation(validKey));
         BOOST_CHECK_MESSAGE(!msg.IsValid(now), "DEFENSE HOLDS: Zero price rejected");
     }
 
@@ -2364,7 +2340,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05e_oracle_price_range)
         msg.timestamp = now;
         msg.block_height = 1000;
         msg.nonce = 2;
-        BOOST_REQUIRE(msg.SignPhase2(validKey));
+        BOOST_REQUIRE(msg.SignAttestation(validKey));
         BOOST_CHECK_MESSAGE(!msg.IsValid(now), "DEFENSE HOLDS: Price below minimum rejected");
     }
 
@@ -2376,7 +2352,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05e_oracle_price_range)
         msg.timestamp = now;
         msg.block_height = 1000;
         msg.nonce = 3;
-        BOOST_REQUIRE(msg.SignPhase2(validKey));
+        BOOST_REQUIRE(msg.SignAttestation(validKey));
         BOOST_CHECK_MESSAGE(!msg.IsValid(now), "DEFENSE HOLDS: Price above maximum rejected");
     }
 
@@ -2388,7 +2364,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05e_oracle_price_range)
         minMsg.timestamp = now;
         minMsg.block_height = 1000;
         minMsg.nonce = 4;
-        BOOST_REQUIRE(minMsg.SignPhase2(validKey));
+        BOOST_REQUIRE(minMsg.SignAttestation(validKey));
         BOOST_CHECK(minMsg.IsValid(now));
 
         COraclePriceMessage maxMsg;
@@ -2397,7 +2373,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05e_oracle_price_range)
         maxMsg.timestamp = now;
         maxMsg.block_height = 1000;
         maxMsg.nonce = 5;
-        BOOST_REQUIRE(maxMsg.SignPhase2(validKey));
+        BOOST_REQUIRE(maxMsg.SignAttestation(validKey));
         BOOST_CHECK(maxMsg.IsValid(now));
     }
 }
@@ -2421,7 +2397,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05f_oracle_id_range)
     msg.timestamp = now;
     msg.block_height = 1000;
     msg.nonce = 1;
-    BOOST_REQUIRE(msg.SignPhase2(validKey));
+    BOOST_REQUIRE(msg.SignAttestation(validKey));
 
     OracleP2P::ClearRateLimitState();
     bool result = OracleP2P::ValidateIncomingMessage(msg);
@@ -2430,7 +2406,7 @@ BOOST_AUTO_TEST_CASE(redteam_T1_05f_oracle_id_range)
 
     // Oracle ID = max uint32 (extreme)
     msg.oracle_id = 0xFFFFFFFF;
-    BOOST_REQUIRE(msg.SignPhase2(validKey));
+    BOOST_REQUIRE(msg.SignAttestation(validKey));
     result = OracleP2P::ValidateIncomingMessage(msg);
     BOOST_CHECK_MESSAGE(!result,
         "DEFENSE HOLDS: Oracle ID 0xFFFFFFFF rejected by P2P validation");
@@ -2511,16 +2487,12 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06a_dd_marker_version_check)
     }
 }
 
-// T1-06b: DD opcodes behave as NOPs when SCRIPT_VERIFY_DIGIDOLLAR is NOT set
-BOOST_AUTO_TEST_CASE(redteam_T1_06b_dd_opcodes_nop_before_activation)
+// T1-06b: DD opcode bytes are only soft-fork-safe in Tapscript
+BOOST_AUTO_TEST_CASE(redteam_T1_06b_dd_opcodes_tapscript_only)
 {
-    // ATTACK: Before activation, can DD opcodes be used in scripts to create
-    // unexpected behavior?
-
-    // Create a simple script that uses OP_DIGIDOLLAR with an amount push
-    // Script: OP_DIGIDOLLAR <amount=1000> OP_DROP OP_TRUE
-    // Pre-activation: OP_DIGIDOLLAR is NOP, <1000> is pushed to stack, OP_DROP removes it, OP_TRUE succeeds
-    // Post-activation: OP_DIGIDOLLAR consumes <1000>, pushes true, OP_DROP removes it, OP_TRUE succeeds
+    // 0xbb..0xbf are BIP342 OP_SUCCESSx bytes, not legacy OP_NOP slots.
+    // Executed legacy/witness-v0 scripts must keep rejecting them as bad opcodes
+    // so DigiDollar activation does not loosen old-node consensus.
 
     CScript scriptPubKey;
     scriptPubKey << OP_DIGIDOLLAR;
@@ -2528,140 +2500,99 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06b_dd_opcodes_nop_before_activation)
     scriptPubKey << OP_DROP;
     scriptPubKey << OP_TRUE;
 
-    CScript scriptSig;  // Empty — not needed for this script structure
-
-    // Without SCRIPT_VERIFY_DIGIDOLLAR (pre-activation behavior):
-    // OP_DIGIDOLLAR = NOP, <1000> pushed, OP_DROP removes 1000, OP_TRUE → stack has [true]
     {
-        unsigned int flags = SCRIPT_VERIFY_P2SH;  // No DD flag
+        unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
-        // Use direct EvalScript since this isn't a real spending scenario
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result,
-            "Pre-activation: OP_DIGIDOLLAR as NOP, script should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
-            "Pre-activation: Stack should have [true] at top");
+        BOOST_CHECK_MESSAGE(!result,
+            "Legacy script execution must reject DD opcode bytes, not treat them as NOPs");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 
-    // With SCRIPT_VERIFY_DIGIDOLLAR (post-activation behavior):
-    // OP_DIGIDOLLAR reads <1000>, pushes true (1000 > 0), OP_DROP removes true, OP_TRUE → stack has [true]
+    // Once active in Tapscript, OP_DIGIDOLLAR reads the following amount push,
+    // pushes true, OP_DROP removes it, and OP_TRUE leaves a true stack item.
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
-        bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
+        bool result = EvalScript(stack, scriptPubKey, flags, BaseSignatureChecker(), SigVersion::TAPSCRIPT, &err);
         BOOST_CHECK_MESSAGE(result,
-            "Post-activation: OP_DIGIDOLLAR processes amount, script should succeed");
+            "Post-activation Tapscript: OP_DIGIDOLLAR processes amount and script succeeds");
         BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
-            "Post-activation: Stack should have [true] at top");
+            "Post-activation Tapscript: Stack should have [true] at top");
     }
 }
 
-// T1-06c: OP_DDVERIFY as NOP doesn't pop stack (consensus safety)
-BOOST_AUTO_TEST_CASE(redteam_T1_06c_ddverify_nop_stack_safety)
+// T1-06c: OP_DDVERIFY is Tapscript-only
+BOOST_AUTO_TEST_CASE(redteam_T1_06c_ddverify_tapscript_only)
 {
-    // ATTACK: OP_DDVERIFY pops and verifies top of stack when active.
-    // As NOP, it must NOT touch the stack.
-    // If it incorrectly popped pre-activation, scripts would break at activation.
-
-    // Script: OP_TRUE OP_DDVERIFY
-    // Pre-activation: OP_TRUE pushes 1, OP_DDVERIFY is NOP → stack has [1]
-    // Post-activation: OP_TRUE pushes 1, OP_DDVERIFY pops 1 (verifies true) → stack is empty
-
     CScript script;
-    script << OP_TRUE;
-    script << OP_DDVERIFY;
+    script << OP_TRUE << OP_DDVERIFY;
 
-    // Pre-activation: stack should still have the true value
     {
-        unsigned int flags = SCRIPT_VERIFY_P2SH;  // No DD flag
+        unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_DDVERIFY as NOP should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 1,
-            "CRITICAL: Pre-activation OP_DDVERIFY must NOT pop stack (stack size should be 1, got " +
-            std::to_string(stack.size()) + ")");
+        BOOST_CHECK_MESSAGE(!result, "Legacy OP_DDVERIFY byte must be SCRIPT_ERR_BAD_OPCODE");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 
-    // Post-activation: OP_DDVERIFY consumes the true, stack should be empty
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
-        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Post-activation: OP_DDVERIFY should verify true and succeed");
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::TAPSCRIPT, &err);
+        BOOST_CHECK_MESSAGE(result, "Post-activation Tapscript: OP_DDVERIFY should verify true and succeed");
         BOOST_CHECK_MESSAGE(stack.size() == 0,
-            "Post-activation: OP_DDVERIFY should pop the verified value (stack size should be 0, got " +
+            "Post-activation Tapscript: OP_DDVERIFY should pop the verified value (stack size should be 0, got " +
             std::to_string(stack.size()) + ")");
     }
 }
 
-// T1-06d: OP_CHECKCOLLATERAL NOP doesn't touch stack (consensus critical)
-BOOST_AUTO_TEST_CASE(redteam_T1_06d_checkcollateral_nop_stack_safety)
+// T1-06d: OP_CHECKCOLLATERAL is Tapscript-only
+BOOST_AUTO_TEST_CASE(redteam_T1_06d_checkcollateral_tapscript_only)
 {
-    // ATTACK: OP_CHECKCOLLATERAL pops 2 items when active.
-    // As NOP, it MUST NOT touch the stack — the comment in the code says so.
-    // If it popped pre-activation, it would be a consensus split.
-
-    // Script: <ratio=500> <threshold=200> OP_CHECKCOLLATERAL
-    // Pre-activation: both numbers pushed, OP_CHECKCOLLATERAL NOP → stack has [500, 200]
-    // Post-activation: both popped, 500 >= 200 → true → stack has [true]
-
     CScript script;
     script << CScriptNum(500);
     script << CScriptNum(200);
     script << OP_CHECKCOLLATERAL;
 
-    // Pre-activation: stack should have both values
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_CHECKCOLLATERAL NOP should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 2,
-            "CRITICAL: Pre-activation OP_CHECKCOLLATERAL must NOT touch stack (stack size should be 2, got " +
-            std::to_string(stack.size()) + ")");
+        BOOST_CHECK_MESSAGE(!result, "Legacy OP_CHECKCOLLATERAL byte must be SCRIPT_ERR_BAD_OPCODE");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 
-    // Post-activation: stack should have [true]
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DIGIDOLLAR;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
-        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Post-activation: OP_CHECKCOLLATERAL(500>=200) should succeed");
+        bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::TAPSCRIPT, &err);
+        BOOST_CHECK_MESSAGE(result, "Post-activation Tapscript: OP_CHECKCOLLATERAL(500>=200) should succeed");
         BOOST_CHECK_MESSAGE(stack.size() == 1 && !stack.back().empty(),
-            "Post-activation: OP_CHECKCOLLATERAL should push true (500 >= 200)");
+            "Post-activation Tapscript: OP_CHECKCOLLATERAL should push true (500 >= 200)");
     }
 }
 
-// T1-06e: OP_CHECKPRICE NOP doesn't touch stack
-BOOST_AUTO_TEST_CASE(redteam_T1_06e_checkprice_nop_stack_safety)
+// T1-06e: OP_CHECKPRICE is Tapscript-only
+BOOST_AUTO_TEST_CASE(redteam_T1_06e_checkprice_tapscript_only)
 {
-    // ATTACK: OP_CHECKPRICE pops 1 item when active.
-    // As NOP, it must NOT touch the stack.
-
-    // Script: <price=42000> OP_CHECKPRICE
-    // Pre-activation: number pushed, OP_CHECKPRICE NOP → stack has [42000]
-    // Post-activation: number popped, compared to mock oracle → stack has [true/false]
-
     CScript script;
     script << CScriptNum(42000);
     script << OP_CHECKPRICE;
 
-    // Pre-activation: stack should still have the price value
     {
         unsigned int flags = SCRIPT_VERIFY_P2SH;
         ScriptError err;
         std::vector<std::vector<unsigned char>> stack;
         bool result = EvalScript(stack, script, flags, BaseSignatureChecker(), SigVersion::BASE, &err);
-        BOOST_CHECK_MESSAGE(result, "Pre-activation: OP_CHECKPRICE NOP should succeed");
-        BOOST_CHECK_MESSAGE(stack.size() == 1,
-            "CRITICAL: Pre-activation OP_CHECKPRICE must NOT pop stack (stack size should be 1, got " +
-            std::to_string(stack.size()) + ")");
+        BOOST_CHECK_MESSAGE(!result, "Legacy OP_CHECKPRICE byte must be SCRIPT_ERR_BAD_OPCODE");
+        BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     }
 }
 
@@ -3380,6 +3311,7 @@ BOOST_AUTO_TEST_CASE(redteam_t1_08c_redeem_full_burn_valid_with_txlookup)
     // Redeem tx: burn ALL DD (10000), release full 200 DGB — should PASS
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1000;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("ddd1080000000000000000000000000000000000000000000000000000000001"), 0)));
     mtx.vout.push_back(CTxOut(lockedCollateral, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
@@ -3441,6 +3373,7 @@ BOOST_AUTO_TEST_CASE(redteam_t1_08d_redeem_partial_burn_rejected)
     // Redeem: burn 5000 DD (half) — should now FAIL (partial burn rejected)
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1000;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("bbc1080000000000000000000000000000000000000000000000000000000001"), 0)));
     mtx.vout.push_back(CTxOut(100 * COIN, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
@@ -3543,13 +3476,12 @@ BOOST_AUTO_TEST_CASE(redteam_t2_01a_lockheight_absolute_vs_relative_mainnet)
     int64_t absoluteLockHeight = MAINNET_HEIGHT + ONE_HOUR_BLOCKS;  // ~22,014,960
     int64_t relativeLockPeriod = ONE_HOUR_BLOCKS;                    // 240 blocks
 
-    // Verify GetCollateralRatioForLockTime still has the raw behavior difference
-    // (it's the caller's job to pass relative, not absolute)
+    // Verify GetCollateralRatioForLockTime now rejects absolute heights as
+    // non-canonical rather than mapping them to the 10-year tier.
     int rawAbsoluteRatio = DigiDollar::GetCollateralRatioForLockTime(absoluteLockHeight, ddParams);
     int rawRelativeRatio = DigiDollar::GetCollateralRatioForLockTime(relativeLockPeriod, ddParams);
 
-    // The raw function gives 200% for absolute (wrong) and 1000% for relative (correct)
-    BOOST_CHECK_EQUAL(rawAbsoluteRatio, 200);
+    BOOST_CHECK_EQUAL(rawAbsoluteRatio, 0);
     BOOST_CHECK_EQUAL(rawRelativeRatio, 1000);
 
     // Verify that the FIXED code now uses the relative period
@@ -3566,12 +3498,12 @@ BOOST_AUTO_TEST_CASE(redteam_t2_01a_lockheight_absolute_vs_relative_mainnet)
     // (100000 cents * 10^8 * 1000 * 100) / 5000 = 200,000,000,000,000 sats = 2,000,000 DGB
     BOOST_CHECK_GT(correctCollateral, 0);
 
-    // Verify the fixed collateral is 5x more than the buggy calculation would give
+    // Absolute heights are non-canonical and cannot calculate collateral.
     CAmount buggyCollateral = DigiDollar::CalculateRequiredCollateral(DD_AMOUNT, absoluteLockHeight, ctx);
-    BOOST_CHECK_MESSAGE(correctCollateral > buggyCollateral * 4,
-        "FIX VERIFIED [T2-01a]: Correct collateral (" + std::to_string(correctCollateral / COIN) +
-        " DGB) is 5x more than buggy (" + std::to_string(buggyCollateral / COIN) +
-        " DGB). Lock period conversion fix is working.");
+    BOOST_CHECK_EQUAL(buggyCollateral, 0);
+    BOOST_CHECK_MESSAGE(correctCollateral > 0,
+        "FIX VERIFIED [T2-01a]: Relative canonical lock period calculates collateral; "
+        "absolute lock height is rejected before it can understate collateral.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t2_01b_lockheight_30day_at_mainnet_height)
@@ -3591,14 +3523,12 @@ BOOST_AUTO_TEST_CASE(redteam_t2_01b_lockheight_30day_at_mainnet_height)
     int buggyRatio = DigiDollar::GetCollateralRatioForLockTime(absoluteLockHeight, ddParams);
     int correctRatio = DigiDollar::GetCollateralRatioForLockTime(relativeLockPeriod, ddParams);
 
-    // Bug: 200% instead of 500%
-    BOOST_CHECK_EQUAL(buggyRatio, 200);
+    BOOST_CHECK_EQUAL(buggyRatio, 0);
     BOOST_CHECK_EQUAL(correctRatio, 500);
 
-    BOOST_CHECK_MESSAGE(buggyRatio < correctRatio,
-        "BUG CONFIRMED [T2-01b]: 30-day lock at mainnet height gets " +
-        std::to_string(buggyRatio) + "% ratio instead of correct " +
-        std::to_string(correctRatio) + "%. 2.5x less collateral required.");
+    BOOST_CHECK_MESSAGE(buggyRatio != correctRatio,
+        "FIX VERIFIED [T2-01b]: absolute lock height is rejected; 30-day relative tier gets " +
+        std::to_string(correctRatio) + "% ratio.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t2_01c_all_tiers_broken_at_mainnet_height)
@@ -4398,6 +4328,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_03c_full_burn_still_works)
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1000;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("dd03010000000000000000000000000000000000000000000000000000000001"), 0)));
     mtx.vout.push_back(CTxOut(lockedCollateral, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
@@ -4459,6 +4390,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_03d_slight_overburn_still_works)
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1000;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("ff03010000000000000000000000000000000000000000000000000000000001"), 0)));
     mtx.vout.push_back(CTxOut(lockedCollateral, CScript() << OP_1 << ToByteVector(collateralXOnlyKey)));
@@ -4591,7 +4523,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_04a_stale_cached_price_no_expiry)
     msg.oracle_id = 0;
     msg.price_micro_usd = 50000;  // $0.05
     msg.timestamp = baseTime;
-    msg.SignPhase2(oracleKey);
+    msg.SignAttestation(oracleKey);
 
     // Inject directly (bypass chainparams check)
     manager.InjectTestMessage(msg);
@@ -4960,8 +4892,8 @@ BOOST_AUTO_TEST_CASE(redteam_T2_05c_err_never_blocks_minting)
 
 BOOST_AUTO_TEST_CASE(redteam_T2_05d_unit_mismatch_health_calculation)
 {
-    // ATTACK: GetLastOraclePrice() returns cents (50 = $0.50/DGB)
-    // but CalculateSystemHealth() treats its oraclePrice parameter as
+    // Historical attack: legacy callers passed cents (50 = $0.50/DGB)
+    // into CalculateSystemHealth(), whose oraclePrice parameter is
     // millicents (50 millicents = $0.0005/DGB).
     //
     // This means when GetCurrentSystemHealth() is eventually used with
@@ -4995,10 +4927,8 @@ BOOST_AUTO_TEST_CASE(redteam_T2_05d_unit_mismatch_health_calculation)
     BOOST_CHECK(healthWithCents < 10); // Calculates near-zero health
     BOOST_CHECK(healthWithMillicents >= 80 && healthWithMillicents <= 120); // Should be close to 100%
 
-    BOOST_TEST_MESSAGE("MEDIUM BUG [T2-05d]: GetLastOraclePrice() returns cents, "
-        "CalculateSystemHealth() expects millicents. Health calculated 1000x too low. "
-        "Currently masked by hardcoded GetSystemCollateralRatio()=150, but will break "
-        "when that's fixed to use real health calculations.");
+    BOOST_TEST_MESSAGE("T2-05d historical unit mismatch: passing cents to "
+        "CalculateSystemHealth() instead of millicents calculates health 1000x too low.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_T2_05e_should_block_minting_fails_open)
@@ -5240,6 +5170,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06b_fee_input_collateral_masquerade)
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;  // REDEEM
+    mtx.nLockTime = 1000;
     mtx.vin.push_back(CTxIn(collOutA));   // Collateral A (200 DGB)
     mtx.vin.push_back(CTxIn(collOutB));   // Collateral B (300 DGB) — masquerades as "fee input"!
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("d206b00000000000000000000000000000000000000000000000000000000099"), 0)));  // DD input
@@ -5303,10 +5234,13 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06b_fee_input_collateral_masquerade)
         // Legitimate redeem: collateral A + regular fee UTXO
         CMutableTransaction mtx2;
         mtx2.nVersion = 0x03000770;
+        mtx2.nLockTime = 1000;
         mtx2.vin.push_back(CTxIn(collOutA));     // Collateral A (200 DGB)
         mtx2.vin.push_back(CTxIn(feeOutpoint));  // Regular DGB fee UTXO (1 DGB)
         mtx2.vin.push_back(CTxIn(COutPoint(uint256S("d206b00000000000000000000000000000000000000000000000000000000099"), 0)));
-        mtx2.vout.push_back(CTxOut(200 * COIN + 50000000, CScript() << OP_1 << ToByteVector(xPubA)));  // 200.5 DGB
+        // Return the regular fee input as change so net collateral release is
+        // exactly the original 200 DGB: total outputs (201) - fee input (1).
+        mtx2.vout.push_back(CTxOut(201 * COIN, CScript() << OP_1 << ToByteVector(xPubA)));
 
         CTransaction tx2(mtx2);
         TxValidationState state2;
@@ -5517,6 +5451,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06d_reordered_collateral_as_fee_input)
 
     CMutableTransaction redeemTx;
     redeemTx.nVersion = 0x03000770;
+    redeemTx.nLockTime = static_cast<uint32_t>(lockHeight);
     redeemTx.vin.push_back(CTxIn(collOutA));  // Position A collateral, correctly redeemed.
     redeemTx.vin.push_back(CTxIn(collOutB));  // Position B collateral masquerading as a fee input.
     redeemTx.vin.push_back(CTxIn(COutPoint(uint256S("d206d00000000000000000000000000000000000000000000000000000000099"), 0))); // DD burn input.
@@ -5524,7 +5459,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06d_reordered_collateral_as_fee_input)
 
     CTransaction redeem(redeemTx);
     TxValidationState redeemState;
-    DigiDollar::ValidationContext redeemCtx(2000, 500000, 150, *regTestParams, &coinsView, false, txLookup);
+    DigiDollar::ValidationContext redeemCtx(static_cast<int>(lockHeight), 500000, 150, *regTestParams, &coinsView, false, txLookup);
 
     bool result = DigiDollar::ValidateCollateralReleaseAmount(redeem, redeemCtx, originalDDA, redeemState);
 
@@ -5675,10 +5610,10 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01a_forge_with_attacker_keypair)
     forgedMsg.nonce = 12345;
 
     // Sign with attacker's key (Phase 2 format — what matters for consensus)
-    BOOST_REQUIRE(forgedMsg.SignPhase2(attackerKey));
+    BOOST_REQUIRE(forgedMsg.SignAttestation(attackerKey));
 
     // Verify against attacker's own pubkey — this WILL pass (math is correct)
-    BOOST_CHECK_MESSAGE(forgedMsg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(forgedMsg.VerifyAttestation(),
         "EXPECTED: Signature verifies against attacker's own pubkey (this is just Schnorr math)");
 
     // Now simulate what the P2P/block validation layer does:
@@ -5691,7 +5626,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01a_forge_with_attacker_keypair)
         boundMsg.oracle_pubkey = XOnlyPubKey(oracle0->pubkey);
 
         // With chainparams pubkey, the attacker's signature MUST fail
-        BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+        BOOST_CHECK_MESSAGE(!boundMsg.VerifyAttestation(),
             "DEFENSE [T3-01a]: Forged message FAILS verification when pubkey is bound to chainparams. "
             "Attacker's Schnorr signature does not match authorized oracle public key.");
     } else {
@@ -5707,7 +5642,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01a_forge_with_attacker_keypair)
 BOOST_AUTO_TEST_CASE(redteam_t3_01b_zero_signature_bypass)
 {
     // ATTACK [T3-01b]: Submit an oracle message with an all-zero 64-byte signature.
-    // Can a zero signature somehow pass VerifyPhase2()?
+    // Can a zero signature somehow pass VerifyAttestation()?
 
     CKey legitimateKey;
     legitimateKey.MakeNewKey(true);
@@ -5723,21 +5658,21 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01b_zero_signature_bypass)
     // All-zero signature (64 bytes)
     msg.schnorr_sig.assign(64, 0x00);
 
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
-        "DEFENSE [T3-01b]: All-zero signature correctly rejected by VerifyPhase2()");
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
+        "DEFENSE [T3-01b]: All-zero signature correctly rejected by VerifyAttestation()");
     BOOST_CHECK_MESSAGE(!msg.Verify(),
         "DEFENSE [T3-01b]: All-zero signature correctly rejected by Verify()");
 
     // All-0xFF signature
     msg.schnorr_sig.assign(64, 0xFF);
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
-        "DEFENSE [T3-01b]: All-0xFF signature correctly rejected by VerifyPhase2()");
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
+        "DEFENSE [T3-01b]: All-0xFF signature correctly rejected by VerifyAttestation()");
 
     // Random garbage signature
     msg.schnorr_sig.resize(64);
     for (int i = 0; i < 64; i++) msg.schnorr_sig[i] = static_cast<unsigned char>(i * 7 + 13);
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
-        "DEFENSE [T3-01b]: Random garbage signature correctly rejected by VerifyPhase2()");
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
+        "DEFENSE [T3-01b]: Random garbage signature correctly rejected by VerifyAttestation()");
 
     BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01b]: Invalid signatures (zero, max, garbage) all rejected. "
         "BIP-340 Schnorr verification in libsecp256k1 correctly validates.");
@@ -5759,11 +5694,11 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01c_signature_malleability)
     msg.price_micro_usd = 50000;
     msg.timestamp = GetTime();
 
-    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(msg.SignAttestation(key));
 
     // Save original valid signature
     std::vector<unsigned char> originalSig = msg.schnorr_sig;
-    BOOST_REQUIRE(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.VerifyAttestation());
 
     // Attempt 1: Negate the s-value (ECDSA malleability trick)
     // In Schnorr, sig = (R, s) where R is 32 bytes and s is 32 bytes
@@ -5774,26 +5709,26 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01c_signature_malleability)
         malleatedSig[i] ^= 0xFF;
     }
     msg.schnorr_sig = malleatedSig;
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
         "DEFENSE [T3-01c]: Bit-flipped s-value correctly rejected");
 
     // Attempt 2: Flip single bit in R
     malleatedSig = originalSig;
     malleatedSig[0] ^= 0x01;
     msg.schnorr_sig = malleatedSig;
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
         "DEFENSE [T3-01c]: Single bit flip in R correctly rejected");
 
     // Attempt 3: Flip single bit in s
     malleatedSig = originalSig;
     malleatedSig[32] ^= 0x01;
     msg.schnorr_sig = malleatedSig;
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
         "DEFENSE [T3-01c]: Single bit flip in s correctly rejected");
 
     // Restore original — should pass
     msg.schnorr_sig = originalSig;
-    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(msg.VerifyAttestation(),
         "SANITY: Original signature still valid after malleability attempts");
 
     BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01c]: BIP-340 Schnorr signatures are non-malleable. "
@@ -5815,26 +5750,26 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01d_wrong_oracle_id_cross_sign)
     msg.price_micro_usd = 50000;
     msg.timestamp = GetTime();
 
-    BOOST_REQUIRE(msg.SignPhase2(oracleKey));
-    BOOST_REQUIRE(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.SignAttestation(oracleKey));
+    BOOST_REQUIRE(msg.VerifyAttestation());
 
     // Tamper: change oracle_id
     msg.oracle_id = 1;
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
         "DEFENSE [T3-01d]: Changing oracle_id after signing invalidates Phase2 signature. "
-        "oracle_id is included in GetPhase2SignatureHash().");
+        "oracle_id is included in GetAttestationSignatureHash().");
 
     // Tamper: change price
     msg.oracle_id = 0;  // Restore
     uint64_t originalPrice = msg.price_micro_usd;
     msg.price_micro_usd = 100000;  // Double the price
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
         "DEFENSE [T3-01d]: Changing price after signing invalidates Phase2 signature.");
 
     // Tamper: change timestamp
     msg.price_micro_usd = originalPrice;  // Restore
     msg.timestamp += 1;
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
         "DEFENSE [T3-01d]: Changing timestamp after signing invalidates Phase2 signature.");
 
     BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01d]: All three Phase2 hash fields (oracle_id, price, timestamp) "
@@ -5843,12 +5778,8 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01d_wrong_oracle_id_cross_sign)
 
 BOOST_AUTO_TEST_CASE(redteam_t3_01e_empty_signature_isvalid_bypass)
 {
-    // ATTACK [T3-01e]: Can we bypass signature verification by submitting a message
-    // with an EMPTY signature vector? IsValid() has special handling for empty sigs
-    // (returns true for "compact format" messages).
-    //
-    // This is a known design choice for Phase 1 compact format, but we verify that
-    // validation layers properly enforce signatures when required.
+    // ATTACK [T3-01e]: Can we bypass signature verification by submitting a
+    // message with an empty signature vector?
 
     COraclePriceMessage msg;
     msg.oracle_id = 0;
@@ -5857,34 +5788,31 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01e_empty_signature_isvalid_bypass)
     msg.block_height = 1000;
     msg.nonce = 0;
 
-    // Empty signature — Phase 1 compact format trust path
+    // Empty signatures are rejected at the message layer for V1.
     msg.schnorr_sig.clear();
-    BOOST_CHECK_MESSAGE(msg.IsValid(),
-        "EXPECTED: IsValid() accepts empty-signature messages (Phase 1 compact format trust). "
-        "This is by design — compact format relies on chainparams pubkey binding at higher layers.");
+    BOOST_CHECK_MESSAGE(!msg.IsValid(),
+        "DEFENSE HOLDS: IsValid() rejects empty-signature messages. "
+        "V1 does not keep a compact unsigned oracle trust path.");
 
     // But direct Phase2 verification should fail
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(),
-        "DEFENSE [T3-01e]: VerifyPhase2() rejects empty signature (size != 64)");
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(),
+        "DEFENSE [T3-01e]: VerifyAttestation() rejects empty signature (size != 64)");
 
-    // ValidatePhaseTwoBundle explicitly skips empty-sig messages
-    // (they don't count toward valid_count)
+    // Legacy bundle validators are disabled for V1.
     COracleBundle bundle;
     bundle.messages.push_back(msg);
     bundle.epoch = 0;
     bundle.median_price_micro_usd = 50000;
     bundle.timestamp = GetTime();
 
-    // Phase 2 bundle should NOT have consensus with only empty-sig messages
     auto regTestParams = CChainParams::RegTest({});
     const Consensus::Params& params = regTestParams->GetConsensus();
-    BOOST_CHECK_MESSAGE(!OracleBundleManager::ValidatePhaseTwoBundle(bundle, params),
-        "DEFENSE [T3-01e]: Phase 2 bundle validation rejects empty-signature messages. "
-        "They don't count toward the required consensus threshold.");
+    BOOST_CHECK_MESSAGE(!OracleBundleManager::ValidateBundle(bundle, 0, params),
+        "DEFENSE [T3-01e]: Legacy bundle validation is disabled; empty signatures "
+        "cannot be promoted into an on-chain oracle bundle.");
 
-    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01e]: Empty signatures are a Phase 1 compact format artifact. "
-        "Phase 2 validation (ValidatePhaseTwoBundle) correctly ignores empty-sig messages. "
-        "P2P layer (CheckMessageSize) also rejects non-64-byte signatures.");
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-01e]: Empty signatures are rejected before "
+        "oracle data can become consensus-visible.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t3_01f_phase2_hash_field_independence)
@@ -5903,18 +5831,18 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01f_phase2_hash_field_independence)
     msg.block_height = 1000;
     msg.nonce = 42;
 
-    BOOST_REQUIRE(msg.SignPhase2(key));
-    BOOST_REQUIRE(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.SignAttestation(key));
+    BOOST_REQUIRE(msg.VerifyAttestation());
 
     // Changing block_height should NOT invalidate Phase 2 signature
     // (because block_height is NOT in Phase 2 hash)
     msg.block_height = 9999;
-    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(msg.VerifyAttestation(),
         "EXPECTED: block_height change doesn't invalidate Phase2 sig (not in hash)");
 
     // Changing nonce should NOT invalidate Phase 2 signature
     msg.nonce = 999999;
-    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(msg.VerifyAttestation(),
         "EXPECTED: nonce change doesn't invalidate Phase2 sig (not in hash)");
 
     // But Phase 1 full verification SHOULD fail (block_height and nonce are in Phase 1 hash)
@@ -5953,10 +5881,10 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01g_manual_pubkey_rebinding)
     forgedMsg.timestamp = GetTime();
 
     // Sign with attacker key
-    BOOST_REQUIRE(forgedMsg.SignPhase2(attackerKey));
+    BOOST_REQUIRE(forgedMsg.SignAttestation(attackerKey));
 
-    // Direct VerifyPhase2 passes (attacker's own key)
-    BOOST_CHECK(forgedMsg.VerifyPhase2());
+    // Direct VerifyAttestation passes (attacker's own key)
+    BOOST_CHECK(forgedMsg.VerifyAttestation());
 
     // Simulate pubkey rebinding (what P2P handler and IsValidOracleMessage do):
     // Look up authorized pubkey from chainparams for oracle_id
@@ -5969,7 +5897,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01g_manual_pubkey_rebinding)
         boundMsg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
 
         // Verification MUST fail with the real pubkey
-        BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+        BOOST_CHECK_MESSAGE(!boundMsg.VerifyAttestation(),
             "DEFENSE [T3-01g]: After rebinding pubkey from chainparams, attacker's "
             "Schnorr signature is rejected. This is the pattern used by P2P handler, "
             "IsValidOracleMessage, and ExtractOracleBundle.");
@@ -5980,7 +5908,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01g_manual_pubkey_rebinding)
         authorizedKey.MakeNewKey(true);
         COraclePriceMessage boundMsg = forgedMsg;
         boundMsg.oracle_pubkey = XOnlyPubKey(authorizedKey.GetPubKey());
-        BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+        BOOST_CHECK_MESSAGE(!boundMsg.VerifyAttestation(),
             "DEFENSE [T3-01g]: Forged message fails when verified against a different pubkey.");
     }
 
@@ -5991,12 +5919,12 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01g_manual_pubkey_rebinding)
 
 BOOST_AUTO_TEST_CASE(redteam_t3_01h_bundle_isvalid_no_rebind)
 {
-    // ATTACK [T3-01h]: COracleBundle::IsValid() verifies signatures but does NOT
-    // rebind pubkeys from chainparams. If called on a bundle with attacker-supplied
-    // pubkeys, it would pass. This is safe because all callers ensure pubkeys are
-    // bound before calling IsValid().
+    // ATTACK [T3-01h]: Legacy message-bundle validation used to verify signatures
+    // without rebinding pubkeys from chainparams. V1 disables message-bundle
+    // validation entirely; only complete MuSig2 v0x03 bundles are valid.
     //
-    // This test documents the trust boundary: callers MUST bind pubkeys.
+    // This test documents the new trust boundary: legacy message bundles must fail
+    // before pubkey rebinding can matter.
 
     CKey attackerKey;
     attackerKey.MakeNewKey(true);
@@ -6008,7 +5936,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01h_bundle_isvalid_no_rebind)
     forgedMsg.block_height = 0;
     forgedMsg.nonce = 0;
 
-    BOOST_REQUIRE(forgedMsg.SignPhase2(attackerKey));
+    BOOST_REQUIRE(forgedMsg.SignAttestation(attackerKey));
 
     COracleBundle bundle;
     bundle.messages.push_back(forgedMsg);
@@ -6016,18 +5944,9 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01h_bundle_isvalid_no_rebind)
     bundle.median_price_micro_usd = 50000;
     bundle.timestamp = GetTime();
 
-    // WARNING: bundle.IsValid() with attacker pubkey DOES pass
-    // This is NOT a bug — the function trusts its caller to bind pubkeys
-    BOOST_CHECK_MESSAGE(bundle.IsValid(1, GetTime()),
-        "INFO [T3-01h]: bundle.IsValid() passes with attacker pubkey — this is expected. "
-        "The function verifies cryptographic correctness, not authorization. "
-        "Callers (ExtractOracleBundle, P2P handler) must bind chainparams pubkeys first.");
-
-    BOOST_TEST_MESSAGE("INFO [T3-01h]: COracleBundle::IsValid() is a cryptographic check, not an "
-        "authorization check. It trusts the caller to set oracle_pubkey from chainparams. "
-        "All production code paths (P2P, block extraction, IsValidOracleMessage) do this correctly. "
-        "RISK: If a new code path calls IsValid() without binding pubkeys, it would be vulnerable. "
-        "Consider adding a chainparams pubkey verification inside IsValid() as defense-in-depth.");
+    BOOST_CHECK_MESSAGE(!bundle.IsValid(1, GetTime()),
+        "DEFENSE HOLDS [T3-01h]: COracleBundle::IsValid() rejects legacy "
+        "message bundles. V1 requires complete MuSig2 v0x03 oracle data.");
 }
 
 // ============================================================================
@@ -6037,8 +5956,8 @@ BOOST_AUTO_TEST_CASE(redteam_t3_01h_bundle_isvalid_no_rebind)
 
 BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
 {
-    // ATTACK [T3-02a]: ORACLEBUNDLE P2P handler verifies signatures using
-    // attacker-supplied pubkeys WITHOUT rebinding from chainparams.
+    // ATTACK [T3-02a]: ORACLEBUNDLE P2P handler used to verify legacy bundle
+    // signatures using attacker-supplied pubkeys without rebinding from chainparams.
     //
     // The ORACLEPRICE handler correctly rebinds:
     //   oracle_msg.price_message.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
@@ -6046,14 +5965,14 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
     // But the ORACLEBUNDLE handler does:
     //   for (const auto& msg : bundle_msg.bundle.messages) {
     //       if (!msg.schnorr_sig.empty()) {
-    //           if (!msg.VerifyPhase2() && !msg.Verify()) { ... }
+    //           if (!msg.VerifyAttestation() && !msg.Verify()) { ... }
     //       }
     //   }
     //
     // No pubkey rebinding! Attacker generates own keypair, signs messages
     // claiming any oracle_id, sets oracle_pubkey to their own key.
-    // VerifyPhase2() passes. Bundle passes P2P validation and gets RELAYED
-    // to all connected peers — P2P relay amplification attack.
+    // VerifyAttestation() passes on each individual message, but the V1 bundle
+    // path must still reject the legacy bundle as a whole.
 
     CKey attackerKey;
     attackerKey.MakeNewKey(true);
@@ -6074,7 +5993,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
         // Set attacker's pubkey
         msg.oracle_pubkey = XOnlyPubKey(attackerKey.GetPubKey());
         // Sign with attacker's key
-        BOOST_REQUIRE(msg.SignPhase2(attackerKey));
+        BOOST_REQUIRE(msg.SignAttestation(attackerKey));
         prices.push_back(msg.price_micro_usd);
         forgedBundle.messages.push_back(msg);
     }
@@ -6089,18 +6008,16 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
     bool all_sigs_pass = true;
     for (const auto& msg : forgedBundle.messages) {
         if (!msg.schnorr_sig.empty()) {
-            if (!msg.VerifyPhase2() && !msg.Verify()) {
+            if (!msg.VerifyAttestation() && !msg.Verify()) {
                 all_sigs_pass = false;
                 break;
             }
         }
     }
 
-    // BUG: All signatures pass because they're verified against attacker's pubkey
+    // Individual signatures still pass against the attacker's own embedded pubkey.
     BOOST_CHECK_MESSAGE(all_sigs_pass,
-        "BUG [T3-02a]: Forged bundle with attacker-signed messages passes P2P "
-        "signature verification because ORACLEBUNDLE handler does NOT rebind "
-        "pubkeys from chainparams before calling VerifyPhase2().");
+        "INFO [T3-02a]: Forged individual messages verify against attacker-supplied pubkeys.");
 
     // The bundle also passes consensus check
     BOOST_CHECK_MESSAGE(forgedBundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED),
@@ -6108,19 +6025,12 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02a_oraclebundle_no_pubkey_rebinding)
         "Combined with missing pubkey rebinding, this means the entire P2P "
         "validation pipeline is bypassed.");
 
-    // Bundle.IsValid also passes (it doesn't rebind either)
-    BOOST_CHECK_MESSAGE(forgedBundle.IsValid(ORACLE_CONSENSUS_REQUIRED, GetTime()),
-        "BUG [T3-02a]: bundle.IsValid() passes with attacker pubkeys — confirming "
-        "that the bundle passes ALL P2P validation checks and will be relayed.");
+    BOOST_CHECK_MESSAGE(!forgedBundle.IsValid(ORACLE_CONSENSUS_REQUIRED, GetTime()),
+        "DEFENSE HOLDS [T3-02a]: COracleBundle::IsValid() rejects legacy "
+        "message bundles even when the individual signatures verify.");
 
-    BOOST_TEST_MESSAGE("BUG [T3-02a]: ORACLEBUNDLE P2P relay amplification attack. "
-        "Attacker generates own keypair, forges bundle with 9+ messages claiming "
-        "different oracle_ids. All P2P validation passes. Bundle relayed to entire "
-        "network. Defense: IsValidOracleMessage in AddOracleMessage catches at storage "
-        "level, but relay damage is done. "
-        "FIX NEEDED: Rebind pubkeys from chainparams in ORACLEBUNDLE handler before "
-        "sig verification (same pattern as ORACLEPRICE handler). Also: only relay "
-        "bundle if at least one message was successfully stored.");
+    BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-02a]: V1 ignores deprecated ORACLEBUNDLE "
+        "P2P messages and accepts only on-chain MuSig2 v0x03 bundles.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t3_02b_isvalidoraclemessage_catches_spoofed_id)
@@ -6136,10 +6046,10 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02b_isvalidoraclemessage_catches_spoofed_id)
     spoofedMsg.price_micro_usd = 50000;
     spoofedMsg.timestamp = GetTime();
     spoofedMsg.oracle_pubkey = XOnlyPubKey(attackerKey.GetPubKey());
-    BOOST_REQUIRE(spoofedMsg.SignPhase2(attackerKey));
+    BOOST_REQUIRE(spoofedMsg.SignAttestation(attackerKey));
 
     // Direct verification passes (attacker's own key)
-    BOOST_CHECK(spoofedMsg.VerifyPhase2());
+    BOOST_CHECK(spoofedMsg.VerifyAttestation());
 
     // But after rebinding from chainparams, it should fail
     auto regTestParams = CChainParams::RegTest({});
@@ -6149,7 +6059,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02b_isvalidoraclemessage_catches_spoofed_id)
     COraclePriceMessage boundMsg = spoofedMsg;
     boundMsg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
 
-    BOOST_CHECK_MESSAGE(!boundMsg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!boundMsg.VerifyAttestation(),
         "DEFENSE [T3-02b]: After rebinding pubkey from chainparams, spoofed oracle "
         "message is rejected. IsValidOracleMessage does this for Phase Two.");
 
@@ -6240,16 +6150,16 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02e_p2p_price_handler_rebinding)
     attackerMsg.oracle_id = 0;
     attackerMsg.price_micro_usd = 1000; // Extremely low price to undercollateralize
     attackerMsg.timestamp = GetTime();
-    BOOST_REQUIRE(attackerMsg.SignPhase2(attackerKey));
+    BOOST_REQUIRE(attackerMsg.SignAttestation(attackerKey));
 
     // Without rebinding: passes (attacker's own key)
-    BOOST_CHECK(attackerMsg.VerifyPhase2());
+    BOOST_CHECK(attackerMsg.VerifyAttestation());
 
     // Simulate P2P handler rebinding to legitimate key
     attackerMsg.oracle_pubkey = XOnlyPubKey(legitimateKey.GetPubKey());
 
     // After rebinding: fails (signature doesn't match legitimate key)
-    BOOST_CHECK_MESSAGE(!attackerMsg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!attackerMsg.VerifyAttestation(),
         "DEFENSE [T3-02e]: After pubkey rebinding, attacker's signature is rejected. "
         "This is the correct behavior of the ORACLEPRICE P2P handler.");
 
@@ -6267,7 +6177,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02f_empty_sig_bundle_bypass)
     //   if (!msg.schnorr_sig.empty()) { ... verify ... }
     //
     // With empty sig, the message passes P2P sig check entirely.
-    // Then IsValidOracleMessage checks VerifyPhase2() which requires sig.size()==64.
+    // Then IsValidOracleMessage checks VerifyAttestation() which requires sig.size()==64.
 
     COraclePriceMessage emptySigMsg;
     emptySigMsg.oracle_id = 0;
@@ -6276,16 +6186,16 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02f_empty_sig_bundle_bypass)
     emptySigMsg.schnorr_sig.clear();  // Empty signature
 
     // ORACLEBUNDLE handler: empty sig → skip verification → passes P2P check
-    bool passes_p2p = emptySigMsg.schnorr_sig.empty() || emptySigMsg.VerifyPhase2();
+    bool passes_p2p = emptySigMsg.schnorr_sig.empty() || emptySigMsg.VerifyAttestation();
     BOOST_CHECK_MESSAGE(passes_p2p,
         "BUG [T3-02f]: Empty-signature message passes ORACLEBUNDLE P2P sig check "
         "because the handler skips verification for empty signatures.");
 
-    // IsValidOracleMessage (Phase Two): VerifyPhase2() requires 64-byte sig
-    bool passes_storage = emptySigMsg.VerifyPhase2();
+    // IsValidOracleMessage (Phase Two): VerifyAttestation() requires 64-byte sig
+    bool passes_storage = emptySigMsg.VerifyAttestation();
     BOOST_CHECK_MESSAGE(!passes_storage,
         "DEFENSE [T3-02f]: Empty-signature message fails IsValidOracleMessage "
-        "because VerifyPhase2() requires 64-byte Schnorr signature.");
+        "because VerifyAttestation() requires 64-byte Schnorr signature.");
 
     BOOST_TEST_MESSAGE("PARTIAL DEFENSE [T3-02f]: Empty-sig messages bypass ORACLEBUNDLE P2P "
         "sig verification (skipped entirely), but are caught at storage level. "
@@ -6332,7 +6242,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02g_unconditional_bundle_relay)
     spoofed.oracle_id = 0;
     spoofed.price_micro_usd = 50000;
     spoofed.timestamp = GetTime();
-    BOOST_REQUIRE(spoofed.SignPhase2(attackerKey));
+    BOOST_REQUIRE(spoofed.SignAttestation(attackerKey));
 
     // Storage rejects it
     bool stored = mgr.AddOracleMessage(spoofed);
@@ -6355,7 +6265,7 @@ static COraclePriceMessage MakeSignedOracleMsg(uint32_t id, uint64_t price, int6
     msg.timestamp = ts;
     msg.block_height = 0;
     msg.nonce = 0;
-    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(msg.SignAttestation(key));
     return msg;
 }
 
@@ -6745,7 +6655,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_03h_iqr_boundary_price_range)
  * valid oracle broadcast. While pending_messages dedup by oracle_id prevents
  * storage of duplicates, each mutation still:
  *   1. Passes HasOracleMessage() dedup check (different hash)
- *   2. Passes VerifyPhase2() (same Phase2 hash)
+ *   2. Passes VerifyAttestation() (same Phase2 hash)
  *   3. Gets counted by rate limiter (burns budget)
  *   4. Pollutes seen_message_hashes set
  *
@@ -6767,23 +6677,23 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04a_nonce_mutation_dedup_bypass)
     original.timestamp = now - 30;
     original.block_height = 100;
     original.nonce = 42;
-    BOOST_REQUIRE(original.SignPhase2(key));
+    BOOST_REQUIRE(original.SignAttestation(key));
 
     // Verify original is valid
-    BOOST_CHECK(original.VerifyPhase2());
+    BOOST_CHECK(original.VerifyAttestation());
 
     // Now mutate block_height and nonce — Phase2 sig should still verify
     COraclePriceMessage mutant1 = original;
     mutant1.block_height = 999;
     mutant1.nonce = 9999;
-    BOOST_CHECK_MESSAGE(mutant1.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(mutant1.VerifyAttestation(),
         "EXPLOIT: Phase2 signature still valid after block_height/nonce mutation — "
         "attacker can create unlimited 'distinct' messages from a single valid broadcast");
 
     COraclePriceMessage mutant2 = original;
     mutant2.block_height = 0;
     mutant2.nonce = std::numeric_limits<uint64_t>::max();
-    BOOST_CHECK_MESSAGE(mutant2.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(mutant2.VerifyAttestation(),
         "EXPLOIT: Phase2 signature valid with extreme nonce values");
 
     // All three messages have DIFFERENT GetSignatureHash (used for dedup)
@@ -6799,9 +6709,9 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04a_nonce_mutation_dedup_bypass)
         "All mutations produce unique dedup hashes");
 
     // But all three have the SAME Phase2 signature hash
-    uint256 phase2_orig = original.GetPhase2SignatureHash();
-    uint256 phase2_mut1 = mutant1.GetPhase2SignatureHash();
-    uint256 phase2_mut2 = mutant2.GetPhase2SignatureHash();
+    uint256 phase2_orig = original.GetAttestationSignatureHash();
+    uint256 phase2_mut1 = mutant1.GetAttestationSignatureHash();
+    uint256 phase2_mut2 = mutant2.GetAttestationSignatureHash();
 
     BOOST_CHECK_EQUAL(phase2_orig, phase2_mut1);
     BOOST_CHECK_EQUAL(phase2_orig, phase2_mut2);
@@ -6854,7 +6764,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04b_rate_limit_exhaustion_via_mutations)
     original.timestamp = now - 30;
     original.block_height = 100;
     original.nonce = 0;
-    BOOST_REQUIRE(original.SignPhase2(key));
+    BOOST_REQUIRE(original.SignAttestation(key));
 
     // Generate 100 mutations — all valid, all unique hashes
     std::set<uint256> unique_hashes;
@@ -6864,7 +6774,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04b_rate_limit_exhaustion_via_mutations)
         mutant.block_height = static_cast<int32_t>(i * 7);
 
         // Phase2 signature still valid
-        BOOST_CHECK(mutant.VerifyPhase2());
+        BOOST_CHECK(mutant.VerifyAttestation());
 
         // Unique dedup hash
         uint256 hash = mutant.GetSignatureHash();
@@ -6904,7 +6814,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04c_pending_messages_secondary_dedup)
     original.timestamp = now - 30;
     original.block_height = 100;
     original.nonce = 42;
-    BOOST_REQUIRE(original.SignPhase2(key));
+    BOOST_REQUIRE(original.SignAttestation(key));
 
     mgr.InjectTestMessage(original);
     BOOST_CHECK_EQUAL(mgr.GetPendingMessageCount(), 1);
@@ -6957,7 +6867,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04d_getoracles_no_rate_limit)
         msg.timestamp = now - 10;
         msg.block_height = 0;
         msg.nonce = 0;
-        BOOST_REQUIRE(msg.SignPhase2(keys[i]));
+        BOOST_REQUIRE(msg.SignAttestation(keys[i]));
         mgr.InjectTestMessage(msg);
     }
 
@@ -7006,7 +6916,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04e_post_restart_replay)
     recent_msg.timestamp = now - 1800;  // 30 min ago
     recent_msg.block_height = 100;
     recent_msg.nonce = 42;
-    BOOST_REQUIRE(recent_msg.SignPhase2(key));
+    BOOST_REQUIRE(recent_msg.SignAttestation(key));
 
     // After "restart", dedup is empty — message accepted
     BOOST_CHECK(!mgr.HasOracleMessage(recent_msg.GetSignatureHash()));
@@ -7019,7 +6929,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04e_post_restart_replay)
     stale_msg.timestamp = now - 7200;  // 2 hours ago
     stale_msg.block_height = 50;
     stale_msg.nonce = 0;
-    BOOST_REQUIRE(stale_msg.SignPhase2(key));
+    BOOST_REQUIRE(stale_msg.SignAttestation(key));
 
     // Stale message: IsValid will reject it (timestamp > ORACLE_MAX_AGE_SECONDS old)
     BOOST_CHECK_MESSAGE(!stale_msg.IsValid(),
@@ -7037,7 +6947,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04e_post_restart_replay)
  * oracle_id+price+timestamp). This mismatch allowed dedup bypass via field mutation.
  *
  * FIX APPLIED: OraclePriceMsg::GetHash() and AddOracleMessage now use
- * GetPhase2SignatureHash() for Phase2-signed messages. All mutations of the
+ * GetAttestationSignatureHash() for Phase2-signed messages. All mutations of the
  * same (oracle_id, price, timestamp) triple now map to the same dedup hash.
  */
 BOOST_AUTO_TEST_CASE(redteam_T3_04f_dedup_hash_fix_verified)
@@ -7054,11 +6964,11 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04f_dedup_hash_fix_verified)
     msg.timestamp = now - 30;
     msg.block_height = 100;
     msg.nonce = 42;
-    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(msg.SignAttestation(key));
 
     // GetSignatureHash still includes block_height+nonce (internal detail)
     uint256 full_hash = msg.GetSignatureHash();
-    uint256 phase2_hash = msg.GetPhase2SignatureHash();
+    uint256 phase2_hash = msg.GetAttestationSignatureHash();
     BOOST_CHECK(full_hash != phase2_hash);
 
     // FIX VERIFICATION: OraclePriceMsg::GetHash() now uses Phase2 hash for signed messages
@@ -7071,7 +6981,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04f_dedup_hash_fix_verified)
     COraclePriceMessage mutant = msg;
     mutant.nonce = 99999;
     mutant.block_height = 9999;
-    BOOST_CHECK(mutant.VerifyPhase2()); // Phase2 sig still valid
+    BOOST_CHECK(mutant.VerifyAttestation()); // Phase2 sig still valid
 
     OraclePriceMsg wrapped_mutant;
     wrapped_mutant.price_message = mutant;
@@ -7090,7 +7000,7 @@ BOOST_AUTO_TEST_CASE(redteam_T3_04f_dedup_hash_fix_verified)
     // The manager's AddOracleMessage computes Phase2 hash for the seen set
     // So after adding original, the mutation should be detected as duplicate
     // (We test via the P2P hash which matches what the manager now uses)
-    BOOST_CHECK_EQUAL(msg.GetPhase2SignatureHash(), mutant.GetPhase2SignatureHash());
+    BOOST_CHECK_EQUAL(msg.GetAttestationSignatureHash(), mutant.GetAttestationSignatureHash());
 
     mgr.Clear();
     SetMockTime(0);
@@ -7140,7 +7050,7 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, GetTime());
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        msg.SignPhase2(key);
+        msg.SignAttestation(key);
         bundle.messages.push_back(msg);
     }
     bundle.median_price_micro_usd = 50000;
@@ -7170,8 +7080,9 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
 
 BOOST_AUTO_TEST_CASE(T3_05b_update_cached_price_uses_wrong_threshold)
 {
-    // FIX VERIFIED [T3-05b]: UpdateCachedPrice now uses min_oracle_count
-    // (set from consensus.nOracleRequiredMessages during initialization)
+    // FIX VERIFIED [T3-05b]: UpdateCachedPrice no longer accepts off-chain
+    // message bundles as canonical price cache input. Only complete MuSig2 v0x03
+    // bundles may update cached_price.
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
@@ -7179,7 +7090,7 @@ BOOST_AUTO_TEST_CASE(T3_05b_update_cached_price_uses_wrong_threshold)
     // Set manager threshold to testnet value (5)
     manager.SetMinOracleCount(5);
 
-    // Create a bundle with 5 valid messages (meets 5-of-8 testnet threshold)
+    // Create a legacy message bundle with 5 valid messages.
     int32_t epoch = 5;
     COracleBundle bundle(epoch);
     for (int i = 0; i < 5; i++) {
@@ -7187,49 +7098,50 @@ BOOST_AUTO_TEST_CASE(T3_05b_update_cached_price_uses_wrong_threshold)
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, GetTime());
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        msg.SignPhase2(key);
+        msg.SignAttestation(key);
         bundle.messages.push_back(msg);
     }
     bundle.median_price_micro_usd = 50000;
 
-    // Store via UpdateBundle
+    // Store via UpdateBundle. This may retain the bundle for coordination, but
+    // it must not update the canonical price cache.
     manager.UpdateBundle(bundle);
 
-    // FIXED: UpdateCachedPrice now uses min_oracle_count (5), not ORACLE_CONSENSUS_REQUIRED (RC30: 9)
     bool updated = manager.UpdateCachedPrice(epoch);
 
-    BOOST_CHECK_MESSAGE(updated,
-        "FIXED: UpdateCachedPrice succeeds with 5 messages because "
-        "it now uses min_oracle_count (5) from chainparams, not hardcoded 8");
+    BOOST_CHECK_MESSAGE(!updated,
+        "DEFENSE HOLDS: UpdateCachedPrice rejects legacy message bundles; "
+        "canonical price cache updates require complete MuSig2 v0x03 bundles.");
 
     manager.Clear();
 }
 
 BOOST_AUTO_TEST_CASE(T3_05c_validate_oracle_bundle_wrong_threshold)
 {
-    // FIX VERIFIED [T3-05c]: ValidateOracleBundle now uses params.nOracleRequiredMessages
+    // FIX VERIFIED [T3-05c]: ValidateOracleBundle no longer accepts legacy
+    // message bundles; V1 requires a MuSig2 v0x03 aggregate signature.
     const Consensus::Params& params = Params().GetConsensus();
     int required = params.nOracleRequiredMessages;
 
-    // Create a bundle with exactly the required messages for this network
+    // Create a legacy message bundle with exactly the old required message count.
     int32_t epoch = GetCurrentEpoch(1000);
     COracleBundle bundle(epoch);
+    bundle.version = 2;
     for (int i = 0; i < required; i++) {
         CKey key;
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, GetTime());
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        msg.SignPhase2(key);
+        msg.SignAttestation(key);
         bundle.messages.push_back(msg);
     }
     bundle.median_price_micro_usd = 50000;
 
-    // FIXED: ValidateOracleBundle now passes params.nOracleRequiredMessages to HasConsensus
     bool valid = OracleDataValidator::ValidateOracleBundle(bundle, epoch, params);
 
-    BOOST_CHECK_MESSAGE(valid,
-        "FIXED: ValidateOracleBundle accepts " << required << "-message bundle because "
-        "it now uses params.nOracleRequiredMessages instead of hardcoded ORACLE_CONSENSUS_REQUIRED");
+    BOOST_CHECK_MESSAGE(!valid,
+        "DEFENSE HOLDS: ValidateOracleBundle rejects legacy " << required
+        << "-message bundles. V1 accepts only MuSig2 v0x03 oracle bundles.");
 }
 
 BOOST_AUTO_TEST_CASE(T3_05d_net_processing_oraclebundle_wrong_threshold)
@@ -7249,7 +7161,7 @@ BOOST_AUTO_TEST_CASE(T3_05d_net_processing_oraclebundle_wrong_threshold)
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, GetTime());
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        msg.SignPhase2(key);
+        msg.SignAttestation(key);
         bundle.messages.push_back(msg);
     }
     bundle.median_price_micro_usd = 50000;
@@ -7263,29 +7175,27 @@ BOOST_AUTO_TEST_CASE(T3_05d_net_processing_oraclebundle_wrong_threshold)
         "and legitimate oracle peers are not banned.");
 }
 
-BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_uses_coinbase_epoch)
+BOOST_AUTO_TEST_CASE(T3_05e_legacy_extraction_rejected)
 {
-    // Phase 2 ExtractOracleBundle must bind the bundle epoch to the coinbase
-    // height. ValidatePhaseTwoBundle uses bundle.epoch to select the active
-    // oracle roster, so hardcoding epoch 0 would let the epoch-0 roster validate
-    // oracle data in later epochs.
+    // V1 no longer parses legacy v0x02 oracle data at all. A v0x02 coinbase
+    // output must fail closed before any epoch/roster selection can matter.
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
 
-    // Create a Phase 2 formatted coinbase with oracle data
+    // Create a legacy v0x02 formatted coinbase with oracle data.
     CMutableTransaction coinbase_tx;
     coinbase_tx.vin.resize(1);
     coinbase_tx.vin[0].scriptSig << CScriptNum(1000); // BIP34 height
 
-    // Create 4 oracle messages for Phase 2 bundle
+    // Create 4 oracle messages in the old serialized layout.
     std::vector<CKey> keys;
     uint64_t consensus_price = 50000;
     int64_t timestamp = GetTime();
 
     CScript oracle_script;
     oracle_script << OP_RETURN << OP_ORACLE;
-    oracle_script << std::vector<unsigned char>{0x02}; // Phase Two version
+    oracle_script << std::vector<unsigned char>{0x02}; // legacy version
 
     std::vector<unsigned char> p2_data;
     int num_msgs = 4;
@@ -7312,7 +7222,7 @@ BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_uses_coinbase_epoch)
         // Create message and sign for valid sig
         COraclePriceMessage msg(i, consensus_price, timestamp);
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        msg.SignPhase2(key);
+        msg.SignAttestation(key);
 
         if (msg.schnorr_sig.size() == 64) {
             p2_data.insert(p2_data.end(), msg.schnorr_sig.begin(), msg.schnorr_sig.end());
@@ -7333,14 +7243,10 @@ BOOST_AUTO_TEST_CASE(T3_05e_phase2_extraction_uses_coinbase_epoch)
     COracleBundle extracted;
     bool ok = manager.ExtractOracleBundle(tx, extracted);
 
-    BOOST_CHECK(ok);
-    BOOST_CHECK_EQUAL(extracted.messages.size(), (size_t)num_msgs);
-
-    const int32_t expected_epoch = GetCurrentEpoch(1000);
-    BOOST_CHECK_MESSAGE(extracted.epoch == expected_epoch,
-        "Phase 2 ExtractOracleBundle must derive the bundle epoch from the "
-        "coinbase height so ValidatePhaseTwoBundle checks the correct active "
-        "oracle roster. got=" << extracted.epoch << " expected=" << expected_epoch);
+    BOOST_CHECK_MESSAGE(!ok,
+        "DEFENSE HOLDS: ExtractOracleBundle rejects legacy v0x02 oracle output. "
+        "V1 block data must be MuSig2 v0x03.");
+    BOOST_CHECK(extracted.messages.empty());
 
     manager.Clear();
 }
@@ -7456,53 +7362,40 @@ BOOST_AUTO_TEST_CASE(redteam_T3_06c_convert_truncation_bias)
     // Should be 1000000 if properly rounded
     BOOST_CHECK(result3 == 999999 || result3 == 1000000); // Truncation vs rounding
 
-    // FINDING (LOW): Boundary — exactly $100 passes the > 100 check
-    CAmount result4 = fetcher.ConvertToMicroUSD(100.0);
-    // if (price_usd <= 0 || price_usd > 100) return 0;
-    // 100.0 > 100 is FALSE, so 100.0 passes the check!
-    // This means $100/DGB is ACCEPTED — extremely unrealistic for DGB
-    BOOST_CHECK_EQUAL(result4, 100000000); // $100 exactly accepted (100M μUSD)
+    // Wave 11 (DD-FA-SEC-009): central cap tightened from $100 to $10 so every
+    // fetcher fails closed even if a per-fetcher gate is missing. The new
+    // boundary is `> 10` rejected, exactly $10 accepted.
+    CAmount result4 = fetcher.ConvertToMicroUSD(10.0);
+    BOOST_CHECK_EQUAL(result4, 10000000); // $10 exactly accepted (10M μUSD)
+    CAmount result5 = fetcher.ConvertToMicroUSD(10.01);
+    BOOST_CHECK_EQUAL(result5, 0); // Just above cap rejected
 }
 
 /**
- * T3-06d: ATTACK — Inconsistent price range caps across fetchers
+ * T3-06d: Wave 11 (DD-FA-SEC-009) — every fetcher now uses the $10 cap
  *
- * ConvertToMicroUSD base function: max $100
- * Per-fetcher validation (KuCoin, Gate.io, HTX, Crypto.com): max $10
- * No per-fetcher validation (Binance, CoinGecko): no additional cap
+ * Pre-fix: ConvertToMicroUSD allowed up to $100 while six fetchers gated at
+ * $10 post-conversion, so a compromised endpoint could feed up to ~$99.99
+ * through Binance/Coinbase/Kraken/Messari/CoinGecko.
  *
- * If DGB price reaches $15, Binance and CoinGecko report it but
- * KuCoin/Gate.io/HTX/Crypto.com reject it → only 2 sources remain.
- * With min_required=3 in node.cpp, oracle fails entirely.
- * With min_required=2 (default header), no outlier filtering on 2 sources.
+ * Post-fix: the central helper itself rejects `> $10` so every fetcher fails
+ * closed without per-fetcher edits. DGB historic ATH (~$0.18) sits ~50x below
+ * the cap; if/when the network needs a higher ceiling it will be a chainparams
+ * change reviewed at protocol level.
  */
 BOOST_AUTO_TEST_CASE(redteam_T3_06d_inconsistent_price_range_caps)
 {
     using namespace ExchangeAPI;
 
-    // Verify base ConvertToMicroUSD accepts up to $100
     BinanceFetcher base_fetcher;
-    CAmount high_price = base_fetcher.ConvertToMicroUSD(15.0); // $15/DGB
-    BOOST_CHECK_EQUAL(high_price, 15000000); // Base accepts it
+    BOOST_CHECK_EQUAL(base_fetcher.ConvertToMicroUSD(10.0), 10000000); // exactly $10 accepted
+    BOOST_CHECK_EQUAL(base_fetcher.ConvertToMicroUSD(10.01), 0); // just above cap rejected
+    BOOST_CHECK_EQUAL(base_fetcher.ConvertToMicroUSD(15.0), 0); // previously accepted
+    BOOST_CHECK_EQUAL(base_fetcher.ConvertToMicroUSD(99.99), 0); // previously accepted
+    BOOST_CHECK_EQUAL(base_fetcher.ConvertToMicroUSD(100.01), 0);
 
-    CAmount very_high = base_fetcher.ConvertToMicroUSD(99.99);
-    BOOST_CHECK(very_high > 0); // Base accepts $99.99
-
-    CAmount too_high = base_fetcher.ConvertToMicroUSD(100.01);
-    BOOST_CHECK_EQUAL(too_high, 0); // Base rejects > $100
-
-    // The per-fetcher range checks (in FetchPrice) use $0.0001 to $10 range
-    // for KuCoin, Gate.io, HTX, Crypto.com. If DGB reaches $15:
-    // - Binance: returns 15000000 (no per-fetcher check beyond ConvertToMicroUSD)
-    // - CoinGecko: returns 15000000 (no per-fetcher check)
-    // - KuCoin: returns 0 (per-fetcher rejects > $10 = 10000000 μUSD)
-    // - Gate.io: returns 0
-    // - HTX: returns 0
-    // - Crypto.com: returns 0
-    // Only 2 valid sources → fails min_required_sources=3 → oracle returns 0
-    // Result: Oracle completely breaks if DGB exceeds $10
-    // FINDING (LOW): 4 of 6 fetchers have $10 cap, 2 have $100 cap.
-    // All should use consistent range, or range should be configurable.
+    // All fetchers now share the central cap, so the previous "Binance and
+    // CoinGecko accept $15 but KuCoin et al. reject" disagreement is gone.
 }
 
 /**
@@ -7890,8 +7783,8 @@ BOOST_AUTO_TEST_CASE(redteam_T4_01d_lock_tier_boundary_values)
     {
         int64_t lockBlocks = DigiDollar::LockDaysToBlocks(999999);
         int ratio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, regTestParams->GetDigiDollarParams());
-        // Anything beyond 10 years should map to 200% (the best ratio)
-        BOOST_CHECK_EQUAL(ratio, 200);
+        // V1 canonical tiers only: anything beyond the 10-year exact tier rejects.
+        BOOST_CHECK_EQUAL(ratio, 0);
     }
 }
 
@@ -7963,22 +7856,10 @@ BOOST_AUTO_TEST_CASE(redteam_T4_01f_importdigidollaraddress_noop)
     BOOST_CHECK(true); // Documented finding
 }
 
-BOOST_AUTO_TEST_CASE(redteam_T4_01g_submitoracleprice_hardcoded_bounds)
+BOOST_AUTO_TEST_CASE(redteam_T4_01g_legacy_oracle_price_rpc_removed)
 {
-    // FINDING (LOW): submitoracleprice RPC hardcodes oracle_id upper bound
-    // to 6 (if oracle_id > 6) instead of using ORACLE_TOTAL_COUNT.
-    //
-    // This means:
-    // 1. If regtest ORACLE_TOTAL_COUNT changes, the RPC won't match
-    // 2. The constant is manually maintained instead of using the config
-    //
-    // Verify the current discrepancy:
-    auto regTestParams = CChainParams::RegTest({});
-    int totalOracles = regTestParams->GetConsensus().nOracleRequiredMessages;
-    // The RPC hardcodes 6, but ORACLE_TOTAL_COUNT may differ
-    // This is regtest-only so low severity, but should use the constant
     BOOST_CHECK_MESSAGE(true,
-        "submitoracleprice uses hardcoded 'oracle_id > 6' check instead of ORACLE_TOTAL_COUNT");
+        "V1 removed the manual individual oracle price RPC; regtest mock pricing now publishes MuSig2 bundles");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_T4_01h_dd_amount_int64_boundaries)
@@ -9415,7 +9296,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_02d_normal_tx_dd_extraction_works)
 // VULNERABILITY: The Phase 2 on-chain format stores ONE consensus price and
 // ONE timestamp for all oracles. But each oracle signs H(oracle_id,
 // THEIR_price, THEIR_timestamp). After extraction from on-chain data,
-// VerifyPhase2() is called with the consensus price/timestamp, producing a
+// VerifyAttestation() is called with the consensus price/timestamp, producing a
 // DIFFERENT hash than what the oracle actually signed. Signatures fail.
 //
 // Impact: Phase 2 multi-oracle verification is fundamentally broken when
@@ -9446,8 +9327,8 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03a_phase2_consensus_price_sig_mismatch)
         msg.price_micro_usd = individual_prices[i];
         msg.timestamp = individual_timestamps[i];
         msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
-        BOOST_CHECK(msg.SignPhase2(oracle_keys[i]));
-        BOOST_CHECK(msg.VerifyPhase2()); // Sig verifies against individual values
+        BOOST_CHECK(msg.SignAttestation(oracle_keys[i]));
+        BOOST_CHECK(msg.VerifyAttestation()); // Sig verifies against individual values
         signed_messages.push_back(msg);
     }
 
@@ -9478,7 +9359,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03a_phase2_consensus_price_sig_mismatch)
     int valid_count = 0;
     int fail_count = 0;
     for (const auto& msg : bundle.messages) {
-        if (msg.VerifyPhase2()) {
+        if (msg.VerifyAttestation()) {
             valid_count++;
         } else {
             fail_count++;
@@ -9515,7 +9396,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03a_phase2_consensus_price_sig_mismatch)
             << " ts=" << individual_timestamps[i]
             << " | extracted price=" << consensus_price
             << " ts=" << consensus_timestamp
-            << " | verify=" << bundle.messages[i].VerifyPhase2());
+            << " | verify=" << bundle.messages[i].VerifyAttestation());
     }
 }
 
@@ -9524,7 +9405,8 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03a_phase2_consensus_price_sig_mismatch)
 BOOST_AUTO_TEST_CASE(redteam_t5_03b_phase2_identical_prices_verify_ok)
 {
     // This is the MOCK scenario — all oracles use same price and timestamp
-    // This is what happens in MockOracleManager::CreateMockBundle
+    // This is what legacy individual-message bundle creation did before V1
+    // moved on-chain oracle data to MuSig2-only bundles.
     std::vector<CKey> oracle_keys(5);
     for (int i = 0; i < 5; i++) {
         oracle_keys[i].MakeNewKey(true);
@@ -9545,14 +9427,14 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03b_phase2_identical_prices_verify_ok)
         msg.price_micro_usd = shared_price;
         msg.timestamp = shared_timestamp;
         msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
-        BOOST_CHECK(msg.SignPhase2(oracle_keys[i]));
+        BOOST_CHECK(msg.SignAttestation(oracle_keys[i]));
         bundle.messages.push_back(msg);
     }
 
     // All signatures verify because price and timestamp match exactly
     int valid_count = 0;
     for (const auto& msg : bundle.messages) {
-        if (msg.VerifyPhase2()) valid_count++;
+        if (msg.VerifyAttestation()) valid_count++;
     }
 
     BOOST_CHECK_EQUAL(valid_count, 5);
@@ -9574,15 +9456,15 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03c_phase2_one_microusd_breaks_sig)
     signed_msg.price_micro_usd = 50000;
     signed_msg.timestamp = ts;
     signed_msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    BOOST_CHECK(signed_msg.SignPhase2(key));
-    BOOST_CHECK(signed_msg.VerifyPhase2());
+    BOOST_CHECK(signed_msg.SignAttestation(key));
+    BOOST_CHECK(signed_msg.VerifyAttestation());
 
     // After extraction, consensus price is 50001 (just 1 micro-USD off)
     COraclePriceMessage extracted_msg = signed_msg;
     extracted_msg.price_micro_usd = 50001;  // 1 micro-USD = $0.000001 difference
 
     // Signature FAILS — hash is completely different due to Schnorr/SHA256
-    BOOST_CHECK_MESSAGE(!extracted_msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!extracted_msg.VerifyAttestation(),
         "CONFIRMED: Even 1 micro-USD price difference ($0.000001) invalidates "
         "the Schnorr signature. Phase 2 on-chain verification is fundamentally "
         "broken for realistic multi-price scenarios.");
@@ -9600,14 +9482,14 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03d_phase2_one_second_breaks_sig)
     signed_msg.price_micro_usd = 50000;
     signed_msg.timestamp = 1707000000;
     signed_msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    BOOST_CHECK(signed_msg.SignPhase2(key));
-    BOOST_CHECK(signed_msg.VerifyPhase2());
+    BOOST_CHECK(signed_msg.SignAttestation(key));
+    BOOST_CHECK(signed_msg.VerifyAttestation());
 
     // After extraction, consensus timestamp is T+1 (1 second off)
     COraclePriceMessage extracted_msg = signed_msg;
     extracted_msg.timestamp = 1707000001;  // Just 1 second later
 
-    BOOST_CHECK_MESSAGE(!extracted_msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(!extracted_msg.VerifyAttestation(),
         "CONFIRMED: Even 1 second timestamp difference invalidates the Schnorr "
         "signature. Since each oracle calls GetTime() independently, timestamps "
         "will never match exactly across oracles.");
@@ -9639,8 +9521,8 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03e_phase2_full_roundtrip_different_prices)
         msg.price_micro_usd = prices[i];
         msg.timestamp = base_time + i;  // Each oracle at different time
         msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
-        BOOST_CHECK(msg.SignPhase2(oracle_keys[i]));
-        BOOST_CHECK(msg.VerifyPhase2());  // Individual sig verifies
+        BOOST_CHECK(msg.SignAttestation(oracle_keys[i]));
+        BOOST_CHECK(msg.VerifyAttestation());  // Individual sig verifies
         bundle.messages.push_back(msg);
     }
 
@@ -9674,7 +9556,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03e_phase2_full_roundtrip_different_prices)
         // Now verify — should fail for oracles that didn't sign the consensus values
         int valid_count = 0;
         for (const auto& msg : bundle.messages) {
-            if (msg.VerifyPhase2()) valid_count++;
+            if (msg.VerifyAttestation()) valid_count++;
         }
 
         BOOST_CHECK_MESSAGE(valid_count < 4,
@@ -9708,7 +9590,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_03e_phase2_full_roundtrip_different_prices)
         // Verify signatures on extracted bundle
         int valid_count = 0;
         for (const auto& msg : extracted_bundle.messages) {
-            if (msg.VerifyPhase2()) valid_count++;
+            if (msg.VerifyAttestation()) valid_count++;
         }
 
         BOOST_CHECK_MESSAGE(valid_count < 4,
@@ -10088,7 +9970,9 @@ BOOST_AUTO_TEST_CASE(redteam_t5_05b_block_timestamp_manipulation_oracle_expiry)
     int64_t now = GetTime();
     int64_t oracle_timestamp = now - 4200; // 70 minutes ago
 
-    COraclePriceMessage msg(0, 6500, oracle_timestamp);
+    CKey key;
+    key.MakeNewKey(true);
+    COraclePriceMessage msg = MakeSignedOracleMsg(0, 6500, oracle_timestamp, key);
 
     // Validate with real time — should FAIL (message is 70 min old, max is 60 min)
     BOOST_CHECK_MESSAGE(!msg.IsValid(now),
@@ -10124,7 +10008,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_05b_block_timestamp_manipulation_oracle_expiry)
     // The real concern: oracle 65 minutes old with 30-min-old MTP
     int64_t expired_oracle_ts = now - 3900; // 65 min ago (5 min past expiry)
     BOOST_CHECK(!msg.IsValid(now)); // Expired with real time
-    COraclePriceMessage expired_msg(0, 6500, expired_oracle_ts);
+    COraclePriceMessage expired_msg = MakeSignedOracleMsg(0, 6500, expired_oracle_ts, key);
     BOOST_CHECK(!expired_msg.IsValid(now)); // Expired with real time
 
     // With slow MTP: oracle_age = (now-1800) - (now-3900) = 2100 < 3600 → VALID!
@@ -10141,7 +10025,9 @@ BOOST_AUTO_TEST_CASE(redteam_t5_05c_forward_timestamp_increases_oracle_age)
     int64_t now = GetTime();
     int64_t oracle_timestamp = now - 3000; // 50 minutes ago (valid)
 
-    COraclePriceMessage msg(0, 6500, oracle_timestamp);
+    CKey key;
+    key.MakeNewKey(true);
+    COraclePriceMessage msg = MakeSignedOracleMsg(0, 6500, oracle_timestamp, key);
 
     // Normal validation: age = 3000 < 3600 → VALID
     BOOST_CHECK(msg.IsValid(now));
@@ -10235,25 +10121,28 @@ BOOST_AUTO_TEST_CASE(redteam_t5_05f_oracle_future_timestamp_tolerance)
     int64_t now = GetTime();
 
     // Oracle message 59 seconds in the future (within 60-second tolerance)
-    COraclePriceMessage msg_ok(0, 6500, now + 59);
+    CKey key;
+    key.MakeNewKey(true);
+
+    COraclePriceMessage msg_ok = MakeSignedOracleMsg(0, 6500, now + 59, key);
     BOOST_CHECK_MESSAGE(msg_ok.IsValid(now),
         "Oracle message 59 seconds in the future is accepted (within 60s tolerance).");
 
     // Oracle message 61 seconds in the future (beyond tolerance)
-    COraclePriceMessage msg_future(0, 6500, now + 61);
+    COraclePriceMessage msg_future = MakeSignedOracleMsg(0, 6500, now + 61, key);
     BOOST_CHECK_MESSAGE(!msg_future.IsValid(now),
         "DEFENSE HOLDS: Oracle message 61 seconds in the future is correctly rejected.");
 
     // Oracle message at exactly ORACLE_MAX_AGE_SECONDS boundary
     // IsValid uses strict <: timestamp < current_time - MAX_AGE
     // So timestamp == current_time - MAX_AGE is NOT rejected (boundary is inclusive)
-    COraclePriceMessage msg_boundary(0, 6500, now - ORACLE_MAX_AGE_SECONDS);
+    COraclePriceMessage msg_boundary = MakeSignedOracleMsg(0, 6500, now - ORACLE_MAX_AGE_SECONDS, key);
     BOOST_CHECK_MESSAGE(msg_boundary.IsValid(now),
         "Oracle message at exact expiry boundary (3600s) is accepted "
         "(uses strict < comparison: timestamp < current_time - MAX_AGE, so boundary is inclusive).");
 
     // Oracle message 1 second past expiry
-    COraclePriceMessage msg_expired(0, 6500, now - ORACLE_MAX_AGE_SECONDS - 1);
+    COraclePriceMessage msg_expired = MakeSignedOracleMsg(0, 6500, now - ORACLE_MAX_AGE_SECONDS - 1, key);
     BOOST_CHECK_MESSAGE(!msg_expired.IsValid(now),
         "DEFENSE HOLDS: Oracle message 1 second past expiry (3601s old) is rejected.");
 }
@@ -10500,7 +10389,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_06e_hardcoded_oracle_defaults)
     //       return 8; // Conservative estimate until proper integration
     //   }
     //
-    // GetLastOraclePrice() defaults to 50 cents if no volatility data:
+    // Historical GetLastOraclePrice() defaulted to 50 cents if no volatility data:
     //   CAmount SystemHealthMonitor::GetLastOraclePrice() {
     //       ...
     //       return 50; // Default $0.50 per DGB (50 cents)
@@ -14569,7 +14458,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02a_forged_messages_rejected_before_rate_limit)
     // Simulate what happens in net_processing.cpp:
     // 1. Attacker sends message with oracle_id=0, random signature
     // 2. P2P handler: binds pubkey from chainparams (Step 2.5)
-    // 3. VerifyPhase2() fails because signature doesn't match authorized pubkey
+    // 3. VerifyAttestation() fails because signature doesn't match authorized pubkey
     // 4. Misbehaving(20) applied → peer disconnected after 5 failures
     // 5. Rate limit counter is NEVER incremented
 
@@ -14578,24 +14467,24 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02a_forged_messages_rejected_before_rate_limit)
     forged_msg.oracle_id = 0;
     forged_msg.price_micro_usd = 5000000; // $5.00
     forged_msg.timestamp = GetTime();
-    // Leave schnorr_sig empty — will fail VerifyPhase2
+    // Leave schnorr_sig empty — will fail VerifyAttestation
 
-    // Empty sig: VerifyPhase2 fails (size != 64)
-    BOOST_CHECK(!forged_msg.VerifyPhase2());
+    // Empty sig: VerifyAttestation fails (size != 64)
+    BOOST_CHECK(!forged_msg.VerifyAttestation());
     // NOTE: IsValid() returns TRUE for empty sig (compact format path).
     // This is by design — compact format messages are trusted via chainparams.
-    // The P2P handler uses VerifyPhase2() || Verify() explicitly, not IsValid().
+    // The P2P handler uses VerifyAttestation() || Verify() explicitly, not IsValid().
 
     // Random 64-byte signature also fails
     forged_msg.schnorr_sig.resize(64);
     // Fill with random data (GetRandBytes max 32 bytes per call)
     GetRandBytes(Span<unsigned char>(forged_msg.schnorr_sig.data(), 32));
     GetRandBytes(Span<unsigned char>(forged_msg.schnorr_sig.data() + 32, 32));
-    // Need a valid pubkey for VerifyPhase2 to even attempt verification
+    // Need a valid pubkey for VerifyAttestation to even attempt verification
     CKey random_key;
     random_key.MakeNewKey(true);
     forged_msg.oracle_pubkey = XOnlyPubKey(random_key.GetPubKey());
-    BOOST_CHECK(!forged_msg.VerifyPhase2()); // Wrong key, wrong sig
+    BOOST_CHECK(!forged_msg.VerifyAttestation()); // Wrong key, wrong sig
 
     // The P2P handler rebinds pubkey from chainparams (Step 2.5).
     // Even if attacker sets oracle_pubkey to their own key and signs correctly,
@@ -14607,8 +14496,8 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02a_forged_messages_rejected_before_rate_limit)
     self_signed.oracle_id = 0;
     self_signed.price_micro_usd = 5000000;
     self_signed.timestamp = GetTime();
-    BOOST_CHECK(self_signed.SignPhase2(attacker_key)); // Signs with attacker key
-    BOOST_CHECK(self_signed.VerifyPhase2()); // Passes with attacker's pubkey!
+    BOOST_CHECK(self_signed.SignAttestation(attacker_key)); // Signs with attacker key
+    BOOST_CHECK(self_signed.VerifyAttestation()); // Passes with attacker's pubkey!
 
     // Now simulate pubkey rebinding (what P2P handler does at Step 2.5):
     // Replace pubkey with chainparams authorized key
@@ -14616,7 +14505,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02a_forged_messages_rejected_before_rate_limit)
     const OracleNodeInfo* oracle_config = params.GetOracleNode(0);
     if (oracle_config) {
         self_signed.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
-        BOOST_CHECK(!self_signed.VerifyPhase2()); // NOW FAILS — signature doesn't match authorized key
+        BOOST_CHECK(!self_signed.VerifyAttestation()); // NOW FAILS — signature doesn't match authorized key
     }
 
     // Even without chainparams (testnet may not have oracle config),
@@ -14691,7 +14580,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02b_sybil_connections_rate_limit_multiplication)
         msg.oracle_id = 0;
         msg.price_micro_usd = 5000000 + (i * 1000); // Slightly different prices
         msg.timestamp = base_time + i; // Each 1 second newer
-        msg.SignPhase2(oracle_key);
+        msg.SignAttestation(oracle_key);
         msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
 
         bool added = manager.AddOracleMessage(msg);
@@ -14755,7 +14644,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02c_seen_hashes_overflow_and_dedup_bypass)
         msg.oracle_id = 0;
         msg.price_micro_usd = 5000000;
         msg.timestamp = base_time + i; // Range: [now-2200, now-101], all in past within 3600s
-        msg.SignPhase2(test_key);
+        msg.SignAttestation(test_key);
         msg.oracle_pubkey = XOnlyPubKey(test_key.GetPubKey());
         if (manager.AddOracleMessage(msg)) {
             if (msg.timestamp > latest_timestamp) {
@@ -14786,7 +14675,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02c_seen_hashes_overflow_and_dedup_bypass)
     old_msg.oracle_id = 0;
     old_msg.price_micro_usd = 5000000;
     old_msg.timestamp = base_time; // Original timestamp (hash likely evicted)
-    old_msg.SignPhase2(test_key);
+    old_msg.SignAttestation(test_key);
     old_msg.oracle_pubkey = XOnlyPubKey(test_key.GetPubKey());
 
     bool replayed = manager.AddOracleMessage(old_msg);
@@ -14884,7 +14773,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02e_compromised_oracle_median_manipulation)
         msg.oracle_id = i;
         msg.price_micro_usd = 5000000;
         msg.timestamp = now;
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
         manager.InjectTestMessage(msg); // Bypass validation for testing
     }
@@ -14895,7 +14784,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02e_compromised_oracle_median_manipulation)
         msg.oracle_id = i;
         msg.price_micro_usd = 100000000; // $100
         msg.timestamp = now;
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
         manager.InjectTestMessage(msg);
     }
@@ -14981,13 +14870,13 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
     msg.oracle_id = 0;
     msg.price_micro_usd = 5000000;
     msg.timestamp = GetTime();
-    msg.SignPhase2(test_key);
+    msg.SignAttestation(test_key);
     msg.oracle_pubkey = XOnlyPubKey(test_key.GetPubKey());
     manager.AddOracleMessage(msg);
 
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
 
-    // With Phase 3 active (regtest nDigiDollarPhase3Height=0), AddOracleBundleToBlock
+    // With Phase 3 active (regtest nDigiDollarMuSig2Height=0), AddOracleBundleToBlock
     // takes the MuSig2 path. Without a complete MuSig2 session, bundle creation
     // returns false — this is correct behavior (no session = no bundle).
     CMutableTransaction coinbase;
@@ -16216,7 +16105,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_02a_inject_bypasses_stale_purge)
     // DESIGN GAP: InjectTestMessage (and by extension AddOracleBundleToBlock's
     // direct read of pending_messages) does NOT purge stale entries.
     // The stale purge ONLY runs inside AddOracleMessage(), which requires
-    // valid Schnorr signatures (IsValidOracleMessage -> VerifyPhase2).
+    // valid Schnorr signatures (IsValidOracleMessage -> VerifyAttestation).
     BOOST_TEST_MESSAGE("T9-02a: InjectTestMessage bypasses stale purge — stale messages persist");
 
     OracleBundleManager manager;
@@ -16672,10 +16561,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_02f_stale_purge_boundary_exact_3600s)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_02g_cached_price_stale_after_threshold_drop)
 {
-    // VERIFY: When oracle count drops below threshold, cached_price becomes stale.
-    // Use UpdateBundle() to set cached_price (bypasses sig requirement), then
-    // test what happens when consensus drops below threshold.
-    BOOST_TEST_MESSAGE("T9-02g: cached_price staleness when oracle count drops below threshold");
+    // VERIFY: Legacy message bundles can no longer seed cached_price, so a drop
+    // below threshold cannot leave a fresh non-MuSig2 price in the canonical cache.
+    BOOST_TEST_MESSAGE("T9-02g: legacy message bundle cannot seed cached_price");
 
     OracleBundleManager manager;
     manager.SetEnabled(true);
@@ -16683,7 +16571,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_02g_cached_price_stale_after_threshold_drop)
 
     int64_t now = GetTime();
 
-    // Phase 1: Create bundle with 5 oracles — sets cached_price via UpdateBundle
+    // Create a legacy message bundle with 5 oracles.
     COracleBundle full_bundle;
     full_bundle.epoch = 1;
     for (uint32_t i = 0; i < 5; i++) {
@@ -16695,17 +16583,15 @@ BOOST_AUTO_TEST_CASE(redteam_t9_02g_cached_price_stale_after_threshold_drop)
     }
     full_bundle.median_price_micro_usd = 5000;
 
-    // UpdateBundle sets cached_price when HasConsensus is true
+    // UpdateBundle must not set cached_price for legacy message bundles.
     bool updated = manager.UpdateBundle(full_bundle);
     BOOST_CHECK(updated);
 
     CAmount price_with_consensus = manager.GetLatestPrice();
-    BOOST_CHECK(price_with_consensus > 0);
-    BOOST_CHECK_EQUAL(price_with_consensus, 5000);
-    BOOST_TEST_MESSAGE("  With 5 oracles: price=" << price_with_consensus << " \xE2\x9C\x85");
+    BOOST_CHECK_EQUAL(price_with_consensus, 0);
+    BOOST_TEST_MESSAGE("  Legacy message bundle did not seed cached_price");
 
-    // Phase 2: Oracles 3,4 go offline. Inject only 3 fresh messages.
-    // cached_price stays frozen because no new consensus is reached.
+    // Oracles 3,4 go offline. Inject only 3 fresh messages.
     manager.ClearPendingMessages();
     for (uint32_t i = 0; i < 3; i++) {
         COraclePriceMessage msg;
@@ -16718,26 +16604,13 @@ BOOST_AUTO_TEST_CASE(redteam_t9_02g_cached_price_stale_after_threshold_drop)
     // 3 < 5 => no consensus possible
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 3u);
 
-    // cached_price is still 5000 (set by UpdateBundle), and last_update_time
-    // is recent (set within this test), so GetLatestPrice still returns old price
+    // cached_price remains empty because only MuSig2 v0x03 bundles are canonical.
     CAmount price_below_threshold = manager.GetLatestPrice();
 
-    // KEY FINDING: The old (higher) price is still returned because:
-    // 1. cached_price = 5000 (from Phase 1 consensus)
-    // 2. last_update_time = now (recent, within ORACLE_MAX_AGE_SECONDS)
-    // 3. No mechanism to invalidate cached_price when consensus drops
-    //
-    // In production: if 2 oracles go offline, the remaining 3 cannot update
-    // cached_price. The old price persists for up to ORACLE_MAX_AGE_SECONDS.
-    // If the market crashed, minting uses the OLD higher price = less collateral!
-    BOOST_CHECK_EQUAL(price_below_threshold, 5000);
+    BOOST_CHECK_EQUAL(price_below_threshold, 0);
 
     BOOST_TEST_MESSAGE("  With 3 oracles (below threshold): price=" << price_below_threshold);
-    BOOST_TEST_MESSAGE("  Old price 5000 still used despite only 3/5 oracles reporting \xE2\x9A\xA0\xEF\xB8\x8F");
-    BOOST_TEST_MESSAGE("  DESIGN GAP: No mechanism to invalidate cached_price when");
-    BOOST_TEST_MESSAGE("  consensus drops below threshold. Window: up to "
-                       << ORACLE_MAX_AGE_SECONDS << "s of stale exposure");
-    BOOST_TEST_MESSAGE("  In a market crash, minting uses stale high price = less collateral \xE2\x9A\xA0\xEF\xB8\x8F");
+    BOOST_TEST_MESSAGE("  DEFENSE HOLDS: no non-MuSig2 cached price is available");
 }
 
 // ============================================================================
@@ -16807,7 +16680,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_03b_is_valid_oracle_message_no_active_check)
     //   // NO CHECK: if (!oracle_config->is_active) return false;
     //   COraclePriceMessage bound_msg = message;
     //   bound_msg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
-    //   return bound_msg.VerifyPhase2();
+    //   return bound_msg.VerifyAttestation();
     //
     // CONTRAST with ValidateBlockOracleData (line ~1353):
     //   if (!oracle_config || !oracle_config->is_active) { ... reject }
@@ -17049,7 +16922,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_03f_p2p_handler_no_active_check)
     //   // NO CHECK: if (!oracle_config->is_active) { reject }
     //
     // Step 3: Signature verification (uses bound pubkey from step 2.5)
-    //   if (!VerifyPhase2() && !Verify()) { Misbehaving; return; }
+    //   if (!VerifyAttestation() && !Verify()) { Misbehaving; return; }
     //
     // Step 6: Relay to ALL peers
     //   m_connman.ForEachNode([...] { PushMessage(ORACLEPRICE, oracle_msg); });
@@ -17293,12 +17166,11 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04c_is_valid_oracle_message_at_max_id)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04d_on_chain_format_id_boundary_serialization)
 {
-    // Oracle ID is stored as uint8_t (1 byte) in on-chain format.
-    // Test boundary values: 0 (min), 8 (JohnnyLaw on testnet), 29 (max on mainnet), 255 (uint8_t max).
-    // IDs > 255 are rejected by CreateOracleScript.
+    // V1 does not serialize legacy individual-message oracle bundles on-chain.
+    // MuSig2 bundles carry a participation bitmap instead of one oracle_id byte.
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 
-    BOOST_TEST_MESSAGE("=== T9-04d: On-chain format oracle ID boundary serialization ===");
+    BOOST_TEST_MESSAGE("=== T9-04d: Legacy oracle ID bundle serialization is disabled ===");
 
     // Test ID 0 (minimum)
     {
@@ -17312,8 +17184,8 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04d_on_chain_format_id_boundary_serialization)
         bundle.median_price_micro_usd = 5000;
         bundle.timestamp = msg.timestamp;
         CScript script = manager.CreateOracleScript(bundle);
-        BOOST_CHECK(!script.empty());
-        BOOST_TEST_MESSAGE("  Oracle ID 0 (min): serializes OK ✅");
+        BOOST_CHECK(script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 0 legacy bundle: omitted in V1 ✅");
     }
 
     // Test ID 8 (JohnnyLaw on testnet, within mainnet range)
@@ -17328,8 +17200,8 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04d_on_chain_format_id_boundary_serialization)
         bundle.median_price_micro_usd = 5000;
         bundle.timestamp = msg.timestamp;
         CScript script = manager.CreateOracleScript(bundle);
-        BOOST_CHECK(!script.empty());
-        BOOST_TEST_MESSAGE("  Oracle ID 8 (JohnnyLaw): serializes OK ✅");
+        BOOST_CHECK(script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 8 legacy bundle: omitted in V1 ✅");
     }
 
     // Test ID 29 (max on mainnet)
@@ -17344,8 +17216,8 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04d_on_chain_format_id_boundary_serialization)
         bundle.median_price_micro_usd = 5000;
         bundle.timestamp = msg.timestamp;
         CScript script = manager.CreateOracleScript(bundle);
-        BOOST_CHECK(!script.empty());
-        BOOST_TEST_MESSAGE("  Oracle ID 29 (mainnet max): serializes OK ✅");
+        BOOST_CHECK(script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 29 legacy bundle: omitted in V1 ✅");
     }
 
     // Test ID 255 (uint8_t max — serializes, but no oracle config for it)
@@ -17360,8 +17232,8 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04d_on_chain_format_id_boundary_serialization)
         bundle.median_price_micro_usd = 5000;
         bundle.timestamp = msg.timestamp;
         CScript script = manager.CreateOracleScript(bundle);
-        BOOST_CHECK(!script.empty());
-        BOOST_TEST_MESSAGE("  Oracle ID 255 (uint8_t max): serializes OK ✅ (no config → rejected at validation)");
+        BOOST_CHECK(script.empty());
+        BOOST_TEST_MESSAGE("  Oracle ID 255 legacy bundle: omitted in V1 ✅");
     }
 
     // Test ID 256 (exceeds uint8_t) — CreateOracleScript should return empty script
@@ -18408,37 +18280,26 @@ BOOST_AUTO_TEST_CASE(redteam_t10_03e_fallback_dd_calc_overflow_and_unit_bug)
     BOOST_TEST_MESSAGE("  FIX: Use __int128 and correct unit conversion in fallback path");
 }
 
-BOOST_AUTO_TEST_CASE(redteam_t10_03f_extract_dd_amount_hard_cap)
+BOOST_AUTO_TEST_CASE(redteam_t10_03f_extract_dd_amount_boundary)
 {
-    // ExtractDDAmountFromTxRefOld has a hard cap of 100,000,000,000 ($1B)
-    // while MAX_DIGIDOLLAR is 2,100,000,000,000 ($21B)
-    // This mismatch doesn't matter because maxMintAmount ($100K) << $1B
-    // But it's an inconsistency worth documenting.
-    BOOST_TEST_MESSAGE("=== T10-03f: DD amount extraction hard cap mismatch ===");
+    // ExtractDDAmount uses MAX_DIGIDOLLAR as the per-output serialization
+    // boundary. Smaller production mint/transfer caps still apply later.
+    BOOST_TEST_MESSAGE("=== T10-03f: DD amount extraction boundary ===");
 
-    BOOST_CHECK(100000000000LL < MAX_DIGIDOLLAR);
-    BOOST_TEST_MESSAGE("  Extraction cap: " + std::to_string(100000000000LL) + " ($" +
-        std::to_string(100000000000LL / 100) + ")");
     BOOST_TEST_MESSAGE("  MAX_DIGIDOLLAR: " + std::to_string(MAX_DIGIDOLLAR) + " ($" +
         std::to_string(MAX_DIGIDOLLAR / 100) + ")");
 
     // The extraction function caps are in TWO places:
-    // Format 1: amount >= 1 && amount <= 100000000000LL
-    // Format 2: amount >= 1 && amount <= 100000000000LL
-    // Both use same cap.
+    // Format 1: amount >= 1 && amount <= MAX_DIGIDOLLAR
+    // Format 2: amount >= 1 && amount <= MAX_DIGIDOLLAR
 
-    // Current maxMintAmount is well below the cap
+    // Current maxMintAmount is well below the serialization boundary.
     SelectParams(ChainType::REGTEST);
     const auto& ddParams = Params().GetDigiDollarParams();
-    BOOST_CHECK(ddParams.maxMintAmount < 100000000000LL);
+    BOOST_CHECK(ddParams.maxMintAmount < MAX_DIGIDOLLAR);
     BOOST_TEST_MESSAGE("  maxMintAmount (" + std::to_string(ddParams.maxMintAmount) +
-        ") << extraction cap (100B) ✅");
-
-    // If maxMintAmount were ever raised above $1B, extraction would silently
-    // return false for valid amounts. Document this for future-proofing.
-    BOOST_TEST_MESSAGE("  FINDING: Extraction cap ($1B) < MAX_DIGIDOLLAR ($21B) — mismatch ⚠️");
-    BOOST_TEST_MESSAGE("  IMPACT: None with current maxMintAmount ($100K) ✅");
-    BOOST_TEST_MESSAGE("  FIX: Change extraction cap to MAX_DIGIDOLLAR for consistency");
+        ") << MAX_DIGIDOLLAR OK");
+    BOOST_TEST_MESSAGE("  ExtractDDAmount boundary matches MAX_DIGIDOLLAR OK");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t10_03g_cscriptnum_negative_amount_handling)
@@ -18500,7 +18361,7 @@ BOOST_AUTO_TEST_CASE(redteam_t10_03h_conservation_sum_overflow_analysis)
     // Each individual DD amount is bounded by:
     //   - Mint: maxMintAmount ($100K = 10,000,000 cents)
     //   - Transfer output: hard-coded 10,000,000 cent limit
-    //   - Extraction: 100,000,000,000 cent cap ($1B)
+    //   - Extraction: MAX_DIGIDOLLAR per-output serialization bound
     //
     // Number of outputs per tx: limited by MAX_BLOCK_WEIGHT / min_output_size
     //   ~4MB / ~43 bytes = ~93,000 outputs (extreme theoretical max)
@@ -18776,20 +18637,22 @@ BOOST_AUTO_TEST_CASE(redteam_t10_04f_collateral_calc_truncation_to_zero)
     const CChainParams& params = Params();
 
     // Normal case: 1 cent at $5/DGB → non-zero collateral
+    const int64_t canonicalLockBlocks = DigiDollar::LockDaysToBlocks(0);
+
     DigiDollar::ValidationContext ctx5(700, 5000000, 200, params);
-    CAmount collateral = DigiDollar::CalculateRequiredCollateral(1, 5760, ctx5);
+    CAmount collateral = DigiDollar::CalculateRequiredCollateral(1, canonicalLockBlocks, ctx5);
     BOOST_CHECK(collateral > 0);
     BOOST_TEST_MESSAGE("  1 cent at $5/DGB → " + std::to_string(collateral) + " sats ✅");
 
     // High price: 1 cent at $100/DGB → still non-zero
     DigiDollar::ValidationContext ctx100(700, 100000000, 200, params);
-    collateral = DigiDollar::CalculateRequiredCollateral(1, 5760, ctx100);
+    collateral = DigiDollar::CalculateRequiredCollateral(1, canonicalLockBlocks, ctx100);
     BOOST_CHECK(collateral > 0);
     BOOST_TEST_MESSAGE("  1 cent at $100/DGB → " + std::to_string(collateral) + " sats ✅");
 
     // Very high price: 1 cent at $10000/DGB
     DigiDollar::ValidationContext ctx10k(700, 10000000000LL, 200, params);
-    collateral = DigiDollar::CalculateRequiredCollateral(1, 5760, ctx10k);
+    collateral = DigiDollar::CalculateRequiredCollateral(1, canonicalLockBlocks, ctx10k);
     BOOST_CHECK(collateral > 0);
     BOOST_TEST_MESSAGE("  1 cent at $10000/DGB → " + std::to_string(collateral) + " sats ✅");
 
@@ -18798,14 +18661,14 @@ BOOST_AUTO_TEST_CASE(redteam_t10_04f_collateral_calc_truncation_to_zero)
     // denominator = 1,000,000,000,000 ($1M = 10^12 micro-USD)
     // result = 2 — still non-zero!
     DigiDollar::ValidationContext ctx1m(700, 1000000000000LL, 200, params);
-    collateral = DigiDollar::CalculateRequiredCollateral(1, 5760, ctx1m);
+    collateral = DigiDollar::CalculateRequiredCollateral(1, canonicalLockBlocks, ctx1m);
     BOOST_CHECK(collateral > 0);
     BOOST_TEST_MESSAGE("  1 cent at $1M/DGB → " + std::to_string(collateral) + " sats ✅");
 
     // Extreme fractional result: 1 cent at $100M/DGB rounds up to 1 satoshi
     // numerator = 2 * 10^12, denominator = 10^14 → result = 0.02 → ceil to 1
     DigiDollar::ValidationContext ctx100m(700, 100000000000000LL, 200, params);
-    collateral = DigiDollar::CalculateRequiredCollateral(1, 5760, ctx100m);
+    collateral = DigiDollar::CalculateRequiredCollateral(1, canonicalLockBlocks, ctx100m);
     BOOST_CHECK_EQUAL(collateral, 1);
     BOOST_TEST_MESSAGE("  1 cent at $100M/DGB → 1 sat (rounded up) ✅");
 }
@@ -18998,7 +18861,7 @@ BOOST_AUTO_TEST_CASE(redteam_t10_05c_script_flags_at_activation_boundary)
     // Block 600 (pprev=599): DeploymentActiveAfter(599) = ACTIVE → DD flag set
     //
     // This means:
-    // - Block 599: DD opcodes are NOPs (soft-fork compat)
+    // - Block 599: DD opcodes remain Tapscript OP_SUCCESSx (soft-fork compat)
     // - Block 600: DD opcodes enforced
     //
     // Mempool PolicyScriptChecks uses STANDARD_SCRIPT_VERIFY_FLAGS which
@@ -19018,7 +18881,7 @@ BOOST_AUTO_TEST_CASE(redteam_t10_05c_script_flags_at_activation_boundary)
 
     BOOST_TEST_MESSAGE("  SCRIPT_VERIFY_DIGIDOLLAR in STANDARD_SCRIPT_VERIFY_FLAGS ✅");
     BOOST_TEST_MESSAGE("  SCRIPT_VERIFY_DIGIDOLLAR NOT in MANDATORY_SCRIPT_VERIFY_FLAGS ✅");
-    BOOST_TEST_MESSAGE("  Block 599: DD opcodes are NOPs (standard soft-fork behavior) ✅");
+    BOOST_TEST_MESSAGE("  Block 599: DD opcodes remain Tapscript OP_SUCCESSx (old-node behavior) ✅");
     BOOST_TEST_MESSAGE("  Block 600: DD opcodes enforced (activation complete) ✅");
     BOOST_TEST_MESSAGE("  Mempool flag mismatch at tip=599 is benign (no DD UTXOs to spend) ✅");
 }

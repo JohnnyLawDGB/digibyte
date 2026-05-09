@@ -5,9 +5,14 @@
 #include <qt/test/digidollarwidgettests.h>
 #include <qt/test/util.h>
 
+#include <consensus/merkle.h>
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
 #include <key_io.h>
+#include <oracle/bundle_manager.h>
+#include <oracle/mock_oracle.h>
+#include <pow.h>
+#include <primitives/transaction.h>
 #include <qt/clientmodel.h>
 #include <qt/optionsmodel.h>
 #include <qt/platformstyle.h>
@@ -24,12 +29,12 @@
 #include <qt/digidollartab.h>
 #include <qt/ddaddressbookpage.h>
 #include <qt/walletview.h>
+#include <support/allocators/secure.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 #include <wallet/digidollarwallet.h>
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
-#include <oracle/mock_oracle.h>
 
 #include <memory>
 
@@ -88,6 +93,48 @@ std::shared_ptr<wallet::CWallet> SetupDescriptorsWallet(interfaces::Node& node, 
     SyncUpWallet(wallet, node);
     wallet->SetBroadcastTransactions(true);
     return wallet;
+}
+
+CTransactionRef MakePendingDDTx()
+{
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    tx.vout.resize(2);
+    tx.vout[0].nValue = COIN;
+    tx.vout[1].nValue = 0;
+    return MakeTransactionRef(std::move(tx));
+}
+
+void CreateAndProcessOracleQuoteBlock(TestChain100Setup& test, CAmount price_micro_usd)
+{
+    MockOracleManager& mock_oracle = MockOracleManager::GetInstance();
+    mock_oracle.SetEnabled(true);
+    mock_oracle.SetMockPrice(price_micro_usd);
+
+    OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
+    oracle_manager.SetEnabled(true);
+
+    Chainstate& chainstate = Assert(test.m_node.chainman)->ActiveChainstate();
+    const int block_height = WITH_LOCK(cs_main, return chainstate.m_chain.Tip()->nHeight + 1);
+    const CScript coinbase_script = GetScriptForRawPubKey(test.coinbaseKey.GetPubKey());
+    CBlock block = test.CreateBlock({}, coinbase_script, chainstate);
+
+    COracleBundle bundle = mock_oracle.CreateMockMuSig2Bundle(block_height, block.GetBlockTime());
+    std::string error;
+    QVERIFY2(OracleBundleManager::ValidateMuSig2Bundle(
+                 bundle, block_height, Params().GetConsensus(), error),
+             error.c_str());
+    QVERIFY(oracle_manager.UpdateBundle(bundle));
+    QVERIFY(oracle_manager.AddOracleBundleToBlock(block, block_height));
+
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+    while (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, Params().GetConsensus())) {
+        ++block.nNonce;
+    }
+
+    std::shared_ptr<const CBlock> shared_block = std::make_shared<const CBlock>(block);
+    QVERIFY(Assert(test.m_node.chainman)->ProcessNewBlock(shared_block, true, true, nullptr));
 }
 
 struct DigiDollarMiniGUI {
@@ -276,9 +323,18 @@ void DigiDollarWidgetTests::watchOnlyDigiDollarBalanceHiddenInWalletModel()
     dd_wallet->AddDDUTXO(COutPoint(uint256::ONE, 1), 10000);
     QCOMPARE(dd_wallet->GetTotalDDBalance(), 10000);
 
+    const CTransactionRef pending_tx = MakePendingDDTx();
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->AddToWallet(pending_tx, wallet::TxStateInMempool{});
+    }
+    dd_wallet->AddDDUTXO(COutPoint(pending_tx->GetHash(), 1), 2500);
+    QCOMPARE(dd_wallet->GetPendingDDBalance(), 2500);
+
     DigiDollarMiniGUI mini_gui(m_node);
     mini_gui.initModelForWallet(m_node, wallet);
     QCOMPARE(mini_gui.walletModel->getDigiDollarBalance(), 0);
+    QCOMPARE(mini_gui.walletModel->getPendingDigiDollarBalance(), 0);
 }
 
 void DigiDollarWidgetTests::privateKeyDisabledWalletCannotGenerateDigiDollarAddress()
@@ -388,7 +444,7 @@ void DigiDollarWidgetTests::qtMintStoresDescriptorRecoverableOwnerKey()
     MockOracleManager::GetInstance().SetEnabled(true);
     MockOracleManager::GetInstance().SetMockPrice(500000);
 
-    test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    CreateAndProcessOracleQuoteBlock(test, 500000);
     std::shared_ptr<wallet::CWallet> wallet = wallet::CreateSyncedWallet(
         *test.m_node.chain,
         WITH_LOCK(Assert(test.m_node.chainman)->GetMutex(), return test.m_node.chainman->ActiveChain()),
@@ -551,6 +607,44 @@ void DigiDollarWidgetTests::positionsWidgetTests()
     TestPositionsWidget(m_node, wallet);
 }
 
+void DigiDollarWidgetTests::positionsWidgetHiddenDoesNotPollWallet()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarPositionsWidget positionsWidget;
+    QVERIFY(!positionsWidget.isVisible());
+    positionsWidget.setWalletModel(mini_gui.walletModel.get());
+    positionsWidget.setClientModel(mini_gui.clientModel.get());
+    QCoreApplication::processEvents();
+
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 0);
+
+    positionsWidget.show();
+    QCoreApplication::processEvents();
+    positionsWidget.updateView();
+    QCOMPARE(table->rowCount(), 1);
+}
+
 void DigiDollarWidgetTests::positionsWidgetInitialLoadNotThrottled()
 {
 #ifdef Q_OS_MACOS
@@ -576,6 +670,9 @@ void DigiDollarWidgetTests::positionsWidgetInitialLoadNotThrottled()
     DigiDollarPositionsWidget positionsWidget;
     positionsWidget.setWalletModel(mini_gui.walletModel.get());
     positionsWidget.setClientModel(mini_gui.clientModel.get());
+    positionsWidget.show();
+    QCoreApplication::processEvents();
+    positionsWidget.updateView();
 
     QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
     QVERIFY(table != nullptr);
@@ -610,6 +707,9 @@ void DigiDollarWidgetTests::positionsWidgetHealthUsesMicroUsdOraclePrice()
     DigiDollarPositionsWidget positionsWidget;
     positionsWidget.setClientModel(mini_gui.clientModel.get());
     positionsWidget.setWalletModel(mini_gui.walletModel.get());
+    positionsWidget.show();
+    QCoreApplication::processEvents();
+    positionsWidget.updateView();
 
     QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
     QVERIFY(table != nullptr);
@@ -650,6 +750,9 @@ void DigiDollarWidgetTests::positionsWidgetDisablesRedeemForPrivateKeyDisabledWa
     DigiDollarPositionsWidget positionsWidget;
     positionsWidget.setClientModel(mini_gui.clientModel.get());
     positionsWidget.setWalletModel(mini_gui.walletModel.get());
+    positionsWidget.show();
+    QCoreApplication::processEvents();
+    positionsWidget.updateView();
 
     QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
     QVERIFY(table != nullptr);
@@ -658,8 +761,104 @@ void DigiDollarWidgetTests::positionsWidgetDisablesRedeemForPrivateKeyDisabledWa
     QPushButton* redeemButton = qobject_cast<QPushButton*>(
         table->cellWidget(0, DigiDollarPositionsWidget::COL_ACTIONS));
     QVERIFY(redeemButton != nullptr);
-    QCOMPARE(redeemButton->text(), QString("Locked"));
+    // DD-FA-FUNC-027 (Wave 17 Agent C): a wallet with WALLET_FLAG_DISABLE_PRIVATE_KEYS
+    // must surface an explicit "Watch-Only" badge in the redeem column rather
+    // than the previous ambiguous "Locked" text shared with timelocked vaults.
+    QCOMPARE(redeemButton->text(), QString("Watch-Only"));
     QVERIFY(!redeemButton->isEnabled());
+    // The tooltip must explain why the action is disabled so the user knows
+    // their wallet is the limiting factor (not the timelock).
+    QVERIFY(redeemButton->toolTip().contains("Watch-only"));
+}
+
+void DigiDollarWidgetTests::positionsWidgetDisablesRedeemForLockedEncryptedWallet()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+
+    SecureString passphrase{"wave17-qt-locked-wallet"};
+    QVERIFY(wallet->EncryptWallet(passphrase));
+    QVERIFY(wallet->IsLocked());
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    QCOMPARE(mini_gui.walletModel->getEncryptionStatus(), WalletModel::Locked);
+
+    DigiDollarPositionsWidget positionsWidget;
+    positionsWidget.setClientModel(mini_gui.clientModel.get());
+    positionsWidget.setWalletModel(mini_gui.walletModel.get());
+    positionsWidget.show();
+    QCoreApplication::processEvents();
+    positionsWidget.updateView();
+
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+
+    QPushButton* redeemButton = qobject_cast<QPushButton*>(
+        table->cellWidget(0, DigiDollarPositionsWidget::COL_ACTIONS));
+    QVERIFY(redeemButton != nullptr);
+    QCOMPARE(redeemButton->text(), QString("Wallet Locked"));
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("Unlock"));
+}
+
+// DD-FA-FUNC-031 (Wave 19 Agent A): WalletModel::mintDigiDollar must
+// short-circuit private-keys-disabled wallets with the same explicit
+// "Private keys are disabled" diagnostic that sendDigiDollar already
+// surfaces, instead of letting the user run through UTXO scans, oracle
+// RPCs, and a confirmation dialog only to fail later at HD owner-key
+// derivation with the misleading "requires an HD wallet" message.
+void DigiDollarWidgetTests::mintDigiDollarRejectsPrivateKeyDisabledWallet()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->EnsureDDWallet();
+    wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    WalletModel::DigiDollarMintResult result =
+        mini_gui.walletModel->mintDigiDollar(/*ddAmount=*/10000, /*lockTier=*/0);
+
+    QVERIFY(result.status != WalletModel::OK);
+    // Must be the explicit private-keys-disabled diagnostic, not the
+    // misleading "requires an HD wallet" message that mint emits when
+    // the HD owner-key derivation finally fails further down the path.
+    QVERIFY2(result.reasonFailed.contains("Private keys are disabled", Qt::CaseInsensitive),
+             qPrintable(QString("expected 'Private keys are disabled' in reasonFailed, got: ") + result.reasonFailed));
+    // The fail-fast check must run before any wallet-side state mutation
+    // so the txid/positionId remain empty for the rejected attempt.
+    QVERIFY(result.txid.isEmpty());
+    QVERIFY(result.positionId.isEmpty());
 }
 
 void DigiDollarWidgetTests::transactionsWidgetTests()

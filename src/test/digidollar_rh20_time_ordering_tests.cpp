@@ -104,9 +104,9 @@ struct RH20TestSetup : public TestingSetup {
 
 BOOST_FIXTURE_TEST_CASE(epoch_boundary_oracle_price_determinism, RH20TestSetup)
 {
-    // Oracle epoch boundary: with regtest nDDOracleEpochBlocks=10,
-    // epoch changes at heights 0,10,20,30...
-    // Block 9 = epoch 0, Block 10 = epoch 1
+    // Oracle epoch boundary follows the consensus nDDOracleEpochBlocks value.
+    // RC34 pins V1 to 40-block (~10 minute) epochs on all networks:
+    // block 39 = epoch 0, block 40 = epoch 1.
     const auto& consensus = Params().GetConsensus();
     int epochLen = consensus.nDDOracleEpochBlocks;
     BOOST_CHECK_GT(epochLen, 0);
@@ -125,23 +125,20 @@ BOOST_FIXTURE_TEST_CASE(epoch_boundary_oracle_price_determinism, RH20TestSetup)
     //
     // VERIFY: lockPeriod calculation is height-dependent
     int lockBlocks = 30 * 24 * 60 * 4; // 30 days in blocks
-    CAmount ddAmount = 10000; // $100
-
     // At height epochBoundary-1 (epoch 0), lockHeight - nHeight = lockPeriod
     (void)(epochBoundary); // used above for epoch checks
 
     // The lockPeriod differs by 1 block between these two heights.
-    // Both should produce the same tier (30-day = tier 1).
-    // Verify the collateral ratio is the same regardless of epoch.
+    // V1 requires exact canonical tiers, so only the exact 30-day lock gets
+    // the 30-day ratio. The off-by-one duration must fail closed.
     const auto& ddParams = Params().GetDigiDollarParams();
     int ratio_e0 = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddParams);
     int ratio_e1 = DigiDollar::GetCollateralRatioForLockTime(lockBlocks - 1, ddParams);
 
-    // Design: intermediate lock durations get the NEXT tier's (better) ratio.
-    // lockBlocks (exact 30d) = 500%, lockBlocks-1 also = 500% (lower_bound finds 30d tier).
-    // Both map to the same tier regardless of which epoch the tx lands in.
     BOOST_CHECK_EQUAL(ratio_e0, 500);
-    BOOST_CHECK_EQUAL(ratio_e1, 500);
+    BOOST_CHECK_EQUAL(ratio_e1, 0);
+    BOOST_CHECK(DigiDollar::IsCanonicalLockTier(lockBlocks, ddParams));
+    BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(lockBlocks - 1, ddParams));
 }
 
 // ============================================================================
@@ -151,8 +148,7 @@ BOOST_FIXTURE_TEST_CASE(epoch_boundary_oracle_price_determinism, RH20TestSetup)
 BOOST_FIXTURE_TEST_CASE(lock_period_minimum_1_block, RH20TestSetup)
 {
     // Attacker tries to mint with lockHeight = nHeight + 1 (1 block lock).
-    // lockPeriod = lockTime - nHeight = 1.
-    // GetCollateralRatioForLockTime(1) should return highest ratio (1000%).
+    // V1 rejects this because 1 block is not a canonical lock tier.
     int currentHeight = 1000;
     int64_t lockHeight = currentHeight + 1;
     CAmount ddAmount = 10000; // $100
@@ -164,15 +160,14 @@ BOOST_FIXTURE_TEST_CASE(lock_period_minimum_1_block, RH20TestSetup)
     auto ctx = MakeContext(currentHeight, oraclePrice);
     TxValidationState state;
 
-    // Validation should process this — the 1-block lock gets the highest
-    // collateral ratio (tier 0 = 1000%), requiring massive collateral.
-    // With $0.50 price, $100 DD at 1000% = $1000 in DGB = 2000 DGB.
-    // 50000 DGB > 2000 DGB, so it passes.
-    DigiDollar::ValidateMintTransaction(tx, ctx, state);
-    // The key security: 1-block lock should NOT get a favorable ratio
+    bool result = DigiDollar::ValidateMintTransaction(tx, ctx, state);
+    BOOST_CHECK(!result);
+    BOOST_CHECK_NE(state.GetRejectReason().find("bad-mint-lock-tier-duration"), std::string::npos);
+
     const auto& ddParams = Params().GetDigiDollarParams();
     int ratioForOneBlock = DigiDollar::GetCollateralRatioForLockTime(1, ddParams);
-    BOOST_CHECK_GE(ratioForOneBlock, 1000); // Must be highest tier (most expensive)
+    BOOST_CHECK_EQUAL(ratioForOneBlock, 0);
+    BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(1, ddParams));
 }
 
 BOOST_FIXTURE_TEST_CASE(lock_period_zero_rejected, RH20TestSetup)
@@ -341,34 +336,26 @@ BOOST_FIXTURE_TEST_CASE(collateral_ratio_tier_boundary_values, RH20TestSetup)
 
     // Tier 0: 1 hour (240 blocks) = 1000%
     // Tier 1: 30 days = 500%
-    // Test: lockBlocks = 239 (just under 1 hour)
-    // Should map to tier 0 (1000%) via lower_bound finding 240
+    // V1 accepts only exact canonical values.
     int ratio_239 = DigiDollar::GetCollateralRatioForLockTime(239, ddParams);
     int ratio_240 = DigiDollar::GetCollateralRatioForLockTime(240, ddParams);
     int ratio_241 = DigiDollar::GetCollateralRatioForLockTime(241, ddParams);
 
-    // 239: lower_bound finds 240 (first key >= 239) → 1000%
-    BOOST_CHECK_EQUAL(ratio_239, 1000);
-    // 240: exact match → 1000%
+    BOOST_CHECK_EQUAL(ratio_239, 0);
     BOOST_CHECK_EQUAL(ratio_240, 1000);
-    // 241: lower_bound finds 172800 (30d tier) → 500% (by design: past 1h threshold)
-    BOOST_CHECK_EQUAL(ratio_241, 500);
+    BOOST_CHECK_EQUAL(ratio_241, 0);
+    BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(239, ddParams));
+    BOOST_CHECK(DigiDollar::IsCanonicalLockTier(240, ddParams));
+    BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(241, ddParams));
 
     // At exactly 30 days boundary
     int ratio_30d = DigiDollar::GetCollateralRatioForLockTime(30 * BLOCKS_PER_DAY, ddParams);
     int ratio_30d_minus1 = DigiDollar::GetCollateralRatioForLockTime(30 * BLOCKS_PER_DAY - 1, ddParams);
-    // Design: 30d-1 is between tier 0 (240) and tier 1 (30d). lower_bound finds 30d → 500%.
-    BOOST_CHECK_EQUAL(ratio_30d_minus1, 500);
+    BOOST_CHECK_EQUAL(ratio_30d_minus1, 0);
 
     BOOST_CHECK_EQUAL(ratio_30d, 500);
-    // Wait — that means a lock of 30d-1 gets the SAME ratio as 30d.
-    // DESIGN NOTE [RH-20-01]: After investigation, this is BY DESIGN.
-    // Tier boundaries are minimum lock thresholds to EARN a better ratio.
-    // Locking for 241 blocks (past the 240-block tier 0 boundary) qualifies
-    // for the next tier's ratio (500%). The economic justification: the user
-    // committed beyond tier 0, so they earn tier 1's better rate.
-    // All existing consensus tests confirm this interpretation.
-    BOOST_CHECK_EQUAL(ratio_241, 500);
+    BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(30 * BLOCKS_PER_DAY - 1, ddParams));
+    BOOST_CHECK(DigiDollar::IsCanonicalLockTier(30 * BLOCKS_PER_DAY, ddParams));
 }
 
 // ============================================================================
@@ -471,19 +458,26 @@ BOOST_FIXTURE_TEST_CASE(skip_oracle_validation_still_checks_structure, RH20TestS
 
     ResetVolatility(currentHeight);
 
-    // Create a mint with NO collateral output (structural violation)
+    // Create a mint with NO collateral output (structural violation).
+    // Use a canonical tier-1 lock duration (30 days = 172800 blocks) so
+    // the missing-collateral structural check is the FIRST consensus
+    // failure, not bad-mint-lock-tier-duration. DD-FA-SEC-011 (Wave 14)
+    // removed the IBD bypass on the canonical-duration check, so the
+    // lock duration must always match the claimed tier or the validator
+    // returns bad-mint-lock-tier-duration before the structural checks.
     CMutableTransaction mtx;
     mtx.nVersion = 0x01000770; // DD_TX_MINT
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(uint256S("0xdead"), 0);
 
-    // Only DD output, no collateral
+    // Only DD output, no collateral.
+    const int64_t canonical_tier_1_blocks = DigiDollar::LockDaysToBlocks(30);
     const CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
     const CScript opReturn = CScript() << OP_RETURN
                                        << std::vector<unsigned char>{'D', 'D'}
                                        << CScriptNum(1)
                                        << CScriptNum(ddAmount)
-                                       << CScriptNum(currentHeight + 5760)
+                                       << CScriptNum(currentHeight + canonical_tier_1_blocks)
                                        << CScriptNum(1)
                                        << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
 
@@ -492,7 +486,9 @@ BOOST_FIXTURE_TEST_CASE(skip_oracle_validation_still_checks_structure, RH20TestS
     mtx.vout[1] = CTxOut(0, ddScript);
 
     CTransaction tx(mtx);
-    auto ctx = MakeContext(currentHeight, /*oraclePrice=*/0, /*systemCollateral=*/150, /*skipOracle=*/true);
+    // Use a live oracle price here so this fixture isolates the structural
+    // missing-collateral check rather than the consensus oracle-price gate.
+    auto ctx = MakeContext(currentHeight, /*oraclePrice=*/500000, /*systemCollateral=*/150, /*skipOracle=*/true);
     TxValidationState state;
 
     bool result = DigiDollar::ValidateMintTransaction(tx, ctx, state);

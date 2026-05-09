@@ -134,7 +134,7 @@ BOOST_AUTO_TEST_CASE(nonce_ingestion_round_trip)
 {
     const int32_t epoch = 100;
     const uint8_t min_signers = 4;
-    const int num_oracles = 7;
+    const int num_oracles = min_signers;
 
     // Generate oracle keys
     std::vector<CKey> keys;
@@ -183,7 +183,9 @@ BOOST_AUTO_TEST_CASE(nonce_ingestion_round_trip)
         BOOST_REQUIRE(session.AddPubnonce(0, local_nonce));
     }
 
-    // Oracles 1-6 generate nonces and serialize as P2P messages
+    // Remote oracles generate exactly the quorum needed for regtest V1.
+    // The old fallback-era test pushed all seven slots through a four-signer
+    // session; V1 only needs the active quorum to prove P2P ingestion.
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 
     // We need separate sessions per oracle to generate their nonces,

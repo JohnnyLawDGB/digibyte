@@ -89,11 +89,19 @@ BOOST_AUTO_TEST_CASE(rh21_collateral_calc_extreme_price_boundaries)
 {
     auto regTestParams = CChainParams::RegTest({});
 
-    // Minimum price: 1 micro-USD ($0.000001)
+    // Below the oracle floor: 1 micro-USD ($0.000001)
     {
         DigiDollar::ValidationContext ctx(1000, 1, 150, *regTestParams);
         CAmount required = DigiDollar::CalculateRequiredCollateral(10000000, 30 * DigiDollar::BLOCKS_PER_DAY, ctx);
-        BOOST_CHECK_EQUAL(required, MAX_MONEY); // Should cap at MAX_MONEY
+        BOOST_CHECK_EQUAL(required, 0); // Should fail closed, not cap at MAX_MONEY
+    }
+
+    // Valid oracle minimum should remain representable and positive.
+    {
+        DigiDollar::ValidationContext ctx(1000, ORACLE_MIN_PRICE_MICRO_USD, 150, *regTestParams);
+        CAmount required = DigiDollar::CalculateRequiredCollateral(10000000, 30 * DigiDollar::BLOCKS_PER_DAY, ctx);
+        BOOST_CHECK_GT(required, 0);
+        BOOST_CHECK_LE(required, MAX_MONEY);
     }
 
     // Maximum sane price: $100 = 100,000,000 micro-USD
@@ -444,30 +452,28 @@ BOOST_AUTO_TEST_CASE(rh21_collateral_ratios_ordering)
     }
 }
 
-BOOST_AUTO_TEST_CASE(rh21_collateral_ratio_between_tiers)
+BOOST_AUTO_TEST_CASE(rh21_collateral_ratio_rejects_between_tiers)
 {
-    // Lock time between two tiers should use the higher (more conservative) ratio
+    // V1 accepts only exact canonical lock tiers; in-between durations reject.
     DigiDollar::ConsensusParams params;
 
-    // 45 days is between 30 (500%) and 90 (400%)
-    // lower_bound finds first tier >= 45 days, which is 90-day tier
-    // But the 90-day tier ratio is looked up by its lock time key
     int64_t fortyFiveDays = 45 * DigiDollar::BLOCKS_PER_DAY;
     int ratio = DigiDollar::GetCollateralRatioForLockTime(fortyFiveDays, params);
-    // Uses the tier found by lower_bound (90 days = 400% or 30 days = 500%)
-    // The function returns the more conservative ratio for shorter locks
-    BOOST_CHECK_GE(ratio, 400); // At least 400%
-    BOOST_CHECK_LE(ratio, 500); // At most 500%
+
+    BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(fortyFiveDays, params));
+    BOOST_CHECK_EQUAL(ratio, 0);
 }
 
-BOOST_AUTO_TEST_CASE(rh21_collateral_ratio_beyond_max_tier)
+BOOST_AUTO_TEST_CASE(rh21_collateral_ratio_rejects_beyond_max_tier)
 {
-    // Lock time longer than 10 years should use 10-year tier
+    // V1 does not silently cap custom long locks to the longest canonical tier.
     DigiDollar::ConsensusParams params;
 
     int64_t fifteenYears = 15 * 365 * DigiDollar::BLOCKS_PER_DAY;
     int ratio = DigiDollar::GetCollateralRatioForLockTime(fifteenYears, params);
-    BOOST_CHECK_EQUAL(ratio, 200); // 10-year tier is the longest
+
+    BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(fifteenYears, params));
+    BOOST_CHECK_EQUAL(ratio, 0);
 }
 
 // =============================================================================
@@ -484,13 +490,13 @@ BOOST_AUTO_TEST_CASE(rh21_int128_collateral_calc_max_values)
 
     auto regTestParams = CChainParams::RegTest({});
     // Emergency DCA (2.0x) with highest ratio tier (1000%)
-    DigiDollar::ValidationContext ctx(1000, 1, 50, *regTestParams); // Low health = high DCA
+    DigiDollar::ValidationContext ctx(1000, ORACLE_MIN_PRICE_MICRO_USD, 50, *regTestParams); // Low health = high DCA
 
     CAmount maxMint = 10000000; // $100K max
     int64_t shortLock = 240; // 1 hour = 1000% ratio
     CAmount required = DigiDollar::CalculateRequiredCollateral(maxMint, shortLock, ctx);
 
-    // Should be capped at MAX_MONEY, not overflow
+    // Should be representable at the valid oracle floor, not overflow
     BOOST_CHECK_GT(required, 0);
     BOOST_CHECK_LE(required, MAX_MONEY);
 }

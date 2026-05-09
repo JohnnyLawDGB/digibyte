@@ -418,7 +418,6 @@ BOOST_AUTO_TEST_CASE(attack_block_stuffing_oracle_dos)
 
     OracleBundleManager bundleMgr;
     bundleMgr.SetEnabled(true);
-    bundleMgr.SetForcePhase2(true); // Enable for testing
     bundleMgr.SetMinOracleCount(1); // Relax for unit testing
 
     // Step 1: Create oracle messages to form a bundle

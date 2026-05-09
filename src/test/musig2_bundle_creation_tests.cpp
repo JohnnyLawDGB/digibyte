@@ -8,10 +8,10 @@
  * Tests for wiring v0x03 data into CreateOracleScript and ExtractOracleBundle:
  * - Round-trip: create v0x03 script, extract back, compare all fields
  * - Phase 3 activation height gate
- * - Script size verification (v0x03 ~92 bytes on regtest vs v0x02 600+)
+ * - Script size verification (v0x03 ~92 bytes on regtest; v0x02 omitted)
  * - Validation: reject invalid aggregate_sig size, empty bitmap
  * - Oracle ID decoding from participation bitmap
- * - Regression: v0x02 bundles still work after v0x03 additions
+ * - Regression: legacy v0x01/v0x02 bundles are not emitted in V1
  * - ValidateV03BundleFormat helper
  */
 
@@ -321,10 +321,10 @@ BOOST_AUTO_TEST_CASE(test_create_v03_rejects_wrong_bitmap_sizes)
 }
 
 // ============================================================================
-// test_v02_still_works
-// Regression: v0x02 bundle creation and extraction still works after v0x03 additions
+// test_v02_rejected_in_v1
+// Regression: V1 must not emit or extract legacy v0x02 bundles
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_v02_still_works)
+BOOST_AUTO_TEST_CASE(test_v02_rejected_in_v1)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -333,6 +333,7 @@ BOOST_AUTO_TEST_CASE(test_v02_still_works)
 
     // Create a Phase 2 bundle with 3 oracle messages
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = 1;
     bundle.median_price_micro_usd = 50000;
     bundle.timestamp = GetTime();
@@ -341,30 +342,22 @@ BOOST_AUTO_TEST_CASE(test_v02_still_works)
     for (int i = 0; i < 3; ++i) {
         keys[i].MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, bundle.timestamp);
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         bundle.messages.push_back(msg);
     }
 
-    // v0x02 (default version=2) should produce a valid script
     BOOST_CHECK_EQUAL(bundle.version, 2);
     BOOST_CHECK(!bundle.IsMuSig2());
 
     CScript oracle_script = manager.CreateOracleScript(bundle);
-    BOOST_CHECK_MESSAGE(!oracle_script.empty(), "v0x02 CreateOracleScript should still work");
+    BOOST_CHECK_MESSAGE(oracle_script.empty(),
+        "V1 must not serialize legacy v0x02 oracle scripts");
 
-    // Extract back
     CTransaction tx = MakeCoinbaseTx(oracle_script);
     COracleBundle extracted;
     bool ok = manager.ExtractOracleBundle(tx, extracted);
-    BOOST_CHECK_MESSAGE(ok, "v0x02 ExtractOracleBundle should still work");
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 3);
-    BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 50000);
-
-    // Verify individual oracle IDs/signatures survived
-    for (int i = 0; i < 3; ++i) {
-        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, static_cast<uint32_t>(i));
-        BOOST_CHECK_EQUAL(extracted.messages[i].schnorr_sig.size(), 64);
-    }
+    BOOST_CHECK_MESSAGE(!ok,
+        "V1 must not extract legacy v0x02 oracle scripts");
 }
 
 // ============================================================================
@@ -376,10 +369,10 @@ BOOST_AUTO_TEST_CASE(test_v02_still_works)
 // Disabled: requires Wave 3 bitmap→messages decoding in ExtractOracleBundle
 
 // ============================================================================
-// test_create_oracle_script_v02_unchanged
-// v0x02 still works when phase3 inactive (height below phase3)
+// test_create_oracle_script_v02_rejected
+// V1 rejects v0x02 regardless of old phase gates
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_create_oracle_script_v02_unchanged)
+BOOST_AUTO_TEST_CASE(test_create_oracle_script_v02_rejected)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -387,6 +380,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v02_unchanged)
     manager.SetMinOracleCount(1);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = 1;
     bundle.median_price_micro_usd = 50000;
     bundle.timestamp = GetTime();
@@ -395,22 +389,21 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v02_unchanged)
     for (int i = 0; i < 3; ++i) {
         keys[i].MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, bundle.timestamp);
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         bundle.messages.push_back(msg);
     }
 
     BOOST_CHECK_EQUAL(bundle.version, 2);
 
-    // v0x02 should still work regardless of Phase 3 script support.
     CScript oracle_script = manager.CreateOracleScript(bundle);
-    BOOST_CHECK_MESSAGE(!oracle_script.empty(), "v0x02 CreateOracleScript should work regardless of phase3 status");
+    BOOST_CHECK_MESSAGE(oracle_script.empty(),
+        "V1 must not serialize legacy v0x02 oracle scripts");
 
     CTransaction tx = MakeCoinbaseTx(oracle_script);
     COracleBundle extracted;
     bool ok = manager.ExtractOracleBundle(tx, extracted);
-    BOOST_CHECK(ok);
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 3);
-    BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 50000);
+    BOOST_CHECK_MESSAGE(!ok,
+        "V1 must not extract legacy v0x02 oracle scripts");
 }
 
 // ============================================================================
@@ -469,10 +462,10 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_full_participation)
 }
 
 // ============================================================================
-// test_create_oracle_script_v03_size_reduced
-// v0x03 is ~92 bytes total vs v0x02 600+ for 9 oracles
+// test_create_oracle_script_v03_only
+// v0x03 emits compact scripts while legacy v0x02 is omitted
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_size_reduced)
+BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_only)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -487,6 +480,7 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_size_reduced)
 
     // v0x02: 9 oracles
     COracleBundle v02_bundle;
+    v02_bundle.version = 2;
     v02_bundle.epoch = 1;
     v02_bundle.median_price_micro_usd = 50000;
     v02_bundle.timestamp = 1700000000;
@@ -494,24 +488,20 @@ BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_size_reduced)
     for (int i = 0; i < 9; ++i) {
         keys[i].MakeNewKey(true);
         COraclePriceMessage msg(i, 50000, 1700000000);
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         v02_bundle.messages.push_back(msg);
     }
     CScript v02_script = manager.CreateOracleScript(v02_bundle);
-    BOOST_CHECK(!v02_script.empty());
-
-    BOOST_CHECK_MESSAGE(v03_script.size() < v02_script.size(),
-        "v0x03 (" + std::to_string(v03_script.size()) + " bytes) should be much smaller than v0x02 (" +
-        std::to_string(v02_script.size()) + " bytes)");
+    BOOST_CHECK_MESSAGE(v02_script.empty(),
+        "V1 must not serialize legacy v0x02 oracle scripts");
     BOOST_CHECK_LT(v03_script.size(), 100);
-    BOOST_CHECK_GT(v02_script.size(), 600);
 }
 
 // ============================================================================
-// test_extract_oracle_bundle_v02
-// Extract v0x02 bundle from script with multiple oracles
+// test_extract_oracle_bundle_v02_rejected
+// Legacy v0x02 bundles are not extractable in V1
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v02)
+BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v02_rejected)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -519,6 +509,7 @@ BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v02)
     manager.SetMinOracleCount(1);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = 1;
     bundle.median_price_micro_usd = 88000;
     bundle.timestamp = 1700002000;
@@ -527,26 +518,18 @@ BOOST_AUTO_TEST_CASE(test_extract_oracle_bundle_v02)
     for (int i = 0; i < 4; ++i) {
         keys[i].MakeNewKey(true);
         COraclePriceMessage msg(i, 88000, bundle.timestamp);
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         bundle.messages.push_back(msg);
     }
 
     CScript oracle_script = manager.CreateOracleScript(bundle);
-    BOOST_REQUIRE(!oracle_script.empty());
+    BOOST_CHECK_MESSAGE(oracle_script.empty(),
+        "V1 must not serialize legacy v0x02 oracle scripts");
 
     CTransaction tx = MakeCoinbaseTx(oracle_script);
     COracleBundle extracted;
-    BOOST_REQUIRE(manager.ExtractOracleBundle(tx, extracted));
-
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 4);
-    BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, 88000);
-    BOOST_CHECK_EQUAL(extracted.timestamp, 1700002000);
-
-    for (int i = 0; i < 4; ++i) {
-        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, static_cast<uint32_t>(i));
-        BOOST_CHECK_EQUAL(extracted.messages[i].schnorr_sig.size(), 64);
-        BOOST_CHECK_EQUAL(extracted.messages[i].price_micro_usd, 88000);
-    }
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(tx, extracted),
+        "V1 must not extract legacy v0x02 oracle scripts");
 }
 
 // ============================================================================
@@ -680,7 +663,7 @@ BOOST_AUTO_TEST_CASE(test_roundtrip_v03_create_extract)
 
 // ============================================================================
 // test_create_oracle_script_v03_phase3_gate
-// v0x03 bundle rejected when block_height < nDigiDollarPhase3Height
+// v0x03 bundle rejected when block_height < nDigiDollarMuSig2Height
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_create_oracle_script_v03_phase3_gate)
 {
@@ -716,20 +699,22 @@ BOOST_AUTO_TEST_CASE(test_validate_v03_bundle_format)
     BOOST_CHECK(manager.ValidateV03BundleFormat(v03_script, version));
     BOOST_CHECK_EQUAL(version, 0x03);
 
-    // v0x01 script (single message)
+    // Legacy single-message script must not be emitted in V1.
     COracleBundle v01_bundle;
+    v01_bundle.version = 1;
     v01_bundle.epoch = 1;
     v01_bundle.median_price_micro_usd = 50000;
     v01_bundle.timestamp = GetTime();
     CKey key;
     key.MakeNewKey(true);
     COraclePriceMessage msg(0, 50000, v01_bundle.timestamp);
-    msg.SignPhase2(key);
+    msg.SignAttestation(key);
     v01_bundle.messages.push_back(msg);
 
     CScript v01_script = manager.CreateOracleScript(v01_bundle);
-    BOOST_CHECK(manager.ValidateV03BundleFormat(v01_script, version));
-    BOOST_CHECK_EQUAL(version, 0x01);
+    BOOST_CHECK_MESSAGE(v01_script.empty(),
+        "V1 must not serialize legacy v0x01 oracle scripts");
+    BOOST_CHECK(!manager.ValidateV03BundleFormat(v01_script, version));
 
     // Empty/invalid scripts
     CScript empty_script;

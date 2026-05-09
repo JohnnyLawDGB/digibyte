@@ -32,6 +32,7 @@ private Q_SLOTS:
     void receiveWidgetTests();
     void redeemWidgetTests();
     void positionsWidgetTests();
+    void positionsWidgetHiddenDoesNotPollWallet();
     void addressBookTests();
     void transactionsWidgetTests();
     void transactionsWidgetExportTests();
@@ -55,7 +56,9 @@ private Q_SLOTS:
     void positionsWidgetInitialLoadNotThrottled();
     void positionsWidgetHealthUsesMicroUsdOraclePrice();
     void positionsWidgetDisablesRedeemForPrivateKeyDisabledWallet();
+    void positionsWidgetDisablesRedeemForLockedEncryptedWallet();
     void redeemWidgetKeepsTimelockedPositionDisabled();
+    void mintDigiDollarRejectsPrivateKeyDisabledWallet();
 };
 
 #endif // DIGIBYTE_QT_TEST_DIGIDOLLARWIDGETTESTS_H

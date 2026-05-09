@@ -8,6 +8,7 @@
 #include <key.h>
 #include <kernel/chainparams.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/musig2_aggregator.h>
 #include <oracle/node.h>
 #include <primitives/oracle.h>
 #include <protocol.h>
@@ -18,6 +19,8 @@
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 #include <util/time.h>
+
+#include <limits>
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_oracle_tests, BasicTestingSetup)
 
@@ -71,6 +74,11 @@ BOOST_AUTO_TEST_CASE(oracle_price_message_validation)
     msg.price_micro_usd = 6000; // $0.006 per DGB (realistic)
     msg.timestamp = GetTime();
     msg.oracle_id = 1;
+    {
+        CKey key;
+        key.MakeNewKey(true);
+        BOOST_REQUIRE(msg.SignAttestation(key));
+    }
     BOOST_CHECK(msg.IsValid());
 
     // Test timestamp validation (future timestamp should be invalid)
@@ -275,6 +283,15 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_epoch_validation)
     // Test invalid epoch (future)
     COracleBundle bundle4(current_epoch + 1);
     BOOST_CHECK(!bundle4.ValidateEpoch(current_epoch));
+
+    // Edge values must reject safely without signed-overflow UB.
+    COracleBundle min_bundle(std::numeric_limits<int32_t>::min());
+    BOOST_CHECK(min_bundle.ValidateEpoch(std::numeric_limits<int32_t>::min()));
+    BOOST_CHECK(!min_bundle.ValidateEpoch(std::numeric_limits<int32_t>::max()));
+
+    COracleBundle max_bundle(std::numeric_limits<int32_t>::max());
+    BOOST_CHECK(max_bundle.ValidateEpoch(std::numeric_limits<int32_t>::max()));
+    BOOST_CHECK(!max_bundle.ValidateEpoch(std::numeric_limits<int32_t>::min()));
 }
 
 BOOST_AUTO_TEST_CASE(oracle_bundle_serialization)
@@ -654,7 +671,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_manager_message_handling)
     // No getter, but we've tested it doesn't crash
 }
 
-BOOST_AUTO_TEST_CASE(oracle_bundle_manager_bundle_creation)
+BOOST_AUTO_TEST_CASE(oracle_bundle_manager_rejects_legacy_message_bundle)
 {
     OracleBundleManager manager;
     int32_t test_epoch = 100;
@@ -674,11 +691,11 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_manager_bundle_creation)
 
     // Update manager with bundle
     BOOST_CHECK(manager.UpdateBundle(bundle));
-    BOOST_CHECK(manager.HasValidBundle(test_epoch));
+    BOOST_CHECK(!manager.HasValidBundle(test_epoch));
 
-    // Test consensus price
+    // Legacy message bundles are not canonical V1 price sources.
     CAmount consensus_price = manager.GetConsensusPrice(test_epoch);
-    BOOST_CHECK_GT(consensus_price, 0);
+    BOOST_CHECK_EQUAL(consensus_price, 0);
 }
 
 /**
@@ -803,11 +820,21 @@ BOOST_AUTO_TEST_CASE(oracle_block_integration)
     // Empty bundle should create empty script
     BOOST_CHECK(oracle_script.empty());
 
-    // Test with valid bundle
+    // Test with structurally valid MuSig2 bundle. V1 no longer serializes
+    // legacy v0x01/v0x02 message bundles into block oracle scripts.
     COracleBundle valid_bundle(10);
-    COraclePriceMessage msg2(1, 6000, GetTime());  // $0.006 (realistic price)
-    msg2.schnorr_sig = {0x01, 0x02, 0x03}; // Mock signature
-    valid_bundle.AddMessage(msg2);
+    valid_bundle.version = 3;
+    valid_bundle.median_price_micro_usd = 6000;
+    valid_bundle.timestamp = GetTime();
+
+    const Consensus::Params& consensus = CChainParams::Main()->GetConsensus();
+    std::vector<uint8_t> oracle_ids;
+    for (uint8_t id = 0; id < consensus.nOracleConsensusRequired; ++id) {
+        oracle_ids.push_back(id);
+    }
+    valid_bundle.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        oracle_ids, static_cast<uint16_t>(consensus.nOracleTotalOracles));
+    valid_bundle.aggregate_sig.assign(64, 0x01);
 
     oracle_script = manager.CreateOracleScript(valid_bundle);
     BOOST_CHECK(!oracle_script.empty());
@@ -827,7 +854,7 @@ BOOST_AUTO_TEST_CASE(oracle_data_validation)
 
     CKey test_key;
     test_key.MakeNewKey(true);
-    BOOST_CHECK(valid_msg.Sign(test_key));
+    BOOST_CHECK(valid_msg.SignAttestation(test_key));
 
     // Message should be valid (structure-wise)
     BOOST_CHECK(valid_msg.IsValid());
@@ -910,12 +937,12 @@ BOOST_AUTO_TEST_CASE(test_signature_verification_edge_cases)
     COraclePriceMessage double_spend1(1, 6000, GetTime());  // $0.006
     COraclePriceMessage double_spend2(1, 7000, GetTime()); // Same oracle, different price ($0.007)
 
-    BOOST_CHECK(double_spend1.Sign(oracle_key));
-    BOOST_CHECK(double_spend2.Sign(oracle_key));
+    BOOST_CHECK(double_spend1.SignAttestation(oracle_key));
+    BOOST_CHECK(double_spend2.SignAttestation(oracle_key));
 
     // Both should be valid individually, but conflict detection should prevent both
-    BOOST_CHECK(double_spend1.Verify());
-    BOOST_CHECK(double_spend2.Verify());
+    BOOST_CHECK(double_spend1.VerifyAttestation());
+    BOOST_CHECK(double_spend2.VerifyAttestation());
 
     // This should fail when checking for conflicting messages
     BOOST_CHECK(!COraclePriceMessage::CheckForConflictingMessages({double_spend1, double_spend2}));
@@ -1007,7 +1034,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Create valid Schnorr signature
     CKey test_key;
     test_key.MakeNewKey(true);
-    BOOST_CHECK(rate_limit_msg.Sign(test_key));
+    BOOST_CHECK(rate_limit_msg.SignAttestation(test_key));
 
     // First message should be accepted
     BOOST_CHECK(OracleP2P::ValidateIncomingMessage(rate_limit_msg));
@@ -1015,7 +1042,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Rapid subsequent messages should be rate limited
     for (int i = 0; i < 10; i++) {
         COraclePriceMessage spam_msg(1, 6000 + i * 100, GetTime());  // $0.006 + variations
-        BOOST_CHECK(spam_msg.Sign(test_key));
+        BOOST_CHECK(spam_msg.SignAttestation(test_key));
 
         // Should be rate limited after the first few
         bool accepted = OracleP2P::ValidateIncomingMessage(spam_msg);
@@ -1040,8 +1067,8 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
         test_bundle.AddMessage(msg);
     }
 
-    // Valid bundle should pass
-    BOOST_CHECK(OracleP2P::ValidateBundleMessage(test_bundle));
+    // Legacy ORACLEBUNDLE P2P messages are deprecated in V1.
+    BOOST_CHECK(!OracleP2P::ValidateBundleMessage(test_bundle));
 
     // Create bundle with too many messages by directly manipulating the vector
     COracleBundle oversized_bundle(10);

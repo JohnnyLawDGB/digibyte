@@ -95,8 +95,8 @@ BOOST_FIXTURE_TEST_CASE(skip_oracle_allows_insufficient_collateral_exploit, Basi
     // (dust+) collateral for $100 DD. At $0.50/DGB with 500% ratio, the
     // real requirement is ~10 DGB (1,000,000,000 sats).
     //
-    // With skipOracleValidation=true (the current bug in ConnectBlock),
-    // collateral ratio validation is skipped entirely, so this passes.
+    // Before DD-RH-115, skipOracleValidation=true skipped collateral ratio
+    // validation entirely, so this passed only for IBD/catch-up nodes.
 
     CKey testKey;
     testKey.MakeNewKey(true);
@@ -114,8 +114,9 @@ BOOST_FIXTURE_TEST_CASE(skip_oracle_allows_insufficient_collateral_exploit, Basi
     CMutableTransaction mtx = BuildMintTx(ownerKey, trivialCollateral, currentHeight);
     CTransaction tx(mtx);
 
-    // With skipOracleValidation=true (the bug): collateral check is SKIPPED
-    // This passes because no economic validation occurs
+    // With skipOracleValidation=true, local sync state must not change the
+    // consensus result: a post-activation mint still needs oracle-backed
+    // collateral validation.
     {
         DigiDollar::ValidationContext ctx(currentHeight, oraclePrice, 150, Params(),
                                           nullptr, true /* skipOracleValidation */);
@@ -123,11 +124,11 @@ BOOST_FIXTURE_TEST_CASE(skip_oracle_allows_insufficient_collateral_exploit, Basi
         bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
         BOOST_TEST_MESSAGE("skipOracle=true, trivial collateral result: " +
                           std::to_string(result) + " reason: " + state.GetRejectReason());
-        // This documents the bug: with skipOracle=true, insufficient collateral passes
-        // After the fix, this STILL passes in IBD mode (skipOracle=true) because
-        // historical blocks already passed consensus when they were first validated.
-        BOOST_CHECK_MESSAGE(result,
-            "IBD mode should allow through historical blocks (skipOracle=true)");
+        BOOST_CHECK_MESSAGE(!result,
+            "SECURITY BUG [DD-RH-115]: skipOracleValidation=true bypasses "
+            "collateral ratio, so IBD/catch-up nodes can accept an "
+            "undercollateralized mint rejected by caught-up nodes");
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "insufficient-collateral");
     }
 
     // With skipOracleValidation=false (the fix for non-IBD blocks): this MUST FAIL
@@ -146,8 +147,9 @@ BOOST_FIXTURE_TEST_CASE(skip_oracle_allows_insufficient_collateral_exploit, Basi
 
 BOOST_FIXTURE_TEST_CASE(non_ibd_rejects_zero_oracle_price, BasicTestingSetup)
 {
-    // When NOT in IBD, oracle price must be available and positive.
-    // Zero oracle price should cause rejection (fail-closed).
+    // Oracle price must be available and positive for mint validation in every
+    // local sync state. Otherwise IBD/catch-up nodes can accept blocks that
+    // caught-up nodes reject.
 
     CKey testKey;
     testKey.MakeNewKey(true);
@@ -172,10 +174,12 @@ BOOST_FIXTURE_TEST_CASE(non_ibd_rejects_zero_oracle_price, BasicTestingSetup)
                           std::to_string(result) + " reason: " + state.GetRejectReason());
         BOOST_CHECK_MESSAGE(!result,
             "SECURITY BUG: Mint accepted with zero oracle price in non-IBD mode!");
-        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-oracle-price");
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price" ||
+                            state.GetRejectReason() == "minting-blocked-during-err",
+            "unexpected fail-closed reason: " + state.GetRejectReason());
     }
 
-    // IBD with oracle price = 0: allowed (oracle may not be available during sync)
+    // IBD/catch-up with oracle price = 0: also rejected.
     {
         DigiDollar::ValidationContext ctx(currentHeight, 0, 150, Params(),
                                           nullptr, true /* IBD mode */);
@@ -183,7 +187,11 @@ BOOST_FIXTURE_TEST_CASE(non_ibd_rejects_zero_oracle_price, BasicTestingSetup)
         bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
         BOOST_TEST_MESSAGE("IBD, zero oracle result: " +
                           std::to_string(result) + " reason: " + state.GetRejectReason());
-        BOOST_CHECK(result);
+        BOOST_CHECK_MESSAGE(!result,
+            "SECURITY BUG [DD-RH-115]: IBD/catch-up mint accepted with zero oracle price");
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price" ||
+                            state.GetRejectReason() == "minting-blocked-during-err",
+            "unexpected fail-closed reason: " + state.GetRejectReason());
     }
 }
 
@@ -248,9 +256,9 @@ BOOST_FIXTURE_TEST_CASE(valid_mint_passes_non_ibd, BasicTestingSetup)
 
 BOOST_FIXTURE_TEST_CASE(ibd_err_blocks_minting_with_nonzero_supply, BasicTestingSetup)
 {
-    // Reproduce the exact IBD failure: after earlier mints increment totalDDSupply,
-    // ShouldBlockMintingDuringERR() blocks minting because oracle price is 0 (fail-closed).
-    // With skipOracleValidation=true (IBD mode), the ERR check should be skipped.
+    // Regression: after earlier mints increment totalDDSupply, the IBD/catch-up
+    // path still must fail closed on zero oracle price before any local ERR
+    // state can make the result node-dependent.
 
     CKey testKey;
     testKey.MakeNewKey(true);
@@ -274,9 +282,8 @@ BOOST_FIXTURE_TEST_CASE(ibd_err_blocks_minting_with_nonzero_supply, BasicTesting
     CMutableTransaction mtx = BuildMintTx(ownerKey, generousCollateral, currentHeight);
     CTransaction tx(mtx);
 
-    // IBD mode: oracle price is 0 (no oracles running during sync), skipOracle=true
-    // BUG: ShouldBlockMintingDuringERR does NOT check skipOracleValidation,
-    // so it calls ShouldBlockMinting(0) which fails-closed → "minting-blocked-during-err"
+    // IBD/catch-up mode: oracle price is 0, so the mint must be rejected
+    // deterministically with the same reason as a caught-up node.
     {
         DigiDollar::ValidationContext ctx(currentHeight, 0 /* no oracle in IBD */, 150, Params(),
                                           nullptr, true /* skipOracleValidation = IBD mode */);
@@ -284,11 +291,11 @@ BOOST_FIXTURE_TEST_CASE(ibd_err_blocks_minting_with_nonzero_supply, BasicTesting
         bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
         BOOST_TEST_MESSAGE("IBD + nonzero supply + zero oracle: result=" +
                           std::to_string(result) + " reason=" + state.GetRejectReason());
-        BOOST_CHECK_MESSAGE(result,
-            "IBD BUG: Mint blocked during IBD with reason: " + state.GetRejectReason() +
-            " — new nodes cannot sync past this block!");
-        // Before fix: fails with "minting-blocked-during-err"
-        // After fix: passes (ERR check skipped during IBD)
+        BOOST_CHECK_MESSAGE(!result,
+            "SECURITY BUG [DD-RH-115]: IBD/catch-up mint accepted with zero oracle price");
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price" ||
+                            state.GetRejectReason() == "minting-blocked-during-err",
+            "unexpected fail-closed reason: " + state.GetRejectReason());
     }
 
     // Non-IBD mode with zero oracle: should STILL block (fail-closed is correct for live nodes)
@@ -380,7 +387,7 @@ BOOST_FIXTURE_TEST_CASE(non_ibd_err_still_blocks_when_active, BasicTestingSetup)
         BOOST_CHECK_EQUAL(state.GetRejectReason(), "minting-blocked-during-err");
     }
 
-    // IBD with active ERR: should be skipped (historical block already validated)
+    // IBD/catch-up with active ERR: local sync state must not bypass mint blocking.
     {
         DigiDollar::ValidationContext ctx(currentHeight, oraclePrice, 50, Params(),
                                           nullptr, true /* IBD mode */);
@@ -388,8 +395,9 @@ BOOST_FIXTURE_TEST_CASE(non_ibd_err_still_blocks_when_active, BasicTestingSetup)
         bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
         BOOST_TEST_MESSAGE("IBD + active ERR: result=" +
                           std::to_string(result) + " reason=" + state.GetRejectReason());
-        BOOST_CHECK_MESSAGE(result,
-            "IBD should skip ERR check for historical blocks! reason: " + state.GetRejectReason());
+        BOOST_CHECK_MESSAGE(!result,
+            "SECURITY: skipOracleValidation bypassed active ERR mint blocking");
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "minting-blocked-during-err");
     }
 
     // Clean up ERR state — reconstruct with healthy system

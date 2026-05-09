@@ -268,18 +268,23 @@ BOOST_AUTO_TEST_CASE(rh34_health_staleness_no_dd_activity)
     // ATTACK: System has DD supply but no new DD transactions for 1000 blocks.
     // DGB price drops. Attacker mints at stale health ratio.
     SystemHealthMonitor::ResetMetrics();
+    Volatility::VolatilityMonitor::ClearHistory();
+    Volatility::VolatilityMonitor::RecordPrice(
+        500'000 /* $0.50/DGB in micro-USD */, 1'700'000'000, 1000);
 
     SystemHealthMonitor::OnMintConnected(10000, 100 * COIN);
 
-    auto metrics = SystemHealthMonitor::GetCachedMetrics();
+    auto metrics = SystemHealthMonitor::GetSystemMetrics();
     BOOST_CHECK_EQUAL(metrics.totalDDSupply, 10000);
     BOOST_CHECK_EQUAL(metrics.totalCollateral, 100 * COIN);
+    BOOST_CHECK_EQUAL(metrics.lastOraclePrice, 500'000);
 
     // GetSystemCollateralRatio recalculates from totalCollateral * currentPrice.
     // It does NOT just return a cached percentage. This is the defense.
     CAmount ratio = DigiDollar::GetSystemCollateralRatio();
     BOOST_CHECK(ratio > 0);
 
+    Volatility::VolatilityMonitor::ClearHistory();
     SystemHealthMonitor::ResetMetrics();
 }
 

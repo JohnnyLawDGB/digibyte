@@ -49,7 +49,7 @@ namespace {
 bool SkipPhase2MinerTest()
 {
     const auto& params = Params().GetConsensus();
-    if (params.nDigiDollarPhase3Height <= 0) {
+    if (params.nDigiDollarMuSig2Height <= 0) {
         BOOST_TEST_MESSAGE("SKIPPED: Phase 3 active from genesis — Phase 2 miner test not applicable");
         return true;
     }
@@ -80,7 +80,6 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
     // Create oracle bundle with valid message
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
 
     // Generate oracle keypair
@@ -98,7 +97,7 @@ BOOST_AUTO_TEST_CASE(add_oracle_bundle_to_coinbase)
     msg.oracle_pubkey = oracle_pubkey;
 
     // Sign the message
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
 
     // Add message to bundle manager
     BOOST_REQUIRE(manager.AddOracleMessage(msg));
@@ -159,7 +158,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_serialization_format)
     msg.oracle_pubkey = oracle_pubkey;
 
     // Sign the message
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
 
     // Create bundle with message
     COracleBundle bundle;
@@ -220,7 +219,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
 
     // Create bundle
     COracleBundle bundle;
@@ -230,7 +229,6 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_size_limit)
     // Use CreateOracleScript to create compact format
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
 
     CScript oracle_script = manager.CreateOracleScript(bundle);
@@ -296,7 +294,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
     manager.AddOracleMessage(msg);
 
     // Create new block using BlockAssembler
@@ -333,6 +331,12 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
 
     // WILL FAIL: Oracle bundle not added by CreateNewBlock()
     BOOST_CHECK(found_oracle_opreturn);
+
+    // Regression: CreateNewBlock appends the oracle output after generating the
+    // witness commitment. The returned template must already have the final
+    // merkle root; miners/GBT consumers should not need IncrementExtraNonce()
+    // to repair it.
+    BOOST_CHECK(block.hashMerkleRoot == BlockMerkleRoot(block));
 }
 
 /**
@@ -371,9 +375,9 @@ BOOST_AUTO_TEST_CASE(create_new_block_no_oracle_if_unavailable)
     // Coinbase should have at least miner payout
     BOOST_CHECK_GE(coinbase.vout.size(), 1);
 
-    // Compute and verify merkle root (CreateNewBlock doesn't set it)
-    block.hashMerkleRoot = BlockMerkleRoot(block);
+    // Verify CreateNewBlock returned a populated merkle root.
     BOOST_CHECK(!block.hashMerkleRoot.IsNull());
+    BOOST_CHECK(block.hashMerkleRoot == BlockMerkleRoot(block));
 
     // Test should pass even without oracle bundle (graceful degradation)
     BOOST_CHECK(true);
@@ -394,7 +398,6 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
     // Add EXACTLY ONE oracle message (Phase One requirement)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1 consensus
     manager.ClearPendingMessages();
 
@@ -410,7 +413,7 @@ BOOST_AUTO_TEST_CASE(create_new_block_phase_one_single_oracle)
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
 
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
     manager.AddOracleMessage(msg);
 
     // Do NOT add additional oracle messages (Phase One = single oracle)

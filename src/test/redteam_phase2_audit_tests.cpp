@@ -62,7 +62,7 @@ static COraclePriceMessage MakeSignedMsg(const CKey& key, uint32_t id, uint64_t 
     msg.block_height = 700;
     msg.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(msg.SignAttestation(key));
     return msg;
 }
 
@@ -71,7 +71,7 @@ static Consensus::Params MakePhase2Params(int required, int total, int phase2_he
     Consensus::Params p;
     p.nOracleRequiredMessages = required;
     p.nOracleTotalOracles = total;
-    p.nDigiDollarPhase2Height = phase2_height;
+    p.nDDActivationHeight = phase2_height;
     p.nOracleEpochLength = 144;
     return p;
 }
@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE(attack_empty_sig_phase2_bundle)
     }
     bundle.median_price_micro_usd = OracleBundleManager::CalculateConsensusPrice(bundle, params);
 
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
     BOOST_CHECK_MESSAGE(!result,
         "CRITICAL: Phase 2 bundle with empty signatures should be REJECTED");
 
@@ -140,7 +140,7 @@ BOOST_AUTO_TEST_CASE(attack_zero_sig_phase2_bundle)
     }
     bundle.median_price_micro_usd = OracleBundleManager::CalculateConsensusPrice(bundle, params);
 
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
     BOOST_CHECK_MESSAGE(!result,
         "CRITICAL: Phase 2 bundle with all-zero signatures should be REJECTED");
 
@@ -177,8 +177,10 @@ BOOST_AUTO_TEST_CASE(attack_version_downgrade)
     p1_bundle.messages.push_back(p1_msg);
     p1_bundle.median_price_micro_usd = p1_msg.price_micro_usd;
 
-    // Create Phase 1 script (version 0x01)
+    // V1 no longer emits Phase 1 scripts.
     CScript p1_script = manager.CreateOracleScript(p1_bundle);
+    BOOST_CHECK_MESSAGE(p1_script.empty(),
+        "V1 must not serialize legacy Phase 1 oracle scripts");
 
     // Construct a coinbase with the Phase 1 data
     CMutableTransaction coinbase;
@@ -193,15 +195,16 @@ BOOST_AUTO_TEST_CASE(attack_version_downgrade)
     coinbase.vout.push_back(oracle_out);
     CTransaction tx(coinbase);
 
-    // Extract the bundle — should get Phase 1 format
+    // No legacy bundle should be extractable from V1 block data.
     COracleBundle extracted;
     bool extracted_ok = manager.ExtractOracleBundle(tx, extracted);
-    BOOST_CHECK(extracted_ok);
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 1);
+    BOOST_CHECK_MESSAGE(!extracted_ok,
+        "V1 must not extract legacy Phase 1 oracle scripts");
 
-    // Now validate as Phase 2 — should FAIL because Phase 2 requires N sigs
+    // A hand-built Phase 1 bundle still fails Phase 2 validation because Phase
+    // Two requires signed quorum messages.
     const Consensus::Params& regtest_params = Params().GetConsensus();
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(extracted, regtest_params);
+    bool result = OracleBundleManager::ValidateBundle(p1_bundle, 0, regtest_params);
     BOOST_CHECK_MESSAGE(!result,
         "CRITICAL: Phase 1 bundle should be REJECTED during Phase 2 validation");
 
@@ -241,7 +244,7 @@ BOOST_AUTO_TEST_CASE(attack_cross_signing)
     cross_msg.block_height = 700;
     cross_msg.nonce = 999;
     cross_msg.oracle_pubkey = XOnlyPubKey(keys[3].GetPubKey()); // oracle 3's key
-    BOOST_REQUIRE(cross_msg.SignPhase2(keys[3])); // Signed by oracle 3
+    BOOST_REQUIRE(cross_msg.SignAttestation(keys[3])); // Signed by oracle 3
     bundle.messages.push_back(cross_msg);
 
     bundle.median_price_micro_usd = OracleBundleManager::CalculateConsensusPrice(bundle, params);
@@ -253,7 +256,8 @@ BOOST_AUTO_TEST_CASE(attack_cross_signing)
     manager.SetMinOracleCount(1);
 
     CScript script = manager.CreateOracleScript(bundle);
-    BOOST_CHECK(!script.empty());
+    BOOST_CHECK_MESSAGE(script.empty(),
+        "V1 must not serialize legacy Phase 2 oracle scripts");
 
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
@@ -267,26 +271,15 @@ BOOST_AUTO_TEST_CASE(attack_cross_signing)
     CTransaction tx(coinbase);
 
     COracleBundle extracted;
-    BOOST_CHECK(manager.ExtractOracleBundle(tx, extracted));
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(tx, extracted),
+        "V1 must not extract legacy Phase 2 oracle scripts");
 
-    // After extraction, oracle_id=4's pubkey is bound from chainparams (oracle 4's key)
-    // but the signature was made by oracle 3's key → verification MUST fail for that message
-    int valid_sigs = 0;
-    for (const auto& msg : extracted.messages) {
-        if (msg.VerifyPhase2()) valid_sigs++;
-    }
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
+    BOOST_CHECK_MESSAGE(!result || script.empty(),
+        "Cross-signed legacy bundle must not reach block-validation quorum");
 
-    // Only 3 honest sigs should verify, the cross-signed message should fail
-    BOOST_CHECK_MESSAGE(valid_sigs == 3,
-        strprintf("Cross-signing attack: expected 3 valid sigs, got %d", valid_sigs));
-
-    // With only 3 valid sigs and threshold 4, ValidatePhaseTwoBundle should reject
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(extracted, params);
-    BOOST_CHECK_MESSAGE(!result,
-        "Cross-signed bundle should NOT reach threshold");
-
-    LogPrintf("REDTEAM: Attack 4 — %s (valid_sigs=%d, threshold=4)\n",
-              result ? "EXPLOITABLE!!" : "Defense holds ✓", valid_sigs);
+    LogPrintf("REDTEAM: Attack 4 — %s (legacy script omitted)\n",
+              (result && !script.empty()) ? "EXPLOITABLE!!" : "Defense holds ✓");
 }
 
 // ============================================================================
@@ -319,6 +312,8 @@ BOOST_AUTO_TEST_CASE(attack_signature_replay)
     bundle1.median_price_micro_usd = price;
 
     CScript script1 = manager.CreateOracleScript(bundle1);
+    BOOST_CHECK_MESSAGE(script1.empty(),
+        "V1 must not serialize legacy Phase 2 oracle scripts");
     CMutableTransaction cb1;
     cb1.vin.resize(1); cb1.vin[0].prevout.SetNull();
     cb1.vout.resize(1); cb1.vout[0].scriptPubKey = CScript() << OP_TRUE;
@@ -326,14 +321,10 @@ BOOST_AUTO_TEST_CASE(attack_signature_replay)
     cb1.vout.push_back(o1);
     CTransaction tx1(cb1);
 
-    // Extract and verify block 1 signatures
+    // No legacy signatures should be extractable in V1.
     COracleBundle ext1;
-    BOOST_CHECK(manager.ExtractOracleBundle(tx1, ext1));
-    int valid1 = 0;
-    for (const auto& m : ext1.messages) {
-        if (m.VerifyPhase2()) valid1++;
-    }
-    BOOST_CHECK_EQUAL(valid1, 5);
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(tx1, ext1),
+        "V1 must not extract legacy Phase 2 oracle scripts");
 
     // Block 2: REPLAY — copy exact same script into a new coinbase
     // A miner could take the oracle output from block N and put it in block N+1
@@ -344,27 +335,10 @@ BOOST_AUTO_TEST_CASE(attack_signature_replay)
     CTransaction tx2(cb2);
 
     COracleBundle ext2;
-    BOOST_CHECK(manager.ExtractOracleBundle(tx2, ext2));
-    int valid2 = 0;
-    for (const auto& m : ext2.messages) {
-        if (m.VerifyPhase2()) valid2++;
-    }
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(tx2, ext2),
+        "V1 must not extract replayed legacy Phase 2 oracle scripts");
 
-    // Signatures DO verify — they're mathematically valid for same (oracle_id, price, ts)
-    // This is a REPLAY and the signatures will verify
-    BOOST_CHECK_MESSAGE(valid2 == 5,
-        "Replayed signatures verify (expected — sig covers only oracle_id+price+ts)");
-
-    // The defense is the TIMESTAMP check in ValidateBlockOracleData():
-    //   oracle_age = block.nTime - bundle.timestamp
-    //   if (oracle_age > ORACLE_MAX_AGE_SECONDS) → REJECT
-    // As long as the timestamp is within 1 hour of the new block, replay works.
-    // After 1 hour, the timestamp check rejects it.
-
-    // Document: signatures are replayable within the 1-hour window
-    // This is a design trade-off, not a bug — Phase 2 sigs are stateless
-    LogPrintf("REDTEAM: Attack 5 — REPLAY WORKS within 1-hour window (by design)\n");
-    LogPrintf("REDTEAM: Attack 5 — Severity: LOW (miner can reuse stale oracle data for up to 1 hour)\n");
+    LogPrintf("REDTEAM: Attack 5 — Defense holds ✓ (legacy replay data is not serialized)\n");
 }
 
 // ============================================================================
@@ -518,7 +492,7 @@ BOOST_AUTO_TEST_CASE(attack_nonexistent_oracle_id)
     }
     bundle.median_price_micro_usd = 50000;
 
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
     BOOST_CHECK_MESSAGE(!result,
         "Bundle with non-existent oracle IDs should be REJECTED");
 
@@ -622,7 +596,7 @@ BOOST_AUTO_TEST_CASE(attack_malformed_phase2_data)
         // If it succeeds, ValidatePhaseTwoBundle should reject it
         if (ok) {
             Consensus::Params params = MakePhase2Params(4, 7);
-            bool valid = OracleBundleManager::ValidatePhaseTwoBundle(extracted, params);
+            bool valid = OracleBundleManager::ValidateBundle(extracted, 0, params);
             BOOST_CHECK_MESSAGE(!valid, "Phase 2 bundle with 0 messages should fail validation");
         }
     }
@@ -719,7 +693,7 @@ BOOST_AUTO_TEST_CASE(attack_duplicate_oracle_id_inflation)
 
     bundle.median_price_micro_usd = 50000;
 
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
     BOOST_CHECK_MESSAGE(!result,
         "Bundle with duplicate oracle IDs should be REJECTED");
 
@@ -752,12 +726,12 @@ BOOST_AUTO_TEST_CASE(attack_price_out_of_range)
         msg.block_height = 700;
         msg.nonce = i;
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         bundle.messages.push_back(msg);
     }
     bundle.median_price_micro_usd = 50;
 
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
     BOOST_CHECK_MESSAGE(!result,
         "Bundle with sub-minimum prices should be REJECTED");
 
@@ -789,7 +763,7 @@ BOOST_AUTO_TEST_CASE(attack_consensus_price_mismatch)
     // ATTACK: Claim a DIFFERENT median price
     bundle.median_price_micro_usd = 99999;
 
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
     BOOST_CHECK_MESSAGE(!result,
         "Bundle with mismatched median_price should be REJECTED by price verification");
 

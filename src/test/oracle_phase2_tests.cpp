@@ -3,10 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 /**
- * Oracle Phase 2 Unit Tests
+ * Legacy Oracle Phase 2 Unit Tests
  *
- * Tests for multi-oracle consensus (RC30: 9-of-17 mainnet and testnet).
- * Validates ValidatePhaseTwoBundle(), CalculateConsensusPrice(), and related functions.
+ * V1 on-chain oracle data is MuSig2-only (v0x03). These tests keep legacy
+ * Phase 2 calculation helpers covered while asserting that Phase 1/2 bundle
+ * validation/routing does not accept, mine, or extract legacy bundles.
  *
  * Specification: ORACLE_PHASE_2_SPEC_PRD.md
  */
@@ -55,7 +56,7 @@ static COraclePriceMessage CreateSignedOracleMessage(
     msg.nonce = GetRand(UINT64_MAX);
     msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
 
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
     return msg;
 }
 
@@ -122,13 +123,14 @@ static Consensus::Params CreatePhase2Params(int required_messages, int total_ora
 {
     Consensus::Params params;
     params.nOracleRequiredMessages = required_messages;
+    params.nOracleConsensusRequired = required_messages;
     params.nOracleTotalOracles = total_oracles;
-    params.nDigiDollarPhase2Height = 100;  // Activate Phase 2 at block 100
+    params.nDDActivationHeight = 100;  // Activate Phase 2 at block 100
     params.nOracleEpochLength = 144;
     return params;
 }
 
-BOOST_AUTO_TEST_CASE(phase2_extraction_derives_epoch_from_coinbase_height)
+BOOST_AUTO_TEST_CASE(phase2_legacy_bundle_not_serialized_from_coinbase_height)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -138,6 +140,7 @@ BOOST_AUTO_TEST_CASE(phase2_extraction_derives_epoch_from_coinbase_height)
     BOOST_REQUIRE_NE(expected_epoch, 0);
 
     COracleBundle bundle(expected_epoch);
+    bundle.version = 2;
     bundle.timestamp = GetTime();
     bundle.median_price_micro_usd = 50000;
     for (uint32_t oracle_id = 0; oracle_id < 4; ++oracle_id) {
@@ -147,7 +150,8 @@ BOOST_AUTO_TEST_CASE(phase2_extraction_derives_epoch_from_coinbase_height)
     }
 
     CScript oracle_script = manager.CreateOracleScript(bundle);
-    BOOST_REQUIRE(!oracle_script.empty());
+    BOOST_CHECK_MESSAGE(oracle_script.empty(),
+        "V1 must not serialize legacy Phase Two oracle bundles");
 
     CMutableTransaction coinbase_tx;
     coinbase_tx.vin.resize(1);
@@ -157,8 +161,8 @@ BOOST_AUTO_TEST_CASE(phase2_extraction_derives_epoch_from_coinbase_height)
     coinbase_tx.vout.push_back(CTxOut(0, oracle_script));
 
     COracleBundle extracted;
-    BOOST_REQUIRE(manager.ExtractOracleBundle(CTransaction(coinbase_tx), extracted));
-    BOOST_CHECK_EQUAL(extracted.epoch, expected_epoch);
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(CTransaction(coinbase_tx), extracted),
+        "No bundle should be extracted when V1 refuses to serialize legacy data");
 
     manager.Clear();
 }
@@ -168,11 +172,11 @@ BOOST_AUTO_TEST_CASE(phase2_extraction_derives_epoch_from_coinbase_height)
 //
 
 /**
- * Test: ValidatePhaseTwoBundle requires minimum message count
+ * Test: ValidatePhaseTwoBundle rejects legacy bundles even when below threshold
  */
 BOOST_AUTO_TEST_CASE(phase2_minimum_messages)
 {
-    LogPrintf("Test: ValidatePhaseTwoBundle requires minimum %d messages\n", 3);
+    LogPrintf("Test: ValidatePhaseTwoBundle rejects legacy bundle with fewer than %d messages\n", 3);
 
     // Create 3-of-10 testnet params
     Consensus::Params params = CreatePhase2Params(3, 10);
@@ -186,6 +190,7 @@ BOOST_AUTO_TEST_CASE(phase2_minimum_messages)
     int32_t epoch = GetCurrentEpoch(block_height);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = epoch;
     bundle.timestamp = timestamp;
 
@@ -197,16 +202,16 @@ BOOST_AUTO_TEST_CASE(phase2_minimum_messages)
     }
     bundle.median_price_micro_usd = 50000;
 
-    // Should FAIL: only 2 messages, need 3
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
-    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject bundle with < 3 messages");
+    // V1 rejects all legacy Phase 2 bundles.
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
+    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject legacy bundles");
 
     LogPrintf("Test PASSED: Bundle with %zu messages rejected (minimum: %d)\n",
               bundle.messages.size(), params.nOracleRequiredMessages);
 }
 
 /**
- * Test: ValidatePhaseTwoBundle detects duplicate oracle IDs
+ * Test: ValidatePhaseTwoBundle rejects duplicate oracle IDs as legacy data
  */
 BOOST_AUTO_TEST_CASE(phase2_duplicate_oracle_ids)
 {
@@ -220,6 +225,7 @@ BOOST_AUTO_TEST_CASE(phase2_duplicate_oracle_ids)
     int32_t epoch = GetCurrentEpoch(block_height);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = epoch;
     bundle.timestamp = timestamp;
 
@@ -230,15 +236,15 @@ BOOST_AUTO_TEST_CASE(phase2_duplicate_oracle_ids)
 
     bundle.median_price_micro_usd = 51000;
 
-    // Should FAIL: duplicate oracle ID 1
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
-    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject bundle with duplicate oracle IDs");
+    // V1 rejects all legacy Phase 2 bundles.
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
+    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject legacy bundles");
 
     LogPrintf("Test PASSED: Bundle with duplicate oracle IDs rejected\n");
 }
 
 /**
- * Test: ValidatePhaseTwoBundle rejects invalid Schnorr signatures
+ * Test: ValidatePhaseTwoBundle rejects legacy bundles with invalid signatures
  */
 BOOST_AUTO_TEST_CASE(phase2_invalid_signatures)
 {
@@ -252,6 +258,7 @@ BOOST_AUTO_TEST_CASE(phase2_invalid_signatures)
     int32_t epoch = GetCurrentEpoch(block_height);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = epoch;
     bundle.timestamp = timestamp;
 
@@ -266,19 +273,19 @@ BOOST_AUTO_TEST_CASE(phase2_invalid_signatures)
 
     bundle.median_price_micro_usd = 51000;
 
-    // Should FAIL: only 2 valid signatures, need 3
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
-    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject bundle with invalid signatures");
+    // V1 rejects all legacy Phase 2 bundles.
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
+    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject legacy bundles");
 
     LogPrintf("Test PASSED: Bundle with invalid signature rejected\n");
 }
 
 /**
- * Test: ValidatePhaseTwoBundle accepts valid bundle with exactly threshold signatures
+ * Test: ValidatePhaseTwoBundle rejects legacy bundle with exactly threshold signatures
  */
 BOOST_AUTO_TEST_CASE(phase2_exact_threshold)
 {
-    LogPrintf("Test: ValidatePhaseTwoBundle accepts bundle with exactly 3 valid signatures\n");
+    LogPrintf("Test: ValidatePhaseTwoBundle rejects legacy bundle with exactly 3 valid signatures\n");
 
     Consensus::Params params = CreatePhase2Params(3, 10);
     auto oracle_keys = CreateOracleKeys(3);
@@ -288,6 +295,7 @@ BOOST_AUTO_TEST_CASE(phase2_exact_threshold)
     int32_t epoch = GetCurrentEpoch(block_height);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = epoch;
     bundle.timestamp = timestamp;
 
@@ -303,14 +311,18 @@ BOOST_AUTO_TEST_CASE(phase2_exact_threshold)
 
     LogPrintf("Test: Bundle created with %zu messages, median_price=%llu\n",
               bundle.messages.size(), bundle.median_price_micro_usd);
+
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
+    BOOST_CHECK_MESSAGE(!result,
+        "V1 must reject legacy Phase Two bundles even with exactly threshold signatures");
 }
 
 /**
- * Test: ValidatePhaseTwoBundle accepts bundle with more than threshold signatures
+ * Test: ValidatePhaseTwoBundle rejects legacy bundle with more than threshold signatures
  */
 BOOST_AUTO_TEST_CASE(phase2_above_threshold)
 {
-    LogPrintf("Test: ValidatePhaseTwoBundle accepts bundle with > 3 valid signatures\n");
+    LogPrintf("Test: ValidatePhaseTwoBundle rejects legacy bundle with > 3 valid signatures\n");
 
     Consensus::Params params = CreatePhase2Params(3, 10);
     auto oracle_keys = CreateOracleKeys(5);  // 5 > 3
@@ -320,6 +332,7 @@ BOOST_AUTO_TEST_CASE(phase2_above_threshold)
     int32_t epoch = GetCurrentEpoch(block_height);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = epoch;
     bundle.timestamp = timestamp;
 
@@ -337,12 +350,16 @@ BOOST_AUTO_TEST_CASE(phase2_above_threshold)
     BOOST_CHECK_MESSAGE(bundle.median_price_micro_usd == 51000 || bundle.median_price_micro_usd > 0,
                         "Consensus price should be calculated correctly");
 
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
+    BOOST_CHECK_MESSAGE(!result,
+        "V1 must reject legacy Phase Two bundles even above threshold");
+
     LogPrintf("Test: Bundle with %zu messages has median_price=%llu\n",
               bundle.messages.size(), bundle.median_price_micro_usd);
 }
 
 /**
- * Test: ValidatePhaseTwoBundle rejects messages without signatures
+ * Test: ValidatePhaseTwoBundle rejects legacy bundles with missing signatures
  */
 BOOST_AUTO_TEST_CASE(phase2_missing_signatures)
 {
@@ -356,6 +373,7 @@ BOOST_AUTO_TEST_CASE(phase2_missing_signatures)
     int32_t epoch = GetCurrentEpoch(block_height);
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = epoch;
     bundle.timestamp = timestamp;
 
@@ -376,9 +394,9 @@ BOOST_AUTO_TEST_CASE(phase2_missing_signatures)
 
     bundle.median_price_micro_usd = 51000;
 
-    // Should FAIL: only 2 valid signed messages, need 3
-    bool result = OracleBundleManager::ValidatePhaseTwoBundle(bundle, params);
-    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject messages without signatures");
+    // V1 rejects all legacy Phase 2 bundles.
+    bool result = OracleBundleManager::ValidateBundle(bundle, 0, params);
+    BOOST_CHECK_MESSAGE(!result, "ValidatePhaseTwoBundle should reject legacy bundles");
 
     LogPrintf("Test PASSED: Bundle with unsigned message rejected\n");
 }
@@ -543,20 +561,20 @@ BOOST_AUTO_TEST_CASE(consensus_price_single_message)
 //
 
 /**
- * Test: GetRequiredConsensus returns 1 below Phase 2 height
+ * Test: GetRequiredConsensus always returns configured MuSig2 threshold
  */
-BOOST_AUTO_TEST_CASE(required_consensus_phase1)
+BOOST_AUTO_TEST_CASE(required_consensus_v1_uses_configured_threshold_below_legacy_phase2_height)
 {
-    LogPrintf("Test: GetRequiredConsensus returns 1 below Phase 2 height\n");
+    LogPrintf("Test: GetRequiredConsensus returns configured threshold below legacy Phase 2 height\n");
 
     Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
-    params.nDigiDollarPhase2Height = 10000;  // Phase 2 at block 10000
+    params.nDDActivationHeight = 10000;  // Phase 2 at block 10000
 
-    // Below Phase 2 height
+    // V1 no longer falls back to Phase 1 1-of-1 below the legacy Phase 2 height.
     int required = OracleBundleManager::GetRequiredConsensus(5000, params);
-    BOOST_CHECK_EQUAL(required, 1);
+    BOOST_CHECK_EQUAL(required, 9);
 
-    LogPrintf("Test PASSED: Phase 1 (height 5000) requires %d signatures\n", required);
+    LogPrintf("Test PASSED: V1 at height 5000 requires %d signatures\n", required);
 }
 
 /**
@@ -567,7 +585,7 @@ BOOST_AUTO_TEST_CASE(required_consensus_phase2_at_activation)
     LogPrintf("Test: GetRequiredConsensus returns params value at Phase 2 height\n");
 
     Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
-    params.nDigiDollarPhase2Height = 10000;
+    params.nDDActivationHeight = 10000;
 
     // Exactly at Phase 2 height (RC30: 9-of-17)
     int required = OracleBundleManager::GetRequiredConsensus(10000, params);
@@ -584,7 +602,7 @@ BOOST_AUTO_TEST_CASE(required_consensus_phase2_above_activation)
     LogPrintf("Test: GetRequiredConsensus returns params value above Phase 2 height\n");
 
     Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
-    params.nDigiDollarPhase2Height = 10000;
+    params.nDDActivationHeight = 10000;
 
     // Above Phase 2 height (RC30: 9-of-17)
     int required = OracleBundleManager::GetRequiredConsensus(15000, params);
@@ -598,61 +616,63 @@ BOOST_AUTO_TEST_CASE(required_consensus_phase2_above_activation)
 //
 
 /**
- * Test: ValidateBundle routes to Phase 1 below activation
+ * Test: ValidateBundle rejects legacy Phase 1 below legacy Phase 2 activation
  */
-BOOST_AUTO_TEST_CASE(validate_bundle_routes_phase1)
+BOOST_AUTO_TEST_CASE(validate_bundle_rejects_legacy_phase1)
 {
-    LogPrintf("Test: ValidateBundle routes to Phase 1 below activation height\n");
+    LogPrintf("Test: ValidateBundle rejects legacy Phase 1 below activation height\n");
 
     Consensus::Params params = CreatePhase2Params(9, 17);  // RC30: 9-of-17
-    params.nDigiDollarPhase2Height = 10000;
+    params.nDDActivationHeight = 10000;
 
     auto oracle_keys = CreateOracleKeys(1);
     int64_t timestamp = GetTime();
     int32_t block_height = 5000;  // Below Phase 2
 
-    // Create Phase 1 bundle (1 message)
+    // Create legacy Phase 1 bundle (1 message)
     COracleBundle bundle;
+    bundle.version = 1;
     bundle.epoch = GetCurrentEpoch(block_height);
     bundle.timestamp = timestamp;
     bundle.messages.push_back(CreateSignedOracleMessage(
         oracle_keys[0], 0, 50000, timestamp, block_height));
     bundle.median_price_micro_usd = 50000;
 
-    // Should use Phase 1 validation (1-of-1)
+    // V1 validates only MuSig2 v0x03 bundles.
     bool result = OracleBundleManager::ValidateBundle(bundle, block_height, params);
-    BOOST_CHECK_MESSAGE(result, "ValidateBundle should accept 1-of-1 bundle in Phase 1");
+    BOOST_CHECK_MESSAGE(!result, "ValidateBundle should reject legacy Phase 1 bundles");
 
-    LogPrintf("Test PASSED: Phase 1 validation at height %d\n", block_height);
+    LogPrintf("Test PASSED: legacy Phase 1 rejected at height %d\n", block_height);
 }
 
 /**
- * Test: ValidateBundle routes to Phase 2 at/above activation
+ * Test: ValidateBundle rejects legacy Phase 2 at/above legacy activation
  */
-BOOST_AUTO_TEST_CASE(validate_bundle_routes_phase2)
+BOOST_AUTO_TEST_CASE(validate_bundle_rejects_legacy_phase2)
 {
-    LogPrintf("Test: ValidateBundle routes to Phase 2 at/above activation height\n");
+    LogPrintf("Test: ValidateBundle rejects legacy Phase 2 at/above activation height\n");
 
     Consensus::Params params = CreatePhase2Params(3, 10);
-    params.nDigiDollarPhase2Height = 10000;
+    params.nDDActivationHeight = 10000;
 
     auto oracle_keys = CreateOracleKeys(1);
     int64_t timestamp = GetTime();
     int32_t block_height = 10000;  // At Phase 2
 
-    // Create Phase 1 bundle (1 message) - should FAIL in Phase 2
+    // Create a legacy single-message bundle.
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = GetCurrentEpoch(block_height);
     bundle.timestamp = timestamp;
     bundle.messages.push_back(CreateSignedOracleMessage(
         oracle_keys[0], 0, 50000, timestamp, block_height));
     bundle.median_price_micro_usd = 50000;
 
-    // Should use Phase 2 validation (3-of-10) and fail with only 1 message
+    // V1 validates only MuSig2 v0x03 bundles.
     bool result = OracleBundleManager::ValidateBundle(bundle, block_height, params);
-    BOOST_CHECK_MESSAGE(!result, "ValidateBundle should reject 1-of-1 bundle in Phase 2");
+    BOOST_CHECK_MESSAGE(!result, "ValidateBundle should reject legacy Phase 2 bundles");
 
-    LogPrintf("Test PASSED: Phase 2 validation rejects insufficient messages at height %d\n", block_height);
+    LogPrintf("Test PASSED: legacy Phase 2 bundle rejected at height %d\n", block_height);
 }
 
 //
@@ -667,7 +687,7 @@ BOOST_AUTO_TEST_CASE(byzantine_tolerance_test)
     LogPrintf("Test: Byzantine fault tolerance - 8 malicious + 9 honest = SUCCESS (RC30 9-of-17)\n");
 
     Consensus::Params params = CreatePhase2Params(9, 17);
-    params.nDigiDollarPhase2Height = 100;
+    params.nDDActivationHeight = 100;
 
     auto oracle_keys = CreateOracleKeys(17);
     int64_t timestamp = GetTime();
@@ -834,7 +854,7 @@ static std::vector<CKey> InjectConsensusAttestations(
     return keys;
 }
 
-// Test: Pending messages and attestations are cleared after Phase Two bundle creation
+// Test: Legacy pending messages and attestations survive when no MuSig2 bundle is mined
 BOOST_FIXTURE_TEST_CASE(pending_messages_survive_after_bundle, BasicTestingSetup)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
@@ -855,8 +875,8 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_survive_after_bundle, BasicTestingSetup
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 9);
     BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 9);
 
-    // Create a block — messages are consumed into the bundle but NOT cleared
-    // (they persist for future template creation, expire via stale purge)
+    // Create a block. V1 does not mine legacy Phase Two data; messages remain
+    // pending and expire via stale purge.
     CBlock block;
     AddDummyCoinbase(block);
     block.nTime = GetTime();
@@ -874,7 +894,7 @@ BOOST_FIXTURE_TEST_CASE(pending_messages_survive_after_bundle, BasicTestingSetup
         strprintf("Attestations should survive bundle creation (got %zu, expected 9)", manager.GetPendingAttestationCount())
     );
 
-    LogPrintf("Test PASSED: Pending messages and attestations persist after Phase Two bundle creation\n");
+    LogPrintf("Test PASSED: Pending messages and attestations persist when no MuSig2 bundle is mined\n");
 }
 
 // Test: With fewer than required messages, pending messages should NOT be cleared
@@ -957,17 +977,11 @@ BOOST_FIXTURE_TEST_CASE(no_stale_message_carryover, BasicTestingSetup)
 // =============================================================================
 
 /**
- * Test: Phase 2 round-trip — consensus-signed messages survive CreateOracleScript → ExtractOracleBundle
- * This is the CRITICAL test that validates the T5-03 fix.
- * Previously, oracles signed individual prices but on-chain stored consensus price,
- * making signature verification impossible after extraction.
- *
- * Uses REGTEST oracle keys (matching chainparams) because ExtractOracleBundle
- * binds pubkeys from chainparams for security.
+ * Test: legacy Phase 2 consensus-signed messages are not serialized in V1.
  */
-BOOST_AUTO_TEST_CASE(phase2_roundtrip_consensus_signed)
+BOOST_AUTO_TEST_CASE(phase2_roundtrip_consensus_signed_legacy_not_serialized)
 {
-    LogPrintf("Test: Phase 2 round-trip with consensus-signed messages\n");
+    LogPrintf("Test: legacy Phase 2 consensus-signed messages are not serialized in V1\n");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -984,6 +998,7 @@ BOOST_AUTO_TEST_CASE(phase2_roundtrip_consensus_signed)
     int64_t consensus_timestamp = timestamp;
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = GetCurrentEpoch(200);
     bundle.timestamp = consensus_timestamp;
 
@@ -994,9 +1009,10 @@ BOOST_AUTO_TEST_CASE(phase2_roundtrip_consensus_signed)
     }
     bundle.median_price_micro_usd = consensus_price;
 
-    // Step 2: Serialize to on-chain Phase 2 format
+    // Step 2: V1 rejects the legacy on-chain Phase 2 format.
     CScript oracle_script = manager.CreateOracleScript(bundle);
-    BOOST_CHECK_MESSAGE(!oracle_script.empty(), "Phase 2 oracle script should not be empty");
+    BOOST_CHECK_MESSAGE(oracle_script.empty(),
+        "V1 must not produce legacy Phase Two oracle scripts");
 
     // Step 3: Create a coinbase transaction with the oracle data
     CMutableTransaction coinbase;
@@ -1013,29 +1029,13 @@ BOOST_AUTO_TEST_CASE(phase2_roundtrip_consensus_signed)
 
     CTransaction tx(coinbase);
 
-    // Step 4: Extract the bundle back from the transaction
+    // Step 4: There is no legacy bundle to extract in V1.
     COracleBundle extracted;
     bool extracted_ok = manager.ExtractOracleBundle(tx, extracted);
-    BOOST_CHECK_MESSAGE(extracted_ok, "Phase 2 bundle extraction should succeed");
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
-    BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, consensus_price);
-    BOOST_CHECK_EQUAL(extracted.timestamp, consensus_timestamp);
+    BOOST_CHECK_MESSAGE(!extracted_ok,
+        "Legacy Phase Two bundle extraction should fail because no script was serialized");
 
-    // Step 5: Verify Phase 2 signatures survive the round-trip
-    // This is the KEY assertion — it failed before the T5-03 fix
-    // After extraction, pubkeys are bound from chainparams (not from the message)
-    int valid_sigs = 0;
-    for (const auto& msg : extracted.messages) {
-        BOOST_CHECK_EQUAL(msg.price_micro_usd, consensus_price);
-        BOOST_CHECK_EQUAL(msg.timestamp, consensus_timestamp);
-        if (msg.VerifyPhase2()) {
-            valid_sigs++;
-        }
-    }
-    BOOST_CHECK_MESSAGE(valid_sigs == 5,
-        strprintf("All 5 Phase 2 signatures should verify after round-trip, got %d", valid_sigs));
-
-    LogPrintf("Test PASSED: Phase 2 round-trip — %d/5 signatures verified\n", valid_sigs);
+    LogPrintf("Test PASSED: legacy Phase 2 consensus bundle was not serialized\n");
 }
 
 /**
@@ -1043,9 +1043,9 @@ BOOST_AUTO_TEST_CASE(phase2_roundtrip_consensus_signed)
  * This documents the bug that T5-03 fixes — when oracles sign their individual prices
  * but the on-chain format stores consensus price, signatures break.
  */
-BOOST_AUTO_TEST_CASE(phase2_roundtrip_individual_prices_break)
+BOOST_AUTO_TEST_CASE(phase2_roundtrip_individual_prices_legacy_not_serialized)
 {
-    LogPrintf("Test: Phase 2 round-trip with individual prices (expected to break sigs)\n");
+    LogPrintf("Test: legacy Phase 2 individual-price bundle is not serialized in V1\n");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -1059,6 +1059,7 @@ BOOST_AUTO_TEST_CASE(phase2_roundtrip_individual_prices_break)
     uint64_t individual_prices[] = {49000, 50000, 51000, 52000, 53000};
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = GetCurrentEpoch(200);
     bundle.timestamp = timestamp;
 
@@ -1073,9 +1074,10 @@ BOOST_AUTO_TEST_CASE(phase2_roundtrip_individual_prices_break)
     bundle.median_price_micro_usd = OracleBundleManager::CalculateConsensusPrice(bundle, params);
     BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 51000); // Median of 49k-53k
 
-    // Serialize → extract round-trip
+    // V1 serializes no legacy Phase Two script.
     CScript oracle_script = manager.CreateOracleScript(bundle);
-    BOOST_CHECK(!oracle_script.empty());
+    BOOST_CHECK_MESSAGE(oracle_script.empty(),
+        "V1 must not produce legacy Phase Two oracle scripts");
 
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
@@ -1090,38 +1092,23 @@ BOOST_AUTO_TEST_CASE(phase2_roundtrip_individual_prices_break)
     CTransaction tx(coinbase);
 
     COracleBundle extracted;
-    BOOST_CHECK(manager.ExtractOracleBundle(tx, extracted));
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(tx, extracted),
+        "Legacy Phase Two extraction should fail because no script was serialized");
 
-    // After extraction, ALL messages have consensus price (51000), not individual prices
-    // The signatures were over individual prices, so they WON'T verify
-    int valid_sigs = 0;
-    for (const auto& msg : extracted.messages) {
-        BOOST_CHECK_EQUAL(msg.price_micro_usd, 51000); // All set to consensus
-        if (msg.VerifyPhase2()) {
-            valid_sigs++;
-        }
-    }
-
-    // Only oracle 2 (who had price 51000 = consensus price) would verify
-    // The rest signed different prices → signatures break
-    BOOST_CHECK_MESSAGE(valid_sigs < 5,
-        strprintf("Individual-price signatures should NOT all verify after round-trip, got %d/5", valid_sigs));
-
-    LogPrintf("Test PASSED: Individual-price round-trip correctly shows %d/5 sigs broken\n", valid_sigs);
+    LogPrintf("Test PASSED: legacy Phase 2 individual-price bundle was not serialized\n");
 }
 
 /**
- * Test: Full Phase 2 pipeline — attestations → AddOracleBundleToBlock → extract → validate
- * End-to-end test of the corrected flow.
+ * Test: Legacy Phase 2 pipeline — attestations → AddOracleBundleToBlock.
+ * V1 must not mine or extract a fallback bundle without a completed MuSig2 session.
  */
-BOOST_AUTO_TEST_CASE(phase2_full_pipeline)
+BOOST_AUTO_TEST_CASE(phase2_full_pipeline_legacy_not_mined)
 {
-    LogPrintf("Test: Full Phase 2 pipeline with consensus attestations\n");
+    LogPrintf("Test: legacy Phase 2 pipeline does not mine fallback bundle in V1\n");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(4); // Phase Two: 4-of-7 (regtest)
 
     // Use regtest oracle keys (match chainparams pubkeys for extraction binding)
@@ -1166,36 +1153,26 @@ BOOST_AUTO_TEST_CASE(phase2_full_pipeline)
 
     BOOST_CHECK(manager.AddOracleBundleToBlock(block, 200));
 
-    // Step 5: Verify bundle was embedded — messages/attestations persist after
-    // bundle creation (available for next template, expire via stale purge)
+    // Step 5: V1 keeps the pending data but does not mine a legacy fallback
+    // bundle when no complete MuSig2 session exists.
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 5); // Persist after bundle
     BOOST_CHECK_EQUAL(manager.GetPendingAttestationCount(), 5); // Persist after bundle
-    BOOST_CHECK(block.vtx[0]->vout.size() >= 2); // Oracle output added
+    BOOST_CHECK_EQUAL(block.vtx[0]->vout.size(), 1);
 
-    // Step 6: Extract and validate (simulating block validation on receiving node)
+    // Step 6: No legacy bundle should be extractable from the block.
     COracleBundle extracted;
-    BOOST_CHECK(manager.ExtractOracleBundle(*block.vtx[0], extracted));
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
-    BOOST_CHECK_EQUAL(extracted.median_price_micro_usd, consensus_price);
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(*block.vtx[0], extracted),
+        "No legacy Phase Two bundle should be extractable in V1");
 
-    // Step 7: Verify ALL signatures survive round-trip
-    int valid_sigs = 0;
-    for (const auto& msg : extracted.messages) {
-        if (msg.VerifyPhase2()) {
-            valid_sigs++;
-        }
-    }
-    BOOST_CHECK_EQUAL(valid_sigs, 5);
-
-    LogPrintf("Test PASSED: Full Phase 2 pipeline — %d/5 signatures verified after round-trip\n", valid_sigs);
+    LogPrintf("Test PASSED: legacy Phase 2 pipeline did not mine fallback bundle\n");
 }
 
 /**
  * Test: Phase 2 bitmask — oracle IDs are correctly preserved through round-trip
  */
-BOOST_AUTO_TEST_CASE(phase2_oracle_ids_preserved)
+BOOST_AUTO_TEST_CASE(phase2_oracle_ids_legacy_not_serialized)
 {
-    LogPrintf("Test: Phase 2 oracle IDs preserved through round-trip\n");
+    LogPrintf("Test: legacy Phase 2 oracle ID bitmask is not serialized in V1\n");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -1211,6 +1188,7 @@ BOOST_AUTO_TEST_CASE(phase2_oracle_ids_preserved)
     uint32_t oracle_ids[] = {0, 3, 5, 7, 8};
 
     COracleBundle bundle;
+    bundle.version = 2;
     bundle.epoch = 0;
     bundle.timestamp = timestamp;
 
@@ -1223,6 +1201,9 @@ BOOST_AUTO_TEST_CASE(phase2_oracle_ids_preserved)
 
     // Round-trip
     CScript script = manager.CreateOracleScript(bundle);
+    BOOST_CHECK_MESSAGE(script.empty(),
+        "V1 must not produce legacy Phase Two oracle scripts");
+
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
     coinbase.vin[0].prevout.SetNull();
@@ -1236,15 +1217,10 @@ BOOST_AUTO_TEST_CASE(phase2_oracle_ids_preserved)
     CTransaction tx(coinbase);
 
     COracleBundle extracted;
-    BOOST_CHECK(manager.ExtractOracleBundle(tx, extracted));
-    BOOST_CHECK_EQUAL(extracted.messages.size(), 5);
+    BOOST_CHECK_MESSAGE(!manager.ExtractOracleBundle(tx, extracted),
+        "Legacy Phase Two extraction should fail because no script was serialized");
 
-    // Verify oracle IDs are preserved
-    for (size_t i = 0; i < 5; ++i) {
-        BOOST_CHECK_EQUAL(extracted.messages[i].oracle_id, oracle_ids[i]);
-    }
-
-    LogPrintf("Test PASSED: Oracle IDs preserved through Phase 2 round-trip\n");
+    LogPrintf("Test PASSED: legacy Phase 2 oracle ID bitmask was not serialized\n");
 }
 
 /**

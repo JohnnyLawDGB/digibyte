@@ -250,7 +250,7 @@ BOOST_AUTO_TEST_CASE(validate_v03_rejects_signed_out_of_range_price)
     BOOST_REQUIRE(SignRegtestV03Bundle(bundle, oracle_ids));
 
     std::string error;
-    BOOST_CHECK(!OracleBundleManager::ValidatePhaseThreeBundle(bundle, /*block_height=*/0, params, error));
+    BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, /*block_height=*/0, params, error));
     BOOST_CHECK(error.find("price") != std::string::npos);
 }
 
@@ -276,7 +276,7 @@ BOOST_AUTO_TEST_CASE(validate_v03_rejects_unused_bitmap_bits)
     bundle.participation_bitmap[0] |= 0x80;
 
     std::string error;
-    BOOST_CHECK(!OracleBundleManager::ValidatePhaseThreeBundle(bundle, /*block_height=*/0, params, error));
+    BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, /*block_height=*/0, params, error));
     BOOST_CHECK(error.find("bitmap") != std::string::npos);
 }
 

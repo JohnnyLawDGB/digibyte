@@ -83,9 +83,9 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_epoch_length)
     LogPrintf("Oracle epoch length (testnet): %d blocks (%.1f hours)\n",
               consensus.nDDOracleEpochBlocks, epoch_hours);
 
-    // TODO: Once oracle-specific parameters exist:
-    // BOOST_CHECK_EQUAL(consensus.nOracleEpochLength, 1440);  // 24 hours for production
-    // For testnet: BOOST_CHECK_EQUAL(consensus.nOracleEpochLength, 50);  // Faster rotation
+    // DigiDollar V1 uses 40-block (~10 minute) oracle signing epochs.
+    BOOST_CHECK_EQUAL(consensus.nDDOracleEpochBlocks, 40);
+    BOOST_CHECK_EQUAL(consensus.nOracleEpochLength, 40);
 }
 
 /**
@@ -423,15 +423,14 @@ BOOST_AUTO_TEST_CASE(oracle_epoch_calculation)
 
     int epoch_length = consensus.nDDOracleEpochBlocks;
 
-    // Test epoch calculation at various heights
-    int32_t epoch_0 = GetCurrentEpoch(0);
-    int32_t epoch_1 = GetCurrentEpoch(epoch_length);
-    int32_t epoch_2 = GetCurrentEpoch(epoch_length * 2);
+    BOOST_CHECK_EQUAL(epoch_length, 40);
 
-    // Epochs should increment
-    BOOST_CHECK_EQUAL(epoch_0, 0);
-    BOOST_CHECK_EQUAL(epoch_1, 1);
-    BOOST_CHECK_EQUAL(epoch_2, 2);
+    // Test epoch calculation at the 40-block boundaries.
+    BOOST_CHECK_EQUAL(GetCurrentEpoch(0), 0);
+    BOOST_CHECK_EQUAL(GetCurrentEpoch(39), 0);
+    BOOST_CHECK_EQUAL(GetCurrentEpoch(40), 1);
+    BOOST_CHECK_EQUAL(GetCurrentEpoch(79), 1);
+    BOOST_CHECK_EQUAL(GetCurrentEpoch(80), 2);
 
     // Test within epoch boundaries
     int32_t epoch_mid = GetCurrentEpoch(epoch_length / 2);

@@ -223,7 +223,7 @@ struct DDTransferTestFixture : public TestingSetup {
 
         // Add some mock UTXOs
         params.ddUtxos.push_back(CreateMockDDUTXO(TEST_DD_AMOUNT));
-        params.feeUtxos.push_back(CreateMockDGBUTXO(100000)); // 0.001 DGB for fees
+        params.feeUtxos.push_back(CreateMockDGBUTXO(COIN)); // 1 DGB for fees
 
         return params;
     }
@@ -276,8 +276,8 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_with_change, DDTransferTestFixture)
         BOOST_TEST_MESSAGE("Transfer failed: " << result.error);
     }
     BOOST_CHECK(result.success);
-    // Outputs: recipient P2TR + change P2TR + OP_RETURN = 3
-    BOOST_CHECK_EQUAL(result.tx.vout.size(), 3); // recipient + change + OP_RETURN
+    // Outputs: recipient P2TR + DD change P2TR + DGB fee change + OP_RETURN = 4
+    BOOST_CHECK_EQUAL(result.tx.vout.size(), 4);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_multiple_dd_inputs_consolidation, DDTransferTestFixture)
@@ -723,7 +723,7 @@ BOOST_FIXTURE_TEST_CASE(test_multiple_dd_inputs_assembly, DDTransferTestFixture)
     params.recipients = {{CreateDDAddress(recipientKey.GetPubKey()), 15000}}; // $150.00
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     // Create 5 small UTXOs
     for (int i = 0; i < 5; ++i) {
@@ -760,7 +760,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_input_count_matches_utxo_count, DDTransferTestFi
         params.recipients = {{recipientAddr, count * 1000}}; // $10.00 per UTXO
         params.feeRate = 100000; // 100,000 sat/kB
         params.spenderKey = senderKey;
-        params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+        params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
         for (int i = 0; i < count; ++i) {
             params.ddUtxos.push_back(CreateMockDDUTXO(1000));
@@ -802,7 +802,7 @@ BOOST_FIXTURE_TEST_CASE(test_build_transfer_outputs, DDTransferTestFixture)
     params.ddUtxos.push_back(CreateMockDDUTXO(25000)); // $250
 
     // Add fee UTXOs
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000)); // 0.001 DGB
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN)); // 1 DGB
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -845,7 +845,7 @@ BOOST_FIXTURE_TEST_CASE(test_single_recipient_output, DDTransferTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(30000)); // Exact amount
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -882,7 +882,7 @@ BOOST_FIXTURE_TEST_CASE(test_output_p2tr_script_format, DDTransferTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(10000));
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -936,7 +936,7 @@ BOOST_FIXTURE_TEST_CASE(test_all_recipients_get_outputs, DDTransferTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(60000)); // Exact total
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -981,7 +981,7 @@ BOOST_FIXTURE_TEST_CASE(test_output_amounts_match_requested, DDTransferTestFixtu
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(amount1 + amount2));
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1018,7 +1018,7 @@ BOOST_FIXTURE_TEST_CASE(test_fee_inputs_added, DDTransferTestFixture)
 {
     // Arrange: Create transfer params with fee inputs
     COutPoint ddUtxo = CreateMockDDUTXO(50000);  // $500.00
-    COutPoint feeUtxo = CreateMockDGBUTXO(100000); // 0.001 DGB for fees
+    COutPoint feeUtxo = CreateMockDGBUTXO(COIN); // 1 DGB for fees
 
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
 
@@ -1063,7 +1063,7 @@ BOOST_FIXTURE_TEST_CASE(test_transaction_finalization, DDTransferTestFixture)
 
     // Create DD UTXO with sufficient balance
     params.ddUtxos.push_back(CreateMockDDUTXO(50000)); // Exact amount
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000)); // Fee UTXO
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN)); // Fee UTXO
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1097,7 +1097,7 @@ BOOST_FIXTURE_TEST_CASE(test_transaction_version_and_locktime, DDTransferTestFix
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(25000));
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1121,7 +1121,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_amount_balance_verification, DDTransferTestFixtu
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(30000)); // Exact balance
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1163,7 +1163,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_amount_mismatch_detection, DDTransferTestFixture
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(30000)); // Only $300.00 (insufficient!)
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1176,6 +1176,42 @@ BOOST_FIXTURE_TEST_CASE(test_dd_amount_mismatch_detection, DDTransferTestFixture
     BOOST_CHECK(result.error.find("Insufficient") != std::string::npos);
 }
 
+BOOST_FIXTURE_TEST_CASE(transfer_rejects_malformed_opreturn_without_throwing, DDTransferTestFixture)
+{
+    CMutableTransaction tx;
+    tx.SetDigiDollarType(::DD_TX_TRANSFER);
+    tx.vin.push_back(CTxIn(CreateMockDDUTXO(TEST_DD_AMOUNT)));
+
+    XOnlyPubKey recipientXOnly(recipientKey.GetPubKey());
+    tx.vout.push_back(CTxOut(0, DigiDollar::CreateDigiDollarP2TR(recipientXOnly, TEST_DD_AMOUNT)));
+
+    CScript malformedType;
+    malformedType << OP_RETURN
+                  << std::vector<unsigned char>{'D', 'D'}
+                  << std::vector<unsigned char>(5, 0x01)
+                  << CScriptNum(TEST_DD_AMOUNT);
+    tx.vout.push_back(CTxOut(0, malformedType));
+
+    TxValidationState state;
+    DigiDollar::ValidationContext ctx(currentHeight, oraclePrice, systemCollateral, chainParams);
+
+    bool valid = true;
+    BOOST_CHECK_NO_THROW(valid = DigiDollar::ValidateTransferTransaction(CTransaction(tx), ctx, state));
+    BOOST_CHECK(!valid);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "transfer-malformed-op-return");
+
+    tx.vout.back().scriptPubKey = CScript() << OP_RETURN
+                                            << std::vector<unsigned char>{'D', 'D'}
+                                            << CScriptNum(2)
+                                            << std::vector<unsigned char>(9, 0x01);
+
+    state = TxValidationState();
+    valid = true;
+    BOOST_CHECK_NO_THROW(valid = DigiDollar::ValidateTransferTransaction(CTransaction(tx), ctx, state));
+    BOOST_CHECK(!valid);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "transfer-malformed-op-return");
+}
+
 BOOST_FIXTURE_TEST_CASE(test_empty_inputs_validation, DDTransferTestFixture)
 {
     // Arrange: Create params with no DD inputs
@@ -1186,7 +1222,7 @@ BOOST_FIXTURE_TEST_CASE(test_empty_inputs_validation, DDTransferTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     // No ddUtxos provided!
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1206,7 +1242,7 @@ BOOST_FIXTURE_TEST_CASE(test_empty_outputs_validation, DDTransferTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(10000));
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1228,7 +1264,7 @@ BOOST_FIXTURE_TEST_CASE(test_complete_transaction_structure, DDTransferTestFixtu
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(40000));
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(COIN));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -1514,7 +1550,7 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_broadcasts_to_network, DDTransferTestFixtu
     params.spenderKey = ownerKey;
     params.ddUtxos = {mint_dd_utxo};
     params.ddAmounts = {mint_amount};  // Provide DD amounts for mock UTXO
-    params.feeUtxos = {CreateMockDGBUTXO(100000)};
+    params.feeUtxos = {CreateMockDGBUTXO(COIN)};
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
     TxBuilderResult result = builder.BuildTransferTransaction(params);

@@ -22,7 +22,7 @@ BOOST_FIXTURE_TEST_SUITE(oracle_message_tests, BasicTestingSetup)
 //
 
 /**
- * TDD Test 1: SignPhase2 → VerifyPhase2 roundtrip MUST work
+ * TDD Test 1: SignAttestation → VerifyAttestation roundtrip MUST work
  * This is the correct path used by all oracle signing code.
  */
 BOOST_AUTO_TEST_CASE(signphase2_verifyphase2_roundtrip)
@@ -39,14 +39,14 @@ BOOST_AUTO_TEST_CASE(signphase2_verifyphase2_roundtrip)
     msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
 
     // Sign with Phase 2 (3-field hash: oracle_id + price + timestamp)
-    BOOST_REQUIRE(msg.SignPhase2(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
 
     // Verify with Phase 2 — MUST succeed
-    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(), "SignPhase2 → VerifyPhase2 roundtrip MUST work");
+    BOOST_CHECK_MESSAGE(msg.VerifyAttestation(), "SignAttestation → VerifyAttestation roundtrip MUST work");
 }
 
 /**
- * TDD Test 2: SignPhase2 → Verify() MUST FAIL
+ * TDD Test 2: SignAttestation → Verify() MUST FAIL
  * This documents the bug: signing uses 3-field hash, but Verify() uses 5-field hash.
  * If this test passes (Verify returns false), the mismatch is confirmed.
  */
@@ -64,10 +64,10 @@ BOOST_AUTO_TEST_CASE(signphase2_verify_mismatch_fails)
     msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
 
     // Sign with Phase 2 (3-field hash)
-    BOOST_REQUIRE(msg.SignPhase2(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
 
     // Verify with old Verify() (5-field hash) — MUST FAIL (this is the bug!)
-    BOOST_CHECK_MESSAGE(!msg.Verify(), "SignPhase2 → Verify() SHOULD fail due to hash mismatch");
+    BOOST_CHECK_MESSAGE(!msg.Verify(), "SignAttestation → Verify() SHOULD fail due to hash mismatch");
 }
 
 /**
@@ -94,8 +94,8 @@ BOOST_AUTO_TEST_CASE(sign_verify_roundtrip)
     // Verify with old Verify() — MUST succeed
     BOOST_CHECK_MESSAGE(msg.Verify(), "Sign → Verify roundtrip MUST work");
 
-    // Cross-check: Sign() → VerifyPhase2() should FAIL (different hash)
-    BOOST_CHECK_MESSAGE(!msg.VerifyPhase2(), "Sign → VerifyPhase2 SHOULD fail due to hash mismatch");
+    // Cross-check: Sign() → VerifyAttestation() should FAIL (different hash)
+    BOOST_CHECK_MESSAGE(!msg.VerifyAttestation(), "Sign → VerifyAttestation SHOULD fail due to hash mismatch");
 }
 
 //
@@ -470,9 +470,7 @@ BOOST_AUTO_TEST_CASE(oracle_message_micro_usd_format)
 }
 
 /**
- * RED TEST: Test timestamp validation
- *
- * EXPECTED TO FAIL: Validation logic needs update
+ * Test timestamp validation for signed compact oracle attestations.
  */
 BOOST_AUTO_TEST_CASE(oracle_message_timestamp_validation)
 {
@@ -489,29 +487,27 @@ BOOST_AUTO_TEST_CASE(oracle_message_timestamp_validation)
 
     // Test current timestamp (should be valid)
     msg.timestamp = GetTime();
-    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
     BOOST_CHECK(msg.IsValid());
 
     // Test timestamp 1 minute ago (should be valid)
     msg.timestamp = GetTime() - 60;
-    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
     BOOST_CHECK(msg.IsValid());
 
     // Test timestamp 30 minutes ago (should be valid)
     msg.timestamp = GetTime() - 1800;
-    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
     BOOST_CHECK(msg.IsValid());
 
     // Test timestamp 59 minutes ago (should be valid, within 1 hour)
     msg.timestamp = GetTime() - 3540;
-    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
     BOOST_CHECK(msg.IsValid());
 }
 
 /**
- * RED TEST: Test rejecting messages from the future
- *
- * EXPECTED TO FAIL: Validation might not be strict enough
+ * Test rejecting attestations from the future.
  */
 BOOST_AUTO_TEST_CASE(oracle_message_reject_future_timestamp)
 {
@@ -528,58 +524,61 @@ BOOST_AUTO_TEST_CASE(oracle_message_reject_future_timestamp)
 
     // Test future timestamp (5 minutes ahead, should be invalid)
     msg.timestamp = GetTime() + 300;
-    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
     BOOST_CHECK(!msg.IsValid());
 
     // Test far future (1 hour ahead, should be invalid)
     msg.timestamp = GetTime() + 3600;
-    BOOST_REQUIRE(msg.Sign(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
     BOOST_CHECK(!msg.IsValid());
 
     // Test timestamp 2 minutes ahead (within clock skew tolerance, might be ok)
     // Spec allows 1 minute tolerance
     msg.timestamp = GetTime() + 120;
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
     BOOST_CHECK(!msg.IsValid());
 }
 
 /**
- * RED TEST: Test rejecting messages older than 1 hour
- *
- * EXPECTED TO FAIL: Validation exists but may need adjustment
+ * Test rejecting attestations older than 1 hour.
  */
 BOOST_AUTO_TEST_CASE(oracle_message_reject_old_timestamp)
 {
     CKey privkey;
     privkey.MakeNewKey(true);
+    XOnlyPubKey pubkey(privkey.GetPubKey());
 
     // Test timestamp 61 minutes ago (should be invalid)
     COraclePriceMessage msg1;
     msg1.oracle_id = 1;
+    msg1.oracle_pubkey = pubkey;
     msg1.price_micro_usd = 6000;       // $0.006 (realistic DGB price)
     msg1.timestamp = GetTime() - 3660;  // 61 minutes
     msg1.block_height = 0;
     msg1.nonce = 0;
-    msg1.Sign(privkey);
+    BOOST_REQUIRE(msg1.SignAttestation(privkey));
     BOOST_CHECK(!msg1.IsValid());  // Should fail due to old timestamp
 
     // Test timestamp 2 hours ago (should be invalid)
     COraclePriceMessage msg2;
     msg2.oracle_id = 1;
+    msg2.oracle_pubkey = pubkey;
     msg2.price_micro_usd = 6000;       // $0.006 (realistic DGB price)
     msg2.timestamp = GetTime() - 7200;
     msg2.block_height = 0;
     msg2.nonce = 0;
-    msg2.Sign(privkey);
+    BOOST_REQUIRE(msg2.SignAttestation(privkey));
     BOOST_CHECK(!msg2.IsValid());
 
     // Test timestamp exactly 1 hour ago (boundary, should still be valid)
     COraclePriceMessage msg3;
     msg3.oracle_id = 1;
+    msg3.oracle_pubkey = pubkey;
     msg3.price_micro_usd = 6000;       // $0.006 (realistic DGB price)
     msg3.timestamp = GetTime() - 3600;
     msg3.block_height = 0;
     msg3.nonce = 0;
-    msg3.Sign(privkey);
+    BOOST_REQUIRE(msg3.SignAttestation(privkey));
     BOOST_CHECK(msg3.IsValid());
 }
 

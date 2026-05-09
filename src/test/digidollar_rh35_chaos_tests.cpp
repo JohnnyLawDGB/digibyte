@@ -314,19 +314,22 @@ BOOST_AUTO_TEST_CASE(rh35_extreme_lock_period_collateral_ratio)
     const CChainParams& params = Params();
     const auto& ddParams = params.GetDigiDollarParams();
 
-    // Lock period beyond all defined tiers — should use lowest ratio (200%)
+    // V1 accepts only exact canonical lock tiers. Extreme/custom periods reject
+    // instead of being coerced to the closest collateral tier.
     int64_t absurdLockPeriod = 100LL * 365 * 24 * 60 * 4; // 100 years in blocks
     int ratio = GetCollateralRatioForLockTime(absurdLockPeriod, ddParams);
-    // Should get the longest tier's ratio (200% for 10 years)
-    BOOST_CHECK_EQUAL(ratio, 200);
+    BOOST_CHECK(!IsCanonicalLockTier(absurdLockPeriod, ddParams));
+    BOOST_CHECK_EQUAL(ratio, 0);
 
-    // Zero lock period — should get highest ratio (1000%)
+    // Zero lock period is not a canonical tier.
     ratio = GetCollateralRatioForLockTime(0, ddParams);
-    BOOST_CHECK_EQUAL(ratio, 1000);
+    BOOST_CHECK(!IsCanonicalLockTier(0, ddParams));
+    BOOST_CHECK_EQUAL(ratio, 0);
 
-    // Negative lock period
+    // Negative lock periods must also fail closed.
     ratio = GetCollateralRatioForLockTime(-1, ddParams);
-    BOOST_CHECK_EQUAL(ratio, 1000); // Should default to highest/shortest tier
+    BOOST_CHECK(!IsCanonicalLockTier(-1, ddParams));
+    BOOST_CHECK_EQUAL(ratio, 0);
 }
 
 // =============================================================================
@@ -383,18 +386,16 @@ BOOST_AUTO_TEST_CASE(rh35_collateral_calc_near_max_money)
 
     ValidationContext ctx(1000, 1, 0, params, nullptr, true); // min price, emergency DCA
 
-    // Large DD amount with tiny price = massive collateral requirement
-    // Should be capped at MAX_MONEY, not overflow
+    // Large DD amount with tiny price = infeasible collateral requirement.
+    // Should fail closed, not cap to a satisfiable amount or overflow.
     CAmount required = CalculateRequiredCollateral(
         10000000,              // $100k DD (10M cents)
         30 * BLOCKS_PER_DAY,   // 30 day lock (500% base * 2.0 DCA = 1000%)
         ctx
     );
 
-    // Result should be capped at MAX_MONEY
-    BOOST_CHECK(required <= MAX_MONEY);
-    BOOST_CHECK_MESSAGE(required == MAX_MONEY,
-        "Required collateral should cap at MAX_MONEY when calculation overflows. Got: " << required);
+    BOOST_CHECK_MESSAGE(required == 0,
+        "Required collateral should fail closed when calculation exceeds MAX_MONEY. Got: " << required);
 }
 
 BOOST_AUTO_TEST_CASE(rh35_collateral_calc_1_cent_mint)

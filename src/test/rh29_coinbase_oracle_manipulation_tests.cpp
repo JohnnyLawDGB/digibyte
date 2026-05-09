@@ -113,7 +113,7 @@ COraclePriceMessage MakeSignedMessage(const CKey& key, uint8_t oracle_id,
     msg.block_height = 0;
     msg.nonce = 0;
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    msg.SignPhase2(key);
+    msg.SignAttestation(key);
     return msg;
 }
 
@@ -127,6 +127,17 @@ CScript MakeV02ScriptSigned(uint64_t price, int64_t timestamp,
         sigs.push_back({oid, msg.schnorr_sig});
     }
     return MakeV02Script(static_cast<uint8_t>(oracle_keys.size()), price, timestamp, sigs);
+}
+
+CScript MakeV03Script(uint64_t price, int64_t timestamp, int32_t epoch = 1)
+{
+    COracleBundle bundle(epoch);
+    bundle.version = 3;
+    bundle.participation_bitmap = {0x0f};
+    bundle.median_price_micro_usd = price;
+    bundle.timestamp = timestamp;
+    bundle.aggregate_sig.assign(64, 0x42);
+    return OracleBundleManager::GetInstance().CreateOracleScript(bundle);
 }
 
 } // anonymous namespace
@@ -143,7 +154,7 @@ BOOST_AUTO_TEST_CASE(attack1_extra_op_return_before_oracle)
 
     // A miner adds an extra OP_RETURN output (e.g., pool tag) before oracle output
     int64_t now = GetTime();
-    CScript oracle_script = MakeV01Script(0, 50000, now);
+    CScript oracle_script = MakeV03Script(50000, now);
 
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
@@ -164,9 +175,9 @@ BOOST_AUTO_TEST_CASE(attack1_extra_op_return_before_oracle)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(coinbase), bundle);
 
-    // ExtractOracleBundle scans all outputs for OP_ORACLE marker, so the
-    // non-oracle OP_RETURN should be ignored and oracle data found
-    BOOST_CHECK_MESSAGE(extracted, "Oracle data should be extractable even with extra OP_RETURNs");
+    // ExtractOracleBundle scans all outputs for the single v0x03 OP_ORACLE
+    // marker, so the non-oracle OP_RETURN should be ignored.
+    BOOST_CHECK_MESSAGE(extracted, "MuSig2 oracle data should be extractable even with extra OP_RETURNs");
     if (extracted) {
         BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 50000ULL);
     }
@@ -199,16 +210,9 @@ BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_to_oracle_script)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(MakeCoinbaseTx(script, 101)), bundle);
 
-    // The extra push data gets concatenated into the data buffer during extraction.
-    // V01 expects exactly 18 bytes. Extra data means data.size() > 18.
-    // But ExtractOracleBundle for V01 only checks data.size() < 18, not ==18.
     BOOST_TEST_MESSAGE("  Extracted: " << extracted);
-    if (extracted) {
-        BOOST_TEST_MESSAGE("  >>> FINDING: V01 extraction accepts trailing data (no exact size check)");
-        BOOST_TEST_MESSAGE("  >>> Extra bytes after V01 oracle data are silently ignored");
-        BOOST_TEST_MESSAGE("  >>> Malleability risk: same oracle data can have different serializations");
-        BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, price);
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "V01 extraction must reject trailing data so the same oracle payload has one canonical serialization");
 }
 
 BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_v02)
@@ -241,13 +245,9 @@ BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_v02)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(MakeCoinbaseTx(script, 101)), bundle);
 
-    // V02 calculates expected_size = 1+1+8+8+N*65 and checks data.size() < expected_size
-    // But does NOT check data.size() > expected_size — trailing bytes allowed
     BOOST_TEST_MESSAGE("  V02 extraction with trailing data: " << extracted);
-    if (extracted) {
-        BOOST_TEST_MESSAGE("  >>> FINDING: V02 extraction accepts trailing data beyond expected_size");
-        BOOST_TEST_MESSAGE("  >>> Script malleability: miners can embed hidden data after oracle payload");
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "V02 extraction must reject trailing data beyond expected_size");
 }
 
 BOOST_AUTO_TEST_CASE(attack1_extra_data_appended_v03)
@@ -325,15 +325,13 @@ BOOST_AUTO_TEST_CASE(attack2_two_oracle_op_returns)
     BOOST_TEST_MESSAGE("  Validation result: " << valid);
     BOOST_TEST_MESSAGE("  State: " << state.ToString());
 
-    // ExtractOracleBundle returns the FIRST match — which price wins?
+    // ExtractOracleBundle should also reject ambiguous oracle outputs rather than
+    // returning the first match and silently ignoring the second.
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(*block.vtx[0], bundle);
-    if (extracted) {
-        BOOST_TEST_MESSAGE("  Extracted price: " << bundle.median_price_micro_usd);
-        BOOST_TEST_MESSAGE("  >>> ExtractOracleBundle returns first OP_ORACLE match");
-        BOOST_TEST_MESSAGE("  >>> Second oracle output (price=99999) is silently ignored");
-    }
+    BOOST_CHECK_MESSAGE(!extracted,
+        "ExtractOracleBundle must reject transactions with multiple OP_ORACLE outputs");
 
     // The block validation should reject this
     if (!valid) {
@@ -349,7 +347,7 @@ BOOST_AUTO_TEST_CASE(attack2_oracle_plus_non_oracle_op_return)
 
     // This is a legitimate scenario (witness commitment + oracle)
     int64_t now = GetTime();
-    CScript oracle = MakeV01Script(0, 50000, now);
+    CScript oracle = MakeV03Script(50000, now);
 
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
@@ -372,7 +370,7 @@ BOOST_AUTO_TEST_CASE(attack2_oracle_plus_non_oracle_op_return)
     COracleBundle bundle;
     bool extracted = manager.ExtractOracleBundle(CTransaction(coinbase), bundle);
 
-    BOOST_CHECK_MESSAGE(extracted, "Should extract oracle data from coinbase with witness commitment");
+    BOOST_CHECK_MESSAGE(extracted, "Should extract MuSig2 oracle data from coinbase with witness commitment");
     if (extracted) {
         BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 50000ULL);
         BOOST_TEST_MESSAGE("  Correctly found oracle output alongside witness commitment");
@@ -620,7 +618,7 @@ BOOST_AUTO_TEST_CASE(attack5_v02_sig_replay_same_price_timestamp)
     COraclePriceMessage msg = MakeSignedMessage(oracle_key, 0, price, timestamp);
 
     // Verify original
-    BOOST_CHECK(msg.VerifyPhase2());
+    BOOST_CHECK(msg.VerifyAttestation());
 
     // "Replay" — create new message with same fields
     COraclePriceMessage replayed;
@@ -633,7 +631,7 @@ BOOST_AUTO_TEST_CASE(attack5_v02_sig_replay_same_price_timestamp)
     replayed.schnorr_sig = msg.schnorr_sig;
 
     // Replayed sig verifies because hash(oracle_id, price, timestamp) is the same!
-    BOOST_CHECK_MESSAGE(replayed.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(replayed.VerifyAttestation(),
         "Replayed sig should verify — Phase2 hash doesn't include block height");
 
     BOOST_TEST_MESSAGE("  >>> CRITICAL FINDING: Phase 2 signatures are replayable!");
@@ -654,7 +652,7 @@ BOOST_AUTO_TEST_CASE(attack5_v02_sig_replay_stale_protection)
     // Sign with timestamp 2 hours ago
     int64_t old_timestamp = GetTime() - 7200;
     COraclePriceMessage msg = MakeSignedMessage(oracle_key, 0, 50000, old_timestamp);
-    BOOST_CHECK(msg.VerifyPhase2());
+    BOOST_CHECK(msg.VerifyAttestation());
 
     // The sig is technically valid, but block validation should reject it
     // because oracle_age > ORACLE_MAX_AGE_SECONDS
@@ -721,8 +719,8 @@ BOOST_AUTO_TEST_CASE(attack6_oracle_price_immediate_use)
     uint64_t price1 = 40000; // $0.04
     uint64_t price2 = 80000; // $0.08 — 2x the price!
 
-    CScript script1 = MakeV01Script(0, price1, now);
-    CScript script2 = MakeV01Script(0, price2, now);
+    CScript script1 = MakeV03Script(price1, now);
+    CScript script2 = MakeV03Script(price2, now);
 
     CBlock block1 = MakeBlock(script1, static_cast<uint32_t>(now), 101);
     CBlock block2 = MakeBlock(script2, static_cast<uint32_t>(now), 101);
@@ -738,7 +736,7 @@ BOOST_AUTO_TEST_CASE(attack6_oracle_price_immediate_use)
     BOOST_TEST_MESSAGE("  >>> This is by design: DD transactions in block N use block N's oracle");
     BOOST_TEST_MESSAGE("  >>> Risk: A miner who controls oracle signing can manipulate the price");
     BOOST_TEST_MESSAGE("  >>> for DD transactions they include in their own block");
-    BOOST_TEST_MESSAGE("  >>> Mitigation: Multi-oracle consensus (Phase 2+) makes this hard");
+    BOOST_TEST_MESSAGE("  >>> Mitigation: MuSig2 quorum makes this hard");
 }
 
 // ============================================================================

@@ -13,6 +13,7 @@
 #include <oracle/bundle_manager.h>
 #include <oracle/exchange.h>
 #include <oracle/mock_oracle.h>
+#include <oracle/musig2_messages.h>
 #include <oracle/node.h>
 #include <primitives/oracle.h>
 #include <protocol.h>
@@ -39,26 +40,25 @@ static COraclePriceMessage MakeRegtestOracleMessage(uint32_t oracle_id, uint64_t
     CKey key = GetRegtestBundleOracleKey(oracle_id);
     COraclePriceMessage msg(oracle_id, price, timestamp);
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(key));
-    BOOST_REQUIRE(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.SignAttestation(key));
+    BOOST_REQUIRE(msg.VerifyAttestation());
     return msg;
 }
 
 /**
- * Test Phase One: 1-of-1 Consensus Bundle Creation
+ * Test V1: individual oracle messages cannot become canonical bundles.
  */
-BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
+BOOST_AUTO_TEST_CASE(single_message_does_not_create_v1_bundle)
 {
     // Initialize bundle manager
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear(); // Clear state for test isolation
     manager.SetEnabled(true);
-    manager.SetMinOracleCount(1); // Phase One: 1-of-1
+    manager.SetMinOracleCount(1);
 
     // Create oracle key
     CKey oracle_key;
     oracle_key.MakeNewKey(true);
-    CPubKey oracle_pubkey = oracle_key.GetPubKey();
 
     // Create oracle price message
     uint32_t oracle_id = 0;
@@ -68,11 +68,11 @@ BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
     COraclePriceMessage msg(oracle_id, price_micro_usd, timestamp);
 
     // Sign the message with Schnorr signature
-    BOOST_CHECK(msg.SignPhase2(oracle_key));
+    BOOST_CHECK(msg.SignAttestation(oracle_key));
 
     // Validate message
     BOOST_CHECK(msg.IsValid());
-    BOOST_CHECK(msg.VerifyPhase2());
+    BOOST_CHECK(msg.VerifyAttestation());
 
     // Add message to bundle manager
     BOOST_CHECK(manager.AddOracleMessage(msg));
@@ -83,23 +83,22 @@ BOOST_AUTO_TEST_CASE(phase_one_bundle_creation)
     // Get current epoch
     int32_t epoch = GetCurrentEpoch(1000);
 
-    // Create bundle for this epoch
-    manager.TryCreateBundle(epoch);
+    // Legacy message-bundle creation is disabled for V1.
+    BOOST_CHECK(!manager.TryCreateBundle(epoch));
 
-    // Verify bundle was created
-    BOOST_CHECK(manager.HasValidBundle(epoch));
+    // Verify no canonical bundle was created.
+    BOOST_CHECK(!manager.HasValidBundle(epoch));
 
     // Get bundle
     COracleBundle bundle = manager.GetCurrentBundle(epoch);
 
-    // Verify bundle has 1 message (Phase One)
-    BOOST_CHECK_EQUAL(bundle.messages.size(), 1);
+    BOOST_CHECK(bundle.messages.empty());
 
-    // Verify consensus price
+    // Only complete MuSig2 v0x03 bundles expose a canonical price.
     CAmount consensus_price = manager.GetConsensusPrice(epoch);
-    BOOST_CHECK_EQUAL(consensus_price, price_micro_usd);
+    BOOST_CHECK_EQUAL(consensus_price, 0);
 
-    LogPrintf("Test: Phase One bundle created successfully with price=%lld micro-USD\n", consensus_price);
+    LogPrintf("Test: V1 rejected single-message oracle bundle; price=%lld micro-USD\n", consensus_price);
 }
 
 /**
@@ -125,7 +124,7 @@ BOOST_AUTO_TEST_CASE(message_validation)
 
     // Test 3: Valid message
     COraclePriceMessage valid_msg(0, 6000, GetTime());
-    BOOST_CHECK(valid_msg.SignPhase2(oracle_key));
+    BOOST_CHECK(valid_msg.SignAttestation(oracle_key));
     BOOST_CHECK(valid_msg.IsValid());
 
     LogPrintf("Test: Message validation working correctly\n");
@@ -175,7 +174,7 @@ BOOST_AUTO_TEST_CASE(bundle_persistence_cleanup)
     // Create messages for multiple epochs
     for (int32_t epoch = 0; epoch < 5; epoch++) {
         COraclePriceMessage msg(0, 50000 + epoch * 100, GetTime());
-        msg.SignPhase2(oracle_key);
+        msg.SignAttestation(oracle_key);
 
         manager.AddOracleMessage(msg);
     }
@@ -217,7 +216,7 @@ BOOST_AUTO_TEST_CASE(oracle_node_price_fetching)
     BOOST_CHECK(msg.IsValid());
     BOOST_CHECK_EQUAL(msg.oracle_id, 0);
     BOOST_CHECK_EQUAL(msg.price_micro_usd, test_price);
-    BOOST_CHECK(msg.VerifyPhase2());
+    BOOST_CHECK(msg.VerifyAttestation());
 
     LogPrintf("Test: Oracle node price message creation successful\n");
 }
@@ -240,7 +239,7 @@ BOOST_AUTO_TEST_CASE(bundle_validation_rules)
     // Create bundle with valid message
     COracleBundle bundle(epoch);
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.SignPhase2(oracle_key);
+    msg.SignAttestation(oracle_key);
 
     BOOST_CHECK(bundle.AddMessage(msg));
 
@@ -256,14 +255,13 @@ BOOST_AUTO_TEST_CASE(bundle_validation_rules)
 }
 
 /**
- * Test Phase One Testnet Configuration
+ * Test V1 testnet configuration: one message is not consensus.
  */
-BOOST_AUTO_TEST_CASE(phase_one_testnet_config)
+BOOST_AUTO_TEST_CASE(v1_testnet_single_message_not_consensus)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear(); // Clear state for test isolation
 
-    // For Phase One, min oracle count should be 1 on testnet
     manager.SetMinOracleCount(1);
     BOOST_CHECK_EQUAL(manager.GetStats().pending_messages, 0);
 
@@ -272,20 +270,20 @@ BOOST_AUTO_TEST_CASE(phase_one_testnet_config)
     oracle_key.MakeNewKey(true);
 
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.SignPhase2(oracle_key);
+    msg.SignAttestation(oracle_key);
 
     BOOST_CHECK(manager.AddOracleMessage(msg));
 
-    // With 1-of-1 consensus, create bundle
+    // Legacy 1-of-1 bundle creation is disabled for V1.
     int32_t epoch = GetCurrentEpoch(1000);
-    manager.TryCreateBundle(epoch);
-    BOOST_CHECK(manager.HasValidBundle(epoch));
+    BOOST_CHECK(!manager.TryCreateBundle(epoch));
+    BOOST_CHECK(!manager.HasValidBundle(epoch));
 
-    // Verify price is available
+    // Verify no canonical price is available from unsigned message data.
     CAmount price = manager.GetLatestPrice();
-    BOOST_CHECK(price > 0);
+    BOOST_CHECK_EQUAL(price, 0);
 
-    LogPrintf("Test: Phase One testnet configuration validated (1-of-1 consensus)\n");
+    LogPrintf("Test: V1 testnet rejects single-message oracle consensus\n");
 }
 
 /**
@@ -307,19 +305,19 @@ BOOST_AUTO_TEST_CASE(oracle_stats_reporting)
     oracle_key.MakeNewKey(true);
 
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.SignPhase2(oracle_key);
+    msg.SignAttestation(oracle_key);
 
     manager.AddOracleMessage(msg);
 
-    // Create bundle to achieve consensus
+    // Legacy message-bundle creation does not create V1 consensus.
     int32_t epoch = GetCurrentEpoch(1000);
-    manager.TryCreateBundle(epoch);
+    BOOST_CHECK(!manager.TryCreateBundle(epoch));
 
     // Check updated stats
     stats = manager.GetStats();
     BOOST_CHECK_EQUAL(stats.pending_messages, 1);
-    BOOST_CHECK(stats.has_consensus);
-    BOOST_CHECK(stats.latest_price > 0);
+    BOOST_CHECK(!stats.has_consensus);
+    BOOST_CHECK_EQUAL(stats.latest_price, 0);
 
     LogPrintf("Test: Oracle stats - pending=%d, consensus=%s, price=%lld\n",
              stats.pending_messages, stats.has_consensus ? "true" : "false", stats.latest_price);
@@ -348,11 +346,11 @@ BOOST_AUTO_TEST_CASE(register_seen_hash_dedup)
     oracle_key.MakeNewKey(true);
 
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.SignPhase2(oracle_key);
+    msg.SignAttestation(oracle_key);
 
     // Simulate the P2P wrapper hash (what OraclePriceMsg::GetHash() returns)
     // This is what net_processing computes before calling HasOracleMessage
-    uint256 p2p_hash = msg.GetPhase2SignatureHash();
+    uint256 p2p_hash = msg.GetAttestationSignatureHash();
 
     // Before registration, HasOracleMessage should return false for a random hash
     uint256 random_hash = InsecureRand256();
@@ -377,7 +375,7 @@ BOOST_AUTO_TEST_CASE(consensus_hash_is_domain_separated_from_oracle_price)
     COraclePriceMessage price_message(shared_id_and_epoch, price, timestamp);
     CKey key;
     key.MakeNewKey(true);
-    BOOST_REQUIRE(price_message.SignPhase2(key));
+    BOOST_REQUIRE(price_message.SignAttestation(key));
 
     OraclePriceMsg price_msg;
     price_msg.price_message = price_message;
@@ -420,11 +418,11 @@ BOOST_AUTO_TEST_CASE(attestation_replay_hash_binds_signature)
     key.MakeNewKey(true);
 
     COraclePriceMessage valid_attestation(2, 7500, GetTime());
-    BOOST_REQUIRE(valid_attestation.SignPhase2(key));
+    BOOST_REQUIRE(valid_attestation.SignAttestation(key));
 
     COraclePriceMessage invalid_attestation = valid_attestation;
     invalid_attestation.schnorr_sig[0] ^= 0x01;
-    BOOST_REQUIRE(!invalid_attestation.VerifyPhase2());
+    BOOST_REQUIRE(!invalid_attestation.VerifyAttestation());
 
     OracleAttestationMsg invalid_msg;
     invalid_msg.attestation = invalid_attestation;
@@ -471,15 +469,15 @@ BOOST_AUTO_TEST_CASE(full_dedup_flow_prevents_log_spam)
     oracle_key.MakeNewKey(true);
 
     COraclePriceMessage msg(0, 7500, GetTime());
-    msg.SignPhase2(oracle_key);
+    msg.SignAttestation(oracle_key);
 
     // Step 1: First peer sends message → AddOracleMessage succeeds
     BOOST_CHECK(manager.AddOracleMessage(msg));
 
     // Step 2: After successful add, P2P handler registers the wrapper hash
     // (In production this is OraclePriceMsg::GetHash(), which for Phase2
-    // messages equals GetPhase2SignatureHash())
-    uint256 p2p_hash = msg.GetPhase2SignatureHash();
+    // messages equals GetAttestationSignatureHash())
+    uint256 p2p_hash = msg.GetAttestationSignatureHash();
     manager.RegisterSeenHash(p2p_hash);
 
     // Step 3: Second peer sends the same message
@@ -487,14 +485,14 @@ BOOST_AUTO_TEST_CASE(full_dedup_flow_prevents_log_spam)
     BOOST_CHECK(manager.HasOracleMessage(p2p_hash));
 
     // Step 4: Even the internal hash (what AddOracleMessage inserted) should be seen
-    // AddOracleMessage uses GetPhase2SignatureHash() for Phase2 messages
-    uint256 internal_hash = msg.GetPhase2SignatureHash();
+    // AddOracleMessage uses GetAttestationSignatureHash() for Phase2 messages
+    uint256 internal_hash = msg.GetAttestationSignatureHash();
     BOOST_CHECK(manager.HasOracleMessage(internal_hash));
 
     // Step 5: A completely new message should NOT be seen
     COraclePriceMessage msg2(1, 8000, GetTime());
-    msg2.SignPhase2(oracle_key);
-    uint256 new_hash = msg2.GetPhase2SignatureHash();
+    msg2.SignAttestation(oracle_key);
+    uint256 new_hash = msg2.GetAttestationSignatureHash();
     BOOST_CHECK(!manager.HasOracleMessage(new_hash));
 }
 
@@ -522,8 +520,8 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_accepted)
     COraclePriceMessage att(0, consensus_price, consensus_timestamp);
     att.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
     att.nonce = 12345;
-    BOOST_CHECK(att.SignPhase2(oracle_key));
-    BOOST_CHECK(att.VerifyPhase2());
+    BOOST_CHECK(att.SignAttestation(oracle_key));
+    BOOST_CHECK(att.VerifyAttestation());
 
     // Should be accepted
     BOOST_CHECK(manager.AddConsensusAttestation(att));
@@ -567,7 +565,7 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_requires_exact_local_consensus_values
 
     COraclePriceMessage valid_attestation = node.CreateConsensusAttestation(computed_price, computed_timestamp);
     BOOST_CHECK(!valid_attestation.schnorr_sig.empty());
-    BOOST_CHECK(valid_attestation.VerifyPhase2());
+    BOOST_CHECK(valid_attestation.VerifyAttestation());
 
     COraclePriceMessage wrong_price = node.CreateConsensusAttestation(computed_price + 1, computed_timestamp);
     BOOST_CHECK_MESSAGE(wrong_price.schnorr_sig.empty(),
@@ -597,13 +595,13 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_wrong_price_rejected)
     // Sign attestation for correct price
     COraclePriceMessage att(0, consensus_price, consensus_timestamp);
     att.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-    BOOST_CHECK(att.SignPhase2(oracle_key));
+    BOOST_CHECK(att.SignAttestation(oracle_key));
 
     // Tamper with price AFTER signing — signature should fail verification
     att.price_micro_usd = 99999;
 
     // The attestation verification should fail since price was tampered
-    BOOST_CHECK(!att.VerifyPhase2());
+    BOOST_CHECK(!att.VerifyAttestation());
 
     // AddConsensusAttestation should reject it (invalid signature)
     // Note: In regtest, it might be accepted due to chainparams bypass
@@ -612,7 +610,7 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_wrong_price_rejected)
     att2.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
     // Don't sign — no valid signature for wrong price
     att2.schnorr_sig.resize(64, 0); // Garbage signature
-    BOOST_CHECK(!att2.VerifyPhase2());
+    BOOST_CHECK(!att2.VerifyAttestation());
 }
 
 /**
@@ -629,13 +627,13 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_wrong_timestamp_rejected)
     // Sign attestation for correct timestamp
     COraclePriceMessage att(0, consensus_price, consensus_timestamp);
     att.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-    BOOST_CHECK(att.SignPhase2(oracle_key));
+    BOOST_CHECK(att.SignAttestation(oracle_key));
 
     // Tamper with timestamp AFTER signing
     att.timestamp = consensus_timestamp + 100;
 
     // Signature should not verify against tampered timestamp
-    BOOST_CHECK(!att.VerifyPhase2());
+    BOOST_CHECK(!att.VerifyAttestation());
 }
 
 /**
@@ -656,15 +654,15 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_forged_pubkey_rejected)
     // Attacker signs with their own key, sets pubkey to their own key
     COraclePriceMessage att(0, consensus_price, consensus_timestamp);
     att.oracle_pubkey = XOnlyPubKey(attacker_key.GetPubKey());
-    BOOST_CHECK(att.SignPhase2(attacker_key));
+    BOOST_CHECK(att.SignAttestation(attacker_key));
 
     // Attacker's message verifies against THEIR pubkey
-    BOOST_CHECK(att.VerifyPhase2());
+    BOOST_CHECK(att.VerifyAttestation());
 
     // BUT: When we rebind pubkey to the REAL oracle's key (simulating chainparams binding),
     // the signature should FAIL
     att.oracle_pubkey = XOnlyPubKey(real_oracle_key.GetPubKey());
-    BOOST_CHECK(!att.VerifyPhase2());
+    BOOST_CHECK(!att.VerifyAttestation());
 }
 
 /**
@@ -678,9 +676,6 @@ BOOST_AUTO_TEST_CASE(five_of_nine_attestations_create_bundle)
     manager.SetMinOracleCount(5);
 
     int64_t now = GetTime();
-    uint64_t consensus_price = 7000;
-    int64_t consensus_timestamp = now;
-
     // Create 9 oracle keys
     std::vector<CKey> oracle_keys(9);
     for (int i = 0; i < 9; ++i) {
@@ -695,7 +690,7 @@ BOOST_AUTO_TEST_CASE(five_of_nine_attestations_create_bundle)
 
         COraclePriceMessage msg(i, individual_price, individual_timestamp);
         msg.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
-        msg.SignPhase2(oracle_keys[i]);
+        msg.SignAttestation(oracle_keys[i]);
         manager.InjectTestMessage(msg);
     }
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 9);
@@ -711,8 +706,8 @@ BOOST_AUTO_TEST_CASE(five_of_nine_attestations_create_bundle)
         COraclePriceMessage att(i, computed_price, computed_timestamp);
         att.oracle_pubkey = XOnlyPubKey(oracle_keys[i].GetPubKey());
         att.nonce = i + 100;
-        BOOST_CHECK(att.SignPhase2(oracle_keys[i]));
-        BOOST_CHECK(att.VerifyPhase2());
+        BOOST_CHECK(att.SignAttestation(oracle_keys[i]));
+        BOOST_CHECK(att.VerifyAttestation());
         BOOST_CHECK(manager.AddConsensusAttestation(att));
     }
 
@@ -723,7 +718,7 @@ BOOST_AUTO_TEST_CASE(five_of_nine_attestations_create_bundle)
     for (const auto& att : attestations) {
         BOOST_CHECK_EQUAL(att.price_micro_usd, computed_price);
         BOOST_CHECK_EQUAL(att.timestamp, computed_timestamp);
-        BOOST_CHECK(att.VerifyPhase2());
+        BOOST_CHECK(att.VerifyAttestation());
     }
 }
 
@@ -744,9 +739,9 @@ BOOST_AUTO_TEST_CASE(replay_attestation_rejected)
 
     COraclePriceMessage att(0, consensus_price, consensus_timestamp);
     att.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-    BOOST_CHECK(att.SignPhase2(oracle_key));
+    BOOST_CHECK(att.SignAttestation(oracle_key));
 
-    uint256 att_hash = att.GetPhase2SignatureHash();
+    uint256 att_hash = att.GetAttestationSignatureHash();
 
     // First time: should be accepted (new attestation)
     BOOST_CHECK(manager.RegisterSeenAttestation(att_hash));
@@ -779,7 +774,7 @@ BOOST_AUTO_TEST_CASE(compute_consensus_values_correctness)
         key.MakeNewKey(true);
         COraclePriceMessage msg(i, prices[i], timestamps[i]);
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        msg.SignPhase2(key);
+        msg.SignAttestation(key);
         manager.InjectTestMessage(msg);
     }
 
@@ -855,7 +850,7 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_msg_serialization)
         key.MakeNewKey(true);
 
         COraclePriceMessage att(3, 7500, 1700000000);
-        att.SignPhase2(key);
+        att.SignAttestation(key);
 
         OracleAttestationMsg msg;
         msg.attestation = att;
@@ -869,7 +864,7 @@ BOOST_AUTO_TEST_CASE(consensus_attestation_msg_serialization)
         BOOST_CHECK_EQUAL(msg2.attestation.oracle_id, 3u);
         BOOST_CHECK_EQUAL(msg2.attestation.price_micro_usd, 7500ULL);
         BOOST_CHECK_EQUAL(msg2.attestation.timestamp, 1700000000LL);
-        BOOST_CHECK(msg2.attestation.VerifyPhase2());
+        BOOST_CHECK(msg2.attestation.VerifyAttestation());
 
         // Hash should be deterministic
         BOOST_CHECK(msg.GetHash() == msg2.GetHash());
@@ -896,7 +891,7 @@ BOOST_AUTO_TEST_CASE(pending_messages_survive_bundle_creation)
     oracle_key.MakeNewKey(true);
 
     COraclePriceMessage msg(0, 6000, GetTime());
-    msg.SignPhase2(oracle_key);
+    msg.SignAttestation(oracle_key);
     BOOST_CHECK(manager.AddOracleMessage(msg));
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
 
@@ -956,14 +951,14 @@ BOOST_AUTO_TEST_CASE(stale_messages_purged_naturally)
 
     // Add a message from oracle 0 that is STALE (older than ORACLE_MAX_AGE_SECONDS)
     COraclePriceMessage stale_msg(0, 6000, now - ORACLE_MAX_AGE_SECONDS - 10);
-    stale_msg.SignPhase2(oracle_key1);
+    stale_msg.SignAttestation(oracle_key1);
     // Use InjectTestMessage to bypass IsValid timestamp check
     manager.InjectTestMessage(stale_msg);
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
 
     // Add a fresh message from oracle 1 — this should trigger purge of stale messages
     COraclePriceMessage fresh_msg(1, 7000, now);
-    fresh_msg.SignPhase2(oracle_key2);
+    fresh_msg.SignAttestation(oracle_key2);
     BOOST_CHECK(manager.AddOracleMessage(fresh_msg));
 
     // The stale message from oracle 0 should have been purged,
@@ -1012,7 +1007,6 @@ BOOST_AUTO_TEST_CASE(phase2_block_template_ignores_aged_pending_messages)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(4);
 
     MockOracleManager& mock = MockOracleManager::GetInstance();
@@ -1110,6 +1104,162 @@ BOOST_AUTO_TEST_CASE(proactive_consensus_proposal_broadcasting)
     LogPrintf("Test: proactive_consensus_proposal_broadcasting setup PASSED\n");
     LogPrintf("After fix: AddOracleMessage will trigger BroadcastConsensusProposal on quorum\n");
     LogPrintf("After fix: BroadcastConsensusProposal rate limited to 30 seconds, not epoch-limited\n");
+}
+
+/**
+ * Wave 20 (Agent A): pin the dedup contract for MuSig2 P2P messages.
+ *
+ * `OracleMusigNonceMsg::GetHash()` and `OracleMusigPartialSigMsg::GetHash()`
+ * are used by `OracleBundleManager::HasOracleMessage` /
+ * `RegisterSeenHash` (called from `src/net_processing.cpp` ORACLEMUSIGNONCE
+ * and ORACLEMUSIGPARTIALSIG handlers) to deduplicate gossip relays. These
+ * hashes intentionally cover only the authenticated payload fields
+ * `(epoch, oracle_id, pubnonce|partial_sig)` and **must not** include the
+ * outer Schnorr `signature` field. Schnorr signatures over BIP-340 are
+ * deterministic, so a legitimate signer cannot produce two distinct
+ * signatures over the same payload — and including the signature in the
+ * dedup hash would let a peer mutate the signature byte to forge distinct
+ * dedup keys for what is otherwise the same message and bypass the
+ * `seen_message_hashes` cap of 2048.
+ *
+ * These pins also assert the hash genuinely depends on the authenticated
+ * payload fields so that two distinct (epoch, oracle_id, pubnonce|partial_sig)
+ * tuples produce distinct dedup keys (otherwise the seen-set would
+ * incorrectly drop legitimate messages from later epochs).
+ */
+BOOST_AUTO_TEST_CASE(musig2_nonce_dedup_hash_excludes_signature)
+{
+    OracleMusigNonceMsg base;
+    base.epoch = 7;
+    base.oracle_id = 3;
+    base.pubnonce.assign(66, 0xAA);
+    base.signature.assign(64, 0x01);
+
+    OracleMusigNonceMsg with_mutated_sig = base;
+    // Flip every byte of the signature; payload fields untouched.
+    for (auto& b : with_mutated_sig.signature) b ^= 0xFF;
+
+    BOOST_CHECK_MESSAGE(base.GetHash() == with_mutated_sig.GetHash(),
+        "OracleMusigNonceMsg dedup hash must ignore signature mutations");
+
+    // Distinct authenticated payloads must produce distinct dedup hashes.
+    OracleMusigNonceMsg distinct_epoch = base;
+    distinct_epoch.epoch = 8;
+    BOOST_CHECK(base.GetHash() != distinct_epoch.GetHash());
+
+    OracleMusigNonceMsg distinct_oracle = base;
+    distinct_oracle.oracle_id = 4;
+    BOOST_CHECK(base.GetHash() != distinct_oracle.GetHash());
+
+    OracleMusigNonceMsg distinct_pubnonce = base;
+    distinct_pubnonce.pubnonce[0] ^= 0x01;
+    BOOST_CHECK(base.GetHash() != distinct_pubnonce.GetHash());
+}
+
+BOOST_AUTO_TEST_CASE(musig2_partial_sig_dedup_hash_excludes_signature)
+{
+    OracleMusigPartialSigMsg base;
+    base.epoch = 11;
+    base.oracle_id = 2;
+    base.partial_sig.assign(32, 0x55);
+    base.signature.assign(64, 0x77);
+
+    OracleMusigPartialSigMsg with_mutated_sig = base;
+    for (auto& b : with_mutated_sig.signature) b ^= 0xFF;
+
+    BOOST_CHECK_MESSAGE(base.GetHash() == with_mutated_sig.GetHash(),
+        "OracleMusigPartialSigMsg dedup hash must ignore signature mutations");
+
+    OracleMusigPartialSigMsg distinct_epoch = base;
+    distinct_epoch.epoch = 12;
+    BOOST_CHECK(base.GetHash() != distinct_epoch.GetHash());
+
+    OracleMusigPartialSigMsg distinct_oracle = base;
+    distinct_oracle.oracle_id = 3;
+    BOOST_CHECK(base.GetHash() != distinct_oracle.GetHash());
+
+    OracleMusigPartialSigMsg distinct_partial = base;
+    distinct_partial.partial_sig[0] ^= 0x01;
+    BOOST_CHECK(base.GetHash() != distinct_partial.GetHash());
+}
+
+/**
+ * Wave 20 (Agent A): pin that the `OracleBundleManager` dedup set is shared
+ * across all four P2P oracle gossip message families
+ * (price / consensus / musig nonce / musig partial-sig) without cross-family
+ * collisions. Because each family's `GetHash()` includes a tagged-string
+ * domain prefix, distinct families with otherwise identical numeric payloads
+ * must hash to distinct uint256 values. This also ensures that registering
+ * a hash for one family does not silently swallow a legitimate message from
+ * another family.
+ */
+BOOST_AUTO_TEST_CASE(musig2_dedup_hash_domain_separated_from_other_families)
+{
+    const int32_t epoch = 5;
+    const uint8_t oracle_id = 1;
+    const uint64_t price = 9000;
+    const int64_t timestamp = GetTime();
+
+    OracleConsensusMsg cons;
+    cons.epoch = epoch;
+    cons.consensus_price = price;
+    cons.consensus_timestamp = timestamp;
+
+    OracleMusigNonceMsg nonce;
+    nonce.epoch = epoch;
+    nonce.oracle_id = oracle_id;
+    nonce.pubnonce.assign(66, 0x12);
+    nonce.signature.assign(64, 0x34);
+
+    OracleMusigPartialSigMsg psig;
+    psig.epoch = epoch;
+    psig.oracle_id = oracle_id;
+    psig.partial_sig.assign(32, 0x56);
+    psig.signature.assign(64, 0x78);
+
+    BOOST_CHECK(cons.GetHash() != nonce.GetHash());
+    BOOST_CHECK(cons.GetHash() != psig.GetHash());
+    BOOST_CHECK(nonce.GetHash() != psig.GetHash());
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+struct MainParamsOracleBundleSetup : public BasicTestingSetup {
+    MainParamsOracleBundleSetup() : BasicTestingSetup(ChainType::MAIN) {}
+};
+
+BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_mainnet_tests, MainParamsOracleBundleSetup)
+
+BOOST_AUTO_TEST_CASE(mainnet_reserve_messages_do_not_satisfy_pending_consensus)
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 17);
+    BOOST_REQUIRE_EQUAL(consensus.nOracleConsensusRequired, 9);
+    BOOST_REQUIRE_GT(Params().GetOracleNodes().size(),
+                     static_cast<size_t>(consensus.nOraclePubkeyCount));
+
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(consensus.nOracleConsensusRequired);
+
+    const int64_t now = GetTime();
+    for (uint32_t oracle_id = 17; oracle_id < 26; ++oracle_id) {
+        manager.InjectTestMessage(oracle_bundle_manager_tests::MakeRegtestOracleMessage(
+            oracle_id, 7000 + oracle_id, now));
+    }
+
+    COraclePriceMessage reserve_msg =
+        oracle_bundle_manager_tests::MakeRegtestOracleMessage(17, 7000, now);
+    BOOST_CHECK_MESSAGE(!manager.AddOracleMessage(reserve_msg),
+        "reserve-slot oracle messages must be rejected before entering pending consensus");
+    BOOST_CHECK_MESSAGE(!manager.AddConsensusAttestation(reserve_msg),
+        "reserve-slot oracle attestations must not enter the MuSig2 attestation pool");
+
+    uint64_t consensus_price = 0;
+    int64_t consensus_timestamp = 0;
+    BOOST_CHECK_MESSAGE(!manager.ComputeConsensusValues(consensus_price, consensus_timestamp),
+        "reserve-slot oracle messages must not satisfy the active MuSig2 pending-message quorum");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -105,15 +105,56 @@ BOOST_AUTO_TEST_CASE(t2_05a_health_calculation_formula_consistency)
     BOOST_CHECK_EQUAL(health150DCA, 150);
 }
 
+BOOST_AUTO_TEST_CASE(wave3_required_collateral_above_max_money_fails_closed)
+{
+    SystemHealthMonitor::ResetMetrics();
+
+    const auto& params = Params();
+    const int64_t lockBlocks = DigiDollar::LockDaysToBlocks(0); // 1-hour tier, 1000%
+    DigiDollar::ValidationContext ctx(
+        /*height=*/1000,
+        /*oraclePriceMicroUSD=*/1,
+        /*systemCollateral=*/30000,
+        params);
+
+    const CAmount required = DigiDollar::CalculateRequiredCollateral(
+        params.GetDigiDollarParams().maxMintAmount,
+        lockBlocks,
+        ctx);
+
+    BOOST_CHECK_MESSAGE(required == 0,
+        "Collateral requirements above MAX_MONEY must fail closed, not cap to MAX_MONEY");
+}
+
+BOOST_AUTO_TEST_CASE(wave3_system_collateral_ratio_extreme_values_do_not_overflow)
+{
+    SystemHealthMonitor::ResetMetrics();
+
+    SystemMetrics metrics;
+    metrics.totalDDSupply = 10000;
+    metrics.totalCollateral = MAX_MONEY;
+    metrics.lastOraclePrice = 50'000; // $0.05 per DGB, in micro-USD
+    metrics.systemHealth = 0;
+    metrics.hasCanonicalHealth = false;
+    SystemHealthMonitor::SetMetricsForTesting(metrics);
+
+    const CAmount health = DigiDollar::GetSystemCollateralRatio();
+
+    BOOST_CHECK_EQUAL(health, 30000);
+
+    SystemHealthMonitor::ResetMetrics();
+}
+
 // ============================================================================
 // T2-05b: DCA::CalculateSystemHealth unit mismatch
 // ============================================================================
 
 BOOST_AUTO_TEST_CASE(t2_05b_calculate_system_health_with_cents)
 {
-    // GetLastOraclePrice() returns cents (100 = $1.00)
-    // CalculateSystemHealth expects millicents (100,000 = $1.00)
-    // GetCurrentSystemHealth must convert properly
+    // Display/legacy health helpers may use cents, while
+    // DCA::CalculateSystemHealth expects millicents (100,000 = $1.00).
+    // GetCurrentSystemHealth converts the cached micro-USD oracle price
+    // to millicents before calling DCA.
 
     // Set up known metrics via SystemHealthMonitor
     SystemHealthMonitor::Initialize();

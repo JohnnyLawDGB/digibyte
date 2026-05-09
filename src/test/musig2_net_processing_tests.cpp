@@ -4,10 +4,22 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <chainparams.h>
+#include <oracle/musig2_messages.h>
+#include <primitives/oracle.h>
 #include <protocol.h>
 #include <test/util/setup_common.h>
 
 #include <algorithm>
+
+namespace {
+
+struct ScopedParamsRestore {
+    ChainType original{Params().GetChainType()};
+    ~ScopedParamsRestore() { SelectParams(original); }
+};
+
+} // namespace
 
 BOOST_FIXTURE_TEST_SUITE(musig2_net_processing_tests, BasicTestingSetup)
 
@@ -66,6 +78,30 @@ BOOST_AUTO_TEST_CASE(musig2_messages_validate_expected_field_lengths)
     no_sig_psig.oracle_id = 1;
     no_sig_psig.partial_sig.assign(32, 0x33);
     BOOST_CHECK(!no_sig_psig.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(musig2_relay_authorization_rejects_reserve_slots)
+{
+    ScopedParamsRestore restore;
+
+    SelectParams(ChainType::MAIN);
+    BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 17);
+    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), 16));
+    BOOST_CHECK_MESSAGE(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 17),
+        "mainnet reserve slot 17 must not be accepted for MuSig2 relay");
+    BOOST_CHECK_MESSAGE(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 29),
+        "mainnet reserve slot 29 must not be accepted for MuSig2 relay");
+    BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), ORACLE_TOTAL_COUNT));
+
+    SelectParams(ChainType::TESTNET);
+    BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 17);
+    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), 16));
+    BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 17));
+
+    SelectParams(ChainType::REGTEST);
+    BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 7);
+    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), 6));
+    BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 7));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

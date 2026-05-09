@@ -2131,13 +2131,13 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_digidollar_phase21_basic, DDWalletTestFixt
     std::string recipientAddr = CreateDDAddress(recipientKey.GetPubKey());
     CDigiDollarAddress recipient(recipientAddr);
 
-    // Act: Attempt transfer using Phase 2.1 signature
+    // Act: Attempt transfer using a standalone wallet wrapper with no signer.
     CTransactionRef tx_out;
     bool result = wallet.TransferDigiDollar(recipient, 50000, tx_out);  // Transfer $500
 
-    // Assert: Should succeed with sufficient balance
-    BOOST_CHECK_EQUAL(result, true);
-    BOOST_CHECK(tx_out != nullptr);
+    // V1 requires a real signing wallet; mock positions alone are read-only.
+    BOOST_CHECK_EQUAL(result, false);
+    BOOST_CHECK(tx_out == nullptr);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_transfer_digidollar_phase21_coin_selection, DDWalletTestFixture)
@@ -2158,9 +2158,9 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_digidollar_phase21_coin_selection, DDWalle
     CTransactionRef tx_out;
     bool result = wallet.TransferDigiDollar(recipient, 40000, tx_out);  // $400 (needs 200+300)
 
-    // Assert: Should use SelectDDCoins to gather sufficient balance
-    BOOST_CHECK_EQUAL(result, true);
-    BOOST_CHECK(tx_out != nullptr);
+    // V1 must not build spend transactions without a signing wallet.
+    BOOST_CHECK_EQUAL(result, false);
+    BOOST_CHECK(tx_out == nullptr);
 }
 
 BOOST_FIXTURE_TEST_CASE(test_transfer_digidollar_phase21_insufficient_balance, DDWalletTestFixture)
@@ -2193,9 +2193,9 @@ BOOST_FIXTURE_TEST_CASE(test_transfer_digidollar_phase21_fee_selection, DDWallet
     CTransactionRef tx_out;
     bool result = wallet.TransferDigiDollar(recipient, 25000, tx_out);
 
-    // Assert: Should succeed (with mock fee UTXOs in current impl)
-    BOOST_CHECK_EQUAL(result, true);
-    BOOST_CHECK(tx_out != nullptr);
+    // V1 must not fall back to mock fee/signing paths for spend creation.
+    BOOST_CHECK_EQUAL(result, false);
+    BOOST_CHECK(tx_out == nullptr);
 }
 
 // =============================================================================
@@ -3778,6 +3778,181 @@ BOOST_FIXTURE_TEST_CASE(test_validate_position_states_keeps_active_positions, Te
     // Active-only query should return empty
     auto active_positions = dd_wallet.GetDDTimeLocks(true);
     BOOST_CHECK_EQUAL(active_positions.size(), 0);
+}
+
+/**
+ * Test: pending redeem mempool removal reactivates live collateral positions
+ *
+ * `redeemdigidollar` marks a position inactive while the redeem is pending so
+ * users cannot submit duplicate redemptions. If that tx leaves the mempool
+ * without confirming, the collateral remains live and the wallet must restore
+ * the position immediately instead of waiting for restart/rescan/abandon.
+ */
+BOOST_FIXTURE_TEST_CASE(test_pending_redeem_removed_from_mempool_reactivates_position, TestChain100Setup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    wallet->LoadWallet();
+    wallet->EnsureDDWallet();
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(),
+                                       m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    }
+
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    BOOST_REQUIRE(dd_wallet != nullptr);
+
+    const uint256 live_mint_txid = m_coinbase_txns.front()->GetHash();
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = live_mint_txid;
+    pos.dd_minted = 100000;
+    pos.dgb_collateral = 50 * COIN;
+    pos.lock_tier = 0;
+    pos.unlock_height = 100;
+    pos.is_active = false; // pending redeem made the wallet view inactive
+    dd_wallet->AddCollateralPosition(pos);
+
+    CMutableTransaction redeem_mtx;
+    redeem_mtx.SetDigiDollarType(::DD_TX_REDEEM);
+    redeem_mtx.vin.emplace_back(COutPoint(live_mint_txid, 0));
+    redeem_mtx.vout.emplace_back(0, CScript() << OP_RETURN);
+    CTransactionRef redeem_tx = MakeTransactionRef(std::move(redeem_mtx));
+
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddToWallet(redeem_tx, wallet::TxStateInMempool{}) != nullptr);
+        BOOST_CHECK(wallet->IsSpent(COutPoint(live_mint_txid, 0)));
+    }
+
+    wallet->transactionRemovedFromMempool(redeem_tx, MemPoolRemovalReason::EXPIRY);
+
+    {
+        LOCK(wallet->cs_wallet);
+        const wallet::CWalletTx* wtx = wallet->GetWalletTx(redeem_tx->GetHash());
+        BOOST_REQUIRE(wtx != nullptr);
+        BOOST_CHECK_MESSAGE(wtx->isAbandoned(),
+            "A stale pending DD redeem must be abandoned so its inputs become spendable again");
+        BOOST_CHECK_MESSAGE(!wallet->IsSpent(COutPoint(live_mint_txid, 0)),
+            "Abandoning the stale DD redeem must release the live collateral outpoint");
+    }
+
+    const auto positions = dd_wallet->GetDDTimeLocks(false);
+    BOOST_REQUIRE_EQUAL(positions.size(), 1);
+    BOOST_CHECK_MESSAGE(positions[0].is_active,
+        "Mempool removal must reactivate a position whose collateral is still in the UTXO set");
+}
+
+/**
+ * Test: mempool-imported pending redeem deactivates the live position
+ *
+ * A wallet may learn about a valid pending redeem from mempool import on
+ * startup/reindex rather than from the original `redeemdigidollar` RPC path.
+ * That pending spend must reserve the DD/collateral position exactly like a
+ * freshly-created redeem so RPC/Qt do not display it as simultaneously active
+ * and already spent by a wallet transaction.
+ */
+BOOST_FIXTURE_TEST_CASE(test_pending_redeem_mempool_import_deactivates_position, TestChain100Setup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    wallet->LoadWallet();
+    wallet->EnsureDDWallet();
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(),
+                                       m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    }
+
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    BOOST_REQUIRE(dd_wallet != nullptr);
+
+    const uint256 live_mint_txid = m_coinbase_txns.front()->GetHash();
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = live_mint_txid;
+    pos.dd_minted = 100000;
+    pos.dgb_collateral = 50 * COIN;
+    pos.lock_tier = 0;
+    pos.unlock_height = 100;
+    pos.is_active = true;
+    dd_wallet->AddCollateralPosition(pos);
+
+    CMutableTransaction redeem_mtx;
+    redeem_mtx.SetDigiDollarType(::DD_TX_REDEEM);
+    redeem_mtx.vin.emplace_back(COutPoint(live_mint_txid, 0));
+    redeem_mtx.vout.emplace_back(0, CScript() << OP_RETURN);
+    CTransactionRef redeem_tx = MakeTransactionRef(std::move(redeem_mtx));
+
+    BOOST_REQUIRE(dd_wallet->ProcessIncomingDDTransaction(redeem_tx));
+
+    const auto positions = dd_wallet->GetDDTimeLocks(false);
+    BOOST_REQUIRE_EQUAL(positions.size(), 1);
+    BOOST_CHECK_MESSAGE(!positions[0].is_active,
+        "Mempool-imported pending DD redeem must deactivate the live position");
+}
+
+/**
+ * Test: transient redeem reorg removals do not reactivate pending positions
+ *
+ * BroadcastTransaction can move a wallet transaction between the temporary pool
+ * and mempool with removal reason REORG before the transaction is re-added. That
+ * notification is not a final mempool eviction, so the pending redeem must keep
+ * the position inactive while the wallet transaction remains live.
+ */
+BOOST_FIXTURE_TEST_CASE(test_pending_redeem_transient_reorg_removal_stays_inactive, TestChain100Setup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    wallet->LoadWallet();
+    wallet->EnsureDDWallet();
+
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetLastBlockProcessed(m_node.chainman->ActiveChain().Height(),
+                                       m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    }
+
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    BOOST_REQUIRE(dd_wallet != nullptr);
+
+    const uint256 live_mint_txid = m_coinbase_txns.front()->GetHash();
+    WalletCollateralPosition pos;
+    pos.dd_timelock_id = live_mint_txid;
+    pos.dd_minted = 100000;
+    pos.dgb_collateral = 50 * COIN;
+    pos.lock_tier = 0;
+    pos.unlock_height = 100;
+    pos.is_active = false;
+    dd_wallet->AddCollateralPosition(pos);
+
+    CMutableTransaction redeem_mtx;
+    redeem_mtx.SetDigiDollarType(::DD_TX_REDEEM);
+    redeem_mtx.vin.emplace_back(COutPoint(live_mint_txid, 0));
+    redeem_mtx.vout.emplace_back(0, CScript() << OP_RETURN);
+    CTransactionRef redeem_tx = MakeTransactionRef(std::move(redeem_mtx));
+
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddToWallet(redeem_tx, wallet::TxStateInMempool{}) != nullptr);
+        BOOST_CHECK(wallet->IsSpent(COutPoint(live_mint_txid, 0)));
+    }
+
+    wallet->transactionRemovedFromMempool(redeem_tx, MemPoolRemovalReason::REORG);
+
+    {
+        LOCK(wallet->cs_wallet);
+        const wallet::CWalletTx* wtx = wallet->GetWalletTx(redeem_tx->GetHash());
+        BOOST_REQUIRE(wtx != nullptr);
+        BOOST_CHECK(!wtx->isAbandoned());
+        BOOST_CHECK(wallet->IsSpent(COutPoint(live_mint_txid, 0)));
+    }
+
+    const auto positions = dd_wallet->GetDDTimeLocks(false);
+    BOOST_REQUIRE_EQUAL(positions.size(), 1);
+    BOOST_CHECK_MESSAGE(!positions[0].is_active,
+        "Transient REORG removal must not reactivate a still-pending DD redeem");
 }
 
 // =============================================================================

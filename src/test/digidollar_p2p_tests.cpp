@@ -5,6 +5,9 @@
 #include <boost/test/unit_test.hpp>
 
 #include <protocol.h>
+#include <chainparams.h>
+#include <oracle/bundle_manager.h>
+#include <oracle/musig2_aggregator.h>
 #include <primitives/oracle.h>
 #include <serialize.h>
 #include <uint256.h>
@@ -119,14 +122,12 @@ BOOST_AUTO_TEST_CASE(test_oracle_price_msg_serialization)
 
 BOOST_AUTO_TEST_CASE(test_oracle_bundle_msg_serialization)
 {
-    // Create test oracle bundle
     COracleBundle bundle{123}; // epoch 123
-
-    // Add some test messages
-    for (uint32_t i = 1; i <= 3; ++i) {
-        COraclePriceMessage msg{i, static_cast<uint64_t>(COIN * (5 + i * 100)), GetTime()};
-        bundle.AddMessage(msg);
-    }
+    bundle.version = 3;
+    bundle.median_price_micro_usd = 6000;
+    bundle.timestamp = GetTime();
+    bundle.participation_bitmap = {0x0f};
+    bundle.aggregate_sig.assign(64, 0x42);
 
     // Create bundle message
     OracleBundleMsg bundle_msg;
@@ -143,7 +144,10 @@ BOOST_AUTO_TEST_CASE(test_oracle_bundle_msg_serialization)
 
     // Verify content
     BOOST_CHECK_EQUAL(deserialized_msg.bundle.epoch, 123);
-    BOOST_CHECK_EQUAL(deserialized_msg.bundle.messages.size(), 3);
+    BOOST_CHECK_EQUAL(deserialized_msg.bundle.version, 3);
+    BOOST_CHECK_EQUAL(deserialized_msg.bundle.median_price_micro_usd, 6000U);
+    BOOST_CHECK_EQUAL(deserialized_msg.bundle.aggregate_sig.size(), 64U);
+    BOOST_CHECK(deserialized_msg.bundle.participation_bitmap == std::vector<unsigned char>{0x0f});
     BOOST_CHECK_EQUAL(deserialized_msg.block_hash, uint256S("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"));
 }
 
@@ -199,17 +203,22 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_timestamp)
 {
     // Test timestamp validation for oracle messages
     int64_t now = GetTime();
+    CKey key;
+    key.MakeNewKey(true);
 
     // Valid message (recent timestamp)
     COraclePriceMessage valid_msg{1, 6000, now - 30}; // 30 seconds ago, $0.006
+    BOOST_REQUIRE(valid_msg.SignAttestation(key));
     BOOST_CHECK(valid_msg.IsValid());
 
     // Message too far in future (should be invalid)
     COraclePriceMessage future_msg{1, 6000, now + 120}; // 2 minutes in future
+    BOOST_REQUIRE(future_msg.SignAttestation(key));
     BOOST_CHECK(!future_msg.IsValid());
 
     // Message too old (should be invalid)
     COraclePriceMessage old_msg{1, 6000, now - 7200}; // 2 hours ago
+    BOOST_REQUIRE(old_msg.SignAttestation(key));
     BOOST_CHECK(!old_msg.IsValid());
 }
 
@@ -246,20 +255,30 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_validation_signature)
 
 BOOST_AUTO_TEST_CASE(test_oracle_bundle_consensus_validation)
 {
-    // Test oracle bundle consensus requirements (RC30: 9-of-17)
-    COracleBundle bundle{100};
+    const Consensus::Params& params = Params().GetConsensus();
+    const int required = params.nOracleConsensusRequired;
 
-    // Bundle with insufficient messages should not have consensus
-    for (uint32_t i = 1; i <= 8; ++i) {
-        COraclePriceMessage msg{i, 5, GetTime()};
-        bundle.AddMessage(msg);
+    COracleBundle insufficient{100};
+    insufficient.version = 3;
+    insufficient.median_price_micro_usd = 6000;
+    insufficient.timestamp = GetTime();
+    insufficient.aggregate_sig.assign(64, 0x42);
+    std::vector<uint8_t> insufficient_ids;
+    for (int i = 0; i < required - 1; ++i) {
+        insufficient_ids.push_back(static_cast<uint8_t>(i));
     }
-    BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Only 8 messages, need 9 (RC30)
+    insufficient.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        insufficient_ids, static_cast<uint16_t>(params.nOracleTotalOracles));
+    BOOST_CHECK(!OracleBundleManager::ValidateBundle(insufficient, 0, params));
 
-    // Add one more message to reach consensus
-    COraclePriceMessage msg9{9, 5, GetTime()};
-    bundle.AddMessage(msg9);
-    BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED)); // Now has 9 messages (RC30: 9-of-17)
+    COracleBundle valid = insufficient;
+    std::vector<uint8_t> valid_ids;
+    for (int i = 0; i < required; ++i) {
+        valid_ids.push_back(static_cast<uint8_t>(i));
+    }
+    valid.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        valid_ids, static_cast<uint16_t>(params.nOracleTotalOracles));
+    BOOST_CHECK(OracleBundleManager::ValidateBundle(valid, 0, params));
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_message_types_in_all_net_message_types)

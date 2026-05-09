@@ -202,6 +202,62 @@ BOOST_AUTO_TEST_CASE(test_session_nonce_generation)
     secp256k1_context_destroy(ctx);
 }
 
+BOOST_AUTO_TEST_CASE(test_passive_init_keeps_locally_started_session_alive)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+
+    constexpr size_t N = 2;
+    unsigned char seckeys[N][32];
+    secp256k1_keypair keypairs[N];
+    secp256k1_pubkey pubkeys[N];
+    for (size_t i = 0; i < N; ++i) {
+        BOOST_REQUIRE(MakeRandomKeypair(ctx, seckeys[i], &keypairs[i], &pubkeys[i]));
+    }
+
+    std::vector<const secp256k1_pubkey*> pubkey_ptrs(N);
+    for (size_t i = 0; i < N; ++i) pubkey_ptrs[i] = &pubkeys[i];
+    secp256k1_xonly_pubkey agg_pk;
+    secp256k1_musig_keyagg_cache cache;
+    BOOST_REQUIRE(secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), N));
+
+    MuSig2SigningSession session(77, N);
+
+    secp256k1_musig_pubnonce local_pubnonce;
+    BOOST_REQUIRE(session.GenerateNonce(0, MakeCKey(seckeys[0]), pubkeys[0], cache, local_pubnonce));
+    BOOST_REQUIRE_EQUAL(static_cast<int>(session.GetState()),
+                        static_cast<int>(MuSig2SessionState::NONCES_COLLECTING));
+
+    // Regression for the live multi-oracle race: a P2P nonce can enter
+    // IngestRemoteNonce after it observed CREATED but after local nonce
+    // generation moved the same session to NONCES_COLLECTING. Passive init
+    // must be idempotent so that valid remote nonce is not dropped.
+    BOOST_REQUIRE(session.InitializePassive(cache));
+    BOOST_REQUIRE_EQUAL(static_cast<int>(session.GetState()),
+                        static_cast<int>(MuSig2SessionState::NONCES_COLLECTING));
+
+    secp256k1_musig_secnonce remote_secnonce;
+    secp256k1_musig_pubnonce remote_pubnonce;
+    unsigned char session_rand[32];
+    GetStrongRandBytes(Span{session_rand, 32});
+    BOOST_REQUIRE(secp256k1_musig_nonce_gen(ctx,
+                                            &remote_secnonce,
+                                            &remote_pubnonce,
+                                            session_rand,
+                                            seckeys[1],
+                                            &pubkeys[1],
+                                            nullptr,
+                                            &cache,
+                                            nullptr));
+
+    BOOST_REQUIRE(session.AddPubnonce(0, local_pubnonce));
+    BOOST_REQUIRE(session.AddPubnonce(1, remote_pubnonce));
+    BOOST_CHECK(session.HasEnoughNonces());
+    BOOST_CHECK_EQUAL(static_cast<int>(session.GetState()),
+                      static_cast<int>(MuSig2SessionState::NONCES_COMPLETE));
+
+    secp256k1_context_destroy(ctx);
+}
+
 // ============================================================================
 // test_session_nonce_collection_9_of_15
 // Add 9 pubnonces → session advances to NONCES_COMPLETE

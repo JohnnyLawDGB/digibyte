@@ -90,29 +90,44 @@ struct DigiDollarLockHeightTestSetup : public TestingSetup {
 BOOST_FIXTURE_TEST_CASE(rescan_mature_mint_passes, DigiDollarLockHeightTestSetup)
 {
     // Mint created at height 100 with lockHeight 340 (1-hour tier / 240 blocks).
-    // During rescan/revalidation at height 500, it must still validate.
+    // Historical revalidation uses the original block-connection height. Mint
+    // validation still enforces collateral using lockHeight - nHeight, even when
+    // oracle validation is skipped.
+    const int mintHeight = 100;
     const int64_t lockHeight = 340;
-    const CTransaction tx = CreateMintTx(lockHeight, /*lock_tier=*/0, /*dd_amount=*/10000, /*collateral=*/1000 * COIN);
-    DigiDollar::ValidationContext ctx = MakeContext(/*height=*/500, /*skip_oracle_validation=*/true);
+    DigiDollar::ValidationContext ctx = MakeContext(mintHeight, /*skip_oracle_validation=*/true);
+    const CAmount ddAmount = 10000;
+    const CAmount requiredCollateral = DigiDollar::CalculateRequiredCollateral(
+        ddAmount, lockHeight - mintHeight, ctx);
+    BOOST_REQUIRE(requiredCollateral > 0);
+    const CTransaction tx = CreateMintTx(lockHeight, /*lock_tier=*/0, ddAmount, requiredCollateral);
     TxValidationState state;
 
     ResetVolatilityState(ctx.nHeight);
-    BOOST_CHECK(DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state));
+    BOOST_CHECK_MESSAGE(DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state),
+        "Historical mint should pass at original validation height, got: " + state.GetRejectReason());
     BOOST_CHECK(state.IsValid());
 }
 
-BOOST_FIXTURE_TEST_CASE(rescan_immature_mint_still_valid, DigiDollarLockHeightTestSetup)
+BOOST_FIXTURE_TEST_CASE(rescan_wrong_height_noncanonical_remaining_lock_fails, DigiDollarLockHeightTestSetup)
 {
-    // Same historical mint, but validation context is height 200 (lock not yet matured).
-    // Rescan/revalidation must not reject it for lock tier mismatch.
+    // A historical 1-hour mint must be revalidated at its original block height.
+    // Using a later height makes the remaining lock period 140 blocks, which is
+    // not a canonical V1 tier and must fail closed.
+    const int mintHeight = 100;
     const int64_t lockHeight = 340;
-    const CTransaction tx = CreateMintTx(lockHeight, /*lock_tier=*/0, /*dd_amount=*/10000, /*collateral=*/1000 * COIN);
     DigiDollar::ValidationContext ctx = MakeContext(/*height=*/200, /*skip_oracle_validation=*/true);
+    const CAmount ddAmount = 10000;
+    DigiDollar::ValidationContext mintCtx = MakeContext(mintHeight, /*skip_oracle_validation=*/true);
+    const CAmount requiredCollateral = DigiDollar::CalculateRequiredCollateral(
+        ddAmount, lockHeight - mintHeight, mintCtx);
+    BOOST_REQUIRE(requiredCollateral > 0);
+    const CTransaction tx = CreateMintTx(lockHeight, /*lock_tier=*/0, ddAmount, requiredCollateral);
     TxValidationState state;
 
     ResetVolatilityState(ctx.nHeight);
-    BOOST_CHECK(DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state));
-    BOOST_CHECK(state.IsValid());
+    BOOST_CHECK(!DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state));
+    BOOST_CHECK(!state.IsValid());
 }
 
 BOOST_FIXTURE_TEST_CASE(fresh_mint_tier_mismatch_fails, DigiDollarLockHeightTestSetup)
@@ -150,12 +165,13 @@ BOOST_FIXTURE_TEST_CASE(fresh_mint_tier_correct_passes, DigiDollarLockHeightTest
     BOOST_CHECK(state.IsValid());
 }
 
-BOOST_FIXTURE_TEST_CASE(aged_mint_active_lock_passes, DigiDollarLockHeightTestSetup)
+BOOST_FIXTURE_TEST_CASE(aged_mint_wrong_height_revalidation_fails, DigiDollarLockHeightTestSetup)
 {
     // Bug #25: Tier 1 mint created at height 39237, lockHeight=212037 (172800 blocks = 30 days).
     // Chain now at 163162. Remaining = 48875 blocks < 172800.
-    // The old code rejects this as "bad-mint-lock-height-mismatch" — FALSE POSITIVE.
-    // After fix, aged mints with active locks must pass re-validation.
+    // V1 does not accept a custom 48875-block lock. Historical validation must
+    // use the original block height, so validating this mint at the later tip
+    // height must fail closed instead of treating the remaining lock as valid.
     const int mintHeight = 39237;
     const int64_t tier1LockBlocks = DigiDollar::LockDaysToBlocks(30);
     const int64_t lockHeight = mintHeight + tier1LockBlocks; // 212037
@@ -166,15 +182,14 @@ BOOST_FIXTURE_TEST_CASE(aged_mint_active_lock_passes, DigiDollarLockHeightTestSe
 
     const CTransaction tx = CreateMintTx(lockHeight, /*lock_tier=*/1, ddAmount, requiredCollateral);
 
-    // Re-validate at height 163162 — lock still active but remaining << expected
+    // Re-validating at height 163162 makes the remaining lock non-canonical.
     const int currentHeight = 163162;
     DigiDollar::ValidationContext ctx = MakeContext(currentHeight, /*skip_oracle_validation=*/false);
     TxValidationState state;
 
     ResetVolatilityState(ctx.nHeight);
-    BOOST_CHECK_MESSAGE(DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state),
-        "Aged mint with active lock should pass re-validation, got: " + state.GetRejectReason());
-    BOOST_CHECK(state.IsValid());
+    BOOST_CHECK(!DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state));
+    BOOST_CHECK(!state.IsValid());
 }
 
 BOOST_FIXTURE_TEST_CASE(fresh_mint_short_lock_high_tier_fails, DigiDollarLockHeightTestSetup)
@@ -201,17 +216,23 @@ BOOST_FIXTURE_TEST_CASE(fresh_mint_short_lock_high_tier_fails, DigiDollarLockHei
 
 BOOST_FIXTURE_TEST_CASE(matured_mint_locktime_in_past_passes, DigiDollarLockHeightTestSetup)
 {
-    // Matured mint: lockTime is in the past (lockTime <= nHeight).
-    // During rescan/wallet-reload, skipOracleValidation is true (no live oracle data).
-    // The tier check must be skipped for matured mints, confirming RC25 behavior.
+    // A 30-day mint validated at its original block height must pass even when
+    // oracle validation is skipped. Fully matured mints are redemption cases;
+    // mint validation rejects them because lockTime - nHeight is non-positive.
+    const int mintHeight = 39237;
+    const int64_t tier1LockBlocks = DigiDollar::LockDaysToBlocks(30);
     const int64_t lockHeight = 212037;
-    const CTransaction tx = CreateMintTx(lockHeight, /*lock_tier=*/1, /*dd_amount=*/10000, /*collateral=*/1000 * COIN);
-    DigiDollar::ValidationContext ctx = MakeContext(/*height=*/300000, /*skip_oracle_validation=*/true);
+    BOOST_REQUIRE_EQUAL(lockHeight, mintHeight + tier1LockBlocks);
+    DigiDollar::ValidationContext ctx = MakeContext(mintHeight, /*skip_oracle_validation=*/true);
+    const CAmount ddAmount = 10000;
+    const CAmount requiredCollateral = DigiDollar::CalculateRequiredCollateral(ddAmount, tier1LockBlocks, ctx);
+    BOOST_REQUIRE(requiredCollateral > 0);
+    const CTransaction tx = CreateMintTx(lockHeight, /*lock_tier=*/1, ddAmount, requiredCollateral);
     TxValidationState state;
 
     ResetVolatilityState(ctx.nHeight);
     BOOST_CHECK_MESSAGE(DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state),
-        "Matured mint should pass, got: " + state.GetRejectReason());
+        "Historical 30-day mint should pass at original validation height, got: " + state.GetRejectReason());
     BOOST_CHECK(state.IsValid());
 }
 

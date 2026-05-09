@@ -20,6 +20,7 @@
 #include <qt/test/addressbooktests.h>
 #include <qt/test/wallettests.h>
 #include <qt/test/digidollarwidgettests.h>
+#include <qt/test/digidollarwave19widgettests.h>
 #endif // ENABLE_WALLET
 
 #include <QApplication>
@@ -117,6 +118,12 @@ int main(int argc, char* argv[])
 
     DigiDollarWidgetTests test7(app.node());
     num_test_failures += QTest::qExec(&test7);
+
+    // Wave 19 Agent B: separate translation unit for the Wave 19 Qt pins
+    // (DD-FA-FUNC-030, DD-FA-TEST-027/028/029) — kept out of
+    // digidollarwidgettests.cpp to avoid concurrent edits in the audit.
+    DigiDollarWave19WidgetTests test8(app.node());
+    num_test_failures += QTest::qExec(&test8);
 #endif
 
     if (num_test_failures) {

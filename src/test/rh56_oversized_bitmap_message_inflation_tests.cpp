@@ -8,7 +8,7 @@
  *
  * Target: src/oracle/bundle_manager.cpp:1127-1131 (ExtractOracleBundle v0x03 path)
  *         src/oracle/musig2_aggregator.cpp:63-80  (DecodeBitmap)
- *         src/oracle/bundle_manager.cpp:2735-2742 (ValidatePhaseThreeBundle)
+ *         src/oracle/bundle_manager.cpp:2735-2742 (ValidateMuSig2Bundle)
  *
  * Angle: (D) Out-of-range IDs + (B) ExtractOracleBundle cache asymmetry.
  *        Carries W1-L-08 from the Wave-1 mapper report into a concrete PoC.
@@ -27,7 +27,7 @@
  *   attacker-chosen `oracle_id`. IDs ≥ nOracleTotalOracles have no chainparams
  *   entry, so `GetOracleNode(id)` returns null and the synthetic message
  *   carries an UNINITIALIZED `oracle_pubkey`. The consensus validator later
- *   rejects the bundle at `ValidatePhaseThreeBundle` because that path
+ *   rejects the bundle at `ValidateMuSig2Bundle` because that path
  *   decodes the bitmap with the exact consensus total (17 → expected 3 bytes,
  *   the 32-byte bitmap mismatches → empty `oracle_ids` → "bitmap decoding
  *   failed"), so this is not a direct consensus break. However the
@@ -58,7 +58,7 @@
  *   3. Extract succeeds. bundle.messages contains 256 synthetic entries with
  *      oracle_ids 0..255. IDs >= nOracleTotalOracles (17 mainnet / 7 regtest)
  *      have default-constructed `oracle_pubkey`.
- *   4. ValidatePhaseThreeBundle later rejects the block (bitmap size mismatch),
+ *   4. ValidateMuSig2Bundle later rejects the block (bitmap size mismatch),
  *      so the block does NOT enter the chain. The fix makes extraction reject
  *      the same malformed bitmap before creating synthetic messages.
  *
@@ -69,7 +69,7 @@
  *       const uint16_t total_oracles = static_cast<uint16_t>(
  *           std::max(1, params.nOracleTotalOracles));
  *   — forcing the extract path to use the consensus-fixed total and matching
- *   ValidatePhaseThreeBundle's expectations. DecodeBitmap with the correct
+ *   ValidateMuSig2Bundle's expectations. DecodeBitmap with the correct
  *   total would then reject the oversized bitmap at line 70 (size mismatch),
  *   bundle.messages stays empty, and the caller sees a clean "extract failed"
  *   instead of a polluted bundle.
@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(rh56_extract_rejects_oversized_bitmap)
 // ============================================================================
 // rh56_validator_rejects_oversized_bitmap_defense
 //
-// Confirms the consensus defender still rejects: ValidatePhaseThreeBundle
+// Confirms the consensus defender still rejects: ValidateMuSig2Bundle
 // calls DecodeBitmap with params.nOracleTotalOracles (NOT the inflated total),
 // catching the bitmap-size mismatch and refusing the bundle. This is the
 // defense-in-depth layer that keeps the extract-time inflation from being a
@@ -209,7 +209,7 @@ BOOST_AUTO_TEST_CASE(rh56_extract_rejects_oversized_bitmap)
 // ============================================================================
 BOOST_AUTO_TEST_CASE(rh56_validator_rejects_oversized_bitmap_defense)
 {
-    BOOST_TEST_MESSAGE("=== RH-56 defender sanity: ValidatePhaseThreeBundle rejects oversized bitmap ===");
+    BOOST_TEST_MESSAGE("=== RH-56 defender sanity: ValidateMuSig2Bundle rejects oversized bitmap ===");
 
     const Consensus::Params& params = Params().GetConsensus();
 
@@ -222,7 +222,7 @@ BOOST_AUTO_TEST_CASE(rh56_validator_rejects_oversized_bitmap_defense)
     bundle.epoch = 0;
 
     std::string error;
-    bool ok = OracleBundleManager::ValidatePhaseThreeBundle(bundle, /*block_height=*/0, params, error);
+    bool ok = OracleBundleManager::ValidateMuSig2Bundle(bundle, /*block_height=*/0, params, error);
 
     BOOST_CHECK_MESSAGE(!ok,
         "Defender-path sanity: consensus MUST reject the 32-byte oversized "

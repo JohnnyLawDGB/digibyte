@@ -151,4 +151,64 @@ BOOST_AUTO_TEST_CASE(testnet_xonly_slot_alignment_reference)
     }
 }
 
+// ---------------------------------------------------------------------------
+// RH50.4 — Regtest reference: same per-slot alignment invariant.
+//
+// Regtest uses a 4-of-7 MuSig2 quorum with deterministic test keys.
+// CRegTestParams populates `consensus.vOraclePublicKeys` and `vOracleNodes`
+// independently; if their orderings ever drift the regtest signing
+// orchestrator will produce aggregate signatures whose subkey order does
+// not match what `ValidateMuSig2Bundle` reads, breaking every regtest DD
+// block. This test pins the cross-list ordering for the active 7 slots.
+// Closes Wave 9 cross-network alignment coverage (Agent C).
+// ---------------------------------------------------------------------------
+BOOST_AUTO_TEST_CASE(regtest_xonly_slot_alignment_reference)
+{
+    SelectParams(ChainType::REGTEST);
+    const CChainParams& params = Params();
+    const Consensus::Params& consensus = params.GetConsensus();
+
+    const auto& nodes = params.GetOracleNodes();
+    const auto& xonly = consensus.vOraclePublicKeys;
+
+    const int active = consensus.nOraclePubkeyCount;
+    BOOST_REQUIRE_GE(active, 1);
+    BOOST_REQUIRE_GE(static_cast<int>(nodes.size()), active);
+    BOOST_REQUIRE_GE(static_cast<int>(xonly.size()), active);
+
+    for (int i = 0; i < active; ++i) {
+        const std::string got = XOnlyHexFromCompressed(nodes[i].pubkey);
+        std::string want = xonly[i];
+        std::transform(want.begin(), want.end(), want.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        BOOST_CHECK_MESSAGE(
+            got == want,
+            "Regtest oracle slot " << i << " mismatch: vOracleNodes x-only="
+            << got << " but vOraclePublicKeys=" << want
+            << ". A regtest drift here masks mainnet/testnet drift in "
+               "the same release because the wave-9 alignment audit relies "
+               "on regtest as the single end-to-end signing reference.");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// RH50.5 — Cross-network sanity: ValidateOracleNodeAlignment() agrees.
+// This is the same predicate digibyted runs at startup
+// (`common::InitConfig` -> chainparams). If this test ever fails for a
+// network, that network's binary refuses to launch — which is the correct
+// fail-closed behavior, but is also worth catching at unit-test time.
+// ---------------------------------------------------------------------------
+BOOST_AUTO_TEST_CASE(all_networks_validate_oracle_node_alignment)
+{
+    for (ChainType ct : {ChainType::MAIN, ChainType::TESTNET, ChainType::REGTEST}) {
+        SelectParams(ct);
+        const CChainParams& params = Params();
+        BOOST_CHECK_MESSAGE(
+            params.ValidateOracleNodeAlignment(),
+            "ValidateOracleNodeAlignment() must hold for chain type "
+            << params.GetChainTypeString()
+            << ". Failure means digibyted refuses to start on this network.");
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

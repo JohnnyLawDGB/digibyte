@@ -13,7 +13,7 @@
  * - Partial signature broadcast
  * - Remote partial sig collection
  * - v0x03 bundle creation on signing completion
- * - v0x02 fallback when session incomplete
+ * - no legacy fallback when session incomplete
  * - Session timeout handling
  * - Quorum resilience with offline peers
  */
@@ -353,9 +353,9 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_collect_remote_partial_sigs)
 }
 
 // ============================================================================
-// test_oracle_node_fallback_to_v02
+// test_oracle_node_no_legacy_fallback
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_oracle_node_fallback_to_v02)
+BOOST_AUTO_TEST_CASE(test_oracle_node_no_legacy_fallback)
 {
     OracleTestHarness h;
     MuSig2OracleParticipation node;
@@ -371,8 +371,11 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_fallback_to_v02)
     node.OnBlockConnected(100);
 
     COracleBundle bundle = node.GetCurrentBundle(100);
-    BOOST_CHECK_EQUAL(bundle.version, 2);
-    BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 1500000U);
+    BOOST_CHECK_EQUAL(bundle.version, 3);
+    BOOST_CHECK(bundle.IsMuSig2());
+    BOOST_CHECK(bundle.aggregate_sig.empty());
+    BOOST_CHECK(bundle.participation_bitmap.empty());
+    BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 0U);
 }
 
 // ============================================================================
@@ -467,16 +470,25 @@ BOOST_AUTO_TEST_CASE(test_oracle_node_session_timeout)
     v02_bundle.timestamp = 1700000000;
     node.SetLatestV02Bundle(v02_bundle, 100);
 
-    node.OnBlockConnected(100);
+    const int32_t start_height = 100;
+    const int32_t timeout_height = start_height + 1;
+    BOOST_REQUIRE_EQUAL(GetCurrentEpoch(start_height), GetCurrentEpoch(timeout_height));
+
+    node.OnBlockConnected(start_height);
     BOOST_CHECK(node.GetSessionState() == MuSig2SessionState::NONCES_COLLECTING);
 
-    // Default timeout is 20 blocks
-    node.OnBlockConnected(121);
+    // Keep the timeout check in the same RC34 oracle epoch. Advancing to 121
+    // would start the next 40-block epoch and correctly replace the session.
+    node.OnBlockConnected(timeout_height);
 
     BOOST_CHECK(node.GetSessionState() == MuSig2SessionState::FAILED);
 
-    COracleBundle bundle = node.GetCurrentBundle(121);
-    BOOST_CHECK_EQUAL(bundle.version, 2);
+    COracleBundle bundle = node.GetCurrentBundle(timeout_height);
+    BOOST_CHECK_EQUAL(bundle.version, 3);
+    BOOST_CHECK(bundle.IsMuSig2());
+    BOOST_CHECK(bundle.aggregate_sig.empty());
+    BOOST_CHECK(bundle.participation_bitmap.empty());
+    BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 0U);
 }
 
 // ============================================================================

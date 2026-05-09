@@ -44,6 +44,14 @@ CAmount CreateTestOraclePrice() {
     return 50000; // $0.05 per DGB = 50,000 micro-USD
 }
 
+void SetCanonicalLock(TxBuilderMintParams& params, int lockDays)
+{
+    const int tierIndex = GetLockTierIndex(LockDaysToBlocks(lockDays), Params().GetDigiDollarParams());
+    BOOST_REQUIRE_MESSAGE(tierIndex >= 0, "test requested non-canonical lock days: " + std::to_string(lockDays));
+    params.lockDays = lockDays;
+    params.lockTier = static_cast<uint32_t>(tierIndex);
+}
+
 // Helper function to create mock mint transaction builder
 class MockMintTxBuilder : public MintTxBuilder {
 private:
@@ -95,7 +103,7 @@ BOOST_AUTO_TEST_CASE(mint_minimum_amount)
     TxBuilderMintParams mintParams;
     // Use consensus minimum - regtest uses $100.00 minimum (10000 cents)
     mintParams.ddAmount = params.GetDigiDollarParams().minMintAmount; // $100.00 in cents
-    mintParams.lockDays = 365; // 1 year
+    SetCanonicalLock(mintParams, 365); // 1 year
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -138,7 +146,7 @@ BOOST_AUTO_TEST_CASE(mint_standard_amounts)
 
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = amount;
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
@@ -174,7 +182,7 @@ BOOST_AUTO_TEST_CASE(mint_maximum_amount)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 100000; // 100,000 cents = $1,000 (regtest max)
-    mintParams.lockDays = 3650; // 10 years (lowest collateral ratio = 200%)
+    SetCanonicalLock(mintParams, 3650); // 10 years (lowest collateral ratio = 200%)
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -211,7 +219,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
     {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 0;
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
@@ -225,7 +233,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
     {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = -1000;
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
@@ -239,7 +247,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
     {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = params.GetDigiDollarParams().minMintAmount - 1; // Just below minimum
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
@@ -253,7 +261,7 @@ BOOST_AUTO_TEST_CASE(mint_invalid_amounts)
     {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 150000; // 150,000 cents = $1,500 (above regtest max)
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
@@ -377,7 +385,7 @@ BOOST_AUTO_TEST_CASE(collateral_insufficient_rejection)
     // Mint $1000 (max for regtest) - needs 200% * $1000 / $0.05 = 40,000 DGB at minimum (10 year lock)
     // With 1 year lock (300%), needs 60,000 DGB
     mintParams.ddAmount = 100000; // $1000 in cents (regtest max)
-    mintParams.lockDays = 365;     // 1 year = 300% ratio
+    SetCanonicalLock(mintParams, 365);     // 1 year = 300% ratio
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -407,7 +415,7 @@ BOOST_AUTO_TEST_CASE(p2tr_script_creation_through_transaction)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -443,7 +451,7 @@ BOOST_AUTO_TEST_CASE(p2tr_redemption_paths_verification)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -474,7 +482,7 @@ BOOST_AUTO_TEST_CASE(transaction_version_field)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -511,7 +519,7 @@ BOOST_AUTO_TEST_CASE(transaction_input_consumption)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -552,7 +560,7 @@ BOOST_AUTO_TEST_CASE(transaction_output_creation)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -602,7 +610,7 @@ BOOST_AUTO_TEST_CASE(transaction_fee_calculation)
     for (CAmount feeRate : feeRates) {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 10000;
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = feeRate;
         mintParams.utxos = utxos;
@@ -631,7 +639,7 @@ BOOST_AUTO_TEST_CASE(transaction_signing_preparation)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -678,7 +686,7 @@ BOOST_AUTO_TEST_CASE(edge_case_exact_collateral_no_change)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = ddAmount;
-    mintParams.lockDays = lockDays;
+    SetCanonicalLock(mintParams, lockDays);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -714,7 +722,7 @@ BOOST_AUTO_TEST_CASE(edge_case_multiple_inputs)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100 (needs 6000 DGB at 300% ratio with $0.05/DGB)
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -771,7 +779,7 @@ BOOST_AUTO_TEST_CASE(edge_case_oracle_price_unavailable)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -798,7 +806,7 @@ BOOST_AUTO_TEST_CASE(edge_case_extreme_fee_rates)
     {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 10000;
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 200000000; // 200M sat/kB (above max of 100M sat/kB)
         mintParams.utxos = utxos;
@@ -813,7 +821,7 @@ BOOST_AUTO_TEST_CASE(edge_case_extreme_fee_rates)
     {
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 10000;
-        mintParams.lockDays = 365;
+        SetCanonicalLock(mintParams, 365);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 0;
         mintParams.utxos = utxos;
@@ -839,7 +847,7 @@ BOOST_AUTO_TEST_CASE(edge_case_invalid_keys)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     // mintParams.ownerKey not set (invalid)
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -878,7 +886,7 @@ BOOST_AUTO_TEST_CASE(integration_complete_mint_flow)
     // Mint $500 worth of DigiDollars with 1-year lock (within regtest max of $1000)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 50000; // $500 in cents
-    mintParams.lockDays = 365;   // 1 year = 300% collateral ratio
+    SetCanonicalLock(mintParams, 365);   // 1 year = 300% collateral ratio
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 200000;   // 200,000 sat/kB (= 200 sat/vB)
     mintParams.utxos = utxos;
@@ -942,7 +950,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_healthy_system)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100
-    mintParams.lockDays = 365;   // 1 year (300% base ratio)
+    SetCanonicalLock(mintParams, 365);   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -978,7 +986,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_warning_system)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100
-    mintParams.lockDays = 365;   // 1 year (300% base ratio)
+    SetCanonicalLock(mintParams, 365);   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -1013,7 +1021,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_critical_system)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100
-    mintParams.lockDays = 365;   // 1 year (300% base ratio)
+    SetCanonicalLock(mintParams, 365);   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -1047,7 +1055,7 @@ BOOST_AUTO_TEST_CASE(mint_with_dca_emergency_system)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100
-    mintParams.lockDays = 365;   // 1 year (300% base ratio)
+    SetCanonicalLock(mintParams, 365);   // 1 year (300% base ratio)
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -1103,7 +1111,7 @@ BOOST_AUTO_TEST_CASE(mint_dca_applies_to_all_lock_tiers)
 
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = ddAmount;
-        mintParams.lockDays = tier.days;
+        SetCanonicalLock(mintParams, tier.days);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = utxos;
@@ -1140,7 +1148,7 @@ BOOST_AUTO_TEST_CASE(mint_insufficient_funds_with_dca)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100
-    mintParams.lockDays = 365;   // 1 year (300% base = 6k DGB)
+    SetCanonicalLock(mintParams, 365);   // 1 year (300% base = 6k DGB)
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;
@@ -1169,7 +1177,7 @@ BOOST_AUTO_TEST_CASE(mint_dca_real_time_adjustment)
 
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
-    mintParams.lockDays = 365;
+    SetCanonicalLock(mintParams, 365);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = utxos;

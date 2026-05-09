@@ -44,11 +44,11 @@ CAmount ScopedOpcodeOraclePrice::s_current_price = 0;
 // Test that DigiDollar opcodes have correct values
 BOOST_AUTO_TEST_CASE(digidollar_opcode_values)
 {
-    // These opcodes should use OP_NOP slots for soft fork compatibility
-    BOOST_CHECK_EQUAL(static_cast<int>(OP_DIGIDOLLAR), 0xbb);      // OP_NOP11
-    BOOST_CHECK_EQUAL(static_cast<int>(OP_DDVERIFY), 0xbc);        // OP_NOP12
-    BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKPRICE), 0xbd);      // OP_NOP13
-    BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKCOLLATERAL), 0xbe); // OP_NOP14
+    // These opcodes use Tapscript OP_SUCCESSx slots for soft-fork compatibility.
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_DIGIDOLLAR), 0xbb);
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_DDVERIFY), 0xbc);
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKPRICE), 0xbd);
+    BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKCOLLATERAL), 0xbe);
 
     // Verify OP_CHECKSIGADD exists (BIP342)
     BOOST_CHECK_EQUAL(static_cast<int>(OP_CHECKSIGADD), 0xba);
@@ -76,7 +76,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_basic)
     CScript script;
     script << OP_DIGIDOLLAR << CScriptNum(100000);  // 1.0 DGB in satoshis
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
     BOOST_CHECK(CastToBool(stack.back())); // Should push true for valid amount
@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_zero_amount)
     script << OP_DIGIDOLLAR << CScriptNum(0);
 
     // SECURITY FIX: Zero amount now correctly fails instead of pushing false
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
 }
 
@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_negative_amount)
     CScript script;
     script << OP_DIGIDOLLAR << CScriptNum(-100);
 
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
 }
 
@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_overflow_amount)
     CScript script;
     script << OP_DIGIDOLLAR << CScriptNum(MAX_MONEY + 1);
 
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT);
 }
 
@@ -139,7 +139,7 @@ BOOST_AUTO_TEST_CASE(op_digidollar_insufficient_stack)
     CScript script;
     script << OP_DIGIDOLLAR; // No amount in script
 
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_DD_AMOUNT); // Changed from INVALID_STACK_OPERATION
 }
 
@@ -155,7 +155,7 @@ BOOST_AUTO_TEST_CASE(op_ddverify_basic)
     CScript script;
     script << OP_TRUE << OP_DDVERIFY;
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 0); // Should consume the stack item
 }
@@ -171,7 +171,7 @@ BOOST_AUTO_TEST_CASE(op_ddverify_false)
     CScript script;
     script << OP_FALSE << OP_DDVERIFY;
 
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_DD_VERIFY);
 }
 
@@ -186,7 +186,7 @@ BOOST_AUTO_TEST_CASE(op_ddverify_insufficient_stack)
     CScript script;
     script << OP_DDVERIFY; // No value on stack
 
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
 }
 
@@ -205,7 +205,7 @@ BOOST_AUTO_TEST_CASE(op_checkprice_basic)
     CScript script;
     script << CScriptNum(100000) << OP_CHECKPRICE;
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
     BOOST_CHECK(CastToBool(stack.back())); // Should push true for matching price
@@ -222,7 +222,7 @@ BOOST_AUTO_TEST_CASE(op_checkprice_mismatch)
     CScript script;
     script << CScriptNum(50000) << OP_CHECKPRICE; // Different from mock oracle price
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
     BOOST_CHECK(!CastToBool(stack.back())); // Should push false for non-matching price
@@ -239,7 +239,7 @@ BOOST_AUTO_TEST_CASE(op_checkprice_insufficient_stack)
     CScript script;
     script << OP_CHECKPRICE; // No price on stack
 
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
 }
 
@@ -255,7 +255,7 @@ BOOST_AUTO_TEST_CASE(op_checkcollateral_basic)
     CScript script;
     script << CScriptNum(150) << CScriptNum(120) << OP_CHECKCOLLATERAL; // ratio=150, threshold=120
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
     BOOST_CHECK(CastToBool(stack.back())); // Should push true for sufficient collateral
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(op_checkcollateral_insufficient)
     CScript script;
     script << CScriptNum(100) << CScriptNum(120) << OP_CHECKCOLLATERAL; // ratio=100, threshold=120
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
     BOOST_CHECK(!CastToBool(stack.back())); // Should push false for insufficient collateral
@@ -289,7 +289,7 @@ BOOST_AUTO_TEST_CASE(op_checkcollateral_equal)
     CScript script;
     script << CScriptNum(120) << CScriptNum(120) << OP_CHECKCOLLATERAL; // ratio=120, threshold=120
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
     BOOST_CHECK(CastToBool(stack.back())); // Should push true for equal values
@@ -306,29 +306,33 @@ BOOST_AUTO_TEST_CASE(op_checkcollateral_insufficient_stack)
     CScript script;
     script << CScriptNum(120) << OP_CHECKCOLLATERAL; // Only one value on stack
 
-    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_INVALID_STACK_OPERATION);
 }
 
-// Test DigiDollar opcodes behave as NOPs when flag is not set (soft fork compatibility)
-BOOST_AUTO_TEST_CASE(opcodes_as_nops_without_flag)
+// In legacy and witness-v0 scripts, DD opcode bytes are not old-node NOPs.
+// They must remain bad opcodes so activation is not a hard fork for those script versions.
+BOOST_AUTO_TEST_CASE(opcodes_are_bad_opcode_outside_tapscript)
 {
-    std::vector<std::vector<unsigned char>> stack;
     MockSignatureChecker checker;
-    ScriptError error;
-    ScriptExecutionData execdata;
-
-    // All DD opcodes should behave as NOPs without SCRIPT_VERIFY_DIGIDOLLAR flag
-    // Push a value on stack first so we can verify stack is unchanged
     CScript script;
-    script << CScriptNum(100000) << OP_DIGIDOLLAR << CScriptNum(999);
+    script << OP_DIGIDOLLAR << CScriptNum(100000);
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_NONE, checker, SigVersion::BASE, execdata, &error));
-    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
-    // Without the flag, OP_DIGIDOLLAR behaves as NOP, leaving stack with the two pushed values
-    BOOST_CHECK_EQUAL(stack.size(), 2);
-    BOOST_CHECK_EQUAL(CScriptNum(stack[0], false).GetInt64(), 100000);
-    BOOST_CHECK_EQUAL(CScriptNum(stack[1], false).GetInt64(), 999);
+    {
+        std::vector<std::vector<unsigned char>> stack;
+        ScriptError error;
+        ScriptExecutionData execdata;
+        BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+        BOOST_CHECK_EQUAL(error, SCRIPT_ERR_BAD_OPCODE);
+    }
+
+    {
+        std::vector<std::vector<unsigned char>> stack;
+        ScriptError error;
+        ScriptExecutionData execdata;
+        BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::WITNESS_V0, execdata, &error));
+        BOOST_CHECK_EQUAL(error, SCRIPT_ERR_BAD_OPCODE);
+    }
 }
 
 // Test complex DigiDollar script combining multiple opcodes
@@ -351,7 +355,7 @@ BOOST_AUTO_TEST_CASE(complex_digidollar_script)
     script << CScriptNum(150) << CScriptNum(120) << OP_CHECKCOLLATERAL; // Check collateral (pushes true)
     script << OP_BOOLAND; // Combine last two conditions with AND
 
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
     BOOST_CHECK(CastToBool(stack.back())); // All conditions should pass
@@ -366,24 +370,28 @@ BOOST_AUTO_TEST_CASE(digidollar_script_error_strings)
     BOOST_CHECK_EQUAL(ScriptErrorString(SCRIPT_ERR_INSUFFICIENT_COLLATERAL), "Insufficient collateral ratio");
 }
 
-// Test that opcodes work with different signature versions
-BOOST_AUTO_TEST_CASE(opcodes_different_sigversions)
+// Test that activated DD opcodes execute only under Tapscript.
+BOOST_AUTO_TEST_CASE(opcodes_tapscript_only)
 {
-    std::vector<std::vector<unsigned char>> stack;
     MockSignatureChecker checker;
-    ScriptError error;
-    ScriptExecutionData execdata;
-
     CScript script;
     script << OP_DIGIDOLLAR << CScriptNum(100000);
 
-    // Test with different signature versions
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
-    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    {
+        std::vector<std::vector<unsigned char>> stack;
+        ScriptError error;
+        ScriptExecutionData execdata;
+        BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
+        BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    }
 
-    stack.clear();
-    BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::WITNESS_V0, execdata, &error));
-    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+    {
+        std::vector<std::vector<unsigned char>> stack;
+        ScriptError error;
+        ScriptExecutionData execdata;
+        BOOST_CHECK(!EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error));
+        BOOST_CHECK_EQUAL(error, SCRIPT_ERR_BAD_OPCODE);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

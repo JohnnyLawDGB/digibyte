@@ -45,8 +45,8 @@ void InjectSignedMessage(OracleBundleManager& manager, const CKey& key, uint32_t
 {
     COraclePriceMessage msg(oracle_id, price_micro_usd, timestamp);
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(key));
-    BOOST_REQUIRE(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.SignAttestation(key));
+    BOOST_REQUIRE(msg.VerifyAttestation());
     manager.InjectTestMessage(msg);
 }
 
@@ -58,7 +58,6 @@ OracleBundleManager& ResetTimingManager(int min_oracle_count)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(min_oracle_count);
     return manager;
 }
@@ -84,11 +83,13 @@ BOOST_AUTO_TEST_CASE(bundle_immediate_when_quorum_met)
     BOOST_CHECK(manager.AddOracleBundleToBlock(block, 1000));
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
 
-    BOOST_CHECK(HasOracleOutput(block));
+    // Legacy signed-price quorum is no longer a mining fallback. V1 only
+    // serializes a completed MuSig2 v0x03 session.
+    BOOST_CHECK(!HasOracleOutput(block));
     BOOST_CHECK_LT(elapsed.count(), 500);
 }
 
-BOOST_AUTO_TEST_CASE(bundle_waits_for_near_quorum)
+BOOST_AUTO_TEST_CASE(bundle_does_not_wait_for_near_quorum_legacy_messages)
 {
     OracleBundleManager& manager = ResetTimingManager(5);
 
@@ -115,12 +116,15 @@ BOOST_AUTO_TEST_CASE(bundle_waits_for_near_quorum)
 
     late_oracle.join();
 
-    BOOST_CHECK(HasOracleOutput(block));
-    BOOST_CHECK_GE(elapsed.count(), 700);
-    BOOST_CHECK_LE(elapsed.count(), 2500);
+    // AddOracleBundleToBlock no longer waits for a near-quorum Phase 2
+    // message to arrive. The async MuSig2 orchestrator owns session
+    // completion; without a completed v0x03 session, the template omits
+    // oracle data immediately.
+    BOOST_CHECK(!HasOracleOutput(block));
+    BOOST_CHECK_LT(elapsed.count(), 500);
 }
 
-BOOST_AUTO_TEST_CASE(bundle_gives_up_after_timeout)
+BOOST_AUTO_TEST_CASE(bundle_no_timeout_wait_for_near_quorum_legacy_messages)
 {
     OracleBundleManager& manager = ResetTimingManager(5);
 
@@ -130,7 +134,8 @@ BOOST_AUTO_TEST_CASE(bundle_gives_up_after_timeout)
     std::vector<CKey> keys(4);
     for (CKey& key : keys) key.MakeNewKey(true);
 
-    // Near quorum (4/5) with no final message arriving: should timeout and give up.
+    // Near quorum (4/5) in legacy messages is not enough for V1 mining and
+    // should not trigger a synchronous wait.
     for (uint32_t i = 0; i < 4; ++i) {
         InjectSignedMessage(manager, keys[i], i, price, ts);
     }
@@ -142,8 +147,7 @@ BOOST_AUTO_TEST_CASE(bundle_gives_up_after_timeout)
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
 
     BOOST_CHECK(!HasOracleOutput(block));
-    BOOST_CHECK_GE(elapsed.count(), 1700);
-    BOOST_CHECK_LE(elapsed.count(), 3000);
+    BOOST_CHECK_LT(elapsed.count(), 700);
 }
 
 BOOST_AUTO_TEST_CASE(bundle_no_wait_when_far_from_quorum)
@@ -190,7 +194,10 @@ BOOST_AUTO_TEST_CASE(bundle_wait_does_not_block_too_long)
     BOOST_CHECK(manager.AddOracleBundleToBlock(block, 1000));
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
 
-    BOOST_CHECK_LE(elapsed.count(), 3000);
+    // Even near quorum, legacy Phase 2 messages must not block mining while
+    // V1 waits for completed MuSig2 v0x03 sessions.
+    BOOST_CHECK(!HasOracleOutput(block));
+    BOOST_CHECK_LT(elapsed.count(), 700);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

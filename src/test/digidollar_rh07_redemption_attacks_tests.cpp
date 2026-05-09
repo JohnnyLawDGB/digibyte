@@ -352,6 +352,7 @@ BOOST_AUTO_TEST_CASE(rh07_02b_partial_burn_at_99_percent)
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1500;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("bbb0000000000000000000000000000000000000000000000000000000000001"), 0)));
     mtx.vout.push_back(CTxOut(lockedCollateral, RH07_MakeP2TR(mint.ownerXOnly)));
@@ -390,6 +391,7 @@ BOOST_AUTO_TEST_CASE(rh07_02c_full_burn_passes)
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1500;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("bbb0000000000000000000000000000000000000000000000000000000000002"), 0)));
     mtx.vout.push_back(CTxOut(lockedCollateral, RH07_MakeP2TR(mint.ownerXOnly)));
@@ -537,6 +539,7 @@ BOOST_AUTO_TEST_CASE(rh07_04a_claim_more_collateral_than_locked)
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1500;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("bbb0000000000000000000000000000000000000000000000000000000000003"), 0)));
 
@@ -588,6 +591,7 @@ BOOST_AUTO_TEST_CASE(rh07_05a_overflow_in_collateral_release_calc)
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = 1500;
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(COutPoint(uint256S("bbb0000000000000000000000000000000000000000000000000000000000004"), 0)));
     // Release full collateral (valid — full burn of 1 cent DD)

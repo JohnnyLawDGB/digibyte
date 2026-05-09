@@ -37,7 +37,7 @@ static COraclePriceMessage MakeSignedMsg(uint32_t oracle_id, uint64_t price, int
     msg.block_height = 1000;
     msg.nonce = oracle_id;
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    msg.SignPhase2(key);
+    msg.SignAttestation(key);
     return msg;
 }
 
@@ -532,10 +532,11 @@ BOOST_AUTO_TEST_CASE(rh09_bonus_convert_to_micro_usd_edges)
     // $1.00
     BOOST_CHECK_EQUAL(binance.ConvertToMicroUSD(1.0), 1000000);
 
-    // Max allowed: $100
-    BOOST_CHECK_EQUAL(binance.ConvertToMicroUSD(100.0), 100000000);
-
-    // Just over max: $100.01 — should return 0
+    // Wave 11 / DD-FA-SEC-009: central per-fetcher cap tightened from
+    // $100 to $10. Anything strictly above $10 must convert to 0.
+    BOOST_CHECK_EQUAL(binance.ConvertToMicroUSD(10.0), 10000000);
+    BOOST_CHECK_EQUAL(binance.ConvertToMicroUSD(10.0001), 0);
+    BOOST_CHECK_EQUAL(binance.ConvertToMicroUSD(100.0), 0);
     BOOST_CHECK_EQUAL(binance.ConvertToMicroUSD(100.01), 0);
 
     // Tiny but valid: $0.000001

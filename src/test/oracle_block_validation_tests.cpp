@@ -17,14 +17,15 @@
 
 #include <boost/test/unit_test.hpp>
 #include <logging.h>
-#include <util/strencodings.h>
 
 #include <chainparams.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <crypto/sha256.h>
 #include <key.h>
 #include <node/miner.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/musig2_aggregator.h>
 #include <primitives/block.h>
 #include <primitives/oracle.h>
 #include <primitives/transaction.h>
@@ -36,7 +37,14 @@
 #include <util/time.h>
 #include <validation.h>
 
+#include <secp256k1.h>
+#include <secp256k1_musig.h>
+#include <secp256k1_schnorrsig.h>
+
+#include <array>
+#include <cstring>
 #include <memory>
+#include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(oracle_block_validation_tests, TestChain100Setup)
 
@@ -65,29 +73,129 @@ static COraclePriceMessage CreateValidOracleMessage(const CKey& oracle_key, uint
     return msg;
 }
 
-/**
- * Create a valid oracle bundle (Phase One: 1-of-1 consensus)
- */
-static COracleBundle CreateValidOracleBundle(const CKey& oracle_key, uint64_t price_micro_usd, int64_t timestamp, int32_t block_height)
+static std::array<unsigned char, 32> RegtestOracleSecret(uint8_t oracle_id)
 {
-    COraclePriceMessage msg = CreateValidOracleMessage(oracle_key, price_micro_usd, timestamp, block_height);
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
 
-    COracleBundle bundle;
-    bundle.messages.push_back(msg);
-    bundle.epoch = GetCurrentEpoch(block_height);
-    bundle.median_price_micro_usd = price_micro_usd; // Phase One: 1 message = median
+    std::array<unsigned char, 32> secret{};
+    std::memcpy(secret.data(), hash.begin(), secret.size());
+    return secret;
+}
+
+static bool SignRegtestV03Bundle(COracleBundle& bundle, const std::vector<uint8_t>& oracle_ids)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    const size_t n_signers = oracle_ids.size();
+    std::vector<std::array<unsigned char, 32>> seckeys(n_signers);
+    std::vector<secp256k1_keypair> keypairs(n_signers);
+    std::vector<secp256k1_pubkey> pubkeys(n_signers);
+
+    for (size_t i = 0; i < n_signers; ++i) {
+        seckeys[i] = RegtestOracleSecret(oracle_ids[i]);
+        if (!secp256k1_keypair_create(ctx, &keypairs[i], seckeys[i].data()) ||
+            !secp256k1_keypair_pub(ctx, &pubkeys[i], &keypairs[i])) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+    }
+
+    std::vector<const secp256k1_pubkey*> pubkey_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        pubkey_ptrs[i] = &pubkeys[i];
+    }
+
+    secp256k1_xonly_pubkey agg_pk{};
+    secp256k1_musig_keyagg_cache cache{};
+    if (!secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_secnonce> secnonces(n_signers);
+    std::vector<secp256k1_musig_pubnonce> pubnonces(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        unsigned char session_rand[32];
+        GetStrongRandBytes(Span{session_rand, 32});
+        if (!secp256k1_musig_nonce_gen(ctx, &secnonces[i], &pubnonces[i],
+                                       session_rand, seckeys[i].data(), &pubkeys[i],
+                                       nullptr, &cache, nullptr)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+    }
+
+    std::vector<const secp256k1_musig_pubnonce*> nonce_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        nonce_ptrs[i] = &pubnonces[i];
+    }
+
+    secp256k1_musig_aggnonce aggnonce{};
+    if (!secp256k1_musig_nonce_agg(ctx, &aggnonce, nonce_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const uint256 msg_hash = ComputeOracleBundleHash(bundle);
+    unsigned char msg32[32];
+    std::memcpy(msg32, msg_hash.begin(), sizeof(msg32));
+
+    secp256k1_musig_session session{};
+    if (!secp256k1_musig_nonce_process(ctx, &session, &aggnonce, msg32, &cache)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_partial_sig> partial_sigs(n_signers);
+    std::vector<const secp256k1_musig_partial_sig*> partial_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        if (!secp256k1_musig_partial_sign(ctx, &partial_sigs[i], &secnonces[i],
+                                          &keypairs[i], &cache, &session)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+        partial_ptrs[i] = &partial_sigs[i];
+    }
+
+    bundle.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        oracle_ids, static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles));
+    bundle.aggregate_sig.assign(64, 0);
+    if (!secp256k1_musig_partial_sig_agg(ctx, bundle.aggregate_sig.data(),
+                                         &session, partial_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const bool verifies = secp256k1_schnorrsig_verify(ctx, bundle.aggregate_sig.data(), msg32, 32, &agg_pk);
+    secp256k1_context_destroy(ctx);
+    return verifies;
+}
+
+static COracleBundle CreateValidMuSig2OracleBundle(uint64_t price_micro_usd, int64_t timestamp, int32_t block_height)
+{
+    COracleBundle bundle(GetCurrentEpoch(block_height));
+    bundle.version = 3;
+    bundle.median_price_micro_usd = price_micro_usd;
     bundle.timestamp = timestamp;
 
+    std::vector<uint8_t> oracle_ids;
+    const int required = Params().GetConsensus().nOracleConsensusRequired;
+    for (uint8_t id = 0; id < required; ++id) {
+        oracle_ids.push_back(id);
+    }
+    BOOST_REQUIRE_MESSAGE(SignRegtestV03Bundle(bundle, oracle_ids),
+                          "failed to sign regtest MuSig2 oracle bundle");
     return bundle;
 }
 
 /**
  * Add oracle bundle to coinbase transaction OP_RETURN output
- * Uses Phase One compact format (20 bytes total)
  */
 static void AddOracleBundleToCoinbase(CMutableTransaction& coinbase, const COracleBundle& bundle)
 {
-    // Use compact format for Phase One (single oracle)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     CScript oracle_script = manager.CreateOracleScript(bundle);
 
@@ -104,6 +212,8 @@ static void AddOracleBundleToCoinbase(CMutableTransaction& coinbase, const COrac
  */
 static CBlock CreateBlockWithOracleBundle(const CKey& oracle_key, uint64_t price_micro_usd, int64_t timestamp, int32_t block_height, const CScript& coinbase_script_sig)
 {
+    (void)oracle_key;
+
     CBlock block;
     block.nVersion = 1;
     block.nTime = timestamp;
@@ -122,8 +232,9 @@ static CBlock CreateBlockWithOracleBundle(const CKey& oracle_key, uint64_t price
     coinbase.vout[0].nValue = 72000 * COIN; // DigiByte block reward
     coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
 
-    // Add oracle bundle to coinbase
-    COracleBundle bundle = CreateValidOracleBundle(oracle_key, price_micro_usd, timestamp, block_height);
+    // Add V1 MuSig2 oracle bundle to coinbase. The oracle_key argument is kept
+    // for the older Phase One call sites but no longer controls V1 signing.
+    COracleBundle bundle = CreateValidMuSig2OracleBundle(price_micro_usd, timestamp, block_height);
     AddOracleBundleToCoinbase(coinbase, bundle);
 
     // Add coinbase to block
@@ -194,32 +305,24 @@ BOOST_AUTO_TEST_CASE(checkblock_accepts_valid_oracle_bundle)
  */
 BOOST_AUTO_TEST_CASE(checkblock_rejects_invalid_bundle_signature)
 {
-    // Phase Two: 4-of-7 multi-oracle consensus test
-    // RegTest: nDDActivationHeight=650, nDigiDollarPhase2Height=100
-    // Height 700 is in Phase Two territory — oracle validation is active
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.SetEnabled(true);
-    manager.SetMinOracleCount(3); // Phase Two regtest: 3-of-5
 
-    // Test: Block with invalid oracle price (0) should be rejected
-    // Create a single message with price=0 — this fails IsValid() price range check
-    CKey oracle_key;
-    oracle_key.MakeNewKey(true);
-
-    COraclePriceMessage msg;
-    msg.oracle_id = 0;
-    msg.price_micro_usd = 0; // Invalid: below ORACLE_MIN_PRICE_MICRO_USD (100)
-    msg.timestamp = GetTime();
-    msg.block_height = 700;
-    msg.nonce = GetRand(UINT64_MAX);
-    msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-    // Don't sign — price=0 is structurally invalid regardless
-
+    // Test: V1 block oracle data with an invalid oracle price (0) should be
+    // rejected contextually. CreateOracleScript still emits structurally valid
+    // v0x03 data; consensus validation catches the bad price.
     COracleBundle bundle;
-    bundle.messages.push_back(msg);
+    bundle.version = 3;
     bundle.epoch = GetCurrentEpoch(700);
     bundle.median_price_micro_usd = 0;
-    bundle.timestamp = msg.timestamp;
+    bundle.timestamp = GetTime();
+    std::vector<uint8_t> oracle_ids;
+    for (uint8_t id = 0; id < Params().GetConsensus().nOracleConsensusRequired; ++id) {
+        oracle_ids.push_back(id);
+    }
+    bundle.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        oracle_ids, static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles));
+    bundle.aggregate_sig.assign(64, 0x01);
 
     // Create block at height 700 (above both activation heights)
     CBlock block;
@@ -238,6 +341,7 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_invalid_bundle_signature)
     coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
 
     AddOracleBundleToCoinbase(coinbase, bundle);
+    BOOST_REQUIRE(!coinbase.vout.back().scriptPubKey.empty());
     block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
 
     BlockValidationState state;
@@ -260,8 +364,7 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_invalid_bundle_signature)
         "Contextual oracle validation should reject block with invalid oracle price (0)");
     std::string reason = contextual_state.GetRejectReason();
     BOOST_CHECK_MESSAGE(
-        reason == "bad-oracle-bundle" || reason == "bad-oracle-phase2" ||
-        reason == "bad-oracle-consensus" || reason == "bad-oracle-median",
+        reason == "bad-oracle-musig2",
         "Expected oracle rejection reason, got: " + reason
     );
 }
@@ -328,14 +431,14 @@ BOOST_AUTO_TEST_CASE(checkblock_rejects_bundle_wrong_consensus)
     // Since we're in transition period, blocks without oracle data are allowed
     // The proper fix is to test that CreateOracleScript returns empty for multi-message bundles
 
-    // RegTest now has Phase Two active (nDigiDollarPhase2Height = 100)
-    // Multi-message bundles should be ACCEPTED and produce a Phase Two script
+    // V1 no longer serializes legacy v0x02 bundles, even when old Phase Two
+    // message consensus exists.
     OracleBundleManager& test_manager = OracleBundleManager::GetInstance();
     CScript oracle_script = test_manager.CreateOracleScript(bundle);
 
     BOOST_CHECK_MESSAGE(
-        !oracle_script.empty(),
-        "CreateOracleScript should produce Phase Two script for multi-message bundles when Phase Two is active"
+        oracle_script.empty(),
+        "CreateOracleScript must not produce legacy v0x02 scripts in V1"
     );
 
     // If script is empty, CheckBlock will pass (transition period)
@@ -366,7 +469,7 @@ BOOST_AUTO_TEST_CASE(contextual_checkblock_timestamp_validation)
 
     int64_t block_time = GetTime();
     int64_t oracle_timestamp = block_time - 1800; // 30 minutes old (valid: < 1 hour)
-    int32_t block_height = 50;  // Below Phase Two activation (100) for Phase One testing  // Above activation height (600)
+    int32_t block_height = 700;  // Above DigiDollar activation so V1 oracle validation runs
 
     CBlock block = CreateBlockWithOracleBundle(
         oracle_key,

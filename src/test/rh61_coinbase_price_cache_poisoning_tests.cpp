@@ -154,18 +154,25 @@
 #include <digidollar/validation.h>
 #include <key.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/musig2_aggregator.h>
 #include <pow.h>
 #include <primitives/transaction.h>
 #include <primitives/oracle.h>
 #include <pubkey.h>
+#include <random.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
 #include <timedata.h>
 #include <util/time.h>
 #include <validation.h>
 
+#include <secp256k1.h>
+#include <secp256k1_musig.h>
+#include <secp256k1_schnorrsig.h>
+
+#include <array>
 #include <cstdint>
-#include <stdexcept>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -247,46 +254,123 @@ CScript BuildCompactOracleScript(uint64_t attacker_price_micro_usd,
         .vout[1].scriptPubKey;
 }
 
-CKey GetRegtestOracleKey(uint32_t oracle_id)
+std::array<unsigned char, 32> RegtestOracleSecret(uint8_t oracle_id)
 {
     const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
     uint256 hash;
     CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
 
-    CKey key;
-    key.Set(hash.begin(), hash.end(), true);
-    return key;
+    std::array<unsigned char, 32> secret{};
+    std::memcpy(secret.data(), hash.begin(), secret.size());
+    return secret;
 }
 
-COraclePriceMessage BuildSignedPhaseTwoMessage(uint32_t oracle_id,
-                                               uint64_t price,
-                                               int64_t timestamp)
+bool SignRegtestV03Bundle(COracleBundle& bundle, const std::vector<uint8_t>& oracle_ids)
 {
-    CKey key = GetRegtestOracleKey(oracle_id);
-    COraclePriceMessage msg(oracle_id, price, timestamp);
-    msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    if (!msg.SignPhase2(key) || !msg.VerifyPhase2()) {
-        throw std::runtime_error("failed to create signed regtest oracle message");
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    const size_t n_signers = oracle_ids.size();
+    std::vector<std::array<unsigned char, 32>> seckeys(n_signers);
+    std::vector<secp256k1_keypair> keypairs(n_signers);
+    std::vector<secp256k1_pubkey> pubkeys(n_signers);
+
+    for (size_t i = 0; i < n_signers; ++i) {
+        seckeys[i] = RegtestOracleSecret(oracle_ids[i]);
+        if (!secp256k1_keypair_create(ctx, &keypairs[i], seckeys[i].data()) ||
+            !secp256k1_keypair_pub(ctx, &pubkeys[i], &keypairs[i])) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
     }
-    return msg;
+
+    std::vector<const secp256k1_pubkey*> pubkey_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        pubkey_ptrs[i] = &pubkeys[i];
+    }
+
+    secp256k1_xonly_pubkey agg_pk{};
+    secp256k1_musig_keyagg_cache cache{};
+    if (!secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_secnonce> secnonces(n_signers);
+    std::vector<secp256k1_musig_pubnonce> pubnonces(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        unsigned char session_rand[32];
+        GetStrongRandBytes(Span{session_rand, 32});
+        if (!secp256k1_musig_nonce_gen(ctx, &secnonces[i], &pubnonces[i],
+                                       session_rand, seckeys[i].data(), &pubkeys[i],
+                                       nullptr, &cache, nullptr)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+    }
+
+    std::vector<const secp256k1_musig_pubnonce*> nonce_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        nonce_ptrs[i] = &pubnonces[i];
+    }
+
+    secp256k1_musig_aggnonce aggnonce{};
+    if (!secp256k1_musig_nonce_agg(ctx, &aggnonce, nonce_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const uint256 msg_hash = ComputeOracleBundleHash(bundle);
+    unsigned char msg32[32];
+    std::memcpy(msg32, msg_hash.begin(), sizeof(msg32));
+
+    secp256k1_musig_session session{};
+    if (!secp256k1_musig_nonce_process(ctx, &session, &aggnonce, msg32, &cache)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_partial_sig> partial_sigs(n_signers);
+    std::vector<const secp256k1_musig_partial_sig*> partial_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        if (!secp256k1_musig_partial_sign(ctx, &partial_sigs[i], &secnonces[i],
+                                          &keypairs[i], &cache, &session)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+        partial_ptrs[i] = &partial_sigs[i];
+    }
+
+    bundle.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        oracle_ids, static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles));
+    bundle.aggregate_sig.assign(64, 0);
+    if (!secp256k1_musig_partial_sig_agg(ctx, bundle.aggregate_sig.data(),
+                                         &session, partial_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const bool verifies = secp256k1_schnorrsig_verify(ctx, bundle.aggregate_sig.data(), msg32, 32, &agg_pk);
+    secp256k1_context_destroy(ctx);
+    return verifies;
 }
 
-CScript BuildPhaseTwoOracleScript(uint64_t price, int64_t timestamp, int32_t block_height)
+CScript BuildMuSig2OracleScript(uint64_t price, int64_t timestamp, int32_t block_height)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
     const int32_t epoch = GetCurrentEpoch(block_height);
-    const std::vector<OracleNodeInfo> active_oracles =
-        SelectOraclesForEpoch(Params().GetOracleNodes(), epoch);
-    if (active_oracles.size() < static_cast<size_t>(consensus.nOracleRequiredMessages)) {
-        throw std::runtime_error("not enough active regtest oracles");
-    }
 
     COracleBundle bundle(epoch);
-    bundle.version = 2;
+    bundle.version = 3;
     bundle.median_price_micro_usd = price;
     bundle.timestamp = timestamp;
-    for (int i = 0; i < consensus.nOracleRequiredMessages; ++i) {
-        bundle.messages.push_back(BuildSignedPhaseTwoMessage(active_oracles.at(i).id, price, timestamp));
+
+    std::vector<uint8_t> oracle_ids;
+    for (uint8_t id = 0; id < consensus.nOracleConsensusRequired; ++id) {
+        oracle_ids.push_back(id);
+    }
+    if (!SignRegtestV03Bundle(bundle, oracle_ids)) {
+        return CScript();
     }
 
     return OracleBundleManager::GetInstance().CreateOracleScript(bundle);
@@ -334,9 +418,8 @@ CMutableTransaction BuildDigiDollarMint(const COutPoint& prevout,
 
 BOOST_FIXTURE_TEST_SUITE(rh61_coinbase_price_cache_poisoning_tests, RegTestingSetup)
 
-// RH-61-01: Prove that `ExtractOracleBundle` will accept a coinbase with
-// an arbitrary miner-chosen price and no signature.
-BOOST_AUTO_TEST_CASE(rh61_01_extract_accepts_unsigned_price)
+// RH-61-01: V1 must reject unsigned legacy oracle data at extraction.
+BOOST_AUTO_TEST_CASE(rh61_01_extract_rejects_unsigned_legacy_price)
 {
     OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
@@ -350,20 +433,17 @@ BOOST_AUTO_TEST_CASE(rh61_01_extract_accepts_unsigned_price)
     COracleBundle bundle;
     const bool ok = mgr.ExtractOracleBundle(tx, bundle);
 
-    BOOST_CHECK_MESSAGE(ok,
-        "ExtractOracleBundle must accept a miner-crafted Phase-1 bundle "
-        "with no signature. This is the attack primitive.");
-    BOOST_CHECK_EQUAL(static_cast<uint64_t>(bundle.median_price_micro_usd),
-                      ATTACKER_PRICE);
-    BOOST_TEST_MESSAGE("RH-61-01: Extracted attacker_price="
-        << bundle.median_price_micro_usd
-        << " (no signature verified, no oracle roster consulted).");
+    BOOST_CHECK_MESSAGE(!ok,
+        "ExtractOracleBundle must reject miner-crafted legacy oracle data "
+        "with no MuSig2 aggregate signature.");
+    BOOST_CHECK_EQUAL(static_cast<uint64_t>(bundle.median_price_micro_usd), 0ULL);
+    BOOST_TEST_MESSAGE("RH-61-01: rejected unsigned legacy oracle price="
+        << ATTACKER_PRICE);
 }
 
-// RH-61-02: PRIMARY PoC. Simulate the exact `ConnectBlock` flow
-// (`src/validation.cpp:2807-2832`) minus any gate. Confirm
-// `GetLatestPrice()` returns the attacker's value afterwards.
-BOOST_AUTO_TEST_CASE(rh61_02_connectblock_path_poisons_global_cached_price)
+// RH-61-02: The ConnectBlock extraction path must not cache unsigned
+// legacy oracle data.
+BOOST_AUTO_TEST_CASE(rh61_02_connectblock_path_rejects_legacy_cache_poison)
 {
     OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
@@ -376,32 +456,28 @@ BOOST_AUTO_TEST_CASE(rh61_02_connectblock_path_poisons_global_cached_price)
     mgr.UpdatePriceCache(HEIGHT - 1, HONEST_PRICE);
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), HONEST_PRICE);
 
-    // Attacker-mined block arrives. Replay exactly what ConnectBlock does.
+    // Attacker-mined block arrives with legacy oracle data. V1 must refuse
+    // to extract it, so the ConnectBlock cache sink is never reached.
     CMutableTransaction cb = BuildMaliciousCoinbase(ATTACKER_PRICE, GetTime());
     CTransaction tx(cb);
 
     COracleBundle extracted;
     const bool extracted_ok = mgr.ExtractOracleBundle(tx, extracted);
-    BOOST_REQUIRE(extracted_ok);
-    BOOST_REQUIRE_GT(static_cast<uint64_t>(extracted.median_price_micro_usd), 0ULL);
+    BOOST_CHECK_MESSAGE(!extracted_ok,
+        "ConnectBlock must not extract unsigned legacy oracle data.");
 
-    // This is the exact call at src/validation.cpp:2816. No gate of any kind.
-    mgr.UpdatePriceCache(HEIGHT, extracted.median_price_micro_usd);
-
-    // Poisoning visible on both access paths.
     const CAmount latest_after  = mgr.GetLatestPrice();
     const uint64_t by_height    = mgr.GetOraclePriceForHeight(HEIGHT);
 
-    BOOST_CHECK_MESSAGE(latest_after == static_cast<CAmount>(ATTACKER_PRICE),
-        "GetLatestPrice() must return the miner-chosen price after "
-        "ConnectBlock's UpdatePriceCache call. honest=" << HONEST_PRICE
-        << " attacker=" << ATTACKER_PRICE
+    BOOST_CHECK_MESSAGE(latest_after == HONEST_PRICE,
+        "GetLatestPrice() must keep the prior honest price when legacy "
+        "oracle data is rejected. honest=" << HONEST_PRICE
+        << " rejected=" << ATTACKER_PRICE
         << " observed=" << latest_after);
 
-    BOOST_CHECK_EQUAL(by_height, ATTACKER_PRICE);
-    BOOST_TEST_MESSAGE("RH-61-02: GetLatestPrice poisoned from "
-        << HONEST_PRICE << " to " << latest_after
-        << "; GetOraclePriceForHeight(" << HEIGHT << ")=" << by_height);
+    BOOST_CHECK_EQUAL(by_height, 0U);
+    BOOST_TEST_MESSAGE("RH-61-02: rejected legacy oracle price "
+        << ATTACKER_PRICE << "; GetLatestPrice remains " << latest_after);
 }
 
 // RH-61-03: Confirm the staleness window is rearmed. `GetLatestPrice`
@@ -456,11 +532,9 @@ BOOST_AUTO_TEST_CASE(rh61_04_per_height_cache_exposed)
         << " h=1002->" << mgr.GetOraclePriceForHeight(1002));
 }
 
-// RH-61-05: Miner-withheld / censorship variant — if a miner REPLACES
-// the honest price with a lower one, the victim's `GetLatestPrice()`
-// immediately drops. No consumer can detect this because the cache
-// keeps no lineage.
-BOOST_AUTO_TEST_CASE(rh61_05_attacker_drives_price_down_for_err_toggle)
+// RH-61-05: Legacy oracle data must not drive ERR/DCA state by replacing
+// the current MuSig2-backed price.
+BOOST_AUTO_TEST_CASE(rh61_05_legacy_price_cannot_drive_err_toggle)
 {
     OracleManagerReset reset;
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
@@ -471,35 +545,23 @@ BOOST_AUTO_TEST_CASE(rh61_05_attacker_drives_price_down_for_err_toggle)
     mgr.UpdatePriceCache(2000, HEALTHY_PRICE);
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), HEALTHY_PRICE);
 
-    // Attacker-mined block at height 2001 with a CRUSH price.
+    // Attacker-mined block at height 2001 with a legacy CRUSH price.
     CMutableTransaction cb = BuildMaliciousCoinbase(CRUSH_PRICE, GetTime());
     CTransaction tx(cb);
 
     COracleBundle extracted;
-    BOOST_REQUIRE(mgr.ExtractOracleBundle(tx, extracted));
-    mgr.UpdatePriceCache(2001, extracted.median_price_micro_usd);
+    BOOST_CHECK_MESSAGE(!mgr.ExtractOracleBundle(tx, extracted),
+        "Legacy oracle data must not be extractable for cache updates.");
 
     const CAmount now = mgr.GetLatestPrice();
-    BOOST_CHECK_EQUAL(now, static_cast<CAmount>(CRUSH_PRICE));
-    BOOST_CHECK_LT(now, HEALTHY_PRICE / 100);
+    BOOST_CHECK_EQUAL(now, HEALTHY_PRICE);
 
-    // Any downstream ERR/DCA evaluator (src/consensus/err.cpp:405) that
-    // reads GetLatestPrice() now sees a crashed price. If the ERR trigger
-    // depends on supply/collateral ratio computed with this price, one
-    // miner can flip the entire system into emergency redemption mode.
-    BOOST_TEST_MESSAGE("RH-61-05: attacker drove GetLatestPrice from "
-        << HEALTHY_PRICE << " to " << now
-        << " in a single mined block; ERR/DCA decisioning would flip.");
+    BOOST_TEST_MESSAGE("RH-61-05: rejected legacy crush price "
+        << CRUSH_PRICE << "; ERR/DCA-visible price remains " << now);
 }
 
-// RH-61-06: Sanity documentation — ExtractOracleBundle scans EVERY
-// coinbase output for the first OP_RETURN+OP_ORACLE marker
-// (`src/oracle/bundle_manager.cpp:1053`). This means the attacker does
-// NOT need to place the bundle at vout[1] specifically — but also it
-// means the Phase-1 contextual check at `src/validation.cpp:4599-4647`
-// (which hardcodes vout[1]) reads the WITNESS COMMITMENT instead of
-// the bundle on any post-SegWit block. Documented here so a defender
-// rewrite of 4599 must scan, not index.
+// RH-61-06: ExtractOracleBundle must scan every coinbase output for a
+// valid MuSig2 bundle, not assume it is at vout[1].
 BOOST_AUTO_TEST_CASE(rh61_06_vout_position_flexibility_docs_W1_H_01)
 {
     OracleManagerReset reset;
@@ -509,10 +571,12 @@ BOOST_AUTO_TEST_CASE(rh61_06_vout_position_flexibility_docs_W1_H_01)
 
     // Build a coinbase where vout[1] is a 38-byte witness-commitment
     // lookalike (scriptPubKey = OP_RETURN 0x24 0xaa 0x21 0xa9 0xed <32B>)
-    // and vout[2] is the attacker's oracle bundle. This mirrors the
+    // and vout[2] is a valid MuSig2 oracle bundle. This mirrors the
     // post-SegWit ordering that `GenerateCoinbaseCommitment` produces
     // and matches the W1-H-01 flag condition.
     CMutableTransaction cb = BuildMaliciousCoinbase(ATTACKER_PRICE, GetTime());
+    cb.vout[1].scriptPubKey = BuildMuSig2OracleScript(ATTACKER_PRICE, GetTime(), 100);
+    BOOST_REQUIRE(!cb.vout[1].scriptPubKey.empty());
 
     // Insert a synthetic witness commitment at vout[1].
     CScript wc;
@@ -527,39 +591,27 @@ BOOST_AUTO_TEST_CASE(rh61_06_vout_position_flexibility_docs_W1_H_01)
     // Layout is now:
     //   vout[0] payout
     //   vout[1] witness commitment
-    //   vout[2] attacker oracle bundle
+    //   vout[2] MuSig2 oracle bundle
 
     CTransaction tx(cb);
     COracleBundle bundle;
     const bool ok = mgr.ExtractOracleBundle(tx, bundle);
 
     BOOST_CHECK_MESSAGE(ok,
-        "ExtractOracleBundle must still find the bundle at vout[2] when "
-        "vout[1] is the witness commitment — it scans all outputs.");
+        "ExtractOracleBundle must still find a valid MuSig2 bundle at "
+        "vout[2] when vout[1] is the witness commitment.");
     BOOST_CHECK_EQUAL(static_cast<uint64_t>(bundle.median_price_micro_usd),
                       ATTACKER_PRICE);
 
-    BOOST_TEST_MESSAGE("RH-61-06: bundle at vout[2] accepted while vout[1] "
-        "is witness commitment. W1-H-01 defender note: any rewrite of "
-        "ContextualCheckBlock:4599 that hardcodes vout[1] will read the "
-        "witness commitment instead of the bundle and bypass the check.");
+    BOOST_TEST_MESSAGE("RH-61-06: MuSig2 bundle at vout[2] accepted while "
+        "vout[1] is witness commitment.");
 }
 
-// RH-61-07: Document that ValidateBlockOracleData — the ONLY validator
-// that checks signatures — is the thing short-circuited on mainnet at
-// `src/oracle/bundle_manager.cpp:2253`. This is C1, and it is what
-// makes the RH-61 primitive fatal on mainnet. The test is not
-// asserting; the assertion is that the sink path exists and is
-// unguarded. We demonstrate the sink behaviour by exercising the cache
-// on regtest (where the validator would normally run) and noting that
-// on mainnet the cache update proceeds from a structurally-parsed
-// bundle with no signature check.
-BOOST_AUTO_TEST_CASE(rh61_07_document_mainnet_validator_shortcircuit)
+// RH-61-07: The old mainnet validator short-circuit must not leave a
+// cache path for legacy oracle data.
+BOOST_AUTO_TEST_CASE(rh61_07_legacy_mainnet_shortcircuit_removed)
 {
     OracleManagerReset reset;
-    // Regtest: we can directly poison the cache without any upstream
-    // signature check firing (because we're calling the extractor and
-    // UpdatePriceCache directly — mirroring the ConnectBlock caller).
     OracleBundleManager& mgr = OracleBundleManager::GetInstance();
     const uint64_t ATTACKER_PRICE = 42424242ULL;
 
@@ -567,18 +619,13 @@ BOOST_AUTO_TEST_CASE(rh61_07_document_mainnet_validator_shortcircuit)
     CTransaction tx(cb);
 
     COracleBundle extracted;
-    BOOST_REQUIRE(mgr.ExtractOracleBundle(tx, extracted));
-    mgr.UpdatePriceCache(3000, extracted.median_price_micro_usd);
-
-    BOOST_CHECK_EQUAL(mgr.GetLatestPrice(),
-                      static_cast<CAmount>(ATTACKER_PRICE));
+    BOOST_CHECK_MESSAGE(!mgr.ExtractOracleBundle(tx, extracted),
+        "Legacy oracle data must be rejected before any chain-specific "
+        "validator path can cache it.");
+    BOOST_CHECK_EQUAL(mgr.GetLatestPrice(), 0);
 
     BOOST_TEST_MESSAGE(
-        "RH-61-07: Reproduced on regtest. On mainnet the equivalent path "
-        "is IDENTICAL because ValidateBlockOracleData short-circuits "
-        "`return true` at src/oracle/bundle_manager.cpp:2253 for all "
-        "non-TESTNET/REGTEST chains. No gate between miner and "
-        "OracleBundleManager::cached_price.");
+        "RH-61-07: legacy oracle data rejected before cache update.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -621,11 +668,13 @@ BOOST_AUTO_TEST_CASE(test_block_validity_does_not_update_health_metrics)
     BOOST_REQUIRE_GE(funding_block.vtx.size(), 2U);
 
     const COutPoint funding_out(funding_block.vtx[1]->GetHash(), 0);
-    CMutableTransaction mint = BuildDigiDollarMint(funding_out, collateral, dd_amount, next_height);
+    const int32_t candidate_height = m_node.chainman->ActiveChain().Height() + 1;
+    DigiDollar::ValidationContext candidate_context(candidate_height, oracle_price, 300, Params());
+    CMutableTransaction mint = BuildDigiDollarMint(funding_out, collateral, dd_amount, candidate_height);
     {
         const CTransaction mint_tx(mint);
         TxValidationState state;
-        const bool mint_valid = DigiDollar::ValidateDigiDollarTransaction(mint_tx, dd_context, state);
+        const bool mint_valid = DigiDollar::ValidateDigiDollarTransaction(mint_tx, candidate_context, state);
         BOOST_REQUIRE_MESSAGE(mint_valid, state.ToString());
     }
 
@@ -634,10 +683,9 @@ BOOST_AUTO_TEST_CASE(test_block_validity_does_not_update_health_metrics)
     BOOST_REQUIRE_EQUAL(before.totalCollateral, 0);
 
     CBlock block = CreateBlock({mint}, coinbase_script, m_node.chainman->ActiveChainstate());
-    const int32_t candidate_height = m_node.chainman->ActiveChain().Height() + 1;
 
     CMutableTransaction coinbase(*block.vtx[0]);
-    CScript oracle_script = BuildPhaseTwoOracleScript(oracle_price, block.nTime, candidate_height);
+    CScript oracle_script = BuildMuSig2OracleScript(oracle_price, block.nTime, candidate_height);
     BOOST_REQUIRE(!oracle_script.empty());
     coinbase.vout.push_back(CTxOut(0, oracle_script));
     block.vtx[0] = MakeTransactionRef(std::move(coinbase));
@@ -701,8 +749,8 @@ BOOST_AUTO_TEST_CASE(load_prices_from_chain_skips_recent_pre_activation_oracle_o
     coinbase.vout.push_back(CTxOut(0, BuildCompactOracleScript(attacker_price, GetTime())));
     block.vtx[0] = MakeTransactionRef(std::move(coinbase));
     COracleBundle inserted_bundle;
-    BOOST_REQUIRE(mgr.ExtractOracleBundle(*block.vtx[0], inserted_bundle));
-    BOOST_REQUIRE_EQUAL(inserted_bundle.median_price_micro_usd, attacker_price);
+    BOOST_CHECK_MESSAGE(!mgr.ExtractOracleBundle(*block.vtx[0], inserted_bundle),
+        "Pre-activation legacy oracle data must not be extracted in V1.");
     block.hashMerkleRoot = BlockMerkleRoot(block);
     block.nNonce = 0;
     while (!CheckProofOfWork(GetPoWAlgoHash(block), block.nBits, m_node.chainman->GetConsensus())) {
@@ -714,7 +762,7 @@ BOOST_AUTO_TEST_CASE(load_prices_from_chain_skips_recent_pre_activation_oracle_o
                                                    /*force_processing=*/true,
                                                    /*min_pow_checked=*/true,
                                                    &new_block));
-    BOOST_REQUIRE_EQUAL(m_node.chainman->ActiveChain().Height(), poisoned_height);
+    BOOST_CHECK_EQUAL(m_node.chainman->ActiveChain().Height(), poisoned_height - 1);
 
     while (m_node.chainman->ActiveChain().Height() < final_height) {
         mineBlocks(1);
@@ -727,8 +775,9 @@ BOOST_AUTO_TEST_CASE(load_prices_from_chain_skips_recent_pre_activation_oracle_o
     BOOST_REQUIRE(poisoned_index != nullptr);
     BOOST_REQUIRE(m_node.chainman->m_blockman.ReadBlockFromDisk(disk_block, *poisoned_index));
     COracleBundle disk_bundle;
-    BOOST_REQUIRE(mgr.ExtractOracleBundle(*disk_block.vtx[0], disk_bundle));
-    BOOST_REQUIRE_EQUAL(disk_bundle.median_price_micro_usd, attacker_price);
+    BOOST_CHECK_MESSAGE(!mgr.ExtractOracleBundle(*disk_block.vtx[0], disk_bundle),
+        "Legacy oracle data stored in old-shaped test blocks must remain "
+        "unusable when prices are loaded from disk.");
 
     mgr.Clear();
     BOOST_REQUIRE_EQUAL(mgr.GetLatestPrice(), 0);
@@ -764,8 +813,9 @@ BOOST_AUTO_TEST_CASE(rejected_block_does_not_update_oracle_cache)
     block.vtx[0] = MakeTransactionRef(std::move(coinbase));
 
     COracleBundle extracted;
-    BOOST_REQUIRE(mgr.ExtractOracleBundle(*block.vtx[0], extracted));
-    BOOST_REQUIRE_EQUAL(extracted.median_price_micro_usd, attacker_price);
+    BOOST_CHECK_MESSAGE(!mgr.ExtractOracleBundle(*block.vtx[0], extracted),
+        "Rejected legacy oracle data must not be extractable before block "
+        "processing.");
 
     block.hashMerkleRoot = BlockMerkleRoot(block);
     block.nNonce = 0;

@@ -243,6 +243,8 @@ BOOST_AUTO_TEST_CASE(rh12_03_transfer_opreturn_amount_mismatch)
     // If it sums ALL OP_RETURN amounts as outputDD, that's an inflation bug.
     BOOST_TEST_MESSAGE("RH-12-03: Transfer with phantom OP_RETURN amounts. Valid=" +
                        std::to_string(valid) + " Reason=" + state.GetRejectReason());
+    BOOST_CHECK(!valid);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "transfer-dd-output-amount-mismatch");
 
     // SCENARIO 2: Fewer OP_RETURN amounts than P2TR outputs
     // This is the reverse — if validation counts P2TR outputs but runs out of
@@ -267,6 +269,8 @@ BOOST_AUTO_TEST_CASE(rh12_03_transfer_opreturn_amount_mismatch)
     bool valid2 = DigiDollar::ValidateTransferTransaction(CTransaction(tx2), ctx, state2);
     BOOST_TEST_MESSAGE("RH-12-03: Transfer with fewer OP_RETURN amounts. Valid=" +
                        std::to_string(valid2) + " Reason=" + state2.GetRejectReason());
+    BOOST_CHECK(!valid2);
+    BOOST_CHECK_EQUAL(state2.GetRejectReason(), "transfer-dd-output-amount-mismatch");
 
     // FINDING: If valid2 is true, the second P2TR output gets no DD amount,
     // effectively creating a "free" P2TR output the receiver thinks has value

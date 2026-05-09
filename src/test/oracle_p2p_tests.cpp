@@ -574,8 +574,8 @@ BOOST_AUTO_TEST_CASE(p2p_oracle_cinv_helpers)
  * Bug #1 Test: CreatePriceMessage must produce Phase2-valid signatures
  *
  * CreatePriceMessage() was calling Sign() (5-field hash) but
- * IsValidOracleMessage() in Phase 2 mode calls VerifyPhase2() (3-field hash).
- * The message must pass both VerifyPhase2() and IsValid().
+ * IsValidOracleMessage() in Phase 2 mode calls VerifyAttestation() (3-field hash).
+ * The message must pass both VerifyAttestation() and IsValid().
  */
 BOOST_AUTO_TEST_CASE(test_create_price_message_phase2_signature)
 {
@@ -593,7 +593,7 @@ BOOST_AUTO_TEST_CASE(test_create_price_message_phase2_signature)
     BOOST_CHECK(msg.oracle_id == 0);
 
     // CRITICAL: Must pass Phase 2 verification (3-field hash)
-    BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+    BOOST_CHECK_MESSAGE(msg.VerifyAttestation(),
         "CreatePriceMessage must produce Phase2-valid signatures");
 
     // Must also pass IsValid() which tries Phase2 first
@@ -605,7 +605,7 @@ BOOST_AUTO_TEST_CASE(test_create_price_message_phase2_signature)
  * Bug #1 Test: Phase 2 signed messages must be accepted by BundleManager
  *
  * IsValidOracleMessage() in Phase 2 mode (min_oracle_count > 1) must
- * accept messages signed with SignPhase2().
+ * accept messages signed with SignAttestation().
  */
 BOOST_AUTO_TEST_CASE(test_phase2_message_accepted_by_bundle_manager)
 {
@@ -639,8 +639,8 @@ BOOST_AUTO_TEST_CASE(test_phase2_message_accepted_by_bundle_manager)
     BOOST_REQUIRE(oracle_key.IsValid());
 
     msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
-    BOOST_CHECK(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
+    BOOST_CHECK(msg.VerifyAttestation());
 
     // Enable manager in Phase 2 mode
     manager.SetEnabled(true);
@@ -675,7 +675,7 @@ BOOST_AUTO_TEST_CASE(test_phase2_message_passes_isvalid)
 
     // Sign with Phase 2 only
     msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(privkey));
+    BOOST_REQUIRE(msg.SignAttestation(privkey));
 
     // Phase 1 Verify() should FAIL (different hash)
     BOOST_CHECK(!msg.Verify());
@@ -686,12 +686,9 @@ BOOST_AUTO_TEST_CASE(test_phase2_message_passes_isvalid)
 }
 
 /**
- * Bug #2 Test: Phase 1 signed messages still work through IsValid()
- *
- * Ensure backward compatibility — Phase 1 Sign() messages must still
- * pass IsValid() via the Phase 1 fallback path.
+ * V1 rejects legacy message signatures through IsValid().
  */
-BOOST_AUTO_TEST_CASE(test_phase1_message_still_passes_isvalid)
+BOOST_AUTO_TEST_CASE(test_legacy_message_rejected_by_isvalid)
 {
     CKey privkey;
     privkey.MakeNewKey(true);
@@ -703,15 +700,15 @@ BOOST_AUTO_TEST_CASE(test_phase1_message_still_passes_isvalid)
     msg.block_height = 100;
     msg.nonce = 42;
 
-    // Sign with Phase 1
+    // Sign with the legacy message signature helper.
     BOOST_REQUIRE(msg.Sign(privkey));
 
-    // Phase 1 Verify() should pass
+    // The legacy verifier still proves the helper itself works.
     BOOST_CHECK(msg.Verify());
 
-    // IsValid() should also pass (tries Phase 2 first, falls back to Phase 1)
-    BOOST_CHECK_MESSAGE(msg.IsValid(),
-        "IsValid() must still accept Phase 1 signed messages");
+    // V1 IsValid() must not fall back to legacy signatures.
+    BOOST_CHECK_MESSAGE(!msg.IsValid(),
+        "IsValid() must reject legacy oracle message signatures in V1");
 }
 
 /**
@@ -738,7 +735,7 @@ BOOST_AUTO_TEST_CASE(test_broadcast_rejects_invalid_message)
 }
 
 /**
- * Test: SignPhase2 and VerifyPhase2 roundtrip with different prices
+ * Test: SignAttestation and VerifyAttestation roundtrip with different prices
  *
  * Ensures the 3-field hash (oracle_id + price + timestamp) works correctly
  * across different price values.
@@ -768,8 +765,8 @@ BOOST_AUTO_TEST_CASE(test_phase2_sign_verify_roundtrip_prices)
         msg.timestamp = GetTime();
         msg.oracle_pubkey = XOnlyPubKey(privkey.GetPubKey());
 
-        BOOST_REQUIRE(msg.SignPhase2(privkey));
-        BOOST_CHECK_MESSAGE(msg.VerifyPhase2(),
+        BOOST_REQUIRE(msg.SignAttestation(privkey));
+        BOOST_CHECK_MESSAGE(msg.VerifyAttestation(),
             strprintf("Phase2 roundtrip failed for price %llu", price));
     }
 }
@@ -777,19 +774,15 @@ BOOST_AUTO_TEST_CASE(test_phase2_sign_verify_roundtrip_prices)
 /**
  * Bug: Cached price updates without consensus
  *
- * Every AddOracleMessage() was immediately updating cached_price,
- * so getoracleprice returned the latest individual oracle's price
- * even without consensus. With 4-of-7 threshold, sending $0.02
- * from only 3 oracles should NOT change the cached price.
- *
- * Fix: Only update cached_price when pending_messages.size() >= min_oracle_count.
+ * Individual oracle messages must never update cached_price in V1.
+ * Only complete MuSig2 bundles may become the canonical price.
  */
-BOOST_AUTO_TEST_CASE(test_cached_price_requires_consensus)
+BOOST_AUTO_TEST_CASE(test_cached_price_requires_musig2_bundle)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
-    manager.SetMinOracleCount(4); // Phase 2: need 4-of-7
+    manager.SetMinOracleCount(4);
 
     // Create 4 oracle keys matching chainparams (regtest)
     // Keys are derived from SHA256("digibyte_regtest_oracle_N")
@@ -803,24 +796,25 @@ BOOST_AUTO_TEST_CASE(test_cached_price_requires_consensus)
 
     int64_t now = GetTime();
 
-    // Round 1: All 4 oracles send $0.01 — reaches consensus
+    // Round 1: All 4 oracles send $0.01. This is still not a canonical
+    // price source without a completed MuSig2 bundle.
     for (int i = 0; i < 4; i++) {
         COraclePriceMessage msg;
         msg.oracle_id = i;
         msg.price_micro_usd = 10000; // $0.01
         msg.timestamp = now;
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         manager.AddOracleMessage(msg);
     }
 
-    // Cached price should be $0.01 (consensus reached with 4 messages)
+    // Cached price should remain empty; pending messages are not canonical.
     CAmount price_after_consensus = manager.GetLatestPrice();
-    BOOST_CHECK_EQUAL(price_after_consensus, 10000);
+    BOOST_CHECK_EQUAL(price_after_consensus, 0);
 
     // Clear pending messages between rounds (messages persist after bundle creation,
     // so use explicit ClearPendingMessages() to reset pending state for testing
-    // price consensus logic — this preserves the cached price from Round 1)
+    // price coordination logic.
     manager.ClearPendingMessages();
 
     // Round 2: Only 3 oracles send $0.02 — below threshold
@@ -830,14 +824,14 @@ BOOST_AUTO_TEST_CASE(test_cached_price_requires_consensus)
         msg.price_micro_usd = 20000; // $0.02
         msg.timestamp = now + 10;
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         manager.AddOracleMessage(msg);
     }
 
-    // Cached price should STILL be $0.01 — only 3 messages, need 4
+    // Cached price should still be empty.
     CAmount price_after_below_threshold = manager.GetLatestPrice();
-    BOOST_CHECK_MESSAGE(price_after_below_threshold == 10000,
-        strprintf("Cached price should remain $0.01 (10000) with only 3/4 oracles, "
+    BOOST_CHECK_MESSAGE(price_after_below_threshold == 0,
+        strprintf("Cached price should remain empty with only pending oracle messages, "
                   "but got %lld", price_after_below_threshold));
 
     manager.Clear();
@@ -845,14 +839,9 @@ BOOST_AUTO_TEST_CASE(test_cached_price_requires_consensus)
 }
 
 /**
- * Test: Stale messages in pending don't create false consensus
- *
- * If 4 oracles send $0.01, pending is NOT cleared (no block mined),
- * then 3 oracles send $0.02 (replacing their entries), the bundle
- * has 3×$0.02 + 1×$0.01 stale = 4 total but price should reflect
- * the mix, not purely the 3 new oracles.
+ * Test: pending-message churn does not create a canonical price.
  */
-BOOST_AUTO_TEST_CASE(test_stale_message_mixed_bundle)
+BOOST_AUTO_TEST_CASE(test_pending_message_churn_does_not_update_cache)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -877,11 +866,11 @@ BOOST_AUTO_TEST_CASE(test_stale_message_mixed_bundle)
         msg.price_micro_usd = 10000;
         msg.timestamp = now;
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         manager.AddOracleMessage(msg);
     }
 
-    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 10000);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 0);
 
     // 3 oracles update to $0.02 (replaces oracle 0,1,2; oracle 3 stale at $0.01)
     for (int i = 0; i < 3; i++) {
@@ -890,28 +879,23 @@ BOOST_AUTO_TEST_CASE(test_stale_message_mixed_bundle)
         msg.price_micro_usd = 20000;
         msg.timestamp = now + 10;
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
-        msg.SignPhase2(keys[i]);
+        msg.SignAttestation(keys[i]);
         manager.AddOracleMessage(msg);
     }
 
-    // 4 messages in pending (3×$0.02 + 1×$0.01 stale)
-    // Median of [10000, 20000, 20000, 20000] = 20000
-    // This IS consensus (4 messages ≥ threshold) — the median handles the outlier
+    // Pending messages changed, but no complete MuSig2 bundle has been accepted.
     CAmount mixed_price = manager.GetLatestPrice();
-    BOOST_CHECK_EQUAL(mixed_price, 20000);
+    BOOST_CHECK_EQUAL(mixed_price, 0);
 
     manager.Clear();
     manager.SetEnabled(false);
 }
 
 /**
- * Bug: Pending-message price cache used a different even-count median than
- * consensus bundle validation.
- *
- * A live 4-of-7 pending set [10000, 10000, 20000, 20000] must expose the same
- * price that a block would later validate: (10000 + 20000) / 2 = 15000.
+ * Pending-message median calculation may still be used for off-chain
+ * coordination, but it must not update the canonical V1 price cache.
  */
-BOOST_AUTO_TEST_CASE(test_pending_cache_uses_consensus_median)
+BOOST_AUTO_TEST_CASE(test_pending_median_not_canonical_cache)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -936,7 +920,7 @@ BOOST_AUTO_TEST_CASE(test_pending_cache_uses_consensus_median)
         msg.price_micro_usd = prices[i];
         msg.timestamp = now + i;
         msg.oracle_pubkey = XOnlyPubKey(keys[i].GetPubKey());
-        BOOST_REQUIRE(msg.SignPhase2(keys[i]));
+        BOOST_REQUIRE(msg.SignAttestation(keys[i]));
 
         expected_bundle.messages.push_back(msg);
         BOOST_REQUIRE(manager.AddOracleMessage(msg));
@@ -944,7 +928,7 @@ BOOST_AUTO_TEST_CASE(test_pending_cache_uses_consensus_median)
 
     const CAmount consensus_price = manager.CalculateConsensusPrice(expected_bundle, Params().GetConsensus());
     BOOST_REQUIRE_EQUAL(consensus_price, 15000);
-    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), consensus_price);
+    BOOST_CHECK_EQUAL(manager.GetLatestPrice(), 0);
 
     manager.Clear();
     manager.SetEnabled(false);
@@ -980,8 +964,8 @@ BOOST_AUTO_TEST_CASE(test_fake_pubkey_rejected_by_bundle_manager)
     fake_msg.block_height = 100;
 
     // Sign with attacker's key — signature is cryptographically valid
-    BOOST_CHECK(fake_msg.SignPhase2(attackerKey));
-    BOOST_CHECK(fake_msg.VerifyPhase2());  // Passes with attacker's own key
+    BOOST_CHECK(fake_msg.SignAttestation(attackerKey));
+    BOOST_CHECK(fake_msg.VerifyAttestation());  // Passes with attacker's own key
 
     // AddOracleMessage calls IsValidOracleMessage internally, which binds
     // the pubkey from chainparams. The attacker's key won't match.

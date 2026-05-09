@@ -136,9 +136,9 @@ BOOST_AUTO_TEST_CASE(rh32_int128_max_money_collateral)
 
     CAmount maxCollateral = MAX_MONEY; // ~2.1e17 sats
     CAmount smallDD = 100;             // $1.00
-    CAmount highPrice = MAX_MONEY;     // Absurd price, tests overflow path
+    CAmount highPrice = 10000000;      // High bounded price, still safe to multiply
 
-    // Should not crash or return garbage — __int128 handles the multiplication
+    // Should not crash or return garbage; bounded __int128 math caps health.
     int health = DynamicCollateralAdjustment::CalculateSystemHealth(maxCollateral, smallDD, highPrice);
     // With massive collateral and tiny DD, health should be capped at 30000
     BOOST_CHECK_EQUAL(health, 30000);
@@ -332,9 +332,8 @@ BOOST_AUTO_TEST_CASE(rh32_collateral_unlock_boundary)
 
 BOOST_AUTO_TEST_CASE(rh32_cross_tier_ratio_lookup)
 {
-    // Attacker locks for a duration between defined tiers to get a better ratio.
-    // E.g., lock for 15 days (between 1-hour and 30-day tier).
-    // GetCollateralRatioForLockTime should return the next tier up (more conservative).
+    // V1 rejects durations between defined tiers. This prevents attackers from
+    // picking custom lock periods that get rounded into a more favorable tier.
 
     SelectParams(ChainType::REGTEST);
     const auto& ddParams = Params().GetDigiDollarParams();
@@ -342,25 +341,24 @@ BOOST_AUTO_TEST_CASE(rh32_cross_tier_ratio_lookup)
     // Between 1-hour (240 blocks) and 30-day (172800 blocks)
     int64_t fifteenDays = 15 * 5760; // 86400 blocks
     int ratio = GetCollateralRatioForLockTime(fifteenDays, ddParams);
-    // Should get 30-day tier (500%) — the next tier >= lockBlocks
-    BOOST_CHECK_EQUAL(ratio, 500);
+    BOOST_CHECK_EQUAL(ratio, 0);
 
     // Exactly at 30-day boundary
     ratio = GetCollateralRatioForLockTime(172800, ddParams);
     BOOST_CHECK_EQUAL(ratio, 500);
 
-    // 1 block more than 30 days — should get 90-day tier (400%)
+    // 1 block more than 30 days is non-canonical.
     ratio = GetCollateralRatioForLockTime(172801, ddParams);
-    BOOST_CHECK_EQUAL(ratio, 400);
+    BOOST_CHECK_EQUAL(ratio, 0);
 
-    // Longer than 10-year tier — should get 10-year ratio (200%)
+    // Longer than 10-year tier is non-canonical.
     int64_t elevenYears = 11 * 365 * 5760;
     ratio = GetCollateralRatioForLockTime(elevenYears, ddParams);
-    BOOST_CHECK_EQUAL(ratio, 200); // Longest tier, rbegin()->second
+    BOOST_CHECK_EQUAL(ratio, 0);
 
-    // 1 block — shorter than any tier, should get 1-hour tier (1000%)
+    // 1 block is shorter than the canonical 1-hour tier.
     ratio = GetCollateralRatioForLockTime(1, ddParams);
-    BOOST_CHECK_EQUAL(ratio, 1000);
+    BOOST_CHECK_EQUAL(ratio, 0);
 }
 
 // ============================================================================

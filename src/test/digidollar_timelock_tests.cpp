@@ -2699,9 +2699,9 @@ BOOST_AUTO_TEST_CASE(err_redemption_RESPECTS_timelock_ALWAYS)
     BOOST_TEST_MESSAGE("✅ CRITICAL: ERR redemption ALWAYS respects timelock - ERR only adjusts AMOUNT!");
 }
 
-BOOST_AUTO_TEST_CASE(timelock_8_lock_tiers)
+BOOST_AUTO_TEST_CASE(timelock_canonical_lock_tiers)
 {
-    // Test comprehensive 8-tier timelock system with collateral requirements
+    // Test comprehensive canonical timelock system with collateral requirements
     // CRITICAL: Longer locks = LESS collateral (treasury model)
 
     DigiDollar::ConsensusParams params;
@@ -2768,7 +2768,7 @@ BOOST_AUTO_TEST_CASE(timelock_8_lock_tiers)
         bool afterResult = DigiDollar::ValidateNormalRedemption(vaultScript, unlockHeight + 1000);
         BOOST_CHECK(afterResult);
     }
-    BOOST_TEST_MESSAGE("✓ All 8 tiers enforce timelocks correctly");
+    BOOST_TEST_MESSAGE("✓ All canonical tiers enforce timelocks correctly");
 
     // Test 4: Verify tier index extraction
     for (size_t i = 0; i < tiers.size(); i++) {
@@ -2777,24 +2777,13 @@ BOOST_AUTO_TEST_CASE(timelock_8_lock_tiers)
         BOOST_TEST_MESSAGE("✓ Tier " << (i+1) << " index: " << tierIndex);
     }
 
-    // Test 5: Test intermediate lock times (between tiers)
-    // Lock time between tier 1 (30 days) and tier 2 (90 days)
+    // Test 5: Intermediate lock times are non-canonical and must reject.
     int64_t betweenLock = (30 * DigiDollar::BLOCKS_PER_DAY + 90 * DigiDollar::BLOCKS_PER_DAY) / 2;
     int betweenRatio = DigiDollar::GetCollateralRatioForLockTime(betweenLock, params);
-    // GetCollateralRatioForLockTime uses lower_bound which finds first tier >= lock time
-    // For a lock between 30 days and 90 days, it finds tier 2 (90 days) and returns 400%
-    // This is actually MORE conservative than returning tier 1's 500% because:
-    // - User locks for 60 days (between tier 1 and 2)
-    // - Gets tier 2's 400% requirement (needs more collateral than if exact match)
-    // Wait, that's LESS collateral... Let me check the implementation
-    // Actually, the function finds the tier with lock >= input, which gives the next tier UP
-    // For 60-day lock: finds 90-day tier (tier 2) = 400% collateral
-    // This is LESS conservative (allows more DD with same collateral)
-    // The comment in the test is wrong - fix the expected value to match actual behavior
-    BOOST_CHECK_EQUAL(betweenRatio, 400);
-    BOOST_TEST_MESSAGE("✓ Lock times between tiers use next tier's collateral ratio");
+    BOOST_CHECK_EQUAL(betweenRatio, 0);
+    BOOST_TEST_MESSAGE("✓ Lock times between tiers are rejected instead of rounded");
 
-    BOOST_TEST_MESSAGE("✅ All 8 lock tiers validated - longer locks = less collateral, all enforce timelocks");
+    BOOST_TEST_MESSAGE("✅ All canonical lock tiers validated - longer locks = less collateral, all enforce timelocks");
 }
 
 // ============================================================================

@@ -106,7 +106,7 @@ BOOST_FIXTURE_TEST_CASE(oracle_key_id_validation, BasicTestingSetup)
         msg.block_height = 1000;
         msg.nonce = 1;
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        BOOST_CHECK(msg.Sign(key));
+        BOOST_CHECK(msg.SignAttestation(key));
         BOOST_CHECK(msg.IsValid());
     }
 
@@ -119,7 +119,7 @@ BOOST_FIXTURE_TEST_CASE(oracle_key_id_validation, BasicTestingSetup)
         msg.block_height = 1000;
         msg.nonce = 2;
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        BOOST_CHECK(msg.Sign(key));
+        BOOST_CHECK(msg.SignAttestation(key));
         BOOST_CHECK(msg.IsValid());
     }
 
@@ -133,7 +133,7 @@ BOOST_FIXTURE_TEST_CASE(oracle_key_id_validation, BasicTestingSetup)
         msg.block_height = 1000;
         msg.nonce = 3;
         msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-        BOOST_CHECK(msg.Sign(key));
+        BOOST_CHECK(msg.SignAttestation(key));
         // IsValid() checks price/timestamp, not oracle_id — that's a higher-level check
         BOOST_CHECK(msg.IsValid());
         // But oracle_id >= ORACLE_TOTAL_COUNT should be rejected by RPC/chainparams
@@ -211,10 +211,10 @@ BOOST_FIXTURE_TEST_CASE(oracle_key_sign_and_validate_message, BasicTestingSetup)
     msg.nonce = 99;
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
 
-    BOOST_CHECK(msg.Sign(key));
+    BOOST_CHECK(msg.SignAttestation(key));
     BOOST_CHECK_EQUAL(msg.schnorr_sig.size(), 64);
     BOOST_CHECK(msg.IsValid());
-    BOOST_CHECK(msg.Verify());
+    BOOST_CHECK(msg.VerifyAttestation());
 }
 
 // 10. Wrong key verification should fail

@@ -47,11 +47,11 @@ BOOST_FIXTURE_TEST_SUITE(oracle_integration_tests, TestChain100Setup)
 namespace {
 /** Phase 2 integration tests require Phase 3 to NOT be active from genesis,
  *  because they construct v0x02 bundles that are rejected by block validation
- *  when Phase 3 is active. Skip when nDigiDollarPhase3Height == 0. */
+ *  when Phase 3 is active. Skip when nDigiDollarMuSig2Height == 0. */
 bool SkipPhase2Test()
 {
     const auto& params = Params().GetConsensus();
-    if (params.nDigiDollarPhase3Height <= 0) {
+    if (params.nDigiDollarMuSig2Height <= 0) {
         BOOST_TEST_MESSAGE("SKIPPED: Phase 3 active from genesis — Phase 2 integration test not applicable");
         return true;
     }
@@ -83,7 +83,6 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();  // Reset singleton state from previous tests
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);  // Phase One: 1-of-1 consensus
 
     // STEP 2: Simulate Exchange API Price Fetching
@@ -117,9 +116,9 @@ BOOST_AUTO_TEST_CASE(end_to_end_oracle_flow)
     msg.oracle_pubkey = oracle_pubkey;
 
     // Sign the message with Schnorr signature
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
     BOOST_REQUIRE(msg.IsValid());
-    BOOST_REQUIRE(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.VerifyAttestation());
 
     LogPrintf("   - Created oracle message with Schnorr signature\n");
     LogPrintf("   - Oracle ID: %u\n", msg.oracle_id);
@@ -290,8 +289,6 @@ BOOST_AUTO_TEST_CASE(oracle_graceful_degradation)
 
     // Re-enable oracle system
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
-
     LogPrintf("=== Oracle Integration Test: Graceful Degradation PASSED ===\n");
 }
 
@@ -324,7 +321,6 @@ BOOST_AUTO_TEST_CASE(verify_integration_points)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();  // Reset singleton state from previous tests
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);  // Phase One: 1-of-1 consensus
     BOOST_CHECK(manager.IsEnabled());
     LogPrintf("   ✓ Oracle Node → Bundle Manager: VERIFIED\n");
@@ -420,7 +416,6 @@ BOOST_AUTO_TEST_CASE(oracle_bundles_survive_template_creation_for_mining)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1); // Phase One: 1-of-1
 
     // --- Step 1: Add oracle messages to pending ---
@@ -435,7 +430,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundles_survive_template_creation_for_mining)
     msg.block_height = 200;
     msg.nonce = 42;
     msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
     BOOST_REQUIRE(manager.AddOracleMessage(msg));
 
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
@@ -579,7 +574,6 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_survives_regenerate_commitments)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);
 
     // Step 1: Create oracle message and add to manager
@@ -594,7 +588,7 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_survives_regenerate_commitments)
     msg.block_height = 200;
     msg.nonce = 12345;
     msg.oracle_pubkey = XOnlyPubKey(oracle_key.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
     BOOST_REQUIRE(manager.AddOracleMessage(msg));
 
     // Step 2: Create a block template with oracle data
@@ -734,7 +728,6 @@ BOOST_AUTO_TEST_CASE(reject_multiple_oracle_outputs_in_coinbase)
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
-    manager.SetForcePhase2(true);
     manager.SetMinOracleCount(1);
 
     // Create a properly signed oracle message
@@ -749,8 +742,8 @@ BOOST_AUTO_TEST_CASE(reject_multiple_oracle_outputs_in_coinbase)
     msg.block_height = m_node.chainman->ActiveChain().Height() + 1;
     msg.nonce = FastRandomContext().rand64();
     msg.oracle_pubkey = oracle_pubkey;
-    BOOST_REQUIRE(msg.SignPhase2(oracle_key));
-    BOOST_REQUIRE(msg.VerifyPhase2());
+    BOOST_REQUIRE(msg.SignAttestation(oracle_key));
+    BOOST_REQUIRE(msg.VerifyAttestation());
     BOOST_REQUIRE(manager.AddOracleMessage(msg));
 
     // Build a block with one oracle output (normal path)

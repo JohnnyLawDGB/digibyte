@@ -268,6 +268,83 @@ BOOST_AUTO_TEST_CASE(rh59_02_dd_wallet_locked_outpoint_also_bypassable)
 }
 
 // =============================================================================
+// RH-59-02b: DD transaction shape blocks preset inputs even if sidecar is stale
+// =============================================================================
+//
+// IsLockedByDD is the primary stateful lock, but a wallet-owned DD mint tx is
+// also self-identifying through its version and output layout. If the DD sidecar
+// is stale or absent, manually preselecting vout 0 must still fail for ordinary
+// DGB transaction creation; otherwise coin-control can spend collateral through
+// the non-DD path without wallet DD bookkeeping.
+// =============================================================================
+BOOST_AUTO_TEST_CASE(rh59_02b_preset_rejects_wallet_dd_mint_non_change_without_sidecar_lock)
+{
+    m_wallet.EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = m_wallet.GetDDWallet();
+    BOOST_REQUIRE(dd_wallet != nullptr);
+
+    CKey sigkey;
+    sigkey.MakeNewKey(true);
+    const CPubKey pub = sigkey.GetPubKey();
+    CScript spend_script = GetScriptForDestination(WitnessV0KeyHash(pub.GetID()));
+
+    CMutableTransaction dd_mint;
+    dd_mint.SetDigiDollarType(DD_TX_MINT);
+    dd_mint.vin.resize(1);
+    dd_mint.vin[0].prevout = COutPoint(uint256::ONE, 0);
+    dd_mint.vout.resize(4);
+    dd_mint.vout[0] = CTxOut(500 * COIN, spend_script); // collateral
+    dd_mint.vout[1] = CTxOut(0, spend_script);          // DD token placeholder
+    dd_mint.vout[2] = CTxOut(0, CScript() << OP_RETURN << std::vector<unsigned char>{'D', 'D'});
+    dd_mint.vout[3] = CTxOut(1 * COIN, spend_script);   // ordinary DGB change
+
+    CTransactionRef tx = MakeTransactionRef(std::move(dd_mint));
+    const COutPoint collateral(tx->GetHash(), 0);
+    const COutPoint change(tx->GetHash(), 3);
+
+    {
+        LOCK(m_wallet.cs_wallet);
+        m_wallet.AddToWallet(tx, TxStateInMempool{});
+    }
+
+    BOOST_REQUIRE(!dd_wallet->IsLockedByDD(collateral));
+    BOOST_REQUIRE(!dd_wallet->IsLockedByDD(change));
+
+    CCoinControl coin_control;
+    coin_control.Select(collateral);
+    coin_control.SetInputWeight(collateral, 272);
+
+    FastRandomContext rng_fast;
+    CoinSelectionParams csp{rng_fast};
+    csp.m_effective_feerate = CFeeRate(1000);
+    csp.m_long_term_feerate = CFeeRate(1000);
+    csp.m_discard_feerate   = CFeeRate(1000);
+
+    util::Result<PreSelectedInputs> res = [&]() EXCLUSIVE_LOCKS_REQUIRED(m_wallet.cs_wallet) {
+        LOCK(m_wallet.cs_wallet);
+        return FetchSelectedInputs(m_wallet, coin_control, csp);
+    }();
+
+    BOOST_CHECK_MESSAGE(!res.has_value(),
+        "DD-FA-SEC-026: preset-input path accepted wallet-owned DD mint "
+        "collateral when the DD sidecar had no lock state");
+
+    // Sanity: the ordinary DGB change output from the same DD mint remains
+    // manually selectable. The guard must reject only the protocol-owned
+    // collateral/token/metadata outputs.
+    CCoinControl change_control;
+    change_control.Select(change);
+    change_control.SetInputWeight(change, 272);
+    util::Result<PreSelectedInputs> change_res = [&]() EXCLUSIVE_LOCKS_REQUIRED(m_wallet.cs_wallet) {
+        LOCK(m_wallet.cs_wallet);
+        return FetchSelectedInputs(m_wallet, change_control, csp);
+    }();
+    BOOST_CHECK_MESSAGE(change_res.has_value(),
+        "DD mint DGB change output should remain spendable through ordinary "
+        "wallet coin-control paths");
+}
+
+// =============================================================================
 // RH-59-03: Regression anchor for the AvailableCoins defence
 // =============================================================================
 //

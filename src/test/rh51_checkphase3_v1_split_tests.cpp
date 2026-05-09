@@ -6,15 +6,15 @@
  * RH-51: Regtest activation-gate asymmetry — documentation / hardening test
  *
  * Target:
- *   src/validation.cpp::CheckPhase3OracleBundleVersion (lines 114-146)
+ *   src/validation.cpp::CheckMuSig2OracleBundleVersion
  *   src/oracle/bundle_manager.cpp::OracleDataValidator::ValidateBlockOracleData
  *
  * Context:
  *   On regtest, BIP9 DEPLOYMENT_DIGIDOLLAR is ALWAYS_ACTIVE (min_activation_height=0)
- *   but `nDDActivationHeight = nDigiDollarPhase2Height = 650`. On mainnet and
- *   testnet, `min_activation_height == nDDActivationHeight` — gates align.
+ *   but `nDDActivationHeight = 650`. On mainnet and testnet,
+ *   `min_activation_height == nDDActivationHeight` — gates align.
  *
- *   Both CheckPhase3OracleBundleVersion and ValidateBlockOracleData follow a
+ *   Both CheckMuSig2OracleBundleVersion and ValidateBlockOracleData follow a
  *   two-branch pattern:
  *     if (pindex_prev)  -> gate on IsDigiDollarEnabled (BIP9)
  *     else              -> gate on block_height < nDDActivationHeight
@@ -26,7 +26,7 @@
  *   Note: this is NOT an exploit. It is a hardening/regression fixture showing
  *   how the two gates relate on each chain type. The adversarial-PoC variant
  *   originally filed here was re-analyzed and found to conflate the activation
- *   boundary (expected rejection at h >= Phase2Height of a v=1 bundle) with a
+ *   boundary (expected rejection at V1 activation of a legacy v=1 bundle) with a
  *   consensus split — reclassified to LOW hardening.
  */
 
@@ -108,20 +108,21 @@ BOOST_AUTO_TEST_CASE(rh51_sanity_regtest_gates_disagree)
 
     BOOST_TEST_MESSAGE("  regtest BIP9 active at genesis : " << bip9_active_at_genesis);
     BOOST_TEST_MESSAGE("  regtest nDDActivationHeight    : " << height_gate);
-    BOOST_TEST_MESSAGE("  regtest nDigiDollarPhase2Height: " << params.nDigiDollarPhase2Height);
+    BOOST_TEST_MESSAGE("  regtest deprecated legacy height: " << params.nDDActivationHeight);
 
     BOOST_CHECK(bip9_active_at_genesis);
     BOOST_CHECK_GT(height_gate, 1);
-    BOOST_CHECK_EQUAL(height_gate, params.nDigiDollarPhase2Height);
+    BOOST_CHECK_EQUAL(height_gate, params.nDDActivationHeight);
 }
 
-// Phase-1 acceptance: ValidateBlockOracleData accepts a legit v=1 bundle
-// when block_height < nDigiDollarPhase2Height. Documents benign half.
-BOOST_AUTO_TEST_CASE(rh51_phase1_v01_accepted_by_validate_block_oracle_data)
+// V1 parser behavior: legacy v=1 oracle data never parses as a valid bundle.
+// The pre-activation validation path may ignore oracle outputs because DD is
+// inactive, but the parser itself must not accept legacy oracle data.
+BOOST_AUTO_TEST_CASE(rh51_legacy_v01_rejected_by_parser)
 {
     const Consensus::Params& params = Params().GetConsensus();
     const int32_t height = 100;
-    BOOST_REQUIRE_LT(height, params.nDigiDollarPhase2Height);
+    BOOST_REQUIRE_LT(height, params.nDDActivationHeight);
 
     const int64_t now = GetTime();
     const CScript v01_spk = MakeMinerV01Script(0, 50'000'000ULL, now);
@@ -131,24 +132,24 @@ BOOST_AUTO_TEST_CASE(rh51_phase1_v01_accepted_by_validate_block_oracle_data)
         OracleBundleManager& mgr = OracleBundleManager::GetInstance();
         COracleBundle bundle;
         const bool extracted = mgr.ExtractOracleBundle(*block.vtx[0], bundle);
-        BOOST_REQUIRE(extracted);
-        BOOST_CHECK_EQUAL(bundle.version, 1);
-        BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 50'000'000ULL);
+        BOOST_CHECK_MESSAGE(!extracted,
+            "DigiDollar V1 must not parse legacy v0x01 oracle outputs");
     }
 
     BlockValidationState state;
     const bool ok = OracleDataValidator::ValidateBlockOracleData(
         block, /*pindex_prev=*/nullptr, params, state);
 
-    BOOST_TEST_MESSAGE("  ValidateBlockOracleData v=1 @ h=" << height
+    BOOST_TEST_MESSAGE("  pre-activation ValidateBlockOracleData legacy v=1 @ h=" << height
                        << " => " << (ok ? "ACCEPT" : "REJECT")
                        << " reason=" << state.GetRejectReason());
-    BOOST_CHECK(ok);
+    BOOST_CHECK_MESSAGE(ok,
+        "Pre-activation non-DD blocks are ignored by DD oracle validation, but legacy data is still unparseable");
 }
 
 // Activation boundary: CheckBlock has no pindex/BIP9 context, so it must not
-// enforce oracle phase rules from static height alone. Contextual validation
-// with pindex_prev still rejects the same v=1 bundle at the phase-2 boundary.
+// enforce oracle rules from static height alone. Contextual validation with
+// pindex_prev still rejects the same legacy v=1 bundle at V1 activation.
 BOOST_AUTO_TEST_CASE(rh51_checkblock_defers_oracle_phase_rules_to_context)
 {
     const Consensus::Params& params = Params().GetConsensus();
@@ -166,7 +167,7 @@ BOOST_AUTO_TEST_CASE(rh51_checkblock_defers_oracle_phase_rules_to_context)
                        << " => " << (ok ? "ACCEPT" : "REJECT")
                        << " reason=" << state.GetRejectReason());
     BOOST_CHECK_MESSAGE(ok,
-        "CheckBlock must not enforce oracle phase/version rules without BIP9 context; got '"
+        "CheckBlock must not enforce oracle bundle rules without BIP9 context; got '"
         << state.GetRejectReason() << "'");
 
     CBlockIndex prev;
@@ -181,20 +182,20 @@ BOOST_AUTO_TEST_CASE(rh51_checkblock_defers_oracle_phase_rules_to_context)
     BOOST_CHECK(!contextual_ok);
     const std::string reason = contextual_state.GetRejectReason();
     const bool is_dd_related =
-        (reason == "bad-oracle-version") ||
-        (reason == "bad-oracle-phase2")  ||
+        (reason == "bad-oracle-malformed") ||
+        (reason == "bad-oracle-legacy") ||
         (reason == "bad-oracle-bundle");
     BOOST_CHECK_MESSAGE(is_dd_related,
-        "Expected contextual Phase-2 rejection reason; got '" << reason << "'");
+        "Expected contextual V1 MuSig2-only rejection reason; got '" << reason << "'");
 }
 
-// Pre-activation acceptance: at h=100 (< Phase2Height), CheckBlock accepts
-// v=1 bundle via the nullptr path's height-gate short-circuit. Document.
-BOOST_AUTO_TEST_CASE(rh51_phase1_boundary_accepts_v01)
+// Pre-activation acceptance: at h=100 (< V1 activation), CheckBlock accepts
+// legacy oracle-looking OP_RETURN data via the nullptr path's height-gate short-circuit.
+BOOST_AUTO_TEST_CASE(rh51_preactivation_checkblock_ignores_legacy_v01)
 {
     const Consensus::Params& params = Params().GetConsensus();
     const int32_t h = 100;
-    BOOST_REQUIRE_LT(h, params.nDigiDollarPhase2Height);
+    BOOST_REQUIRE_LT(h, params.nDDActivationHeight);
 
     const int64_t now = GetTime();
     const CScript v01_spk = MakeMinerV01Script(0, 50'000'000ULL, now);

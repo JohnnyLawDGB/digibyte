@@ -483,7 +483,7 @@ BOOST_AUTO_TEST_CASE(sybil_oracle_spoofing_signature_barrier)
     // Step 2.5: Pubkey is FORCED from chainparams, attacker-supplied pubkey ignored
     //   oracle_msg.price_message.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
     // Step 3: Signature verification against the forced pubkey
-    //   if (!oracle_msg.price_message.VerifyPhase2() && !oracle_msg.price_message.Verify())
+    //   if (!oracle_msg.price_message.VerifyAttestation() && !oracle_msg.price_message.Verify())
     //       Misbehaving(*peer, 20, "invalid oracle signature");
     //
     // FINDING: Sybil attack is COMPLETELY neutralized by pubkey binding.

@@ -87,6 +87,17 @@ struct DigiDollarHealthTestSetup : public TestingSetup {
         mockBlock.vtx.push_back(MakeTransactionRef(std::move(tx2)));
     }
 
+    ~DigiDollarHealthTestSetup() {
+        // Shutdown + Initialize cycles the static state so subsequent suites
+        // (e.g. rh64_dca_table_disagreement_tests) do not inherit the
+        // mock metrics seeded above. ResetMetrics alone leaves
+        // s_initialized=true with empty tiers, which breaks the next case
+        // in this same suite (DD-FA-TEST-005).
+        DigiDollar::SystemHealthMonitor::Shutdown();
+        DigiDollar::Volatility::VolatilityMonitor::ClearHistory();
+        DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+    }
+
     int mockHeight;
     CAmount mockOraclePrice;
     double mockVolatility;

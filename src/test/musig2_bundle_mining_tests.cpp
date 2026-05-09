@@ -160,12 +160,12 @@ BOOST_AUTO_TEST_CASE(add_bundle_skips_oracle_data_when_session_incomplete)
     ScopedMockOracleDisabled mock_disabled;
 
     const Consensus::Params& params = Params().GetConsensus();
-    if (params.nDigiDollarPhase3Height == std::numeric_limits<int>::max()) {
+    if (params.nDigiDollarMuSig2Height == std::numeric_limits<int>::max()) {
         BOOST_TEST_MESSAGE("Phase 3 disabled on this network, skipping test");
         return;
     }
 
-    const int32_t block_height = params.nDigiDollarPhase3Height;
+    const int32_t block_height = params.nDigiDollarMuSig2Height;
     const int32_t epoch = GetCurrentEpoch(block_height);
 
     {
@@ -187,6 +187,48 @@ BOOST_AUTO_TEST_CASE(add_bundle_skips_oracle_data_when_session_incomplete)
     BOOST_CHECK_EQUAL(block.vtx[0]->vout.size(), 1);
 }
 
+BOOST_AUTO_TEST_CASE(completed_session_recovers_missing_signed_values_from_live_consensus)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(Params().GetConsensus().nOracleConsensusRequired);
+    ScopedMockOracleDisabled mock_disabled;
+
+    if (!g_signing_orchestrator) {
+        OracleSigningOrchestrator::Initialize();
+    }
+    g_signing_orchestrator->Clear();
+
+    const int32_t epoch = GetCurrentEpoch(Params().GetConsensus().nDigiDollarMuSig2Height);
+    constexpr uint64_t live_price_micro_usd = 4000;
+    const int64_t live_timestamp = GetTime();
+
+    for (uint32_t oracle_id = 0; oracle_id < static_cast<uint32_t>(Params().GetConsensus().nOracleConsensusRequired); ++oracle_id) {
+        manager.InjectTestMessage(COraclePriceMessage(oracle_id, live_price_micro_usd, live_timestamp));
+    }
+
+    auto complete = std::make_unique<MuSig2SigningSession>(
+        epoch, static_cast<uint8_t>(Params().GetConsensus().nOracleConsensusRequired));
+    BOOST_REQUIRE(BuildCompleteSession(epoch, *complete));
+    BOOST_CHECK_EQUAL(complete->GetState(), MuSig2SessionState::COMPLETE);
+    BOOST_CHECK_EQUAL(complete->GetSignedPrice(), 0U);
+    BOOST_CHECK_EQUAL(complete->GetSignedTimestamp(), 0);
+
+    g_signing_orchestrator->InjectSession(epoch, std::move(complete));
+
+    std::vector<unsigned char> aggregate_sig;
+    std::vector<unsigned char> participation_bitmap;
+    uint64_t signed_price = 0;
+    int64_t signed_timestamp = 0;
+    BOOST_REQUIRE(g_signing_orchestrator->GetCompletedSession(
+        epoch, aggregate_sig, participation_bitmap, signed_price, signed_timestamp));
+    BOOST_CHECK(!aggregate_sig.empty());
+    BOOST_CHECK(!participation_bitmap.empty());
+    BOOST_CHECK_EQUAL(signed_price, live_price_micro_usd);
+    BOOST_CHECK_EQUAL(signed_timestamp, live_timestamp);
+}
+
 BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
@@ -195,12 +237,12 @@ BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)
     ScopedMockOracleDisabled mock_disabled;
 
     const Consensus::Params& params = Params().GetConsensus();
-    if (params.nDigiDollarPhase3Height == std::numeric_limits<int>::max()) {
+    if (params.nDigiDollarMuSig2Height == std::numeric_limits<int>::max()) {
         BOOST_TEST_MESSAGE("Phase 3 disabled on this network, skipping test");
         return;
     }
 
-    const int32_t block_height = params.nDigiDollarPhase3Height;
+    const int32_t block_height = params.nDigiDollarMuSig2Height;
     const int32_t epoch = GetCurrentEpoch(block_height);
 
     // Build a completed session and inject it into the orchestrator
@@ -243,8 +285,11 @@ BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)
         // session remains available for next block attempt.
         BOOST_REQUIRE_EQUAL(block.vtx[0]->vout.size(), 1);
         std::vector<unsigned char> dummy_sig, dummy_bmp;
-        uint64_t dummy_price; int64_t dummy_ts;
-        BOOST_CHECK(g_signing_orchestrator->GetCompletedSession(epoch, dummy_sig, dummy_bmp, dummy_price, dummy_ts));
+        uint64_t dummy_price = 0;
+        int64_t dummy_ts = 0;
+        const bool session_ready = g_signing_orchestrator->GetCompletedSession(epoch, dummy_sig, dummy_bmp, dummy_price, dummy_ts);
+        BOOST_CHECK_MESSAGE(!session_ready || (dummy_price > 0 && dummy_ts > 0),
+                            "completed sessions exposed to mining must carry non-zero signed price/timestamp");
     }
 }
 

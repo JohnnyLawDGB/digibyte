@@ -32,15 +32,15 @@ bool EvalDD(const CScript& script, std::vector<std::vector<unsigned char>>& stac
 {
     MockSignatureChecker checker;
     ScriptExecutionData execdata;
-    return EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::BASE, execdata, &error);
+    return EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error);
 }
 
-// Helper to evaluate without DD flags
+// Helper to evaluate Tapscript before DD activation
 bool EvalNonDD(const CScript& script, std::vector<std::vector<unsigned char>>& stack, ScriptError& error)
 {
     MockSignatureChecker checker;
     ScriptExecutionData execdata;
-    return EvalScript(stack, script, SCRIPT_VERIFY_NONE, checker, SigVersion::BASE, execdata, &error);
+    return EvalScript(stack, script, SCRIPT_VERIFY_NONE, checker, SigVersion::TAPSCRIPT, execdata, &error);
 }
 
 } // namespace
@@ -71,16 +71,15 @@ BOOST_AUTO_TEST_CASE(attack_zero_amount_dd_drop)
 // ============================================================================
 // ATTACK VECTOR 2: MAX_MONEY vs MAX_DIGIDOLLAR mismatch
 // ============================================================================
-// The interpreter allows amounts up to MAX_MONEY (2.1 quadrillion satoshis)
-// but ExtractDDAmount only accepts up to 100 billion cents.
-// An amount between these bounds passes the interpreter but fails extraction.
+// The interpreter and OP_RETURN extractor must reject amounts above
+// MAX_DIGIDOLLAR, the per-output serialization bound.
 BOOST_AUTO_TEST_CASE(attack_amount_range_mismatch)
 {
     std::vector<std::vector<unsigned char>> stack;
     ScriptError error;
 
-    // Amount > MAX_DIGIDOLLAR should be rejected by interpreter after fix
-    CAmount too_large_for_dd = 200000000000LL; // 200 billion cents — over MAX_DIGIDOLLAR
+    // Amount > MAX_DIGIDOLLAR should be rejected by interpreter.
+    CAmount too_large_for_dd = MAX_DIGIDOLLAR + 1;
     CScript script;
     script << OP_DIGIDOLLAR << CScriptNum(too_large_for_dd);
 
@@ -102,8 +101,7 @@ BOOST_AUTO_TEST_CASE(attack_amount_range_mismatch)
 
     CAmount extracted = 0;
     bool extractResult = DigiDollar::ExtractDDAmount(opReturnScript, extracted);
-    BOOST_TEST_MESSAGE("ExtractDDAmount for 200B: " << (extractResult ? "accepted" : "rejected"));
-    // If interpreter accepts but ExtractDDAmount rejects, we have an inconsistency
+    BOOST_CHECK(!extractResult);
 }
 
 // ============================================================================
@@ -148,10 +146,10 @@ BOOST_AUTO_TEST_CASE(attack_dd_followed_by_ddverify)
 }
 
 // ============================================================================
-// ATTACK VECTOR 4: NOP-mode stack divergence
+// ATTACK VECTOR 4: pre-activation OP_SUCCESSx stack divergence
 // ============================================================================
-// Without SCRIPT_VERIFY_DIGIDOLLAR, OP_DIGIDOLLAR is a NOP but the amount
-// push still executes, leaving a number on the stack.
+// Without SCRIPT_VERIFY_DIGIDOLLAR, OP_DIGIDOLLAR remains a BIP342 OP_SUCCESSx
+// and succeeds immediately without executing the following amount push.
 // With the flag, OP_DIGIDOLLAR consumes the amount and pushes true/false.
 // This means the same script produces different stack states.
 BOOST_AUTO_TEST_CASE(attack_nop_mode_stack_divergence)
@@ -163,28 +161,27 @@ BOOST_AUTO_TEST_CASE(attack_nop_mode_stack_divergence)
 
     // With DD flags
     std::vector<std::vector<unsigned char>> stack_dd;
-    EvalDD(script, stack_dd, error);
+    bool dd_result = EvalDD(script, stack_dd, error);
+    BOOST_CHECK(dd_result);
 
     // Without DD flags
     std::vector<std::vector<unsigned char>> stack_nop;
-    EvalNonDD(script, stack_nop, error);
+    bool nop_result = EvalNonDD(script, stack_nop, error);
+    BOOST_CHECK(nop_result);
 
-    // Document the divergence — this is expected for soft fork NOPs that consume args,
-    // but we need to verify it doesn't break consensus rules
+    // Document the divergence — this is expected for soft-fork OP_SUCCESSx
+    // activation, but we need to verify it doesn't break consensus rules.
     BOOST_TEST_MESSAGE("DD-mode stack size: " << stack_dd.size());
-    BOOST_TEST_MESSAGE("NOP-mode stack size: " << stack_nop.size());
+    BOOST_TEST_MESSAGE("Pre-activation OP_SUCCESSx stack size: " << stack_nop.size());
 
-    // In NOP mode: stack has [100000] (the push is a regular push)
+    // In pre-activation OP_SUCCESSx mode: execution short-circuits immediately.
     // In DD mode: stack has [true] (OP_DIGIDOLLAR consumed the push and output true)
-    // This is CORRECT for NOP-based soft forks BUT only if old nodes can't spend these
-    BOOST_CHECK_EQUAL(stack_nop.size(), 1U); // Just the pushed number
+    // This is CORRECT for Tapscript OP_SUCCESSx-based soft forks.
+    BOOST_CHECK_EQUAL(stack_nop.size(), 0U);
     BOOST_CHECK_EQUAL(stack_dd.size(), 1U);  // The validation result
 
-    // NOP-mode should have the raw number, DD-mode should have true
-    if (stack_nop.size() == 1 && stack_dd.size() == 1) {
-        int64_t nop_val = CScriptNum(stack_nop[0], false).GetInt64();
-        BOOST_TEST_MESSAGE("NOP-mode top: " << nop_val);
-        BOOST_CHECK_EQUAL(nop_val, 100000); // The raw amount
+    // DD-mode should have true.
+    if (stack_dd.size() == 1) {
         BOOST_CHECK(CastToBool(stack_dd[0])); // true
     }
 }

@@ -10,7 +10,7 @@
  * - Per-network activation heights (mainnet, testnet, regtest)
  * - Oracle pubkey count, consensus threshold, uniqueness, validity, sort order
  * - Phase 2 backward compatibility before Phase 3
- * - Phase 3 activation logic via IsPhaseThreeActive()
+ * - Phase 3 activation logic via IsMuSig2OracleActive()
  * - ValidateOracleConfiguration() on all networks
  * - Bundle version gating at Phase 3 boundary
  */
@@ -39,7 +39,7 @@ namespace {
 static bool IsBundleVersionAccepted(uint8_t bundle_version, int32_t block_height, const Consensus::Params& params)
 {
     if (bundle_version == 3) {
-        return params.IsPhaseThreeActive(block_height);
+        return params.IsMuSig2OracleActive(block_height);
     }
     return true;
 }
@@ -57,7 +57,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
     SelectParams(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
     // Mainnet uses MuSig2 immediately on top of 9-of-17 oracle consensus (RC30).
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
@@ -65,7 +65,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
     // Testnet also switches immediately to MuSig2 (9-of-17, RC30).
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
@@ -73,7 +73,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
     // Regtest now uses MuSig2 immediately, too.
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, 0);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
 // ============================================================================
@@ -156,23 +156,23 @@ BOOST_AUTO_TEST_CASE(test_phase2_and_phase3_can_be_active_together_on_regtest)
     // With RC27 cleanup, regtest also has immediate Phase 3 activation.
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    BOOST_CHECK(Consensus::IsOracleActive(params, params.nDigiDollarPhase2Height));
-    BOOST_CHECK(Consensus::IsPhase3Active(params, params.nDigiDollarPhase2Height));
-    BOOST_CHECK(Consensus::IsPhase3Active(params, params.nDigiDollarPhase2Height - 1));
-    BOOST_CHECK(params.IsPhaseThreeActive(0));
-    BOOST_CHECK(!params.IsPhaseThreeActive(-1));
+    BOOST_CHECK(Consensus::IsOracleActive(params, params.nDDActivationHeight));
+    BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight));
+    BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight - 1));
+    BOOST_CHECK(params.IsMuSig2OracleActive(0));
+    BOOST_CHECK(!params.IsMuSig2OracleActive(-1));
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_active_after_height)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    int phase3 = params.nDigiDollarPhase3Height;
-    BOOST_CHECK(Consensus::IsPhase3Active(params, phase3));
-    BOOST_CHECK(Consensus::IsPhase3Active(params, phase3 + 1));
-    BOOST_CHECK(Consensus::IsPhase3Active(params, phase3 + 10000));
-    BOOST_CHECK(!Consensus::IsPhase3Active(params, phase3 - 1));
-    BOOST_CHECK(!Consensus::IsPhase3Active(params, phase3 - 1000));
+    int phase3 = params.nDigiDollarMuSig2Height;
+    BOOST_CHECK(Consensus::IsMuSig2Active(params, phase3));
+    BOOST_CHECK(Consensus::IsMuSig2Active(params, phase3 + 1));
+    BOOST_CHECK(Consensus::IsMuSig2Active(params, phase3 + 10000));
+    BOOST_CHECK(!Consensus::IsMuSig2Active(params, phase3 - 1));
+    BOOST_CHECK(!Consensus::IsMuSig2Active(params, phase3 - 1000));
 }
 
 // ============================================================================
@@ -205,44 +205,44 @@ BOOST_AUTO_TEST_CASE(test_v02_bundle_before_phase3)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    BOOST_CHECK(IsBundleVersionAccepted(2, params.nDigiDollarPhase3Height - 1, params));
+    BOOST_CHECK(IsBundleVersionAccepted(2, params.nDigiDollarMuSig2Height - 1, params));
 }
 
 BOOST_AUTO_TEST_CASE(test_v03_bundle_before_phase3)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    BOOST_CHECK(!IsBundleVersionAccepted(3, params.nDigiDollarPhase3Height - 1, params));
+    BOOST_CHECK(!IsBundleVersionAccepted(3, params.nDigiDollarMuSig2Height - 1, params));
 }
 
 BOOST_AUTO_TEST_CASE(test_v03_bundle_at_activation)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    BOOST_CHECK(IsBundleVersionAccepted(3, params.nDigiDollarPhase3Height, params));
+    BOOST_CHECK(IsBundleVersionAccepted(3, params.nDigiDollarMuSig2Height, params));
 }
 
 BOOST_AUTO_TEST_CASE(test_v02_bundle_after_phase3)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    BOOST_CHECK(IsBundleVersionAccepted(2, params.nDigiDollarPhase3Height + 1, params));
+    BOOST_CHECK(IsBundleVersionAccepted(2, params.nDigiDollarMuSig2Height + 1, params));
 }
 
 BOOST_AUTO_TEST_CASE(test_v03_bundle_after_phase3)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    BOOST_CHECK(IsBundleVersionAccepted(3, params.nDigiDollarPhase3Height + 1, params));
+    BOOST_CHECK(IsBundleVersionAccepted(3, params.nDigiDollarMuSig2Height + 1, params));
 }
 
 BOOST_AUTO_TEST_CASE(test_off_by_one_activation)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    int32_t N = params.nDigiDollarPhase3Height;
-    BOOST_CHECK(!params.IsPhaseThreeActive(N - 1));
-    BOOST_CHECK(params.IsPhaseThreeActive(N));
+    int32_t N = params.nDigiDollarMuSig2Height;
+    BOOST_CHECK(!params.IsMuSig2OracleActive(N - 1));
+    BOOST_CHECK(params.IsMuSig2OracleActive(N));
     BOOST_CHECK(!IsBundleVersionAccepted(3, N - 1, params));
     BOOST_CHECK(IsBundleVersionAccepted(3, N, params));
 }
@@ -254,11 +254,11 @@ BOOST_AUTO_TEST_CASE(test_off_by_one_activation)
 BOOST_AUTO_TEST_CASE(test_regtest_earliest_activation)
 {
     SelectParams(ChainType::REGTEST);
-    int32_t regtest = Params().GetConsensus().nDigiDollarPhase3Height;
+    int32_t regtest = Params().GetConsensus().nDigiDollarMuSig2Height;
     SelectParams(ChainType::TESTNET);
-    int32_t testnet = Params().GetConsensus().nDigiDollarPhase3Height;
+    int32_t testnet = Params().GetConsensus().nDigiDollarMuSig2Height;
     SelectParams(ChainType::MAIN);
-    int32_t mainnet = Params().GetConsensus().nDigiDollarPhase3Height;
+    int32_t mainnet = Params().GetConsensus().nDigiDollarMuSig2Height;
     // All RC27 networks should use MuSig2 immediately.
     BOOST_CHECK_EQUAL(regtest, 0);
     BOOST_CHECK_EQUAL(testnet, 0);

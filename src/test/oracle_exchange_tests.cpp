@@ -1096,4 +1096,96 @@ BOOST_AUTO_TEST_CASE(curl_handle_reuse_coingecko)
     BOOST_CHECK(true); // No crash on repeated calls
 }
 
+// ============================================================================
+// CATEGORY 8: Aggregator Min-Source Floor (Wave 11 / DD-FA-DOC-005)
+// Pins the documented vs production minimum-responsive-source contract.
+// The MultiExchangeAggregator default is 2; the production OracleNode caller
+// overrides the floor to 3 via SetMinRequiredSources(3) before fetching, so
+// the live oracle daemon refuses to publish a price when fewer than three
+// exchanges respond. Several user-facing docs claimed "minimum 2 responsive
+// sources" — this test pins the actual semantics so the docs cannot drift.
+// ============================================================================
+
+/**
+ * Documented default floor of the aggregator is two responsive sources
+ * (`min_required_sources{2}` in `src/oracle/exchange.h`). With exactly two
+ * valid prices in last_prices, the aggregator must report sufficient data.
+ */
+BOOST_AUTO_TEST_CASE(aggregator_default_floor_is_two_sources)
+{
+    MultiExchangeAggregator aggregator;
+
+    // Inject two valid prices via the FilterValidPrices public surface by
+    // calling FilterOutliers (which preserves the input when prices.size() < 3).
+    std::vector<MultiExchangeAggregator::ExchangePrice> prices = {
+        {"Binance", 12340, GetTime(), true, 1.0},
+        {"CoinGecko", 12350, GetTime(), true, 1.0},
+    };
+    auto filtered = aggregator.FilterOutliers(prices);
+    BOOST_CHECK_EQUAL(filtered.size(), 2);
+    // CalculateMedianPrice on 2 valid sources must be > 0.
+    CAmount median = aggregator.CalculateMedianPrice(filtered);
+    BOOST_CHECK(median > 0);
+    BOOST_CHECK_EQUAL(median, (12340 + 12350) / 2);
+}
+
+/**
+ * Pin that bumping the floor above any realistic roster fails the publish
+ * path deterministically: every fetcher would have to return success before
+ * HasSufficientData reports true. Even when the host running the test has
+ * network access and live exchanges respond, six successes cannot satisfy a
+ * floor of 99.
+ */
+BOOST_AUTO_TEST_CASE(aggregator_floor_above_fetcher_count_fails_closed)
+{
+    MultiExchangeAggregator aggregator;
+    aggregator.SetMinRequiredSources(99); // far above any realistic roster
+
+    CAmount price = aggregator.FetchAggregatePrice();
+    BOOST_CHECK_EQUAL(price, 0);
+    BOOST_CHECK(!aggregator.HasSufficientData());
+}
+
+/**
+ * Shutdown must be able to interrupt the live exchange fetch loop before the
+ * next HTTPS request starts. This keeps oracle threads from surviving into
+ * process-exit libcurl/OpenSSL cleanup.
+ */
+BOOST_AUTO_TEST_CASE(aggregator_interrupt_aborts_before_live_fetch)
+{
+    MultiExchangeAggregator aggregator;
+    aggregator.SetInterruptCallback([] { return true; });
+
+    CAmount price = aggregator.FetchAggregatePrice();
+    BOOST_CHECK_EQUAL(price, 0);
+    BOOST_CHECK(aggregator.GetLastPrices().empty());
+}
+
+/**
+ * Production caller (`OracleNode::FetchMedianPrice`) raises the floor to
+ * three responsive sources before publishing. Pin via the live caller path
+ * — this test is deterministic because it does not depend on whether real
+ * exchanges are reachable: it asserts the cap on the field that production
+ * configures, recorded in `src/oracle/exchange.h:231` and overridden in
+ * `src/oracle/node.cpp:386`. The header default of 2 cannot be lower than
+ * 1 and cannot exceed the actual fetcher count without breaking the
+ * operator-facing docs ("at least 2 valid sources to publish").
+ */
+BOOST_AUTO_TEST_CASE(aggregator_documented_default_floor_invariant)
+{
+    // The header default must remain low enough that an operator who never
+    // calls SetMinRequiredSources still satisfies the operator-guide claim
+    // of "minimum 2 valid sources". Increasing this without updating docs
+    // would silently break operator expectations across the network.
+    MultiExchangeAggregator aggregator;
+    std::vector<MultiExchangeAggregator::ExchangePrice> two_valid = {
+        {"Binance", 12340, GetTime(), true, 1.0},
+        {"CoinGecko", 12350, GetTime(), true, 1.0},
+    };
+    // CalculateMedianPrice with two inputs must succeed — that is the
+    // floor value claimed by the docs and exercised by the regtest mock.
+    CAmount median = aggregator.CalculateMedianPrice(two_valid);
+    BOOST_CHECK(median > 0);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -8,12 +8,15 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <chainparams.h>
 #include <consensus/amount.h>
 #include <consensus/digidollar.h>
 #include <hash.h>
 #include <key.h>
+#include <oracle/bundle_manager.h>
 #include <oracle/musig2_aggregator.h>
 #include <oracle/signing_orchestrator.h>
+#include <primitives/oracle.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
 #include <digidollar/scripts.h>
@@ -34,21 +37,19 @@ BOOST_FIXTURE_TEST_SUITE(rh15_crypto_primitives_tests, BasicTestingSetup)
 // ATTACK VECTOR 1: ComputeOracleMessageHash Domain Separation
 // ============================================================================
 //
-// FINDING: ComputeOracleMessageHash uses CHashWriter(0) with NO domain tag.
-// This means the hash is just SHA256d(epoch || price || timestamp).
-// If any OTHER hash in the system also uses CHashWriter(0) over data that
-// could collide with (int32 || uint64 || int64), we have a cross-domain
-// collision risk.
+// HISTORICAL FINDING: ComputeOracleMessageHash originally used CHashWriter(0)
+// with NO domain tag, hashing just (epoch, price, timestamp). That left the
+// MuSig2 message indistinguishable from any other CHashWriter(0) over the
+// same 20 bytes, AND made the bundle replayable across DigiByte chains
+// because the hash carried no chain identifier — see DD-FA-SEC-008.
 //
-// SEVERITY: LOW-MEDIUM. The serialized types are different widths (4+8+8=20 bytes),
-// making accidental collision with other contexts unlikely. But the lack of a
-// domain tag is a defense-in-depth violation. A TaggedHash("DigiDollar/OracleBundle")
-// would be strictly better.
+// FIX: ComputeOracleMessageHash now binds a labeled tag and the chain's
+// hashGenesisBlock before the (epoch, price, timestamp) tuple. This case
+// pins that the fix is in place — the orchestrator hash must NOT match a
+// raw CHashWriter(0) over (epoch, price, timestamp).
 
-BOOST_AUTO_TEST_CASE(oracle_hash_no_domain_separation)
+BOOST_AUTO_TEST_CASE(oracle_hash_has_domain_separation)
 {
-    // Demonstrate that ComputeOracleMessageHash produces the same output
-    // as a raw CHashWriter(0) with the same data — no domain tag present.
     unsigned char hash1[32];
     OracleSigningOrchestrator::ComputeOracleMessageHash(100, 6310ULL, 1700000000LL, hash1);
 
@@ -56,12 +57,11 @@ BOOST_AUTO_TEST_CASE(oracle_hash_no_domain_separation)
     hasher << (int32_t)100 << (uint64_t)6310ULL << (int64_t)1700000000LL;
     uint256 hash2 = hasher.GetHash();
 
-    // These SHOULD differ if domain separation existed. They don't.
-    BOOST_CHECK_EQUAL_COLLECTIONS(hash1, hash1 + 32, hash2.begin(), hash2.end());
-
-    // Recommendation: Use TaggedHash("DigiDollar/OracleBundle") instead of CHashWriter(0)
-    // This test documents the current behavior. If domain separation is added,
-    // this test should FAIL (proving the fix works).
+    // Post-fix the two hashes MUST differ: the orchestrator now mixes in
+    // the "DigiDollar/OracleBundle" tag and Params().hashGenesisBlock.
+    BOOST_CHECK_MESSAGE(memcmp(hash1, hash2.begin(), 32) != 0,
+        "DD-FA-SEC-008: ComputeOracleMessageHash must mix in a domain tag and"
+        " the chain's hashGenesisBlock to prevent cross-chain v0x03 replay");
 }
 
 BOOST_AUTO_TEST_CASE(oracle_hash_different_tuples_no_collision)
@@ -167,35 +167,40 @@ BOOST_AUTO_TEST_CASE(musig2_pubnonce_parse_rejects_zero)
 // ============================================================================
 //
 // FINDING: Three oracle hashing contexts all use CHashWriter(0) with no tag:
-// 1. ComputeOracleMessageHash (signing_orchestrator.cpp:533)
-// 2. ComputeOracleBundleHash (bundle_manager.cpp:2599)
-// 3. musig2_oracle_participation.cpp:196
+// 1. OracleSigningOrchestrator::ComputeOracleMessageHash (signer side)
+// 2. ComputeOracleBundleHash                              (validator side)
 //
-// All three hash (epoch || price || timestamp) and MUST produce the same hash.
-// The fact that they share the same non-tagged construction is actually
-// REQUIRED for correctness — but it means the oracle hash domain is
-// indistinguishable from any other CHashWriter(0) over 20 bytes.
+// DD-FA-SEC-008 FIX: both now bind ("DigiDollar/OracleBundle" || chain_hash ||
+// epoch || price || timestamp). The two paths MUST produce the same hash so
+// that signed bundles verify on the same chain; if they diverge, signing or
+// validation breaks. This case pins the parity post-fix.
 
 BOOST_AUTO_TEST_CASE(oracle_hash_consistency_across_codepaths)
 {
-    // Verify all three hash computation paths produce identical results.
-    // This is a correctness test — if they diverge, signing breaks.
     int32_t epoch = 42;
     uint64_t price = 6310;
     int64_t timestamp = 1700000000;
 
-    // Path 1: OracleSigningOrchestrator::ComputeOracleMessageHash
+    // Path 1: OracleSigningOrchestrator::ComputeOracleMessageHash, which uses
+    // Params().GetConsensus().hashGenesisBlock at call time.
     unsigned char hash_orchestrator[32];
     OracleSigningOrchestrator::ComputeOracleMessageHash(epoch, price, timestamp, hash_orchestrator);
 
-    // Path 2: Inline CHashWriter (same as bundle_manager and participation)
-    CHashWriter ss(0);
-    ss << epoch << price << timestamp;
-    uint256 hash_inline = ss.GetHash();
+    // Path 2: ComputeOracleBundleHash bound to the same chain identity. We
+    // construct a bundle with the same payload values and ask for its hash
+    // under the active chain's genesis. The orchestrator's signer hash and
+    // the validator's bundle hash MUST match for a same-chain signature to
+    // verify — that is the whole point of the fix.
+    COracleBundle bundle;
+    bundle.version = 3;
+    bundle.epoch = epoch;
+    bundle.median_price_micro_usd = price;
+    bundle.timestamp = timestamp;
+    uint256 hash_bundle = ComputeOracleBundleHash(bundle, Params().GetConsensus().hashGenesisBlock);
 
     BOOST_CHECK_EQUAL_COLLECTIONS(
         hash_orchestrator, hash_orchestrator + 32,
-        hash_inline.begin(), hash_inline.end());
+        hash_bundle.begin(), hash_bundle.end());
 }
 
 // ============================================================================

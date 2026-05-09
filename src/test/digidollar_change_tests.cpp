@@ -149,7 +149,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_output, DDChangeTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(100000)); // 1000 DD ($1000.00)
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000)); // 0.001 DGB for fees
+    params.feeUtxos.push_back(CreateMockDGBUTXO(20000000)); // 0.2 DGB for 0.1 DGB min fee + change
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -157,7 +157,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_output, DDChangeTestFixture)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
 
     // Assert
-    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_REQUIRE_EQUAL(result.success, true);
     BOOST_CHECK_MESSAGE(result.error.empty(), "Unexpected error: " << result.error);
 
     // Find OP_RETURN output and extract DD amounts
@@ -170,7 +170,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_output, DDChangeTestFixture)
         }
     }
 
-    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+    BOOST_REQUIRE_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
 
     // Debug: Count P2TR DD outputs
     int dd_p2tr_count = 0;
@@ -184,7 +184,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_output, DDChangeTestFixture)
     }
 
     // Should have 2 DD amounts in OP_RETURN: recipient + change
-    BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
+    BOOST_REQUIRE_EQUAL(ddAmounts.size(), 2);
 
     // Verify total DD is conserved (1000 DD)
     CAmount totalDD = 0;
@@ -255,7 +255,7 @@ BOOST_FIXTURE_TEST_CASE(test_no_dd_change_exact_amount, DDChangeTestFixture)
     params.feeRate = 100000; // 100,000 sat/kB
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(50000)); // Exact amount
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(20000000));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -263,7 +263,8 @@ BOOST_FIXTURE_TEST_CASE(test_no_dd_change_exact_amount, DDChangeTestFixture)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
 
     // Assert
-    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_REQUIRE_EQUAL(result.success, true);
+    BOOST_CHECK_MESSAGE(result.error.empty(), "Unexpected error: " << result.error);
 
     // Find OP_RETURN and extract DD amounts
     std::vector<CAmount> ddAmounts;
@@ -275,10 +276,10 @@ BOOST_FIXTURE_TEST_CASE(test_no_dd_change_exact_amount, DDChangeTestFixture)
         }
     }
 
-    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+    BOOST_REQUIRE_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
 
     // Should have exactly 1 DD amount in OP_RETURN (recipient only, no change)
-    BOOST_CHECK_EQUAL(ddAmounts.size(), 1);
+    BOOST_REQUIRE_EQUAL(ddAmounts.size(), 1);
     BOOST_CHECK_EQUAL(ddAmounts[0], 50000);
 }
 
@@ -302,7 +303,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_below_dust, DDChangeTestFixture)
     params.feeRate = 100000;
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(totalDD));
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(20000000));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -310,7 +311,7 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_below_dust, DDChangeTestFixture)
     TxBuilderResult result = builder.BuildTransferTransaction(params);
 
     // Assert: Transaction succeeds
-    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_REQUIRE_EQUAL(result.success, true);
     BOOST_CHECK_MESSAGE(result.error.empty(), "Unexpected error: " << result.error);
 
     // Extract DD amounts from OP_RETURN
@@ -323,10 +324,10 @@ BOOST_FIXTURE_TEST_CASE(test_dd_change_below_dust, DDChangeTestFixture)
         }
     }
 
-    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+    BOOST_REQUIRE_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
 
     // Must have 2 DD amounts: recipient + sub-$1 change (NOT dropped as dust)
-    BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
+    BOOST_REQUIRE_EQUAL(ddAmounts.size(), 2);
 
     // Total DD must be perfectly conserved
     CAmount totalDDOut = 0;
@@ -367,7 +368,7 @@ BOOST_FIXTURE_TEST_CASE(test_bug27_multi_input_dd_conservation, DDChangeTestFixt
     for (int i = 0; i < numUtxos; i++) {
         params.ddUtxos.push_back(CreateMockDDUTXO(perUtxo));
     }
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(20000000));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
@@ -375,7 +376,7 @@ BOOST_FIXTURE_TEST_CASE(test_bug27_multi_input_dd_conservation, DDChangeTestFixt
     TxBuilderResult result = builder.BuildTransferTransaction(params);
 
     // Assert: Must succeed — this was the exact failure scenario
-    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_REQUIRE_EQUAL(result.success, true);
     BOOST_CHECK_MESSAGE(result.error.empty(), "Bug #27 regression: " << result.error);
 
     // Extract DD amounts from OP_RETURN
@@ -388,10 +389,10 @@ BOOST_FIXTURE_TEST_CASE(test_bug27_multi_input_dd_conservation, DDChangeTestFixt
         }
     }
 
-    BOOST_CHECK_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
+    BOOST_REQUIRE_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
 
     // Must have 2 amounts: $99.50 recipient + $0.50 change
-    BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
+    BOOST_REQUIRE_EQUAL(ddAmounts.size(), 2);
 
     // CRITICAL: Total DD must be perfectly conserved — not one cent lost
     CAmount totalDDOut = 0;
@@ -429,26 +430,28 @@ BOOST_FIXTURE_TEST_CASE(test_single_cent_dd_change_preserved, DDChangeTestFixtur
     params.feeRate = 100000;
     params.spenderKey = senderKey;
     params.ddUtxos.push_back(CreateMockDDUTXO(10000)); // $100.00
-    params.feeUtxos.push_back(CreateMockDGBUTXO(100000));
+    params.feeUtxos.push_back(CreateMockDGBUTXO(20000000));
 
     MockTransferTxBuilder builder(chainParams, currentHeight, oraclePrice);
 
     TxBuilderResult result = builder.BuildTransferTransaction(params);
 
-    BOOST_CHECK_EQUAL(result.success, true);
+    BOOST_REQUIRE_EQUAL(result.success, true);
     BOOST_CHECK_MESSAGE(result.error.empty(), "Unexpected error: " << result.error);
 
     // Extract DD amounts from OP_RETURN
     std::vector<CAmount> ddAmounts;
+    bool found_opreturn = false;
     for (const auto& output : result.tx.vout) {
         if (output.scriptPubKey.size() > 0 && output.scriptPubKey[0] == OP_RETURN) {
-            ExtractDDAmountsFromOpReturn(output.scriptPubKey, ddAmounts);
+            found_opreturn = ExtractDDAmountsFromOpReturn(output.scriptPubKey, ddAmounts);
             break;
         }
     }
+    BOOST_REQUIRE_MESSAGE(found_opreturn, "No OP_RETURN found in transaction");
 
     // Must have 2 amounts: $99.99 + $0.01 change
-    BOOST_CHECK_EQUAL(ddAmounts.size(), 2);
+    BOOST_REQUIRE_EQUAL(ddAmounts.size(), 2);
 
     CAmount totalDDOut = 0;
     for (CAmount amount : ddAmounts) {

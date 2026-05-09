@@ -25,6 +25,8 @@
 
 BOOST_AUTO_TEST_SUITE(digidollar_rpc_tests)
 
+static constexpr int64_t RPC_TEST_ORACLE_PRICE_MICRO_USD = 1000000;
+
 static CKey RegtestOracleKey(uint32_t oracle_id)
 {
     const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
@@ -187,7 +189,7 @@ BOOST_FIXTURE_TEST_CASE(test_getdcamultiplier_invalid, DigiDollarRPCTestSetup)
 // Test 8: calculatecollateralrequirement - Basic Response
 BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_basic, DigiDollarRPCTestSetup)
 {
-    UniValue result = CallRPC("calculatecollateralrequirement 10000 365");
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 365 1000000");
 
     // Should return a valid JSON object
     BOOST_CHECK(result.isObject());
@@ -213,7 +215,8 @@ BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_lock_periods, DigiDollarRPCTest
     std::vector<int> lockPeriods = {30, 90, 180, 365, 1095, 1825, 2555, 3650};
 
     for (int lockDays : lockPeriods) {
-        std::string cmd = "calculatecollateralrequirement 10000 " + std::to_string(lockDays);
+        std::string cmd = "calculatecollateralrequirement 10000 " + std::to_string(lockDays) +
+            " " + std::to_string(RPC_TEST_ORACLE_PRICE_MICRO_USD);
         UniValue result = CallRPC(cmd);
 
         BOOST_CHECK(result.isObject());
@@ -225,9 +228,9 @@ BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_lock_periods, DigiDollarRPCTest
 // Test 10: calculatecollateralrequirement - Longer Lock = Less Collateral
 BOOST_FIXTURE_TEST_CASE(test_calculatecollateral_ratio_scaling, DigiDollarRPCTestSetup)
 {
-    UniValue result30 = CallRPC("calculatecollateralrequirement 10000 30");
-    UniValue result365 = CallRPC("calculatecollateralrequirement 10000 365");
-    UniValue result3650 = CallRPC("calculatecollateralrequirement 10000 3650");
+    UniValue result30 = CallRPC("calculatecollateralrequirement 10000 30 1000000");
+    UniValue result365 = CallRPC("calculatecollateralrequirement 10000 365 1000000");
+    UniValue result3650 = CallRPC("calculatecollateralrequirement 10000 3650 1000000");
 
     // Longer lock periods should require less collateral
     double dgb30 = result30["required_dgb"].get_real();
@@ -259,7 +262,7 @@ BOOST_FIXTURE_TEST_CASE(test_validateddaddress_basic, DigiDollarRPCTestSetup)
 // Test 13: estimatecollateral - Basic Response
 BOOST_FIXTURE_TEST_CASE(test_estimatecollateral_basic, DigiDollarRPCTestSetup)
 {
-    UniValue result = CallRPC("estimatecollateral 10000 3");
+    UniValue result = CallRPC("estimatecollateral 10000 3 1000000");
 
     BOOST_CHECK(result.isObject());
     // Should have similar fields to calculatecollateralrequirement
@@ -338,7 +341,7 @@ BOOST_FIXTURE_TEST_CASE(test_getoracleprice_ignores_stale_pending_messages, Digi
     msg.price_micro_usd = 500000;
     msg.timestamp = base_time;
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    BOOST_REQUIRE(msg.SignPhase2(key));
+    BOOST_REQUIRE(msg.SignAttestation(key));
     BOOST_REQUIRE(manager.AddOracleMessage(msg));
 
     SetMockTime(base_time + ORACLE_MAX_AGE_SECONDS + 1);
@@ -520,8 +523,8 @@ BOOST_FIXTURE_TEST_CASE(test_oracle_price_format, DigiDollarRPCTestSetup)
 BOOST_FIXTURE_TEST_CASE(test_collateral_calculation_consistency, DigiDollarRPCTestSetup)
 {
     // Call twice with same parameters
-    UniValue result1 = CallRPC("calculatecollateralrequirement 10000 365");
-    UniValue result2 = CallRPC("calculatecollateralrequirement 10000 365");
+    UniValue result1 = CallRPC("calculatecollateralrequirement 10000 365 1000000");
+    UniValue result2 = CallRPC("calculatecollateralrequirement 10000 365 1000000");
 
     // Results should be identical
     BOOST_CHECK_EQUAL(result1["required_dgb"].get_real(),
@@ -535,7 +538,7 @@ BOOST_FIXTURE_TEST_CASE(test_collateral_calculation_consistency, DigiDollarRPCTe
 // Test 25: DD Amount Calculation
 BOOST_FIXTURE_TEST_CASE(test_dd_amount_calculation, DigiDollarRPCTestSetup)
 {
-    UniValue result = CallRPC("calculatecollateralrequirement 10000 365");
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 365 1000000");
 
     BOOST_CHECK(result.exists("dd_amount_cents"));
     BOOST_CHECK(result.exists("dd_amount_usd"));
@@ -548,14 +551,15 @@ BOOST_FIXTURE_TEST_CASE(test_dd_amount_calculation, DigiDollarRPCTestSetup)
 BOOST_FIXTURE_TEST_CASE(test_lock_blocks_calculation, DigiDollarRPCTestSetup)
 {
     // DigiByte has 15 second blocks, so:
-    // 1 day = 86400 seconds / 15 = 5760 blocks
-    UniValue result = CallRPC("calculatecollateralrequirement 10000 1");
+    // 30 days = 30 * 86400 seconds / 15 = 172800 blocks.
+    // V1 only accepts canonical lock tiers, so this must use a canonical period.
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 30 1000000");
 
     BOOST_CHECK(result.exists("lock_blocks"));
     int64_t lockBlocks = result["lock_blocks"].getInt<int64_t>();
 
-    // Should be approximately 5760 blocks per day (within 1%)
-    double expectedBlocks = 5760.0;
+    // Should be approximately 172800 blocks for 30 days (within 1%).
+    double expectedBlocks = 172800.0;
     double actualBlocks = static_cast<double>(lockBlocks);
     BOOST_CHECK_CLOSE(actualBlocks, expectedBlocks, 1.0);
 }

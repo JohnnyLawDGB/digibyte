@@ -24,6 +24,15 @@ CKey CreateTestKey() {
     return key;
 }
 
+bool IsCanonicalP2TROutput(const CScript& script)
+{
+    int witness_version = -1;
+    std::vector<unsigned char> witness_program;
+    return script.IsWitnessProgram(witness_version, witness_program) &&
+           witness_version == 1 &&
+           witness_program.size() == WITNESS_V1_TAPROOT_SIZE;
+}
+
 // Helper function to create test UTXOs
 std::vector<COutPoint> CreateTestUTXOs(size_t count) {
     std::vector<COutPoint> utxos;
@@ -33,6 +42,13 @@ std::vector<COutPoint> CreateTestUTXOs(size_t count) {
         utxos.emplace_back(hash, i);
     }
     return utxos;
+}
+
+uint32_t CanonicalTierForLockDays(int lockDays)
+{
+    const int tier = GetLockTierIndex(LockDaysToBlocks(lockDays), Params().GetDigiDollarParams());
+    BOOST_REQUIRE_GE(tier, 0);
+    return static_cast<uint32_t>(tier);
 }
 
 // Test MintTxBuilder with larger UTXO values for collateral
@@ -95,6 +111,7 @@ BOOST_AUTO_TEST_CASE(mint_transaction_basic)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100 in cents
     mintParams.lockDays = 365;   // 1 year
+    mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = CreateTestUTXOs(5);
@@ -114,6 +131,36 @@ BOOST_AUTO_TEST_CASE(mint_transaction_basic)
     BOOST_CHECK(::GetDigiDollarTxType(CTransaction(result.tx)) == ::DD_TX_MINT);
 }
 
+BOOST_AUTO_TEST_CASE(mint_change_without_destination_is_not_p2tr_collateral)
+{
+    const CChainParams& params = Params();
+    const int height = 1000;
+    const CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
+
+    TestMintTxBuilder builder(params, height, price);
+
+    TxBuilderMintParams mintParams;
+    mintParams.ddAmount = 10000;
+    mintParams.lockDays = 365;
+    mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
+    mintParams.ownerKey = CreateTestKey();
+    mintParams.feeRate = 100000;
+    mintParams.utxos = CreateTestUTXOs(5);
+
+    TxBuilderResult result = builder.BuildMintTransaction(mintParams);
+
+    BOOST_REQUIRE_MESSAGE(result.success, result.error);
+
+    int positiveP2TROutputs = 0;
+    for (const CTxOut& out : result.tx.vout) {
+        if (out.nValue > 0 && IsCanonicalP2TROutput(out.scriptPubKey)) {
+            positiveP2TROutputs++;
+        }
+    }
+
+    BOOST_CHECK_EQUAL(positiveP2TROutputs, 1);
+}
+
 BOOST_AUTO_TEST_CASE(mint_transaction_insufficient_funds)
 {
     const CChainParams& params = Params();
@@ -126,6 +173,7 @@ BOOST_AUTO_TEST_CASE(mint_transaction_insufficient_funds)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100 in cents
     mintParams.lockDays = 365;   // 1 year
+    mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     // No UTXOs provided - this should cause "Invalid mint parameters" error
@@ -152,6 +200,7 @@ BOOST_AUTO_TEST_CASE(mint_transaction_invalid_amount)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 5000; // $50 in cents (below $100 minimum)
     mintParams.lockDays = 365;  // 1 year
+    mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = CreateTestUTXOs(5);
@@ -235,6 +284,36 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_basic)
     BOOST_CHECK(::GetDigiDollarTxType(CTransaction(result.tx)) == ::DD_TX_TRANSFER);
 }
 
+BOOST_AUTO_TEST_CASE(transfer_rejects_underfunded_fee_inputs)
+{
+    const CChainParams& params = Params();
+    int height = 1000;
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
+
+    TestTransferTxBuilder builder(params, height, price);
+
+    CKey recipient = CreateTestKey();
+    CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(recipient.GetPubKey()))};
+    std::string addr = DigiDollar::EncodeDigiDollarAddress(dest, params);
+
+    uint256 feeHash;
+    feeHash.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+
+    TxBuilderTransferParams transferParams;
+    transferParams.recipients = {{addr, 5000}};
+    transferParams.feeRate = 35000000;
+    transferParams.ddUtxos = CreateTestUTXOs(1);
+    transferParams.ddAmounts = {5000};
+    transferParams.feeUtxos = {COutPoint(feeHash, 0)};
+    transferParams.feeAmounts = {1};
+    transferParams.spenderKey = CreateTestKey();
+
+    TxBuilderResult result = builder.BuildTransferTransaction(transferParams);
+
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(result.error.find("Insufficient DGB fee input") != std::string::npos);
+}
+
 BOOST_AUTO_TEST_CASE(transfer_transaction_invalid_address)
 {
     const CChainParams& params = Params();
@@ -303,6 +382,35 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
     // Check transaction type
     BOOST_CHECK(result.tx.IsDigiDollar());
     BOOST_CHECK(::GetDigiDollarTxType(CTransaction(result.tx)) == ::DD_TX_REDEEM);
+}
+
+BOOST_AUTO_TEST_CASE(redeem_transaction_rejects_zero_prequeried_dd_minted)
+{
+    const CChainParams& params = Params();
+    int height = 1000;
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
+
+    TestRedeemTxBuilder builder(params, height, price);
+
+    TxBuilderRedeemParams redeemParams;
+    uint256 collateralHash;
+    collateralHash.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    redeemParams.collateralOutpoint = COutPoint(collateralHash, 0);
+    redeemParams.ddToRedeem = 10000;
+    redeemParams.path = RedemptionPath::NORMAL;
+    redeemParams.ownerKey = CreateTestKey();
+    redeemParams.feeRate = 100000;
+    redeemParams.ddUtxos = CreateTestUTXOs(1);
+    redeemParams.ddAmounts = {10000};
+    redeemParams.feeUtxos = CreateTestUTXOs(1);
+    redeemParams.collateralAmount = 30000000000;
+    redeemParams.ddMinted = 0;
+    redeemParams.unlockHeight = 500;
+
+    TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
+
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(!result.error.empty());
 }
 
 BOOST_AUTO_TEST_CASE(redeem_transaction_different_paths)
@@ -408,6 +516,7 @@ BOOST_AUTO_TEST_CASE(transaction_validation_integration)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000; // $100 in cents
     mintParams.lockDays = 365;   // 1 year
+    mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
     mintParams.utxos = CreateTestUTXOs(5);
@@ -443,6 +552,7 @@ BOOST_AUTO_TEST_CASE(edge_cases_and_error_handling)
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 0; // Invalid
         mintParams.lockDays = 365;
+        mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = CreateTestUTXOs(5);
@@ -469,6 +579,7 @@ BOOST_AUTO_TEST_CASE(edge_cases_and_error_handling)
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 10000;
         mintParams.lockDays = 365;
+        mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
         // mintParams.ownerKey not set (invalid)
         mintParams.feeRate = 100000; // 100,000 sat/kB (minimum for DigiByte)
         mintParams.utxos = CreateTestUTXOs(5);
@@ -482,6 +593,7 @@ BOOST_AUTO_TEST_CASE(edge_cases_and_error_handling)
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 10000;
         mintParams.lockDays = 365;
+        mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
         mintParams.ownerKey = CreateTestKey();
         mintParams.feeRate = 200000000; // 200M sat/kB - above max of 100M sat/kB
         mintParams.utxos = CreateTestUTXOs(5);
@@ -540,6 +652,7 @@ BOOST_AUTO_TEST_CASE(select_coins_respects_max_inputs)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 10000;
     mintParams.lockDays = 365;
+    mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000;
     mintParams.utxos = CreateTestUTXOs(500);
@@ -563,6 +676,7 @@ BOOST_AUTO_TEST_CASE(select_coins_fails_fragmented_wallet)
     TxBuilderMintParams mintParams;
     mintParams.ddAmount = 50000; // $500 at $0.01/DGB needs huge collateral
     mintParams.lockDays = 365;
+    mintParams.lockTier = CanonicalTierForLockDays(mintParams.lockDays);
     mintParams.ownerKey = CreateTestKey();
     mintParams.feeRate = 100000;
     mintParams.utxos = CreateTestUTXOs(500);

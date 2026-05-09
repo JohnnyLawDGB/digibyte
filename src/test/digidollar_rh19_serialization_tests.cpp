@@ -27,7 +27,7 @@
  *        loses MuSig2 data — round-trip through CDataStream drops v0x03
  *        fields, silently downgrading to v0x02 semantics.
  *
- * BUG-5: Phase2 signature hash type confusion — GetPhase2SignatureHash()
+ * BUG-5: Phase2 signature hash type confusion — GetAttestationSignatureHash()
  *        hashes (oracle_id, price, timestamp) using CHashWriter with
  *        uint32_t oracle_id + uint64_t price + int64_t timestamp. The
  *        on-chain V02 format stores oracle_id as uint8_t. An oracle_id
@@ -353,7 +353,7 @@ BOOST_AUTO_TEST_CASE(bundle_p2p_serialization_drops_musig2_fields)
 
 BOOST_AUTO_TEST_CASE(phase2_hash_type_widths)
 {
-    // GetPhase2SignatureHash hashes oracle_id as uint32_t (4 bytes)
+    // GetAttestationSignatureHash hashes oracle_id as uint32_t (4 bytes)
     // but on-chain V02 format stores oracle_id as uint8_t (1 byte).
     // If someone naively reconstructs the hash from on-chain bytes, they get wrong hash.
 
@@ -362,7 +362,7 @@ BOOST_AUTO_TEST_CASE(phase2_hash_type_widths)
     msg.price_micro_usd = 50000;
     msg.timestamp = 1700000000;
 
-    uint256 hash_from_message = msg.GetPhase2SignatureHash();
+    uint256 hash_from_message = msg.GetAttestationSignatureHash();
 
     // Manually compute what a naive on-chain reconstruction would produce
     // (using 1-byte oracle_id instead of 4-byte)
@@ -521,7 +521,7 @@ BOOST_AUTO_TEST_CASE(v03_large_bitmap_amplification)
 BOOST_AUTO_TEST_CASE(oracle_bundle_hash_field_order)
 {
     // ComputeOracleBundleHash hashes (epoch, price, timestamp)
-    // GetPhase2SignatureHash hashes (oracle_id, price, timestamp)
+    // GetAttestationSignatureHash hashes (oracle_id, price, timestamp)
     // These use CHashWriter << which serializes each field in its native width.
     // Verify the hash is sensitive to field order (no accidental collisions).
 

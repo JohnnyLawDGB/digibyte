@@ -10,7 +10,7 @@
  * - Helper methods: IsMuSig2(), GetV03PayloadSize(), SerializeV03Data(), DeserializeV03Data()
  * - Serialization round-trip
  * - Payload size calculations for various oracle counts
- * - Backward compatibility with v0x01 and v0x02
+ * - Legacy v0x01/v0x02 payload fields remain storage-only, not V1 bundles
  */
 
 #include <boost/test/unit_test.hpp>
@@ -31,8 +31,9 @@ BOOST_AUTO_TEST_CASE(test_v03_bundle_struct_default)
 {
     COracleBundle bundle;
 
-    // New v0x03 fields should default correctly
-    BOOST_CHECK_EQUAL(bundle.version, 2);  // Default is v2 for backward compat
+    // V1 launches with MuSig2 v0x03 as the default and only bundle format.
+    BOOST_CHECK_EQUAL(bundle.version, 3);
+    BOOST_CHECK(bundle.IsMuSig2());
     BOOST_CHECK(bundle.aggregate_sig.empty());
     BOOST_CHECK(bundle.participation_bitmap.empty());
 
@@ -91,11 +92,11 @@ BOOST_AUTO_TEST_CASE(test_v03_bundle_version)
 {
     COracleBundle bundle;
 
-    // Default version is 2
-    BOOST_CHECK_EQUAL(bundle.version, 2);
-    BOOST_CHECK(!bundle.IsMuSig2());
+    // Default version is v0x03 because V1 has no legacy oracle-bundle phase.
+    BOOST_CHECK_EQUAL(bundle.version, 3);
+    BOOST_CHECK(bundle.IsMuSig2());
 
-    // Set to v3
+    // Explicit v0x03 is MuSig2.
     bundle.version = 3;
     BOOST_CHECK_EQUAL(bundle.version, 3);
     BOOST_CHECK(bundle.IsMuSig2());
@@ -209,13 +210,15 @@ BOOST_AUTO_TEST_CASE(test_v03_data_payload_size_9_of_30)
 }
 
 // ============================================================================
-// test_v02_bundle_unchanged — existing v0x02 bundle fields still work
+// legacy_v02_message_fields_are_storage_only — v0x02 is not a V1 bundle
 // ============================================================================
-BOOST_AUTO_TEST_CASE(test_v02_bundle_unchanged)
+BOOST_AUTO_TEST_CASE(legacy_v02_message_fields_are_storage_only)
 {
     COracleBundle bundle;
+    bundle.version = 2;
 
-    // v0x02 uses messages vector, epoch, median_price, timestamp
+    // The old message fields can still be populated for tests/tools, but V1
+    // consensus does not treat them as an oracle bundle.
     bundle.epoch = 42;
     bundle.median_price_micro_usd = 50000;
     bundle.timestamp = 1700000000;
@@ -226,18 +229,19 @@ BOOST_AUTO_TEST_CASE(test_v02_bundle_unchanged)
     msg.timestamp = 1700000000;
     bundle.messages.push_back(msg);
 
-    // Verify all v0x02 fields are intact
+    // Verify the storage fields are intact.
     BOOST_CHECK_EQUAL(bundle.epoch, 42);
     BOOST_CHECK_EQUAL(bundle.median_price_micro_usd, 50000);
     BOOST_CHECK_EQUAL(bundle.timestamp, 1700000000);
     BOOST_CHECK_EQUAL(bundle.messages.size(), 1);
     BOOST_CHECK_EQUAL(bundle.messages[0].oracle_id, 0);
 
-    // Default version should be 2
     BOOST_CHECK_EQUAL(bundle.version, 2);
     BOOST_CHECK(!bundle.IsMuSig2());
+    BOOST_CHECK(!bundle.IsValid(1));
 
-    // HasConsensus still works
+    // Legacy message-threshold helpers may still summarize the message vector,
+    // but the bundle itself is not valid for V1 block validation.
     BOOST_CHECK(bundle.HasConsensus(1));
     BOOST_CHECK(!bundle.HasConsensus(2));
 }
@@ -328,12 +332,12 @@ BOOST_AUTO_TEST_CASE(test_v03_aggregate_sig_size_enforcement)
 }
 
 // ============================================================================
-// nDigiDollarPhase3Height defaults to max int
+// nDigiDollarMuSig2Height defaults to max int
 // ============================================================================
 BOOST_AUTO_TEST_CASE(test_phase3_height_default)
 {
     Consensus::Params params;
-    BOOST_CHECK_EQUAL(params.nDigiDollarPhase3Height, std::numeric_limits<int>::max());
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, std::numeric_limits<int>::max());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

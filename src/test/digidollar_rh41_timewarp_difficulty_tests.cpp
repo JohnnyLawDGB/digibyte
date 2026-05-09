@@ -18,6 +18,7 @@
 #include <pubkey.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
+#include <util/time.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -42,6 +43,7 @@ struct RH41TestSetup : public TestingSetup {
 
     ~RH41TestSetup()
     {
+        SetMockTime(0);
         VolatilityMonitor::ClearFreeze();
         VolatilityMonitor::ClearHistory();
     }
@@ -57,11 +59,11 @@ struct RH41TestSetup : public TestingSetup {
 
     // Build a minimal valid DD mint transaction for testing
     CMutableTransaction BuildMintTx(CAmount ddAmount, CAmount collateral,
-                                     int64_t lockHeight) const
+                                    int64_t lockHeight, int64_t lockTier) const
     {
         CMutableTransaction tx;
         // DD_TX_MINT = 1, version marker
-        tx.nVersion = 0x0D1D0770 | (1 << 16);
+        tx.nVersion = 0x01000770;
 
         // Input (dummy)
         tx.vin.resize(1);
@@ -72,7 +74,7 @@ struct RH41TestSetup : public TestingSetup {
         mintParams.ddAmount = ddAmount;
         mintParams.lockHeight = lockHeight;
         mintParams.ownerKey = testXOnlyKey;
-        mintParams.internalKey = testXOnlyKey;
+        mintParams.internalKey = DigiDollar::GetCollateralNUMSKey();
         mintParams.oracleKeys = DigiDollar::GetOracleKeys(15);
         CScript collateralScript = DigiDollar::CreateCollateralP2TR(mintParams);
         tx.vout.emplace_back(collateral, collateralScript);
@@ -85,6 +87,8 @@ struct RH41TestSetup : public TestingSetup {
         opReturn << CScriptNum(1); // MINT type
         opReturn << CScriptNum(static_cast<int64_t>(ddAmount));
         opReturn << CScriptNum(static_cast<int64_t>(lockHeight));
+        opReturn << CScriptNum(static_cast<int64_t>(lockTier));
+        opReturn << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
         tx.vout.emplace_back(0, opReturn);
 
         // Output 2: DD token output (P2TR)
@@ -201,7 +205,7 @@ BOOST_FIXTURE_TEST_CASE(rh41_oracle_timestamp_vs_height_drift, RH41TestSetup)
 // ============================================================================
 // Mining empty blocks (no DD txs) advances height. This affects:
 // 1. Cooldown timers (height-based)
-// 2. Oracle epoch boundaries (nDDOracleEpochBlocks = 100 blocks)
+// 2. Oracle epoch boundaries (nDDOracleEpochBlocks = 40 blocks, ~10 minutes)
 // 3. Lock period expiry (absolute height-based)
 // The system health monitor tracks mints/redeems, but doesn't degrade
 // if there's simply no DD activity for many blocks.
@@ -316,10 +320,9 @@ BOOST_FIXTURE_TEST_CASE(rh41_nondeterministic_price_recording, RH41TestSetup)
     // different timestamps, leading to different volatility calculations,
     // and potentially different freeze/unfreeze decisions.
     //
-    // From validation.cpp line 1929:
-    //   Volatility::VolatilityMonitor::RecordPrice(ctx.oraclePriceMicroUSD, GetTime(), ctx.nHeight);
-    //
-    // This is NON-DETERMINISTIC and will cause consensus splits.
+    // This was originally reachable through ValidateDigiDollarTransaction()
+    // recording accepted mint prices with GetTime(). The regression below pins
+    // the fix: consensus-context recording must use ctx.nBlockTime instead.
 
     int64_t time1 = 1700000000;
     int64_t time2 = time1 + 3700; // Same block, validated 3700s later on node B
@@ -347,6 +350,62 @@ BOOST_FIXTURE_TEST_CASE(rh41_nondeterministic_price_recording, RH41TestSetup)
     // on different nodes for the same block.
     BOOST_TEST_MESSAGE("  Nodes validating same block at different wall times");
     BOOST_TEST_MESSAGE("  get different timestamps -> different volatility -> CONSENSUS SPLIT");
+}
+
+BOOST_FIXTURE_TEST_CASE(rh41_accepted_mint_records_block_time_not_wall_time, RH41TestSetup)
+{
+    const int currentHeight = 1000;
+    const int64_t blockTime = 1'700'000'000;
+    const int64_t wallTime = blockTime + 7'200;
+    const CAmount ddAmount = 10'000;
+    const CAmount oraclePrice = 500'000;
+
+    SetMockTime(wallTime);
+
+    const int64_t lockHeight = currentHeight + DigiDollar::LockDaysToBlocks(0);
+    CTransaction tx = CTransaction(BuildMintTx(ddAmount, 50'000 * COIN,
+                                               lockHeight, /*lockTier=*/0));
+
+    auto ctx = MakeContext(currentHeight, oraclePrice, /*systemCollateral=*/300);
+    ctx.nBlockTime = blockTime;
+
+    TxValidationState state;
+    BOOST_REQUIRE_MESSAGE(DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state),
+                          state.ToString());
+
+    BOOST_CHECK(VolatilityMonitor::GetPriceHistory().empty());
+    DigiDollar::RecordAcceptedMintVolatility(ctx);
+
+    const auto history = VolatilityMonitor::GetPriceHistory();
+    BOOST_REQUIRE_EQUAL(history.size(), 1U);
+    BOOST_CHECK_EQUAL(history.back().timestamp, blockTime);
+    BOOST_CHECK_NE(history.back().timestamp, wallTime);
+
+    SetMockTime(0);
+}
+
+BOOST_FIXTURE_TEST_CASE(rh41_non_block_validation_does_not_mutate_volatility_history, RH41TestSetup)
+{
+    const int currentHeight = 1000;
+    const int64_t wallTime = 1'700'007'200;
+    const CAmount ddAmount = 10'000;
+    const CAmount oraclePrice = 500'000;
+
+    SetMockTime(wallTime);
+
+    const int64_t lockHeight = currentHeight + DigiDollar::LockDaysToBlocks(0);
+    CTransaction tx = CTransaction(BuildMintTx(ddAmount, 50'000 * COIN,
+                                               lockHeight, /*lockTier=*/0));
+
+    auto ctx = MakeContext(currentHeight, oraclePrice, /*systemCollateral=*/300);
+
+    TxValidationState state;
+    BOOST_REQUIRE_MESSAGE(DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state),
+                          state.ToString());
+
+    BOOST_CHECK(VolatilityMonitor::GetPriceHistory().empty());
+
+    SetMockTime(0);
 }
 
 // ============================================================================

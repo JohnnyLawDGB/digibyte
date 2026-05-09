@@ -74,9 +74,9 @@ BOOST_AUTO_TEST_CASE(test_normal_redemption_path_creation)
     // Should contain CHECKLOCKTIMEVERIFY for timelock
     BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKLOCKTIMEVERIFY) != normalPath.end());
 
-    // Normal redemption does NOT contain OP_DIGIDOLLAR
-    // Amount validation happens at transaction validation layer (see validation.cpp)
-    // This keeps the normal path simple and efficient
+    // Normal redemption must include DD burn verification in the script ABI.
+    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_DIGIDOLLAR) != normalPath.end());
+    BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_DDVERIFY) != normalPath.end());
 
     // Should contain CHECKSIG for owner verification
     BOOST_CHECK(std::find(normalPath.begin(), normalPath.end(), OP_CHECKSIG) != normalPath.end());
@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE(test_err_path_creation)
 
     // Should contain collateral check
     BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_CHECKCOLLATERAL) != errPath.end());
-    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_LESSTHAN) != errPath.end());
+    BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_NOT) != errPath.end());
 
     // Should contain DD verification
     BOOST_CHECK(std::find(errPath.begin(), errPath.end(), OP_DIGIDOLLAR) != errPath.end());
@@ -280,7 +280,8 @@ BOOST_AUTO_TEST_CASE(test_normal_path_opcode_order)
     BOOST_CHECK(normalPath.size() > 0);
 
     // Parse script to verify opcode order
-    // Expected order: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP <ownerKey> OP_CHECKSIG
+    // Expected order: <lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP
+    // OP_DIGIDOLLAR <amount> OP_DDVERIFY <ownerKey> OP_CHECKSIG
     CScript::const_iterator pc = normalPath.begin();
     opcodetype opcode;
     std::vector<unsigned char> data;
@@ -297,11 +298,23 @@ BOOST_AUTO_TEST_CASE(test_normal_path_opcode_order)
     BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(opcode, OP_DROP);
 
-    // Fourth: ownerKey (32-byte push)
+    // Fourth: OP_DIGIDOLLAR
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_DIGIDOLLAR);
+
+    // Fifth: amount
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK(data.size() > 0);
+
+    // Sixth: OP_DDVERIFY
+    BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_DDVERIFY);
+
+    // Seventh: ownerKey (32-byte push)
     BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(data.size(), 32); // X-only pubkey is 32 bytes
 
-    // Fifth: OP_CHECKSIG
+    // Eighth: OP_CHECKSIG
     BOOST_CHECK(normalPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(opcode, OP_CHECKSIG);
 
@@ -317,7 +330,8 @@ BOOST_AUTO_TEST_CASE(test_err_path_opcode_order)
     BOOST_CHECK(errPath.size() > 0);
 
     // Parse script to verify opcode order
-    // Expected: <lockHeight> OP_CLTV OP_DROP OP_CHECKCOLLATERAL <100> OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG
+    // Expected: <lockHeight> OP_CLTV OP_DROP <100> OP_CHECKCOLLATERAL
+    // OP_NOT OP_VERIFY OP_DIGIDOLLAR <amount> OP_DDVERIFY <ownerKey> OP_CHECKSIG
     CScript::const_iterator pc = errPath.begin();
     opcodetype opcode;
     std::vector<unsigned char> data;
@@ -334,17 +348,17 @@ BOOST_AUTO_TEST_CASE(test_err_path_opcode_order)
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(opcode, OP_DROP);
 
-    // 4. OP_CHECKCOLLATERAL
-    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
-    BOOST_CHECK_EQUAL(opcode, OP_CHECKCOLLATERAL);
-
-    // 5. <100> (value 100)
+    // 4. <100> threshold
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
     BOOST_CHECK(data.size() > 0); // Value 100 as CScriptNum
 
-    // 6. OP_LESSTHAN
+    // 5. OP_CHECKCOLLATERAL
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
-    BOOST_CHECK_EQUAL(opcode, OP_LESSTHAN);
+    BOOST_CHECK_EQUAL(opcode, OP_CHECKCOLLATERAL);
+
+    // 6. OP_NOT
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK_EQUAL(opcode, OP_NOT);
 
     // 7. OP_VERIFY
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
@@ -354,15 +368,19 @@ BOOST_AUTO_TEST_CASE(test_err_path_opcode_order)
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(opcode, OP_DIGIDOLLAR);
 
-    // 9. OP_DDVERIFY
+    // 9. amount
+    BOOST_CHECK(errPath.GetOp(pc, opcode, data));
+    BOOST_CHECK(data.size() > 0);
+
+    // 10. OP_DDVERIFY
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(opcode, OP_DDVERIFY);
 
-    // 10. ownerKey (32-byte push)
+    // 11. ownerKey (32-byte push)
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(data.size(), 32);
 
-    // 11. OP_CHECKSIG
+    // 12. OP_CHECKSIG
     BOOST_CHECK(errPath.GetOp(pc, opcode, data));
     BOOST_CHECK_EQUAL(opcode, OP_CHECKSIG);
 
@@ -439,17 +457,10 @@ BOOST_AUTO_TEST_CASE(test_mast_tree_has_exactly_two_paths)
     }
 }
 
-BOOST_AUTO_TEST_CASE(test_normal_path_does_not_have_dd_amount_validation)
+BOOST_AUTO_TEST_CASE(test_normal_path_has_dd_amount_validation)
 {
     auto params = CreateTestMintParams();
     CScript normalPath = DigiDollar::CreateNormalRedemptionPath(params);
-
-    // Normal redemption path does NOT contain OP_DIGIDOLLAR or OP_DDVERIFY
-    // Amount validation happens at transaction validation layer (see validation.cpp)
-    // This keeps the normal path simple and efficient
-    //
-    // NOTE: We use proper script parsing (GetOp) instead of std::find on raw bytes
-    // because std::find can give false positives if data bytes match opcode values
 
     CScript::const_iterator pc = normalPath.begin();
     opcodetype opcode;
@@ -462,8 +473,8 @@ BOOST_AUTO_TEST_CASE(test_normal_path_does_not_have_dd_amount_validation)
         if (opcode == OP_DDVERIFY) found_ddverify = true;
     }
 
-    BOOST_CHECK_MESSAGE(!found_digidollar, "Normal path should NOT contain OP_DIGIDOLLAR");
-    BOOST_CHECK_MESSAGE(!found_ddverify, "Normal path should NOT contain OP_DDVERIFY");
+    BOOST_CHECK_MESSAGE(found_digidollar, "Normal path must contain OP_DIGIDOLLAR");
+    BOOST_CHECK_MESSAGE(found_ddverify, "Normal path must contain OP_DDVERIFY");
 
     // Only contains: CLTV, DROP, ownerKey, CHECKSIG - count opcodes properly
     pc = normalPath.begin();

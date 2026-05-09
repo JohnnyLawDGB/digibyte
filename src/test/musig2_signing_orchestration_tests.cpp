@@ -347,6 +347,162 @@ BOOST_AUTO_TEST_CASE(early_partial_buffer_dedups_by_oracle_before_capacity)
     BOOST_CHECK_EQUAL(receiving_ptr->GetPartialSigCount(), honest_partials.size());
 }
 
+// Wave 10 (Agent C) — operator status visibility: the orchestrator's
+// `m_signing_sessions` map is a private member. Operators have no
+// programmatic way to see whether a session for the current epoch is
+// COMPLETE / SIGNING / FAILED / etc. without reading debug logs. This
+// test pins the new public accessor `GetSessionStateForEpoch` that the
+// RPC surface (`getdigidollardeploymentinfo`) uses to expose the
+// current session state, nonce count, and partial-sig count.
+BOOST_AUTO_TEST_CASE(get_session_state_for_epoch_reports_in_progress_then_failed)
+{
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 200;
+
+    // Before any session exists the accessor returns std::nullopt.
+    BOOST_CHECK(!orch.GetSessionStateForEpoch(epoch).has_value());
+
+    // Create the session at epoch_start_height; CREATED state is reported.
+    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
+    BOOST_REQUIRE_GT(epoch_length, 0);
+    const int32_t creation_height = epoch * epoch_length;
+    MuSig2SigningSession* session = orch.GetOrCreateSigningSession(epoch, creation_height);
+    BOOST_REQUIRE(session != nullptr);
+
+    auto info = orch.GetSessionStateForEpoch(epoch);
+    BOOST_REQUIRE(info.has_value());
+    BOOST_CHECK_EQUAL(static_cast<int>(info->state), static_cast<int>(MuSig2SessionState::CREATED));
+    BOOST_CHECK_EQUAL(info->nonce_count, 0U);
+    BOOST_CHECK_EQUAL(info->partial_sig_count, 0U);
+    BOOST_CHECK_EQUAL(info->creation_height, creation_height);
+
+    // Drive the session to FAILED via timeout: trigger CheckTimeout at a
+    // height beyond creation_height + timeout_blocks (default 100).
+    session->CheckTimeout(creation_height + 200);
+
+    info = orch.GetSessionStateForEpoch(epoch);
+    BOOST_REQUIRE(info.has_value());
+    BOOST_CHECK_EQUAL(static_cast<int>(info->state), static_cast<int>(MuSig2SessionState::FAILED));
+}
+
+// Wave 10 (Agent C) — restart liveness: after `Clear()` (simulated
+// daemon restart) any existing session state is dropped, and the
+// orchestrator must be able to lazily create fresh sessions for the
+// current epoch on the next remote nonce arrival or block tick. The
+// session map is in-memory only (no on-disk persistence): secp256k1
+// secnonces are non-copyable and must never be persisted. After
+// Clear(), HasSession() is false for every previously-known epoch and
+// the session is not silently resurrected.
+BOOST_AUTO_TEST_CASE(clear_drops_all_sessions_simulating_restart)
+{
+    OracleSigningOrchestrator orch;
+    const int32_t epoch_a = 300;
+    const int32_t epoch_b = 301;
+    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
+    BOOST_REQUIRE_GT(epoch_length, 0);
+
+    // Pre-populate two sessions (current + next via pre-start window).
+    BOOST_REQUIRE(orch.GetOrCreateSigningSession(epoch_a, epoch_a * epoch_length) != nullptr);
+    BOOST_REQUIRE(orch.GetOrCreateSigningSession(epoch_b, epoch_b * epoch_length) != nullptr);
+    BOOST_REQUIRE(orch.HasSession(epoch_a));
+    BOOST_REQUIRE(orch.HasSession(epoch_b));
+
+    // Simulate restart: Clear() wipes session map, broadcast trackers,
+    // pending partial-sig buffer, cached oracle key.
+    orch.Clear();
+
+    // Both sessions are gone — the new (post-restart) orchestrator state
+    // is empty, not silently resurrected from a global map.
+    BOOST_CHECK(!orch.HasSession(epoch_a));
+    BOOST_CHECK(!orch.HasSession(epoch_b));
+    BOOST_CHECK(!orch.GetSessionStateForEpoch(epoch_a).has_value());
+    BOOST_CHECK(!orch.GetSessionStateForEpoch(epoch_b).has_value());
+
+    // Lazy session creation still works on the next remote nonce.
+    OracleMusigNonceMsg msg = MakeSignedMusigNonceMsg(epoch_a, /*oracle_id=*/1);
+    orch.IngestRemoteNonce(msg);
+    BOOST_CHECK(orch.HasSession(epoch_a));
+
+    auto info = orch.GetSessionStateForEpoch(epoch_a);
+    BOOST_REQUIRE(info.has_value());
+    BOOST_CHECK(info->state == MuSig2SessionState::CREATED ||
+                info->state == MuSig2SessionState::NONCES_COLLECTING ||
+                info->state == MuSig2SessionState::NONCES_COMPLETE);
+}
+
+// Wave 10 (Agent C) — sub-quorum graceful handling: if fewer than the
+// configured threshold of oracle peers ever respond with a nonce, the
+// session can never reach NONCES_COMPLETE → SIGNING → COMPLETE. The
+// miner queries `GetCompletedSession` and must return false (not crash,
+// not return a half-built bundle), and the bundle manager strips DD
+// txs from the block template via `AddOracleBundleToBlock` returning
+// false for DD-touching blocks. This test pins the
+// `GetCompletedSession` contract for an under-quorum session.
+BOOST_AUTO_TEST_CASE(sub_quorum_session_does_not_complete)
+{
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 400;
+    const uint8_t threshold = static_cast<uint8_t>(Params().GetConsensus().nOracleConsensusRequired);
+    BOOST_REQUIRE_GT(threshold, 1);
+
+    // Inject a session and add only (threshold - 1) nonces — sub-quorum.
+    auto receiving_session = std::make_unique<MuSig2SigningSession>(epoch, threshold);
+
+    MuSig2OracleAggregator aggregator;
+    secp256k1_xonly_pubkey full_agg_pk;
+    secp256k1_musig_keyagg_cache full_keyagg_cache;
+    BOOST_REQUIRE(aggregator.ComputeAggregatePubkey(GetActiveOracleIdsForMusigTest(),
+                                                    full_agg_pk,
+                                                    full_keyagg_cache));
+    BOOST_REQUIRE(receiving_session->InitializePassive(full_keyagg_cache));
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    const std::vector<uint8_t> all_ids = GetActiveOracleIdsForMusigTest();
+    BOOST_REQUIRE_GE(all_ids.size(), threshold);
+    const size_t n_below_quorum = static_cast<size_t>(threshold) - 1;
+    for (size_t i = 0; i < n_below_quorum; ++i) {
+        const uint8_t oracle_id = all_ids[i];
+        CKey key = GetRegtestMusigOracleKey(oracle_id);
+        CPubKey pubkey = key.GetPubKey();
+        secp256k1_pubkey secp_pubkey;
+        BOOST_REQUIRE(secp256k1_ec_pubkey_parse(ctx, &secp_pubkey, pubkey.data(), pubkey.size()));
+        secp256k1_musig_pubnonce pubnonce;
+        // Use a temp signing session to generate a valid pubnonce; we
+        // only need the pubnonce bytes, not the secnonce.
+        MuSig2SigningSession tmp(epoch, threshold);
+        BOOST_REQUIRE(tmp.GenerateNonce(oracle_id, key, secp_pubkey, full_keyagg_cache, pubnonce));
+        BOOST_REQUIRE(receiving_session->AddPubnonce(oracle_id, pubnonce));
+    }
+    secp256k1_context_destroy(ctx);
+
+    BOOST_CHECK_EQUAL(receiving_session->GetNonceCount(), n_below_quorum);
+    BOOST_CHECK(!receiving_session->HasEnoughNonces());
+    BOOST_CHECK_EQUAL(static_cast<int>(receiving_session->GetState()),
+                      static_cast<int>(MuSig2SessionState::NONCES_COLLECTING));
+
+    orch.InjectSession(epoch, std::move(receiving_session));
+
+    // Miner-path query: GetCompletedSession must report false for an
+    // under-quorum session. The miner does not crash; it falls through
+    // to "no MuSig2 bundle ready" and strips DD txs (or omits the
+    // oracle output for non-DD blocks).
+    std::vector<unsigned char> sig, bitmap;
+    uint64_t price = 0;
+    int64_t ts = 0;
+    BOOST_CHECK(!orch.GetCompletedSession(epoch, sig, bitmap, price, ts));
+
+    // Operator-status query reports the under-quorum state with exact
+    // counts so an operator can diagnose the stuck session.
+    auto info = orch.GetSessionStateForEpoch(epoch);
+    BOOST_REQUIRE(info.has_value());
+    BOOST_CHECK_EQUAL(static_cast<int>(info->state),
+                      static_cast<int>(MuSig2SessionState::NONCES_COLLECTING));
+    BOOST_CHECK_EQUAL(info->nonce_count, n_below_quorum);
+    BOOST_CHECK_EQUAL(info->partial_sig_count, 0U);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 struct MainParamsMuSig2Setup : public BasicTestingSetup {
@@ -354,6 +510,25 @@ struct MainParamsMuSig2Setup : public BasicTestingSetup {
 };
 
 BOOST_FIXTURE_TEST_SUITE(musig2_signing_orchestration_mainnet_tests, MainParamsMuSig2Setup)
+
+BOOST_AUTO_TEST_CASE(mainnet_signing_roster_excludes_reserve_metadata_slots)
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 17);
+    BOOST_REQUIRE_GT(Params().GetOracleNodes().size(),
+                     static_cast<size_t>(consensus.nOraclePubkeyCount));
+
+    const std::vector<uint8_t> signing_ids =
+        OracleSigningOrchestrator::GetConsensusOracleIdsForSigning();
+    BOOST_CHECK_EQUAL(signing_ids.size(),
+                      static_cast<size_t>(consensus.nOraclePubkeyCount));
+
+    MuSig2OracleAggregator aggregator;
+    secp256k1_xonly_pubkey agg_pk;
+    secp256k1_musig_keyagg_cache cache;
+    BOOST_CHECK_MESSAGE(aggregator.ComputeAggregatePubkey(signing_ids, agg_pk, cache),
+                        "mainnet signing roster must aggregate without reserve slot ids");
+}
 
 BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_timeout_uses_chain_epoch_length)
 {

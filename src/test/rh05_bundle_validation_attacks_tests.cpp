@@ -42,23 +42,6 @@
 
 BOOST_FIXTURE_TEST_SUITE(rh05_bundle_validation_attacks, RegTestingSetup)
 
-// ============================================================================
-// Helper: Create a signed oracle message for Phase 2
-// ============================================================================
-static COraclePriceMessage CreateSignedMessage(const CKey& key, uint32_t oracle_id,
-                                                uint64_t price, int64_t timestamp)
-{
-    COraclePriceMessage msg;
-    msg.oracle_id = oracle_id;
-    msg.price_micro_usd = price;
-    msg.timestamp = timestamp;
-    msg.block_height = 0;
-    msg.nonce = 0;
-    msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-    msg.Sign(key);
-    return msg;
-}
-
 // Helper: Build a v0x02 CScript manually
 static CScript BuildV02Script(uint8_t num_msgs, uint64_t price, int64_t timestamp,
                                const std::vector<std::pair<uint8_t, std::vector<unsigned char>>>& oracle_sigs)
@@ -145,7 +128,7 @@ BOOST_AUTO_TEST_CASE(attack_v02_downgrade_when_phase3_active)
     const Consensus::Params& params = Params().GetConsensus();
     
     // Phase 3 should be active on regtest (height 0)
-    BOOST_CHECK(params.IsPhaseThreeActive(1000));
+    BOOST_CHECK(params.IsMuSig2OracleActive(1000));
 
     // Build a v0x02 bundle with fake signatures
     int64_t now = GetTime();
@@ -183,17 +166,16 @@ BOOST_AUTO_TEST_CASE(attack_v02_downgrade_when_phase3_active)
 }
 
 // ============================================================================
-// ATTACK 2: Epoch=0 oracle set mismatch in v0x02 extraction
-// ExtractOracleBundle sets bundle.epoch=0 for v0x02, then ValidatePhaseTwoBundle
-// uses GetActiveOraclesForEpoch(0) instead of the real epoch.
+// ATTACK 2: v0x02 epoch confusion must be impossible in V1 because legacy
+// bundles are rejected before extraction.
 // ============================================================================
 BOOST_AUTO_TEST_CASE(attack_epoch_zero_oracle_set_mismatch)
 {
-    BOOST_TEST_MESSAGE("=== RH-05 Attack 2: Epoch=0 oracle set mismatch ===");
+    BOOST_TEST_MESSAGE("=== RH-05 Attack 2: v0x02 epoch confusion rejected ===");
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     
-    // Create a v0x02 script and extract the bundle
+    // Create a v0x02 script and verify extraction rejects it outright.
     int64_t now = GetTime();
     std::vector<std::pair<uint8_t, std::vector<unsigned char>>> oracle_sigs;
     oracle_sigs.push_back({0, std::vector<unsigned char>(64, 0xBB)});
@@ -203,22 +185,9 @@ BOOST_AUTO_TEST_CASE(attack_epoch_zero_oracle_set_mismatch)
     CBlock block = CreateBlockWithScript(v02_script, static_cast<uint32_t>(now), 5000);
     COracleBundle extracted;
     bool ok = manager.ExtractOracleBundle(*block.vtx[0], extracted);
-    BOOST_REQUIRE(ok);
-
-    // The epoch should match block height, not be hardcoded to 0
-    int32_t expected_epoch = GetCurrentEpoch(5000);
-    BOOST_TEST_MESSAGE("  Extracted bundle epoch: " << extracted.epoch);
-    BOOST_TEST_MESSAGE("  Expected epoch for height 5000: " << expected_epoch);
-
-    if (extracted.epoch == 0 && expected_epoch != 0) {
-        BOOST_TEST_MESSAGE("  >>> FINDING: v0x02 extracted bundle has epoch=0 instead of " << expected_epoch);
-        BOOST_TEST_MESSAGE("  >>> GetActiveOraclesForEpoch(0) may return wrong oracle set");
-        BOOST_TEST_MESSAGE("  >>> This allows oracles not active at current epoch to sign bundles");
-    }
-    
-    // Fixed behavior: extraction derives the epoch from the coinbase height
-    // instead of leaving v0x02 bundles at epoch 0.
-    BOOST_CHECK_EQUAL(extracted.epoch, expected_epoch);
+    BOOST_CHECK_MESSAGE(!ok,
+        "DigiDollar V1 must reject v0x02 oracle data before any epoch or "
+        "roster logic can be reached.");
 }
 
 // ============================================================================
@@ -462,7 +431,7 @@ BOOST_AUTO_TEST_CASE(attack_v03_below_threshold_bitmap)
         
         // Try Phase 3 validation
         std::string error;
-        bool valid = OracleBundleManager::ValidatePhaseThreeBundle(extracted, 1000, params, error);
+        bool valid = OracleBundleManager::ValidateMuSig2Bundle(extracted, 1000, params, error);
         BOOST_TEST_MESSAGE("  Phase 3 validation: " << (valid ? "ACCEPTED" : "REJECTED"));
         if (!valid) {
             BOOST_TEST_MESSAGE("  Error: " << error);
@@ -627,12 +596,12 @@ BOOST_AUTO_TEST_CASE(attack_forged_pubkey_in_message)
     msg.Sign(attacker_key);
 
     // The message should verify with attacker's key (Sign uses Phase1 hash, check Phase2)
-    // Note: VerifyPhase2 uses GetPhase2SignatureHash which covers oracle_id+price+timestamp
+    // Note: VerifyAttestation uses GetAttestationSignatureHash which covers oracle_id+price+timestamp
     // and verifies against oracle_pubkey. Sign() uses GetSignatureHash (Phase 1) by default.
-    // So VerifyPhase2 will fail because the sig was made with Phase 1 hash.
-    // Use SignPhase2 instead for a proper test:
-    msg.SignPhase2(attacker_key);
-    BOOST_CHECK(msg.VerifyPhase2());
+    // So VerifyAttestation will fail because the sig was made with Phase 1 hash.
+    // Use SignAttestation instead for a proper test:
+    msg.SignAttestation(attacker_key);
+    BOOST_CHECK(msg.VerifyAttestation());
 
     // But AddOracleMessage (which calls IsValidOracleMessage internally) should rebind
     // to chainparams key and reject
@@ -713,7 +682,7 @@ BOOST_AUTO_TEST_CASE(attack_phase1_price_no_range_check)
         script << data;
 
         // Use a height BELOW Phase 2 activation for pure Phase 1 path
-        int32_t height = 100; // Below nDigiDollarPhase2Height (650 on regtest)
+        int32_t height = 100; // Below nDDActivationHeight (650 on regtest)
         CBlock block = CreateBlockWithScript(script, static_cast<uint32_t>(now), height);
         BlockValidationState state;
         bool result = OracleDataValidator::ValidateBlockOracleData(block, nullptr, params, state);
@@ -750,7 +719,7 @@ BOOST_AUTO_TEST_CASE(attack_v03_forged_aggregate_sig)
     GetRandBytes(Span{bundle.aggregate_sig.data() + 32, 32});
 
     std::string error;
-    bool result = OracleBundleManager::ValidatePhaseThreeBundle(bundle, height, params, error);
+    bool result = OracleBundleManager::ValidateMuSig2Bundle(bundle, height, params, error);
     BOOST_TEST_MESSAGE("  Forged v0x03 sig: " << (result ? "ACCEPTED" : "REJECTED"));
     BOOST_TEST_MESSAGE("  Error: " << error);
     BOOST_CHECK(!result);
@@ -835,7 +804,7 @@ BOOST_AUTO_TEST_CASE(attack_v03_empty_bitmap)
     bundle.aggregate_sig.resize(64, 0xAA);
 
     std::string error;
-    bool result = OracleBundleManager::ValidatePhaseThreeBundle(bundle, height, params, error);
+    bool result = OracleBundleManager::ValidateMuSig2Bundle(bundle, height, params, error);
     BOOST_TEST_MESSAGE("  Empty bitmap: " << (result ? "ACCEPTED" : "REJECTED"));
     BOOST_TEST_MESSAGE("  Error: " << error);
     BOOST_CHECK(!result);
@@ -861,7 +830,7 @@ BOOST_AUTO_TEST_CASE(attack_v03_all_zeros_bitmap)
     bundle.aggregate_sig.resize(64, 0xAA);
 
     std::string error;
-    bool result = OracleBundleManager::ValidatePhaseThreeBundle(bundle, height, params, error);
+    bool result = OracleBundleManager::ValidateMuSig2Bundle(bundle, height, params, error);
     BOOST_TEST_MESSAGE("  All-zeros bitmap: " << (result ? "ACCEPTED" : "REJECTED"));
     BOOST_TEST_MESSAGE("  Error: " << error);
     BOOST_CHECK(!result);

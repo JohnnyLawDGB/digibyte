@@ -334,11 +334,10 @@ BOOST_AUTO_TEST_CASE(attack_nonce_ordering_independence)
 // and node B sees {0,3,4}. They compute different aggregate keys and
 // the network can't agree on a valid signature.
 //
-// Defense: TrimNoncesToThreshold is deterministic — given the same set
-// of nonces, all nodes trim to the same participants. The attack only
-// works if nodes literally receive different nonce sets before timeout.
-// The block-tick model means all nodes try to aggregate at the same
-// block height, and P2P gossip should propagate nonces within 1-2 blocks.
+// Defense: the signing session now uses a canonical deterministic signer
+// committee and does not enter NONCES_COMPLETE for merely any threshold-sized
+// subset. A peer missing a required nonce keeps waiting instead of signing
+// under a divergent aggregate key.
 // ============================================================================
 BOOST_AUTO_TEST_CASE(attack_desync_different_nonce_sets)
 {
@@ -375,32 +374,20 @@ BOOST_AUTO_TEST_CASE(attack_desync_different_nonce_sets)
     session_b.TrimNoncesToThreshold();
     auto part_b = session_b.GetNonceParticipants();
 
-    // Both have 3 participants, but DIFFERENT sets
+    // Node A has the canonical committee {0,1,2}; Node B is missing oracle 2
+    // and must NOT substitute oracle 3/4 just because it has enough total
+    // nonces. That substitution was the RC34 liveness bug: honest peers signed
+    // under different aggregate keys and MuSig2 never reached COMPLETE.
     BOOST_CHECK_EQUAL(part_a.size(), 3u);
-    BOOST_CHECK_EQUAL(part_b.size(), 3u);
-
-    // Node A: {0,1,2}, Node B: {0,1,3}
     BOOST_CHECK_EQUAL(part_a[0], 0);
     BOOST_CHECK_EQUAL(part_a[1], 1);
     BOOST_CHECK_EQUAL(part_a[2], 2);
 
+    BOOST_CHECK_EQUAL(part_b.size(), 2u);
     BOOST_CHECK_EQUAL(part_b[0], 0);
     BOOST_CHECK_EQUAL(part_b[1], 1);
-    BOOST_CHECK_EQUAL(part_b[2], 3);
-
-    // FINDING: Selective forwarding CAN cause different nodes to compute
-    // different participant sets and therefore different aggregate keys.
-    // Only ONE aggregate signature will be valid in the block.
-    // The miner node's view determines which sig goes into the block.
-    // Other nodes verify against the participation bitmap in the bundle.
-    //
-    // This is a LIVENESS attack if the miner can't produce a valid sig,
-    // but NOT a safety attack — validators independently verify the
-    // bitmap + aggregate key + signature.
-    //
-    // RECOMMENDATION: Oracle nonces should be relayed aggressively
-    // (similar to compact block relay). Consider a protocol where
-    // miners wait for N+2 nonces before trimming, giving buffer.
+    BOOST_CHECK(session_a.GetState() == MuSig2SessionState::NONCES_COMPLETE);
+    BOOST_CHECK(session_b.GetState() != MuSig2SessionState::NONCES_COMPLETE);
 }
 
 // ============================================================================

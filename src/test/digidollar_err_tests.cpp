@@ -5,9 +5,11 @@
 #include <consensus/digidollar.h>
 #include <consensus/dca.h>
 #include <consensus/err.h>
+#include <digidollar/health.h>
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
 #include <digidollar/digidollar.h>
+#include <oracle/musig2_aggregator.h>
 #include <primitives/oracle.h>
 #include <key.h>
 #include <pubkey.h>
@@ -34,6 +36,7 @@ struct DigiDollarERRTestSetup : public TestingSetup {
     {
         // Reset static ERR state so tests don't interfere with each other
         DigiDollar::ERR::EmergencyRedemptionRatio::ResetForTesting();
+        DigiDollar::SystemHealthMonitor::ResetMetrics();
 
         // Set up mock oracle price and system state
         mockOraclePrice = 50000; // $500.00 DGB
@@ -56,6 +59,12 @@ struct DigiDollarERRTestSetup : public TestingSetup {
         }
     }
 
+    ~DigiDollarERRTestSetup()
+    {
+        DigiDollar::ERR::EmergencyRedemptionRatio::ResetForTesting();
+        DigiDollar::SystemHealthMonitor::ResetMetrics();
+    }
+
     CKey testKey;
     CPubKey testPubKey;
     XOnlyPubKey testXOnlyKey;
@@ -65,6 +74,38 @@ struct DigiDollarERRTestSetup : public TestingSetup {
     std::vector<CKey> oracleKeys;
     std::vector<XOnlyPubKey> oracleXOnlyKeys;
 };
+
+static CTransaction BuildWave1ERRRedemptionTx(const CKey& owner_key, int dd_input_count, uint32_t lock_time, CAmount collateral_out)
+{
+    CMutableTransaction mtx;
+    mtx.nVersion = DigiDollar::DD_TX_VERSION | DigiDollar::DD_TX_REDEEM;
+    mtx.nLockTime = lock_time;
+
+    for (int i = 0; i < dd_input_count; ++i) {
+        mtx.vin.emplace_back(COutPoint(uint256::ONE, static_cast<uint32_t>(i)), CScript(), 0xfffffffe);
+    }
+
+    CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(owner_key.GetPubKey()))};
+    mtx.vout.emplace_back(collateral_out, GetScriptForDestination(dest));
+    return CTransaction(mtx);
+}
+
+static COracleBundle BuildCompleteMuSig2ERRBundle(int signers, const Consensus::Params& params, int32_t epoch = 1, CAmount price = 50000)
+{
+    COracleBundle bundle(epoch);
+    bundle.version = 3;
+    bundle.median_price_micro_usd = price;
+    bundle.timestamp = GetTime();
+    bundle.aggregate_sig.assign(64, 0x42);
+
+    std::vector<uint8_t> oracle_ids;
+    for (int i = 0; i < signers; ++i) {
+        oracle_ids.push_back(static_cast<uint8_t>(i));
+    }
+    bundle.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        oracle_ids, static_cast<uint16_t>(params.nOracleTotalOracles));
+    return bundle;
+}
 
 // ============================================================================
 // ERR Activation Tests (GREEN Phase)
@@ -269,42 +310,24 @@ BOOST_FIXTURE_TEST_CASE(err_adjusted_redemption_minimum_ratio, DigiDollarERRTest
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_sufficient_signatures, DigiDollarERRTestSetup)
 {
-    // Arrange: Create oracle bundle with 8 messages (sufficient — regtest needs 4-of-7)
-    COracleBundle bundle(1); // Epoch 1
+    const Consensus::Params& params = Params().GetConsensus();
+    const int required = params.nOracleConsensusRequired;
+    COracleBundle bundle = BuildCompleteMuSig2ERRBundle(required, params);
 
-    for (int i = 0; i < 8; i++) {
-        COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-        // In real implementation, would sign the message
-        msg.schnorr_sig = std::vector<unsigned char>(64, 0x01); // Mock signature
-        bundle.AddMessage(msg);
-    }
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, params);
 
-    // Act: Check oracle consensus (regtest 4-of-7, RC30 mainnet/testnet: 9-of-17)
-    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, Params().GetConsensus());
-
-    // Assert: GREEN phase - verify correct behavior
-    BOOST_CHECK(hasConsensus); // Should have consensus on regtest (4-of-7 satisfied)
+    BOOST_CHECK(hasConsensus);
 }
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_insufficient_signatures, DigiDollarERRTestSetup)
 {
     const Consensus::Params& params = Params().GetConsensus();
-    int required = params.nOracleRequiredMessages;
+    int required = params.nOracleConsensusRequired;
 
-    // Arrange: Create oracle bundle with fewer messages than required
-    COracleBundle bundle(1); // Epoch 1
+    COracleBundle bundle = BuildCompleteMuSig2ERRBundle(required - 1, params);
 
-    // Add (required - 1) messages — insufficient for consensus
-    for (int i = 0; i < required - 1; i++) {
-        COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-        msg.schnorr_sig = std::vector<unsigned char>(64, 0x01); // Mock signature
-        bundle.AddMessage(msg);
-    }
-
-    // Act: Check oracle consensus — should fail with fewer than required messages
     bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, params);
 
-    // Assert: Should NOT have consensus with insufficient messages
     BOOST_CHECK(!hasConsensus);
 }
 
@@ -325,19 +348,13 @@ BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_no_messages, DigiDollarERRTestSetup
 
 BOOST_FIXTURE_TEST_CASE(err_oracle_consensus_exactly_threshold, DigiDollarERRTestSetup)
 {
-    // Arrange: Create exactly 8 oracle messages (minimum threshold)
-    COracleBundle bundle(1); // Epoch 1
-    for (int i = 0; i < 8; i++) {
-        COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-        msg.schnorr_sig = std::vector<unsigned char>(64, 0x01); // Mock signature
-        bundle.AddMessage(msg);
-    }
+    const Consensus::Params& params = Params().GetConsensus();
+    const int required = params.nOracleConsensusRequired;
+    COracleBundle bundle = BuildCompleteMuSig2ERRBundle(required, params);
 
-    // Act: Check consensus at threshold
-    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, Params().GetConsensus());
+    bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(bundle, params);
 
-    // Assert: GREEN phase - verify correct behavior
-    BOOST_CHECK(hasConsensus); // Should have consensus at exactly 8/15
+    BOOST_CHECK(hasConsensus);
 }
 
 // ============================================================================
@@ -802,15 +819,14 @@ BOOST_FIXTURE_TEST_CASE(test_err_extreme_activation_scenarios, DigiDollarERRTest
         for (int health : unhealthyLevels) {
             validationContext.systemCollateral = health;
 
-            // Test with insufficient oracle messages
+            // Test with insufficient MuSig2 signers
             const Consensus::Params& cparams = Params().GetConsensus();
-            const int required = cparams.nOracleRequiredMessages;
-            COracleBundle insufficientBundle(1); // Epoch 1
+            const int required = cparams.nOracleConsensusRequired;
+            COracleBundle insufficientBundle = BuildCompleteMuSig2ERRBundle(required - 1, cparams);
             std::vector<COraclePriceMessage> insufficientMessages;
-            for (int i = 0; i < required - 1; i++) { // One fewer than required
+            for (int i = 0; i < required - 1; i++) {
                 COraclePriceMessage msg(i, mockOraclePrice, GetTime());
                 msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
-                insufficientBundle.AddMessage(msg);
                 insufficientMessages.push_back(msg);
             }
 
@@ -967,18 +983,20 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
 
     // Test 1: Massive oracle message handling
     {
-        COracleBundle largeBundle(1);
+        const Consensus::Params& params = Params().GetConsensus();
+        const int required = params.nOracleConsensusRequired;
+        COracleBundle largeBundle = BuildCompleteMuSig2ERRBundle(required, params);
 
-        // Add maximum number of oracle messages
+        // Still feed many legacy messages into the stress helper to prove it
+        // handles old/malformed input without granting V1 consensus.
         for (int i = 0; i < 100; ++i) { // More than the 15 expected oracles
             COraclePriceMessage msg(i, mockOraclePrice, GetTime());
             msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
             largeBundle.AddMessage(msg);
         }
 
-        // Should handle large number of messages gracefully
-        bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(largeBundle, Params().GetConsensus());
-        BOOST_CHECK(hasConsensus); // GREEN phase - has consensus (>= 8 messages)
+        bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(largeBundle, params);
+        BOOST_CHECK(hasConsensus);
 
         // Test large message handling - GREEN phase
         bool largeMessageHandling = DigiDollar::ERR::EmergencyRedemptionRatio::HandleLargeOracleMessageCount(largeBundle);
@@ -1012,7 +1030,7 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         }
 
         bool hasConsensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(malformedBundle, Params().GetConsensus());
-        BOOST_CHECK(hasConsensus); // GREEN phase - has >= 8 messages (consensus logic doesn't validate signatures here)
+        BOOST_CHECK(!hasConsensus);
 
         // Test malformed message handling - GREEN phase
         bool malformedHandling = DigiDollar::ERR::EmergencyRedemptionRatio::ValidateMalformedMessageHandling(malformedMessages);
@@ -1024,16 +1042,12 @@ BOOST_FIXTURE_TEST_CASE(test_err_oracle_consensus_stress, DigiDollarERRTestSetup
         // Measure time to process oracle consensus under load
         auto startTime = std::chrono::high_resolution_clock::now();
 
-        COracleBundle loadTestBundle(1); // Epoch 1
-        for (int i = 0; i < 15; ++i) {
-            COraclePriceMessage msg(i, mockOraclePrice, GetTime());
-            msg.schnorr_sig = std::vector<unsigned char>(64, 0x01);
-            loadTestBundle.AddMessage(msg);
-        }
+        const Consensus::Params& params = Params().GetConsensus();
+        COracleBundle loadTestBundle = BuildCompleteMuSig2ERRBundle(params.nOracleConsensusRequired, params);
 
         // Perform consensus check multiple times
         for (int i = 0; i < 100; ++i) {
-            bool consensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(loadTestBundle, Params().GetConsensus());
+            bool consensus = DigiDollar::ERR::EmergencyRedemptionRatio::HasOracleConsensus(loadTestBundle, params);
             (void)consensus; // Suppress unused variable warning
         }
 
@@ -1342,6 +1356,74 @@ BOOST_FIXTURE_TEST_CASE(bug7_err_healthy_system_no_err, DigiDollarERRTestSetup)
     DigiDollar::ERR::ERRState state = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
     BOOST_CHECK_MESSAGE(!state.isActive,
         "ERR should NOT be active with healthy system (150%)");
+}
+
+// ============================================================================
+// Wave 1 P0.2 ERR Red-Phase Coverage
+// ============================================================================
+
+BOOST_FIXTURE_TEST_CASE(wave1_valid_err_redemption_does_not_return_incomplete, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(90, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight, 10000, 90, Params());
+
+    const CTransaction tx = BuildWave1ERRRedemptionTx(testKey, 2, mockHeight - 1, 2 * COIN);
+    TxValidationState state;
+    const bool accepted = DigiDollar::ValidateERRRedemption(tx, ctx, state);
+
+    BOOST_CHECK_MESSAGE(accepted,
+        "valid ERR redemption rejected with reason=" << state.GetRejectReason());
+    BOOST_CHECK_NE(state.GetRejectReason(), "err-validation-incomplete");
+}
+
+BOOST_FIXTURE_TEST_CASE(wave1_err_requires_extra_burn_not_original_only, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(90, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight, 10000, 90, Params());
+
+    const CAmount original_dd = 10000;
+    const CAmount required_burn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(original_dd, 90);
+    BOOST_REQUIRE_GT(required_burn, original_dd);
+
+    const CTransaction original_only = BuildWave1ERRRedemptionTx(testKey, 1, mockHeight - 1, COIN);
+    const bool original_only_accepted =
+        DigiDollar::ERR::EmergencyRedemptionRatio::ValidateERRRedemption(original_only, original_dd, COIN);
+    BOOST_CHECK_MESSAGE(!original_only_accepted,
+        "ERR accepted original-only DD burn even though required burn is "
+        << required_burn << " cents for original " << original_dd << " cents");
+
+    const CTransaction required_extra = BuildWave1ERRRedemptionTx(testKey, 2, mockHeight - 1, 2 * COIN);
+    TxValidationState state;
+    const bool extra_burn_accepted = DigiDollar::ValidateERRRedemption(required_extra, ctx, state);
+    BOOST_CHECK_MESSAGE(extra_burn_accepted,
+        "ERR redemption with required extra burn rejected with reason=" << state.GetRejectReason());
+    BOOST_CHECK_NE(state.GetRejectReason(), "err-validation-incomplete");
+}
+
+BOOST_FIXTURE_TEST_CASE(wave1_err_before_timelock_fails, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(85, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight - 1, 10000, 85, Params());
+
+    const CTransaction tx = BuildWave1ERRRedemptionTx(testKey, 2, mockHeight, 2 * COIN);
+    TxValidationState state;
+    const bool accepted = DigiDollar::ValidateEmergencyRedemptionConditions(tx, ctx, state);
+
+    BOOST_CHECK(!accepted);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "err-timelock-active");
+}
+
+BOOST_FIXTURE_TEST_CASE(wave1_normal_redemption_blocked_while_err_active, DigiDollarERRTestSetup)
+{
+    DigiDollar::ERR::EmergencyRedemptionRatio::ReconstructERRState(85, mockHeight);
+    DigiDollar::ValidationContext ctx(mockHeight, 10000, 85, Params());
+
+    const CTransaction tx = BuildWave1ERRRedemptionTx(testKey, 1, mockHeight - 1, COIN);
+    TxValidationState state;
+    const bool accepted = DigiDollar::ValidateNormalRedemptionConditions(tx, ctx, state);
+
+    BOOST_CHECK(!accepted);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "redemption-err-active");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

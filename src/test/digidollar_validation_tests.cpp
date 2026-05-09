@@ -5,9 +5,11 @@
 #include <consensus/digidollar.h>
 #include <consensus/volatility.h>
 #include <consensus/err.h>
+#include <digidollar/health.h>
 #include <digidollar/validation.h>
 #include <digidollar/scripts.h>
 #include <digidollar/digidollar.h>
+#include <chainparams.h>
 #include <coins.h>
 #include <key.h>
 #include <pubkey.h>
@@ -39,10 +41,21 @@ struct DigiDollarValidationTestSetup : public TestingSetup {
         testPubKey = testKey.GetPubKey();
         testXOnlyKey = XOnlyPubKey(testPubKey);
 
-        // Clear volatility freeze state from previous tests
+        // Clear volatility state from previous tests
+        DigiDollar::Volatility::VolatilityMonitor::ClearHistory();
         DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+        DigiDollar::ERR::EmergencyRedemptionRatio::ResetForTesting();
+        DigiDollar::SystemHealthMonitor::ResetMetrics();
 
         // Validation context is initialized in member initializer list
+    }
+
+    ~DigiDollarValidationTestSetup()
+    {
+        DigiDollar::Volatility::VolatilityMonitor::ClearHistory();
+        DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+        DigiDollar::ERR::EmergencyRedemptionRatio::ResetForTesting();
+        DigiDollar::SystemHealthMonitor::ResetMetrics();
     }
 
     CKey testKey;
@@ -61,6 +74,18 @@ static CScript MakeDDOpReturnScript(int tx_type, const std::vector<CAmount>& amo
     for (const CAmount amount : amounts) {
         opReturn << CScriptNum(amount);
     }
+    return opReturn;
+}
+
+static CScript MakeLegacyDDOpReturnScript(CAmount amount)
+{
+    std::vector<unsigned char> amountBytes(8);
+    for (int i = 0; i < 8; ++i) {
+        amountBytes[i] = static_cast<unsigned char>((amount >> (i * 8)) & 0xff);
+    }
+
+    CScript opReturn;
+    opReturn << OP_RETURN << OP_DIGIDOLLAR << amountBytes;
     return opReturn;
 }
 
@@ -1890,38 +1915,47 @@ BOOST_FIXTURE_TEST_CASE(test_validate_redemption_fee_handling, DigiDollarValidat
 BOOST_FIXTURE_TEST_CASE(err_validation_blocks_normal_redemptions_during_err, DigiDollarValidationTestSetup)
 {
     // Arrange: System is unhealthy triggering ERR
-    validationContext.systemCollateral = 90; // 90% health triggers ERR
+    const CAmount originalDD = 10000;
+    const CAmount fullCollateralRelease = 100 * COIN;
+    validationContext.systemCollateral = 90; // 90% health triggers extra ERR burn
 
-    // Create normal redemption transaction
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3 in bits 24-31, marker=0x0770 in bits 0-15)
+    mtx.nLockTime = mockHeight - 1;
 
     // Add collateral and DD inputs
     mtx.vin.resize(2);
     mtx.vin[0].prevout = COutPoint(uint256S("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"), 0);
     mtx.vin[1].prevout = COutPoint(uint256S("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"), 0);
 
-    // Add DGB output (full collateral return - not ERR adjusted)
-    CAmount fullCollateralRelease = 100 * COIN;
     CPubKey ownerPubkey = testKey.GetPubKey();
     CTxDestination dest{WitnessV1Taproot(XOnlyPubKey(ownerPubkey))};
     mtx.vout.resize(1);
     mtx.vout[0] = CTxOut(fullCollateralRelease, GetScriptForDestination(dest));
 
+    DigiDollar::MintParams params;
+    params.ddAmount = originalDD;
+    params.lockHeight = mtx.nLockTime;
+    params.ownerKey = testXOnlyKey;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    coinsView.AddCoin(mtx.vin[0].prevout, Coin(CTxOut(fullCollateralRelease, DigiDollar::CreateCollateralP2TR(params)), mockHeight - 10, false), false);
+    coinsView.AddCoin(mtx.vin[1].prevout, Coin(CTxOut(0, DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, originalDD)), mockHeight - 10, false), false);
+
     CTransaction tx(mtx);
+    DigiDollar::ValidationContext ctxWithCoins(mockHeight, mockOraclePrice, 90, Params(), &coinsView);
     TxValidationState state;
 
-    // Act: Validate normal redemption during ERR - EXPECTED TO FAIL (RED phase)
-    bool result = DigiDollar::ValidateRedemptionTransaction(tx, validationContext, state);
+    // Burning only the original amount is insufficient during ERR; the redeemer
+    // must burn the health-adjusted amount and still waits for timelock expiry.
+    bool result = DigiDollar::ValidateRedemptionTransaction(tx, ctxWithCoins, state);
 
-    // Assert: Should fail in RED phase (not implemented)
     BOOST_CHECK(!result);
     BOOST_CHECK(!state.IsValid());
-
-    // After GREEN phase implementation:
-    // Normal redemptions should be blocked during ERR
-    // BOOST_CHECK(!result);
-    // BOOST_CHECK_EQUAL(state.GetRejectReason(), "normal-redemption-blocked-during-err");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-collateral-release-partial-burn");
 }
 
 BOOST_FIXTURE_TEST_CASE(err_validation_allows_err_redemptions_during_err, DigiDollarValidationTestSetup)
@@ -3130,6 +3164,75 @@ BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_utxo_valid, DigiDollarValidat
     BOOST_CHECK_MESSAGE(result, "Valid transfer should pass, got error: " + state.GetRejectReason());
 }
 
+BOOST_FIXTURE_TEST_CASE(transfer_rejects_noncanonical_taproot_like_output, DigiDollarValidationTestSetup)
+{
+    const CAmount ddAmount = 10000;
+    const CScript inputScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+
+    CScript malformedOutputScript;
+    malformedOutputScript << OP_1 << OP_DROP << OP_TRUE;
+    while (malformedOutputScript.size() < 34) {
+        malformedOutputScript << OP_NOP;
+    }
+    BOOST_REQUIRE_EQUAL(malformedOutputScript.size(), 34);
+    BOOST_REQUIRE_NE(malformedOutputScript[1], 32);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    const COutPoint prevOut(uint256S("cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"), 0);
+    coinsView.AddCoin(prevOut, Coin(CTxOut(0, inputScript), 500, false), false);
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;
+    mtx.vin.push_back(CTxIn(prevOut));
+    mtx.vout.push_back(CTxOut(0, malformedOutputScript));
+    mtx.vout.push_back(CTxOut(0, MakeDDOpReturnScript(2, {ddAmount})));
+
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView);
+    TxValidationState state;
+
+    const bool result = DigiDollar::ValidateTransferTransaction(CTransaction(mtx), ctxWithCoins, state);
+    BOOST_CHECK_MESSAGE(!result, "Transfer must reject non-canonical OP_1 scripts as DD outputs");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-dd-script");
+}
+
+BOOST_FIXTURE_TEST_CASE(transfer_rejects_unresolved_zero_value_input_when_other_input_resolves, DigiDollarValidationTestSetup)
+{
+    const CAmount ddAmount = 10000;
+
+    CScript knownInputScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+    CScript outputScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+
+    CScript unresolvedZeroValueP2TR;
+    unresolvedZeroValueP2TR << OP_1 << std::vector<unsigned char>(32, 0x42);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+
+    const COutPoint knownPrevOut(uint256S("abababababababababababababababababababababababababababababababab"), 0);
+    coinsView.AddCoin(knownPrevOut, Coin(CTxOut(0, knownInputScript), 500, false), false);
+
+    const COutPoint unresolvedPrevOut(uint256S("bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"), 0);
+    coinsView.AddCoin(unresolvedPrevOut, Coin(CTxOut(0, unresolvedZeroValueP2TR), 500, false), false);
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x02000770;
+    mtx.vin.push_back(CTxIn(knownPrevOut));
+    mtx.vin.push_back(CTxIn(unresolvedPrevOut));
+    mtx.vout.push_back(CTxOut(0, outputScript));
+    mtx.vout.push_back(CTxOut(0, MakeDDOpReturnScript(2, {ddAmount})));
+
+    auto noLookup = [](const uint256&, uint32_t, CTransactionRef&) { return false; };
+    DigiDollar::ValidationContext ctxWithCoins(1000, 500000, 150, Params(), &coinsView, false, noLookup);
+    TxValidationState state;
+
+    const bool result = DigiDollar::ValidateTransferTransaction(CTransaction(mtx), ctxWithCoins, state);
+    BOOST_CHECK_MESSAGE(!result,
+                        "DD transfer must reject any zero-value input whose DD amount cannot be resolved");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "dd-input-amounts-unknown");
+}
+
 BOOST_FIXTURE_TEST_CASE(transfer_rejects_first_opreturn_amount_spoof, DigiDollarValidationTestSetup)
 {
     const CAmount realAmount = 10000;
@@ -3197,6 +3300,60 @@ BOOST_FIXTURE_TEST_CASE(transfer_rejects_first_opreturn_amount_spoof, DigiDollar
     const bool inflatedAccepted = DigiDollar::ValidateTransferTransaction(CTransaction(inflatedTransfer), ctxWithLookup, inflatedState);
     BOOST_CHECK_MESSAGE(!inflatedAccepted,
                         "Follow-up transfer must not be able to spend 10000 cents as 50000 cents");
+}
+
+BOOST_FIXTURE_TEST_CASE(transfer_rejects_preactivation_dd_looking_source_utxo, DigiDollarValidationTestSetup)
+{
+    const auto testParams = CChainParams::TestNet();
+    const Consensus::Params& consensus = testParams->GetConsensus();
+    BOOST_REQUIRE_EQUAL(consensus.nDDActivationHeight, 600);
+
+    const CAmount ddAmount = 10000;
+    const uint32_t preActivationHeight = consensus.nDDActivationHeight - 1;
+    const int postActivationHeight = consensus.nDDActivationHeight + 1;
+
+    CKey sourceKey;
+    sourceKey.MakeNewKey(true);
+    CKey receiverKey;
+    receiverKey.MakeNewKey(true);
+
+    const CScript sourceScript = CScript() << OP_1 << ToByteVector(XOnlyPubKey(sourceKey.GetPubKey()));
+    const CScript receiverScript = CScript() << OP_1 << ToByteVector(XOnlyPubKey(receiverKey.GetPubKey()));
+
+    CMutableTransaction sourceMtx;
+    sourceMtx.nVersion = 0x02000770;
+    sourceMtx.vin.emplace_back(COutPoint(uint256::ONE, 0));
+    sourceMtx.vout.emplace_back(0, sourceScript);
+    sourceMtx.vout.emplace_back(0, MakeDDOpReturnScript(2, {ddAmount}));
+    const CTransactionRef sourceTx = MakeTransactionRef(sourceMtx);
+    const COutPoint sourceOut(sourceTx->GetHash(), 0);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    coinsView.AddCoin(sourceOut, Coin(sourceTx->vout[0], preActivationHeight, false), false);
+
+    auto lookupPreActivationSource = [sourceTx, preActivationHeight](const uint256& txid,
+                                                                     uint32_t coinHeight,
+                                                                     CTransactionRef& tx_out) {
+        if (txid != sourceTx->GetHash() || coinHeight != preActivationHeight) return false;
+        tx_out = sourceTx;
+        return true;
+    };
+
+    CMutableTransaction spendMtx;
+    spendMtx.nVersion = 0x02000770;
+    spendMtx.vin.emplace_back(sourceOut);
+    spendMtx.vout.emplace_back(0, receiverScript);
+    spendMtx.vout.emplace_back(0, MakeDDOpReturnScript(2, {ddAmount}));
+
+    DigiDollar::ValidationContext ctx(postActivationHeight, 500000, 150, *testParams,
+                                      &coinsView, false, lookupPreActivationSource);
+    TxValidationState state;
+    const bool accepted = DigiDollar::ValidateTransferTransaction(CTransaction(spendMtx), ctx, state);
+
+    BOOST_CHECK_MESSAGE(!accepted,
+        "Pre-activation DD-looking OP_RETURN data must not become spendable DD after activation");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "dd-input-before-activation");
 }
 
 BOOST_FIXTURE_TEST_CASE(bug8_transfer_conservation_nullptr_fallback, DigiDollarValidationTestSetup)
@@ -3291,6 +3448,153 @@ BOOST_FIXTURE_TEST_CASE(mint_accounting_extraction_allows_change_before_opreturn
     BOOST_CHECK_EQUAL(extractedCollateral, collateral);
 }
 
+BOOST_FIXTURE_TEST_CASE(mint_accounting_ignores_legacy_opreturn_spoof, DigiDollarValidationTestSetup)
+{
+    const CAmount ddAmount = 20000;
+    const CAmount spoofedDD = 10000;
+    const int64_t lockBlocks = DigiDollar::LockDaysToBlocks(30);
+    const int64_t lockHeight = mockHeight + lockBlocks;
+    const CAmount collateral = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, validationContext);
+    BOOST_REQUIRE_GT(collateral, 0);
+
+    DigiDollar::MintParams params;
+    params.ddAmount = ddAmount;
+    params.lockHeight = lockHeight;
+    params.ownerKey = testXOnlyKey;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    const CScript legacySpoof = MakeLegacyDDOpReturnScript(spoofedDD);
+    const CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+    const CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+    BOOST_REQUIRE(!collateralScript.empty());
+    BOOST_REQUIRE(!ddScript.empty());
+
+    CPubKey ownerPubKey = testKey.GetPubKey();
+    XOnlyPubKey ownerXOnly(ownerPubKey);
+    CScript modernOpReturn;
+    modernOpReturn << OP_RETURN
+                   << std::vector<unsigned char>{'D', 'D'}
+                   << CScriptNum(1)
+                   << CScriptNum(ddAmount)
+                   << CScriptNum(lockHeight)
+                   << CScriptNum(1)
+                   << std::vector<unsigned char>(ownerXOnly.begin(), ownerXOnly.end());
+
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770;
+    mtx.vin.push_back(CTxIn(COutPoint(uint256S("8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f"), 0)));
+    mtx.vout.push_back(CTxOut(0, legacySpoof));
+    mtx.vout.push_back(CTxOut(collateral, collateralScript));
+    mtx.vout.push_back(CTxOut(0, ddScript));
+    mtx.vout.push_back(CTxOut(0, modernOpReturn));
+    const CTransaction tx(mtx);
+
+    TxValidationState state;
+    BOOST_REQUIRE_MESSAGE(DigiDollar::ValidateMintTransaction(tx, validationContext, state),
+                          "legacy spoof must not make an otherwise valid mint fail validation: " + state.GetRejectReason());
+
+    CAmount extractedDD = 0;
+    CAmount extractedCollateral = 0;
+    BOOST_REQUIRE(DigiDollar::ExtractMintAccountingAmounts(tx, extractedDD, extractedCollateral));
+    BOOST_CHECK_EQUAL(extractedDD, ddAmount);
+    BOOST_CHECK_EQUAL(extractedCollateral, collateral);
+}
+
+BOOST_FIXTURE_TEST_CASE(redemption_uses_authoritative_mint_amount_before_script_metadata, DigiDollarValidationTestSetup)
+{
+    const CAmount originalDD = 50000;
+    const CAmount poisonedDD = 10000;
+    const int64_t lockBlocks = DigiDollar::LockDaysToBlocks(30);
+    const int64_t lockHeight = mockHeight + lockBlocks;
+    const CAmount lockedCollateral = DigiDollar::CalculateRequiredCollateral(originalDD, lockBlocks, validationContext);
+    BOOST_REQUIRE_GT(lockedCollateral, 0);
+
+    DigiDollar::MintParams originalParams;
+    originalParams.ddAmount = originalDD;
+    originalParams.lockHeight = lockHeight;
+    originalParams.ownerKey = testXOnlyKey;
+    originalParams.internalKey = DigiDollar::GetCollateralNUMSKey();
+    originalParams.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    const CScript collateralScript = DigiDollar::CreateCollateralP2TR(originalParams);
+    BOOST_REQUIRE(!collateralScript.empty());
+
+    CScript mintOpReturn;
+    mintOpReturn << OP_RETURN
+                 << std::vector<unsigned char>{'D', 'D'}
+                 << CScriptNum(1)
+                 << CScriptNum(originalDD)
+                 << CScriptNum(lockHeight)
+                 << CScriptNum(1)
+                 << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
+
+    CMutableTransaction originalMint;
+    originalMint.nVersion = 0x01000770;
+    originalMint.vin.push_back(CTxIn(COutPoint(uint256S("cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"), 0)));
+    originalMint.vout.push_back(CTxOut(lockedCollateral, collateralScript));
+    originalMint.vout.push_back(CTxOut(0, DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, originalDD)));
+    originalMint.vout.push_back(CTxOut(0, mintOpReturn));
+    const CTransaction originalMintTx(originalMint);
+
+    CScript poisonedMintOpReturn;
+    poisonedMintOpReturn << OP_RETURN
+                         << std::vector<unsigned char>{'D', 'D'}
+                         << CScriptNum(1)
+                         << CScriptNum(poisonedDD)
+                         << CScriptNum(lockHeight)
+                         << CScriptNum(1)
+                         << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
+
+    CMutableTransaction poisonedMint;
+    poisonedMint.nVersion = 0x01000770;
+    poisonedMint.vin.push_back(CTxIn(COutPoint(uint256S("dededededededededededededededededededededededededededededededede"), 0)));
+    poisonedMint.vout.push_back(CTxOut(546, collateralScript));
+    poisonedMint.vout.push_back(CTxOut(0, DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, poisonedDD)));
+    poisonedMint.vout.push_back(CTxOut(0, poisonedMintOpReturn));
+
+    TxValidationState poisonedState;
+    BOOST_CHECK_MESSAGE(!DigiDollar::ValidateMintTransaction(CTransaction(poisonedMint), validationContext, poisonedState),
+                        "poison mint must be rejected but must not affect later redemption accounting");
+    BOOST_CHECK_EQUAL(poisonedState.GetRejectReason(), "bad-collateral-nums-mismatch");
+
+    DigiDollar::ScriptMetadata poisonedMetadata;
+    BOOST_REQUIRE(DigiDollar::GetScriptMetadata(collateralScript, poisonedMetadata));
+    BOOST_REQUIRE_EQUAL(poisonedMetadata.ddAmount, originalDD);
+
+    CCoinsView baseView;
+    CCoinsViewCache coinsView(&baseView);
+    const COutPoint collateralOut(originalMintTx.GetHash(), 0);
+    coinsView.AddCoin(collateralOut, Coin(CTxOut(lockedCollateral, collateralScript), 500, false), false);
+
+    const CScript burnScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, poisonedDD);
+    const COutPoint ddBurnOut(uint256S("efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"), 0);
+    coinsView.AddCoin(ddBurnOut, Coin(CTxOut(0, burnScript), 500, false), false);
+
+    CMutableTransaction redeem;
+    redeem.nVersion = 0x03000770;
+    redeem.nLockTime = lockHeight;
+    redeem.vin.push_back(CTxIn(collateralOut));
+    redeem.vin.push_back(CTxIn(ddBurnOut));
+    redeem.vout.push_back(CTxOut(lockedCollateral, GetScriptForDestination(PKHash(testPubKey))));
+    redeem.vout.push_back(CTxOut(0, MakeDDOpReturnScript(3, {poisonedDD})));
+
+    auto lookupOriginalMint = [mintRef = MakeTransactionRef(originalMintTx)](const uint256& txid,
+                                                                            uint32_t coinHeight,
+                                                                            CTransactionRef& tx_out) {
+        if (coinHeight != 500 || txid != mintRef->GetHash()) return false;
+        tx_out = mintRef;
+        return true;
+    };
+
+    DigiDollar::ValidationContext ctxWithLookup(lockHeight + 1, 500000, 150, Params(), &coinsView, false, lookupOriginalMint);
+    TxValidationState redeemState;
+    const bool redeemAccepted = DigiDollar::ValidateRedemptionTransaction(CTransaction(redeem), ctxWithLookup, redeemState);
+    BOOST_CHECK_MESSAGE(!redeemAccepted,
+                        "redemption must require burning the original mint amount from the creating transaction, not poisoned script metadata");
+    BOOST_CHECK_EQUAL(redeemState.GetRejectReason(), "bad-collateral-release-partial-burn");
+}
+
 // ============================================================================
 // Bug #4: Collateral Release Validation Tests
 // ============================================================================
@@ -3338,6 +3642,7 @@ BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_excessive, DigiDollarValidationT
     // Build redemption tx: burn all DD, try to release 300 DGB (too much!)
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770; // DD_TX_REDEEM (type=3)
+    mtx.nLockTime = params.lockHeight;
 
     // Input 0: collateral
     mtx.vin.push_back(CTxIn(collOutpoint));
@@ -3396,6 +3701,7 @@ BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_valid, DigiDollarValidationTestS
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770; // DD_TX_REDEEM
+    mtx.nLockTime = params.lockHeight;
 
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(ddOutpoint));
@@ -3452,6 +3758,7 @@ BOOST_FIXTURE_TEST_CASE(bug4_collateral_release_partial, DigiDollarValidationTes
 
     CMutableTransaction mtx;
     mtx.nVersion = 0x03000770;
+    mtx.nLockTime = params.lockHeight;
 
     mtx.vin.push_back(CTxIn(collOutpoint));
     mtx.vin.push_back(CTxIn(ddOutpoint));

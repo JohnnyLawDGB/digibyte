@@ -296,6 +296,7 @@ public:
      */
     bool IsDDOutputMine(const CTxOut& txout, const uint256& txid) const;
     bool IsMyDDAddress(const std::string& addrStr) const;
+    std::vector<std::string> GetKnownDDAddresses() const;
 
     /**
      * Check if a DD output belongs to this wallet using COutPoint
@@ -382,6 +383,15 @@ public:
     size_t ValidatePositionStates();
 
     /**
+     * Reconcile cached collateral-position active flags against chainstate.
+     *
+     * This lightweight wrapper is safe for RPC/Qt/read paths that need a
+     * current position view without forcing a full wallet DD UTXO rescan.
+     * @return Number of positions corrected
+     */
+    size_t ReconcilePositionStates();
+
+    /**
      * Process a single transaction for DD UTXOs (incremental update)
      * Called during block processing - much faster than full rescan
      * @param tx Transaction to process
@@ -405,10 +415,11 @@ public:
     std::vector<WalletCollateralPosition> GetDDTimeLocks(bool active_only = true) const;
 
     /**
-     * Get all spendable DigiDollar UTXOs from active DDTimeLocks
+     * Get tracked DigiDollar UTXOs. By default this returns spendable confirmed
+     * DD UTXOs; read-only display code may opt in to include pending outputs.
      * @return Vector of DD UTXOs (output index 1 of each DDTimeLock)
      */
-    std::vector<DDUtxo> GetDDUTXOs() const;
+    std::vector<DDUtxo> GetDDUTXOs(bool include_unconfirmed = false) const;
 
     /**
      * Get DD amount from UTXO using DDTimeLock cache
@@ -459,7 +470,7 @@ public:
     /**
      * Create mint transaction using transaction builders
      * @param dd_amount Amount of DD to mint (in cents)
-     * @param lock_tier Lock tier (1-9)
+     * @param lock_tier Lock tier (0-9)
      * @param tx_out Output transaction reference
      * @return true if transaction created successfully
      */

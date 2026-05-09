@@ -289,6 +289,15 @@ util::Result<PreSelectedInputs> FetchSelectedInputs(const CWallet& wallet, const
             // selection path at AvailableCoins still filters locked
             // outputs via params.skip_locked=true.
             txout = ptr_wtx->tx->vout.at(outpoint.n);
+            if (IsDigiDollarTransaction(*ptr_wtx->tx)) {
+                const DigiDollarTxType dd_type = GetDigiDollarTxType(*ptr_wtx->tx);
+                if (dd_type == DD_TX_MINT && outpoint.n < 3) {
+                    return util::Error{strprintf(_("Pre-selected input %s is a DigiDollar mint collateral/token/metadata output; use DigiDollar transfer or redeem RPCs"), outpoint.ToString())};
+                }
+                if ((dd_type == DD_TX_TRANSFER || dd_type == DD_TX_REDEEM) && txout.nValue == 0) {
+                    return util::Error{strprintf(_("Pre-selected input %s is a DigiDollar token/metadata output; use DigiDollar transfer or redeem RPCs"), outpoint.ToString())};
+                }
+            }
             input_bytes = CalculateMaximumSignedInputSize(txout, &wallet, &coin_control);
         } else {
             // The input is external. We did not find the tx in mapWallet.

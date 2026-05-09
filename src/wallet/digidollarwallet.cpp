@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <limits>
 #include <regex>
+#include <set>
 
 // CDigiDollarAddress is defined in base58.h - no need to redefine
 
@@ -494,8 +495,12 @@ size_t DigiDollarWallet::LoadDDAddressKeys()
                 CPrivKey privkey;
                 value_stream >> privkey;
 
+                std::array<unsigned char, CPubKey::COMPRESSED_SIZE> compressed_dummy{};
+                compressed_dummy[0] = 0x02;
+                CPubKey dummy_pubkey(compressed_dummy.begin(), compressed_dummy.end());
+
                 CKey key;
-                if (key.Load(privkey, CPubKey(), /*fSkipCheck=*/true)) {
+                if (key.Load(privkey, dummy_pubkey, /*fSkipCheck=*/true)) {
                     dd_address_keys[output_key_bytes] = key;
                     count++;
 
@@ -783,6 +788,38 @@ bool DigiDollarWallet::IsMyDDAddress(const std::string& addrStr) const
     return false;
 }
 
+std::vector<std::string> DigiDollarWallet::GetKnownDDAddresses() const
+{
+    LOCK(cs_dd_wallet);
+    std::set<std::string> addresses;
+
+    for (const auto& [addr, balance] : dd_balances) {
+        if (addr == "total" || addr.rfind("test_addr_", 0) == 0) continue;
+        CDigiDollarAddress dd_addr(addr);
+        if (dd_addr.IsValid()) {
+            addresses.insert(addr);
+        }
+    }
+
+    auto add_output_key = [&addresses](const std::array<unsigned char, 32>& key_bytes) {
+        XOnlyPubKey output_key(Span<const unsigned char>(key_bytes.data(), key_bytes.size()));
+        if (!output_key.IsFullyValid()) return;
+        const std::string addr = EncodeDigiDollarAddress(WitnessV1Taproot(output_key));
+        if (!addr.empty()) {
+            addresses.insert(addr);
+        }
+    };
+
+    for (const auto& [key_bytes, key] : dd_address_keys) {
+        add_output_key(key_bytes);
+    }
+    for (const auto& [key_bytes, key] : dd_crypted_address_keys) {
+        add_output_key(key_bytes);
+    }
+
+    return {addresses.begin(), addresses.end()};
+}
+
 void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
 {
     LOCK(cs_dd_wallet);
@@ -868,8 +905,12 @@ size_t DigiDollarWallet::LoadDDOwnerKeys()
                 CPrivKey privkey;
                 value_stream >> privkey;
 
+                std::array<unsigned char, CPubKey::COMPRESSED_SIZE> compressed_dummy{};
+                compressed_dummy[0] = 0x02;
+                CPubKey dummy_pubkey(compressed_dummy.begin(), compressed_dummy.end());
+
                 CKey key;
-                if (key.Load(privkey, CPubKey(), /*fSkipCheck=*/true)) {
+                if (key.Load(privkey, dummy_pubkey, /*fSkipCheck=*/true)) {
                     dd_owner_keys[dd_timelock_id] = key;
                     count++;
 
@@ -1145,6 +1186,11 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
 
     try {
         LogPrintf("DigiDollar: Starting multi-recipient transfer - %zu recipients\n", recipients.size());
+        if (!m_wallet || m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+            error = "DigiDollar send requires a wallet with private keys enabled";
+            LogPrintf("DigiDollar: Transfer blocked because wallet cannot sign DD spends\n");
+            return false;
+        }
 
         if (recipients.empty()) {
             error = "No recipients specified";
@@ -1978,7 +2024,8 @@ bool DigiDollarWallet::ExtractTierFromOpReturn(const CTransaction& tx, uint32_t&
     // Parse OP_RETURN output to extract lock tier (only for new MINT transactions)
     // New format: OP_RETURN <"DD"> <1> <dd_amount> <unlock_height> <lock_tier>
     // Old format: OP_RETURN <"DD"> <1> <dd_amount> <unlock_height>
-    // Returns false for old transactions without explicit tier (caller should use DeriveLockTierFromHeight)
+    // Returns false for old transactions without explicit tier. V1 wallet
+    // position reconstruction does not fall back to height-derived tiers.
 
     for (const CTxOut& txout : tx.vout) {
         if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
@@ -2044,11 +2091,12 @@ bool DigiDollarWallet::ExtractTierFromOpReturn(const CTransaction& tx, uint32_t&
 
 uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t unlock_height)
 {
-    // DEPRECATED: This function is only for diagnostic/validation purposes.
-    // New MINT transactions store the tier explicitly in OP_RETURN.
-    // Use ExtractTierFromOpReturn() for position reconstruction.
+    // DEPRECATED: This legacy height-threshold helper is retained only for
+    // old diagnostics/tests. New MINT transactions store the tier explicitly
+    // in OP_RETURN; use ExtractTierFromOpReturn() for V1 position reconstruction.
+    // The explicit OP_RETURN tier is authoritative for the full 0..9 canonical set.
     //
-    // Lock tiers (must match consensus/digidollar.h collateralRatios):
+    // Legacy thresholds:
     //   Tier 0:  1 hour  =     240 blocks (testing only)
     //   Tier 1: 30 days  = 172,800 blocks
     //   Tier 2: 90 days  = 518,400 blocks (3 months)
@@ -3527,7 +3575,7 @@ std::vector<WalletCollateralPosition> DigiDollarWallet::GetDDTimeLocks(bool acti
     }
 }
 
-std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
+std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs(bool include_unconfirmed) const {
     auto locks = LockDDWallet();
     std::vector<DDUtxo> utxos;
 
@@ -3542,9 +3590,9 @@ std::vector<DDUtxo> DigiDollarWallet::GetDDUTXOs() const {
             continue; // Skip spent
         }
 
-        // Only confirmed DD UTXOs may be selected. Trusted unconfirmed DD
-        // change is intentionally excluded to prevent DD mempool chains.
-        if (m_wallet) {
+        // Only confirmed DD UTXOs may be selected. Read-only balance display
+        // can opt in to include pending UTXOs without making them spendable.
+        if (m_wallet && !include_unconfirmed) {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
             if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) < 1) {
@@ -3976,11 +4024,13 @@ size_t DigiDollarWallet::ValidatePositionStates()
             continue;
         }
 
-        if (coin.IsSpent()) {
-            // Collateral is NOT in the UTXO set → position was redeemed
+        const bool wallet_spent = m_wallet->IsSpent(collateral_outpoint);
+        if (coin.IsSpent() || wallet_spent) {
+            // Collateral is NOT in the UTXO set or is reserved by a wallet
+            // mempool spend, so the position is not currently spendable.
             if (it->second.is_active) {
                 it->second.is_active = false;
-                LogPrintf("DigiDollar: ValidatePositionStates - Position %s collateral not in UTXO set, marking inactive\n",
+                LogPrintf("DigiDollar: ValidatePositionStates - Position %s collateral spent or pending spend, marking inactive\n",
                           id.GetHex());
 
                 // Persist to database
@@ -3998,6 +4048,79 @@ size_t DigiDollarWallet::ValidatePositionStates()
             wallet::WalletBatch batch(m_wallet->GetDatabase());
             batch.WriteDDTimeLock(it->second);
             ++corrected;
+        }
+    }
+
+    return corrected;
+}
+
+size_t DigiDollarWallet::ReconcilePositionStates()
+{
+    if (!m_wallet) {
+        LogPrintf("DigiDollar: ReconcilePositionStates - no wallet pointer\n");
+        return 0;
+    }
+
+    std::map<COutPoint, Coin> coins_to_check;
+    std::vector<uint256> position_ids;
+    {
+        auto locks = LockDDWallet();
+        for (const auto& [id, pos] : collateral_positions) {
+            if (pos.dgb_collateral > 0) {
+                const COutPoint collateral_outpoint(pos.dd_timelock_id, 0);
+                coins_to_check[collateral_outpoint] = Coin();
+                position_ids.push_back(id);
+            }
+        }
+    }
+
+    if (position_ids.empty()) {
+        return 0;
+    }
+
+    if (!m_wallet->chain().isReadyToBroadcast()) {
+        LogPrintf("DigiDollar: ReconcilePositionStates skipped while chainstate is not ready\n");
+        return 0;
+    }
+
+    LogPrintf("DigiDollar: ReconcilePositionStates checking %zu collateral positions against UTXO set\n",
+              position_ids.size());
+
+    // Do not hold cs_wallet/cs_dd_wallet while entering node::FindCoins; it
+    // takes cs_main and mempool locks and debug builds abort on the inverted
+    // wallet->chain lock order. Re-lock below only to apply/persist changes.
+    m_wallet->chain().findCoins(coins_to_check);
+
+    size_t corrected = 0;
+    {
+        auto locks = LockDDWallet();
+        for (const auto& id : position_ids) {
+            auto it = collateral_positions.find(id);
+            if (it == collateral_positions.end()) {
+                continue;
+            }
+
+            const COutPoint collateral_outpoint(it->second.dd_timelock_id, 0);
+            auto coin_it = coins_to_check.find(collateral_outpoint);
+            const bool coin_spent = coin_it == coins_to_check.end() || coin_it->second.IsSpent();
+            const bool wallet_spent = m_wallet->IsSpent(collateral_outpoint);
+            if (coin_spent || wallet_spent) {
+                if (it->second.is_active) {
+                    it->second.is_active = false;
+                    LogPrintf("DigiDollar: ReconcilePositionStates - Position %s collateral spent or pending spend, marking inactive\n",
+                              id.GetHex());
+                    wallet::WalletBatch batch(m_wallet->GetDatabase());
+                    batch.WriteDDTimeLock(it->second);
+                    ++corrected;
+                }
+            } else if (!it->second.is_active) {
+                it->second.is_active = true;
+                LogPrintf("DigiDollar: ReconcilePositionStates - Position %s collateral is live, marking active\n",
+                          id.GetHex());
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.WriteDDTimeLock(it->second);
+                ++corrected;
+            }
         }
     }
 
@@ -4188,6 +4311,10 @@ bool DigiDollarWallet::MintDigiDollar(const CAmount& dd_amount, uint32_t lock_ti
     auto locks = LockDDWallet();
     try {
         LogPrintf("DigiDollar: MintDigiDollar called - amount: %lld, tier: %u\n", static_cast<long long>(dd_amount), lock_tier);
+        if (!m_wallet || m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+            LogPrintf("DigiDollar: MintDigiDollar blocked because wallet cannot sign DD mints\n");
+            return false;
+        }
 
         // RED phase implementation - validation only
         if (!ValidateMintParams(dd_amount, lock_tier)) {
@@ -4259,6 +4386,10 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
     auto locks = LockDDWallet();
     try {
         LogPrintf("DigiDollar: TransferDigiDollar called - to: %s, amount: %lld\n", to.ToString(), static_cast<long long>(amount));
+        if (!m_wallet || m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+            LogPrintf("DigiDollar: TransferDigiDollar blocked because wallet cannot sign DD spends\n");
+            return false;
+        }
 
         // Validate transfer parameters
         if (!ValidateTransferParams(to, amount)) {
@@ -4636,6 +4767,12 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
     auto locks = LockDDWallet();
     try {
         LogPrintf("DigiDollar: RedeemDigiDollar called - position: %s, amount: %lld\n", dd_timelock_id.ToString(), static_cast<long long>(amount));
+        if (!m_wallet || m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+            LogPrintf("DigiDollar: RedeemDigiDollar blocked because wallet cannot sign DD redemptions\n");
+            return false;
+        }
+
+        ValidatePositionStates();
 
         // Validation
         if (!ValidateRedeemParams(dd_timelock_id, amount)) {
@@ -5027,11 +5164,12 @@ void DigiDollarWallet::ClearWalletData() {
     total_dd_balance = 0;
     locked_collateral = 0;
 
-    // FIX #1: Also clear DD UTXO tracking map
     dd_utxos.clear();
 
-    // FIX #2: Clear owner keys map
     dd_owner_keys.clear();
+    dd_address_keys.clear();
+    dd_crypted_owner_keys.clear();
+    dd_crypted_address_keys.clear();
 
     // Also clear legacy mock data
     ClearMockData();
@@ -5336,6 +5474,10 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
     auto locks = LockDDWallet();
     if (!m_wallet) {
         LogPrintf("DigiDollar: SignDDInputs - No wallet available\n");
+        return false;
+    }
+    if (m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        LogPrintf("DigiDollar: SignDDInputs - Private keys are disabled for this wallet\n");
         return false;
     }
 
@@ -5972,6 +6114,10 @@ bool DigiDollarWallet::SignFeeInputs(CMutableTransaction& tx,
         LogPrintf("DigiDollar: SignFeeInputs - No wallet available (test mode)\n");
         return false; // Can't sign without wallet
     }
+    if (m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        LogPrintf("DigiDollar: SignFeeInputs - Private keys are disabled for this wallet\n");
+        return false;
+    }
 
     // Fee inputs come after DD inputs in the transaction
     size_t fee_input_start = dd_input_count;
@@ -6113,6 +6259,10 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
 
     if (!m_wallet) {
         LogPrintf("DigiDollar: SignRedemptionTransaction - No wallet available\n");
+        return false;
+    }
+    if (m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Private keys are disabled for this wallet\n");
         return false;
     }
 
@@ -7163,13 +7313,47 @@ bool DigiDollarWallet::ProcessIncomingDDTransaction(const CTransactionRef& tx) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessIncomingDDTransaction - no wallet pointer\n");
         return false;
     }
-    if (GetDigiDollarTxType(*tx) == DD_TX_NONE) {
+    const DigiDollarTxType tx_type = GetDigiDollarTxType(*tx);
+    if (tx_type == DD_TX_NONE) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessIncomingDDTransaction - not a DigiDollar versioned transaction\n");
         return true;
     }
 
     LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessIncomingDDTransaction - Processing tx %s\n",
              tx->GetHash().ToString());
+
+    if (tx_type == DD_TX_REDEEM) {
+        bool position_updated = false;
+        for (const CTxIn& txin : tx->vin) {
+            if (txin.prevout.n != 0) continue;
+
+            auto it = collateral_positions.find(txin.prevout.hash);
+            if (it == collateral_positions.end() || !it->second.is_active) continue;
+
+            it->second.is_active = false;
+            position_updated = true;
+            if (m_wallet) {
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.WriteDDTimeLock(it->second);
+            }
+            LogPrintf("DigiDollar: Pending redeem %s deactivated position %s\n",
+                      tx->GetHash().ToString(), txin.prevout.hash.ToString());
+        }
+
+        if (position_updated) {
+            CAmount total_locked = 0;
+            for (const auto& [id, pos] : collateral_positions) {
+                if (pos.is_active) {
+                    total_locked += pos.dgb_collateral;
+                }
+            }
+            locked_collateral = total_locked;
+            if (m_wallet) {
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.WriteDDMetadata("locked_collateral", std::to_string(total_locked));
+            }
+        }
+    }
 
     // Task 6.1: Detect incoming DD outputs
     std::vector<std::pair<uint32_t, CAmount>> our_dd_outputs;
@@ -7216,8 +7400,17 @@ int GetLockDaysForTier(uint32_t tier) {
     // Tier 0: 1 hour, Tier 1: 30 days, Tier 2: 90 days, Tier 3: 180 days,
     // Tier 4: 1 year, Tier 5: 2 years, Tier 6: 3 years, Tier 7: 5 years,
     // Tier 8: 7 years, Tier 9: 10 years
+    //
+    // DD-FA-FUNC-026 (Wave 17 Agent A): tier 0 returns 0 to match the
+    // RPC-side helper at src/rpc/digidollar.cpp:64. The consensus
+    // converter `DigiDollar::LockDaysToBlocks` treats days==0 as the
+    // canonical 1-hour testing tier and emits 240 blocks. Returning 1
+    // here previously emitted 5760 blocks (1 day) and was rejected by
+    // consensus with `bad-mint-lock-tier-duration` if the helper ever
+    // leaked into a tx-builder path. Pinned by
+    // wallet/test/digidollar_wave17_helper_asymmetry_tests.cpp.
     switch (tier) {
-        case 0: return 1;     // 1 hour (special case, handled separately as 240 blocks)
+        case 0: return 0;     // 1 hour testing tier; LockDaysToBlocks(0) = 240
         case 1: return 30;    // 30 days
         case 2: return 90;    // 90 days (3 months)
         case 3: return 180;   // 180 days (6 months)

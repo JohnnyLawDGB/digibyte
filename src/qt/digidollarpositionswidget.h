@@ -83,7 +83,9 @@ private:
     void loadPositionsFromWallet();
     void applyTheme();
     void addPositionToTable(const DigiDollarPosition& position, int row);
-    QPushButton* createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem);
+    // Wallet-state badges keep matured vaults from looking redeemable when
+    // this wallet cannot currently sign.
+    QPushButton* createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked);
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;

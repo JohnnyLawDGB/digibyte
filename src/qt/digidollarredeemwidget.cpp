@@ -13,6 +13,7 @@
 #include <wallet/ddcoincontrol.h>
 #include <wallet/digidollarwallet.h>
 #include <consensus/amount.h>
+#include <consensus/err.h>
 #include <univalue.h>
 #include <logging.h>
 
@@ -33,6 +34,43 @@
 #include <QApplication>
 #include <QPalette>
 #include <QTimer>
+
+namespace {
+
+double CalculateRequiredDDBurnDisplayAmount(double original_dd, int system_health)
+{
+    if (system_health >= 100) return original_dd;
+
+    const CAmount original_cents = static_cast<CAmount>(std::llround(original_dd * 100.0));
+    const CAmount required_cents = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(
+        original_cents, system_health);
+    return static_cast<double>(required_cents) / 100.0;
+}
+
+// DD-FA-FUNC-030 (Wave 19): Redeem widget originally rendered the lock tier as
+// "Tier 1" / "Tier 9", which prevents users from cross-checking the redemption
+// confirmation against the human-readable label they originally selected at
+// mint time ("30 days", "10 years"). The string set below MUST stay in sync
+// with `digidollarmintwidget.cpp::getLockTierDisplayName` and the positions
+// widget's `lockPeriodName` switch.
+QString FormatLockTierLabelForRedeem(int tier)
+{
+    switch (tier) {
+        case 0: return QObject::tr("1 hour");
+        case 1: return QObject::tr("30 days");
+        case 2: return QObject::tr("3 months");
+        case 3: return QObject::tr("6 months");
+        case 4: return QObject::tr("1 year");
+        case 5: return QObject::tr("2 years");
+        case 6: return QObject::tr("3 years");
+        case 7: return QObject::tr("5 years");
+        case 8: return QObject::tr("7 years");
+        case 9: return QObject::tr("10 years");
+        default: return QObject::tr("Unknown tier %1").arg(tier);
+    }
+}
+
+} // namespace
 
 DigiDollarRedeemWidget::DigiDollarRedeemWidget(QWidget *parent) :
     QWidget(parent),
@@ -285,6 +323,7 @@ void DigiDollarRedeemWidget::setupPositionInfoSection()
     // Lock Tier
     m_lockTierLabel = new QLabel(tr("Lock Tier:"), this);
     m_lockTierValue = new QLabel("N/A", this);
+    m_lockTierValue->setObjectName("lockTierValue");
     m_lockTierValue->setFont(monospaceFont);
     m_positionInfoLayout->addWidget(m_lockTierLabel, 3, 0);
     m_positionInfoLayout->addWidget(m_lockTierValue, 3, 1);
@@ -506,23 +545,10 @@ void DigiDollarRedeemWidget::onRedeemClicked()
 
             // If system health < 100%, ERR is active and we need MORE DD to redeem
             if (systemHealth < 100) {
-                // Calculate ERR adjustment ratio
-                double errRatio = 1.0;
-                if (systemHealth >= 95) {
-                    errRatio = 0.95;
-                } else if (systemHealth >= 90) {
-                    errRatio = 0.90;
-                } else if (systemHealth >= 85) {
-                    errRatio = 0.85;
-                } else {
-                    errRatio = 0.80; // Maximum multiplier
-                }
+                requiredDDBurn = CalculateRequiredDDBurnDisplayAmount(m_positionDDMinted, systemHealth);
 
-                // Required DD = Original DD / ERR ratio (e.g., 100 / 0.80 = 125 DD)
-                requiredDDBurn = m_positionDDMinted / errRatio;
-
-                LogPrintf("DigiDollar Qt: ERR active (health: %d%%), required DD burn: %.8f (ratio: %.2f)\n",
-                         systemHealth, requiredDDBurn, errRatio);
+                LogPrintf("DigiDollar Qt: ERR active (health: %d%%), required DD burn: %.8f\n",
+                         systemHealth, requiredDDBurn);
             }
         }
     } catch (const UniValue& objError) {
@@ -732,14 +758,14 @@ void DigiDollarRedeemWidget::updatePositionInfo()
         if (m_privacy) {
             m_ddMintedValue->setText(maskValue(formatDDAmount(0)));
             m_dgbCollateralValue->setText(maskValue(formatDGBAmount(0)));
-            m_lockTierValue->setText(QString("Tier %1").arg(m_positionLockTier)); // Tier is not sensitive
+            m_lockTierValue->setText(FormatLockTierLabelForRedeem(m_positionLockTier)); // Tier is not sensitive
             m_timeRemainingValue->setText(formatBlockTime(m_positionBlocksRemaining)); // Time is not sensitive
             m_healthStatusValue->setText(QString("%1%").arg(QString::number(m_positionHealth, 'f', 1))); // Health is not sensitive
             m_redeemableValue->setText(maskValue(formatDDAmount(0)));
         } else {
             m_ddMintedValue->setText(formatDDAmount(m_positionDDMinted));
             m_dgbCollateralValue->setText(formatDGBAmount(m_positionDGBCollateral));
-            m_lockTierValue->setText(QString("Tier %1").arg(m_positionLockTier));
+            m_lockTierValue->setText(FormatLockTierLabelForRedeem(m_positionLockTier));
             m_timeRemainingValue->setText(formatBlockTime(m_positionBlocksRemaining));
             m_healthStatusValue->setText(QString("%1%").arg(QString::number(m_positionHealth, 'f', 1)));
             m_redeemableValue->setText(formatDDAmount(m_redeemableAmount));
@@ -792,6 +818,12 @@ void DigiDollarRedeemWidget::loadPositionDetails()
     auto loadPositionFromWallet = [&]() -> bool {
         DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
         if (!ddWallet) return false;
+        const bool walletCannotSign =
+            m_walletModel->wallet().privateKeysDisabled() ||
+            m_walletModel->getEncryptionStatus() == WalletModel::Locked;
+        if (!walletCannotSign) {
+            ddWallet->ReconcilePositionStates();
+        }
 
         const int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
         for (const auto& pos : ddWallet->GetDDTimeLocks(false)) {
@@ -942,20 +974,7 @@ bool DigiDollarRedeemWidget::validateDDBalance() const
 
             // If system health < 100%, ERR is active and we need MORE DD to redeem
             if (systemHealth < 100) {
-                // Calculate ERR adjustment ratio
-                double errRatio = 1.0;
-                if (systemHealth >= 95) {
-                    errRatio = 0.95;
-                } else if (systemHealth >= 90) {
-                    errRatio = 0.90;
-                } else if (systemHealth >= 85) {
-                    errRatio = 0.85;
-                } else {
-                    errRatio = 0.80; // Maximum multiplier
-                }
-
-                // Required DD = Original DD / ERR ratio
-                requiredDDBurn = m_positionDDMinted / errRatio;
+                requiredDDBurn = CalculateRequiredDDBurnDisplayAmount(m_positionDDMinted, systemHealth);
             }
         }
     } catch (const UniValue& objError) {

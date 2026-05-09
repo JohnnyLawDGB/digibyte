@@ -12,6 +12,7 @@
 #include <primitives/oracle.h>
 #include <oracle/node.h>
 #include <oracle/mock_oracle.h>
+#include <oracle/signing_orchestrator.h>
 #include <consensus/digidollar.h>
 #include <consensus/dca.h>
 #include <consensus/err.h>
@@ -76,21 +77,11 @@ namespace {
         }
     }
 
-    // Aligned with consensus/digidollar.h collateralRatios (10 tiers, 0-9)
     int GetMinCollateralRatio(uint32_t tier) {
-        switch (tier) {
-            case 0: return 1000;  // 1000% for 1 hour (testing only)
-            case 1: return 500;   // 500% for 30 days
-            case 2: return 400;   // 400% for 90 days
-            case 3: return 350;   // 350% for 180 days
-            case 4: return 300;   // 300% for 1 year
-            case 5: return 275;   // 275% for 2 years
-            case 6: return 250;   // 250% for 3 years
-            case 7: return 225;   // 225% for 5 years
-            case 8: return 212;   // 212% for 7 years
-            case 9: return 200;   // 200% for 10 years
-            default: return 500;
-        }
+        const int lock_days = GetLockDaysForTier(tier);
+        const int64_t lock_blocks = DigiDollar::LockDaysToBlocks(lock_days);
+        const int ratio = DigiDollar::GetCollateralRatioForLockTime(lock_blocks, Params().GetDigiDollarParams());
+        return ratio > 0 ? ratio : 0;
     }
 
     bool TryStartOracleFromPrivateKey(OracleManager& oracle_manager, uint32_t oracle_id, const std::string& private_key_hex, const std::string& key_source, bool allow_initialized_without_running, std::string& status_message, bool* initialized_out = nullptr)
@@ -123,7 +114,7 @@ namespace {
         }
 
         if (allow_initialized_without_running) {
-            status_message = strprintf("Oracle initialized with %s (price thread not active on this network)", key_source);
+            status_message = strprintf("Oracle initialized with %s (price fetcher is not running)", key_source);
             return false;
         }
 
@@ -131,46 +122,120 @@ namespace {
         return false;
     }
 
+    void PublishRegtestMockMuSig2Quote(int32_t quote_height)
+    {
+        COracleBundle bundle = MockOracleManager::GetInstance().CreateMockMuSig2Bundle(quote_height, GetTime());
+        std::string error;
+        if (!OracleBundleManager::ValidateMuSig2Bundle(bundle, quote_height, Params().GetConsensus(), error)) {
+            throw JSONRPCError(RPC_MISC_ERROR,
+                strprintf("Failed to create regtest MuSig2 oracle quote: %s", error));
+        }
+        if (!OracleBundleManager::GetInstance().UpdateBundle(bundle)) {
+            throw JSONRPCError(RPC_MISC_ERROR,
+                "Failed to publish regtest MuSig2 oracle quote");
+        }
+    }
+
+    void RefreshRegtestMockMuSig2QuoteForMempool(const wallet::CWallet& wallet)
+    {
+        if (Params().GetChainType() != ChainType::REGTEST) return;
+        if (MockOracleManager::GetInstance().GetCurrentPrice() <= 0) return;
+
+        node::NodeContext* node_ctx = wallet.chain().context();
+        if (!node_ctx || !node_ctx->chainman) {
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context unavailable");
+        }
+
+        const int current_height = WITH_LOCK(cs_main, {
+            const CBlockIndex* tip = node_ctx->chainman->ActiveChain().Tip();
+            return tip ? tip->nHeight : 0;
+        });
+        PublishRegtestMockMuSig2Quote(current_height + 1);
+    }
+
+    struct DigiDollarRpcTotals {
+        CAmount total_collateral{0};
+        CAmount total_dd{0};
+    };
+
+    DigiDollarRpcTotals GetDigiDollarRpcTotals(const JSONRPCRequest& request)
+    {
+        DigiDollarRpcTotals totals;
+
+        const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+        ChainstateManager& chainman = EnsureChainman(node);
+        if (g_digidollar_stats_index) {
+            if (!g_digidollar_stats_index->BlockUntilSyncedToCurrentChain()) {
+                const IndexSummary summary{g_digidollar_stats_index->GetSummary()};
+                throw JSONRPCError(RPC_INTERNAL_ERROR,
+                    strprintf("DigiDollar stats index is syncing. Current height: %d", summary.best_block_height));
+            }
+
+            const CBlockIndex* pindex = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+            if (pindex) {
+                auto stats = g_digidollar_stats_index->LookUpStats(*pindex);
+                if (stats) {
+                    totals.total_dd = stats->total_dd_supply;
+                    totals.total_collateral = stats->total_collateral;
+                }
+            }
+        } else {
+            const SystemMetrics cached_metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+            const int chain_height = WITH_LOCK(cs_main, return chainman.ActiveChain().Height());
+            if (chain_height <= 0 &&
+                cached_metrics.hasCanonicalHealth &&
+                cached_metrics.totalDDSupply > 0 &&
+                cached_metrics.totalCollateral > 0) {
+                totals.total_dd = cached_metrics.totalDDSupply;
+                totals.total_collateral = cached_metrics.totalCollateral;
+                return totals;
+            }
+
+            Chainstate& active_chainstate = chainman.ActiveChainstate();
+            active_chainstate.ForceFlushStateToDisk();
+            {
+                LOCK(::cs_main);
+                CCoinsView* coins_view = &active_chainstate.CoinsDB();
+                node::BlockManager* blockman = &active_chainstate.m_blockman;
+                const CTxMemPool* mempool = node.mempool.get();
+                DigiDollar::SystemHealthMonitor::ScanUTXOSet(
+                    coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+            }
+            DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
+            totals.total_collateral = metrics.totalCollateral;
+            totals.total_dd = metrics.totalDDSupply;
+        }
+
+        return totals;
+    }
+
+    int GetDigiDollarRpcSystemHealth(const JSONRPCRequest& request,
+                                     CAmount oracle_price_micro_usd,
+                                     int empty_supply_health)
+    {
+        DigiDollarRpcTotals totals = GetDigiDollarRpcTotals(request);
+        if (totals.total_dd == 0) {
+            return empty_supply_health;
+        }
+
+        const CAmount oracle_price_millicents = oracle_price_micro_usd / 10;
+        return DynamicCollateralAdjustment::CalculateSystemHealth(
+            totals.total_collateral, totals.total_dd, oracle_price_millicents);
+    }
+
     CAmount ParseDigiDollarRpcAmount(const UniValue& amount_param)
     {
-        double val;
-        bool string_decimal_dollars = false;
-        if (amount_param.isStr()) {
-            try {
-                size_t consumed = 0;
-                const std::string amount_str = amount_param.get_str();
-                string_decimal_dollars = amount_str.find('.') != std::string::npos;
-                val = std::stod(amount_str, &consumed);
-                if (consumed != amount_str.size()) {
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount is not a valid number");
-                }
-            } catch (const std::exception&) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount is not a valid number");
-            }
-        } else if (amount_param.isNum()) {
-            val = amount_param.get_real();
-        } else {
+        if (!amount_param.isStr() && !amount_param.isNum()) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be a number (integer cents or decimal dollars)");
         }
 
-        if (!std::isfinite(val)) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount must be finite");
+        const std::string amount_str = amount_param.getValStr();
+        const bool decimal_dollars = amount_str.find('.') != std::string::npos;
+        int64_t amount = 0;
+        if (!ParseFixedPoint(amount_str, decimal_dollars ? 2 : 0, &amount)) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount is not a valid number");
         }
-
-        if (val < static_cast<double>(std::numeric_limits<CAmount>::min()) ||
-            val > static_cast<double>(std::numeric_limits<CAmount>::max())) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount out of range");
-        }
-
-        if (string_decimal_dollars || val != std::floor(val)) {
-            const double cents = std::round(val * 100);
-            if (cents < static_cast<double>(std::numeric_limits<CAmount>::min()) ||
-                cents > static_cast<double>(std::numeric_limits<CAmount>::max())) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Amount out of range");
-            }
-            return static_cast<CAmount>(cents);
-        }
-        return static_cast<CAmount>(val);
+        return static_cast<CAmount>(amount);
     }
 
     bool OptionalParamIsSet(const JSONRPCRequest& request, size_t index)
@@ -183,6 +248,26 @@ namespace {
         return timestamp > 0 &&
                timestamp <= now + 60 &&
                now - timestamp <= ORACLE_MAX_AGE_SECONDS;
+    }
+
+    int LatestFreshOracleBundleHeight(const ChainstateManager& chainman, const OracleBundleManager& oracle_manager, int current_height)
+    {
+        LOCK(cs_main);
+        const int64_t now = GetTime();
+        for (int h = current_height; h >= std::max(0, current_height - 20); --h) {
+            const CBlockIndex* pindex = chainman.ActiveChain()[h];
+            if (!pindex) continue;
+            CBlock block;
+            if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+            if (block.vtx.empty()) continue;
+
+            COracleBundle bundle;
+            if (oracle_manager.ExtractOracleBundle(*block.vtx[0], bundle) &&
+                IsFreshOracleTimestamp(bundle.timestamp, now)) {
+                return h;
+            }
+        }
+        return 0;
     }
 
     std::string ExpectedDigiDollarAddressPrefix()
@@ -411,7 +496,25 @@ RPCHelpMan getdigidollarstats()
                 }
             }
             result.pushKV("active_positions", static_cast<int64_t>(activePositions));
-            result.pushKV("oracle_price_age", 0); // TODO: Calculate age
+            int oraclePriceAge = 0;
+            const int currentHeight = WITH_LOCK(cs_main, {
+                const CBlockIndex* tip = chainman.ActiveChain().Tip();
+                return tip ? tip->nHeight : 0;
+            });
+            if (Params().GetChainType() == ChainType::REGTEST &&
+                MockOracleManager::GetInstance().IsEnabled() &&
+                MockOracleManager::GetInstance().GetCurrentPrice() > 0) {
+                const int64_t lastUpdateHeight = MockOracleManager::GetInstance().GetLastUpdateHeight();
+                if (lastUpdateHeight > 0 && lastUpdateHeight <= currentHeight) {
+                    oraclePriceAge = currentHeight - lastUpdateHeight;
+                }
+            } else {
+                const int lastBundleHeight = LatestFreshOracleBundleHeight(chainman, oracle_manager, currentHeight);
+                if (lastBundleHeight > 0 && lastBundleHeight <= currentHeight) {
+                    oraclePriceAge = currentHeight - lastBundleHeight;
+                }
+            }
+            result.pushKV("oracle_price_age", oraclePriceAge);
 
             UniValue dcaTier(UniValue::VOBJ);
             dcaTier.pushKV("min_collateral", tier.minCollateral);
@@ -498,7 +601,11 @@ static RPCHelpMan getdcamultiplier()
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "System health must be between 0 and 30000");
                 }
             } else {
-                systemHealth = DynamicCollateralAdjustment::GetCurrentSystemHealth();
+                CAmount oraclePriceMicroUSD = OracleBundleManager::GetInstance().GetLatestPrice();
+                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                    oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
+                }
+                systemHealth = GetDigiDollarRpcSystemHealth(request, oraclePriceMicroUSD, 0);
             }
 
             // Get DCA multiplier
@@ -534,13 +641,16 @@ static RPCHelpMan calculatecollateralrequirement()
                 "the exact amount of DGB needed for a given DD mint amount and lock period.\n",
                 {
                     {"dd_amount_cents", RPCArg::Type::NUM, RPCArg::Optional::NO, "DigiDollar amount to mint in cents (e.g., 10000 = $100)"},
-                    {"lock_days", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock period in days (30, 90, 180, 365, 1095, 1825, 2555, or 3650)"},
-                    {"oracle_price", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "DGB price in cents per DGB (uses current price if omitted)"}
+                    {"lock_days", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock period in days. Canonical tiers only: 0 (1 hour testing tier), 30, 90, 180, 365, 730, 1095, 1825, 2555, 3650"},
+                    {"oracle_price", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "DGB price in micro-USD per DGB (1,000,000 = $1.00; uses current price if omitted)"}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::NUM, "required_dgb", "Required DGB collateral amount"},
+                        {RPCResult::Type::STR_AMOUNT, "required_dgb", "Minimum consensus DGB collateral amount"},
+                        {RPCResult::Type::STR_AMOUNT, "minimum_required_dgb", "Minimum consensus DGB collateral amount"},
+                        {RPCResult::Type::STR_AMOUNT, "wallet_collateral_dgb", "DGB collateral the wallet mint builder will lock, including safety margin"},
+                        {RPCResult::Type::STR_AMOUNT, "collateral_safety_margin_dgb", "Extra DGB collateral added by the wallet safety margin"},
                         {RPCResult::Type::NUM, "dd_amount_cents", "DD amount being minted (in cents)"},
                         {RPCResult::Type::NUM, "dd_amount_usd", "DD amount being minted (in USD)"},
                         {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
@@ -592,12 +702,15 @@ static RPCHelpMan calculatecollateralrequirement()
                 }
             }
 
-            // Validate parameters
+            // Validate parameters. lockDays = 0 is a valid request: it maps to
+            // the 1-hour testing tier (240 blocks at 15 second blocks).
+            // GetCollateralRatioForLockTime() rejects every other non-canonical
+            // duration below, so we only guard against negative input here.
             if (ddAmount <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "DD amount must be positive");
             }
-            if (lockDays <= 0) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock days must be positive");
+            if (lockDays < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock days must be non-negative");
             }
             if (oraclePriceMicroUSD <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle price must be positive");
@@ -620,15 +733,23 @@ static RPCHelpMan calculatecollateralrequirement()
             // Convert lock days to blocks
             int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
 
-            // Get base collateral ratio
+            // Get base collateral ratio. The error message must list every
+            // canonical lock period the consensus collateral map exposes, so
+            // RPC users do not see drift between the help text, the error
+            // message, and the consensus rule set.
             int baseRatio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddParams);
             if (baseRatio <= 0) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
-                    strprintf("Invalid lock period: %d days. Valid periods: 30, 90, 180, 365, 1095, 1825, 2555, 3650", lockDays));
+                    strprintf("Invalid lock period: %d days. Canonical periods: "
+                              "0 (1 hour testing tier), 30, 90, 180, 365, 730, "
+                              "1095, 1825, 2555, 3650",
+                              lockDays));
             }
 
-            // Get current system health
-            int systemHealth = DynamicCollateralAdjustment::GetCurrentSystemHealth();
+            // Use the same chain-derived health source as getdcamultiplier().
+            // Empty supply is treated as healthy here so the first quote does
+            // not inherit an emergency multiplier from the display-only 0% stat.
+            int systemHealth = GetDigiDollarRpcSystemHealth(request, oraclePriceMicroUSD, 30000);
             double dcaMultiplier = DynamicCollateralAdjustment::GetDCAMultiplier(systemHealth);
             int effectiveRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
             auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
@@ -647,10 +768,18 @@ static RPCHelpMan calculatecollateralrequirement()
             if (result128 > static_cast<__int128>(MAX_MONEY)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Required collateral exceeds maximum money supply");
             }
-            uint64_t requiredDGB = static_cast<uint64_t>(result128);
+            CAmount requiredDGB = static_cast<CAmount>(result128);
+            const CAmount walletCollateralDGB = DigiDollar::ApplyCollateralSafetyMargin(requiredDGB);
+            if (walletCollateralDGB <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Wallet collateral requirement exceeds maximum money supply");
+            }
+            const CAmount collateralSafetyMarginDGB = walletCollateralDGB - requiredDGB;
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
+            result.pushKV("minimum_required_dgb", ValueFromAmount(requiredDGB));
+            result.pushKV("wallet_collateral_dgb", ValueFromAmount(walletCollateralDGB));
+            result.pushKV("collateral_safety_margin_dgb", ValueFromAmount(collateralSafetyMarginDGB));
             result.pushKV("dd_amount_cents", int64_t{ddAmount});
             result.pushKV("dd_amount_usd", ddAmount / 100.0);  // Convert cents to USD
             result.pushKV("lock_days", lockDays);
@@ -689,7 +818,21 @@ static RPCHelpMan getdigidollardeploymentinfo()
                         {RPCResult::Type::NUM, "signaling_blocks", /*optional=*/true, "Blocks signaling support in current period (only during started/locked_in)"},
                         {RPCResult::Type::NUM, "threshold", /*optional=*/true, "Threshold required for activation (only during started/locked_in)"},
                         {RPCResult::Type::NUM, "period_blocks", /*optional=*/true, "Number of blocks in signaling period (only during started/locked_in)"},
-                        {RPCResult::Type::NUM, "progress_percent", /*optional=*/true, "Signaling progress as percentage (only during started/locked_in)"}
+                        {RPCResult::Type::NUM, "progress_percent", /*optional=*/true, "Signaling progress as percentage (only during started/locked_in)"},
+                        {RPCResult::Type::NUM, "oracle_activation_height", "Height at which oracle/DD block rules activate (nOracleActivationHeight)"},
+                        {RPCResult::Type::NUM, "musig2_format_activation_height", "Height at which the MuSig2 v0x03 bundle format activates (nDigiDollarMuSig2Height)"},
+                        {RPCResult::Type::NUM, "oracle_pubkey_count", "Number of consensus oracle public keys configured for MuSig2 (nOraclePubkeyCount)"},
+                        {RPCResult::Type::NUM, "oracle_consensus_required", "MuSig2 quorum size required to satisfy a v0x03 bundle (nOracleConsensusRequired)"},
+                        {RPCResult::Type::NUM, "oracle_total_slots", "Total oracle slots configured in chainparams (vOracleNodes.size); slots beyond oracle_pubkey_count are reserves and cannot vote"},
+                        {RPCResult::Type::OBJ, "musig2_session", "Current MuSig2 signing session status (operator diagnostic)",
+                            {
+                                {RPCResult::Type::NUM, "epoch", "Current epoch number (block_height / nDDOracleEpochBlocks)"},
+                                {RPCResult::Type::STR, "state", "Session state: none / created / nonces_collecting / nonces_complete / signing / complete / failed"},
+                                {RPCResult::Type::NUM, "nonce_count", "Number of pubnonces collected for the current epoch's session"},
+                                {RPCResult::Type::NUM, "partial_sig_count", "Number of partial signatures collected"},
+                                {RPCResult::Type::NUM, "creation_height", /*optional=*/true, "Block height at which the current session was created (omitted when state=none)"}
+                            }
+                        }
                     }
                 },
                 RPCExamples{
@@ -758,6 +901,53 @@ static RPCHelpMan getdigidollardeploymentinfo()
                 }
             }
 
+            // Wave 12: keep the mandatory oracle/DD activation height distinct
+            // from the MuSig2 format height. V1 sets the format gate to 0, but
+            // oracle bundles become mandatory only when the DD/oracle block
+            // rules activate for the network.
+            result.pushKV("oracle_activation_height", consensusParams.nOracleActivationHeight);
+            result.pushKV("musig2_format_activation_height", consensusParams.nDigiDollarMuSig2Height);
+            result.pushKV("oracle_pubkey_count", consensusParams.nOraclePubkeyCount);
+            result.pushKV("oracle_consensus_required", consensusParams.nOracleConsensusRequired);
+            result.pushKV("oracle_total_slots", static_cast<int>(Params().GetOracleNodes().size()));
+
+            // Wave 10 (Agent C): expose the orchestrator's MuSig2 session
+            // status for the current epoch so operators can diagnose stuck
+            // sessions (timeout / sub-quorum / liveness drift). The state
+            // map is the orchestrator's private member; this RPC is the
+            // only way to read it without grepping debug.log.
+            UniValue session_obj(UniValue::VOBJ);
+            const int32_t tip_height = tip ? tip->nHeight : 0;
+            const int32_t current_epoch = GetCurrentEpoch(tip_height);
+            session_obj.pushKV("epoch", current_epoch);
+            std::string state_str = "none";
+            int64_t nonce_count = 0;
+            int64_t partial_sig_count = 0;
+            std::optional<int32_t> creation_height;
+            if (g_signing_orchestrator) {
+                auto status = g_signing_orchestrator->GetSessionStateForEpoch(current_epoch);
+                if (status.has_value()) {
+                    nonce_count = static_cast<int64_t>(status->nonce_count);
+                    partial_sig_count = static_cast<int64_t>(status->partial_sig_count);
+                    creation_height = status->creation_height;
+                    switch (status->state) {
+                        case MuSig2SessionState::CREATED:           state_str = "created"; break;
+                        case MuSig2SessionState::NONCES_COLLECTING: state_str = "nonces_collecting"; break;
+                        case MuSig2SessionState::NONCES_COMPLETE:   state_str = "nonces_complete"; break;
+                        case MuSig2SessionState::SIGNING:           state_str = "signing"; break;
+                        case MuSig2SessionState::COMPLETE:          state_str = "complete"; break;
+                        case MuSig2SessionState::FAILED:            state_str = "failed"; break;
+                    }
+                }
+            }
+            session_obj.pushKV("state", state_str);
+            session_obj.pushKV("nonce_count", nonce_count);
+            session_obj.pushKV("partial_sig_count", partial_sig_count);
+            if (creation_height.has_value()) {
+                session_obj.pushKV("creation_height", *creation_height);
+            }
+            result.pushKV("musig2_session", session_obj);
+
             return result;
         },
     };
@@ -775,8 +965,8 @@ RPCHelpMan mintdigidollar()
                 "The amount of collateral required depends on the lock period and current system health.\n",
                 {
                     {"dd_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount of DigiDollar to mint in cents (min 10000/$100, max 10000000/$100K)", RPCArgOptions{.skip_type_check = true}},
-                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h testing, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)", RPCArgOptions{.skip_type_check = true}},
-                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB (default: 100000)", RPCArgOptions{.skip_type_check = true}}
+                    {"lock_tier", RPCArg::Type::NUM, RPCArg::Optional::NO, "Lock tier 0-9 (0=1h, 1=30d, 2=90d, 3=180d, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y)", RPCArgOptions{.skip_type_check = true}},
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB; values below 35000000 are floored to 35000000 to satisfy the DD fee floor", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -795,9 +985,9 @@ RPCHelpMan mintdigidollar()
                 },
                 RPCExamples{
                     HelpExampleCli("mintdigidollar", "10000 3") +
-                    HelpExampleCli("mintdigidollar", "50000 5 0.001") +
+                    HelpExampleCli("mintdigidollar", "50000 5 35000000") +
                     HelpExampleRpc("mintdigidollar", "10000, 3") +
-                    HelpExampleRpc("mintdigidollar", "50000, 5, 0.001")
+                    HelpExampleRpc("mintdigidollar", "50000, 5, 35000000")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -806,18 +996,30 @@ RPCHelpMan mintdigidollar()
             if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded");
 
             // Check DigiDollar activation via wallet's chain interface
+            node::NodeContext* node_ctx = pwallet->chain().context();
+            if (!node_ctx) throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context unavailable");
+            int currentHeight = 0;
             {
-                node::NodeContext* node_ctx = pwallet->chain().context();
-                if (!node_ctx) throw JSONRPCError(RPC_INTERNAL_ERROR, "Node context unavailable");
                 ChainstateManager& chainman = *node_ctx->chainman;
                 const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
                 if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
                 }
+                currentHeight = tip ? tip->nHeight : 0;
             }
 
-            // Ensure wallet is unlocked
-            wallet::EnsureWalletIsUnlocked(*pwallet);
+            // DD-FA-FUNC-028 (Wave 18 Agent C): surface a DigiDollar-flavored
+            // locked-wallet hint that explicitly cites walletpassphrase so
+            // wallet UIs can disambiguate this rejection from any other
+            // locked-wallet failure. The legacy upstream substring
+            // "Please enter the wallet passphrase with walletpassphrase first"
+            // is preserved verbatim for backward compatibility with
+            // digidollar_encrypted_wallet.py.
+            if (pwallet->IsLocked()) {
+                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                    "DigiDollar mint requires the wallet to be unlocked. "
+                    "Error: Please enter the wallet passphrase with walletpassphrase first.");
+            }
             if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
             }
@@ -861,8 +1063,8 @@ RPCHelpMan mintdigidollar()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Lock tier must be between 0 and 9 (0 = 1 hour testing tier)");
             }
 
-            // Get current height from wallet's chain interface
-            int currentHeight = pwallet->GetLastBlockHeight();
+            // Mempool validation checks DD mints against the next block height.
+            const int mintHeight = currentHeight + 1;
 
             // Get oracle price in micro-USD from real oracle system first, fall back to mock only in regtest
             CAmount oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
@@ -873,43 +1075,36 @@ RPCHelpMan mintdigidollar()
                 throw JSONRPCError(RPC_MISC_ERROR, "No oracle price available. Start the oracle first with startoracle command.");
             }
 
-            // ERR CHECK: Block minting during emergency state
-            // Calculate health directly using wallet's DD positions and current oracle price
-            // This is more reliable than cached metrics which may be stale
-            if (pwallet->GetDDWallet()) {
-                LOCK(pwallet->cs_wallet);
-                CAmount totalDD = 0;
-                CAmount totalCollateral = 0;
-
-                // Get all active positions from wallet
-                auto positions = pwallet->GetDDWallet()->GetDDTimeLocks(true); // true = active only
-                for (const auto& pos : positions) {
-                    totalDD += pos.dd_minted;
-                    totalCollateral += pos.dgb_collateral;
-                }
-
-                // Only check health if there are existing DD positions
-                if (totalDD > 0 && totalCollateral > 0) {
-                    // Convert micro-USD to millicents for health calculation
-                    CAmount oraclePriceMillicents = oraclePriceMicroUSD / 10;
-
-                    int systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
-                        totalCollateral, totalDD, oraclePriceMillicents);
-
-                    LogPrintf("DigiDollar RPC Mint: Health check - DD=%lld, collateral=%lld, price=%lld, health=%d%%\n",
-                              static_cast<long long>(totalDD),
-                              static_cast<long long>(totalCollateral),
-                              static_cast<long long>(oraclePriceMillicents),
-                              systemHealth);
-
-                    // Block minting if system health is below 100% (emergency state)
-                    if (systemHealth < 100) {
-                        throw JSONRPCError(RPC_MISC_ERROR,
-                            strprintf("Minting blocked: System is in emergency state (health: %d%%). "
-                                      "Wait for system health to recover above 100%% before minting new DigiDollars.",
-                                      systemHealth));
+            // ERR CHECK: Block minting during emergency state.
+            // Mempool and ConnectBlock both call ShouldBlockMintingDuringERR()
+            // (validation.cpp:2569), which delegates to
+            // ERR::EmergencyRedemptionRatio::ShouldBlockMinting() and reads the
+            // canonical network-wide cached metrics plus the explicit ERR state.
+            // The wallet RPC must use the same source so a user cannot pass a
+            // local-only check while consensus refuses the broadcast — and so a
+            // wallet with zero DD positions still respects network ERR.
+            if (DigiDollar::ERR::EmergencyRedemptionRatio::ShouldBlockMinting(oraclePriceMicroUSD)) {
+                const DigiDollar::SystemMetrics metrics =
+                    DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+                CAmount priceMillicents = oraclePriceMicroUSD / 10;
+                int reportedHealth = metrics.systemHealth;
+                if (!metrics.hasCanonicalHealth || reportedHealth <= 0) {
+                    if (metrics.totalDDSupply > 0 && metrics.totalCollateral > 0 &&
+                        priceMillicents > 0) {
+                        reportedHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                            metrics.totalCollateral, metrics.totalDDSupply, priceMillicents);
                     }
                 }
+                LogPrintf("DigiDollar RPC Mint: Network ERR active - DD=%lld, "
+                          "collateral=%lld, price_micro_usd=%lld, health=%d%%\n",
+                          static_cast<long long>(metrics.totalDDSupply),
+                          static_cast<long long>(metrics.totalCollateral),
+                          static_cast<long long>(oraclePriceMicroUSD),
+                          reportedHealth);
+                throw JSONRPCError(RPC_MISC_ERROR,
+                    strprintf("Minting blocked: System is in emergency state (health: %d%%). "
+                              "Wait for system health to recover above 100%% before minting new DigiDollars.",
+                              reportedHealth));
             }
 
             // Convert lock tier to days
@@ -938,7 +1133,7 @@ RPCHelpMan mintdigidollar()
                 LOCK(pwallet->cs_wallet);
                 ownerKey = pwallet->GetHDKeyForDigiDollar("dd-owner");
                 if (!ownerKey.IsValid()) {
-                    throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate owner key for DD mint");
+                    throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar mint requires a descriptor/bech32m HD wallet with private keys enabled");
                 }
             }
 
@@ -964,7 +1159,7 @@ RPCHelpMan mintdigidollar()
 
             // Build mint transaction using custom RpcMintTxBuilder with UTXO value lookup
             // Note: MintTxBuilder now expects micro-USD price
-            RpcMintTxBuilder builder(Params(), currentHeight, oraclePriceMicroUSD, utxoValues);
+            RpcMintTxBuilder builder(Params(), mintHeight, oraclePriceMicroUSD, utxoValues);
 
             DigiDollar::TxBuilderMintParams params;
             params.ddAmount = ddAmount;  // Amount in cents (e.g., 5000 = $50.00)
@@ -1114,7 +1309,7 @@ RPCHelpMan mintdigidollar()
                 LogPrintf("DigiDollar RPC Mint: After consolidation: %zu UTXOs available (passes: %d)\n",
                           availableUtxos.size(), pass);
 
-                RpcMintTxBuilder retryBuilder(Params(), currentHeight, oraclePriceMicroUSD, utxoValues);
+                RpcMintTxBuilder retryBuilder(Params(), mintHeight, oraclePriceMicroUSD, utxoValues);
                 params.utxos = availableUtxos;
                 result = retryBuilder.BuildMintTransaction(params);
             }
@@ -1136,8 +1331,32 @@ RPCHelpMan mintdigidollar()
 
             // Create transaction reference for commitment
             CTransactionRef tx = MakeTransactionRef(result.tx);
+            const uint256 positionId = tx->GetHash();
 
-            // Commit transaction to wallet and broadcast
+            if (pwallet->GetDDWallet()) {
+                LOCK(pwallet->cs_wallet);
+                pwallet->GetDDWallet()->StoreOwnerKey(positionId, ownerKey);
+            }
+
+            const bool should_broadcast = pwallet->GetBroadcastTransactions();
+            if (should_broadcast) {
+                RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
+
+                std::string broadcast_error;
+                const bool broadcast_success = pwallet->chain().broadcastTransaction(
+                    tx,
+                    wallet::DEFAULT_TRANSACTION_MAXFEE,
+                    true,
+                    broadcast_error);
+                if (!broadcast_success) {
+                    throw JSONRPCError(RPC_TRANSACTION_REJECTED,
+                        strprintf("Mint transaction rejected by mempool: %s", broadcast_error));
+                }
+            }
+
+            // Commit to wallet only after mempool acceptance succeeds. When
+            // wallet broadcasting is disabled, this creates a local template
+            // without marking a live DD position.
             {
                 LOCK(pwallet->cs_wallet);
                 pwallet->CommitTransaction(tx, {}, {});
@@ -1145,12 +1364,12 @@ RPCHelpMan mintdigidollar()
 
             // Calculate unlock height using consensus function (handles tier 0 special case)
             int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
-            int unlockHeight = currentHeight + lockBlocks;
+            int unlockHeight = mintHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
 
             // CRITICAL FIX: Persist DD position to DigiDollarWallet
-            if (pwallet->GetDDWallet()) {
+            if (should_broadcast && pwallet->GetDDWallet()) {
                 WalletCollateralPosition position;
-                position.dd_timelock_id = tx->GetHash();
+                position.dd_timelock_id = positionId;
                 position.dgb_collateral = result.collateralRequired;
                 position.dd_minted = ddAmount;
                 position.lock_tier = lockTier;
@@ -1161,16 +1380,13 @@ RPCHelpMan mintdigidollar()
                 LOCK(pwallet->cs_wallet);
                 pwallet->GetDDWallet()->AddCollateralPosition(position);
 
-                // CRITICAL: Store the owner key for this position so we can spend it later
-                pwallet->GetDDWallet()->StoreOwnerKey(tx->GetHash(), ownerKey);
-
                 // CRITICAL FIX: Track the DD UTXO so it can be found by GetDDUTXOs()
                 // The DD token output is always at vout[1] in a mint transaction:
                 //   vout[0] = Collateral (P2TR with timelock)
                 //   vout[1] = DD token output (P2TR with 0 value) <- THIS IS THE DD UTXO
                 //   vout[2] = OP_RETURN metadata
                 //   vout[3] = Change output (optional)
-                COutPoint ddOutpoint(tx->GetHash(), 1);
+                COutPoint ddOutpoint(positionId, 1);
                 pwallet->GetDDWallet()->AddDDUTXO(ddOutpoint, ddAmount);
 
                 // CRITICAL FIX #2: Persist DD UTXO to wallet database so it survives daemon restart
@@ -1187,21 +1403,39 @@ RPCHelpMan mintdigidollar()
                 LogPrintf("DigiDollar RPC: Added position %s with %d DD cents, stored owner key, and tracked DD UTXO at vout 1\n",
                          position.dd_timelock_id.ToString(), ddAmount);
             } else {
-                LogPrintf("DigiDollar RPC: WARNING - No DD wallet context, position not persisted\n");
+                LogPrintf("DigiDollar RPC: DD position not persisted (broadcast=%d, ddwallet=%d)\n",
+                          should_broadcast ? 1 : 0, pwallet->GetDDWallet() ? 1 : 0);
             }
 
-            // Calculate collateral ratio based on lock tier and DCA
-            int collateralRatio = 150; // Default, could be calculated from DCA
+            const int baseRatio = DigiDollar::GetCollateralRatioForLockTime(
+                DigiDollar::LockDaysToBlocks(lockDays), ddParams);
+            const DigiDollar::SystemMetrics ratioMetrics =
+                DigiDollar::SystemHealthMonitor::GetCachedMetrics();
+            int systemHealth = 30000;
+            if (ratioMetrics.hasCanonicalHealth && ratioMetrics.systemHealth > 0) {
+                systemHealth = ratioMetrics.systemHealth;
+            } else if (ratioMetrics.totalDDSupply > 0 &&
+                       ratioMetrics.totalCollateral > 0 &&
+                       oraclePriceMicroUSD > 0) {
+                systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
+                    ratioMetrics.totalCollateral,
+                    ratioMetrics.totalDDSupply,
+                    oraclePriceMicroUSD / 10);
+            }
+            const int collateralRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
+            if (collateralRatio <= 0 || collateralRatio == std::numeric_limits<int>::max()) {
+                throw JSONRPCError(RPC_MISC_ERROR, "DCA collateral ratio calculation failed");
+            }
 
             UniValue resultObj(UniValue::VOBJ);
-            resultObj.pushKV("txid", tx->GetHash().GetHex());
+            resultObj.pushKV("txid", positionId.GetHex());
             resultObj.pushKV("dd_minted", int64_t{ddAmount});
             resultObj.pushKV("dgb_collateral", ValueFromAmount(result.collateralRequired));
             resultObj.pushKV("lock_tier", lockTier);
             resultObj.pushKV("unlock_height", unlockHeight);
             resultObj.pushKV("collateral_ratio", collateralRatio);
             resultObj.pushKV("fee_paid", ValueFromAmount(result.totalFees));
-            resultObj.pushKV("position_id", tx->GetHash().GetHex());
+            resultObj.pushKV("position_id", positionId.GetHex());
             if (!consolidation_txid.empty()) {
                 resultObj.pushKV("consolidation_txid", consolidation_txid);
                 resultObj.pushKV("utxos_consolidated", true);
@@ -1222,7 +1456,7 @@ RPCHelpMan senddigidollar()
                     {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to send to (DD/TD/RD prefix)"},
                     {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount to send (in USD cents, e.g., 10000 = $100.00)", RPCArgOptions{.skip_type_check = true}},
                     {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional comment for the transaction"},
-                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Fee rate in sat/kB", RPCArgOptions{.skip_type_check = true}}
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Deprecated compatibility argument; ignored because DigiDollar sends use the fixed DD fee policy", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -1244,7 +1478,6 @@ RPCHelpMan senddigidollar()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // PHASE 7.7: Integration with backend TransferDigiDollar() from Phase 2.1
             LogPrintf("DigiDollar RPC: senddigidollar called\n");
 
             // Get wallet first (wallet RPCs have WalletContext, not NodeContext)
@@ -1264,8 +1497,14 @@ RPCHelpMan senddigidollar()
                 }
             }
 
-            // Ensure wallet is unlocked
-            wallet::EnsureWalletIsUnlocked(*pwallet);
+            // DD-FA-FUNC-028 (Wave 18 Agent C): DD-flavored locked-wallet
+            // hint, preserving the legacy "walletpassphrase" substring for
+            // backward compatibility with digidollar_encrypted_wallet.py.
+            if (pwallet->IsLocked()) {
+                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                    "DigiDollar send requires the wallet to be unlocked. "
+                    "Error: Please enter the wallet passphrase with walletpassphrase first.");
+            }
             if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
             }
@@ -1313,7 +1552,9 @@ RPCHelpMan senddigidollar()
                              balance, amount));
             }
 
-            // Execute transfer using backend function (Phase 2.1)
+            RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
+
+            // Execute transfer using the wallet backend.
             std::string txid;
             std::string error;
             CAmount dd_change = 0;
@@ -1419,7 +1660,17 @@ RPCHelpMan sendmanydigidollar()
                 }
             }
 
-            wallet::EnsureWalletIsUnlocked(*pwallet);
+            // DD-FA-FUNC-028 (Wave 18 Agent C): DD-flavored locked-wallet
+            // hint for sendmanydigidollar (matches mintdigidollar /
+            // senddigidollar / redeemdigidollar / getdigidollaraddress /
+            // createoraclekey). Preserves the legacy "walletpassphrase"
+            // substring for backward compatibility with
+            // digidollar_encrypted_wallet.py.
+            if (pwallet->IsLocked()) {
+                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                    "DigiDollar send requires the wallet to be unlocked. "
+                    "Error: Please enter the wallet passphrase with walletpassphrase first.");
+            }
             if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
             }
@@ -1474,6 +1725,8 @@ RPCHelpMan sendmanydigidollar()
                              balance, total_amount));
             }
 
+            RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
+
             std::string txid;
             std::string error;
             bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error);
@@ -1510,7 +1763,7 @@ RPCHelpMan redeemdigidollar()
                     {"position_id", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Position ID (transaction hash of mint)"},
                     {"dd_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "Amount of DD to redeem (in cents)"},
                     {"redemption_address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "DGB address to receive unlocked collateral (default: new address)"},
-                    {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Fee rate in DGB/kvB"}
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Deprecated compatibility argument; ignored because DigiDollar redemptions use the fixed DD fee policy", RPCArgOptions{.skip_type_check = true}}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -1518,10 +1771,15 @@ RPCHelpMan redeemdigidollar()
                         {RPCResult::Type::STR_HEX, "txid", "Redemption transaction ID"},
                         {RPCResult::Type::STR, "position_id", "Original position ID"},
                         {RPCResult::Type::STR_AMOUNT, "dd_redeemed", "Amount of DD redeemed (burned)"},
+                        {RPCResult::Type::STR_AMOUNT, "total_dd_minted", "Original DD minted by this position"},
+                        {RPCResult::Type::STR_AMOUNT, "required_dd_burn", "DD amount required by normal or ERR redemption"},
                         {RPCResult::Type::STR_AMOUNT, "dgb_unlocked", "Amount of DGB unlocked"},
                         {RPCResult::Type::STR, "unlock_address", "DGB address that received unlocked collateral"},
                         {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid"},
                         {RPCResult::Type::STR, "redemption_path", "Redemption path used (normal/emergency/liquidation)"},
+                        {RPCResult::Type::BOOL, "err_active", "Whether ERR burn rules were active"},
+                        {RPCResult::Type::NUM, "err_system_health", "System health percentage used for ERR"},
+                        {RPCResult::Type::NUM, "err_ratio_bps", "ERR ratio in basis points"},
                         {RPCResult::Type::BOOL, "position_closed", "Whether the position was fully closed"}
                     }
                 },
@@ -1561,14 +1819,24 @@ RPCHelpMan redeemdigidollar()
                 }
             }
 
-            // Ensure wallet is unlocked
-            wallet::EnsureWalletIsUnlocked(*pwallet);
+            // DD-FA-FUNC-025 (Wave 17 Agent C): surface a DigiDollar-flavored
+            // hint that explicitly cites walletpassphrase so wallet UIs can
+            // disambiguate this failure from a generic locked-wallet
+            // rejection. The substring "walletpassphrase" is preserved for
+            // backward compatibility with existing tests.
+            if (pwallet->IsLocked()) {
+                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                    "DigiDollar redemption requires the wallet to be unlocked. "
+                    "Please enter the wallet passphrase with walletpassphrase first.");
+            }
             if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
             }
 
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            pwallet->BlockUntilSyncedToCurrentChain();
+            dd_wallet->ReconcilePositionStates();
 
             // Parse position ID
             uint256 positionId;
@@ -1615,20 +1883,32 @@ RPCHelpMan redeemdigidollar()
                               foundPosition.dd_minted, ddAmount));
             }
 
+            int redemptionSystemHealth = DynamicCollateralAdjustment::GetCurrentSystemHealth();
+            auto errState = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
+            if (errState.isActive && errState.systemHealth < 100) {
+                redemptionSystemHealth = errState.systemHealth;
+            }
+
+            const bool errRedemptionActive = redemptionSystemHealth >= 0 && redemptionSystemHealth < 100;
+            const CAmount requiredDDBurn = errRedemptionActive
+                ? DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(foundPosition.dd_minted, redemptionSystemHealth)
+                : foundPosition.dd_minted;
+            const int errRatioBps = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRRatioBps(redemptionSystemHealth);
+
             // CRITICAL FIX: DD tokens are fungible - any DD can be used to redeem a vault
             // Check if user has enough DD balance (from any source) to cover redemption
             std::vector<COutPoint> selectedDDUtxos;
             std::vector<CAmount> selectedDDAmounts;  // CRITICAL: Need amounts for DD change calculation
             CAmount selectedDDTotal = 0;
-            if (!dd_wallet->SelectDDCoins(ddAmount, selectedDDUtxos, selectedDDTotal, &selectedDDAmounts)) {
+            if (!dd_wallet->SelectDDCoins(requiredDDBurn, selectedDDUtxos, selectedDDTotal, &selectedDDAmounts)) {
                 CAmount walletBalance = dd_wallet->GetDDBalance();
                 throw JSONRPCError(RPC_WALLET_ERROR,
                     strprintf("Insufficient DD balance for redemption. Need %d cents, have %d cents. "
                               "You can use DD from any source to redeem a vault.",
-                              ddAmount, walletBalance));
+                              requiredDDBurn, walletBalance));
             }
             LogPrintf("DigiDollar: Selected %zu DD UTXOs totaling %d cents for redemption of %d cents\n",
-                      selectedDDUtxos.size(), selectedDDTotal, ddAmount);
+                      selectedDDUtxos.size(), selectedDDTotal, requiredDDBurn);
             LogPrintf("DigiDollar: selectedDDAmounts.size() = %zu\n", selectedDDAmounts.size());
 
             // Get oracle price - use real oracle, fall back to mock only in regtest
@@ -1653,8 +1933,8 @@ RPCHelpMan redeemdigidollar()
             redeemParams.collateralOutpoint = COutPoint(positionId, 0); // Collateral is at vout 0
             redeemParams.ddUtxos = selectedDDUtxos;  // Use any DD from wallet (fungible)
             redeemParams.ddAmounts = selectedDDAmounts;  // CRITICAL: Pass amounts for DD change calculation
-            redeemParams.ddToRedeem = ddAmount;
-            redeemParams.path = DigiDollar::RedemptionPath::NORMAL;
+            redeemParams.ddToRedeem = requiredDDBurn;
+            redeemParams.path = errRedemptionActive ? DigiDollar::RedemptionPath::ERR : DigiDollar::RedemptionPath::NORMAL;
             redeemParams.ownerKey = ownerKey;  // BUG #10 FIX: Use position owner key directly
             // DigiDollar transactions MUST pay at least 0.1 DGB fee to miners
             static const CAmount MIN_DD_FEE_RATE = 35000000; // 0.35 DGB/kB ensures min 0.1 DGB for typical tx
@@ -1814,6 +2094,8 @@ RPCHelpMan redeemdigidollar()
             // Create transaction reference
             CTransactionRef redeemTx = MakeTransactionRef(redeemResult.tx);
 
+            RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
+
             std::string broadcast_error;
             const bool broadcast_success = pwallet->chain().broadcastTransaction(
                 redeemTx,
@@ -1847,11 +2129,9 @@ RPCHelpMan redeemdigidollar()
                           spentUtxo.hash.ToString(), spentUtxo.n);
             }
 
-            // Calculate collateral returned (proportional to DD redeemed)
-            CAmount dgbUnlocked = (ddAmount * foundPosition.dgb_collateral) / foundPosition.dd_minted;
-
-            // Update position in DigiDollarWallet
-            bool positionClosed = (ddAmount >= foundPosition.dd_minted);
+            // Full-vault redemption only: normal and ERR both return full collateral.
+            CAmount dgbUnlocked = foundPosition.dgb_collateral;
+            bool positionClosed = true;
 
             if (positionClosed) {
                 // Mark position as inactive
@@ -1875,7 +2155,7 @@ RPCHelpMan redeemdigidollar()
             // Add redemption transaction to history for GUI display
             DDTransaction redeemTxHistory;
             redeemTxHistory.txid = redeemTx->GetHash().GetHex();
-            redeemTxHistory.amount = ddAmount;  // DD amount redeemed (burned)
+            redeemTxHistory.amount = requiredDDBurn;  // DD amount redeemed (burned)
             redeemTxHistory.confirmations = 0;   // Pending confirmation
             redeemTxHistory.timestamp = GetTime();
             redeemTxHistory.incoming = false;    // Redemption = outgoing DD (burning)
@@ -1891,11 +2171,16 @@ RPCHelpMan redeemdigidollar()
             UniValue result(UniValue::VOBJ);
             result.pushKV("txid", redeemTx->GetHash().GetHex());
             result.pushKV("position_id", positionIdStr);
-            result.pushKV("dd_redeemed", int64_t{ddAmount});
+            result.pushKV("dd_redeemed", int64_t{requiredDDBurn});
+            result.pushKV("total_dd_minted", int64_t{foundPosition.dd_minted});
+            result.pushKV("required_dd_burn", int64_t{requiredDDBurn});
             result.pushKV("dgb_unlocked", ValueFromAmount(dgbUnlocked));
             result.pushKV("unlock_address", actualUnlockAddress.empty() ? "auto" : actualUnlockAddress);
             result.pushKV("fee_paid", ValueFromAmount(redeemResult.totalFees));
-            result.pushKV("redemption_path", "normal");
+            result.pushKV("redemption_path", errRedemptionActive ? "emergency" : "normal");
+            result.pushKV("err_active", errRedemptionActive);
+            result.pushKV("err_system_health", redemptionSystemHealth);
+            result.pushKV("err_ratio_bps", errRatioBps);
             result.pushKV("position_closed", positionClosed);
 
             return result;
@@ -1911,7 +2196,13 @@ RPCHelpMan listdigidollarpositions()
                 {
                     {"active_only", RPCArg::Type::BOOL, RPCArg::Default{true}, "Only show active positions"},
                     {"tier_filter", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Filter by specific lock tier (0-9)"},
-                    {"min_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Minimum DD amount filter"}
+                    {"min_amount", RPCArg::Type::AMOUNT, RPCArg::Optional::OMITTED, "Minimum DD amount filter"},
+                    // DD-FA-FUNC-034 (Wave 21 Agent C): per-call paging
+                    // window so the RPC body stays bounded for wallets
+                    // with thousands of positions. Default 0 keeps the
+                    // historical "return all matching positions" body.
+                    {"count", RPCArg::Type::NUM, RPCArg::Default{0}, "Maximum positions to return (0 = no limit, max 1000)"},
+                    {"skip", RPCArg::Type::NUM, RPCArg::Default{0}, "Number of matching positions to skip before returning results"}
                 },
                 RPCResult{
                     RPCResult::Type::ARR, "", "",
@@ -1941,8 +2232,10 @@ RPCHelpMan listdigidollarpositions()
                     HelpExampleCli("listdigidollarpositions", "") +
                     HelpExampleCli("listdigidollarpositions", "false") +
                     HelpExampleCli("listdigidollarpositions", "true 3") +
+                    HelpExampleCli("listdigidollarpositions", "false null 0 50 0") +
                     HelpExampleRpc("listdigidollarpositions", "") +
-                    HelpExampleRpc("listdigidollarpositions", "false, 3")
+                    HelpExampleRpc("listdigidollarpositions", "false, 3") +
+                    HelpExampleRpc("listdigidollarpositions", "false, null, 0, 50, 0")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -1966,6 +2259,24 @@ RPCHelpMan listdigidollarpositions()
                             request.params[1].getInt<int>() : -1;
             CAmount minAmount = OptionalParamIsSet(request, 2) ?
                                ParseDigiDollarRpcAmount(request.params[2]) : 0;
+            // DD-FA-FUNC-034 (Wave 21 Agent C): bound the response body so a
+            // wallet with thousands of positions cannot trivially DoS its own
+            // RPC clients. The default count=0 preserves the historical
+            // "return all matching positions" behaviour for compatibility
+            // with existing scripts; positive counts clamp to the same 1000
+            // ceiling that listdigidollartxs already enforces.
+            int countLimit = OptionalParamIsSet(request, 3) ? request.params[3].getInt<int>() : 0;
+            int skipCount = OptionalParamIsSet(request, 4) ? request.params[4].getInt<int>() : 0;
+            if (tierFilter < -1 || tierFilter > 9) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    "Tier filter must be between 0 and 9, or -1 for no filter");
+            }
+            if (countLimit < 0 || countLimit > 1000) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Count must be between 0 and 1000");
+            }
+            if (skipCount < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Skip must be non-negative");
+            }
 
             // Get wallet
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
@@ -1973,20 +2284,46 @@ RPCHelpMan listdigidollarpositions()
 
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            pwallet->BlockUntilSyncedToCurrentChain();
+            // A reindex restart can load the wallet and abandon stale DD redeem
+            // transactions before chainstate is ready, causing the startup DD
+            // scan to skip active-flag reconciliation. Reconcile on read, after
+            // sync, so listdigidollarpositions reflects the active chain rather
+            // than a stale pre-reindex pending-spend reservation.
+            dd_wallet->ReconcilePositionStates();
 
             // Get all positions
             LOCK(pwallet->cs_wallet);
             std::vector<WalletCollateralPosition> positions = dd_wallet->GetDDTimeLocks(false);
             int currentHeight = pwallet->GetLastBlockHeight();
             const bool walletPrivateKeysDisabled = pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+            // DD-FA-FUNC-022 (Wave 17 Agent C): a locked encrypted wallet
+            // physically cannot construct a redemption witness even though
+            // the WALLET_FLAG_DISABLE_PRIVATE_KEYS flag is unset. Treat the
+            // locked state the same as private-keys-disabled when computing
+            // the spendable / can_redeem flags so RPC clients are not
+            // deceived into telling the user they can redeem now.
+            const bool walletLocked = pwallet->IsLocked();
+            const bool walletCannotSign = walletPrivateKeysDisabled || walletLocked;
 
             UniValue result(UniValue::VARR);
 
+            // DD-FA-FUNC-034: paging counters apply *after* the filter chain
+            // so skip/count refer to the matching subset the caller already
+            // narrowed to (mirrors the listdigidollartxs paging contract).
+            int skipped = 0;
+            int processed = 0;
             for (const auto& pos : positions) {
                 // Apply filters
                 if (activeOnly && !pos.is_active) continue;
                 if (tierFilter >= 0 && pos.lock_tier != static_cast<uint32_t>(tierFilter)) continue;
                 if (minAmount > 0 && pos.dd_minted < minAmount) continue;
+
+                if (skipped < skipCount) {
+                    ++skipped;
+                    continue;
+                }
+                if (countLimit > 0 && processed >= countLimit) break;
 
                 UniValue position(UniValue::VOBJ);
                 position.pushKV("position_id", pos.dd_timelock_id.GetHex());
@@ -2034,10 +2371,12 @@ RPCHelpMan listdigidollarpositions()
                 position.pushKV("health_ratio", healthRatio);
 
                 // can_redeem requires: confirmed, unlocked, active, AND has collateral
-                // Received DD (dgb_collateral=0) cannot be redeemed - only spent/transferred
-                bool canRedeem = confirmations > 0 && blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0 && !walletPrivateKeysDisabled;
+                // Received DD (dgb_collateral=0) cannot be redeemed - only spent/transferred.
+                // Wave 17 / DD-FA-FUNC-022: also gate on walletCannotSign so a
+                // locked encrypted wallet does not falsely advertise can_redeem.
+                bool canRedeem = confirmations > 0 && blocksRemaining == 0 && pos.is_active && pos.dgb_collateral > 0 && !walletCannotSign;
                 position.pushKV("can_redeem", canRedeem);
-                position.pushKV("spendable", !walletPrivateKeysDisabled);
+                position.pushKV("spendable", !walletCannotSign);
                 position.pushKV("iswatchonly", walletPrivateKeysDisabled);
 
                 // Dates: estimate from block heights using 15-second block time
@@ -2058,6 +2397,7 @@ RPCHelpMan listdigidollarpositions()
                 }
 
                 result.push_back(position);
+                ++processed;
             }
 
             return result;
@@ -2109,9 +2449,19 @@ RPCHelpMan getdigidollaraddress()
             std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) return UniValue::VNULL;
 
-            wallet::EnsureWalletIsUnlocked(*pwallet);
+            // DD-FA-FUNC-028 (Wave 18 Agent C): DD-flavored locked-wallet
+            // hint, preserving the legacy "walletpassphrase" substring for
+            // backward compatibility with digidollar_encrypted_wallet.py.
+            if (pwallet->IsLocked()) {
+                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                    "DigiDollar address generation requires the wallet to be unlocked. "
+                    "Error: Please enter the wallet passphrase with walletpassphrase first.");
+            }
             if (pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+            }
+            if (!pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DESCRIPTORS)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar address generation requires a descriptor/bech32m HD wallet with private keys enabled");
             }
 
             LOCK(pwallet->cs_wallet);
@@ -2139,7 +2489,7 @@ RPCHelpMan getdigidollaraddress()
 
             CKey dd_key = pwallet->GetHDKeyForDigiDollar("dd-address");
             if (!dd_key.IsValid()) {
-                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to generate key for DD address");
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar address generation requires a descriptor/bech32m HD wallet with private keys enabled");
             }
 
             // Create the P2TR output key from this key (key-path only, no script tree)
@@ -2245,6 +2595,7 @@ RPCHelpMan validateddaddress()
                         {RPCResult::Type::STR, "prefix", "Address prefix (DD/TD/RD)"},
                         {RPCResult::Type::BOOL, "ismine", "Whether address belongs to this wallet"},
                         {RPCResult::Type::BOOL, "iswatchonly", "Whether address is watch-only"},
+                        {RPCResult::Type::BOOL, "solvable", "If we know how to spend coins sent to this address, ignoring the possible lack of private keys (matches validateaddress semantics)"},
                         {RPCResult::Type::STR, "error", "Error description (if invalid)"}
                     }
                 },
@@ -2295,11 +2646,24 @@ RPCHelpMan validateddaddress()
             }
 
             result.pushKV("isvalid", isValid);
-            result.pushKV("address", isValid ? addressStr : "");
+            // DD-FA-FUNC-019 (Wave 15): echo the canonical re-encoded form
+            // (ddAddress.ToString()) instead of the raw user input. Now that
+            // CDigiDollarAddress rejects whitespace-padded strings up front
+            // this is a defense-in-depth: any future decoder that silently
+            // canonicalises (e.g. case folding) cannot leak the pre-canonical
+            // form through the validateddaddress reply.
+            result.pushKV("address", isValid ? ddAddress.ToString() : std::string{});
             result.pushKV("network", network);
             result.pushKV("prefix", prefix);
             bool isMine = false;
             bool isWatchOnly = false;
+            // DD-FA-FUNC-023 (Wave 17 Agent C): expose `solvable` with the
+            // same semantics as the upstream `validateaddress` RPC. A DD
+            // address is solvable when the wallet holds the descriptor /
+            // address-key required to construct a spending witness, even if
+            // the wallet is currently locked. Foreign DD addresses and any
+            // invalid input are solvable=false.
+            bool solvable = false;
             if (isValid) {
                 try {
                     auto pw = wallet::GetWalletForJSONRPCRequest(request);
@@ -2309,12 +2673,17 @@ RPCHelpMan validateddaddress()
                         if (ddw && ddw->IsMyDDAddress(addressStr)) {
                             isWatchOnly = privateKeysDisabled;
                             isMine = !isWatchOnly;
+                            // Wallet-known DD address always implies the
+                            // descriptor / DD address-key has been recorded,
+                            // so we know how to construct a witness.
+                            solvable = true;
                         }
                     }
                 } catch (...) {}
             }
             result.pushKV("ismine", isMine);
             result.pushKV("iswatchonly", isWatchOnly);
+            result.pushKV("solvable", solvable);
             result.pushKV("error", error);
 
             return result;
@@ -2329,7 +2698,8 @@ RPCHelpMan listdigidollaraddresses()
                 "Returns both owned and watch-only DD addresses with their balances and labels.\n",
                 {
                     {"include_watchonly", RPCArg::Type::BOOL, RPCArg::Default{false}, "Include watch-only addresses"},
-                    {"min_balance", RPCArg::Type::AMOUNT, RPCArg::Default{0}, "Minimum balance filter (in cents)"}
+                    {"min_balance", RPCArg::Type::AMOUNT, RPCArg::Default{0}, "Minimum balance filter (in cents)"},
+                    {"include_empty", RPCArg::Type::BOOL, RPCArg::Default{false}, "Include wallet-generated DD addresses with zero balance (DD-FA-FUNC-024 default-false to avoid leaking the size of the keypool)"}
                 },
                 RPCResult{
                     RPCResult::Type::ARR, "", "",
@@ -2383,13 +2753,18 @@ RPCHelpMan listdigidollaraddresses()
             // Parse parameters
             bool includeWatchOnly = OptionalParamIsSet(request, 0) ? request.params[0].get_bool() : false;
             CAmount minBalance = OptionalParamIsSet(request, 1) ? ParseDigiDollarRpcAmount(request.params[1]) : 0;
+            // DD-FA-FUNC-024 (Wave 17 Agent C): omit empty addresses by
+            // default to avoid leaking the keypool size to RPC observers.
+            // include_empty=true preserves the prior default behaviour for
+            // explicit operator queries.
+            bool includeEmpty = OptionalParamIsSet(request, 2) ? request.params[2].get_bool() : false;
             const bool privateKeysDisabled = pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
 
             UniValue result(UniValue::VARR);
 
             LOCK2(pwallet->cs_wallet, dd_wallet->cs_dd_wallet);
 
-            // Build address→balance map from DD UTXOs
+            // Build address->balance map from DD UTXOs.
             std::map<std::string, CAmount> addressBalances;
             std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs();
             for (const auto& utxo : utxos) {
@@ -2408,14 +2783,14 @@ RPCHelpMan listdigidollaraddresses()
                 addressBalances[ddAddr] += utxo.dd_amount;
             }
 
-            // Also include DD address keys that may have zero balance
-            // (addresses generated but not yet received on)
-            // dd_address_keys is keyed by XOnlyPubKey bytes
-            // We access them indirectly through the UTXOs already collected above.
-            // Any address with a stored key but no UTXO will not appear (no balance).
+            for (const std::string& addr : dd_wallet->GetKnownDDAddresses()) {
+                addressBalances.try_emplace(addr, 0);
+            }
 
             for (const auto& [addr, balance] : addressBalances) {
                 if (balance < minBalance) continue;
+                // DD-FA-FUNC-024: hide zero-balance addresses by default.
+                if (!includeEmpty && balance == 0) continue;
 
                 bool isWatchOnly = privateKeysDisabled;
                 bool isMine = !isWatchOnly;
@@ -2443,23 +2818,23 @@ RPCHelpMan listdigidollaraddresses()
 static RPCHelpMan importdigidollaraddress()
 {
     return RPCHelpMan{"importdigidollaraddress",
-                "\nImport a DigiDollar address for watch-only monitoring.\n"
-                "Adds an external DD address to watch for incoming transactions without spending capability.\n",
+                "\nValidate a DigiDollar address for a future watch-only import flow.\n"
+                "Watch-only DigiDollar address import is explicitly unsupported in V1; this RPC does not change wallet state.\n",
                 {
-                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to import"},
-                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Optional label for the address"},
-                    {"rescan", RPCArg::Type::BOOL, RPCArg::Default{false}, "Rescan blockchain for transactions"},
-                    {"p2sh", RPCArg::Type::BOOL, RPCArg::Default{false}, "Add P2SH version of address (advanced)"}
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to validate"},
+                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Optional label echoed in the response; not stored"},
+                    {"rescan", RPCArg::Type::BOOL, RPCArg::Default{false}, "Ignored; rescan is not performed"},
+                    {"p2sh", RPCArg::Type::BOOL, RPCArg::Default{false}, "Ignored; P2SH import is not supported"}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::STR, "address", "Imported DigiDollar address"},
-                        {RPCResult::Type::STR, "label", "Assigned label"},
-                        {RPCResult::Type::BOOL, "success", "Whether import was successful"},
-                        {RPCResult::Type::BOOL, "rescan_performed", "Whether blockchain rescan was performed"},
-                        {RPCResult::Type::NUM, "transactions_found", "Number of existing transactions found (if rescanned)"},
-                        {RPCResult::Type::STR, "warning", "Any warnings about the import"}
+                        {RPCResult::Type::STR, "address", "Validated DigiDollar address"},
+                        {RPCResult::Type::STR, "label", "Echoed label"},
+                        {RPCResult::Type::BOOL, "success", "Always false because V1 import is unsupported"},
+                        {RPCResult::Type::BOOL, "rescan_performed", "Always false because no rescan is performed"},
+                        {RPCResult::Type::NUM, "transactions_found", "Always 0 because no import/rescan is performed"},
+                        {RPCResult::Type::STR, "warning", "Unsupported-import warning"}
                     }
                 },
                 RPCExamples{
@@ -2492,7 +2867,7 @@ static RPCHelpMan importdigidollaraddress()
 
             bool success = false;
             int transactionsFound = 0;
-            std::string warning = "DigiDollar watch-only import is not implemented; no address was imported";
+            std::string warning = "DigiDollar watch-only import is explicitly unsupported in this build; no wallet state was changed";
 
             if (rescan) {
                 warning += "; rescan was not performed";
@@ -2590,6 +2965,7 @@ RPCHelpMan getdigidollarbalance()
             CAmount confirmedBalance = 0;
             CAmount unconfirmedBalance = 0;
             int addressCount = 0;
+            const int confirmedMinConf = std::max(1, minConf);
 
             if (!addressStr.empty()) {
                 // Get balance for specific address
@@ -2599,53 +2975,61 @@ RPCHelpMan getdigidollarbalance()
                 }
 
                 if (includeWatchOnly || !pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
-                    std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs();
+                    std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs(/*include_unconfirmed=*/minConf == 0);
                     for (const auto& utxo : utxos) {
                         CTxOut txout;
                         int depth = 0;
+                        bool inMempool = false;
                         {
                             LOCK(pwallet->cs_wallet);
                             const wallet::CWalletTx* wtx = pwallet->GetWalletTx(utxo.outpoint.hash);
                             if (!wtx || utxo.outpoint.n >= wtx->tx->vout.size()) continue;
                             depth = pwallet->GetTxDepthInMainChain(*wtx);
+                            inMempool = wtx->InMempool();
                             txout = wtx->tx->vout[utxo.outpoint.n];
                         }
-                        if (depth < minConf) continue;
-
                         CTxDestination dest;
                         if (!ExtractDestination(txout.scriptPubKey, dest)) continue;
                         if (EncodeDigiDollarAddress(dest) != addressStr) continue;
 
-                        confirmedBalance += utxo.dd_amount;
+                        if (depth >= confirmedMinConf) {
+                            confirmedBalance += utxo.dd_amount;
+                        } else if (minConf == 0 && depth == 0 && inMempool) {
+                            unconfirmedBalance += utxo.dd_amount;
+                        }
                     }
-                    addressCount = confirmedBalance > 0 ? 1 : 0;
+                    addressCount = (confirmedBalance + unconfirmedBalance) > 0 ? 1 : 0;
                 }
             } else {
                 // Get total wallet balance
                 if (includeWatchOnly || !pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
                     std::map<std::string, CAmount> confirmedAddressBalances;
-                    std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs();
+                    std::vector<DDUtxo> utxos = dd_wallet->GetDDUTXOs(/*include_unconfirmed=*/minConf == 0);
                     for (const auto& utxo : utxos) {
                         CTxOut txout;
                         int depth = 0;
+                        bool inMempool = false;
                         {
                             LOCK(pwallet->cs_wallet);
                             const wallet::CWalletTx* wtx = pwallet->GetWalletTx(utxo.outpoint.hash);
                             if (!wtx || utxo.outpoint.n >= wtx->tx->vout.size()) continue;
                             depth = pwallet->GetTxDepthInMainChain(*wtx);
+                            inMempool = wtx->InMempool();
                             txout = wtx->tx->vout[utxo.outpoint.n];
                         }
-                        if (depth < minConf) continue;
-
                         CTxDestination dest;
                         if (!ExtractDestination(txout.scriptPubKey, dest)) continue;
                         const std::string ddAddr = EncodeDigiDollarAddress(dest);
                         if (ddAddr.empty()) continue;
 
-                        confirmedBalance += utxo.dd_amount;
-                        confirmedAddressBalances[ddAddr] += utxo.dd_amount;
+                        if (depth >= confirmedMinConf) {
+                            confirmedBalance += utxo.dd_amount;
+                            confirmedAddressBalances[ddAddr] += utxo.dd_amount;
+                        } else if (minConf == 0 && depth == 0 && inMempool) {
+                            unconfirmedBalance += utxo.dd_amount;
+                            confirmedAddressBalances.try_emplace(ddAddr, 0);
+                        }
                     }
-                    unconfirmedBalance = minConf <= 1 ? dd_wallet->GetPendingDDBalance() : 0;
                     addressCount = confirmedAddressBalances.size();
                 }
             }
@@ -2677,7 +3061,10 @@ static RPCHelpMan estimatecollateral()
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
-                        {RPCResult::Type::STR_AMOUNT, "required_dgb", "Required DGB collateral amount"},
+                        {RPCResult::Type::STR_AMOUNT, "required_dgb", "Minimum consensus DGB collateral amount"},
+                        {RPCResult::Type::STR_AMOUNT, "minimum_required_dgb", "Minimum consensus DGB collateral amount"},
+                        {RPCResult::Type::STR_AMOUNT, "wallet_collateral_dgb", "DGB collateral the wallet mint builder will lock, including safety margin"},
+                        {RPCResult::Type::STR_AMOUNT, "collateral_safety_margin_dgb", "Extra DGB collateral added by the wallet safety margin"},
                         {RPCResult::Type::STR_AMOUNT, "dd_amount", "DigiDollar amount to mint (in cents)"},
                         {RPCResult::Type::NUM, "lock_tier", "Lock tier used"},
                         {RPCResult::Type::NUM, "lock_days", "Lock period in days"},
@@ -2688,7 +3075,7 @@ static RPCHelpMan estimatecollateral()
                         {RPCResult::Type::NUM, "oracle_price_usd", "DGB price in USD"},
                         {RPCResult::Type::NUM, "system_health", "Current system health percentage"},
                         {RPCResult::Type::STR, "health_tier", "System health tier"},
-                        {RPCResult::Type::STR_AMOUNT, "usd_value", "USD value of required DGB"}
+                        {RPCResult::Type::NUM, "usd_value", "DigiDollar face value in USD"}
                     }
                 },
                 RPCExamples{
@@ -2761,76 +3148,15 @@ static RPCHelpMan estimatecollateral()
             int lockDays = GetLockDaysForTier(lockTier);
             int baseRatio = GetMinCollateralRatio(lockTier);
 
-            // Get real system health and DCA multiplier from chain state.
-            //
-            // Bug #34 fix: previously this called GetSystemMetrics() without
-            // populating the cache first. That static cache (s_currentMetrics)
-            // is only filled when ScanUTXOSet() runs, which only happens inside
-            // getdigidollarstats and getprotectionstatus. If estimatecollateral
-            // ran before either of those, the cache had totalDDSupply=0, and the
-            // check below hardcoded systemHealth to 0 / emergency / DCA 2x —
-            // even when the system was well-collateralized at 528%.
-            //
-            // Fix: read totalCollateral and totalDDSupply from the stats index
-            // (fast, already synced) or fall back to ScanUTXOSet(), matching
-            // the same pattern getdigidollarstats and getprotectionstatus use.
-            CAmount totalCollateral_est = 0;
-            CAmount totalDD_est = 0;
-
-            {
-                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
-                ChainstateManager& chainman = EnsureChainman(node);
-
-                if (g_digidollar_stats_index) {
-                    // Fast path: read from the stats index (already synced)
-                    if (g_digidollar_stats_index->BlockUntilSyncedToCurrentChain()) {
-                        const CBlockIndex* pindex;
-                        {
-                            LOCK(cs_main);
-                            pindex = chainman.ActiveChain().Tip();
-                        }
-                        if (pindex) {
-                            auto stats = g_digidollar_stats_index->LookUpStats(*pindex);
-                            if (stats) {
-                                totalDD_est = stats->total_dd_supply;
-                                totalCollateral_est = stats->total_collateral;
-                            }
-                        }
-                    }
-                } else {
-                    // Slow fallback: scan the UTXO set (same as getdigidollarstats)
-                    Chainstate& active_chainstate = chainman.ActiveChainstate();
-                    active_chainstate.ForceFlushStateToDisk();
-                    {
-                        LOCK(::cs_main);
-                        CCoinsView* coins_view = &active_chainstate.CoinsDB();
-                        node::BlockManager* blockman = &active_chainstate.m_blockman;
-                        const CTxMemPool* mempool = node.mempool.get();
-                        DigiDollar::SystemHealthMonitor::ScanUTXOSet(
-                            coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
-                    }
-                    DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
-                    totalCollateral_est = metrics.totalCollateral;
-                    totalDD_est = metrics.totalDDSupply;
-                }
-            }
-
-            CAmount oraclePriceMillicents_est = oraclePriceMicroUSD / 10;
-
-            // Calculate system health from real chain data.
-            // When totalDD is 0 (no positions exist), use max health (30000)
-            // so DCA multiplier is 1x — there's nothing at risk, no reason to
-            // penalize the first minter with an emergency multiplier.
-            int systemHealth;
-            if (totalDD_est == 0) {
-                systemHealth = 30000;
-            } else {
-                systemHealth = DynamicCollateralAdjustment::CalculateSystemHealth(
-                    totalCollateral_est, totalDD_est, oraclePriceMillicents_est);
-            }
+            // Use the same chain-derived health source and empty-supply behavior
+            // as calculatecollateralrequirement().
+            int systemHealth = GetDigiDollarRpcSystemHealth(request, oraclePriceMicroUSD, 30000);
             auto healthTier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
             double dcaMultiplier = healthTier.multiplier;
-            int effectiveRatio = static_cast<int>(baseRatio * dcaMultiplier);
+            int effectiveRatio = DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
+            if (effectiveRatio <= 0 || effectiveRatio == std::numeric_limits<int>::max()) {
+                throw JSONRPCError(RPC_MISC_ERROR, "DCA collateral ratio calculation failed");
+            }
 
             // Calculate required DGB using micro-USD precision
             // Formula: DGB_sats = (DD_cents * COIN * ratio * 100) / oracle_micro_usd
@@ -2846,10 +3172,18 @@ static RPCHelpMan estimatecollateral()
             if (result128_est > static_cast<__int128>(MAX_MONEY)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Required collateral exceeds maximum money supply");
             }
-            uint64_t requiredDGB = static_cast<uint64_t>(result128_est);
+            CAmount requiredDGB = static_cast<CAmount>(result128_est);
+            const CAmount walletCollateralDGB = DigiDollar::ApplyCollateralSafetyMargin(requiredDGB);
+            if (walletCollateralDGB <= 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Wallet collateral requirement exceeds maximum money supply");
+            }
+            const CAmount collateralSafetyMarginDGB = walletCollateralDGB - requiredDGB;
 
             UniValue result(UniValue::VOBJ);
-            result.pushKV("required_dgb", ValueFromAmount(static_cast<CAmount>(requiredDGB)));
+            result.pushKV("required_dgb", ValueFromAmount(requiredDGB));
+            result.pushKV("minimum_required_dgb", ValueFromAmount(requiredDGB));
+            result.pushKV("wallet_collateral_dgb", ValueFromAmount(walletCollateralDGB));
+            result.pushKV("collateral_safety_margin_dgb", ValueFromAmount(collateralSafetyMarginDGB));
             result.pushKV("dd_amount", int64_t{ddAmount});
             result.pushKV("lock_tier", lockTier);
             result.pushKV("lock_days", lockDays);
@@ -2884,9 +3218,13 @@ RPCHelpMan getredemptioninfo()
                     {
                         {RPCResult::Type::STR, "position_id", "Position identifier"},
                         {RPCResult::Type::BOOL, "can_redeem", "Whether position can be redeemed now"},
-                        {RPCResult::Type::STR, "redemption_path", "Available redemption path (normal/emergency/liquidation)"},
+                        {RPCResult::Type::STR, "redemption_path", "Available redemption path (normal/emergency)"},
                         {RPCResult::Type::STR_AMOUNT, "total_dd_minted", "Total DD minted in this position"},
                         {RPCResult::Type::STR_AMOUNT, "redeemable_dd", "DD amount that can be redeemed"},
+                        {RPCResult::Type::STR_AMOUNT, "required_dd_burn", "DD amount that must be burned to redeem the position"},
+                        {RPCResult::Type::BOOL, "err_active", "Whether ERR burn rules are active"},
+                        {RPCResult::Type::NUM, "err_system_health", "System health percentage used for ERR"},
+                        {RPCResult::Type::NUM, "err_ratio_bps", "ERR ratio in basis points"},
                         {RPCResult::Type::STR_AMOUNT, "dgb_return", "Estimated DGB return amount"},
                         {RPCResult::Type::NUM, "unlock_height", "Block height when position unlocks"},
                         {RPCResult::Type::NUM, "timelock_remaining", "Blocks until unlock (0 if unlocked)"},
@@ -2934,6 +3272,8 @@ RPCHelpMan getredemptioninfo()
             // Get DD wallet and look up the real position
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            pwallet->BlockUntilSyncedToCurrentChain();
+            dd_wallet->ReconcilePositionStates();
 
             LOCK(pwallet->cs_wallet);
             WalletCollateralPosition foundPosition;
@@ -2972,15 +3312,19 @@ RPCHelpMan getredemptioninfo()
             // Determine redemption path based on system health
             std::string redemptionPath = "normal";
             CAmount penaltyAmount = 0;
+            int redemptionSystemHealth = DynamicCollateralAdjustment::GetCurrentSystemHealth();
             auto errState = DigiDollar::ERR::EmergencyRedemptionRatio::GetCurrentState();
-            if (errState.isActive) {
+            if (errState.isActive && errState.systemHealth < 100) {
+                redemptionSystemHealth = errState.systemHealth;
+            }
+            const bool errActive = redemptionSystemHealth >= 0 && redemptionSystemHealth < 100;
+            CAmount requiredDDBurn = foundPosition.dd_minted;
+            int errRatioBps = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRRatioBps(redemptionSystemHealth);
+            if (errActive) {
                 redemptionPath = "emergency";
-                // ERR penalty: user must burn more DD than minted
-                // adjustmentRatio < 1.0 means burn (1/adjustmentRatio) * dd_minted
-                if (errState.adjustmentRatio > 0 && errState.adjustmentRatio < 1.0) {
-                    CAmount requiredBurn = static_cast<CAmount>(foundPosition.dd_minted / errState.adjustmentRatio);
-                    penaltyAmount = requiredBurn - foundPosition.dd_minted;
-                }
+                requiredDDBurn = DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(
+                    foundPosition.dd_minted, redemptionSystemHealth);
+                penaltyAmount = requiredDDBurn - foundPosition.dd_minted;
             }
 
             if (ddAmount > 0 && ddAmount != foundPosition.dd_minted) {
@@ -2990,19 +3334,21 @@ RPCHelpMan getredemptioninfo()
                               foundPosition.dd_minted, ddAmount));
             }
 
-            // Determine if position can be redeemed. Read-only/watch-only wallets
-            // can monitor positions, but cannot sign a redemption.
+            // Determine if position can be redeemed. Read-only/watch-only and
+            // locked encrypted wallets can monitor positions, but cannot sign
+            // a redemption.
+            const bool walletLocked = pwallet->IsLocked();
+            const bool walletCannotSign = walletPrivateKeysDisabled || walletLocked;
             bool canRedeem = confirmations > 0 && foundPosition.is_active && blocksRemaining == 0 &&
-                             foundPosition.dgb_collateral > 0 && !walletPrivateKeysDisabled;
+                             foundPosition.dgb_collateral > 0 && !walletCannotSign;
 
-            // Redeemable amount is always the full vault amount; partial
-            // redemption is rejected above and by redeemdigidollar.
+            // Redeemable amount is always the full vault amount; required burn
+            // may be higher during ERR.
             CAmount redeemableDD = foundPosition.dd_minted;
 
-            // Estimate DGB return: the locked collateral minus estimated fees
-            CAmount estimatedFee = dd_wallet->EstimateRedemptionFee(
-                COutPoint(positionId, 0), DigiDollar::RedemptionPath::NORMAL);
-            CAmount dgbReturn = std::max(CAmount(0), foundPosition.dgb_collateral - estimatedFee);
+            // Estimate DGB return: normal and ERR both return full locked collateral.
+            // Fees are paid from separate DGB fee inputs and are not a collateral haircut.
+            CAmount dgbReturn = foundPosition.dgb_collateral;
 
             // Compute dates from block heights using 15-second block time
             int64_t now = GetTime();
@@ -3023,6 +3369,10 @@ RPCHelpMan getredemptioninfo()
             result.pushKV("redemption_path", redemptionPath);
             result.pushKV("total_dd_minted", int64_t{foundPosition.dd_minted});
             result.pushKV("redeemable_dd", int64_t{redeemableDD});
+            result.pushKV("required_dd_burn", int64_t{requiredDDBurn});
+            result.pushKV("err_active", errActive);
+            result.pushKV("err_system_health", redemptionSystemHealth);
+            result.pushKV("err_ratio_bps", errRatioBps);
             result.pushKV("dgb_return", ValueFromAmount(dgbReturn));
             result.pushKV("unlock_height", static_cast<int>(foundPosition.unlock_height));
             result.pushKV("timelock_remaining", blocksRemaining);
@@ -3062,7 +3412,7 @@ RPCHelpMan listdigidollartxs()
                                 {RPCResult::Type::STR_AMOUNT, "fee", "Transaction fee paid (if applicable)"},
                                 {RPCResult::Type::STR, "comment", "Transaction comment (if any)"},
                                 {RPCResult::Type::BOOL, "abandoned", "Whether transaction was abandoned"},
-                                {RPCResult::Type::NUM, "lock_tier", "DCA lock tier for mint transactions (0-9)"}
+                                {RPCResult::Type::NUM, "lock_tier", "Collateral lock tier for mint transactions (0-9)"}
                             }
                         }
                     }
@@ -3404,6 +3754,8 @@ static RPCHelpMan getprotectionstatus()
                                 {RPCResult::Type::BOOL, "active", "Whether ERR is currently active"},
                                 {RPCResult::Type::NUM, "threshold", "ERR activation threshold (%)"},
                                 {RPCResult::Type::NUM, "current_ratio", "Current system ratio (%)"},
+                                {RPCResult::Type::NUM, "err_ratio_bps", "ERR ratio in basis points"},
+                                {RPCResult::Type::NUM, "required_burn_per_10000", "DD burn required for 10000 cents under current ERR state"},
                                 {RPCResult::Type::STR, "status", "ERR status (normal/warning/active)"}
                             }
                         },
@@ -3526,6 +3878,9 @@ static RPCHelpMan getprotectionstatus()
             err.pushKV("active", isEmergency);
             err.pushKV("threshold", 100);
             err.pushKV("current_ratio", systemHealth);
+            err.pushKV("err_ratio_bps", DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRRatioBps(systemHealth));
+            err.pushKV("required_burn_per_10000", int64_t{
+                DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(10000, systemHealth)});
             std::string errStatus;
             if (totalDD == 0 || systemHealth >= 100) {
                 errStatus = "normal";
@@ -3642,6 +3997,14 @@ static OracleScanResult ScanOracleDataFromChain(
             COracleBundle bundle;
             if (bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
                 if (!IsFreshOracleTimestamp(bundle.timestamp, now)) continue;
+                // v0x03 stores one aggregate MuSig2 signature; extracted
+                // participant messages do not carry individual attestations.
+                bool bundle_signature_valid = false;
+                if (bundle.IsMuSig2()) {
+                    std::string error;
+                    bundle_signature_valid = OracleBundleManager::ValidateMuSig2Bundle(
+                        bundle, h, Params().GetConsensus(), error);
+                }
                 if (h > res.last_bundle_height) {
                     res.last_bundle_height = h;
                     res.last_bundle_time = bundle.timestamp;
@@ -3656,7 +4019,9 @@ static OracleScanResult ScanOracleDataFromChain(
                         od.price_micro_usd = msg.price_micro_usd;
                         od.timestamp = msg.timestamp;
                         od.block_height = h;
-                        od.signature_valid = msg.VerifyPhase2();
+                        od.signature_valid = bundle.IsMuSig2()
+                            ? bundle_signature_valid
+                            : msg.VerifyAttestation();
                         od.has_data = true;
                         od.price_source = "on-chain";
                     }
@@ -3678,7 +4043,7 @@ static OracleScanResult ScanOracleDataFromChain(
                 od.price_micro_usd = msg.price_micro_usd;
                 od.timestamp = msg.timestamp;
                 od.block_height = 0;
-                od.signature_valid = msg.VerifyPhase2();
+                od.signature_valid = msg.VerifyAttestation();
                 od.has_data = true;
                 od.price_source = "pending";
             }
@@ -3884,6 +4249,7 @@ static RPCHelpMan getoracles()
                                 {RPCResult::Type::STR_HEX, "pubkey", "Oracle public key"},
                                 {RPCResult::Type::STR, "endpoint", "Oracle network endpoint"},
                                 {RPCResult::Type::BOOL, "is_active", "Whether oracle is configured as active"},
+                                {RPCResult::Type::BOOL, "in_consensus", "Whether oracle slot is in the active MuSig2 quorum (true if oracle_id < oracle_pubkey_count). Slots beyond oracle_pubkey_count are reserves and cannot vote in consensus."},
                                 {RPCResult::Type::NUM, "last_price_micro_usd", "Last reported price in micro-USD"},
                                 {RPCResult::Type::NUM, "last_price_usd", "Last reported price in USD"},
                                 {RPCResult::Type::NUM, "last_update", "Timestamp of last price"},
@@ -3950,6 +4316,15 @@ static RPCHelpMan getoracles()
                 info.pushKV("pubkey", HexStr(oc.pubkey));
                 info.pushKV("endpoint", oc.endpoint);
                 info.pushKV("is_active", oc.is_active);
+                // Wave 9 (Agent C): expose whether this slot can vote in
+                // consensus. The MuSig2 aggregator (`ValidateMuSig2Bundle`)
+                // rejects signers whose id >= nOraclePubkeyCount, so a
+                // slot is in the active quorum iff its id is below that
+                // count. Reserve slots (mainnet 17–29) display as
+                // is_active=true (configured) but in_consensus=false
+                // (cannot sign a v0x03 bundle that consensus accepts).
+                const int pubkey_count = params.GetConsensus().nOraclePubkeyCount;
+                info.pushKV("in_consensus", static_cast<int>(oc.id) < pubkey_count);
 
                 auto it = scan.oracle_data.find(oc.id);
                 if (it != scan.oracle_data.end() && it->second.has_data) {
@@ -4159,15 +4534,45 @@ RPCHelpMan createoraclekey()
                 throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
             }
 
-            // Ensure wallet is unlocked
-            wallet::EnsureWalletIsUnlocked(*pwallet);
-
-            // Parse and validate oracle_id
-            uint32_t oracle_id = request.params[0].getInt<int>();
-            if (oracle_id >= (uint32_t)ORACLE_TOTAL_COUNT) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER,
-                    strprintf("Invalid oracle ID %u. Must be between 0 and %d", oracle_id, ORACLE_TOTAL_COUNT - 1));
+            // DD-FA-FUNC-028 (Wave 18 Agent C): DD-flavored locked-wallet
+            // hint for createoraclekey (matches mintdigidollar /
+            // senddigidollar / sendmanydigidollar / getdigidollaraddress /
+            // redeemdigidollar). Preserves the legacy "walletpassphrase"
+            // substring for backward compatibility with
+            // digidollar_encrypted_wallet.py.
+            if (pwallet->IsLocked()) {
+                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                    "DigiDollar oracle key generation requires the wallet to be unlocked. "
+                    "Error: Please enter the wallet passphrase with walletpassphrase first.");
             }
+
+            // Parse and validate oracle_id (DD-FA-FUNC-029).
+            //
+            // The previous implementation read the parameter into a
+            // uint32_t before bounds-checking, so a negative input
+            // wrapped to 4294967295 and produced a confusing diagnostic
+            // (the rejection still happened, but the error text disagreed
+            // with the user input). Mirror startoracle / stoporacle /
+            // getoraclepubkey by reading into a signed int and rejecting
+            // negatives explicitly.
+            int oracle_id_signed = request.params[0].getInt<int>();
+            if (oracle_id_signed < 0 || oracle_id_signed >= ORACLE_TOTAL_COUNT) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Invalid oracle ID %d. Must be between 0 and %d",
+                              oracle_id_signed, ORACLE_TOTAL_COUNT - 1));
+            }
+            // Reject oracle_ids that have no slot in the active chain
+            // params roster. Without this, regtest (which only publishes
+            // 7 slots) would let createoraclekey persist an unusable key
+            // for slots 7..29 that startoracle later refuses with
+            // "Oracle ID N not found in chain parameters". Doing the
+            // check up front keeps wallet state consistent with what the
+            // rest of the oracle CRUD surface accepts.
+            if (Params().GetOracleNode(static_cast<uint32_t>(oracle_id_signed)) == nullptr) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Oracle ID %d not found in chain parameters", oracle_id_signed));
+            }
+            uint32_t oracle_id = static_cast<uint32_t>(oracle_id_signed);
 
             // Check if key already exists for this oracle_id
             CKey existing_key;
@@ -4301,7 +4706,7 @@ RPCHelpMan startoracle()
                                 if (success) {
                                     status_message = "Existing oracle started";
                                 } else if (Params().GetChainType() != ChainType::TESTNET) {
-                                    status_message = "Oracle initialized (price thread not active on this network)";
+                                    status_message = "Oracle initialized (price fetcher is not running)";
                                 } else {
                                     status_message = "Failed to start existing oracle";
                                 }
@@ -4311,6 +4716,16 @@ RPCHelpMan startoracle()
                             try {
                                 std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
                                 if (pwallet) {
+                                    // If no private key was provided, the only
+                                    // remaining start path loads an oracle key
+                                    // from the wallet. Surface the same
+                                    // DigiDollar-specific unlock hint as the
+                                    // rest of the DD/oracle wallet write RPCs.
+                                    if (pwallet->IsLocked()) {
+                                        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                                            "DigiDollar oracle start requires the wallet to be unlocked. "
+                                            "Error: Please enter the wallet passphrase with walletpassphrase first.");
+                                    }
                                     // Ensure wallet is unlocked before reading keys
                                     wallet::EnsureWalletIsUnlocked(*pwallet);
                                     CKey wallet_key;
@@ -4401,6 +4816,10 @@ static RPCHelpMan stoporacle()
             if (oracle_id < 0 || oracle_id >= ORACLE_TOTAL_COUNT) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
                     strprintf("Invalid oracle ID %d. Must be between 0 and %d", oracle_id, ORACLE_TOTAL_COUNT - 1));
+            }
+            if (Params().GetOracleNode(static_cast<uint32_t>(oracle_id)) == nullptr) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Oracle ID %d not found in chain parameters", oracle_id));
             }
 
             OracleManager& oracle_manager = OracleManager::GetInstance();
@@ -4494,6 +4913,10 @@ static RPCHelpMan getoraclepubkey()
                 throw JSONRPCError(RPC_INVALID_PARAMETER,
                     strprintf("Invalid oracle ID %d. Must be between 0 and %d", oracle_id, ORACLE_TOTAL_COUNT - 1));
             }
+            if (Params().GetOracleNode(static_cast<uint32_t>(oracle_id)) == nullptr) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    strprintf("Oracle ID %d not found in chain parameters", oracle_id));
+            }
 
             // Get oracle manager
             OracleManager& oracle_manager = OracleManager::GetInstance();
@@ -4555,6 +4978,8 @@ static RPCHelpMan setmockoracleprice()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            int currentHeight = 0;
+
             // Check DigiDollar activation
             {
                 const node::NodeContext& node = EnsureAnyNodeContext(request.context);
@@ -4563,6 +4988,7 @@ static RPCHelpMan setmockoracleprice()
                 if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
                 }
+                currentHeight = tip ? tip->nHeight : 0;
             }
             // Only allow in RegTest mode
             if (Params().GetChainType() != ChainType::REGTEST) {
@@ -4587,7 +5013,8 @@ static RPCHelpMan setmockoracleprice()
             }
 
             // Set the mock price (mock oracle now accepts micro-USD directly)
-            MockOracleManager::GetInstance().SetMockPrice(price_micro_usd);
+            MockOracleManager::GetInstance().SetMockPrice(price_micro_usd, currentHeight);
+            PublishRegtestMockMuSig2Quote(currentHeight + 1);
 
             // Build result
             UniValue result(UniValue::VOBJ);
@@ -4623,9 +5050,18 @@ static RPCHelpMan getmockoracleprice()
                 RPCExamples{
                     HelpExampleCli("getmockoracleprice", "") +
                     HelpExampleRpc("getmockoracleprice", "")
-                },
+        },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            // Check DigiDollar activation
+            {
+                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+                ChainstateManager& chainman = EnsureChainman(node);
+                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+                }
+            }
             // Only allow in RegTest mode
             if (Params().GetChainType() != ChainType::REGTEST) {
                 throw JSONRPCError(RPC_METHOD_NOT_FOUND,
@@ -4689,6 +5125,8 @@ static RPCHelpMan simulatepricevolatility()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
+            int currentHeight = 0;
+
             // Check DigiDollar activation
             {
                 const node::NodeContext& node = EnsureAnyNodeContext(request.context);
@@ -4697,6 +5135,7 @@ static RPCHelpMan simulatepricevolatility()
                 if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
                     throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
                 }
+                currentHeight = tip ? tip->nHeight : 0;
             }
             // Only allow in RegTest mode
             if (Params().GetChainType() != ChainType::REGTEST) {
@@ -4712,8 +5151,9 @@ static RPCHelpMan simulatepricevolatility()
             }
 
             CAmount oldPrice = MockOracleManager::GetInstance().GetCurrentPrice();
-            MockOracleManager::GetInstance().SimulateVolatility(percentChange);
+            MockOracleManager::GetInstance().SimulateVolatility(percentChange, currentHeight);
             CAmount newPrice = MockOracleManager::GetInstance().GetCurrentPrice();
+            PublishRegtestMockMuSig2Quote(currentHeight + 1);
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("old_price", oldPrice);
@@ -4790,98 +5230,6 @@ static RPCHelpMan enablemockoracle()
     };
 }
 
-static RPCHelpMan submitoracleprice()
-{
-    return RPCHelpMan{"submitoracleprice",
-                "\nSubmit an individual oracle price message for Phase 2 testing (RegTest only).\n"
-                "Creates a signed oracle price message from the specified oracle ID and adds\n"
-                "it to the pending message pool. When enough messages are collected (>= min_required),\n"
-                "a Phase 2 bundle will be created in the next block.\n",
-                {
-                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID (0-4 for regtest)"},
-                    {"price_micro_usd", RPCArg::Type::NUM, RPCArg::Optional::NO, "Price in micro-USD per DGB (e.g., 6500 = $0.0065/DGB)"}
-                },
-                RPCResult{
-                    RPCResult::Type::OBJ, "", "",
-                    {
-                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID used"},
-                        {RPCResult::Type::NUM, "price_micro_usd", "Price submitted"},
-                        {RPCResult::Type::BOOL, "accepted", "Whether message was accepted"},
-                        {RPCResult::Type::NUM, "pending_count", "Total pending oracle messages"},
-                        {RPCResult::Type::NUM, "min_required", "Minimum messages required for consensus"}
-                    }
-                },
-                RPCExamples{
-                    HelpExampleCli("submitoracleprice", "0 6500") +
-                    HelpExampleCli("submitoracleprice", "1 6500") +
-                    HelpExampleCli("submitoracleprice", "2 6500") +
-                    HelpExampleRpc("submitoracleprice", "0, 6500")
-                },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-        {
-            // Check DigiDollar activation
-            {
-                const node::NodeContext& node = EnsureAnyNodeContext(request.context);
-                ChainstateManager& chainman = EnsureChainman(node);
-                const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                    throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
-                }
-            }
-            if (Params().GetChainType() != ChainType::REGTEST) {
-                throw JSONRPCError(RPC_METHOD_NOT_FOUND,
-                    "submitoracleprice is only available in RegTest mode");
-            }
-
-            uint32_t oracle_id = request.params[0].getInt<int>();
-            CAmount price_micro_usd = request.params[1].getInt<int64_t>();
-
-            if (oracle_id > 6) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Oracle ID must be 0-6 for regtest");
-            }
-            if (price_micro_usd <= 0) {
-                throw JSONRPCError(RPC_INVALID_PARAMETER, "Price must be positive");
-            }
-
-            // Get test private key for this oracle
-            MockOracleManager& mock = MockOracleManager::GetInstance();
-            CKey key = mock.GetTestKey(oracle_id);
-            if (!key.IsValid()) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR,
-                    strprintf("No test key available for oracle %d", oracle_id));
-            }
-
-            // Create and sign the oracle price message
-            COraclePriceMessage msg;
-            msg.oracle_id = oracle_id;
-            msg.price_micro_usd = static_cast<uint64_t>(price_micro_usd);
-            msg.timestamp = GetTime();
-            msg.block_height = 0; // Will be set by block creation
-            msg.nonce = GetRand(std::numeric_limits<uint64_t>::max());
-            msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
-
-            if (!msg.SignPhase2(key)) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to sign oracle message");
-            }
-
-            // Add to bundle manager's pending messages
-            OracleBundleManager& manager = OracleBundleManager::GetInstance();
-            bool accepted = manager.AddOracleMessage(msg);
-
-            const Consensus::Params& consensus = Params().GetConsensus();
-
-            UniValue result(UniValue::VOBJ);
-            result.pushKV("oracle_id", (int)oracle_id);
-            result.pushKV("price_micro_usd", price_micro_usd);
-            result.pushKV("accepted", accepted);
-            result.pushKV("pending_count", (int)manager.GetPendingMessageCount());
-            result.pushKV("min_required", consensus.nOracleRequiredMessages);
-
-            return result;
-        },
-    };
-}
-
 void RegisterDigiDollarRPCCommands(CRPCTable &t)
 {
     static const CRPCCommand commands[] = {
@@ -4925,10 +5273,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         {"digidollar", &setmockoracleprice},
         {"digidollar", &getmockoracleprice},
         {"digidollar", &simulatepricevolatility},
-        {"digidollar", &enablemockoracle},
-
-        // Phase 2 oracle testing (RegTest only)
-        {"oracle", &submitoracleprice}
+        {"digidollar", &enablemockoracle}
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

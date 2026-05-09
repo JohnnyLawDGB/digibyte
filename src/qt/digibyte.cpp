@@ -500,6 +500,11 @@ void DigiByteApplication::requestShutdown()
     pollShutdownTimer->stop();
 
 #ifdef ENABLE_WALLET
+    // Destroy wallet views before WalletController destroys WalletModels. The
+    // DigiDollar Qt pages own refresh timers and keep raw WalletModel pointers,
+    // so views must not outlive their models during process shutdown.
+    window->removeAllWallets();
+
     // Delete wallet controller here manually, instead of relying on Qt object
     // tracking (https://doc.qt.io/qt-5/objecttrees.html). This makes sure
     // walletmodel m_handle_* notification handlers are deleted before wallets

@@ -308,7 +308,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_dcaLevelValue = new QLabel("0", this);
     m_dcaLevelValue->setObjectName("dcaLevelValue");
     m_dcaLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_dcaLevelValue->setToolTip(tr("Current Dollar-Cost Averaging intervention level"));
+    m_dcaLevelValue->setToolTip(tr("Current Dynamic Collateral Adjustment intervention level"));
     m_systemHealthLayout->addWidget(m_dcaLevelLabel, 2, 0);
     m_systemHealthLayout->addWidget(m_dcaLevelValue, 2, 1);
 
@@ -318,7 +318,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_errLevelValue = new QLabel("0", this);
     m_errLevelValue->setObjectName("errLevelValue");
     m_errLevelValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_errLevelValue->setToolTip(tr("Current Emergency Response Reserve level"));
+    m_errLevelValue->setToolTip(tr("Current Emergency Redemption Ratio level"));
     m_systemHealthLayout->addWidget(m_errLevelLabel, 3, 0);
     m_systemHealthLayout->addWidget(m_errLevelValue, 3, 1);
 
@@ -628,9 +628,7 @@ void DigiDollarOverviewWidget::updateOraclePrice()
 
     // Get price from MockOracleManager if in RegTest, otherwise use real oracle via RPC
     if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
-        // Get price from mock oracle
-        // Oracle price format: CENTS per DGB
-        // BUG #6 FIX: GetCurrentPrice() returns micro-USD, not cents
+        // Get regtest mock oracle price in micro-USD.
         // 1,000,000 micro-USD = $1.00
         CAmount priceMicroUsd = MockOracleManager::GetInstance().GetCurrentPrice();
 

@@ -26,6 +26,7 @@
 #include <wallet/digidollarwallet.h>
 #include <digidollar/digidollar.h>
 
+#include <array>
 #include <atomic>
 #include <optional>
 #include <string>
@@ -75,6 +76,7 @@ const std::string DD_OWNER_KEY{"ddownerkey"};           // DD owner keys for min
 const std::string DD_CRYPTED_ADDRESS_KEY{"ddcaddrkey"};  // Encrypted DD address keys (T4-03a)
 const std::string DD_CRYPTED_OWNER_KEY{"ddcownerkey"};   // Encrypted DD owner keys (T4-03a)
 const std::string ORACLE_KEY{"oraclekey"};               // Oracle private keys by oracle_id
+const std::string ORACLE_CRYPTED_KEY{"oracleckey"};      // Encrypted oracle private keys by oracle_id
 
 const std::unordered_set<std::string> LEGACY_TYPES{CRYPTED_KEY, CSCRIPT, DEFAULTKEY, HDCHAIN, KEYMETA, KEY, OLD_KEY, POOL, WATCHMETA, WATCHS};
 } // namespace DBKeys
@@ -620,8 +622,10 @@ bool WalletBatch::ReadDDAddressKey(const std::array<unsigned char, 32>& output_k
         return false;
     }
 
-    // Load the key - we need to derive the public key from the private key
-    if (!key.Load(privkey, CPubKey(), true /* fSkipCheck - we don't have pubkey to verify */)) {
+    std::array<unsigned char, CPubKey::COMPRESSED_SIZE> compressed_dummy{};
+    compressed_dummy[0] = 0x02;
+    CPubKey dummy_pubkey(compressed_dummy.begin(), compressed_dummy.end());
+    if (!key.Load(privkey, dummy_pubkey, true /* fSkipCheck - we don't have pubkey to verify */)) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: Failed to load DD address key from database\n");
         return false;
     }
@@ -661,8 +665,10 @@ bool WalletBatch::ReadDDOwnerKey(const uint256& dd_timelock_id, CKey& key)
         return false;
     }
 
-    // Load the key - we need to derive the public key from the private key
-    if (!key.Load(privkey, CPubKey(), true /* fSkipCheck - we don't have pubkey to verify */)) {
+    std::array<unsigned char, CPubKey::COMPRESSED_SIZE> compressed_dummy{};
+    compressed_dummy[0] = 0x02;
+    CPubKey dummy_pubkey(compressed_dummy.begin(), compressed_dummy.end());
+    if (!key.Load(privkey, dummy_pubkey, true /* fSkipCheck - we don't have pubkey to verify */)) {
         LogPrint(BCLog::WALLETDB, "DigiDollar: Failed to load DD owner key from database\n");
         return false;
     }
@@ -811,6 +817,47 @@ bool WalletBatch::EraseOracleKey(uint32_t oracle_id)
     bool success = EraseIC(std::make_pair(DBKeys::ORACLE_KEY, oracle_id));
     if (success) {
         LogPrint(BCLog::WALLETDB, "Oracle: Erased oracle key for oracle_id %u from database\n", oracle_id);
+    }
+    return success;
+}
+
+bool WalletBatch::WriteCryptedOracleKey(uint32_t oracle_id,
+                                        const CPubKey& pubkey,
+                                        const std::vector<unsigned char>& vchCryptedSecret)
+{
+    if (!WriteIC(std::make_pair(DBKeys::ORACLE_CRYPTED_KEY, oracle_id),
+                 std::make_pair(pubkey, vchCryptedSecret), false)) {
+        return false;
+    }
+    EraseIC(std::make_pair(DBKeys::ORACLE_KEY, oracle_id));
+    LogPrint(BCLog::WALLETDB, "Oracle: Wrote encrypted oracle key for oracle_id %u to database\n", oracle_id);
+    return true;
+}
+
+bool WalletBatch::HasCryptedOracleKey(uint32_t oracle_id)
+{
+    return m_batch->Exists(std::make_pair(DBKeys::ORACLE_CRYPTED_KEY, oracle_id));
+}
+
+bool WalletBatch::ReadCryptedOracleKey(uint32_t oracle_id,
+                                       CPubKey& pubkey,
+                                       std::vector<unsigned char>& vchCryptedSecret)
+{
+    std::pair<CPubKey, std::vector<unsigned char>> val;
+    if (!m_batch->Read(std::make_pair(DBKeys::ORACLE_CRYPTED_KEY, oracle_id), val)) {
+        return false;
+    }
+    pubkey = val.first;
+    vchCryptedSecret = val.second;
+    LogPrint(BCLog::WALLETDB, "Oracle: Read encrypted oracle key for oracle_id %u from database\n", oracle_id);
+    return true;
+}
+
+bool WalletBatch::EraseCryptedOracleKey(uint32_t oracle_id)
+{
+    bool success = EraseIC(std::make_pair(DBKeys::ORACLE_CRYPTED_KEY, oracle_id));
+    if (success) {
+        LogPrint(BCLog::WALLETDB, "Oracle: Erased encrypted oracle key for oracle_id %u from database\n", oracle_id);
     }
     return success;
 }

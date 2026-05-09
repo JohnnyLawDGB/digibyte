@@ -29,6 +29,7 @@
 #include <interfaces/node.h>
 #include <node/context.h>
 #include <validation.h>
+#include <versionbits.h>
 
 DigiDollarTab::DigiDollarTab(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
@@ -402,24 +403,30 @@ QString DigiDollarTab::getDeploymentStatus() const
 {
     if (!m_clientModel) return "unknown";
 
-    // Get status via the client model's node interface
-    interfaces::Node& node = m_clientModel->node();
-    int height = node.getNumBlocks();
+    try {
+        interfaces::Node& node = m_clientModel->node();
+        node::NodeContext* ctx = node.context();
+        if (!ctx || !ctx->chainman) return "unknown";
 
-    // Map height to BIP9 window status
-    const auto& params = Params().GetConsensus();
-    int window = params.nMinerConfirmationWindow;
-    int minHeight = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height;
+        ChainstateManager& chainman = *ctx->chainman;
+        const ThresholdState state = WITH_LOCK(cs_main, {
+            const CBlockIndex* tip = chainman.ActiveChain().Tip();
+            return chainman.m_versionbitscache.State(tip, chainman.GetConsensus(),
+                                                     Consensus::DEPLOYMENT_DIGIDOLLAR);
+        });
 
-    if (height < window) {
-        return "defined";
-    } else if (height < window * 2) {
-        return "started";
-    } else if (height < minHeight) {
-        return "locked_in";
+        switch (state) {
+        case ThresholdState::DEFINED: return "defined";
+        case ThresholdState::STARTED: return "started";
+        case ThresholdState::LOCKED_IN: return "locked_in";
+        case ThresholdState::ACTIVE: return "active";
+        case ThresholdState::FAILED: return "failed";
+        }
+    } catch (...) {
+        return "unknown";
     }
 
-    return "checking...";
+    return "unknown";
 }
 
 bool DigiDollarTab::isDigiDollarActive() const

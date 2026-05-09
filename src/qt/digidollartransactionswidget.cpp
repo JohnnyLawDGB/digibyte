@@ -508,8 +508,8 @@ QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations, boo
 
 QString DigiDollarTransactionsWidget::formatLockPeriod(int lockTier) const
 {
-    // Tier mappings: 0-8 (9 tiers total) - matches consensus/digidollar.h
-    // 0=1h (testing), 1=30d, 2=3mo, 3=6mo, 4=1y, 5=3y, 6=5y, 7=7y, 8=10y
+    // Tier mappings: 0-9 (10 tiers total) - matches consensus/digidollar.h
+    // 0=1h, 1=30d, 2=3mo, 3=6mo, 4=1y, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y
     switch (lockTier) {
         case 0:  return tr("1 hour");
         case 1:  return tr("30 days");

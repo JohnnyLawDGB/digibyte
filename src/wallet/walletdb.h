@@ -104,6 +104,7 @@ extern const std::string DD_OWNER_KEY;             // "ddownerkey" - DD owner ke
 extern const std::string DD_CRYPTED_ADDRESS_KEY;   // "ddcaddrkey" - encrypted DD address keys
 extern const std::string DD_CRYPTED_OWNER_KEY;     // "ddcownerkey" - encrypted DD owner keys
 extern const std::string ORACLE_KEY;               // "oraclekey"  - Oracle private keys by oracle_id
+extern const std::string ORACLE_CRYPTED_KEY;       // "oracleckey" - encrypted Oracle private keys by oracle_id
 
 // Keys in this set pertain only to the legacy wallet (LegacyScriptPubKeyMan) and are removed during migration from legacy to descriptors.
 extern const std::unordered_set<std::string> LEGACY_TYPES;
@@ -340,6 +341,14 @@ public:
     bool HasOracleKey(uint32_t oracle_id);
     bool ReadOracleKey(uint32_t oracle_id, CKey& key);
     bool EraseOracleKey(uint32_t oracle_id);
+    bool WriteCryptedOracleKey(uint32_t oracle_id,
+                               const CPubKey& pubkey,
+                               const std::vector<unsigned char>& vchCryptedSecret);
+    bool HasCryptedOracleKey(uint32_t oracle_id);
+    bool ReadCryptedOracleKey(uint32_t oracle_id,
+                              CPubKey& pubkey,
+                              std::vector<unsigned char>& vchCryptedSecret);
+    bool EraseCryptedOracleKey(uint32_t oracle_id);
 
     bool WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent);
     bool WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request);

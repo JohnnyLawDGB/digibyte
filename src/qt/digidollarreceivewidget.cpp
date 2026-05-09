@@ -479,9 +479,7 @@ void DigiDollarReceiveWidget::generateNewAddress()
     bool ok = false;
     double amountValue = m_currentAmount.toDouble(&ok);
     if (ok && amountValue > 0) {
-        // Convert DD amount to satoshis (cents to satoshis)
-        // 1 DD = 100 cents, 1 DGB = 100,000,000 satoshis
-        // For display purposes, store as cents
+        // Store DD payment-request amount in cents.
         recipient.amount = static_cast<CAmount>(amountValue * 100);
     } else {
         recipient.amount = 0; // No specific amount requested

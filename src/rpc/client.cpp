@@ -326,10 +326,13 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "listdigidollarpositions", 0, "active_only" },
     { "listdigidollarpositions", 1, "tier_filter" },
     { "listdigidollarpositions", 2, "min_amount" },
+    { "listdigidollarpositions", 3, "count" },
+    { "listdigidollarpositions", 4, "skip" },
     { "listdigidollartxs", 0, "count" },
     { "listdigidollartxs", 1, "skip" },
     { "listdigidollaraddresses", 0, "include_watchonly" },
     { "listdigidollaraddresses", 1, "min_balance" },
+    { "listdigidollaraddresses", 2, "include_empty" },
     { "importdigidollaraddress", 2, "rescan" },
     { "importdigidollaraddress", 3, "p2sh" },
     // DigiDollar oracle RPC commands
@@ -344,8 +347,6 @@ static const CRPCConvertParam vRPCConvertParams[] =
     // DigiDollar simulation/test RPC commands
     { "setmockoracleprice", 0, "price" },
     { "simulatepricevolatility", 0, "percent_change" },
-    { "submitoracleprice", 0, "oracle_id" },
-    { "submitoracleprice", 1, "price_micro_usd" },
 };
 // clang-format on
 

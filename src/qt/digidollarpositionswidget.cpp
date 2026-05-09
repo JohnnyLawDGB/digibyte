@@ -12,6 +12,7 @@
 #include <interfaces/wallet.h>
 #include <wallet/digidollarwallet.h>
 #include <consensus/amount.h>
+#include <consensus/digidollar.h>
 #include <oracle/mock_oracle.h>
 #include <oracle/bundle_manager.h>
 #include <chainparams.h>
@@ -210,6 +211,10 @@ void DigiDollarPositionsWidget::connectWalletSignals()
     // Connect to wallet balance changes (indicates new transactions)
     connect(m_walletModel, &WalletModel::balanceChanged,
             this, &DigiDollarPositionsWidget::updatePositions);
+    connect(m_walletModel, &WalletModel::encryptionStatusChanged, this, [this]() {
+        m_lastUpdateTime = 0;
+        updatePositions();
+    });
 }
 
 void DigiDollarPositionsWidget::connectClientSignals()
@@ -259,6 +264,10 @@ void DigiDollarPositionsWidget::updateView()
 
 void DigiDollarPositionsWidget::updatePositions()
 {
+    if (!isVisible()) {
+        return;
+    }
+
     // Bail out during shutdown to prevent deadlock on cs_dd_wallet (Bug #23)
     if (ShutdownRequested() || !m_walletModel || !m_clientModel) {
         return;
@@ -360,9 +369,14 @@ void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
     // Show Details action
     QAction* detailsAction = contextMenu.addAction(tr("📊 Show Details"));
     connect(detailsAction, &QAction::triggered, [this, position]() {
-        // Get lock period name
+        // Get lock period name. Tier 0 (1 hour) MUST have its
+        // own case — falling through to the default would mislabel a 240-block
+        // position as "1 year". Order and labels MUST match the
+        // canonical 10 tiers in consensus/digidollar.h and the corresponding
+        // Lock Tier table column above.
         QString lockPeriodName;
         switch(position.lockTier) {
+            case 0: lockPeriodName = tr("1 hour"); break;
             case 1: lockPeriodName = tr("30 days"); break;
             case 2: lockPeriodName = tr("3 months"); break;
             case 3: lockPeriodName = tr("6 months"); break;
@@ -372,23 +386,24 @@ void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
             case 7: lockPeriodName = tr("5 years"); break;
             case 8: lockPeriodName = tr("7 years"); break;
             case 9: lockPeriodName = tr("10 years"); break;
-            default: lockPeriodName = tr("1 year"); break;
+            default: lockPeriodName = tr("Unknown"); break;
         }
 
+        const QString healthText = formatHealthStatus(position.health);
         QString details = tr("Vault Details\n\n"
                            "Vault ID: %1\n"
                            "DD Minted: %2\n"
                            "DGB Collateral: %3\n"
                            "Lock Period: %4\n"
                            "Blocks Remaining: %5\n"
-                           "Health: %6%\n"
+                           "Health: %6\n"
                            "Can Redeem: %7")
                            .arg(position.positionId)
                            .arg(formatDDAmount(position.ddMinted))
                            .arg(formatDGBAmount(position.dgbCollateral))
                            .arg(lockPeriodName)
                            .arg(position.blocksRemaining)
-                           .arg(QString::number(position.health, 'f', 1))
+                           .arg(healthText)
                            .arg(position.canRedeem ? tr("Yes") : tr("No"));
 
         QMessageBox::information(this, tr("Vault Details"), details);
@@ -446,9 +461,12 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
     // Get current blockchain height for timelock calculations
     int currentHeight = m_clientModel->getNumBlocks();
 
-    // Get current oracle price (RegTest: $0.01 = 1000000 cents per DGB)
-    // In RegTest, we use the mock oracle price
+    // Get current oracle price in micro-USD; regtest can use mock helpers,
+    // while testnet/mainnet use the live oracle price.
     CAmount oraclePrice = GetMockOraclePrice();
+    const bool isWatchOnly = m_walletModel->wallet().privateKeysDisabled();
+    const bool isWalletLocked = m_walletModel->getEncryptionStatus() == WalletModel::Locked;
+    const bool walletCanSign = !isWatchOnly && !isWalletLocked;
 
     // Get positions from wallet backend
     std::vector<WalletCollateralPosition> walletPositions = GetWalletPositions();
@@ -496,7 +514,7 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
 
         // Can redeem if timelock expired, position is active, and the wallet can sign.
         // Private-key-disabled/watch-only wallets may observe vaults but cannot unlock them.
-        pos.canRedeem = !m_walletModel->wallet().privateKeysDisabled() && (pos.blocksRemaining == 0) && wp.is_active;
+        pos.canRedeem = walletCanSign && (pos.blocksRemaining == 0) && wp.is_active;
 
         // Track redeemed status
         pos.isRedeemed = !wp.is_active;
@@ -648,7 +666,7 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     switch(position.lockTier) {
         case 0:
             lockPeriodName = tr("1 hour");
-            lockPeriodTooltip = tr("1 hour time lock (1000% collateral) - TESTING ONLY");
+            lockPeriodTooltip = tr("1 hour time lock (1000% collateral)");
             break;
         case 1:
             lockPeriodName = tr("30 days");
@@ -689,6 +707,14 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
         default:
             lockPeriodName = tr("Unknown");
             lockPeriodTooltip = tr("Unknown lock tier");
+    }
+    if (position.lockTier >= 0 && position.lockTier <= 9) {
+        const int lock_days = DigiDollar::BlocksToLockDays(getLockTierBlocks(position.lockTier));
+        const int64_t lock_blocks = DigiDollar::LockDaysToBlocks(lock_days);
+        const int ratio = DigiDollar::GetCollateralRatioForLockTime(lock_blocks, Params().GetDigiDollarParams());
+        if (ratio > 0) {
+            lockPeriodTooltip = tr("%1 time lock (%2% collateral)").arg(lockPeriodName).arg(ratio);
+        }
     }
 
     QTableWidgetItem* tierItem = new QTableWidgetItem(lockPeriodName);
@@ -753,28 +779,40 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     m_positionsTable->setCellWidget(row, COL_HEALTH, healthWidget);
 
     // Actions (Redeem button)
-    QPushButton* redeemButton = createRedeemButton(position.positionId, position.isRedeemed, position.canRedeem);
+    const bool isWatchOnly =
+        m_walletModel ? m_walletModel->wallet().privateKeysDisabled() : false;
+    const bool isWalletLocked =
+        m_walletModel ? m_walletModel->getEncryptionStatus() == WalletModel::Locked : false;
+    QPushButton* redeemButton = createRedeemButton(
+        position.positionId, position.isRedeemed, position.canRedeem, isWatchOnly, isWalletLocked);
     m_positionsTable->setCellWidget(row, COL_ACTIONS, redeemButton);
 }
 
-QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem)
+QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked)
 {
-    // Set button text based on status:
+    // Set button text based on status (priority order):
     // - "Redeemed" if already redeemed (with strikethrough)
     // - "Redeem" if can redeem now (green, clickable)
+    // - "Watch-Only" if the wallet has private keys disabled and so cannot
+    //   ever construct a redemption witness
+    // - "Wallet Locked" if private keys exist but are currently unavailable
     // - "Locked" if vault hasn't matured yet (grayed out)
     QString buttonText;
     if (isRedeemed) {
         buttonText = tr("Redeemed");
     } else if (canRedeem) {
         buttonText = tr("Redeem");
+    } else if (isWatchOnly) {
+        buttonText = tr("Watch-Only");
+    } else if (isWalletLocked) {
+        buttonText = tr("Wallet Locked");
     } else {
         buttonText = tr("Locked");
     }
 
     QPushButton* button = new QPushButton(buttonText, this);
     button->setProperty("positionId", positionId);
-    button->setFixedSize(80, 28);
+    button->setFixedSize(96, 28);
 
     // Apply enhanced theme-aware styling
     QPalette palette = QApplication::palette();
@@ -834,6 +872,48 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
             .arg(successPressed);
         tooltip = tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the DD tokens");
         button->setEnabled(true);
+    } else if (isWatchOnly) {
+        // Watch-Only - wallet has private keys disabled; redemption is
+        // physically impossible from this wallet. Use a distinct grey-blue
+        // styling so the badge is visually different from the timelock
+        // "Locked" state above.
+        QString woBg = isDarkTheme ? "#3a4a5a" : "#dde6ef";
+        QString woText = isDarkTheme ? "#a0c0e0" : "#34495e";
+
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: %2; "
+            "  border: 1px solid %2; "
+            "  border-radius: 5px; "
+            "  padding: 6px 8px; "
+            "  font-weight: 600; "
+            "  font-size: 10px; "
+            "  min-width: 60px; "
+            "}")
+            .arg(woBg)
+            .arg(woText);
+        tooltip = tr("Watch-only wallet\nThis wallet cannot sign DigiDollar redemptions because private keys are disabled.");
+        button->setEnabled(false);
+    } else if (isWalletLocked) {
+        QString lockedWalletBg = isDarkTheme ? "#4a4655" : "#e4dfea";
+        QString lockedWalletText = isDarkTheme ? "#d6c6e6" : "#4d3f5f";
+
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: %2; "
+            "  border: 1px solid %2; "
+            "  border-radius: 5px; "
+            "  padding: 6px 8px; "
+            "  font-weight: 600; "
+            "  font-size: 10px; "
+            "  min-width: 72px; "
+            "}")
+            .arg(lockedWalletBg)
+            .arg(lockedWalletText);
+        tooltip = tr("Wallet is locked\nUnlock the wallet to redeem this DigiDollar vault.");
+        button->setEnabled(false);
     } else {
         // Locked - vault hasn't matured yet - grayed out button with dark text
         QString lockedBg = isDarkTheme ? "#555555" : "#cccccc";
@@ -852,7 +932,7 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
             "}")
             .arg(lockedBg)
             .arg(lockedText);
-        tooltip = tr("🔒 Vault is locked\nWait until the time lock expires to redeem");
+        tooltip = tr("Vault is locked\nWait until the time lock expires to redeem");
         button->setEnabled(false);
     }
 
@@ -872,10 +952,12 @@ QWidget* DigiDollarPositionsWidget::createHealthWidget(double health) const
     layout->setContentsMargins(8, 4, 8, 4);
     layout->setSpacing(0);
 
+    const bool healthUnknown = health < 0.0;
+
     QProgressBar* healthBar = new QProgressBar(widget);
     healthBar->setRange(0, 500);  // Allow up to 500% collateralization
-    healthBar->setValue(static_cast<int>(health));
-    healthBar->setFormat(QString("%1%").arg(QString::number(health, 'f', 1)));
+    healthBar->setValue(healthUnknown ? 0 : static_cast<int>(health));
+    healthBar->setFormat(healthUnknown ? tr("N/A") : QString("%1%").arg(QString::number(health, 'f', 1)));
     healthBar->setFixedHeight(20);
     healthBar->setMinimumWidth(100);
 
@@ -893,7 +975,10 @@ QWidget* DigiDollarPositionsWidget::createHealthWidget(double health) const
     // 80-99% = yellow (warning, under-collateralized)
     // <80% = red (at risk, severely under-collateralized)
     QString healthColor, gradientEnd;
-    if (health >= 100) {
+    if (healthUnknown) {
+        healthColor = borderColor;
+        gradientEnd = borderColor;
+    } else if (health >= 100) {
         healthColor = isDarkTheme ? "#4caf50" : "#28a745";
         gradientEnd = isDarkTheme ? "#66bb6a" : "#4caf50";
     } else if (health >= 80) {
@@ -932,7 +1017,9 @@ QWidget* DigiDollarPositionsWidget::createHealthWidget(double health) const
 
     // Add tooltip with health information
     QString healthStatus;
-    if (health >= 120) {
+    if (healthUnknown) {
+        healthStatus = tr("Oracle price unavailable");
+    } else if (health >= 120) {
         healthStatus = tr("Healthy - Over-Collateralized");
     } else if (health >= 100) {
         healthStatus = tr("Adequate - At Required Ratio");
@@ -942,9 +1029,13 @@ QWidget* DigiDollarPositionsWidget::createHealthWidget(double health) const
         healthStatus = tr("At Risk - Under-Collateralized");
     }
 
-    healthBar->setToolTip(tr("Vault Health: %1% (%2)\n100% = Required collateral ratio\nAbove 100% = Over-collateralized (safer)\nBelow 100% = Under-collateralized (at risk)")
-                         .arg(QString::number(health, 'f', 1))
-                         .arg(healthStatus));
+    if (healthUnknown) {
+        healthBar->setToolTip(tr("Vault Health: N/A (Oracle price unavailable)\nHealth will update when a fresh oracle price is available."));
+    } else {
+        healthBar->setToolTip(tr("Vault Health: %1% (%2)\n100% = Required collateral ratio\nAbove 100% = Over-collateralized (safer)\nBelow 100% = Under-collateralized (at risk)")
+                             .arg(QString::number(health, 'f', 1))
+                             .arg(healthStatus));
+    }
 
     layout->addWidget(healthBar);
     widget->setLayout(layout);
@@ -983,6 +1074,9 @@ QString DigiDollarPositionsWidget::formatBlockTime(int blocks) const
 
 QString DigiDollarPositionsWidget::formatHealthStatus(double health) const
 {
+    if (health < 0.0) {
+        return tr("N/A");
+    }
     return QString("%1%").arg(QString::number(health, 'f', 1));
 }
 
@@ -1035,6 +1129,12 @@ std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositi
     // Access DigiDollarWallet directly from wallet model
     DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
     if (ddWallet) {
+        const bool walletCannotSign =
+            m_walletModel->wallet().privateKeysDisabled() ||
+            m_walletModel->getEncryptionStatus() == WalletModel::Locked;
+        if (!walletCannotSign) {
+            ddWallet->ReconcilePositionStates();
+        }
         positions = ddWallet->GetDDTimeLocks(false); // Get ALL time locks including redeemed ones
     }
 
@@ -1045,6 +1145,10 @@ double DigiDollarPositionsWidget::CalculatePositionHealth(CAmount ddAmount, CAmo
 {
     if (ddAmount == 0) {
         return 0.0; // No DD = no health to display
+    }
+
+    if (oraclePrice <= 0 || dgbCollateral <= 0) {
+        return -1.0;
     }
 
     // Calculate DGB collateral value in USD cents.
@@ -1072,7 +1176,7 @@ int DigiDollarPositionsWidget::getLockTierBlocks(int tier) const
     // Lock periods in blocks (15 second blocks)
     // 1 hour = 240 blocks, 1 day = 5760 blocks, 1 month = 172800 blocks, 1 year = 2102400 blocks
     switch (tier) {
-    case 0: return 240;         // 1 hour (testing only)
+    case 0: return 240;         // 1 hour
     case 1: return 172800;      // 30 days
     case 2: return 518400;      // 3 months (90 days)
     case 3: return 1036800;     // 6 months (180 days)

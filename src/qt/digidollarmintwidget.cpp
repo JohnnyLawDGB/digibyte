@@ -5,11 +5,13 @@
 #include <qt/digidollarmintwidget.h>
 
 #include <qt/digidollarsendwidget.h> // For AmountValidator
+#include <qt/digidollar_qt_translate.h> // DD-FA-FUNC-032 reject-reason translator
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
 #include <qt/digibyteunits.h>
 #include <consensus/amount.h>
+#include <consensus/digidollar.h>
 #include <digidollar/txbuilder.h>
 #include <logging.h>
 #include <node/interface_ui.h>
@@ -237,7 +239,7 @@ void DigiDollarMintWidget::setupLockTierSection()
     m_lockTierCombo->setToolTip(tr("WARNING: Your DGB will be locked for this period and cannot be accessed until the timelock expires.\nLonger locks require less collateral (30 days: 500%, 10 years: 200%)"));
     m_lockTierLabel->setBuddy(m_lockTierCombo);
 
-    // Add all 10 lock periods (including 1-hour test tier)
+    // Add all 10 canonical lock periods.
     for (int i = 0; i <= 9; ++i) {
         m_lockTierCombo->addItem(getLockTierDisplayName(i), i);
     }
@@ -245,7 +247,7 @@ void DigiDollarMintWidget::setupLockTierSection()
     m_lockTierLayout->addWidget(m_lockTierLabel, 1, 0);
     m_lockTierLayout->addWidget(m_lockTierCombo, 1, 1);
 
-    // Set default selection to tier 1 (30 days) - tier 0 is 1-hour testing only
+    // Set default selection to tier 1 (30 days).
     m_lockTierCombo->setCurrentIndex(1);
 
     // Lock tier info
@@ -333,7 +335,7 @@ void DigiDollarMintWidget::setupCollateralSection()
     // Ratio progress bar
     m_ratioBar = new QProgressBar(this);
     m_ratioBar->setObjectName("ratioBar");
-    m_ratioBar->setRange(200, 1000); // 200% (10 year) to 1000% (1 hour test tier)
+    m_ratioBar->setRange(200, 1000); // 200% (10 year) to 1000% (1 hour)
     m_ratioBar->setValue(500);
     m_ratioBar->setFormat("%v%");
     m_collateralLayout->addWidget(m_ratioBar, 4, 0, 1, 2);
@@ -798,7 +800,16 @@ void DigiDollarMintWidget::onMintClicked()
             updateBalance(); // Refresh balance displays
         } else {
             QString errorTitle;
-            QString errorMessage = result.reasonFailed;
+            // DD-FA-FUNC-032 (Wave 19 Agent C): Qt mint broadcasts directly via
+            // node().broadcastTransaction so consensus reject reasons such as
+            // "minting-blocked-during-err" or "bad-tx-no-musig2-quote" reach
+            // the user verbatim. Translate known DD/oracle tags to plain
+            // English with a remediation hint before display; unknown reasons
+            // pass through unchanged. The translator is unit-tested by
+            // src/test/digidollar_qt_translate_tests.cpp without Qt.
+            const QString rawReason = result.reasonFailed;
+            QString errorMessage = QString::fromStdString(
+                TranslateMintRejectReasonForUser(rawReason.toStdString()));
 
             switch (result.status) {
             case WalletModel::InvalidAmount:
@@ -928,37 +939,27 @@ QString DigiDollarMintWidget::formatRatio(double ratio) const
 
 double DigiDollarMintWidget::getCollateralRatioForTier(int tier) const
 {
-    // Collateral ratios from DigiByte_v8.26_DigiDollar_Implementation_Report.md
-    switch (tier) {
-    case 0: return 1000.0; // 1 hour - Testing only (10x collateral)
-    case 1: return 500.0;  // 30 days - Maximum safety for short-term positions
-    case 2: return 400.0;  // 3 months - High collateral for quarterly positions
-    case 3: return 350.0;  // 6 months - Semi-annual positions with strong buffer
-    case 4: return 300.0;  // 1 year - Annual positions with 3x collateral
-    case 5: return 275.0;  // 2 years - Bridge between annual and multi-year
-    case 6: return 250.0;  // 3 years - Medium-term stable positions
-    case 7: return 225.0;  // 5 years - Long-term positions
-    case 8: return 212.0;  // 7 years - Extended positions
-    case 9: return 200.0;  // 10 years - Minimum 2x collateral for decade locks
-    default: return 300.0;
-    }
+    const int lock_days = DigiDollar::BlocksToLockDays(getLockTierBlocks(tier));
+    const int64_t lock_blocks = DigiDollar::LockDaysToBlocks(lock_days);
+    const int ratio = DigiDollar::GetCollateralRatioForLockTime(lock_blocks, Params().GetDigiDollarParams());
+    return ratio > 0 ? static_cast<double>(ratio) : 0.0;
 }
 
 QString DigiDollarMintWidget::getLockTierDisplayName(int tier) const
 {
-    // Display names from DigiByte_v8.26_DigiDollar_Implementation_Report.md
+    const QString ratio = formatRatio(getCollateralRatioForTier(tier));
     switch (tier) {
-    case 0: return tr("1 hour (1000% collateral) - TESTING ONLY");
-    case 1: return tr("30 days (500% collateral)");
-    case 2: return tr("3 months (400% collateral)");
-    case 3: return tr("6 months (350% collateral)");
-    case 4: return tr("1 year (300% collateral)");
-    case 5: return tr("2 years (275% collateral)");
-    case 6: return tr("3 years (250% collateral)");
-    case 7: return tr("5 years (225% collateral)");
-    case 8: return tr("7 years (212% collateral)");
-    case 9: return tr("10 years (200% collateral)");
-    default: return tr("1 year (300% collateral)");
+    case 0: return tr("1 hour (%1 collateral)").arg(ratio);
+    case 1: return tr("30 days (%1 collateral)").arg(ratio);
+    case 2: return tr("3 months (%1 collateral)").arg(ratio);
+    case 3: return tr("6 months (%1 collateral)").arg(ratio);
+    case 4: return tr("1 year (%1 collateral)").arg(ratio);
+    case 5: return tr("2 years (%1 collateral)").arg(ratio);
+    case 6: return tr("3 years (%1 collateral)").arg(ratio);
+    case 7: return tr("5 years (%1 collateral)").arg(ratio);
+    case 8: return tr("7 years (%1 collateral)").arg(ratio);
+    case 9: return tr("10 years (%1 collateral)").arg(ratio);
+    default: return tr("1 year (%1 collateral)").arg(ratio);
     }
 }
 
@@ -967,7 +968,7 @@ int DigiDollarMintWidget::getLockTierBlocks(int tier) const
     // Lock periods in blocks (15 second blocks)
     // 1 hour = 240 blocks, 1 day = 5760 blocks, 1 month = 172800 blocks, 1 year = 2102400 blocks
     switch (tier) {
-    case 0: return 240;         // 1 hour (testing only)
+    case 0: return 240;         // 1 hour
     case 1: return 172800;      // 30 days
     case 2: return 518400;      // 3 months (90 days)
     case 3: return 1036800;     // 6 months (180 days)

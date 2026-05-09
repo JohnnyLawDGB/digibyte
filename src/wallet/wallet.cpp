@@ -885,6 +885,14 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
             WalletLogPrintf("Encrypted DigiDollar private keys\n");
         }
 
+        if (!EncryptOracleKeys(_vMasterKey, encrypted_batch)) {
+            encrypted_batch->TxnAbort();
+            delete encrypted_batch;
+            encrypted_batch = nullptr;
+            assert(false);
+        }
+        WalletLogPrintf("Encrypted DigiDollar oracle keys\n");
+
         // Encryption was introduced in version 0.4.0
         SetMinVersion(FEATURE_WALLETCRYPT, encrypted_batch);
 
@@ -1513,7 +1521,7 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
             if (block_height >= 0) {
                 m_dd_wallet->ProcessDDTxForRescan(ptx, block_height);
             }
-        } else {
+        } else if (!std::holds_alternative<TxStateInactive>(state)) {
             // Normal operation (not rescanning): use ProcessIncomingDDTransaction
             m_dd_wallet->ProcessIncomingDDTransaction(ptx);
         }
@@ -1539,39 +1547,56 @@ void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {
 }
 
 void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) {
-    LOCK(cs_wallet);
-    auto it = mapWallet.find(tx->GetHash());
-    if (it != mapWallet.end()) {
-        RefreshMempoolStatus(it->second, chain());
+    bool reconcile_removed_dd_redeem = false;
+    {
+        LOCK(cs_wallet);
+        auto it = mapWallet.find(tx->GetHash());
+        if (it != mapWallet.end()) {
+            RefreshMempoolStatus(it->second, chain());
+            reconcile_removed_dd_redeem =
+                m_dd_wallet &&
+                (reason == MemPoolRemovalReason::EXPIRY ||
+                 reason == MemPoolRemovalReason::SIZELIMIT) &&
+                GetDigiDollarTxType(*it->second.tx) == DD_TX_REDEEM;
+        }
+        // Handle transactions that were removed from the mempool because they
+        // conflict with transactions in a newly connected block.
+        if (reason == MemPoolRemovalReason::CONFLICT) {
+            // Trigger external -walletnotify notifications for these transactions.
+            // Set Status::UNCONFIRMED instead of Status::CONFLICTED for a few reasons:
+            //
+            // 1. The transactionRemovedFromMempool callback does not currently
+            //    provide the conflicting block's hash and height, and for backwards
+            //    compatibility reasons it may not be not safe to store conflicted
+            //    wallet transactions with a null block hash. See
+            //    https://github.com/digibyte/digibyte/pull/18600#discussion_r420195993.
+            // 2. For most of these transactions, the wallet's internal conflict
+            //    detection in the blockConnected handler will subsequently call
+            //    MarkConflicted and update them with CONFLICTED status anyway. This
+            //    applies to any wallet transaction that has inputs spent in the
+            //    block, or that has ancestors in the wallet with inputs spent by
+            //    the block.
+            // 3. Longstanding behavior since the sync implementation in
+            //    https://github.com/digibyte/digibyte/pull/9371 and the prior sync
+            //    implementation before that was to mark these transactions
+            //    unconfirmed rather than conflicted.
+            //
+            // Nothing described above should be seen as an unchangeable requirement
+            // when improving this code in the future. The wallet's heuristics for
+            // distinguishing between conflicted and unconfirmed transactions are
+            // imperfect, and could be improved in general, see
+            // https://github.com/digibyte-core/digibyte-devwiki/wiki/Wallet-Transaction-Conflict-Tracking
+            SyncTransaction(tx, TxStateInactive{});
+        }
     }
-    // Handle transactions that were removed from the mempool because they
-    // conflict with transactions in a newly connected block.
-    if (reason == MemPoolRemovalReason::CONFLICT) {
-        // Trigger external -walletnotify notifications for these transactions.
-        // Set Status::UNCONFIRMED instead of Status::CONFLICTED for a few reasons:
-        //
-        // 1. The transactionRemovedFromMempool callback does not currently
-        //    provide the conflicting block's hash and height, and for backwards
-        //    compatibility reasons it may not be not safe to store conflicted
-        //    wallet transactions with a null block hash. See
-        //    https://github.com/digibyte/digibyte/pull/18600#discussion_r420195993.
-        // 2. For most of these transactions, the wallet's internal conflict
-        //    detection in the blockConnected handler will subsequently call
-        //    MarkConflicted and update them with CONFLICTED status anyway. This
-        //    applies to any wallet transaction that has inputs spent in the
-        //    block, or that has ancestors in the wallet with inputs spent by
-        //    the block.
-        // 3. Longstanding behavior since the sync implementation in
-        //    https://github.com/digibyte/digibyte/pull/9371 and the prior sync
-        //    implementation before that was to mark these transactions
-        //    unconfirmed rather than conflicted.
-        //
-        // Nothing described above should be seen as an unchangeable requirement
-        // when improving this code in the future. The wallet's heuristics for
-        // distinguishing between conflicted and unconfirmed transactions are
-        // imperfect, and could be improved in general, see
-        // https://github.com/digibyte-core/digibyte-devwiki/wiki/Wallet-Transaction-Conflict-Tracking
-        SyncTransaction(tx, TxStateInactive{});
+
+    if (reconcile_removed_dd_redeem) {
+        const size_t abandoned = AbandonStaleDigiDollarRedeems();
+        if (m_dd_wallet) {
+            const size_t dd_utxos = m_dd_wallet->ScanForDDUTXOs();
+            WalletLogPrintf("DigiDollar: Reconciled removed pending redeem %s - abandoned %zu stale redeem(s), %zu DD UTXOs tracked\n",
+                            tx->GetHash().ToString(), abandoned, dd_utxos);
+        }
     }
 }
 
@@ -2682,10 +2707,26 @@ CKey CWallet::GetHDKeyForDigiDollar(const std::string& label)
 
     CKey key;
 
+    if (IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        LogPrintf("DigiDollar: Cannot derive HD key for label '%s': private keys are disabled\n", label);
+        return key;
+    }
+
+    if (!IsHDEnabled() || !CanGetAddresses()) {
+        LogPrintf("DigiDollar: Cannot derive HD key for label '%s': wallet has no HD seed or available keypool\n", label);
+        return key;
+    }
+
+    if (!IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
+        LogPrintf("DigiDollar: Cannot derive HD key for label '%s': DigiDollar V1 requires a descriptor/bech32m wallet\n", label);
+        return key;
+    }
+
     auto op_dest = GetNewDestination(OutputType::BECH32M, label);
     if (!op_dest) {
-        LogPrintf("DigiDollar: BECH32M not available, trying BECH32 for label '%s'\n", label);
-        op_dest = GetNewDestination(OutputType::BECH32, label);
+        LogPrintf("DigiDollar: BECH32M destination unavailable for label '%s': %s\n",
+                 label, util::ErrorString(op_dest).original);
+        return key;
     }
 
     if (op_dest) {
@@ -2754,8 +2795,6 @@ CKey CWallet::GetHDKeyForDigiDollar(const std::string& label)
                  label, util::ErrorString(op_dest).original);
     }
 
-    LogPrintf("DigiDollar: Falling back to random key for label '%s'\n", label);
-    key.MakeNewKey(true);
     return key;
 }
 
@@ -4660,19 +4699,116 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
 bool CWallet::HasOracleKey(uint32_t oracle_id) const
 {
     WalletBatch batch(GetDatabase());
-    return batch.HasOracleKey(oracle_id);
+    return batch.HasOracleKey(oracle_id) || batch.HasCryptedOracleKey(oracle_id);
 }
 
 bool CWallet::StoreOracleKey(uint32_t oracle_id, const CKey& key)
 {
     WalletBatch batch(GetDatabase());
-    return batch.WriteOracleKey(oracle_id, key);
+    if (!IsCrypted()) {
+        return batch.WriteOracleKey(oracle_id, key);
+    }
+
+    LOCK(cs_wallet);
+    if (vMasterKey.empty()) {
+        LogPrintf("Oracle: Refusing to store oracle key for ID %u while encrypted wallet is locked\n", oracle_id);
+        return false;
+    }
+
+    CPubKey pubkey = key.GetPubKey();
+    CKeyingMaterial vchSecret(key.begin(), key.end());
+    std::vector<unsigned char> vchCryptedSecret;
+    if (!EncryptSecret(vMasterKey, vchSecret, pubkey.GetHash(), vchCryptedSecret)) {
+        LogPrintf("Oracle: Failed to encrypt oracle key for ID %u\n", oracle_id);
+        return false;
+    }
+    return batch.WriteCryptedOracleKey(oracle_id, pubkey, vchCryptedSecret);
 }
 
 bool CWallet::GetOracleKey(uint32_t oracle_id, CKey& key_out)
 {
     WalletBatch batch(GetDatabase());
-    return batch.ReadOracleKey(oracle_id, key_out);
+    CPubKey pubkey;
+    std::vector<unsigned char> vchCryptedSecret;
+    if (batch.ReadCryptedOracleKey(oracle_id, pubkey, vchCryptedSecret)) {
+        LOCK(cs_wallet);
+        if (vMasterKey.empty()) {
+            return false;
+        }
+        return DecryptKey(vMasterKey, vchCryptedSecret, pubkey, key_out);
+    }
+
+    if (!IsCrypted()) {
+        return batch.ReadOracleKey(oracle_id, key_out);
+    }
+
+    // Legacy encrypted wallets may contain plaintext ORACLE_KEY rows created
+    // before encrypted oracle-key storage existed. Refuse while locked, then
+    // migrate the row to ORACLE_CRYPTED_KEY on first successful unlocked read.
+    if (!batch.HasOracleKey(oracle_id)) {
+        return false;
+    }
+
+    LOCK(cs_wallet);
+    if (vMasterKey.empty()) {
+        return false;
+    }
+
+    CKey plaintext_key;
+    if (!batch.ReadOracleKey(oracle_id, plaintext_key)) {
+        return false;
+    }
+
+    CPubKey plaintext_pubkey = plaintext_key.GetPubKey();
+    CKeyingMaterial vchSecret(plaintext_key.begin(), plaintext_key.end());
+    if (!EncryptSecret(vMasterKey, vchSecret, plaintext_pubkey.GetHash(), vchCryptedSecret)) {
+        LogPrintf("Oracle: Failed to migrate plaintext oracle key for ID %u to encrypted storage\n", oracle_id);
+        return false;
+    }
+    if (!batch.WriteCryptedOracleKey(oracle_id, plaintext_pubkey, vchCryptedSecret)) {
+        LogPrintf("Oracle: Failed to write migrated encrypted oracle key for ID %u\n", oracle_id);
+        return false;
+    }
+
+    key_out = plaintext_key;
+    return true;
+}
+
+bool CWallet::EncryptOracleKeys(const CKeyingMaterial& vMasterKeyIn, WalletBatch* encrypted_batch)
+{
+    AssertLockHeld(cs_wallet);
+
+    WalletBatch* active_batch = encrypted_batch;
+    std::unique_ptr<WalletBatch> local_batch;
+    if (!active_batch) {
+        local_batch = std::make_unique<WalletBatch>(GetDatabase());
+        active_batch = local_batch.get();
+    }
+
+    for (uint32_t oracle_id = 0; oracle_id < ORACLE_TOTAL_COUNT; ++oracle_id) {
+        if (active_batch->HasCryptedOracleKey(oracle_id)) {
+            continue;
+        }
+
+        CKey plaintext_key;
+        if (!active_batch->ReadOracleKey(oracle_id, plaintext_key)) {
+            continue;
+        }
+
+        CPubKey pubkey = plaintext_key.GetPubKey();
+        CKeyingMaterial vchSecret(plaintext_key.begin(), plaintext_key.end());
+        std::vector<unsigned char> vchCryptedSecret;
+        if (!EncryptSecret(vMasterKeyIn, vchSecret, pubkey.GetHash(), vchCryptedSecret)) {
+            LogPrintf("Oracle: Failed to encrypt oracle key for ID %u during wallet encryption\n", oracle_id);
+            return false;
+        }
+        if (!active_batch->WriteCryptedOracleKey(oracle_id, pubkey, vchCryptedSecret)) {
+            LogPrintf("Oracle: Failed to write encrypted oracle key for ID %u during wallet encryption\n", oracle_id);
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void CWallet::TryAutoStartOracles()

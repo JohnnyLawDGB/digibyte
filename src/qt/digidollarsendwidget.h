@@ -192,8 +192,8 @@ private:
 };
 
 /**
- * Validator for DigiDollar addresses (DD, TD, RD prefixes)
- * Uses CDigiDollarAddress::IsValidDigiDollarAddress() for proper validation
+ * Validator for DigiDollar addresses on the active network.
+ * Uses CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork().
  */
 class DigiDollarAddressValidator : public QValidator
 {

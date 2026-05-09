@@ -115,7 +115,7 @@ UniValue transferdigidollar(const JSONRPCRequest& request)
         throw std::runtime_error(
             "transferdigidollar address amount\n"
             "\nTransfer DigiDollar tokens (legacy command - use senddigidollar instead).\n"
-            "\nThis is a compatibility wrapper around the Phase 2.1 backend.\n"
+            "\nThis is a compatibility wrapper around the wallet transfer backend.\n"
             "\nArguments:\n"
             "1. address                      (string, required) Recipient DD address\n"
             "2. amount                       (numeric, required) DD amount to transfer in cents\n"

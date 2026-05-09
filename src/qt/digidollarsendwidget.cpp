@@ -586,10 +586,7 @@ void DigiDollarSendWidget::onSendClicked()
     if (!validateAddress()) {
         showError(tr("Invalid DigiDollar Address"),
                   tr("The address format is invalid.\n\n"
-                     "Valid DigiDollar addresses:\n"
-                     "• Start with DD (Mainnet)\n"
-                     "• Start with TD (Testnet)\n"
-                     "• Start with RD (Regtest)\n\n"
+                     "Enter a valid DigiDollar address for the active network.\n\n"
                      "Please check the address and try again."));
         m_addressEdit->setFocus();
         return;
@@ -601,8 +598,8 @@ void DigiDollarSendWidget::onSendClicked()
                   tr("The amount is invalid.\n\n"
                      "Valid amount format:\n"
                      "• Positive number\n"
-                     "• Maximum 8 decimal places\n"
-                     "• Between 0.00000001 and 999,999,999 DD\n\n"
+                     "• Maximum 2 decimal places\n"
+                     "• Between 1.00 and 100,000.00 DD\n\n"
                      "Please enter a valid amount."));
         m_amountEdit->setFocus();
         return;
@@ -1090,7 +1087,7 @@ void DigiDollarSendWidget::updateAddressValidation()
     QString errorColor = isDarkTheme ? "#f44336" : "#dc3545";
 
     if (address.isEmpty()) {
-        m_addressValidationLabel->setText(tr("Enter a valid DigiDollar address (DD, TD, or RD prefix)"));
+        m_addressValidationLabel->setText(tr("Enter a valid DigiDollar address for this network"));
         m_addressValidationLabel->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; }").arg(midColor));
         m_addressEdit->setStyleSheet("");
     } else if (validateAddress()) {
@@ -1098,7 +1095,7 @@ void DigiDollarSendWidget::updateAddressValidation()
         m_addressValidationLabel->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; font-weight: bold; }").arg(successColor));
         m_addressEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(successColor));
     } else {
-        m_addressValidationLabel->setText(tr("✗ Invalid address format - must start with DD, TD, or RD"));
+        m_addressValidationLabel->setText(tr("✗ Invalid DigiDollar address for this network"));
         m_addressValidationLabel->setStyleSheet(QString("QLabel { color: %1; font-size: 11px; font-weight: bold; }").arg(errorColor));
         m_addressEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
     }
@@ -1217,9 +1214,7 @@ QValidator::State DigiDollarAddressValidator::validate(QString& input, int& pos)
 
 bool DigiDollarAddressValidator::isValidDDAddress(const QString& address) const
 {
-    // Use the proper CDigiDollarAddress validation function
-    // This ensures full validation including checksum verification
-    return CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString());
+    return CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(address.toStdString());
 }
 
 void DigiDollarSendWidget::onCoinControlButtonClicked()

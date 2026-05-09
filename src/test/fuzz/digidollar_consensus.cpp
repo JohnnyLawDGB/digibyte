@@ -16,8 +16,10 @@
 #include <test/fuzz/util.h>
 #include <util/chaintype.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 // ============================================================================
@@ -202,13 +204,22 @@ FUZZ_TARGET(dd_collateral_ratio, .init = initialize_dd_consensus)
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
 
     DigiDollar::ConsensusParams params;
+    int min_ratio = std::numeric_limits<int>::max();
+    int max_ratio = 0;
+    for (const auto& [_, ratio] : params.collateralRatios) {
+        min_ratio = std::min(min_ratio, ratio);
+        max_ratio = std::max(max_ratio, ratio);
+    }
+    const auto ratio_is_valid = [&](int ratio) {
+        return ratio == 0 || (ratio >= min_ratio && ratio <= max_ratio);
+    };
 
     // Strategy 1: Random lock block values across full range
     {
         int64_t lock_blocks = fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(0, 10 * 365 * 24 * 60 * 4 + 1000);
         int ratio = DigiDollar::GetCollateralRatioForLockTime(lock_blocks, params);
-        // Ratio must be within defined bounds (200-1000%)
-        assert(ratio >= 200 && ratio <= 1000);
+        // V1 accepts canonical tiers only. Non-tier durations return 0.
+        assert(ratio_is_valid(ratio));
     }
 
     // Strategy 2: Exact tier boundaries
@@ -223,11 +234,11 @@ FUZZ_TARGET(dd_collateral_ratio, .init = initialize_dd_consensus)
     // Strategy 3: Zero and negative lock times
     {
         int ratio_zero = DigiDollar::GetCollateralRatioForLockTime(0, params);
-        assert(ratio_zero >= 200 && ratio_zero <= 1000);
+        assert(ratio_is_valid(ratio_zero));
 
         int64_t negative = fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(-1000000, -1);
         int ratio_neg = DigiDollar::GetCollateralRatioForLockTime(negative, params);
-        assert(ratio_neg >= 200 && ratio_neg <= 1000);
+        assert(ratio_is_valid(ratio_neg));
     }
 
     // Strategy 4: Extremely large lock times
@@ -235,15 +246,15 @@ FUZZ_TARGET(dd_collateral_ratio, .init = initialize_dd_consensus)
         int64_t huge = fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(
             10 * 365 * 24 * 60 * 4, std::numeric_limits<int64_t>::max());
         int ratio = DigiDollar::GetCollateralRatioForLockTime(huge, params);
-        // Beyond max tier, should return lowest ratio (200%)
-        assert(ratio >= 200 && ratio <= 1000);
+        // Beyond max tier is non-canonical and returns 0.
+        assert(ratio_is_valid(ratio));
     }
 
     // Strategy 5: Random values from full int64 range
     {
         int64_t arbitrary = fuzzed_data_provider.ConsumeIntegral<int64_t>();
         int ratio = DigiDollar::GetCollateralRatioForLockTime(arbitrary, params);
-        assert(ratio >= 200 && ratio <= 1000);
+        assert(ratio_is_valid(ratio));
     }
 
     // Strategy 6: Test GetLockTierIndex consistency

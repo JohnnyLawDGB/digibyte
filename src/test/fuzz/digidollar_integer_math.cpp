@@ -19,6 +19,7 @@
 #include <consensus/volatility.h>
 #include <digidollar/health.h>
 #include <digidollar/validation.h>
+#include <primitives/oracle.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <util/chaintype.h>
@@ -376,7 +377,7 @@ FUZZ_TARGET(dd_collateral_math, .init = initialize_dd_integer_math)
     if (strategy == 7) {
         int64_t lockBlocks = fdp.ConsumeIntegral<int64_t>();
         int ratio = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddparams);
-        assert(ratio >= 200 && ratio <= 1000);
+        assert(ratio == 0 || (ratio >= 200 && ratio <= 1000));
 
         // Same input should always give same output
         int ratio2 = DigiDollar::GetCollateralRatioForLockTime(lockBlocks, ddparams);
@@ -439,8 +440,14 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
         int effective = DigiDollar::DCA::DynamicCollateralAdjustment::ApplyDCA(baseRatio, systemHealth);
         // Must be >= base ratio (DCA only increases requirements)
         assert(effective >= baseRatio);
-        // The applied ratio equals floor(baseRatio * multiplier)
-        int expected = static_cast<int>(baseRatio * multiplier);
+        // The applied ratio uses consensus integer basis points and rounds up.
+        const int multiplier_bps =
+            DigiDollar::DCA::DynamicCollateralAdjustment::GetDCAMultiplierBps(systemHealth);
+        const __int128 expected128 =
+            (static_cast<__int128>(baseRatio) * multiplier_bps + 9999) / 10000;
+        int expected = expected128 > std::numeric_limits<int>::max()
+            ? std::numeric_limits<int>::max()
+            : static_cast<int>(expected128);
         assert(effective == expected);
     }
 
@@ -586,9 +593,9 @@ FUZZ_TARGET(dd_price_conversion, .init = initialize_dd_integer_math)
     // scaled-down path (totalDD / 1000 == 0).
     if (strategy == 9) {
         for (CAmount tdd = 1; tdd < 1000; tdd += 100) {
-            // MAX collateral * MAX price to trigger the scaled-down path
+            // MAX collateral * maximum valid oracle price should cap at max health.
             int health = DigiDollar::DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
-                MAX_MONEY, tdd, MAX_MONEY);
+                MAX_MONEY, tdd, ORACLE_MAX_PRICE_MICRO_USD);
             // Should be capped at max, not crash
             assert(health == 30000);
         }

@@ -9,6 +9,7 @@
 #include <key.h>
 
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 FUZZ_TARGET(oracle_bundle_validation)
@@ -50,7 +51,9 @@ FUZZ_TARGET(oracle_bundle_validation)
     (void)bundle.HasConsensus(min_required);
     (void)bundle.GetConsensusPrice(min_required);
     (void)bundle.ValidateEpoch(epoch);
-    (void)bundle.ValidateEpoch(epoch + 1);
+    if (epoch < std::numeric_limits<int32_t>::max()) {
+        (void)bundle.ValidateEpoch(epoch + 1);
+    }
     (void)bundle.IsMuSig2();
     (void)bundle.GetV03PayloadSize();
 

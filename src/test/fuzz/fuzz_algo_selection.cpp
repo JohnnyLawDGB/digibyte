@@ -19,8 +19,8 @@ FUZZ_TARGET(fuzz_algo_selection_phase2a, .init = initialize_algo_selection)
     h.nVersion = fdp.ConsumeIntegral<int32_t>();
 
     const int algo = h.GetAlgo();
-    if (algo == ALGO_SHA256D || algo == ALGO_SCRYPT || algo == ALGO_SKEIN || algo == ALGO_QUBIT || algo == ALGO_ODO) {
-        assert((h.nVersion & GetVersionForAlgo(algo)) != 0);
+    if (algo != ALGO_UNKNOWN) {
+        assert((h.nVersion & BLOCK_VERSION_ALGO) == GetVersionForAlgo(algo));
     }
 
     // Invalid/multi-bit mixes should never crash GetPoWAlgoHash routing.

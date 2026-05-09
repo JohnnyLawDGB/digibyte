@@ -7,16 +7,16 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
+#include <test/fuzz/util/net.h>
 #include <test/util/setup_common.h>
-#include <threadinterrupt.h>
-#include <util/system.h>
+#include <util/threadinterrupt.h>
 
 void initialize_i2p()
 {
     static const auto testing_setup = MakeNoLogFileContext<>();
 }
 
-FUZZ_TARGET_INIT(i2p, initialize_i2p)
+FUZZ_TARGET(i2p, .init = initialize_i2p)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
 

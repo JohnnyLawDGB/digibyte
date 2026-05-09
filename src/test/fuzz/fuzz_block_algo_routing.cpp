@@ -1,11 +1,17 @@
+#include <chainparams.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <util/chaintype.h>
 
 #include <cassert>
 
-FUZZ_TARGET(fuzz_block_algo_routing_phase2a)
+namespace {
+void initialize_block_algo_routing() { SelectParams(ChainType::REGTEST); }
+}
+
+FUZZ_TARGET(fuzz_block_algo_routing_phase2a, .init = initialize_block_algo_routing)
 {
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
     CBlockHeader h;

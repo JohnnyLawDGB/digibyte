@@ -3,17 +3,30 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <oracle/musig2_messages.h>
+#include <chainparams.h>
+#include <key.h>
 #include <protocol.h>
 #include <serialize.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <util/chaintype.h>
 
 #include <cassert>
 #include <cstdint>
 #include <vector>
 
-FUZZ_TARGET(musig2_partialsig_message)
+namespace {
+
+void initialize_musig2_partialsig_message()
+{
+    ECC_Start();
+    SelectParams(ChainType::REGTEST);
+}
+
+} // namespace
+
+FUZZ_TARGET(musig2_partialsig_message, .init = initialize_musig2_partialsig_message)
 {
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
 

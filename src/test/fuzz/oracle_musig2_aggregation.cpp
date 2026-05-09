@@ -99,8 +99,8 @@ FUZZ_TARGET(oracle_musig2_aggregation, .init = initialize_musig2_aggregation)
         msg.oracle_pubkey = XOnlyPubKey(privkeys[idx].GetPubKey());
 
         // Sign and verify individual messages
-        if (msg.SignPhase2(privkeys[idx])) {
-            (void)msg.VerifyPhase2();
+        if (msg.SignAttestation(privkeys[idx])) {
+            (void)msg.VerifyAttestation();
         }
     }
 

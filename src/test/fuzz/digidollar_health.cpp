@@ -11,6 +11,7 @@
 #include <uint256.h>
 #include <util/chaintype.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -103,7 +104,7 @@ FUZZ_TARGET(dd_health_checks, .init = initialize_dd_health)
     // =========================================================================
     {
         // Verify all alert threshold constants are reasonable
-        static_assert(DigiDollar::AlertThresholds::MAX_DD_SUPPLY > 0);
+        static_assert(DigiDollar::AlertThresholds::ALERT_DD_SUPPLY > 0);
         static_assert(DigiDollar::AlertThresholds::MIN_HEALTH_RATIO > 0);
         static_assert(DigiDollar::AlertThresholds::CRITICAL_HEALTH_RATIO > 0);
         static_assert(DigiDollar::AlertThresholds::MIN_HEALTH_RATIO > DigiDollar::AlertThresholds::CRITICAL_HEALTH_RATIO);
@@ -232,7 +233,13 @@ FUZZ_TARGET(dd_health_protection, .init = initialize_dd_health)
         // Test GetCollateralRatioForLockTime with fuzzed lock periods
         int64_t fuzzBlocks = fdp.ConsumeIntegralInRange<int64_t>(0, 50'000'000);
         int ratio = DigiDollar::GetCollateralRatioForLockTime(fuzzBlocks, ddParams);
-        assert(ratio >= 100); // Must be at least 100% (no under-collateralization by design)
+        int min_ratio = std::numeric_limits<int>::max();
+        int max_ratio = 0;
+        for (const auto& [_, tier_ratio] : ddParams.collateralRatios) {
+            min_ratio = std::min(min_ratio, tier_ratio);
+            max_ratio = std::max(max_ratio, tier_ratio);
+        }
+        assert(ratio == 0 || (ratio >= min_ratio && ratio <= max_ratio));
 
         // Test GetDCAMultiplier
         int systemCollateral = fdp.ConsumeIntegralInRange<int>(0, 500);

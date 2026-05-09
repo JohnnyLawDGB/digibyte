@@ -6,6 +6,7 @@
 
 #include <hash.h>
 #include <logging.h>
+#include <oracle/signing_orchestrator.h>
 #include <primitives/oracle.h>
 #include <streams.h>
 #include <support/cleanse.h>
@@ -192,10 +193,15 @@ void MuSig2OracleParticipation::TryAdvanceToSigning()
     MuSig2SessionState state = m_session->GetState();
     if (state != MuSig2SessionState::NONCES_COMPLETE) return;
 
-    // Compute message hash: SHA256(epoch || price || timestamp)
-    CHashWriter hasher(0);
-    hasher << m_epoch << m_consensus_price << m_consensus_timestamp;
-    uint256 msg_hash = hasher.GetHash();
+    // Compute message hash via the canonical orchestrator helper. The
+    // helper binds "DigiDollar/OracleBundle" tag and the chain's
+    // hashGenesisBlock, so signer + validator agree byte-for-byte and
+    // cross-chain replay is rejected (DD-FA-SEC-008).
+    unsigned char msg32[32];
+    OracleSigningOrchestrator::ComputeOracleMessageHash(
+        m_epoch, m_consensus_price, m_consensus_timestamp, msg32);
+    uint256 msg_hash;
+    std::memcpy(msg_hash.begin(), msg32, 32);
 
     // Aggregate nonces with message
     if (!m_session->AggregateNonces(msg_hash.begin())) {
@@ -242,7 +248,6 @@ COracleBundle MuSig2OracleParticipation::GetCurrentBundle(int32_t height)
 {
     LOCK(m_mtx);
 
-    // Prefer v0x03 if session is complete
     if (m_session && m_session->GetState() == MuSig2SessionState::COMPLETE) {
         COracleBundle bundle;
         bundle.version = 3;
@@ -254,8 +259,10 @@ COracleBundle MuSig2OracleParticipation::GetCurrentBundle(int32_t height)
         return bundle;
     }
 
-    // Fall back to v0x02
-    return m_v02_bundle;
+    COracleBundle empty;
+    empty.version = 3;
+    empty.epoch = m_epoch >= 0 ? m_epoch : height;
+    return empty;
 }
 
 MuSig2SessionState MuSig2OracleParticipation::GetSessionState() const
@@ -274,8 +281,8 @@ int32_t MuSig2OracleParticipation::GetSessionEpoch() const
 void MuSig2OracleParticipation::SetLatestV02Bundle(const COracleBundle& bundle, int32_t height)
 {
     LOCK(m_mtx);
-    m_v02_bundle = bundle;
-    m_v02_height = height;
+    (void)bundle;
+    (void)height;
 }
 
 void MuSig2OracleParticipation::SetRelayCallback(RelayCallback callback)

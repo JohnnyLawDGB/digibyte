@@ -77,21 +77,21 @@ public:
     uint256 GetSignatureHash() const;
 
     /**
-     * Get Phase 2 signature hash (covers only consensus-critical fields).
-     * Phase 2 on-chain format doesn't store block_height/nonce, so signatures
-     * must be over oracle_id + price + timestamp only.
+     * Get compact attestation signature hash (oracle_id + price + timestamp).
+     * These signatures are off-chain inputs to MuSig2 aggregation; they are not
+     * accepted as V1 on-chain oracle bundles.
      */
-    uint256 GetPhase2SignatureHash() const;
+    uint256 GetAttestationSignatureHash() const;
 
     /**
-     * Sign using Phase 2 hash (oracle_id + price + timestamp only)
+     * Sign using the compact attestation hash.
      */
-    bool SignPhase2(const CKey& key);
+    bool SignAttestation(const CKey& key);
 
     /**
-     * Verify using Phase 2 hash
+     * Verify using the compact attestation hash.
      */
-    bool VerifyPhase2() const;
+    bool VerifyAttestation() const;
 
     /**
      * Check for conflicting messages from the same oracle.
@@ -118,8 +118,8 @@ public:
     uint64_t median_price_micro_usd{0};      // Median price in DigiDollar cents (100 = $1.00) - field name kept for compatibility
     int64_t timestamp{0};                     // Unix timestamp of bundle creation
 
-    //! v0x03 MuSig2 fields (Phase 3)
-    uint8_t version{2};                                  // 1=Phase1, 2=Phase2, 3=MuSig2
+    //! MuSig2 v0x03 fields
+    uint8_t version{3};
     std::vector<unsigned char> aggregate_sig;             // 64 bytes BIP-340 Schnorr for v0x03
     std::vector<unsigned char> participation_bitmap;      // variable-length bitmap for v0x03
 
@@ -150,14 +150,14 @@ public:
     static bool DeserializeV03Data(const std::vector<unsigned char>& data, COracleBundle& bundle);
 
     //! Validation
-    //! @param min_required  Number of oracle messages required for consensus (from chainparams.nOracleRequiredMessages)
+    //! @param min_required  Number of oracle messages required for off-chain consensus
     //! @param reference_time  Block time for timestamp validation (0 = use current time)
     bool IsValid(int min_required, int64_t reference_time = 0) const;  // Validate bundle structure and signatures
 
     //! Message management
     bool AddMessage(const COraclePriceMessage& message);
 
-    //! Consensus validation — min_required MUST come from consensus.nOracleRequiredMessages
+    //! Off-chain consensus validation for MuSig2 inputs.
     bool HasConsensus(int min_required) const;
     uint64_t GetConsensusPrice(int min_required) const;
     bool ValidateEpoch(int32_t current_epoch) const;

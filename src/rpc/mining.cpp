@@ -1053,8 +1053,8 @@ static RPCHelpMan getblocktemplate()
     // Serve full pre-built coinbase transaction when oracle data is present.
     // Serialized WITHOUT witness so miners compute the correct txid for the
     // merkle root. The witness nonce is re-added by UpdateUncommittedBlockStructures
-    // when the block is submitted. This ensures oracle bundle data (Phase 2
-    // multi-oracle Schnorr signatures) reaches mined blocks without requiring
+    // when the block is submitted. This ensures MuSig2 oracle bundle data reaches
+    // mined blocks without requiring
     // any mining software changes — miners that support coinbasetxn (BIP 22)
     // use it as-is instead of building their own coinbase.
     {

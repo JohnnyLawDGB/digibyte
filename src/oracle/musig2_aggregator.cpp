@@ -16,6 +16,21 @@
 
 namespace {
 
+int ConfiguredMuSig2Threshold()
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    if (consensus.nOracleConsensusRequired > 0) return consensus.nOracleConsensusRequired;
+    return ORACLE_CONSENSUS_REQUIRED;
+}
+
+uint16_t ConfiguredMuSig2BitmapSlots()
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const int configured_total = std::max(consensus.nOracleTotalOracles, consensus.nOraclePubkeyCount);
+    if (configured_total <= 0 || configured_total > 256) return 0;
+    return static_cast<uint16_t>(configured_total);
+}
+
 std::vector<unsigned char> EncodeBitmapForCache(
     const std::vector<uint8_t>& oracle_ids,
     uint16_t total_oracles)
@@ -68,7 +83,7 @@ std::vector<unsigned char> MuSig2OracleAggregator::EncodeBitmap(
     const std::vector<uint8_t>& oracle_ids, uint16_t total_oracles)
 {
     if (oracle_ids.empty()) return {};
-    if (static_cast<int>(oracle_ids.size()) < ORACLE_CONSENSUS_REQUIRED) return {};
+    if (static_cast<int>(oracle_ids.size()) < ConfiguredMuSig2Threshold()) return {};
     if (total_oracles == 0 || total_oracles > 256) return {};
 
     size_t num_bytes = (total_oracles + 7) / 8;
@@ -124,13 +139,18 @@ bool MuSig2OracleAggregator::ComputeAggregatePubkey(
     std::sort(sorted_ids.begin(), sorted_ids.end());
     sorted_ids.erase(std::unique(sorted_ids.begin(), sorted_ids.end()), sorted_ids.end());
 
-    const auto& nodes = Params().GetOracleNodes();
     const Consensus::Params& consensus = Params().GetConsensus();
-    int required = std::max(1, consensus.nOracleConsensusRequired);
+    const auto& nodes = Params().GetOracleNodes();
+    int required = std::max(1, ConfiguredMuSig2Threshold());
     if (static_cast<int>(sorted_ids.size()) < required) return false;
 
-    uint16_t total = static_cast<uint16_t>(std::max(1, consensus.nOracleTotalOracles));
+    uint16_t total = ConfiguredMuSig2BitmapSlots();
+    if (total == 0) return false;
     if (nodes.size() < static_cast<size_t>(total)) return false;
+    if (consensus.nOraclePubkeyCount <= 0 ||
+        consensus.vOraclePublicKeys.size() < static_cast<size_t>(consensus.nOraclePubkeyCount)) {
+        return false;
+    }
 
     // Encode bitmap for caching
     auto bitmap = EncodeBitmapForCache(sorted_ids, total);
@@ -152,8 +172,9 @@ bool MuSig2OracleAggregator::ComputeAggregatePubkey(
     std::vector<secp256k1_pubkey> pubkeys;
     pubkeys.reserve(sorted_ids.size());
     for (uint8_t id : sorted_ids) {
-        if (id >= nodes.size()) {
-            LogPrintf("Oracle: ComputeAggregatePubkey: oracle id %d >= nodes.size() %zu\n", id, nodes.size());
+        if (id >= consensus.nOraclePubkeyCount) {
+            LogPrintf("Oracle: ComputeAggregatePubkey: oracle id %d outside active roster size %d\n",
+                     id, consensus.nOraclePubkeyCount);
             return false;
         }
         const CPubKey& cpk = nodes[id].pubkey;

@@ -61,6 +61,7 @@
 #include <node/ui_interface.h>
 #include <node/validation_cache_args.h>
 #include <oracle/bundle_manager.h>
+#include <oracle/node.h>
 #include <oracle/signing_orchestrator.h>
 #include <script/interpreter.h>
 #include <policy/feerate.h>
@@ -273,8 +274,12 @@ void Shutdown(NodeContext& node)
     if (node.mempool) node.mempool->AddTransactionsUpdated(1);
     if (node.stempool) node.stempool->AddTransactionsUpdated(1);
 
-    // Shut down MuSig2 signing orchestrator before network
+    // Shut down oracle services before tearing down networking and before
+    // process-exit library cleanup can invalidate libcurl/OpenSSL state.
     OracleSigningOrchestrator::Shutdown();
+    OracleManager::StopOracleService();
+    g_get_oracle_consensus_price = nullptr;
+    OracleBundleManager::Shutdown();
 
     StopHTTPRPC();
     StopREST();

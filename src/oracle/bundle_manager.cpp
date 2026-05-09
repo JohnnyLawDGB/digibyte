@@ -8,11 +8,11 @@
 #include <cassert>
 #include <chrono>
 #include <limits>
-#include <optional>
 
 #include <chainparams.h>
 #include <common/args.h>
 #include <consensus/consensus.h>
+#include <consensus/volatility.h>
 #include <digidollar/digidollar.h>
 #include <kernel/chainparams.h>
 #include <logging.h>
@@ -56,6 +56,130 @@ bool IsFreshLiveOracleTimestamp(int64_t timestamp, int64_t now)
     return timestamp > 0 &&
            timestamp <= now + 60 &&
            now - timestamp <= ORACLE_MAX_AGE_SECONDS;
+}
+
+bool IsConsensusMuSig2OracleId(uint32_t oracle_id, const Consensus::Params& params)
+{
+    return params.nOraclePubkeyCount > 0 &&
+           oracle_id < static_cast<uint32_t>(params.nOraclePubkeyCount);
+}
+
+bool IsActiveConsensusOracle(uint32_t oracle_id)
+{
+    const CChainParams& params = Params();
+    if (!IsConsensusMuSig2OracleId(oracle_id, params.GetConsensus())) return false;
+
+    const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
+    return oracle_config && oracle_config->is_active;
+}
+
+bool IsCompleteMuSig2Bundle(const COracleBundle& bundle)
+{
+    return bundle.IsMuSig2() &&
+           bundle.aggregate_sig.size() == 64 &&
+           !bundle.participation_bitmap.empty() &&
+           bundle.median_price_micro_usd > 0 &&
+           bundle.timestamp > 0;
+}
+
+bool HasMuSig2Quorum(const COracleBundle& bundle, const Consensus::Params& params)
+{
+    if (!IsCompleteMuSig2Bundle(bundle)) return false;
+
+    const std::vector<uint8_t> oracle_ids = MuSig2OracleAggregator::DecodeBitmap(
+        bundle.participation_bitmap, static_cast<uint16_t>(params.nOracleTotalOracles));
+    if (static_cast<int>(oracle_ids.size()) < params.nOracleConsensusRequired) return false;
+
+    for (uint8_t oracle_id : oracle_ids) {
+        if (static_cast<int>(oracle_id) >= params.nOraclePubkeyCount) return false;
+    }
+
+    return true;
+}
+
+bool BlockTouchesDigiDollar(const CBlock& block)
+{
+    for (size_t i = 1; i < block.vtx.size(); ++i) {
+        if (DigiDollar::HasDigiDollarMarker(*block.vtx[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool BlockNeedsOraclePrice(const CBlock& block)
+{
+    for (size_t i = 1; i < block.vtx.size(); ++i) {
+        const CTransaction& tx = *block.vtx[i];
+        if (!DigiDollar::HasDigiDollarMarker(tx)) continue;
+        const DigiDollar::DigiDollarTxType tx_type = DigiDollar::GetDigiDollarTxType(tx);
+        if (tx_type == DigiDollar::DD_TX_MINT || tx_type == DigiDollar::DD_TX_REDEEM) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool BlockHasDigiDollarMint(const CBlock& block)
+{
+    for (size_t i = 1; i < block.vtx.size(); ++i) {
+        const CTransaction& tx = *block.vtx[i];
+        if (DigiDollar::HasDigiDollarMarker(tx) &&
+            DigiDollar::GetDigiDollarTxType(tx) == DigiDollar::DD_TX_MINT) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ComputeAggregatePubkeyFromConsensusParams(const std::vector<uint8_t>& oracle_ids,
+                                               const Consensus::Params& params,
+                                               secp256k1_xonly_pubkey& agg_pk,
+                                               secp256k1_musig_keyagg_cache& cache)
+{
+    if (oracle_ids.empty()) return false;
+    if (params.nOraclePubkeyCount < 0) return false;
+    if (params.vOraclePublicKeys.size() < static_cast<size_t>(params.nOraclePubkeyCount)) return false;
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    std::vector<secp256k1_pubkey> pubkeys;
+    pubkeys.reserve(oracle_ids.size());
+    for (uint8_t id : oracle_ids) {
+        if (id >= static_cast<uint8_t>(params.nOraclePubkeyCount)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+
+        const std::vector<unsigned char> xonly = ParseHex(params.vOraclePublicKeys[id]);
+        if (xonly.size() != 32) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+
+        std::vector<unsigned char> compressed;
+        compressed.reserve(CPubKey::COMPRESSED_SIZE);
+        compressed.push_back(0x02);
+        compressed.insert(compressed.end(), xonly.begin(), xonly.end());
+
+        secp256k1_pubkey pk;
+        if (!secp256k1_ec_pubkey_parse(ctx, &pk, compressed.data(), compressed.size())) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+        pubkeys.push_back(pk);
+    }
+
+    std::vector<const secp256k1_pubkey*> pubkey_ptrs(pubkeys.size());
+    for (size_t i = 0; i < pubkeys.size(); ++i) {
+        pubkey_ptrs[i] = &pubkeys[i];
+    }
+
+    const bool ok = secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache,
+                                               pubkey_ptrs.data(), pubkey_ptrs.size()) == 1;
+    secp256k1_context_destroy(ctx);
+    return ok;
 }
 } // namespace
 
@@ -127,12 +251,12 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
 
     // Periodic cleanup of seen message hashes to prevent deadlock.
     // When the oracle consensus round stalls (e.g., due to rapid block production
-    // or network partition), messages with the same Phase2 hash keep getting
+    // or network partition), messages with the same attestation hash keep getting
     // rejected as duplicates, preventing recovery. Clearing the set periodically
     // allows fresh consensus rounds to form. The 300-second interval is shorter
-    // than any network's epoch length (testnet=750s, mainnet=1500s), ensuring at
-    // least one cleanup per epoch. The pending_messages map (keyed by oracle_id)
-    // provides the authoritative dedup — seen_message_hashes is best-effort P2P
+    // than the 40-block (~600s) DigiDollar oracle epoch, ensuring at least one
+    // cleanup per epoch. The pending_messages map (keyed by oracle_id)
+    // provides the authoritative dedup; seen_message_hashes is best-effort P2P
     // optimization only.
     {
         static int64_t last_seen_cleanup = 0;
@@ -148,11 +272,12 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
     }
 
     // Calculate message hash for duplicate detection.
-    // Use Phase2 hash (oracle_id + price + timestamp) for Phase2-signed messages.
-    // GetSignatureHash() includes block_height+nonce which are NOT covered by
-    // Phase2 signatures — an attacker can mutate those fields to bypass dedup.
+    // Use the attestation hash (oracle_id + price + timestamp) for compact
+    // off-chain oracle messages. GetSignatureHash() includes block_height+nonce,
+    // which are not covered by attestations; letting peers mutate those fields
+    // would bypass deduplication.
     uint256 msg_hash = (!message.schnorr_sig.empty())
-        ? message.GetPhase2SignatureHash()
+        ? message.GetAttestationSignatureHash()
         : message.GetSignatureHash();
 
     // Check if we've already seen this exact message
@@ -203,23 +328,23 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
     // Note: Bundle creation happens in AddOracleBundleToBlock() or when explicitly requested
     // Don't auto-create here to avoid epoch mismatch issues
 
-    // Update cached price only when consensus is met
-    // Phase One (1-of-1): any single message is consensus
-    // Phase Two (4-of-7): need min_oracle_count agreeing messages
-    //
-    // Only count fresh messages (within ORACLE_MAX_AGE_SECONDS) for consensus.
-    // Stale entries were purged above, so pending_messages.size() is the
-    // fresh message count.
+    // Individual P2P messages may coordinate MuSig2 signing, but they do not
+    // update the canonical price cache. V1 cache updates come only from a
+    // validated on-chain MuSig2 bundle after block validation succeeds.
     {
         std::lock_guard<std::recursive_mutex> pending_lock(mtx_messages);
-        int fresh_count = static_cast<int>(pending_messages.size());
-        if (fresh_count >= min_oracle_count) {
-            COracleBundle temp;
-            temp.messages.reserve(pending_messages.size());
-            for (const auto& [id, m] : pending_messages) {
+        const int64_t now = GetTime();
+        COracleBundle temp;
+        temp.messages.reserve(pending_messages.size());
+        for (const auto& [id, m] : pending_messages) {
+            if (IsActiveConsensusOracle(id) &&
+                IsFreshLiveOracleTimestamp(m.timestamp, now)) {
                 temp.messages.push_back(m);
             }
+        }
 
+        int fresh_count = static_cast<int>(temp.messages.size());
+        if (fresh_count >= min_oracle_count) {
             const Consensus::Params& cparams = Params().GetConsensus();
             const CAmount consensus_price = CalculateConsensusPrice(temp, cparams);
             if (consensus_price <= 0) {
@@ -229,12 +354,9 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
                 return true;
             }
 
-            std::lock_guard<std::mutex> price_lock(mtx_bundles);
-            cached_price = consensus_price;
-            last_update_time = GetTime();
-            LogPrintf("Oracle: Updated cached price with %d/%d oracles in consensus (min %d required): %llu micro-USD ($%.6f)\n",
-                     fresh_count, (int)pending_messages.size(), min_oracle_count,
-                     static_cast<uint64_t>(consensus_price), consensus_price / 1000000.0);
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: %d/%d individual messages reached off-chain consensus (min %d required); waiting for MuSig2 on-chain bundle before updating price cache\n",
+                     fresh_count, (int)pending_messages.size(), min_oracle_count);
 
             // T5-03: When consensus is reached from individual messages, try to generate
             // consensus attestations from local oracle nodes. Each oracle signs
@@ -262,12 +384,13 @@ bool OracleBundleManager::AddOracleMessage(const COraclePriceMessage& message)
                     // Ask local oracle nodes to sign consensus values
                     OracleManager& om = OracleManager::GetInstance();
                     for (const auto& [oid, omsg] : pending_messages) {
+                        if (!IsActiveConsensusOracle(oid)) continue;
                         if (pending_attestations.count(oid)) continue; // Already have attestation
                         OracleNode* node = om.GetOracleNode(oid);
                         if (node) {
                             COraclePriceMessage att = node->CreateConsensusAttestation(
                                 att_consensus_price, att_consensus_timestamp);
-                            if (!att.schnorr_sig.empty() && att.VerifyPhase2()) {
+                            if (!att.schnorr_sig.empty() && att.VerifyAttestation()) {
                                 pending_attestations[oid] = att;
                                 LogPrint(BCLog::DIGIDOLLAR,
                                     "Oracle: Auto-generated consensus attestation for local oracle %d\n", oid);
@@ -331,6 +454,7 @@ void OracleBundleManager::ClearPendingMessages()
     pending_messages.clear();
     pending_attestations.clear();
     seen_message_hashes.clear();
+    seen_attestation_hashes.clear();
     LogPrintf("Oracle: Manually cleared all pending messages and attestations\n");
     m_messages_updated_cv.notify_all();
 }
@@ -348,9 +472,16 @@ bool OracleBundleManager::AddConsensusAttestation(const COraclePriceMessage& att
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
 
-    // Basic validation: must have a Phase 2 signature
+    // Consensus attestations are off-chain inputs to the MuSig2 signing round.
+    // They must be signed, but they are never accepted as on-chain oracle bundles.
     if (attestation.schnorr_sig.empty() || attestation.schnorr_sig.size() != 64) {
         LogPrintf("Oracle: Rejecting consensus attestation from oracle %d: missing/invalid signature\n",
+                 attestation.oracle_id);
+        return false;
+    }
+
+    if (!IsActiveConsensusOracle(attestation.oracle_id)) {
+        LogPrintf("Oracle: Rejecting consensus attestation from oracle %d: outside active MuSig2 consensus keyset\n",
                  attestation.oracle_id);
         return false;
     }
@@ -370,15 +501,15 @@ bool OracleBundleManager::AddConsensusAttestation(const COraclePriceMessage& att
         return false;
     }
 
-    // Verify Phase 2 signature (attestation signs consensus values)
-    if (!attestation.VerifyPhase2()) {
+    // Verify compact attestation signature over the consensus values.
+    if (!attestation.VerifyAttestation()) {
         // Also try with chainparams pubkey binding
         const CChainParams& params = Params();
         const OracleNodeInfo* oracle_config = params.GetOracleNode(attestation.oracle_id);
         if (oracle_config) {
             COraclePriceMessage bound = attestation;
             bound.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
-            if (!bound.VerifyPhase2()) {
+            if (!bound.VerifyAttestation()) {
                 LogPrintf("Oracle: Rejecting consensus attestation from oracle %d: invalid signature\n",
                          attestation.oracle_id);
                 return false;
@@ -436,7 +567,8 @@ bool OracleBundleManager::ComputeConsensusValues(uint64_t& consensus_price, int6
     const int64_t now = GetTime();
     COracleBundle temp;
     for (const auto& [id, msg] : pending_messages) {
-        if (IsFreshLiveOracleTimestamp(msg.timestamp, now)) {
+        if (IsActiveConsensusOracle(id) &&
+            IsFreshLiveOracleTimestamp(msg.timestamp, now)) {
             temp.messages.push_back(msg);
         }
     }
@@ -521,9 +653,10 @@ bool OracleBundleManager::UpdateBundle(const COracleBundle& bundle)
     LogPrintf("Oracle: Updated bundle for epoch %d with %d messages\n",
              bundle.epoch, bundle.messages.size());
 
-    // Update cached price if this is the latest bundle
-    if (bundle.epoch >= cached_epoch && bundle.HasConsensus(min_oracle_count)) {
-        cached_price = bundle.GetConsensusPrice(min_oracle_count);
+    // Only complete MuSig2 bundles may update the latest price cache. Off-chain
+    // individual-message consensus can coordinate signing but is not canonical.
+    if (HasMuSig2Quorum(bundle, Params().GetConsensus()) && bundle.epoch >= cached_epoch) {
+        cached_price = static_cast<CAmount>(bundle.median_price_micro_usd);
         cached_epoch = bundle.epoch;
         last_update_time = GetTime();
     }
@@ -536,7 +669,7 @@ bool OracleBundleManager::HasValidBundle(int32_t epoch) const
     std::lock_guard<std::mutex> lock(mtx_bundles);
 
     auto it = epoch_bundles.find(epoch);
-    return it != epoch_bundles.end() && it->second.HasConsensus(min_oracle_count);
+    return it != epoch_bundles.end() && HasMuSig2Quorum(it->second, Params().GetConsensus());
 }
 
 void OracleBundleManager::CleanupOldBundles(int32_t current_epoch)
@@ -557,24 +690,24 @@ void OracleBundleManager::CleanupOldBundles(int32_t current_epoch)
 
 bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_height)
 {
+    const bool block_touches_dd = BlockTouchesDigiDollar(block);
+    const bool block_needs_oracle_price = BlockNeedsOraclePrice(block);
+
     LogPrintf("Oracle: AddOracleBundleToBlock called for height %d, enabled=%d, min_oracle_count=%d\n",
              block_height, enabled, min_oracle_count);
 
     if (!enabled) {
-        LogPrintf("Oracle: Oracles disabled, skipping bundle addition\n");
-        return true; // Don't fail block creation if oracles are disabled
+        if (block_needs_oracle_price) {
+            LogPrintf("Oracle: price-dependent DD block at height %d requires a MuSig2 bundle, but oracles are disabled\n",
+                      block_height);
+        } else {
+            LogPrintf("Oracle: Oracles disabled, no bundle available for block %d\n", block_height);
+        }
+        return false;
     }
 
     int32_t epoch = GetCurrentEpoch(block_height);
     LogPrintf("Oracle: Current epoch=%d for height %d\n", epoch, block_height);
-    const Consensus::Params& consensus_params = Params().GetConsensus();
-    const bool chainparams_phase_one =
-        !force_phase2 &&
-        block_height < consensus_params.nDigiDollarPhase2Height &&
-        min_oracle_count == consensus_params.nOracleRequiredMessages;
-    const int32_t required_bundle_messages =
-        chainparams_phase_one ? 1 : min_oracle_count;
-
     // Cleanup stale MuSig2 sessions at epoch boundary (keep current epoch only).
     // This prevents unbounded growth of the global session map when epoch advances.
     {
@@ -591,10 +724,44 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
         }
     }
 
-    // Try MuSig2 (v0x03) first — the OracleSigningOrchestrator drives the
+    auto bundle_is_fresh = [&](const COracleBundle& bundle) -> bool {
+        // Mine only bundles that will still be fresh against the candidate block
+        // timestamp. Functional tests and real miners can advance mock/adjusted
+        // time beyond wall-clock GetTime(); using wall time here allowed stale
+        // cached bundles into templates that TestBlockValidity then rejected.
+        const int64_t now = std::max<int64_t>(GetTime(), block.nTime);
+        if (bundle.timestamp <= 0 || bundle.timestamp > now + 60 ||
+            now - bundle.timestamp > ORACLE_MAX_AGE_SECONDS) {
+            LogPrintf("Oracle: Refusing stale/future MuSig2 bundle for block %d: timestamp=%lld now=%lld age=%lld max=%d\n",
+                      block_height,
+                      static_cast<long long>(bundle.timestamp),
+                      static_cast<long long>(now),
+                      static_cast<long long>(now - bundle.timestamp),
+                      ORACLE_MAX_AGE_SECONDS);
+            return false;
+        }
+        return true;
+    };
+
+    auto add_bundle_to_coinbase = [&](const COracleBundle& bundle) -> bool {
+        CScript oracle_script = CreateOracleScript(bundle);
+        if (oracle_script.empty()) {
+            return false;
+        }
+
+        CMutableTransaction coinbase_tx(*block.vtx[0]);
+        CTxOut oracle_output;
+        oracle_output.nValue = 0;
+        oracle_output.scriptPubKey = oracle_script;
+        coinbase_tx.vout.push_back(oracle_output);
+        block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
+        return true;
+    };
+
+    // V1 is MuSig2-only. The OracleSigningOrchestrator drives the
     // MuSig2 protocol asynchronously via BlockConnected callbacks.
     // AddOracleBundleToBlock only *queries* for a completed session.
-    if (!force_phase2 && g_signing_orchestrator) {
+    if (g_signing_orchestrator) {
         COracleBundle bundle(epoch);
         bundle.version = 3;
 
@@ -612,379 +779,47 @@ bool OracleBundleManager::AddOracleBundleToBlock(CBlock& block, int32_t block_he
             bundle.median_price_micro_usd = signed_price;
             bundle.timestamp = signed_timestamp;
 
-            CScript oracle_script = CreateOracleScript(bundle);
-            if (!oracle_script.empty()) {
-                CMutableTransaction coinbase_tx(*block.vtx[0]);
-                CTxOut oracle_output;
-                oracle_output.nValue = 0;
-                oracle_output.scriptPubKey = oracle_script;
-                coinbase_tx.vout.push_back(oracle_output);
-                block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
-
+            std::string error;
+            if (ValidateMuSig2Bundle(bundle, block_height, Params().GetConsensus(), error) &&
+                bundle_is_fresh(bundle) &&
+                add_bundle_to_coinbase(bundle)) {
                 LogPrintf("Oracle: Added MuSig2 v0x03 bundle to block %d (epoch %d)\n",
                          block_height, epoch);
                 return true;
             }
-        }
-        // MuSig2 not ready — fall through to v0x02 individual-sig bundling
-        LogPrintf("Oracle: MuSig2 not ready for epoch %d, using v0x02 fallback\n", epoch);
-    }
-
-    // Phase 1/2 bundling (existing logic below)
-    COracleBundle bundle = GetCurrentBundle(epoch);
-    const int64_t now_for_bundle = GetTime();
-    if (bundle.HasConsensus(required_bundle_messages) &&
-        !IsFreshLiveOracleTimestamp(bundle.timestamp, now_for_bundle)) {
-        LogPrintf("Oracle: Ignoring stale cached bundle for epoch %d while building block %d\n",
-                 epoch, block_height);
-        bundle = COracleBundle(epoch);
-    }
-    LogPrintf("Oracle: GetCurrentBundle(epoch=%d) returned bundle with %zu messages, HasConsensus=%d\n",
-             epoch, bundle.messages.size(), bundle.HasConsensus(required_bundle_messages));
-
-    // If no consensus yet, try previous epoch
-    if (!bundle.HasConsensus(required_bundle_messages)) {
-        bundle = GetCurrentBundle(epoch - 1);
-        if (bundle.HasConsensus(required_bundle_messages) &&
-            !IsFreshLiveOracleTimestamp(bundle.timestamp, now_for_bundle)) {
-            LogPrintf("Oracle: Ignoring stale cached bundle for previous epoch %d while building block %d\n",
-                     epoch - 1, block_height);
-            bundle = COracleBundle(epoch - 1);
-        }
-        LogPrintf("Oracle: Tried previous epoch, bundle now has %zu messages, HasConsensus=%d\n",
-                 bundle.messages.size(), bundle.HasConsensus(required_bundle_messages));
-    }
-
-    // Phase One: If still no consensus and min_oracle_count == 1, use pending messages directly
-    // This allows unit tests to work without full epoch consensus flow
-    if (!bundle.HasConsensus(required_bundle_messages) && required_bundle_messages == 1) {
-        LogPrintf("Oracle: Phase One mode - checking pending messages\n");
-        std::lock_guard<std::recursive_mutex> lock(mtx_messages);
-        std::vector<COraclePriceMessage> pending;
-        pending.reserve(pending_messages.size());
-        for (const auto& pair : pending_messages) {
-            if (IsFreshLiveOracleTimestamp(pair.second.timestamp, now_for_bundle)) {
-                pending.push_back(pair.second);
-            }
-        }
-        LogPrintf("Oracle: Phase One - %zu pending messages\n", pending.size());
-
-        if (!pending.empty()) {
-            bundle = COracleBundle(epoch);
-            bundle.messages.push_back(pending.front());
-            bundle.median_price_micro_usd = pending[0].price_micro_usd;
-            LogPrintf("Oracle: Phase One - Using 1 of %zu pending message(s) for block %d\n",
-                     pending.size(), block_height);
-            // NOTE: Do NOT clear pending_messages here. CreateNewBlock() fires every
-            // ~15 seconds but oracle messages broadcast every ~60 seconds. Clearing
-            // here drains messages 4x faster than replenished, resulting in zero
-            // oracle data in blocks. Messages expire naturally via the stale purge
-            // in AddOracleMessage() after ORACLE_MAX_AGE_SECONDS (3600s).
-        } else {
-            LogPrintf("Oracle: Phase One - No pending messages available!\n");
+            LogPrintf("Oracle: Completed MuSig2 session for epoch %d failed bundle validation: %s\n",
+                      epoch, error);
         }
     }
 
-    // Phase Two: Build bundle from consensus attestations (signatures over consensus values)
-    // T5-03: Each oracle signs H(oracle_id, consensus_price, consensus_timestamp) — the same
-    // consensus values stored on-chain. This ensures signatures verify after round-trip through
-    // the Phase 2 on-chain format (which stores ONE consensus price + N signatures).
-    if (!bundle.HasConsensus(required_bundle_messages) && required_bundle_messages > 1) {
-        LogPrintf("Oracle: Phase Two mode - checking for consensus attestations (%d-of-N)\n", required_bundle_messages);
-
-        struct PhaseTwoAttempt {
-            bool has_bundle{false};
-            bool near_quorum{false};
-            size_t individual_count{0};
-            size_t valid_attestation_count{0};
-            uint64_t consensus_price{0};
-            int64_t consensus_timestamp{0};
-            COracleBundle candidate;
-        };
-
-        auto try_build_phase_two_bundle_locked = [&]() -> PhaseTwoAttempt {
-            PhaseTwoAttempt result;
-            const size_t near_quorum_threshold = required_bundle_messages > 1 ? static_cast<size_t>(required_bundle_messages - 1) : 0;
-
-            std::vector<COraclePriceMessage> all_individual;
-            all_individual.reserve(pending_messages.size());
-            for (const auto& pair : pending_messages) {
-                if (IsFreshLiveOracleTimestamp(pair.second.timestamp, now_for_bundle)) {
-                    all_individual.push_back(pair.second);
-                }
-            }
-            result.individual_count = all_individual.size();
-
-            if (result.individual_count < static_cast<size_t>(required_bundle_messages)) {
-                result.near_quorum = result.individual_count >= near_quorum_threshold;
-                return result;
-            }
-
-            COracleBundle temp_bundle(epoch);
-            temp_bundle.messages = all_individual;
-            const Consensus::Params& cparams = Params().GetConsensus();
-            CAmount computed_price = CalculateConsensusPrice(temp_bundle, cparams);
-            if (computed_price <= 0) {
-                return result;
-            }
-
-            result.consensus_price = static_cast<uint64_t>(computed_price);
-
-            // Consensus timestamp: median of individual message timestamps
-            std::vector<int64_t> timestamps;
-            timestamps.reserve(all_individual.size());
-            for (const auto& msg : all_individual) {
-                timestamps.push_back(msg.timestamp);
-            }
-            std::sort(timestamps.begin(), timestamps.end());
-            const size_t tmid = timestamps.size() / 2;
-            result.consensus_timestamp = (timestamps.size() % 2 == 0) ?
-                (timestamps[tmid - 1] + timestamps[tmid]) / 2 : timestamps[tmid];
-
-            // Collect valid consensus attestations.
-            std::vector<COraclePriceMessage> valid_attestations;
-            valid_attestations.reserve(std::max(pending_attestations.size(), all_individual.size()));
-            std::set<uint32_t> seen_ids;
-
-            for (const auto& pair : pending_attestations) {
-                const COraclePriceMessage& att = pair.second;
-                if (IsFreshLiveOracleTimestamp(att.timestamp, now_for_bundle) &&
-                    att.price_micro_usd == result.consensus_price &&
-                    att.timestamp == result.consensus_timestamp &&
-                    att.VerifyPhase2()) {
-                    valid_attestations.push_back(att);
-                    seen_ids.insert(att.oracle_id);
-                }
-            }
-
-            // Also check pending_messages — an oracle may have already signed consensus values.
-            for (const auto& msg : all_individual) {
-                if (seen_ids.count(msg.oracle_id)) continue;
-                COraclePriceMessage check_msg = msg;
-                check_msg.price_micro_usd = result.consensus_price;
-                check_msg.timestamp = result.consensus_timestamp;
-                if (check_msg.VerifyPhase2()) {
-                    valid_attestations.push_back(check_msg);
-                    seen_ids.insert(msg.oracle_id);
-                }
-            }
-
-            // Try to generate attestation from local oracle node (if available).
-            if (static_cast<int>(valid_attestations.size()) < required_bundle_messages) {
-                OracleManager& om = OracleManager::GetInstance();
-                for (const auto& pair : pending_messages) {
-                    const uint32_t id = pair.first;
-                    if (seen_ids.count(id)) continue;
-                    if (!IsFreshLiveOracleTimestamp(pair.second.timestamp, now_for_bundle)) continue;
-                    OracleNode* node = om.GetOracleNode(id);
-                    if (node) {
-                        COraclePriceMessage att = node->CreateConsensusAttestation(
-                            result.consensus_price, result.consensus_timestamp);
-                        if (!att.schnorr_sig.empty() && att.VerifyPhase2()) {
-                            valid_attestations.push_back(att);
-                            seen_ids.insert(id);
-                            pending_attestations[id] = att;
-                            LogPrintf("Oracle: Phase Two - Generated local consensus attestation for oracle %d\n", id);
-                        }
-                    }
-                }
-            }
-
-            result.valid_attestation_count = valid_attestations.size();
-            if (result.valid_attestation_count >= static_cast<size_t>(required_bundle_messages)) {
-                result.has_bundle = true;
-                result.candidate = COracleBundle(epoch);
-                result.candidate.messages = std::move(valid_attestations);
-                result.candidate.median_price_micro_usd = result.consensus_price;
-                result.candidate.timestamp = result.consensus_timestamp;
-                return result;
-            }
-
-            // Once we have enough individual messages for a consensus price, quorum progress
-            // should be measured on attestations rather than raw message count.
-            result.near_quorum = result.valid_attestation_count >= near_quorum_threshold;
-            return result;
-        };
-
-        std::unique_lock<std::recursive_mutex> lock(mtx_messages);
-        PhaseTwoAttempt attempt = try_build_phase_two_bundle_locked();
-
-        if (!attempt.has_bundle && attempt.near_quorum && near_quorum_wait_timeout.count() > 0) {
-            ++near_quorum_wait_attempts;
-            const uint64_t wait_attempt = near_quorum_wait_attempts;
-            const auto wait_started = std::chrono::steady_clock::now();
-            const auto deadline = wait_started + near_quorum_wait_timeout;
-
-            LogPrintf("Oracle: Near-quorum wait triggered for block %d (attempt #%llu): %zu individual, %zu attestations, need %d\n",
-                     block_height, wait_attempt, attempt.individual_count, attempt.valid_attestation_count, required_bundle_messages);
-
-            while (!attempt.has_bundle && attempt.near_quorum) {
-                const auto now = std::chrono::steady_clock::now();
-                if (now >= deadline) {
-                    break;
-                }
-                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
-                const auto step = std::min(near_quorum_wait_poll_interval, remaining);
-                m_messages_updated_cv.wait_for(lock, step);
-                attempt = try_build_phase_two_bundle_locked();
-            }
-
-            const auto waited_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - wait_started).count();
-            if (attempt.has_bundle) {
-                ++near_quorum_wait_successes;
-                LogPrintf("Oracle: Near-quorum wait succeeded after %lldms (success %llu/%llu)\n",
-                         waited_ms,
-                         static_cast<unsigned long long>(near_quorum_wait_successes),
-                         static_cast<unsigned long long>(near_quorum_wait_attempts));
-            } else {
-                ++near_quorum_wait_timeouts;
-                LogPrintf("Oracle: Near-quorum wait timed out after %lldms (timeouts %llu/%llu)\n",
-                         waited_ms,
-                         static_cast<unsigned long long>(near_quorum_wait_timeouts),
-                         static_cast<unsigned long long>(near_quorum_wait_attempts));
-            }
-        }
-
-        if (attempt.has_bundle) {
-            bundle = std::move(attempt.candidate);
-            LogPrintf("Oracle: Phase Two - Created bundle with %zu consensus attestations, price=%llu\n",
-                     bundle.messages.size(), bundle.median_price_micro_usd);
-        } else if (attempt.consensus_price > 0) {
-            const uint64_t consensus_price = attempt.consensus_price;
-            const int64_t consensus_timestamp = attempt.consensus_timestamp;
-            const size_t valid_attestation_count = attempt.valid_attestation_count;
-            const size_t individual_count = attempt.individual_count;
-            lock.unlock();
-
-            LogPrintf("Oracle: Phase Two - %zu valid consensus attestations from %zu individual messages (need %d), broadcasting proposal\n",
-                     valid_attestation_count, individual_count, required_bundle_messages);
-            BroadcastConsensusProposal(epoch, consensus_price, consensus_timestamp);
-        } else {
-            LogPrintf("Oracle: Phase Two - Not enough individual messages for consensus (%zu, need %d)\n",
-                     attempt.individual_count, required_bundle_messages);
-        }
+    COracleBundle cached_bundle = GetCurrentBundle(epoch);
+    std::string error;
+    if (ValidateMuSig2Bundle(cached_bundle, block_height, Params().GetConsensus(), error) &&
+        bundle_is_fresh(cached_bundle) &&
+        add_bundle_to_coinbase(cached_bundle)) {
+        LogPrintf("Oracle: Added cached MuSig2 v0x03 bundle to block %d (epoch %d)\n",
+                  block_height, epoch);
+        return true;
     }
 
-    // If still no consensus, create empty bundle (graceful degradation)
-    if (!bundle.HasConsensus(required_bundle_messages)) {
-        if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
-            COracleBundle mock_bundle = MockOracleManager::GetInstance().CreateMockBundle(block_height, block.GetBlockTime());
-            if (required_bundle_messages == 1 && mock_bundle.messages.size() > 1) {
-                mock_bundle.messages.resize(1);
-                mock_bundle.median_price_micro_usd = mock_bundle.messages[0].price_micro_usd;
-                mock_bundle.version = 1;
-            } else {
-                mock_bundle.version = 2;
-            }
-            if (mock_bundle.HasConsensus(required_bundle_messages)) {
-                LogPrintf("Oracle: Using regtest mock oracle bundle for block %d with %zu messages\n",
-                          block_height, mock_bundle.messages.size());
-                bundle = std::move(mock_bundle);
-            }
-        }
+    if (block_needs_oracle_price) {
+        LogPrintf("Oracle: No valid MuSig2 bundle ready for price-dependent DD block %d (epoch %d): %s\n",
+                  block_height, epoch, error);
+        return false;
     }
 
-    if (!bundle.HasConsensus(required_bundle_messages)) {
-        LogPrintf("Oracle: No consensus bundle available for block %d, creating empty oracle data\n", block_height);
-        bundle = COracleBundle(epoch);
+    if (block_touches_dd) {
+        LogPrintf("Oracle: MuSig2 not ready/fresh for transfer-only DD block %d (epoch %d); no oracle data added\n",
+                  block_height, epoch);
+    } else {
+        LogPrintf("Oracle: MuSig2 not ready/fresh for epoch %d; no oracle data added to block template\n", epoch);
     }
-
-    if (consensus_params.IsPhaseThreeActive(block_height)) {
-        LogPrintf("Oracle: Phase Three active at height %d, checking MuSig2 session for epoch %d\n", block_height, epoch);
-
-        std::optional<std::vector<unsigned char>> phase3_sig;
-        std::optional<std::vector<unsigned char>> phase3_bitmap;
-
-        {
-            LOCK(g_oracle_signing_sessions_mutex);
-            auto it = g_oracle_signing_sessions.find(epoch);
-            if (it != g_oracle_signing_sessions.end()) {
-                MuSig2SigningSession& session = it->second;
-                std::vector<unsigned char> sig64;
-
-                if (session.GetState() == MuSig2SessionState::COMPLETE) {
-                    sig64 = session.GetAggregateSig();
-                } else if (session.HasEnoughPartialSigs() && session.AggregateSignature(sig64)) {
-                    LogPrintf("Oracle: Aggregated MuSig2 signature for epoch %d at block build\n", epoch);
-                }
-
-                if (sig64.size() == 64) {
-                    auto bitmap = session.GetParticipationBitmap();
-                    if (!bitmap.empty()) {
-                        phase3_sig = std::move(sig64);
-                        phase3_bitmap = std::move(bitmap);
-                    }
-                }
-            }
-        }
-
-        if (phase3_sig && phase3_bitmap) {
-            const uint16_t total_oracles = static_cast<uint16_t>(std::max(1, consensus_params.nOracleTotalOracles));
-            const int phase3_required = std::max(1, consensus_params.nOracleConsensusRequired);
-            std::vector<uint8_t> participating_ids = MuSig2OracleAggregator::DecodeBitmap(*phase3_bitmap, total_oracles);
-            if (participating_ids.size() >= static_cast<size_t>(phase3_required)) {
-                MuSig2OracleAggregator aggregator;
-                secp256k1_xonly_pubkey agg_pk;
-                secp256k1_musig_keyagg_cache cache;
-                if (aggregator.ComputeAggregatePubkey(participating_ids, agg_pk, cache)) {
-                    COracleBundle v03_bundle = bundle;
-                    v03_bundle.version = 3;
-                    v03_bundle.aggregate_sig = *phase3_sig;
-                    v03_bundle.participation_bitmap = *phase3_bitmap;
-
-                    std::vector<unsigned char> v03_payload = v03_bundle.SerializeV03Data();
-                    if (!v03_payload.empty() && v03_payload.size() <= MAX_SCRIPT_ELEMENT_SIZE) {
-                        bundle = std::move(v03_bundle);
-                        LOCK(g_oracle_signing_sessions_mutex);
-                        g_oracle_signing_sessions.erase(epoch);
-                        LogPrintf("Oracle: Using v0x03 MuSig2 bundle at height %d, participants=%zu payload=%zu bytes\n",
-                                  block_height, participating_ids.size(), v03_payload.size());
-                    } else {
-                        LogPrintf("Oracle: Rejecting v0x03 payload size=%zu (max=%d)\n",
-                                  v03_payload.size(), MAX_SCRIPT_ELEMENT_SIZE);
-                    }
-                } else {
-                    LogPrintf("Oracle: Failed ComputeAggregatePubkey for %zu participants\n", participating_ids.size());
-                }
-            } else {
-                LogPrintf("Oracle: MuSig2 participant threshold not met (%zu < %d)\n",
-                          participating_ids.size(), phase3_required);
-            }
-        } else {
-            LogPrintf("Oracle: No complete MuSig2 session available for epoch %d, falling back to legacy bundle\n", epoch);
-        }
-    }
-
-    LogPrintf("Oracle: Final bundle has %zu messages before CreateOracleScript\n", bundle.messages.size());
-
-    // Create oracle script and add to coinbase
-    CScript oracle_script = CreateOracleScript(bundle);
-    LogPrintf("Oracle: CreateOracleScript returned script of size %zu\n", oracle_script.size());
-
-    if (oracle_script.empty()) {
-        LogPrintf("Oracle: Script is empty, returning true without adding bundle\n");
-        return true; // Empty script is OK for transition period
-    }
-
-    // Add oracle data as OP_RETURN output to coinbase
-    CMutableTransaction coinbase_tx(*block.vtx[0]);
-    CTxOut oracle_output;
-    oracle_output.nValue = 0;
-    oracle_output.scriptPubKey = oracle_script;
-    coinbase_tx.vout.push_back(oracle_output);
-
-    // Update block with modified coinbase
-    block.vtx[0] = MakeTransactionRef(std::move(coinbase_tx));
-
-    LogPrintf("Oracle: Added oracle bundle to block %d with %d oracle messages\n",
-             block_height, bundle.messages.size());
     return true;
 }
 
 CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) const
 {
-    // Phase Three (v0x03): MuSig2 aggregate signature + participation bitmap
+    // MuSig2 v0x03: aggregate signature + participation bitmap
     // Format: OP_RETURN OP_ORACLE <version=0x03> <v03_data>
     // v03_data: bitmap_len(1) + bitmap(var) + price(8) + timestamp(8) + aggregate_sig(64)
     if (bundle.version == 3) {
@@ -1026,152 +861,31 @@ CScript OracleBundleManager::CreateOracleScript(const COracleBundle& bundle) con
         script << std::vector<unsigned char>{0x03};
         script << v03_data;
 
-        LogPrintf("Oracle: Created Phase Three (v0x03) script with bitmap_bytes=%zu, payload=%zu, price=%llu\n",
+        LogPrintf("Oracle: Created MuSig2 v0x03 script with bitmap_bytes=%zu, payload=%zu, price=%llu\n",
                  bundle.participation_bitmap.size(),
                  v03_data.size(),
                  static_cast<unsigned long long>(bundle.median_price_micro_usd));
         return script;
     }
 
-    if (bundle.messages.empty()) {
-        return CScript(); // Empty script for no oracle data
-    }
-
-    // Phase One: Compact format using oracle pubkey hash from chainparams
-    // Format: OP_RETURN OP_ORACLE <version=0x01> <oracle_id> <price_micro_usd> <timestamp>
-    // Total: ~20 bytes (well within 83 byte MAX_OP_RETURN_RELAY limit)
-
-    if (bundle.messages.size() > 1) {
-        // Check if Phase Two is active — only create multi-oracle scripts when Phase Two is enabled
-        const Consensus::Params& cparams = Params().GetConsensus();
-        int current_height = 0; // Best effort — CreateOracleScript doesn't have height context
-        // If Phase Two is not activated (INT_MAX), reject multi-message bundles
-        if (cparams.nDigiDollarPhase2Height == std::numeric_limits<int>::max()) {
-            LogPrintf("Oracle: Phase Two not active, rejecting multi-message bundle (%zu messages)\n",
-                     bundle.messages.size());
-            return CScript(); // Phase One: reject multi-message bundles
-        }
-
-        // Phase Two: Full signature format — all signatures stored on-chain for verification
-        // Format: OP_RETURN OP_ORACLE <version=0x02> <data>
-        // Data layout:
-        //   num_messages (1 byte)
-        //   consensus_price (8 bytes, uint64 LE)
-        //   timestamp (8 bytes, int64 LE)
-        //   For each message:
-        //     oracle_id (1 byte)
-        //     schnorr_sig (64 bytes)
-        // Total for 4 oracles: 1+8+8 + 4*(1+64) = 277 bytes
-        // Exceeds 83-byte MAX_OP_RETURN_RELAY but coinbase is not subject to relay policy
-
-        CScript script;
-        script << OP_RETURN << OP_ORACLE;
-
-        script << std::vector<unsigned char>{0x02};
-
-        std::vector<unsigned char> p2_data;
-        size_t num_msgs = bundle.messages.size();
-        p2_data.reserve(17 + num_msgs * 65);
-
-        // Number of oracle messages
-        p2_data.push_back(static_cast<unsigned char>(num_msgs & 0xFF));
-
-        // Consensus price in micro-USD (uint64, little-endian)
-        uint64_t p2_price = bundle.median_price_micro_usd;
-        for (int i = 0; i < 8; ++i) {
-            p2_data.push_back(static_cast<unsigned char>((p2_price >> (i * 8)) & 0xFF));
-        }
-
-        // Consensus timestamp (int64, little-endian)
-        int64_t p2_timestamp = bundle.timestamp;
-        for (int i = 0; i < 8; ++i) {
-            p2_data.push_back(static_cast<unsigned char>((p2_timestamp >> (i * 8)) & 0xFF));
-        }
-
-        // Per-oracle entries: oracle_id + schnorr_sig
-        for (const auto& msg : bundle.messages) {
-            // SECURITY (DGB-SEC-004): Defense-in-depth — reject at serialization
-            if (msg.oracle_id > 255) {
-                LogPrintf("Oracle: Phase Two rejecting oracle_id %d > 255\n", msg.oracle_id);
-                return CScript();
-            }
-            p2_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF));
-            if (msg.schnorr_sig.size() == 64) {
-                p2_data.insert(p2_data.end(), msg.schnorr_sig.begin(), msg.schnorr_sig.end());
-            } else {
-                // Pad with zeros if signature missing (will fail validation)
-                p2_data.insert(p2_data.end(), 64, 0x00);
-                LogPrintf("Oracle: WARNING - Phase Two message for oracle %d missing signature\n", msg.oracle_id);
-            }
-        }
-
-        // For data > 75 bytes, CScript << vector uses OP_PUSHDATA1/2 automatically
-        script << p2_data;
-
-        LogPrintf("Oracle: Created Phase Two script with %zu oracle messages, %zu bytes, price=%llu\n",
-                 num_msgs, p2_data.size(), p2_price);
-        return script;
-    }
-
-    // Phase One: Must have exactly 1 message (1-of-1 consensus)
-    CScript script;
-    script << OP_RETURN << OP_ORACLE;
-
-    // Version byte (0x01 = Phase One compact format)
-    script << std::vector<unsigned char>{0x01};
-
-    // Phase One: Single oracle message (chainparams verification)
-    const COraclePriceMessage& msg = bundle.messages[0];
-
-    // Compact data: oracle_id (1 byte) + price (8 bytes) + timestamp (8 bytes)
-    std::vector<unsigned char> compact_data;
-    compact_data.reserve(17);
-
-    // Oracle ID (uint8 for Phase One, expandable to uint32 for Phase Two)
-    // SECURITY (DGB-SEC-004): Defense-in-depth — reject at serialization
-    if (msg.oracle_id > 255) {
-        LogPrintf("Oracle: Phase One rejecting oracle_id %d > 255\n", msg.oracle_id);
-        return CScript();
-    }
-    compact_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF));
-
-    // Price in micro-USD (uint64, little-endian)
-    uint64_t price = msg.price_micro_usd;
-    for (int i = 0; i < 8; ++i) {
-        compact_data.push_back(static_cast<unsigned char>((price >> (i * 8)) & 0xFF));
-    }
-
-    // Timestamp (int64, little-endian)
-    int64_t timestamp = msg.timestamp;
-    for (int i = 0; i < 8; ++i) {
-        compact_data.push_back(static_cast<unsigned char>((timestamp >> (i * 8)) & 0xFF));
-    }
-
-    script << compact_data;
-
-    return script;
+    return CScript();
 }
 
 bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, COracleBundle& bundle) const
 {
-    const std::optional<int32_t> coinbase_height = [&]() -> std::optional<int32_t> {
-        if (coinbase_tx.vin.empty() || coinbase_tx.vin[0].scriptSig.empty()) {
-            return std::nullopt;
+    int oracle_output_count = 0;
+    for (const auto& output : coinbase_tx.vout) {
+        if (output.scriptPubKey.size() >= 2 &&
+            output.scriptPubKey[0] == OP_RETURN &&
+            output.scriptPubKey[1] == OP_ORACLE) {
+            ++oracle_output_count;
         }
-
-        CScript::const_iterator pc = coinbase_tx.vin[0].scriptSig.begin();
-        opcodetype opcode;
-        std::vector<unsigned char> data;
-        if (!coinbase_tx.vin[0].scriptSig.GetOp(pc, opcode, data) || data.empty()) {
-            return std::nullopt;
-        }
-
-        try {
-            return CScriptNum(data, true).getint();
-        } catch (const scriptnum_error&) {
-            return std::nullopt;
-        }
-    }();
+    }
+    if (oracle_output_count > 1) {
+        LogPrintf("Oracle: Rejecting transaction with %d oracle outputs (expected at most 1)\n",
+                  oracle_output_count);
+        return false;
+    }
 
     // Look for OP_RETURN output with OP_ORACLE marker
     for (const auto& output : coinbase_tx.vout) {
@@ -1193,32 +907,32 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                                 data.insert(data.end(), script_it, script_it + chunk_size);
                                 script_it += chunk_size;
                             } else {
-                                break;
+                                return false;
                             }
                         } else if (*script_it == 0x4c) { // OP_PUSHDATA1: next byte is length
                             ++script_it;
-                            if (script_it >= output.scriptPubKey.end()) break;
+                            if (script_it >= output.scriptPubKey.end()) return false;
                             unsigned int chunk_size = *script_it;
                             ++script_it;
                             if (script_it + chunk_size <= output.scriptPubKey.end()) {
                                 data.insert(data.end(), script_it, script_it + chunk_size);
                                 script_it += chunk_size;
                             } else {
-                                break;
+                                return false;
                             }
                         } else if (*script_it == 0x4d) { // OP_PUSHDATA2: next 2 bytes are length (LE)
                             ++script_it;
-                            if (script_it + 2 > output.scriptPubKey.end()) break;
+                            if (script_it + 2 > output.scriptPubKey.end()) return false;
                             unsigned int chunk_size = *script_it | (*(script_it + 1) << 8);
                             script_it += 2;
                             if (script_it + chunk_size <= output.scriptPubKey.end()) {
                                 data.insert(data.end(), script_it, script_it + chunk_size);
                                 script_it += chunk_size;
                             } else {
-                                break;
+                                return false;
                             }
                         } else {
-                            break;
+                            return false;
                         }
                     }
 
@@ -1242,7 +956,7 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                         bundle.version = 3;
                         // RC30: bundle.epoch is now parsed from the on-chain payload by
                         // DeserializeV03Data — do NOT zero it here. The validator binds
-                        // the epoch to the current block height in ValidatePhaseThreeBundle.
+                        // the epoch to the current block height in ValidateMuSig2Bundle.
 
                         // Wave 3: decode participation bitmap into synthetic oracle messages.
                         // v0x03 stores one aggregate signature, so per-oracle schnorr_sig is empty.
@@ -1279,135 +993,10 @@ bool OracleBundleManager::ExtractOracleBundle(const CTransaction& coinbase_tx, C
                                  bundle.aggregate_sig.size());
                         return true;
                     }
-                    else if (data[0] == 0x01) {
-                        // Phase One compact format: oracle_id (1) + price (8) + timestamp (8) = 17 bytes
-                        if (data.size() < 18) { // 1 (version) + 17 (data)
-                            LogPrintf("Oracle: Invalid Phase One bundle size: %d\n", data.size());
-                            return false;
-                        }
-
-                        COraclePriceMessage msg;
-
-                        // Parse oracle_id (uint8)
-                        msg.oracle_id = data[1];
-
-                        // Parse price (uint64, little-endian)
-                        uint64_t price = 0;
-                        for (int i = 0; i < 8; ++i) {
-                            price |= (static_cast<uint64_t>(data[2 + i]) << (i * 8));
-                        }
-                        msg.price_micro_usd = price;
-
-                        // Parse timestamp (int64, little-endian)
-                        int64_t timestamp = 0;
-                        for (int i = 0; i < 8; ++i) {
-                            timestamp |= (static_cast<int64_t>(data[10 + i]) << (i * 8));
-                        }
-                        msg.timestamp = timestamp;
-
-                        // Set remaining fields (not in compact format)
-                        msg.block_height = coinbase_height.value_or(0);
-                        msg.nonce = 0;
-
-                        // Phase One: Get oracle pubkey from chainparams for verification
-                        // Compact format doesn't include signature/pubkey (would exceed OP_RETURN size limit)
-                        const CChainParams& chainparams = Params();
-                        const OracleNodeInfo* oracle_info = chainparams.GetOracleNode(msg.oracle_id);
-                        if (oracle_info) {
-                            msg.oracle_pubkey = XOnlyPubKey(oracle_info->pubkey);
-                            // Schnorr signature is NOT in compact format (verified at bundle creation time)
-                            // For Phase One, trust is based on chainparams oracle pubkey
-                        }
-
-                        // Create bundle with single message
-                        bundle.version = 1; // Phase One (V01)
-                        bundle.messages.clear();
-                        bundle.messages.push_back(msg);
-                        bundle.median_price_micro_usd = price;
-                        bundle.timestamp = timestamp;
-                        bundle.epoch = coinbase_height ? GetCurrentEpoch(*coinbase_height) : 0;
-
-                        return true;
-                    }
-                    else if (data[0] == 0x02) {
-                        // Phase Two: Full signature format
-                        // Layout: version(1) + num_msgs(1) + price(8) + timestamp(8) + N*(oracle_id(1)+sig(64))
-                        if (data.size() < 18) { // minimum: version + num_msgs + price + timestamp
-                            return false;
-                        }
-
-                        uint8_t num_messages = data[1];
-
-                        // Reject empty bundles and unreasonably large message counts
-                        if (num_messages == 0) {
-                            LogPrintf("Oracle: Phase Two bundle rejected: num_messages=0 (ghost bundle)\n");
-                            return false;
-                        }
-                        if (num_messages > ORACLE_ACTIVE_COUNT) {
-                            LogPrintf("Oracle: Phase Two bundle rejected: num_messages=%d exceeds ORACLE_ACTIVE_COUNT=%d\n",
-                                     num_messages, ORACLE_ACTIVE_COUNT);
-                            return false;
-                        }
-
-                        // Validate we have enough data for all messages
-                        size_t expected_size = 1 + 1 + 8 + 8 + num_messages * 65; // version + header + per-msg
-                        if (data.size() < expected_size) {
-                            LogPrintf("Oracle: Phase Two data too short: %zu < %zu (for %d messages)\n",
-                                     data.size(), expected_size, num_messages);
-                            return false;
-                        }
-
-                        // Parse consensus price (uint64, little-endian)
-                        uint64_t price = 0;
-                        for (int i = 0; i < 8; ++i) {
-                            price |= (static_cast<uint64_t>(data[2 + i]) << (i * 8));
-                        }
-
-                        // Parse consensus timestamp (int64, little-endian)
-                        int64_t timestamp = 0;
-                        for (int i = 0; i < 8; ++i) {
-                            timestamp |= (static_cast<int64_t>(data[10 + i]) << (i * 8));
-                        }
-
-                        bundle.version = 2;
-                        bundle.aggregate_sig.clear();
-                        bundle.participation_bitmap.clear();
-                        bundle.messages.clear();
-                        const CChainParams& chainparams = Params();
-
-                        // Parse each oracle message (oracle_id + schnorr_sig)
-                        size_t offset = 18; // past version + num_msgs + price + timestamp
-                        for (uint8_t m = 0; m < num_messages; m++) {
-                            COraclePriceMessage msg;
-                            msg.oracle_id = data[offset];
-                            offset += 1;
-
-                            msg.schnorr_sig.assign(data.begin() + offset, data.begin() + offset + 64);
-                            offset += 64;
-
-                            // All oracles in the bundle attested to the same consensus price
-                            msg.price_micro_usd = price;
-                            msg.timestamp = timestamp;
-                            msg.block_height = coinbase_height.value_or(0);
-                            msg.nonce = 0;
-
-                            // Get oracle pubkey from chainparams for verification
-                            const OracleNodeInfo* oracle_info = chainparams.GetOracleNode(msg.oracle_id);
-                            if (oracle_info) {
-                                msg.oracle_pubkey = XOnlyPubKey(oracle_info->pubkey);
-                            }
-
-                            bundle.messages.push_back(msg);
-                        }
-
-                        bundle.median_price_micro_usd = price;
-                        bundle.timestamp = timestamp;
-                        bundle.epoch = coinbase_height ? GetCurrentEpoch(*coinbase_height) : 0;
-
-                        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Extracted Phase Two bundle: %d oracles with signatures, price=%llu micro-USD\n",
-                                 num_messages, price);
-
-                        return true;
+                    if (data[0] == 0x01 || data[0] == 0x02) {
+                        LogPrintf("Oracle: Rejecting legacy oracle bundle version v0x%02x; DigiDollar V1 requires MuSig2 v0x03\n",
+                                  data[0]);
+                        return false;
                     }
 
                     return false;
@@ -1468,7 +1057,7 @@ bool OracleBundleManager::ValidateV03BundleFormat(const CScript& script, uint8_t
                 return false;
             }
         } else {
-            break;
+            return false;
         }
     }
 
@@ -1476,32 +1065,21 @@ bool OracleBundleManager::ValidateV03BundleFormat(const CScript& script, uint8_t
 
     version = data[0];
 
-    // Validate format based on version
-    if (version == 0x03) {
-        // v0x03: version(1) + bitmap_len(1) + bitmap(>=1) + epoch(4) + price(8) + timestamp(8) + sig(64)
-        if (data.size() < 87) return false;
-        uint8_t bitmap_len = data[1];
-        if (bitmap_len == 0) return false;
-        size_t expected = 1 + 1 + bitmap_len + 4 + 8 + 8 + 64;
-        return data.size() == expected;
-    } else if (version == 0x02) {
-        // v0x02: version(1) + num_msgs(1) + price(8) + timestamp(8) = 18 minimum
-        if (data.size() < 18) return false;
-        uint8_t num_msgs = data[1];
-        size_t expected = 1 + 1 + 8 + 8 + num_msgs * 65;
-        return data.size() >= expected;
-    } else if (version == 0x01) {
-        // v0x01: version(1) + oracle_id(1) + price(8) + timestamp(8) = 18
-        return data.size() >= 18;
-    }
+    if (version != 0x03) return false;
 
-    return false;
+    // v0x03: version(1) + bitmap_len(1) + bitmap(>=1) + epoch(4) + price(8) + timestamp(8) + sig(64)
+    if (data.size() < 87) return false;
+    uint8_t bitmap_len = data[1];
+    if (bitmap_len == 0) return false;
+    size_t expected = 1 + 1 + bitmap_len + 4 + 8 + 8 + 64;
+    return data.size() == expected;
 }
 
 CAmount OracleBundleManager::GetConsensusPrice(int32_t epoch) const
 {
     COracleBundle bundle = GetCurrentBundle(epoch);
-    return bundle.GetConsensusPrice(min_oracle_count);
+    if (!HasMuSig2Quorum(bundle, Params().GetConsensus())) return 0;
+    return static_cast<CAmount>(bundle.median_price_micro_usd);
 }
 
 CAmount OracleBundleManager::GetLatestPrice() const
@@ -1528,8 +1106,8 @@ CAmount OracleBundleManager::GetLatestPrice() const
 bool OracleBundleManager::UpdateCachedPrice(int32_t epoch)
 {
     COracleBundle bundle = GetCurrentBundle(epoch);
-    if (bundle.HasConsensus(min_oracle_count)) {
-        CAmount price = bundle.GetConsensusPrice(min_oracle_count);
+    if (HasMuSig2Quorum(bundle, Params().GetConsensus())) {
+        CAmount price = static_cast<CAmount>(bundle.median_price_micro_usd);
         if (price > 0) {
             std::lock_guard<std::mutex> lock(mtx_bundles);
             cached_price = price;
@@ -1543,7 +1121,7 @@ bool OracleBundleManager::UpdateCachedPrice(int32_t epoch)
 
 bool OracleBundleManager::ValidateOracleBundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params) const
 {
-    return OracleDataValidator::ValidateOracleBundle(bundle, GetCurrentEpoch(block_height), params);
+    return OracleDataValidator::ValidateOracleBundle(bundle, block_height, params);
 }
 
 bool OracleBundleManager::ValidateOracleDataInBlock(const CBlock& block, int32_t block_height, const Consensus::Params& params) const
@@ -1670,7 +1248,7 @@ bool OracleBundleManager::HasBroadcastConsensusProposal(int32_t epoch) const
 bool OracleBundleManager::StartMuSig2Session(int32_t block_height)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
-    if (!consensus.IsPhaseThreeActive(block_height)) return false;
+    if (!consensus.IsMuSig2OracleActive(block_height)) return false;
 
     OracleManager& om = OracleManager::GetInstance();
     const std::vector<uint32_t> active_ids = om.GetActiveOracleIds();
@@ -1690,7 +1268,7 @@ bool OracleBundleManager::StartMuSig2Session(int32_t block_height)
         auto [it, ok] = g_oracle_signing_sessions.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(epoch),
-            std::forward_as_tuple(epoch, static_cast<uint8_t>(consensus.nOracleRequiredMessages)));
+            std::forward_as_tuple(epoch, static_cast<uint8_t>(consensus.nOracleConsensusRequired)));
         if (!ok) return false;
         session_ptr = &it->second;
     }
@@ -1749,7 +1327,7 @@ bool OracleBundleManager::StartMuSig2Session(int32_t block_height)
 bool OracleBundleManager::CompleteMuSig2Session(int32_t block_height)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
-    if (!consensus.IsPhaseThreeActive(block_height)) return false;
+    if (!consensus.IsMuSig2OracleActive(block_height)) return false;
 
     OracleManager& om = OracleManager::GetInstance();
     const std::vector<uint32_t> active_ids = om.GetActiveOracleIds();
@@ -2026,7 +1604,7 @@ void OracleBundleManager::Initialize()
     const Consensus::Params& consensus = Params().GetConsensus();
 
     // Set consensus requirements from chain parameters
-    manager.min_oracle_count = consensus.nOracleRequiredMessages;
+    manager.min_oracle_count = consensus.nOracleConsensusRequired;
     manager.total_oracle_count = consensus.nOracleTotalOracles;
     // Note: epoch_length is not a member variable in header, but nOracleEpochLength is in consensus
 
@@ -2043,12 +1621,12 @@ void OracleBundleManager::Initialize()
     }
 
     // Log oracle configuration
-    LogPrintf("Oracle: Testnet configured with %zu oracle keys, %d-of-%d consensus\n",
+    LogPrintf("Oracle: configured with %zu MuSig2 oracle keys, %d-of-%d quorum\n",
              consensus.vOraclePublicKeys.size(),
-             consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
+             consensus.nOracleConsensusRequired, consensus.nOracleTotalOracles);
 
     // Check epoch length is reasonable
-    if (consensus.nOracleEpochLength < 144 || consensus.nOracleEpochLength > 10080) {
+    if (consensus.nOracleEpochLength < 40 || consensus.nOracleEpochLength > 10080) {
         LogPrintf("Oracle: WARNING - Unusual epoch length: %d blocks\n", consensus.nOracleEpochLength);
     }
 }
@@ -2084,10 +1662,14 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
         return;
     }
 
-    // Scan back 20 blocks to find recent oracle prices (default validity window)
+    // Scan recent blocks for the live oracle cache and enough history to
+    // deterministically rebuild volatility state after restart/reindex.
     static constexpr int ORACLE_VALIDITY_BLOCKS = 20;
-    int scan_depth = std::min(ORACLE_VALIDITY_BLOCKS, tip_height);
+    static constexpr int VOLATILITY_HISTORY_BLOCKS = 30 * 24 * 60 * 4;
+    int scan_depth = std::min(std::max(ORACLE_VALIDITY_BLOCKS, VOLATILITY_HISTORY_BLOCKS), tip_height);
+    const int price_cache_start_height = std::max(0, tip_height - ORACLE_VALIDITY_BLOCKS + 1);
     int prices_found = 0;
+    std::vector<DigiDollar::Volatility::PricePoint> volatility_prices;
 
     LogPrintf("Oracle: Scanning last %d blocks for oracle prices (height %d to %d)...\n",
              scan_depth, tip_height - scan_depth + 1, tip_height);
@@ -2097,15 +1679,9 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
         CBlockIndex* block_index = chainman.ActiveChain()[height];
         if (!block_index) continue;
 
-        if (height < consensus.nDDActivationHeight) {
+        if (!ShouldLoadStartupOraclePriceForBlock(height, block_index, consensus)) {
             LogPrint(BCLog::DIGIDOLLAR,
                      "Oracle: Skipping pre-activation price cache load at height %d\n",
-                     height);
-            continue;
-        }
-        if (block_index->pprev && !DigiDollar::IsDigiDollarEnabled(block_index->pprev, consensus)) {
-            LogPrint(BCLog::DIGIDOLLAR,
-                     "Oracle: Skipping inactive BIP9 price cache load at height %d\n",
                      height);
             continue;
         }
@@ -2129,13 +1705,27 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
                              height, state.ToString());
                     continue;
                 }
-                manager.UpdatePriceCache(height, bundle.median_price_micro_usd, bundle.timestamp);
-                prices_found++;
+                if (height >= price_cache_start_height) {
+                    manager.UpdatePriceCache(height, bundle.median_price_micro_usd, bundle.timestamp);
+                    prices_found++;
+                }
+                if (BlockHasDigiDollarMint(block)) {
+                    const int64_t block_time = block.GetBlockTime();
+                    if (volatility_prices.empty() ||
+                        block_time - volatility_prices.back().timestamp >= 3600) {
+                        volatility_prices.emplace_back(static_cast<CAmount>(bundle.median_price_micro_usd),
+                                                       block_time,
+                                                       static_cast<uint32_t>(height));
+                    }
+                }
                 LogPrintf("Oracle: Found price %llu micro-USD at height %d\n",
                          bundle.median_price_micro_usd, height);
             }
         }
     }
+
+    DigiDollar::Volatility::VolatilityMonitor::ReconstructFromBlockData(
+        volatility_prices, static_cast<uint32_t>(tip_height));
 
     if (prices_found > 0) {
         LogPrintf("Oracle: Loaded %d oracle prices from blockchain, latest price: %llu micro-USD\n",
@@ -2143,6 +1733,24 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     } else {
         LogPrintf("Oracle: No oracle prices found in recent blocks\n");
     }
+}
+
+bool OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const Consensus::Params& params)
+{
+    if (block_index && block_index->pprev) {
+        return DigiDollar::IsDigiDollarEnabled(block_index->pprev, params);
+    }
+
+    const auto& deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    const int activation_height = deployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE
+        ? deployment.min_activation_height
+        : std::min(params.nDDActivationHeight, deployment.min_activation_height);
+
+    if (activation_height <= 0) {
+        return true;
+    }
+
+    return height >= activation_height;
 }
 
 void OracleBundleManager::Clear()
@@ -2166,7 +1774,6 @@ void OracleBundleManager::Clear()
         near_quorum_wait_attempts = 0;
         near_quorum_wait_successes = 0;
         near_quorum_wait_timeouts = 0;
-        force_phase2 = false;
     }
 
     {
@@ -2189,25 +1796,25 @@ bool OracleBundleManager::ValidateConfiguration() const
         return false;
     }
 
-    if (consensus.nOracleRequiredMessages > consensus.nOracleTotalOracles) {
-        LogPrintf("Oracle: ERROR - Required messages (%d) exceeds total oracles (%d)\n",
-                 consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
+    if (consensus.nOracleConsensusRequired > consensus.nOracleTotalOracles) {
+        LogPrintf("Oracle: ERROR - MuSig2 quorum (%d) exceeds total oracles (%d)\n",
+                 consensus.nOracleConsensusRequired, consensus.nOracleTotalOracles);
         return false;
     }
 
     LogPrintf("Oracle: Configuration valid - %zu keys, %d-of-%d consensus\n",
              consensus.vOraclePublicKeys.size(),
-             consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
+             consensus.nOracleConsensusRequired, consensus.nOracleTotalOracles);
 
     // Check epoch length is reasonable
-    if (consensus.nOracleEpochLength < 144 || consensus.nOracleEpochLength > 10080) {
+    if (consensus.nOracleEpochLength < 40 || consensus.nOracleEpochLength > 10080) {
         LogPrintf("Oracle: WARNING - Unusual epoch length: %d blocks\n", consensus.nOracleEpochLength);
     }
 
     // Check min_oracle_count matches consensus
-    if (min_oracle_count != consensus.nOracleRequiredMessages) {
-        LogPrintf("Oracle: ERROR - min_oracle_count (%d) does not match consensus.nOracleRequiredMessages (%d)\n",
-                 min_oracle_count, consensus.nOracleRequiredMessages);
+    if (min_oracle_count != consensus.nOracleConsensusRequired) {
+        LogPrintf("Oracle: ERROR - min_oracle_count (%d) does not match consensus.nOracleConsensusRequired (%d)\n",
+                 min_oracle_count, consensus.nOracleConsensusRequired);
         return false;
     }
 
@@ -2223,42 +1830,9 @@ bool OracleBundleManager::ValidateConfiguration() const
 
 bool OracleBundleManager::TryCreateBundle(int32_t epoch)
 {
-    std::lock_guard<std::recursive_mutex> messages_lock(mtx_messages);
-
-    // Create bundle for current epoch
-    COracleBundle bundle(epoch);
-
-    const int64_t now = GetTime();
-    for (const auto& [oracle_id, message] : pending_messages) {
-        if (!IsFreshLiveOracleTimestamp(message.timestamp, now)) continue;
-        if (!bundle.AddMessage(message)) {
-            LogPrintf("Oracle: Failed to add message from oracle %d to bundle\n", oracle_id);
-        }
-    }
-
-    if (bundle.messages.size() < static_cast<size_t>(min_oracle_count)) {
-        return false;
-    }
-
-    // Check if bundle has consensus
-    if (bundle.HasConsensus(min_oracle_count)) {
-        // Calculate and set median price
-        bundle.median_price_micro_usd = bundle.GetConsensusPrice(min_oracle_count);
-
-        // Set bundle timestamp to the latest message timestamp
-        bundle.timestamp = GetTime();
-        for (const auto& msg : bundle.messages) {
-            if (msg.timestamp > bundle.timestamp) {
-                bundle.timestamp = msg.timestamp;
-            }
-        }
-
-        UpdateBundle(bundle);
-        LogPrintf("Oracle: Created consensus bundle for epoch %d with %d messages (min required: %d), median price=%llu\n",
-                 epoch, bundle.messages.size(), min_oracle_count, bundle.median_price_micro_usd);
-        return true;
-    }
-
+    (void)epoch;
+    LogPrint(BCLog::DIGIDOLLAR,
+             "Oracle: legacy message-bundle creation disabled; V1 uses completed MuSig2 bundles only\n");
     return false;
 }
 
@@ -2278,14 +1852,21 @@ bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& messag
         return false;
     }
 
-    // Phase One: Skip chainparams check when min_oracle_count == 1 (testing mode)
-    if (min_oracle_count == 1) {
-        if (!message.IsValid()) return false;
-        return message.VerifyPhase2();
+    // MuSig2 v0x03 validation only recognizes slots in the consensus pubkey
+    // roster. Reserve metadata entries must not satisfy pending-message quorum.
+    if (!IsActiveConsensusOracle(message.oracle_id)) {
+        LogPrintf("Oracle: Rejecting message from oracle %d: outside active MuSig2 consensus keyset\n",
+                 message.oracle_id);
+        return false;
     }
 
-    // Phase Two (min_oracle_count > 1): Use Phase 2 signature hash
-    // Basic field validation without calling IsValid() which uses Phase 1 Verify()
+    // Single-signer regtest mode still uses signed compact attestations.
+    if (min_oracle_count == 1) {
+        if (!message.IsValid()) return false;
+        return message.VerifyAttestation();
+    }
+
+    // Basic field validation without trusting caller-supplied pubkeys.
     if (message.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD) return false;
     if (message.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) return false;
 
@@ -2304,7 +1885,7 @@ bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& messag
     // Verify oracle ID is in valid range and matches chainparams
     const CChainParams& params = Params();
     const OracleNodeInfo* oracle_config = params.GetOracleNode(message.oracle_id);
-    if (!oracle_config) {
+    if (!oracle_config || !oracle_config->is_active) {
         return false;
     }
 
@@ -2314,8 +1895,8 @@ bool OracleBundleManager::IsValidOracleMessage(const COraclePriceMessage& messag
     COraclePriceMessage bound_msg = message;
     bound_msg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
 
-    // Verify Phase 2 Schnorr signature against chainparams pubkey
-    return bound_msg.VerifyPhase2();
+    // Verify compact attestation signature against chainparams pubkey.
+    return bound_msg.VerifyAttestation();
 }
 
 std::vector<uint32_t> OracleBundleManager::GetActiveOraclesForEpoch(int32_t epoch) const
@@ -2501,8 +2082,13 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     }
 
     if (oracle_output_count == 0) {
-        // Allow blocks without oracle data during transition
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: No oracle bundle in block %d (transition period)\n", block_height);
+        if (BlockNeedsOraclePrice(block)) {
+            LogPrintf("Oracle: price-dependent DD block %d has no oracle bundle\n", block_height);
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                 "bad-oracle-missing",
+                                 "DigiDollar mint/redeem blocks must include a valid MuSig2 oracle bundle");
+        }
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: block %d has no oracle bundle and no price-dependent DD operation\n", block_height);
         return true;
     }
 
@@ -2510,96 +2096,32 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block, const CBl
     COracleBundle bundle;
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     if (!manager.ExtractOracleBundle(coinbase, bundle)) {
-        // During transition period, allow blocks without valid oracle bundles
-        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d could not extract oracle bundle (transition period)\n", block_height);
-        return true;
+        LogPrintf("Oracle: Block %d has malformed or legacy oracle data\n", block_height);
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                             "bad-oracle-malformed",
+                             "Oracle output must be a valid MuSig2 bundle");
     }
 
     // IMPORTANT: Once we successfully extract a bundle, we MUST validate it fully
     // No transition period leniency for bundles that are present but invalid
 
-    // STEP 7: PHASE-AWARE CONSENSUS VALIDATION
-    const Consensus::Params& consensusParams_ref = Params().GetConsensus();
-
-    // Phase 3 (MuSig2): v0x03 bundles use aggregate signatures instead of individual oracle sigs
-    if (bundle.version == 3) {
-        std::string phase3_error;
-        if (!OracleBundleManager::ValidatePhaseThreeBundle(bundle, block_height, consensusParams_ref, phase3_error)) {
-            LogPrintf("Oracle: Phase Three bundle validation failed at block %d: %s\n",
-                     block_height, phase3_error);
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
-                                "bad-oracle-phase3",
-                                strprintf("Phase Three oracle bundle validation failed: %s", phase3_error));
-        }
-        // Phase 3 validation complete — skip Phase 1/2 checks below
-        // (v0x03 bundles don't have individual oracle messages)
-        goto oracle_post_validation;
+    if (!bundle.IsMuSig2()) {
+        LogPrintf("Oracle: Block %d used legacy oracle bundle version %d\n",
+                  block_height, bundle.version);
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                             "bad-oracle-legacy",
+                             "DigiDollar V1 accepts only MuSig2 oracle bundles");
     }
 
-    // Phase 1: Use generic bundle.IsValid() which checks Phase 1 signatures
-    // Phase 2: Skip generic IsValid() — ValidatePhaseTwoBundle does Phase 2-specific validation
-    if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
-        if (!bundle.IsValid(consensusParams_ref.nOracleRequiredMessages, block.nTime)) {
-            LogPrintf("Oracle: Invalid oracle bundle in block %d\n", block_height);
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "invalid oracle bundle structure");
-        }
-    } else {
-        // Phase 2: Basic structural checks only (signatures checked by ValidatePhaseTwoBundle)
-        if (bundle.messages.empty()) {
-            LogPrintf("Oracle: Empty oracle bundle in block %d\n", block_height);
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-bundle", "empty oracle bundle");
-        }
+    std::string musig_error;
+    if (!OracleBundleManager::ValidateMuSig2Bundle(bundle, block_height, params, musig_error)) {
+        LogPrintf("Oracle: MuSig2 bundle validation failed at block %d: %s\n",
+                 block_height, musig_error);
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                            "bad-oracle-musig2",
+                            strprintf("MuSig2 oracle bundle validation failed: %s", musig_error));
     }
 
-    if (block_height >= consensusParams_ref.nDigiDollarPhase2Height) {
-        // Phase Two: Full multi-oracle validation with on-chain signature verification
-        if (!OracleBundleManager::ValidatePhaseTwoBundle(bundle, consensusParams_ref)) {
-            LogPrintf("Oracle: Phase Two bundle validation failed at block %d\n", block_height);
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
-                                "bad-oracle-phase2",
-                                "Phase Two oracle bundle validation failed");
-        }
-    } else {
-        // Phase One: Exactly 1 message required
-        if (bundle.messages.size() != 1) {
-            LogPrintf("Oracle: Phase One requires exactly 1 oracle message, got %zu\n",
-                     bundle.messages.size());
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
-                                "bad-oracle-consensus",
-                                strprintf("Phase One requires exactly 1 oracle message, got %zu",
-                                         bundle.messages.size()));
-        }
-        
-        // Phase One: Median price must equal single message price
-        const COraclePriceMessage& msg_p1 = bundle.messages[0];
-        if (bundle.median_price_micro_usd != msg_p1.price_micro_usd) {
-            LogPrintf("Oracle: Median price mismatch: bundle=%llu, message=%llu\n",
-                     bundle.median_price_micro_usd, msg_p1.price_micro_usd);
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
-                                "bad-oracle-median",
-                                strprintf("Median price mismatch: bundle=%llu, message=%llu",
-                                         bundle.median_price_micro_usd, msg_p1.price_micro_usd));
-        }
-    }
-
-    // Use first message for remaining validation checks
-    {
-        const COraclePriceMessage& msg = bundle.messages[0];
-
-        // Phase 1: Verify Schnorr signature (Phase 2 signatures verified in ValidatePhaseTwoBundle)
-        if (block_height < consensusParams_ref.nDigiDollarPhase2Height) {
-            if (!msg.schnorr_sig.empty()) {
-                if (!msg.VerifyPhase2()) {
-                    LogPrintf("Oracle: Invalid Schnorr signature in oracle message (oracle_id=%d, block=%d)\n",
-                             msg.oracle_id, block_height);
-                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-signature",
-                        "Invalid oracle Schnorr signature");
-                }
-            }
-        }
-    }
-
-oracle_post_validation:
     // Verify oracle timestamp is not too old (max 1 hour = 3600 seconds)
     int64_t oracle_age = block.nTime - bundle.timestamp;
     if (oracle_age > ORACLE_MAX_AGE_SECONDS) {
@@ -2615,18 +2137,6 @@ oracle_post_validation:
                  (long long)bundle.timestamp, block.nTime);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-timestamp",
             "Oracle timestamp is in the future");
-    }
-
-    // Verify oracle is authorized (skip in REGTEST for unit testing, skip Phase 3 — uses bitmap)
-    if (bundle.version < 3 && !bundle.messages.empty() && Params().GetChainType() != ChainType::REGTEST) {
-        const CChainParams& chainparams = Params();
-        const COraclePriceMessage& auth_msg = bundle.messages[0];
-        const OracleNodeInfo* oracle_config = chainparams.GetOracleNode(auth_msg.oracle_id);
-        if (!oracle_config || !oracle_config->is_active) {
-            LogPrintf("Oracle: Unauthorized oracle ID %d in block %d\n", auth_msg.oracle_id, block_height);
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-oracle-unauthorized",
-                strprintf("Unauthorized oracle ID %d", auth_msg.oracle_id));
-        }
     }
 
     LogPrint(BCLog::DIGIDOLLAR, "Oracle: Block %d oracle bundle validated: price=%llu micro-USD\n",
@@ -2659,6 +2169,10 @@ bool OracleDataValidator::ValidateOracleMessage(const COraclePriceMessage& messa
         return false;
     }
 
+    if (!IsConsensusMuSig2OracleId(message.oracle_id, params)) {
+        return false;
+    }
+
     // Verify oracle is authorized
     const CChainParams& chainparams = Params();
     const OracleNodeInfo* oracle_config = chainparams.GetOracleNode(message.oracle_id);
@@ -2667,30 +2181,22 @@ bool OracleDataValidator::ValidateOracleMessage(const COraclePriceMessage& messa
     }
 
     // Verify signature
-    return message.VerifyPhase2();
+    return message.VerifyAttestation();
 }
 
-bool OracleDataValidator::ValidateOracleBundle(const COracleBundle& bundle, int32_t epoch, const Consensus::Params& params)
+bool OracleDataValidator::ValidateOracleBundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params)
 {
-    // Validate epoch
-    if (!bundle.ValidateEpoch(epoch)) {
-        LogPrintf("Oracle: Invalid epoch in bundle: %d (current: %d)\n", bundle.epoch, epoch);
+    if (!bundle.IsMuSig2()) {
+        LogPrintf("Oracle: Rejecting legacy oracle bundle version %u; DigiDollar V1 requires MuSig2 v0x03\n",
+                  bundle.version);
         return false;
     }
 
-    // Check consensus requirement using chainparams threshold
-    if (!bundle.HasConsensus(params.nOracleRequiredMessages)) {
-        LogPrintf("Oracle: Bundle does not have required consensus (%zu messages, %d required)\n",
-                  bundle.messages.size(), params.nOracleRequiredMessages);
+    std::string error;
+    if (!OracleBundleManager::ValidateMuSig2Bundle(bundle, block_height, params, error)) {
+        LogPrintf("Oracle: MuSig2 bundle validation failed at height %d: %s\n",
+                  block_height, error);
         return false;
-    }
-
-    // Validate individual messages
-    for (const auto& message : bundle.messages) {
-        if (!ValidateOracleMessage(message, params)) {
-            LogPrintf("Oracle: Invalid message from oracle %d in bundle\n", message.oracle_id);
-            return false;
-        }
     }
 
     return true;
@@ -2698,12 +2204,8 @@ bool OracleDataValidator::ValidateOracleBundle(const COracleBundle& bundle, int3
 
 bool OracleDataValidator::CheckOracleSignatures(const COracleBundle& bundle, const Consensus::Params& params)
 {
-    for (const auto& message : bundle.messages) {
-        if (!ValidateOracleMessage(message, params)) {
-            return false;
-        }
-    }
-    return true;
+    (void)params;
+    return HasMuSig2Quorum(bundle, params);
 }
 
 bool OracleDataValidator::CheckOracleEpoch(const COracleBundle& bundle, int32_t current_epoch)
@@ -2713,155 +2215,41 @@ bool OracleDataValidator::CheckOracleEpoch(const COracleBundle& bundle, int32_t 
 
 bool OracleDataValidator::CheckOracleConsensus(const COracleBundle& bundle, const Consensus::Params& params)
 {
-    return bundle.HasConsensus(params.nOracleRequiredMessages);
+    return HasMuSig2Quorum(bundle, params);
 }
-
-/**
- * Phase Two Bundle Validation Implementation
- */
 
 bool OracleBundleManager::ValidateBundle(const COracleBundle& bundle, int block_height, const Consensus::Params& params)
 {
-    // v0x03 MuSig2 bundles — structural validation
-    if (bundle.version == 3 || bundle.IsMuSig2()) {
-        return true;
-    }
-
-    if (block_height >= params.nDigiDollarPhase2Height) {
-        return ValidatePhaseTwoBundle(bundle, params);
-    } else {
-        return ValidatePhaseOneBundle(bundle, params);
-    }
+    (void)block_height;
+    return HasMuSig2Quorum(bundle, params);
 }
 
 int OracleBundleManager::GetRequiredConsensus(int block_height, const Consensus::Params& params)
 {
-    if (block_height >= params.nDigiDollarPhase2Height) {
-        return params.nOracleRequiredMessages;  // 3 for testnet, 8 for mainnet
-    }
-    return 1;  // Phase One: 1-of-1
-}
-
-bool OracleBundleManager::ValidatePhaseOneBundle(const COracleBundle& bundle, const Consensus::Params& params)
-{
-    // Phase One: Must have exactly 1 message (1-of-1 consensus)
-    if (bundle.messages.size() != 1) {
-        LogPrintf("Oracle: Phase One requires exactly 1 oracle message, got %zu\n", bundle.messages.size());
-        return false;
-    }
-
-    const COraclePriceMessage& msg = bundle.messages[0];
-
-    // Verify message is valid
-    if (!msg.IsValid()) {
-        LogPrintf("Oracle: Phase One message validation failed\n");
-        return false;
-    }
-
-    // Verify median price matches single message price
-    if (bundle.median_price_micro_usd != msg.price_micro_usd) {
-        LogPrintf("Oracle: Phase One median price mismatch: bundle=%llu, message=%llu\n",
-                 bundle.median_price_micro_usd, msg.price_micro_usd);
-        return false;
-    }
-
-    // Phase One: Schnorr signature verification (if signature is present)
-    if (!msg.schnorr_sig.empty() && !msg.VerifyPhase2()) {
-        LogPrintf("Oracle: Phase One signature verification failed\n");
-        return false;
-    }
-
-    return true;
-}
-
-bool OracleBundleManager::ValidatePhaseTwoBundle(const COracleBundle& bundle, const Consensus::Params& params)
-{
-    // Check minimum message count
-    int min_required = params.nOracleRequiredMessages;
-    if (bundle.messages.size() < static_cast<size_t>(min_required)) {
-        LogPrintf("Oracle: Phase Two requires at least %d messages, got %zu\n",
-                 min_required, bundle.messages.size());
-        return false;
-    }
-
-    // Check for duplicate oracle IDs
-    std::set<uint32_t> seen_oracles;
-    for (const auto& msg : bundle.messages) {
-        if (seen_oracles.count(msg.oracle_id) > 0) {
-            LogPrintf("Oracle: Phase Two detected duplicate oracle ID %d\n", msg.oracle_id);
-            return false;
-        }
-        seen_oracles.insert(msg.oracle_id);
-    }
-
-    // Get active oracle set for current epoch
-    std::vector<uint32_t> active_oracles = OracleBundleManager::GetInstance().GetActiveOraclesForEpoch(bundle.epoch);
-
-    // Verify each message is from an active oracle and has valid signature
-    int valid_count = 0;
-    for (const auto& msg : bundle.messages) {
-        // Check if oracle is in active set
-        auto it = std::find(active_oracles.begin(), active_oracles.end(), msg.oracle_id);
-        if (it == active_oracles.end()) {
-            LogPrintf("Oracle: Phase Two oracle %d not in active set for epoch %d\n",
-                     msg.oracle_id, bundle.epoch);
-            continue;  // Skip invalid oracle, don't fail entire bundle
-        }
-
-        // Verify basic message fields (price range)
-        if (msg.price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
-            msg.price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
-            LogPrintf("Oracle: Phase Two message price out of range for oracle %d\n", msg.oracle_id);
-            continue;
-        }
-
-        // Verify Schnorr signature using Phase 2 hash (oracle_id + price + timestamp only)
-        if (!msg.schnorr_sig.empty()) {
-            if (!msg.VerifyPhase2()) {
-                LogPrintf("Oracle: Phase Two signature verification failed for oracle %d\n", msg.oracle_id);
-                continue;  // Skip message with invalid signature
-            }
-        } else {
-            LogPrintf("Oracle: Phase Two message missing signature for oracle %d\n", msg.oracle_id);
-            continue;  // Skip message without signature
-        }
-
-        valid_count++;
-    }
-
-    // Check if we have enough valid signatures
-    if (valid_count < min_required) {
-        LogPrintf("Oracle: Phase Two requires %d valid signatures, got %d\n",
-                 min_required, valid_count);
-        return false;
-    }
-
-    // Verify consensus price calculation
-    CAmount calculated_price = CalculateConsensusPrice(bundle, params);
-    if (calculated_price != static_cast<CAmount>(bundle.median_price_micro_usd)) {
-        LogPrintf("Oracle: Phase Two consensus price mismatch: calculated=%lld, bundle=%llu\n",
-                 calculated_price, bundle.median_price_micro_usd);
-        return false;
-    }
-
-    LogPrintf("Oracle: Phase Two bundle validated successfully: %d valid signatures (min: %d), price=%llu micro-USD\n",
-             valid_count, min_required, bundle.median_price_micro_usd);
-
-    return true;
+    (void)block_height;
+    return params.nOracleConsensusRequired;
 }
 
 /**
- * Compute deterministic hash of oracle bundle consensus data.
+ * Compute deterministic hash of oracle bundle consensus data, bound to a
+ * specific DigiByte chain identity.
  *
  * For v0x03 (MuSig2) bundles, the aggregate signature covers the consensus
- * price and timestamp — the fields all participating oracles agreed upon.
- * This hash is used as the message for secp256k1_schnorrsig_verify.
+ * price, timestamp, epoch, and the chain's hashGenesisBlock — the fields
+ * all participating oracles agreed upon for THIS chain. This hash is used
+ * as the message for secp256k1_schnorrsig_verify.
+ *
+ * DD-FA-SEC-008 — binding the chain identity prevents a bundle signed for
+ * one DigiByte chain from being replayed on another chain that shares the
+ * oracle roster (mainnet and testnet share oracle keys).
  */
-uint256 ComputeOracleBundleHash(const COracleBundle& bundle)
+uint256 ComputeOracleBundleHash(const COracleBundle& bundle, const uint256& chain_hash)
 {
     // Must match OracleSigningOrchestrator::ComputeOracleMessageHash
-    // which hashes (epoch, price, timestamp).
+    // which hashes (tag, chain_hash, epoch, price, timestamp).
     CHashWriter ss(0);
+    ss << std::string{"DigiDollar/OracleBundle"};
+    ss << chain_hash;
     ss << bundle.epoch;
     ss << bundle.median_price_micro_usd;
     ss << bundle.timestamp;
@@ -2869,7 +2257,18 @@ uint256 ComputeOracleBundleHash(const COracleBundle& bundle)
 }
 
 /**
- * Phase Three Bundle Validation (MuSig2 aggregate signatures)
+ * Compatibility overload: hash a bundle bound to the active chain's
+ * genesis. Production validator paths now pass the consensus params'
+ * hashGenesisBlock explicitly so cross-chain replay is rejected even when
+ * the validator is invoked with non-active params (e.g., test fixtures).
+ */
+uint256 ComputeOracleBundleHash(const COracleBundle& bundle)
+{
+    return ComputeOracleBundleHash(bundle, Params().GetConsensus().hashGenesisBlock);
+}
+
+/**
+ * MuSig2 Bundle Validation
  *
  * Validates a v0x03 oracle bundle containing:
  * - participation_bitmap: which oracles contributed to the aggregate signature
@@ -2884,15 +2283,20 @@ uint256 ComputeOracleBundleHash(const COracleBundle& bundle)
  * 5. Compute aggregate pubkey from participating oracle subset (via chainparams)
  * 6. Verify aggregate signature against bundle hash using schnorrsig_verify
  */
-bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
+bool OracleBundleManager::ValidateMuSig2Bundle(const COracleBundle& bundle,
                                                     int32_t block_height,
                                                     const Consensus::Params& params,
                                                     std::string& error)
 {
-    // Pre-condition: Phase 3 must be active
+    // Pre-condition: MuSig2 roster must be active
     // Pre-condition: must be a v0x03 bundle
     if (bundle.version != 3) {
-        error = "ValidatePhaseThreeBundle called with non-v0x03 bundle (version=" + std::to_string(bundle.version) + ")";
+        error = "ValidateMuSig2Bundle called with non-v0x03 bundle (version=" + std::to_string(bundle.version) + ")";
+        return false;
+    }
+
+    if (!params.IsMuSig2OracleActive(block_height)) {
+        error = "v0x03 roster activation height not reached";
         return false;
     }
 
@@ -2935,11 +2339,18 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
     }
 
     // Check minimum oracle threshold
-    if (static_cast<int>(oracle_ids.size()) < params.nOracleRequiredMessages) {
+    if (static_cast<int>(oracle_ids.size()) < params.nOracleConsensusRequired) {
         error = "v0x03 bundle below minimum oracle threshold (" +
                 std::to_string(oracle_ids.size()) + " signers, need " +
-                std::to_string(params.nOracleRequiredMessages) + ")";
+                std::to_string(params.nOracleConsensusRequired) + ")";
         return false;
+    }
+
+    for (uint8_t oracle_id : oracle_ids) {
+        if (oracle_id >= static_cast<uint8_t>(params.nOraclePubkeyCount)) {
+            error = "v0x03 signer outside active oracle roster (id=" + std::to_string(oracle_id) + ")";
+            return false;
+        }
     }
 
     // Compute aggregate pubkey for participating oracles
@@ -2947,7 +2358,7 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
     secp256k1_xonly_pubkey agg_pk;
     secp256k1_musig_keyagg_cache cache;
 
-    LogPrintf("Oracle: ValidatePhaseThreeBundle: bitmap=%s, total_oracles=%d, oracle_ids=[%s]\n",
+    LogPrintf("Oracle: ValidateMuSig2Bundle: bitmap=%s, total_oracles=%d, oracle_ids=[%s]\n",
              HexStr(bundle.participation_bitmap),
              params.nOracleTotalOracles,
              [&]() -> std::string {
@@ -2959,15 +2370,22 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
                  return s;
              }());
 
-    if (!aggregator.ComputeAggregatePubkeyFromBitmap(bundle.participation_bitmap,
-                                                      static_cast<uint16_t>(params.nOracleTotalOracles),
-                                                      agg_pk, cache)) {
+    const bool using_active_chainparams = &params == &Params().GetConsensus();
+    const bool aggregate_ok = using_active_chainparams ?
+        aggregator.ComputeAggregatePubkeyFromBitmap(bundle.participation_bitmap,
+                                                    static_cast<uint16_t>(params.nOracleTotalOracles),
+                                                    agg_pk, cache) :
+        ComputeAggregatePubkeyFromConsensusParams(oracle_ids, params, agg_pk, cache);
+    if (!aggregate_ok) {
         error = "Failed to compute aggregate pubkey from bitmap";
         return false;
     }
 
-    // Compute message hash (price + timestamp)
-    uint256 msg_hash = ComputeOracleBundleHash(bundle);
+    // Compute message hash (tag, chain_hash, epoch, price, timestamp).
+    // DD-FA-SEC-008 — bind validation to params.hashGenesisBlock so a v0x03
+    // bundle signed for one DigiByte chain cannot be replayed against
+    // another chain's validator that shares the oracle roster.
+    uint256 msg_hash = ComputeOracleBundleHash(bundle, params.hashGenesisBlock);
 
     // Verify aggregate signature using BIP-340 Schnorr verification
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
@@ -2982,7 +2400,7 @@ bool OracleBundleManager::ValidatePhaseThreeBundle(const COracleBundle& bundle,
         return false;
     }
 
-    LogPrintf("Oracle: Phase Three bundle validated: %zu oracles, price=%llu micro-USD\n",
+    LogPrintf("Oracle: MuSig2 bundle validated: %zu oracles, price=%llu micro-USD\n",
              oracle_ids.size(), bundle.median_price_micro_usd);
 
     return true;
@@ -3079,7 +2497,7 @@ CAmount GetCurrentOraclePrice()
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     CAmount price_micro_usd = manager.GetLatestPrice();
 
-    // Phase One (testnet): cached_price is stored in micro-USD format
+    // The canonical oracle cache is stored in micro-USD format.
     // Convert micro-USD to cents: cents = micro-USD / 10,000
     // e.g. 50,000 micro-USD = $0.05 = 5 cents
     // e.g. 6,310 micro-USD = $0.00631 = 0.631 cents (rounds to 1 cent)
@@ -3132,8 +2550,8 @@ CAmount GetOraclePriceForHeight(int nHeight)
     // Get oracle bundle manager instance
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
 
-    // Phase One: Try to get price from cache first (populated by ConnectBlock)
-    // This takes priority over MockOracleManager for accurate integration testing
+    // Try the block-connected MuSig2 price cache first. This takes priority
+    // over MockOracleManager for accurate integration testing.
     uint64_t cached_price = manager.GetOraclePriceForHeight(nHeight);
     if (cached_price > 0) {
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using cached price for height %d: %llu micro-USD ($%.6f)\n",
@@ -3145,29 +2563,28 @@ CAmount GetOraclePriceForHeight(int nHeight)
     if (Params().GetChainType() == ChainType::REGTEST) {
         CAmount mockPrice = MockOracleManager::GetInstance().GetCurrentPrice();
         if (mockPrice > 0) {
-            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using mock price for height %d: %lld (MockOracleManager fallback)\n",
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using mock price for height %d: %lld (MockOracleManager regtest)\n",
                      nHeight, mockPrice);
             return mockPrice;
         }
     }
 
-    // Fallback: Try to get from current epoch bundle (for mempool transactions)
+    // For mempool transactions, try the current in-memory MuSig2 bundle.
     int32_t epoch = GetCurrentEpoch(nHeight);
     COracleBundle bundle = manager.GetCurrentBundle(epoch);
-    const int nRequired = manager.GetMinOracleCount();
 
-    if (bundle.HasConsensus(nRequired)) {
-        CAmount price = bundle.GetConsensusPrice(nRequired);
+    if (HasMuSig2Quorum(bundle, Params().GetConsensus())) {
+        CAmount price = static_cast<CAmount>(bundle.median_price_micro_usd);
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using current epoch price for height %d (epoch %d): %lld micro-USD\n",
                  nHeight, epoch, price);
         return price;
     }
 
-    // Try previous epoch as fallback
+    // Then try the previous epoch for mempool liveness.
     if (epoch > 0) {
         COracleBundle prev_bundle = manager.GetCurrentBundle(epoch - 1);
-        if (prev_bundle.HasConsensus(nRequired)) {
-            CAmount price = prev_bundle.GetConsensusPrice(nRequired);
+        if (HasMuSig2Quorum(prev_bundle, Params().GetConsensus())) {
+            CAmount price = static_cast<CAmount>(prev_bundle.median_price_micro_usd);
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using previous epoch price for height %d: %lld micro-USD\n",
                      nHeight, price);
             return price;

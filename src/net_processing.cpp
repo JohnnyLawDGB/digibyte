@@ -5484,7 +5484,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // rate limit budget of honest peers. We verify crypto BEFORE touching the rate
         // limiter so forged messages are rejected and penalized immediately.
         // Schnorr verification is ~50-100µs — cheap enough to do before rate limiting.
-        if (!oracle_msg.price_message.VerifyPhase2() && !oracle_msg.price_message.Verify()) {
+        if (!oracle_msg.price_message.VerifyAttestation()) {
             LogPrint(BCLog::NET, "Oracle message signature verification failed from oracle %d peer=%d\n",
                      oracle_msg.price_message.oracle_id, pfrom.GetId());
             Misbehaving(*peer, 20, "invalid oracle signature");
@@ -5610,144 +5610,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // ── Step 1: Deserialize ──
+        // V1 does not accept or relay legacy oracle bundle messages. MuSig2
+        // coordination uses ORACLEMUSIGNONCE / ORACLEMUSIGPARTIALSIG, and the
+        // final v0x03 bundle is committed in the block coinbase.
         OracleBundleMsg bundle_msg;
         vRecv >> bundle_msg;
-
-        // ── Step 2: Duplicate check (silent return) ──
-        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
-        uint256 bundle_hash = bundle_msg.GetHash();
-        if (bundleManager.HasOracleMessage(bundle_hash)) {
-            LogPrint(BCLog::NET, "Ignoring duplicate oracle bundle epoch=%d peer=%d\n",
-                     bundle_msg.bundle.epoch, pfrom.GetId());
-            return;
-        }
-        bundleManager.RegisterSeenHash(bundle_hash);
-
-        // ── Step 3: Signature verification EARLY on all messages in the bundle ──
-        // Verify every message signature before touching the rate limiter.
-        // An attacker sending bundles with forged signatures gets penalized immediately.
-        if (bundle_msg.bundle.messages.size() > ORACLE_ACTIVE_COUNT) {
-            LogPrint(BCLog::NET, "Oracle bundle too large (%d messages) from peer=%d\n",
-                      bundle_msg.bundle.messages.size(), pfrom.GetId());
-            Misbehaving(*peer, 10, "oversized oracle bundle");
-            return;
-        }
-        // SECURITY: Bind pubkeys from chainparams BEFORE signature verification.
-        // Without this, an attacker can generate their own keypair, sign messages
-        // claiming any oracle_id, set oracle_pubkey to their own key, and the
-        // bundle would pass verification — enabling P2P relay amplification.
-        // This mirrors the pubkey rebinding in the ORACLEPRICE handler above.
-        {
-            const CChainParams& params = m_chainparams;
-            for (auto& msg : bundle_msg.bundle.messages) {
-                if (msg.oracle_id >= ORACLE_TOTAL_COUNT) {
-                    Misbehaving(*peer, 10, "invalid oracle ID in bundle message");
-                    return;
-                }
-                const OracleNodeInfo* oracle_config = params.GetOracleNode(msg.oracle_id);
-                if (!oracle_config) {
-                    Misbehaving(*peer, 10, "unknown oracle ID in bundle message");
-                    return;
-                }
-                // Force the authorized pubkey — ignore whatever the sender supplied
-                msg.oracle_pubkey = XOnlyPubKey(oracle_config->pubkey);
-
-                if (!msg.schnorr_sig.empty()) {
-                    if (!msg.VerifyPhase2() && !msg.Verify()) {
-                        LogPrint(BCLog::NET, "Oracle bundle contains invalid signature from oracle %d peer=%d\n",
-                                  msg.oracle_id, pfrom.GetId());
-                        Misbehaving(*peer, 20, "invalid signature in oracle bundle");
-                        return;
-                    }
-                } else {
-                    // Empty signature — reject (Phase 2 requires Schnorr signatures)
-                    LogPrint(BCLog::NET, "Oracle bundle message missing signature from oracle %d peer=%d\n",
-                              msg.oracle_id, pfrom.GetId());
-                    Misbehaving(*peer, 10, "missing signature in oracle bundle");
-                    return;
-                }
-            }
-        }
-
-        // ── Step 4: Rate limiting (novel, sig-verified bundles only) ──
-        // Max 50 novel bundles per hour per peer.
-        static std::map<NodeId, std::pair<int64_t, int>> bundle_rate_limit;
-        int64_t now = GetTime();
-
-        if (bundle_rate_limit.size() > 100) {
-            auto it = bundle_rate_limit.begin();
-            while (it != bundle_rate_limit.end()) {
-                if (now - it->second.first > 7200) {
-                    it = bundle_rate_limit.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-        }
-
-        auto& [last_reset, count] = bundle_rate_limit[pfrom.GetId()];
-        if (now - last_reset > 3600) {
-            last_reset = now;
-            count = 0;
-        }
-
-        if (++count > 50) {
-            if (count % 10 == 1) {
-                LogPrint(BCLog::NET, "Oracle bundle rate limit exceeded from peer=%d (count=%d novel bundles/hr)\n", pfrom.GetId(), count);
-            }
-            Misbehaving(*peer, 5, "oracle bundle rate limit exceeded");
-            return;
-        }
-
-        // ── Step 5: Remaining validation (consensus, epoch) ──
-        const int nOracleRequired = m_chainman.GetConsensus().nOracleRequiredMessages;
-        if (!bundle_msg.bundle.HasConsensus(nOracleRequired)) {
-            LogPrint(BCLog::NET, "Oracle bundle lacks consensus (%d of %d required) from peer=%d\n",
-                      bundle_msg.bundle.messages.size(), nOracleRequired, pfrom.GetId());
-            Misbehaving(*peer, 5, "oracle bundle lacks consensus");
-            return;
-        }
-
-        int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
-        if (!bundle_msg.bundle.ValidateEpoch(current_epoch)) {
-            LogPrint(BCLog::NET, "Oracle bundle has invalid epoch %d (current=%d) from peer=%d\n",
-                      bundle_msg.bundle.epoch, current_epoch, pfrom.GetId());
-            Misbehaving(*peer, 5, "invalid oracle bundle epoch");
-            return;
-        }
-
-        // ── Step 6: Store + relay (only relay if at least one message stored) ──
-        int stored_count = 0;
-        for (const auto& msg : bundle_msg.bundle.messages) {
-            if (bundleManager.AddOracleMessage(msg)) {
-                stored_count++;
-            }
-        }
-
-        // Mark sender as knowing this bundle
-        AddKnownOracle(*peer, bundle_hash);
-
-        if (stored_count == 0) {
-            LogPrint(BCLog::NET, "Oracle bundle had no new/valid messages, skipping relay (epoch=%d, peer=%d)\n",
-                     bundle_msg.bundle.epoch, pfrom.GetId());
-            return;
-        }
-
-        LogPrint(BCLog::NET, "Stored oracle bundle: epoch=%d, messages=%d (stored=%d), peer=%d\n",
-                 bundle_msg.bundle.epoch, bundle_msg.bundle.messages.size(), stored_count, pfrom.GetId());
-
-        // Relay to peers who don't already know this bundle
-        m_connman.ForEachNode([&bundle_msg, &bundle_hash, this](CNode* pnode) {
-            PeerRef relay_peer = GetPeerRef(pnode->GetId());
-            if (!relay_peer) return;
-
-            if (PeerKnowsOracle(*relay_peer, bundle_hash)) return;
-
-            AddKnownOracle(*relay_peer, bundle_hash);
-            m_connman.PushMessage(pnode, CNetMsgMaker(pnode->GetCommonVersion()).Make(NetMsgType::ORACLEBUNDLE, bundle_msg));
-        });
-
+        LogPrint(BCLog::NET,
+                 "Ignoring deprecated ORACLEBUNDLE message from peer=%d; DigiDollar V1 uses MuSig2 nonce/partial-sig messages and on-chain v0x03 bundles\n",
+                 pfrom.GetId());
         return;
     }
 
@@ -5909,7 +5779,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── Step 5: Signature verification EARLY ──
-        if (!att_msg.attestation.VerifyPhase2()) {
+        if (!att_msg.attestation.VerifyAttestation()) {
             LogPrint(BCLog::NET, "Oracle attestation signature verification failed oracle=%d peer=%d\n",
                      att_msg.attestation.oracle_id, pfrom.GetId());
             Misbehaving(*peer, 20, "invalid attestation signature");
@@ -5987,11 +5857,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // ── RH-03 Fix: Validate oracle_id against ORACLE_TOTAL_COUNT ──
-        // IsValid() only checks < 255; we must reject IDs outside the
-        // configured oracle set to prevent sybil/spoofed oracle messages.
-        if (nonce_msg.oracle_id >= ORACLE_TOTAL_COUNT) {
-            Misbehaving(*peer, 10, "MuSig2 nonce oracle_id out of range");
+        // MuSig2 v0x03 relay is limited to the active consensus pubkey roster.
+        // Reserve metadata slots in vOracleNodes are not signing slots and
+        // must be rejected before dedup/relay/ingestion.
+        if (!IsAuthorizedMuSig2OracleIdForRelay(m_chainparams, nonce_msg.oracle_id)) {
+            Misbehaving(*peer, 10, "MuSig2 nonce oracle_id outside active consensus roster");
             return;
         }
 
@@ -6015,12 +5885,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── RH-03 Fix: Epoch sanity check ──
-        // Reject messages for non-positive epochs or epochs far in the future.
+        // Reject messages for non-positive, stale, or far-future epochs.
         // Current epoch is derived from chain height; allow current + 1 for
-        // race conditions during epoch transitions.
+        // race conditions during epoch transitions. Older epochs are no longer
+        // useful for signing and can otherwise amplify stale session state.
         {
             int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
-            if (nonce_msg.epoch <= 0 || nonce_msg.epoch > current_epoch + 1) {
+            if (nonce_msg.epoch <= 0 || nonce_msg.epoch < current_epoch ||
+                nonce_msg.epoch > current_epoch + 1) {
                 LogPrint(BCLog::NET, "MuSig2 nonce epoch out of range (epoch=%d, current=%d) peer=%d\n",
                          nonce_msg.epoch, current_epoch, pfrom.GetId());
                 Misbehaving(*peer, 5, "MuSig2 nonce epoch out of range");
@@ -6076,7 +5948,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // miner can aggregate nonces from all oracle peers.
         bundleManager.ProcessRemoteMusigNonce(nonce_msg);
 
-        // Also feed into the signing orchestrator (Phase 3 async path)
+        // Also feed into the signing orchestrator for MuSig2 aggregation.
         if (g_signing_orchestrator) {
             g_signing_orchestrator->IngestRemoteNonce(nonce_msg);
         }
@@ -6099,9 +5971,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        // ── RH-03 Fix: Validate oracle_id against ORACLE_TOTAL_COUNT ──
-        if (partial_sig_msg.oracle_id >= ORACLE_TOTAL_COUNT) {
-            Misbehaving(*peer, 10, "MuSig2 partial sig oracle_id out of range");
+        // MuSig2 v0x03 relay is limited to the active consensus pubkey roster.
+        if (!IsAuthorizedMuSig2OracleIdForRelay(m_chainparams, partial_sig_msg.oracle_id)) {
+            Misbehaving(*peer, 10, "MuSig2 partial sig oracle_id outside active consensus roster");
             return;
         }
 
@@ -6123,9 +5995,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── RH-03 Fix: Epoch sanity check ──
+        // Current and current+1 are the only useful relay windows. Stale
+        // positive epochs must not be relayed or ingested into obsolete
+        // sessions.
         {
             int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
-            if (partial_sig_msg.epoch <= 0 || partial_sig_msg.epoch > current_epoch + 1) {
+            if (partial_sig_msg.epoch <= 0 || partial_sig_msg.epoch < current_epoch ||
+                partial_sig_msg.epoch > current_epoch + 1) {
                 LogPrint(BCLog::NET, "MuSig2 partial sig epoch out of range (epoch=%d, current=%d) peer=%d\n",
                          partial_sig_msg.epoch, current_epoch, pfrom.GetId());
                 Misbehaving(*peer, 5, "MuSig2 partial sig epoch out of range");
@@ -6179,7 +6055,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // miner can aggregate signatures from all oracle peers.
         bundleManager.ProcessRemoteMusigPartialSig(partial_sig_msg);
 
-        // Also feed into the signing orchestrator (Phase 3 async path)
+        // Also feed into the signing orchestrator for MuSig2 aggregation.
         if (g_signing_orchestrator) {
             g_signing_orchestrator->IngestRemotePartialSig(partial_sig_msg);
         }

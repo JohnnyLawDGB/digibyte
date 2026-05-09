@@ -6,6 +6,7 @@
 #define DIGIBYTE_ORACLE_NODE_H
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -32,6 +33,8 @@ private:
     std::atomic<bool> running;
     std::atomic<bool> enabled;
     mutable std::mutex mtx_price;
+    std::mutex mtx_stop;
+    std::condition_variable cv_stop;
 
     // Current price data (from exchange fetch)
     CAmount current_price{0};
@@ -83,11 +86,9 @@ public:
     int64_t GetLastBroadcastTime() const { return last_broadcast_time; }
     int64_t GetStartTime() const { return start_time; }
 
-    //! Key management (Phase One: Testnet hardcoded key)
+    //! Key management
     /**
-     * Get oracle private key (hardcoded for Phase One testnet)
-     * WARNING: This uses a hardcoded key for testnet only
-     * Mainnet will use secure key management
+     * Get oracle private key for MuSig2 participation.
      * @return CKey private key for signing
      */
     CKey GetOraclePrivateKey();
@@ -109,8 +110,7 @@ public:
     COraclePriceMessage CreatePriceMessage(CAmount price, int64_t timestamp);
 
     /**
-     * Create a consensus attestation — Phase 2 signed message over consensus values.
-     * All oracles sign the SAME consensus price/timestamp, enabling on-chain verification.
+     * Create a signed consensus-value message used while coordinating MuSig2.
      * @param consensus_price The consensus price all oracles agreed upon
      * @param consensus_timestamp The consensus timestamp (median of individual timestamps)
      * @return Signed message with consensus values, or empty message on failure

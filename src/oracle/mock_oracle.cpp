@@ -9,15 +9,132 @@
 #include <crypto/sha256.h>
 #include <hash.h>
 #include <logging.h>
+#include <oracle/bundle_manager.h>
+#include <oracle/musig2_aggregator.h>
 #include <util/strencodings.h>
 #include <node/chainstate.h>
+#include <random.h>
 #include <util/time.h>
 #include <validation.h>
 
+#include <secp256k1.h>
+#include <secp256k1_musig.h>
+#include <secp256k1_schnorrsig.h>
+
 #include <algorithm>
+#include <array>
+#include <cstring>
+#include <vector>
 
 // Global instance pointer
 MockOracleManager* MockOracleManager::instance = nullptr;
+
+namespace {
+
+std::array<unsigned char, 32> RegtestOracleSecret(uint8_t oracle_id)
+{
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
+
+    std::array<unsigned char, 32> secret{};
+    std::memcpy(secret.data(), hash.begin(), secret.size());
+    return secret;
+}
+
+bool SignRegtestMuSig2Bundle(COracleBundle& bundle, const std::vector<uint8_t>& oracle_ids)
+{
+    if (oracle_ids.empty()) return false;
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    if (!ctx) return false;
+
+    const size_t n_signers = oracle_ids.size();
+    std::vector<std::array<unsigned char, 32>> seckeys(n_signers);
+    std::vector<secp256k1_keypair> keypairs(n_signers);
+    std::vector<secp256k1_pubkey> pubkeys(n_signers);
+
+    for (size_t i = 0; i < n_signers; ++i) {
+        seckeys[i] = RegtestOracleSecret(oracle_ids[i]);
+        if (!secp256k1_keypair_create(ctx, &keypairs[i], seckeys[i].data()) ||
+            !secp256k1_keypair_pub(ctx, &pubkeys[i], &keypairs[i])) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+    }
+
+    std::vector<const secp256k1_pubkey*> pubkey_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        pubkey_ptrs[i] = &pubkeys[i];
+    }
+
+    secp256k1_xonly_pubkey agg_pk{};
+    secp256k1_musig_keyagg_cache cache{};
+    if (!secp256k1_musig_pubkey_agg(ctx, &agg_pk, &cache, pubkey_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_secnonce> secnonces(n_signers);
+    std::vector<secp256k1_musig_pubnonce> pubnonces(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        unsigned char session_rand[32];
+        GetStrongRandBytes(Span{session_rand, 32});
+        if (!secp256k1_musig_nonce_gen(ctx, &secnonces[i], &pubnonces[i],
+                                       session_rand, seckeys[i].data(), &pubkeys[i],
+                                       nullptr, &cache, nullptr)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+    }
+
+    std::vector<const secp256k1_musig_pubnonce*> nonce_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        nonce_ptrs[i] = &pubnonces[i];
+    }
+
+    secp256k1_musig_aggnonce aggnonce{};
+    if (!secp256k1_musig_nonce_agg(ctx, &aggnonce, nonce_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const uint256 msg_hash = ComputeOracleBundleHash(bundle);
+    unsigned char msg32[32];
+    std::memcpy(msg32, msg_hash.begin(), sizeof(msg32));
+
+    secp256k1_musig_session session{};
+    if (!secp256k1_musig_nonce_process(ctx, &session, &aggnonce, msg32, &cache)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    std::vector<secp256k1_musig_partial_sig> partial_sigs(n_signers);
+    std::vector<const secp256k1_musig_partial_sig*> partial_ptrs(n_signers);
+    for (size_t i = 0; i < n_signers; ++i) {
+        if (!secp256k1_musig_partial_sign(ctx, &partial_sigs[i], &secnonces[i],
+                                          &keypairs[i], &cache, &session)) {
+            secp256k1_context_destroy(ctx);
+            return false;
+        }
+        partial_ptrs[i] = &partial_sigs[i];
+    }
+
+    bundle.participation_bitmap = MuSig2OracleAggregator::EncodeBitmap(
+        oracle_ids, static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles));
+    bundle.aggregate_sig.assign(64, 0);
+    if (!secp256k1_musig_partial_sig_agg(ctx, bundle.aggregate_sig.data(),
+                                         &session, partial_ptrs.data(), n_signers)) {
+        secp256k1_context_destroy(ctx);
+        return false;
+    }
+
+    const bool verifies = secp256k1_schnorrsig_verify(ctx, bundle.aggregate_sig.data(), msg32, 32, &agg_pk);
+    secp256k1_context_destroy(ctx);
+    return verifies;
+}
+
+} // namespace
 
 MockOracleManager::MockOracleManager()
     : mockPriceMicroUSD(6500),   // Default: $0.0065 per DGB = 6500 micro-USD (realistic DGB price)
@@ -78,6 +195,11 @@ CAmount MockOracleManager::GetCurrentPrice() const
 
 void MockOracleManager::SetMockPrice(CAmount price_micro_usd)
 {
+    SetMockPrice(price_micro_usd, -1);
+}
+
+void MockOracleManager::SetMockPrice(CAmount price_micro_usd, int64_t update_height)
+{
     // SECURITY (DGB-SEC-005): Runtime guard — mock oracle must only operate in REGTEST
     if (Params().GetChainType() != ChainType::REGTEST) {
         LogPrintf("MockOracleManager: SECURITY - SetMockPrice rejected on non-REGTEST network\n");
@@ -105,10 +227,9 @@ void MockOracleManager::SetMockPrice(CAmount price_micro_usd)
 
     mockPriceMicroUSD = price_micro_usd;
 
-    // Update height from chain tip if available
-    // Note: Height tracking is optional for mock oracle
-    // In production this would integrate with node context
-    lastUpdateHeight = 0; // TODO: Get from node context when available
+    if (update_height >= 0) {
+        lastUpdateHeight = update_height;
+    }
 
     LogPrintf("MockOracleManager: Price updated to %lld micro-USD ($%.6f per DGB)\n",
               mockPriceMicroUSD, static_cast<double>(mockPriceMicroUSD) / 1000000.0);
@@ -134,55 +255,39 @@ int64_t MockOracleManager::GetLastUpdateHeight() const
     return lastUpdateHeight;
 }
 
-COracleBundle MockOracleManager::CreateMockBundle(int height, int64_t block_time)
+COracleBundle MockOracleManager::CreateMockMuSig2Bundle(int height, int64_t block_time)
 {
     LOCK(cs_price);
 
-    COracleBundle bundle;
-    bundle.epoch = GetCurrentEpoch(height);
-    const int64_t bundle_timestamp = block_time > 0 ? block_time : GetTime();
+    COracleBundle bundle(GetCurrentEpoch(height));
+    bundle.version = 3;
+    bundle.median_price_micro_usd = mockPriceMicroUSD;
+    bundle.timestamp = block_time > 0 ? block_time : GetTime();
 
-    // Determine how many oracle messages to create based on chain config
-    // Use min(available test keys, ORACLE_CONSENSUS_REQUIRED) for backward compat
-    uint32_t num_messages = std::min(static_cast<uint32_t>(testOracleKeys.size()),
-                                     static_cast<uint32_t>(ORACLE_CONSENSUS_REQUIRED));
-    if (num_messages == 0) num_messages = ORACLE_CONSENSUS_REQUIRED; // fallback
-
-    for (uint32_t i = 0; i < num_messages; i++) {
-        COraclePriceMessage msg;
-        msg.oracle_id = i;
-        msg.price_micro_usd = mockPriceMicroUSD;
-        msg.timestamp = bundle_timestamp;
-        msg.block_height = height;
-
-        // Sign with real Schnorr signature if test key is available
-        auto key_it = testOracleKeys.find(i);
-        if (key_it != testOracleKeys.end()) {
-            msg.oracle_pubkey = XOnlyPubKey(key_it->second.GetPubKey());
-            if (!msg.SignPhase2(key_it->second)) {
-                LogPrintf("MockOracleManager: WARNING - Failed to sign message for oracle %d\n", i);
-            }
-        } else {
-            // Fallback: fake signature (will fail verification but maintains backward compat)
-            msg.schnorr_sig.resize(64);
-            for (size_t j = 0; j < 64; j++) {
-                msg.schnorr_sig[j] = static_cast<unsigned char>((i * 64 + j) % 256);
-            }
-        }
-
-        bundle.messages.push_back(msg);
+    std::vector<uint8_t> oracle_ids;
+    const int required = std::max(1, Params().GetConsensus().nOracleConsensusRequired);
+    for (uint8_t id = 0; id < testOracleKeys.size() && static_cast<int>(oracle_ids.size()) < required; ++id) {
+        oracle_ids.push_back(id);
     }
 
-    bundle.median_price_micro_usd = mockPriceMicroUSD;
-    bundle.timestamp = bundle_timestamp;
+    if (static_cast<int>(oracle_ids.size()) < required ||
+        !SignRegtestMuSig2Bundle(bundle, oracle_ids)) {
+        LogPrintf("MockOracleManager: Failed to create regtest MuSig2 oracle bundle for height %d\n",
+                  height);
+        return COracleBundle(GetCurrentEpoch(height));
+    }
 
-    LogPrint(BCLog::DIGIDOLLAR, "MockOracleManager: Created bundle for epoch %d with %d messages, price %lld micro-USD\n",
-             bundle.epoch, num_messages, mockPriceMicroUSD);
-
+    LogPrintf("MockOracleManager: Created regtest MuSig2 bundle for height %d epoch %d with %zu signers, price %lld micro-USD\n",
+              height, bundle.epoch, oracle_ids.size(), mockPriceMicroUSD);
     return bundle;
 }
 
 void MockOracleManager::SimulateVolatility(int percentChange)
+{
+    SimulateVolatility(percentChange, -1);
+}
+
+void MockOracleManager::SimulateVolatility(int percentChange, int64_t update_height)
 {
     LOCK(cs_price);
 
@@ -203,8 +308,9 @@ void MockOracleManager::SimulateVolatility(int percentChange)
 
     mockPriceMicroUSD = newPrice;
 
-    // Update height is optional for mock oracle
-    lastUpdateHeight = 0; // TODO: Get from node context when available
+    if (update_height >= 0) {
+        lastUpdateHeight = update_height;
+    }
 
     LogPrintf("MockOracleManager: Simulated %d%% volatility: %lld -> %lld micro-USD ($%.6f -> $%.6f per DGB)\n",
               percentChange, oldPrice, mockPriceMicroUSD,

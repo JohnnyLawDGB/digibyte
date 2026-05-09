@@ -6,6 +6,8 @@
 
 #include <chainparams.h>
 
+#include <algorithm>
+
 /** Global MuSig2 signing sessions indexed by epoch */
 std::map<int32_t, MuSig2SigningSession> g_oracle_signing_sessions;
 Mutex g_oracle_signing_sessions_mutex;
@@ -161,13 +163,17 @@ std::vector<unsigned char> MuSig2Orchestrator::BuildBitmap(const std::set<uint8_
 {
     if (oracle_ids.empty()) return {};
 
-    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
-    if (total_oracles == 0 || total_oracles > 256) return {};
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const int configured_total = std::max(consensus.nOracleTotalOracles, consensus.nOraclePubkeyCount);
+    if (configured_total <= 0 || configured_total > 256) return {};
+    if (consensus.nOraclePubkeyCount <= 0 || consensus.nOraclePubkeyCount > configured_total) return {};
+    const uint16_t total_oracles = static_cast<uint16_t>(configured_total);
+    const uint16_t active_oracles = static_cast<uint16_t>(consensus.nOraclePubkeyCount);
 
     const size_t bitmap_bytes = (total_oracles + 7) / 8;
     std::vector<unsigned char> bitmap(bitmap_bytes, 0);
     for (uint8_t id : oracle_ids) {
-        if (id >= total_oracles) return {};
+        if (id >= active_oracles) return {};
         bitmap[id / 8] |= (1 << (id % 8));
     }
     return bitmap;

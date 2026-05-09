@@ -20,14 +20,14 @@
 
 /**
  * MuSig2 Oracle Participation — manages an oracle's participation in
- * the two-round MuSig2 signing protocol for Phase 3 oracle bundles.
+ * the two-round MuSig2 signing protocol for V1 oracle bundles.
  *
  * Lifecycle per epoch:
  *   1. OnBlockConnected() detects new epoch → generates nonce, broadcasts it
  *   2. OnOracleMusigNonce() collects remote nonces
  *   3. SetConsensusValues() triggers signing when consensus + nonces ready
  *   4. OnOracleMusigPartialSig() collects remote partial sigs
- *   5. GetCurrentBundle() returns v0x03 if complete, v0x02 fallback otherwise
+ *   5. GetCurrentBundle() returns a completed v0x03 bundle or an empty v0x03 placeholder
  *
  * Thread-safe: all public methods are guarded by m_mtx.
  */
@@ -71,9 +71,7 @@ public:
     void SetConsensusValues(int32_t epoch, uint64_t price, int64_t timestamp);
 
     /**
-     * Get best available oracle bundle:
-     *   - v0x03 if MuSig2 session is COMPLETE
-     *   - v0x02 fallback otherwise
+     * Get the completed MuSig2 bundle, or an empty v0x03 bundle if none is ready.
      * Called by bundle_manager::AddOracleBundleToBlock().
      */
     COracleBundle GetCurrentBundle(int32_t height);
@@ -84,7 +82,7 @@ public:
     /** Get current session epoch (-1 if no session). */
     int32_t GetSessionEpoch() const;
 
-    /** Set latest v0x02 bundle as fallback. */
+    /** Deprecated no-op retained for old callers; V1 stores only MuSig2 bundles. */
     void SetLatestV02Bundle(const COracleBundle& bundle, int32_t height);
 
     /** Relay callback for broadcasting MuSig2 messages to P2P. */
@@ -119,10 +117,6 @@ private:
     bool m_has_consensus GUARDED_BY(m_mtx){false};
     uint64_t m_consensus_price GUARDED_BY(m_mtx){0};
     int64_t m_consensus_timestamp GUARDED_BY(m_mtx){0};
-
-    // v0x02 fallback bundle
-    COracleBundle m_v02_bundle GUARDED_BY(m_mtx);
-    int32_t m_v02_height GUARDED_BY(m_mtx){0};
 
     // P2P relay callback
     RelayCallback m_relay;

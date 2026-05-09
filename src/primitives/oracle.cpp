@@ -44,20 +44,8 @@ bool COraclePriceMessage::IsValid(int64_t reference_time) const
     // Check timestamp is not too old (1 hour max)
     if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
 
-    // Verify Schnorr signature (skip for Phase One compact format)
-    // Compact format messages don't have embedded signatures
-    if (!schnorr_sig.empty()) {
-        // Try Phase 2 verification first (signs only oracle_id + price + timestamp)
-        // Phase 2 messages don't include block_height/nonce in their signature hash
-        if (VerifyPhase2()) {
-            return true;
-        }
-        // Fall back to Phase 1 full verification (includes block_height + nonce)
-        return Verify();
-    }
-
-    // Compact format: Trust based on chainparams oracle pubkey (verified at extraction)
-    return true;
+    // V1 does not accept unsigned compact oracle messages.
+    return VerifyAttestation();
 }
 
 bool COraclePriceMessage::Sign(const CKey& key, const uint256* merkle_root, const uint256& aux)
@@ -145,10 +133,10 @@ uint256 COraclePriceMessage::GetSignatureHash() const
     return ss.GetHash();
 }
 
-uint256 COraclePriceMessage::GetPhase2SignatureHash() const
+uint256 COraclePriceMessage::GetAttestationSignatureHash() const
 {
-    // Phase 2 signature hash: only consensus-critical fields
-    // block_height and nonce are NOT stored on-chain in Phase 2 format
+    // Compact attestation hash for off-chain MuSig2 inputs. The final on-chain
+    // oracle data is the v0x03 aggregate signature, not this individual message.
     CHashWriter ss(0);
     ss << oracle_id;
     ss << price_micro_usd;
@@ -156,9 +144,9 @@ uint256 COraclePriceMessage::GetPhase2SignatureHash() const
     return ss.GetHash();
 }
 
-bool COraclePriceMessage::SignPhase2(const CKey& key)
+bool COraclePriceMessage::SignAttestation(const CKey& key)
 {
-    uint256 hash = GetPhase2SignatureHash();
+    uint256 hash = GetAttestationSignatureHash();
     schnorr_sig.resize(64);
     if (!key.SignSchnorr(hash, schnorr_sig, nullptr, uint256())) {
         schnorr_sig.clear();
@@ -168,11 +156,11 @@ bool COraclePriceMessage::SignPhase2(const CKey& key)
     return true;
 }
 
-bool COraclePriceMessage::VerifyPhase2() const
+bool COraclePriceMessage::VerifyAttestation() const
 {
     if (schnorr_sig.size() != 64) return false;
     if (!oracle_pubkey.IsFullyValid()) return false;
-    uint256 hash = GetPhase2SignatureHash();
+    uint256 hash = GetAttestationSignatureHash();
     return oracle_pubkey.VerifySchnorr(hash, schnorr_sig);
 }
 
@@ -305,47 +293,25 @@ bool COracleBundle::DeserializeV03Data(const std::vector<unsigned char>& data, C
 
 bool COracleBundle::IsValid(int min_required, int64_t reference_time) const
 {
-    // Check if bundle has messages
-    if (messages.empty()) {
+    (void)min_required;
+
+    // DigiDollar V1 consensus-visible oracle data is MuSig2 v0x03 only.
+    // Message-bundle validation is intentionally not a fallback path.
+    if (!IsMuSig2()) return false;
+    if (aggregate_sig.size() != 64) return false;
+    if (participation_bitmap.empty()) return false;
+    if (median_price_micro_usd < ORACLE_MIN_PRICE_MICRO_USD ||
+        median_price_micro_usd > ORACLE_MAX_PRICE_MICRO_USD) {
         return false;
     }
 
     // Use provided reference time (block time during validation) or current time
     int64_t current_time = (reference_time > 0) ? reference_time : GetTime();
 
-    // Verify all message signatures (skip for Phase One compact format)
-    for (const auto& msg : messages) {
-        // Phase One compact format: Signature not embedded (verified at creation time)
-        // Trust is based on chainparams oracle pubkey validation
-        if (!msg.schnorr_sig.empty()) {
-            // Full format with embedded signature - verify it
-            if (!msg.VerifyPhase2()) {
-                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message signature verification failed for oracle %u\n", msg.oracle_id);
-                return false;
-            }
-        }
-
-        // Basic message validation (price range, timestamp, etc)
-        if (!msg.IsValid(reference_time)) {
-            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Message validation failed for oracle %u\n", msg.oracle_id);
-            return false;
-        }
-    }
-
     // Verify timestamp is reasonable (within 1 hour of reference time)
     if (timestamp > current_time + 3600 || timestamp < current_time - 3600) {
         LogPrint(BCLog::DIGIDOLLAR, "Oracle: Bundle timestamp out of range: %d (current: %d)\n", timestamp, current_time);
         return false;
-    }
-
-    // Verify median price matches calculated consensus price (if consensus achieved)
-    if (HasConsensus(min_required)) {
-        uint64_t calculated_median = GetConsensusPrice(min_required);
-        if (median_price_micro_usd != calculated_median) {
-            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Median price mismatch: bundle=%llu, calculated=%llu\n",
-                     median_price_micro_usd, calculated_median);
-            return false;
-        }
     }
 
     return true;
@@ -449,7 +415,7 @@ uint64_t COracleBundle::GetConsensusPrice(int min_required) const
 bool COracleBundle::ValidateEpoch(int32_t current_epoch) const
 {
     // Accept current epoch or previous epoch only
-    return epoch == current_epoch || epoch == current_epoch - 1;
+    return epoch == current_epoch || int64_t{epoch} == int64_t{current_epoch} - 1;
 }
 
 bool operator==(const COracleBundle& a, const COracleBundle& b)
@@ -561,8 +527,8 @@ std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeIn
 
 int32_t GetCurrentEpoch(int32_t block_height)
 {
-    // Get epoch length from consensus parameters
-    // This varies by network: mainnet=100, testnet=50, regtest=10
+    // Get DigiDollar oracle signing epoch length from consensus parameters.
+    // V1 uses 40-block (~10 minute) epochs on mainnet, testnet, and regtest.
     const Consensus::Params& params = Params().GetConsensus();
     int32_t epoch_length = params.nDDOracleEpochBlocks;
 
@@ -603,24 +569,8 @@ bool ValidateIncomingMessage(const COraclePriceMessage& message)
 
 bool ValidateBundleMessage(const COracleBundle& bundle)
 {
-    // Bundle cannot exceed maximum oracle count
-    if (bundle.messages.size() > ORACLE_ACTIVE_COUNT) return false;
-
-    // Each message in bundle must be valid
-    for (const auto& msg : bundle.messages) {
-        if (!msg.IsValid()) return false;
-    }
-
-    // Check for duplicate oracle IDs in bundle
-    std::set<uint32_t> oracle_ids;
-    for (const auto& msg : bundle.messages) {
-        if (oracle_ids.find(msg.oracle_id) != oracle_ids.end()) {
-            return false; // Duplicate oracle ID
-        }
-        oracle_ids.insert(msg.oracle_id);
-    }
-
-    return true;
+    (void)bundle;
+    return false;
 }
 
 bool ValidateGetOracleRequest(const GetOracleDataMsg& request)

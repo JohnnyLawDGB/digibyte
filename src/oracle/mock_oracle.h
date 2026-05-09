@@ -58,6 +58,7 @@ public:
      * @param price_micro_usd Price in micro-USD (1,000,000 = $1.00)
      */
     void SetMockPrice(CAmount price_micro_usd);
+    void SetMockPrice(CAmount price_micro_usd, int64_t update_height);
 
     /**
      * Check if mock oracle is enabled
@@ -78,18 +79,21 @@ public:
     int64_t GetLastUpdateHeight() const;
 
     /**
-     * Create mock oracle bundle for a given height
-     * Simulates 9-of-17 oracle signatures with consistent price (RC30)
-     * @param height Block height for the bundle
-     * @return Mock oracle bundle with valid structure
+     * Create a real MuSig2 v0x03 bundle for regtest.
+     * Uses deterministic regtest oracle keys so tests exercise the same bundle
+     * format that V1 accepts on chain.
+     * @param height Block height the bundle will be mined at
+     * @param block_time Timestamp to sign, or current time when 0
+     * @return Signed MuSig2 bundle, or an empty bundle if signing fails
      */
-    COracleBundle CreateMockBundle(int height, int64_t block_time = 0);
+    COracleBundle CreateMockMuSig2Bundle(int height, int64_t block_time = 0);
 
     /**
      * Simulate price volatility for testing
      * @param percentChange Percentage change (positive or negative)
      */
     void SimulateVolatility(int percentChange);
+    void SimulateVolatility(int percentChange, int64_t update_height);
 
     /**
      * Get test private key for a specific oracle ID

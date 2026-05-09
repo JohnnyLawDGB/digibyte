@@ -16,13 +16,15 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
+#include <vector>
 
 class CBlock;
 class CConnman;
 
 /**
- * MuSig2 Signing Orchestrator (Phase 3)
+ * MuSig2 Signing Orchestrator
  *
  * Drives the MuSig2 signing protocol on every block tick via
  * CValidationInterface::BlockConnected.
@@ -65,11 +67,27 @@ public:
                              uint64_t& signed_price_out,
                              int64_t& signed_timestamp_out) const;
 
+    /**
+     * Wave 10 (Agent C) — operator/diagnostic visibility into MuSig2 session
+     * state for an epoch. Operators reading the RPC surface need to know
+     * whether the orchestrator has reached COMPLETE for the current epoch,
+     * is stuck waiting for nonces, has timed out (FAILED), or has not yet
+     * created a session at all.
+     */
+    struct SessionStatus {
+        MuSig2SessionState state;
+        size_t nonce_count;
+        size_t partial_sig_count;
+        int32_t creation_height;
+    };
+    std::optional<SessionStatus> GetSessionStateForEpoch(int32_t epoch) const;
+
     // Utilities
     static int32_t ComputeEpoch(int32_t block_height, int32_t epoch_length);
     static void ComputeOracleMessageHash(int32_t epoch, uint64_t price,
                                          int64_t timestamp,
                                          unsigned char hash32[32]);
+    static std::vector<uint8_t> GetConsensusOracleIdsForSigning();
 
     // Lifecycle
     void Start();

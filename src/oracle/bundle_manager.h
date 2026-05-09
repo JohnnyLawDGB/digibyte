@@ -56,7 +56,6 @@ private:
 
     // Configuration
     bool enabled{true};
-    bool force_phase2{false};  // Test-only: bypass Phase 3 gate in AddOracleBundleToBlock
     int32_t min_oracle_count{ORACLE_CONSENSUS_REQUIRED};
     int32_t total_oracle_count{ORACLE_ACTIVE_COUNT};
     std::chrono::milliseconds near_quorum_wait_timeout{std::chrono::seconds(2)};
@@ -74,7 +73,6 @@ public:
     bool IsEnabled() const { return enabled; }
     void SetMinOracleCount(int32_t min_count) { min_oracle_count = min_count; }
     int32_t GetMinOracleCount() const { return min_oracle_count; }
-    void SetForcePhase2(bool force) { force_phase2 = force; }  // Test-only
 
     //! Message management
     bool AddOracleMessage(const COraclePriceMessage& message);
@@ -86,9 +84,10 @@ public:
     //! For testing: directly inject a message into pending (bypasses validation)
     void InjectTestMessage(const COraclePriceMessage& message);
 
-    //! Consensus attestation management (Phase 2)
+    //! Consensus attestation management for MuSig2 signing
     //! Consensus attestations are messages signed over the consensus price/timestamp
-    //! (as opposed to individual oracle prices). These are used for Phase 2 on-chain data.
+    //! (as opposed to individual oracle prices). They feed aggregation only and
+    //! are never mined as on-chain bundles.
     bool AddConsensusAttestation(const COraclePriceMessage& attestation);
     std::vector<COraclePriceMessage> GetPendingAttestations() const;
     size_t GetPendingAttestationCount() const;
@@ -114,7 +113,7 @@ public:
     bool ExtractOracleBundle(const CTransaction& coinbase_tx, COracleBundle& bundle) const;
     bool TryCreateBundle(int32_t epoch);  // Explicitly create bundle for given epoch
 
-    //! MuSig2 Phase 3 session lifecycle
+    //! MuSig2 session lifecycle
     bool StartMuSig2Session(int32_t block_height);
     bool CompleteMuSig2Session(int32_t block_height);
 
@@ -137,10 +136,7 @@ public:
     //! V0x03 script format validation
     bool ValidateV03BundleFormat(const CScript& script, uint8_t& version);
 
-    //! Phase validation (static for reuse in consensus code)
-    static bool ValidatePhaseTwoBundle(const COracleBundle& bundle, const Consensus::Params& params);
-    static bool ValidatePhaseThreeBundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params, std::string& error);
-    static bool ValidatePhaseOneBundle(const COracleBundle& bundle, const Consensus::Params& params);
+    static bool ValidateMuSig2Bundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params, std::string& error);
     static bool ValidateBundle(const COracleBundle& bundle, int block_height, const Consensus::Params& params);
     static int GetRequiredConsensus(int block_height, const Consensus::Params& params);
     static CAmount CalculateConsensusPrice(const COracleBundle& bundle, const Consensus::Params& params);
@@ -209,6 +205,7 @@ public:
     //! Load oracle prices from blockchain on startup
     //! Must be called after chainstate is fully loaded
     static void LoadPricesFromChain(ChainstateManager& chainman);
+    static bool ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const Consensus::Params& params);
 
     //! Clear all state (for testing)
     void Clear();
@@ -245,7 +242,7 @@ private:
     std::vector<uint32_t> GetActiveOraclesForEpoch(int32_t epoch) const;
     bool HasRequiredSignatures(const COracleBundle& bundle, int32_t block_height) const;
 
-    //! Consensus attestations: Phase 2 messages signed over consensus values
+    //! Consensus attestations signed over MuSig2 consensus values
     //! Separate from pending_messages (which contain individual prices)
     std::unordered_map<uint32_t, COraclePriceMessage> pending_attestations;
 
@@ -281,7 +278,7 @@ public:
     static bool ValidateOracleMessage(const COraclePriceMessage& message, const Consensus::Params& params);
 
     //! Bundle validation
-    static bool ValidateOracleBundle(const COracleBundle& bundle, int32_t epoch, const Consensus::Params& params);
+    static bool ValidateOracleBundle(const COracleBundle& bundle, int32_t block_height, const Consensus::Params& params);
 
 private:
     //! Internal validation helpers
@@ -293,8 +290,12 @@ private:
 //! Global oracle bundle manager instance
 extern std::unique_ptr<OracleBundleManager> g_oracle_bundle_manager;
 
-//! Compute deterministic hash of oracle bundle consensus data (price + timestamp).
+//! Compute deterministic v0x03 MuSig2 message hash bound to a chain identity.
 //! Used as the message for MuSig2 aggregate signature verification.
+//! DD-FA-SEC-008 — the chain's hashGenesisBlock prevents cross-chain replay.
+uint256 ComputeOracleBundleHash(const COracleBundle& bundle, const uint256& chain_hash);
+
+//! Compatibility overload: hash a bundle bound to the active chain's genesis.
 uint256 ComputeOracleBundleHash(const COracleBundle& bundle);
 
 //! Utility functions for integration with existing code

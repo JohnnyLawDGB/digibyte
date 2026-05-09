@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <limits>
 
 std::unique_ptr<OracleSigningOrchestrator> g_signing_orchestrator;
 
@@ -32,6 +33,25 @@ int32_t GetEpochStartHeight(int32_t epoch)
     return epoch * epoch_length;
 }
 } // namespace
+
+std::vector<uint8_t> OracleSigningOrchestrator::GetConsensusOracleIdsForSigning()
+{
+    std::vector<uint8_t> oracle_ids;
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const int active_pubkeys = consensus.nOraclePubkeyCount;
+    if (active_pubkeys <= 0) return oracle_ids;
+
+    const auto& nodes = Params().GetOracleNodes();
+    oracle_ids.reserve(nodes.size());
+    for (const auto& node : nodes) {
+        if (!node.is_active) continue;
+        // vOracleNodes may include reserve metadata beyond the consensus keyset.
+        if (node.id >= static_cast<uint32_t>(active_pubkeys)) continue;
+        if (node.id > std::numeric_limits<uint8_t>::max()) continue;
+        oracle_ids.push_back(static_cast<uint8_t>(node.id));
+    }
+    return oracle_ids;
+}
 
 // ============================================================================
 // Construction / lifecycle
@@ -99,13 +119,7 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
     if (it == m_signing_sessions.end() || !it->second) return;
 
     if (it->second->GetState() == MuSig2SessionState::CREATED) {
-        std::vector<uint8_t> all_oracle_ids;
-        const uint32_t total_oracles = static_cast<uint32_t>(std::max(1, Params().GetConsensus().nOracleTotalOracles));
-        for (const auto& node : Params().GetOracleNodes()) {
-            if (node.is_active && node.id < total_oracles) {
-                all_oracle_ids.push_back(static_cast<uint8_t>(node.id));
-            }
-        }
+        std::vector<uint8_t> all_oracle_ids = GetConsensusOracleIdsForSigning();
 
         MuSig2OracleAggregator aggregator;
         secp256k1_xonly_pubkey agg_pk;
@@ -421,13 +435,12 @@ void OracleSigningOrchestrator::OnBlockConnected(
     // Pre-start next epoch's ceremony in the tail of the current one.
     //
     // The MuSig2 ceremony needs ~3 block ticks to reach COMPLETE
-    // (nonce → partial-sig → aggregate). Without pre-start, the
+    // (nonce -> partial-sig -> aggregate). Without pre-start, the
     // session for epoch N+1 is only created when block (N+1)*L
-    // first connects — by which time block_template assembly for
-    // that block has already fired, queried for the non-existent
-    // session, and fallen through to the v0x02 fallback. Starting
-    // the ceremony K blocks early lets it reach COMPLETE before the
-    // first block of the next epoch is templated.
+    // first connects, which can leave the next block template without
+    // the mandatory v0x03 bundle. Starting the ceremony K blocks early
+    // lets it reach COMPLETE before the first block of the next epoch
+    // is templated.
     const Consensus::Params& p = Params().GetConsensus();
     int32_t epoch_length = p.nDDOracleEpochBlocks;
     if (epoch_length <= 0) epoch_length = 1440;
@@ -462,11 +475,7 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
         LogPrintf("Oracle: Step 1 - local_ids.size()=%zu for epoch %d\n", local_ids.size(), epoch);
 
         // Build full oracle ID list for key aggregation
-        std::vector<uint8_t> all_oracle_ids;
-        const auto& nodes = Params().GetOracleNodes();
-        for (size_t i = 0; i < nodes.size(); ++i) {
-            if (nodes[i].is_active) all_oracle_ids.push_back(static_cast<uint8_t>(i));
-        }
+        std::vector<uint8_t> all_oracle_ids = GetConsensusOracleIdsForSigning();
 
         LogPrintf("Oracle: Step 1 - all_oracle_ids.size()=%zu\n", all_oracle_ids.size());
 
@@ -703,7 +712,43 @@ bool OracleSigningOrchestrator::GetCompletedSession(
     participation_bitmap_out = session.GetParticipationBitmap();
     signed_price_out = session.GetSignedPrice();
     signed_timestamp_out = session.GetSignedTimestamp();
-    return !aggregate_sig_out.empty();
+
+    // Some nodes can complete aggregation from received partial signatures even
+    // if their local signing tick did not persist the signed values before the
+    // miner queries the completed session. Recover the same consensus values the
+    // signing round used. The resulting bundle is still verified against the
+    // aggregate signature before mining/acceptance, so a mismatched recovery
+    // cannot create an invalid-but-accepted block; it simply fails validation.
+    if ((signed_price_out == 0 || signed_timestamp_out == 0) && g_oracle_bundle_manager) {
+        uint64_t consensus_price = 0;
+        int64_t consensus_timestamp = 0;
+        if (OracleBundleManager::GetInstance().ComputeConsensusValues(consensus_price, consensus_timestamp)) {
+            signed_price_out = consensus_price;
+            signed_timestamp_out = consensus_timestamp;
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Recovered missing signed MuSig2 values for completed epoch %d: price=%llu timestamp=%lld\n",
+                     epoch,
+                     static_cast<unsigned long long>(signed_price_out),
+                     static_cast<long long>(signed_timestamp_out));
+        }
+    }
+
+    return !aggregate_sig_out.empty() && signed_price_out > 0 && signed_timestamp_out > 0;
+}
+
+std::optional<OracleSigningOrchestrator::SessionStatus>
+OracleSigningOrchestrator::GetSessionStateForEpoch(int32_t epoch) const
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    auto it = m_signing_sessions.find(epoch);
+    if (it == m_signing_sessions.end() || !it->second) return std::nullopt;
+    const MuSig2SigningSession& session = *it->second;
+    SessionStatus status;
+    status.state = session.GetState();
+    status.nonce_count = session.GetNonceCount();
+    status.partial_sig_count = session.GetPartialSigCount();
+    status.creation_height = session.GetCreationHeight();
+    return status;
 }
 
 // ============================================================================
@@ -720,7 +765,22 @@ void OracleSigningOrchestrator::ComputeOracleMessageHash(
     int32_t epoch, uint64_t price, int64_t timestamp,
     unsigned char hash32[32])
 {
+    // DD-FA-SEC-008 — domain-separate the v0x03 MuSig2 message so that the
+    // same (epoch, price, timestamp) signed for one DigiByte chain cannot
+    // be replayed on a different chain that shares the oracle roster.
+    // The hash binds:
+    //   tag           — labeled prefix for defense-in-depth
+    //   chain_hash    — Params().GetConsensus().hashGenesisBlock (chain id)
+    //   epoch         — RC30 cross-epoch replay binding
+    //   price         — consensus DGB/USD price (micro-USD)
+    //   timestamp     — bundle timestamp
+    //
+    // Validator computes the same hash via ComputeOracleBundleHash, which
+    // MUST stay byte-identical to this construction for verification to
+    // succeed.
     CHashWriter hasher(0);
+    hasher << std::string{"DigiDollar/OracleBundle"};
+    hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
     hasher << price;
     hasher << timestamp;

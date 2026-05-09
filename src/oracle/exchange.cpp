@@ -32,6 +32,18 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::stri
     return total_size;
 }
 
+#ifdef HAVE_LIBCURL
+#if LIBCURL_VERSION_NUM >= 0x072000
+static int CurlInterruptCallback(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+#else
+static int CurlInterruptCallback(void* clientp, double, double, double, double)
+#endif
+{
+    const auto* interrupt_callback = static_cast<const std::function<bool()>*>(clientp);
+    return interrupt_callback && *interrupt_callback && (*interrupt_callback)() ? 1 : 0;
+}
+#endif
+
 /**
  * BaseExchangeFetcher Implementation
  */
@@ -73,6 +85,11 @@ BaseExchangeFetcher::~BaseExchangeFetcher()
 std::string BaseExchangeFetcher::HttpGet(const std::string& url)
 {
 #ifdef HAVE_LIBCURL
+    if (m_interrupt_callback && m_interrupt_callback()) {
+        LogPrint(BCLog::DIGIDOLLAR, "HttpGet: interrupted before request to %s\n", url);
+        return "";
+    }
+
     CURL* curl;
 #ifdef WIN32
     // Windows: reuse persistent handle — curl_easy_reset() preserves connection
@@ -103,6 +120,14 @@ std::string BaseExchangeFetcher::HttpGet(const std::string& url)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_MAXFILESIZE, 1048576L);  // 1MB max response
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+#if LIBCURL_VERSION_NUM >= 0x072000
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, CurlInterruptCallback);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &m_interrupt_callback);
+#else
+    curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, CurlInterruptCallback);
+    curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, &m_interrupt_callback);
+#endif
 
     // Set timeout
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_seconds));
@@ -229,19 +254,44 @@ std::string BaseExchangeFetcher::ExtractJsonValue(const std::string& json, const
 
 CAmount BaseExchangeFetcher::ConvertToMicroUSD(const std::string& price_str)
 {
-    try {
-        double price_usd = std::stod(price_str);
-        return ConvertToMicroUSD(price_usd);
-    } catch (const std::exception& e) {
-        LogPrintf("Oracle: Failed to convert price string '%s': %s\n", price_str, e.what());
+    // Exchange APIs commonly report more precision than micro-USD. Parse with
+    // extra fixed-point precision, then truncate to micro-USD, while still
+    // rejecting malformed strings or trailing junk.
+    static constexpr int PRICE_PARSE_DECIMALS = 12;
+    static constexpr int64_t PRICE_PARSE_TO_MICRO_USD = 1000000;
+    int64_t parsed_price = 0;
+    if (!ParseFixedPoint(price_str, PRICE_PARSE_DECIMALS, &parsed_price)) {
+        LogPrintf("Oracle: Failed to parse fixed-point price string '%s'\n", price_str);
         return 0;
     }
+
+    // Keep the string path on exact integer arithmetic and the same exchange
+    // sanity cap as the double compatibility overload.
+    static constexpr CAmount MAX_REASONABLE_PRICE_MICRO_USD = 10 * 1000000;
+    const CAmount price_micro_usd = parsed_price / PRICE_PARSE_TO_MICRO_USD;
+    if (price_micro_usd <= 0 || price_micro_usd > MAX_REASONABLE_PRICE_MICRO_USD) {
+        return 0;
+    }
+
+    return price_micro_usd;
 }
 
 CAmount BaseExchangeFetcher::ConvertToMicroUSD(double price_usd)
 {
     if (!std::isfinite(price_usd)) return 0;
-    if (price_usd <= 0 || price_usd > 100) { // Sanity check
+    // SECURITY (DD-FA-SEC-009): Centralised per-fetcher safety cap.
+    // Six fetchers (Bittrex / Poloniex / KuCoin / Crypto.com / Gate.io /
+    // HTX) already gate at $10 (10,000,000 micro-USD); five others
+    // (Binance / Coinbase / Kraken / Messari / CoinGecko) relied on this
+    // helper, whose pre-Wave-11 cap was $100. Tightening the central
+    // helper to $10 makes every fetcher fail closed on a compromised
+    // endpoint that returns nonsense (e.g. $99.99) instead of feeding a
+    // poisoned positive value into the median / outlier filter.
+    // DGB historic ATH is ~$0.18, so $10 is ~50x the highest realistic
+    // exchange-reported value while still covering hypothetical pre-
+    // launch volatility headroom.
+    static constexpr double MAX_REASONABLE_PRICE_USD = 10.0;
+    if (price_usd <= 0 || price_usd > MAX_REASONABLE_PRICE_USD) {
         return 0;
     }
     return static_cast<CAmount>(price_usd * 1000000); // Convert to micro-USD (1,000,000 = $1.00)
@@ -981,6 +1031,14 @@ MultiExchangeAggregator::~MultiExchangeAggregator()
 {
 }
 
+void MultiExchangeAggregator::SetInterruptCallback(std::function<bool()> callback)
+{
+    interrupt_callback = std::move(callback);
+    for (auto& fetcher : fetchers) {
+        fetcher->SetInterruptCallback(interrupt_callback);
+    }
+}
+
 void MultiExchangeAggregator::InitializeFetchers()
 {
     // Initialize exchange fetchers - only use exchanges that actually list DGB
@@ -1005,6 +1063,9 @@ void MultiExchangeAggregator::InitializeFetchers()
     fetchers.push_back(std::make_unique<HTXFetcher>());
     fetchers.push_back(std::make_unique<CryptoComFetcher>());
     // CoinMarketCap removed — paid API key incompatible with decentralized design
+    for (auto& fetcher : fetchers) {
+        fetcher->SetInterruptCallback(interrupt_callback);
+    }
 
     LogPrintf("Oracle: Initialized %d exchange fetchers\n", fetchers.size());
 }
@@ -1047,6 +1108,12 @@ std::vector<MultiExchangeAggregator::ExchangePrice> MultiExchangeAggregator::Fet
     int64_t timestamp = GetTime();
 
     for (const auto& fetcher : fetchers) {
+        if (interrupt_callback && interrupt_callback()) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: price fetch interrupted before %s\n",
+                     fetcher->GetExchangeName());
+            break;
+        }
+
         try {
             CAmount price = fetcher->FetchPrice();
             bool success = (price > 0);

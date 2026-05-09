@@ -81,7 +81,10 @@ public:
     /** Get the epoch this session is for. */
     int32_t GetEpoch() const;
 
-    /** Initialize passive (non-oracle) session: CREATED -> NONCES_COLLECTING without secnonce. */
+    /**
+     * Initialize passive (non-oracle) session: CREATED -> NONCES_COLLECTING without secnonce.
+     * Idempotent once local nonce generation has already started the session.
+     */
     bool InitializePassive(const secp256k1_musig_keyagg_cache& cache);
 
     /**
@@ -128,8 +131,10 @@ public:
     void SetKeyAggCache(const secp256k1_musig_keyagg_cache& cache);
     /** Return sorted oracle IDs that contributed nonces. */
     std::vector<uint8_t> GetNonceParticipants() const;
+    /** Return the deterministic threshold participant set selected from collected nonces. */
+    std::vector<uint8_t> GetRequiredParticipants() const;
     /**
-     * Trim nonces to exactly m_min_signers. Keeps the lowest oracle IDs.
+     * Trim nonces to exactly m_min_signers. Keeps the lowest oracle IDs from the collected set.
      * Must be called BEFORE AggregateNonces so the session is bound to
      * exactly the threshold number of participants.
      */
@@ -201,6 +206,8 @@ public:
     void SetTimeoutBlocks(int32_t blocks);
     /** TEST ONLY: Set creation height for timeout testing. */
     void SetCreationHeight(int32_t height) { m_creation_height = height; }
+    /** Read creation height (lock-protected). Used by operator status. */
+    int32_t GetCreationHeight() const;
 
     /** Get the aggregate signature after COMPLETE state. */
     std::vector<unsigned char> GetAggregateSig() const;

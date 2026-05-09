@@ -6,8 +6,10 @@
 #define DIGIBYTE_ORACLE_EXCHANGE_H
 
 #include <consensus/amount.h>
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -31,6 +33,7 @@ protected:
     //! On Windows, curl_easy_init()/cleanup() per request causes TIME_WAIT buildup
     //! that exhausts ephemeral ports after 6-24 hours with 7 exchanges @ 15s intervals.
     void* m_curl_handle{nullptr};
+    std::function<bool()> m_interrupt_callback;
 
 public:
     BaseExchangeFetcher(const std::string& name, const std::string& url);
@@ -45,6 +48,7 @@ public:
 
     //! Set request timeout
     void SetTimeout(int seconds) { timeout_seconds = seconds; }
+    void SetInterruptCallback(std::function<bool()> callback) { m_interrupt_callback = std::move(callback); }
 
     //! Convert price string to micro-USD (1,000,000 = $1.00) - Public for testing
     CAmount ConvertToMicroUSD(const std::string& price_str);
@@ -231,6 +235,7 @@ private:
     size_t min_required_sources{2};  // Lowered from 3 - only need 2 working exchanges
     double outlier_threshold{0.10}; // 10% deviation
     bool use_weighted_median{false};
+    std::function<bool()> interrupt_callback;
 
 public:
     MultiExchangeAggregator();
@@ -240,6 +245,7 @@ public:
     void SetMinRequiredSources(size_t min_sources) { min_required_sources = min_sources; }
     void SetOutlierThreshold(double threshold) { outlier_threshold = threshold; }
     void SetUseWeightedMedian(bool use_weighted) { use_weighted_median = use_weighted; }
+    void SetInterruptCallback(std::function<bool()> callback);
 
     //! Price fetching
     CAmount FetchAggregatePrice();

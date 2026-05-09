@@ -6,18 +6,31 @@
 #define DIGIBYTE_ORACLE_MUSIG2_SESSION_MINING_H
 
 /**
- * MuSig2 Session Mining Extensions (W2-A2)
+ * MuSig2 Session Mining — legacy global session map (Wave 10 Agent C note).
  *
- * This header declares additions to MuSig2SigningSession needed by
- * AddOracleBundleToBlock for Phase 3 (v0x03) bundle creation:
+ * Re-declares the legacy global signing-session map and its mutex so any
+ * translation unit that needs to inspect them (notably the P2P ingestion
+ * paths in `OracleBundleManager::ProcessRemoteMusigNonce` /
+ * `ProcessRemoteMusigPartialSig` and tests under `src/test/`) can include
+ * a single header. The globals are *defined* in
+ * `oracle/musig2_orchestrator.cpp`.
  *
- * 1. GetAggregateSig() / GetParticipationBitmap() — getters for COMPLETE sessions
- * 2. g_oracle_signing_sessions — global session map keyed by epoch
- * 3. g_oracle_signing_sessions_mutex — mutex protecting the map
+ * IMPORTANT — actual production miner path (RC30+):
+ *   `OracleBundleManager::AddOracleBundleToBlock` does NOT consult this
+ *   global session map for completed bundles. It queries
+ *   `g_signing_orchestrator->GetCompletedSession(epoch, ...)` instead,
+ *   which reads the orchestrator's private `m_signing_sessions` map.
  *
- * These are declared in musig2_session.h and defined in musig2_session.cpp
- * when those files are up to date. This header exists as a bridge to ensure
- * the declarations are always available even during concurrent development.
+ *   The legacy global map (`g_oracle_signing_sessions`) and the
+ *   companion `OracleBundleManager::CompleteMuSig2Session` method are
+ *   retained only for the P2P ingestion shim and the
+ *   `musig2_p2p_ingestion_tests` regression suite. They are NOT on the
+ *   block-template hot path. Treat them as P2P-shim state, not as the
+ *   miner's source of truth.
+ *
+ * Anyone editing this surface should update both this header comment
+ * and the equivalent note in `REPO_MAP_DIGIDOLLAR.md` so the doc/code
+ * pair stays consistent (DD-FA-DOC-004).
  */
 
 #include <oracle/musig2_session.h>

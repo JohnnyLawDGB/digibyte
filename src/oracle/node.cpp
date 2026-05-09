@@ -137,12 +137,6 @@ void OracleNode::SetExchangeEndpoints(const std::vector<std::string>& endpoints)
 
 void OracleNode::Start()
 {
-    // CRITICAL: Oracle only runs on TESTNET for Phase One
-    if (Params().GetChainType() != ChainType::TESTNET) {
-        LogPrintf("Oracle: Not starting - only enabled on testnet (Phase One)\n");
-        return;
-    }
-
     if (running.load()) {
         LogPrintf("Oracle: Oracle %d is already running\n", oracle_id);
         return;
@@ -167,20 +161,19 @@ void OracleNode::Start()
     running.store(true);
     start_time = GetTime();
     price_thread = std::thread(&OracleNode::PriceThreadFunc, this);
-    LogPrintf("Oracle: Started oracle %d on testnet (Phase One: 1-of-1 consensus)\n", oracle_id);
+    LogPrintf("Oracle: Started oracle %d for MuSig2 bundle participation\n", oracle_id);
 }
 
 void OracleNode::Stop()
 {
-    if (!running.load()) {
-        return;
-    }
-
-    running.store(false);
+    const bool was_running = running.exchange(false);
+    cv_stop.notify_all();
     if (price_thread.joinable()) {
         price_thread.join();
     }
-    LogPrintf("Oracle: Stopped oracle %d\n", oracle_id);
+    if (was_running) {
+        LogPrintf("Oracle: Stopped oracle %d\n", oracle_id);
+    }
 }
 
 CAmount OracleNode::GetCurrentPrice() const
@@ -248,10 +241,9 @@ COraclePriceMessage OracleNode::CreatePriceMessage(CAmount price, int64_t timest
     // Set nonce for uniqueness
     message.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
 
-    // Sign the message using Phase 2 Schnorr signature (3-field hash: oracle_id + price + timestamp)
-    // Phase 2 is the standard for multi-oracle consensus — all oracle messages use this format
-    if (!message.SignPhase2(private_key)) {
-        LogPrintf("Oracle: Failed to create Phase 2 Schnorr signature for oracle %d\n", oracle_id);
+    // Sign the compact attestation hash used as off-chain MuSig2 input.
+    if (!message.SignAttestation(private_key)) {
+        LogPrintf("Oracle: Failed to create compact oracle attestation for oracle %d\n", oracle_id);
         return COraclePriceMessage(); // Return empty message on failure
     }
 
@@ -276,9 +268,9 @@ COraclePriceMessage OracleNode::CreateConsensusAttestation(uint64_t consensus_pr
     // Set nonce for uniqueness
     message.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
 
-    // Sign Phase 2: H(oracle_id, consensus_price, consensus_timestamp)
-    // This signature will verify on-chain because the block stores these same consensus values
-    if (!message.SignPhase2(private_key)) {
+    // Sign H(oracle_id, consensus_price, consensus_timestamp). These attestations
+    // are off-chain inputs to MuSig2 aggregation; only v0x03 bundles are mined.
+    if (!message.SignAttestation(private_key)) {
         LogPrintf("Oracle: Failed to create consensus attestation for oracle %d\n", oracle_id);
         return COraclePriceMessage();
     }
@@ -297,7 +289,7 @@ bool OracleNode::BroadcastPriceMessage(const COraclePriceMessage& message)
     }
 
     // Validate Schnorr signature
-    if (!message.VerifyPhase2()) {
+    if (!message.VerifyAttestation()) {
         LogPrintf("Oracle: Invalid Schnorr signature on price message for oracle %d\n", oracle_id);
         return false;
     }
@@ -340,12 +332,17 @@ void OracleNode::PriceThreadFunc()
                 }
             }
 
-            // Sleep for the configured interval
-            std::this_thread::sleep_for(std::chrono::seconds(price_update_interval));
+            std::unique_lock<std::mutex> lock(mtx_stop);
+            cv_stop.wait_for(lock, std::chrono::seconds(price_update_interval), [this] {
+                return !running.load();
+            });
         }
         catch (const std::exception& e) {
             LogPrintf("Oracle: Exception in price thread for oracle %d: %s\n", oracle_id, e.what());
-            std::this_thread::sleep_for(std::chrono::seconds(60)); // Wait 1 minute on error
+            std::unique_lock<std::mutex> lock(mtx_stop);
+            cv_stop.wait_for(lock, std::chrono::seconds(60), [this] {
+                return !running.load();
+            });
         }
     }
 
@@ -388,10 +385,13 @@ void OracleNode::FetchAndUpdatePrice()
 CAmount OracleNode::FetchMedianPrice()
 {
     // Use the real MultiExchangeAggregator from exchange.cpp
-    // This fetches from all 8 exchanges and returns median with outlier filtering
+    // This fetches from the active exchange set and returns median with outlier filtering.
     ExchangeAPI::MultiExchangeAggregator aggregator;
     aggregator.SetMinRequiredSources(3);  // Need at least 3 exchanges
     aggregator.SetOutlierThreshold(0.10); // 10% deviation threshold
+    aggregator.SetInterruptCallback([this] {
+        return !running.load();
+    });
 
     CAmount price = aggregator.FetchAggregatePrice();
 
@@ -411,9 +411,9 @@ void OracleNode::BroadcastCurrentPrice()
     int64_t timestamp = GetTime();
 
     if (price > 0) {
-        // T5-03: Check if consensus has formed from pending P2P messages.
-        // If so, broadcast a consensus attestation (signed over consensus values)
-        // instead of individual price. This enables Phase 2 on-chain verification.
+        // Check if consensus has formed from pending P2P messages.
+        // If so, broadcast a consensus attestation over those values so
+        // the MuSig2 signing round can aggregate the final v0x03 bundle.
         OracleBundleManager& bm = OracleBundleManager::GetInstance();
         uint64_t consensus_price = 0;
         int64_t consensus_timestamp = 0;
@@ -422,7 +422,7 @@ void OracleNode::BroadcastCurrentPrice()
             // DEADLOCK PREVENTION: If the consensus timestamp is stale (>5 minutes
             // old), the consensus round is frozen. All oracles are creating
             // attestations with the same (price, timestamp) tuple, producing
-            // identical Phase2 hashes that get rejected by the duplicate filter.
+            // identical hashes that get rejected by the duplicate filter.
             // Fall through to individual price broadcast with a fresh timestamp
             // to break the cycle and allow a new consensus round to form.
             int64_t consensus_age = timestamp - consensus_timestamp;
@@ -448,7 +448,7 @@ void OracleNode::BroadcastCurrentPrice()
             }
         }
 
-        // No consensus yet, Phase 1, or stale consensus — broadcast individual price
+        // No fresh consensus yet — broadcast individual price input for the next round.
         COraclePriceMessage message = CreatePriceMessage(price, timestamp);
         if (BroadcastPriceMessage(message)) {
             std::lock_guard<std::mutex> lock(mtx_price);
@@ -603,8 +603,8 @@ std::vector<ExchangePriceFetcher::ExchangePrice> ExchangePriceFetcher::FetchAllP
 {
     std::vector<ExchangePrice> prices;
 
-    // For testing/mockup, return mock prices
-    // In real implementation, would fetch from actual exchanges
+    // Legacy test fetcher path; the live oracle daemon uses
+    // MultiExchangeAggregator::FetchAggregatePrice().
     int64_t timestamp = GetTime();
 
     // Mock exchange prices with slight variation
@@ -906,18 +906,12 @@ OracleManager& OracleManager::GetInstance()
 
 void OracleManager::StartOracleService()
 {
-    // CRITICAL: Only start on testnet for Phase One
-    if (Params().GetChainType() != ChainType::TESTNET) {
-        LogPrintf("Oracle: Oracle service not started - testnet only (Phase One)\n");
-        return;
-    }
-
     OracleManager& manager = GetInstance();
     manager.Initialize();
 
-    // Phase Two: Do NOT auto-start with hardcoded key.
+    // Do NOT auto-start with hardcoded keys.
     // Oracle operators must use 'startoracle <id> <privkey>' or 'createoraclekey' + 'startoracle'.
-    // This enables multi-oracle consensus where each node runs its own oracle with its own key.
+    // Each operator participates in MuSig2 with its own configured key.
     LogPrintf("Oracle: Oracle service initialized. Use 'startoracle <id> <privkey>' to start an oracle.\n");
 }
 

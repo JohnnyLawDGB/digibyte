@@ -35,6 +35,7 @@ static const int CLIENT_VERSION =
                          +     100 * CLIENT_VERSION_MINOR
                          +       1 * CLIENT_VERSION_BUILD;
 
+inline constexpr const char* CLIENT_NAME_RAW{"DigiByte"};
 extern const std::string CLIENT_NAME;
 
 

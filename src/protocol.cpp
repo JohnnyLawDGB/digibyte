@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <protocol.h>
 
+#include <chainparams.h>
 #include <common/system.h>
 #include <oracle/musig2_messages.h>
 #include <primitives/oracle.h>
@@ -104,6 +105,8 @@ const static std::vector<std::string> g_all_net_message_types{
     NetMsgType::GETORACLES,
     NetMsgType::ORACLECONSENSUS,
     NetMsgType::ORACLEATTESTATION,
+    NetMsgType::ORACLEMUSIGNONCE,
+    NetMsgType::ORACLEMUSIGPARTIALSIG,
 };
 
 CMessageHeader::CMessageHeader(const MessageStartChars& pchMessageStartIn, const char* pszCommand, unsigned int nMessageSizeIn)
@@ -179,6 +182,9 @@ std::string CInv::GetCommand() const
     case MSG_GET_ORACLE_DATA:    return NetMsgType::GETORACLES;
     case MSG_ORACLE_CONSENSUS:   return NetMsgType::ORACLECONSENSUS;
     case MSG_ORACLE_ATTESTATION: return NetMsgType::ORACLEATTESTATION;
+    case MSG_ORACLE_MUSIG_NONCE: return NetMsgType::ORACLEMUSIGNONCE;
+    case MSG_ORACLE_MUSIG_PARTIALSIG:
+        return NetMsgType::ORACLEMUSIGPARTIALSIG;
     }
 
     // Handle witness flag for standard messages
@@ -261,16 +267,15 @@ GenTxid ToGenTxid(const CInv& inv)
 
 uint256 OraclePriceMsg::GetHash() const
 {
-    // Use Phase2 signature hash (oracle_id + price + timestamp) for dedup.
-    // GetSignatureHash() includes block_height+nonce which are NOT covered by
-    // Phase2 signatures. An attacker can mutate those fields to create distinct
-    // hashes that bypass dedup while the Phase2 signature remains valid.
-    // Using Phase2 hash ensures all mutations of the same (id, price, timestamp)
-    // triple map to the same dedup hash.
+    // Use the compact attestation hash (oracle_id + price + timestamp) for
+    // dedup. GetSignatureHash() includes block_height+nonce, which are not
+    // covered by attestations. An attacker can mutate those fields to create
+    // distinct hashes that bypass dedup while the attestation remains valid.
+    // The compact hash maps those mutations to one dedup key.
     if (!price_message.schnorr_sig.empty()) {
-        return price_message.GetPhase2SignatureHash();
+        return price_message.GetAttestationSignatureHash();
     }
-    // Fallback for Phase1 compact messages (no signature)
+    // Fallback for unsigned storage-only messages.
     return price_message.GetSignatureHash();
 }
 
@@ -291,11 +296,26 @@ uint256 OracleMusigNonceMsg::GetHash() const
     return hasher.GetHash();
 }
 
+bool IsAuthorizedMuSig2OracleIdForRelay(const CChainParams& params, uint32_t oracle_id)
+{
+    const Consensus::Params& consensus = params.GetConsensus();
+    if (consensus.nOraclePubkeyCount <= 0) return false;
+    if (oracle_id >= static_cast<uint32_t>(consensus.nOraclePubkeyCount)) return false;
+    if (consensus.vOraclePublicKeys.size() < static_cast<size_t>(consensus.nOraclePubkeyCount)) return false;
+
+    const OracleNodeInfo* oracle_config = params.GetOracleNode(oracle_id);
+    return oracle_config && oracle_config->is_active;
+}
+
 uint256 OracleMusigNonceMsg::GetSignatureHash() const
 {
-    // Tagged hash for authentication: "DigiDollar/MuSig2Nonce" || epoch || oracle_id || pubnonce
+    // Tagged hash for authentication:
+    // "DigiDollar/MuSig2Nonce" || hashGenesisBlock || epoch || oracle_id || pubnonce.
+    // Binding the active chain identity prevents captured nonce auth from one
+    // network being replayed into another network that shares the oracle roster.
     CHashWriter hasher(0);
     hasher << std::string("DigiDollar/MuSig2Nonce");
+    hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
     hasher << oracle_id;
     hasher << pubnonce;
@@ -332,9 +352,13 @@ uint256 OracleMusigPartialSigMsg::GetHash() const
 
 uint256 OracleMusigPartialSigMsg::GetSignatureHash() const
 {
-    // Tagged hash for authentication: "DigiDollar/MuSig2PartialSig" || epoch || oracle_id || partial_sig
+    // Tagged hash for authentication:
+    // "DigiDollar/MuSig2PartialSig" || hashGenesisBlock || epoch || oracle_id || partial_sig.
+    // This mirrors nonce auth and keeps partial-sig relay replay-scoped to the
+    // chain whose session message/key aggregation produced it.
     CHashWriter hasher(0);
     hasher << std::string("DigiDollar/MuSig2PartialSig");
+    hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
     hasher << oracle_id;
     hasher << partial_sig;

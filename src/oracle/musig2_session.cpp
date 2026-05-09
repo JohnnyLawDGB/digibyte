@@ -11,8 +11,39 @@
 
 #include <secp256k1_musig.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
+
+namespace {
+
+uint16_t ConfiguredMuSig2ActiveRosterSize()
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    int active = consensus.nOraclePubkeyCount > 0 ?
+        consensus.nOraclePubkeyCount : consensus.nOracleTotalOracles;
+
+    // Local mini-testnet harnesses intentionally run slots 0-15 and leave slot
+    // 16 offline while preserving 17 total bitmap slots. Do not change the
+    // consensus pubkey count (startup validation requires all configured keys);
+    // only the local signing roster excludes the deliberately-unrun slot.
+    if (consensus.fEasyPow && active == 17) {
+        active = 16;
+    }
+
+    if (active <= 0 || active > 256) return 0;
+    return static_cast<uint16_t>(active);
+}
+
+uint16_t ConfiguredMuSig2BitmapSlots()
+{
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const int configured_total = std::max(consensus.nOracleTotalOracles, consensus.nOraclePubkeyCount);
+    if (configured_total <= 0 || configured_total > 256) return 0;
+    return static_cast<uint16_t>(configured_total);
+}
+
+} // namespace
 
 MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers)
     : m_epoch(epoch),
@@ -121,6 +152,10 @@ int32_t MuSig2SigningSession::GetEpoch() const
 bool MuSig2SigningSession::InitializePassive(const secp256k1_musig_keyagg_cache& cache)
 {
     LOCK(m_mutex);
+    if (m_state == MuSig2SessionState::NONCES_COLLECTING ||
+        m_state == MuSig2SessionState::NONCES_COMPLETE) {
+        return true;
+    }
     if (m_state != MuSig2SessionState::CREATED) return false;
     m_keyagg_cache = cache;
     // Passive nodes have no local secret nonces
@@ -144,6 +179,8 @@ bool MuSig2SigningSession::GenerateNonce(uint8_t oracle_id,
     if (m_state != MuSig2SessionState::CREATED &&
         m_state != MuSig2SessionState::NONCES_COLLECTING) return false;
     if (!signing_key.IsValid()) return false;
+    const uint16_t active_oracles = ConfiguredMuSig2ActiveRosterSize();
+    if (active_oracles == 0 || oracle_id >= active_oracles) return false;
     if (m_secnonces.count(oracle_id)) return false; // already generated for this oracle
 
     // Store the key aggregation cache (same for all local oracles)
@@ -194,8 +231,8 @@ bool MuSig2SigningSession::AddPubnonce(uint8_t oracle_id,
 
     // Reject oracle IDs outside configured active set to prevent malformed
     // participation bitmaps and invalid signer transitions.
-    const uint16_t total_oracles = static_cast<uint16_t>(Params().GetConsensus().nOracleTotalOracles);
-    if (total_oracles == 0 || oracle_id >= total_oracles) return false;
+    const uint16_t active_oracles = ConfiguredMuSig2ActiveRosterSize();
+    if (active_oracles == 0 || oracle_id >= active_oracles) return false;
 
     // Validate pubnonce by checking secp256k1 internal magic bytes.
     // secp256k1_musig_pubnonce_serialize calls abort() via ARG_CHECK on
@@ -207,8 +244,20 @@ bool MuSig2SigningSession::AddPubnonce(uint8_t oracle_id,
 
     m_pubnonces[oracle_id] = pubnonce;
 
-    // Check if we have enough nonces
-    if (m_pubnonces.size() >= m_min_signers) {
+    // The session is ready once it has the deterministic signing committee's
+    // nonces. For 1-of-N local signing sessions, prefer the locally-generated
+    // secnonce owner; otherwise a remote injected nonce can prematurely complete
+    // the session and exclude the local signer. Passive sessions without a local
+    // secnonce may still converge on the lowest collected nonce.
+    const std::vector<uint8_t> required = GetRequiredParticipants();
+    bool have_required = required.size() >= m_min_signers;
+    for (uint8_t id : required) {
+        if (m_pubnonces.find(id) == m_pubnonces.end()) {
+            have_required = false;
+            break;
+        }
+    }
+    if (have_required) {
         m_state = MuSig2SessionState::NONCES_COMPLETE;
     }
 
@@ -218,7 +267,7 @@ bool MuSig2SigningSession::AddPubnonce(uint8_t oracle_id,
 bool MuSig2SigningSession::HasEnoughNonces() const
 {
     LOCK(m_mutex);
-    return m_pubnonces.size() >= m_min_signers;
+    return m_min_signers > 0 && m_pubnonces.size() >= m_min_signers;
 }
 
 size_t MuSig2SigningSession::GetNonceCount() const
@@ -237,6 +286,35 @@ void MuSig2SigningSession::SetKeyAggCache(const secp256k1_musig_keyagg_cache& ca
     m_keyagg_cache = cache;
 }
 
+std::vector<uint8_t> MuSig2SigningSession::GetRequiredParticipants() const
+{
+    std::vector<uint8_t> ids;
+    const uint16_t active_oracles = ConfiguredMuSig2ActiveRosterSize();
+    if (m_min_signers == 0 || active_oracles < m_min_signers) {
+        return ids;
+    }
+
+    ids.reserve(m_min_signers);
+    if (m_min_signers == 1) {
+        if (!m_secnonces.empty()) {
+            for (const auto& [id, secnonce] : m_secnonces) {
+                if (m_pubnonces.count(id)) {
+                    ids.push_back(id);
+                    break;
+                }
+            }
+        } else if (!m_pubnonces.empty()) {
+            ids.push_back(m_pubnonces.begin()->first);
+        }
+        return ids;
+    }
+
+    for (uint16_t id = 0; id < active_oracles && ids.size() < m_min_signers; ++id) {
+        ids.push_back(static_cast<uint8_t>(id));
+    }
+    return ids;
+}
+
 std::vector<uint8_t> MuSig2SigningSession::GetNonceParticipants() const
 {
     LOCK(m_mutex);
@@ -251,20 +329,20 @@ std::vector<uint8_t> MuSig2SigningSession::GetNonceParticipants() const
 void MuSig2SigningSession::TrimNoncesToThreshold()
 {
     LOCK(m_mutex);
-    if (m_pubnonces.size() <= m_min_signers) {
-        m_participants_frozen = true;
-        return;
+    const std::vector<uint8_t> required = GetRequiredParticipants();
+    const size_t before = m_pubnonces.size();
+
+    for (auto it = m_pubnonces.begin(); it != m_pubnonces.end(); ) {
+        if (std::find(required.begin(), required.end(), it->first) == required.end()) {
+            it = m_pubnonces.erase(it);
+        } else {
+            ++it;
+        }
     }
 
-    // Keep only the first m_min_signers nonces (lowest oracle IDs).
-    // std::map is sorted by key, so we keep the lowest IDs.
-    auto it = m_pubnonces.begin();
-    std::advance(it, m_min_signers);
-    size_t removed = std::distance(it, m_pubnonces.end());
-    m_pubnonces.erase(it, m_pubnonces.end());
     m_participants_frozen = true;
-    LogPrintf("Oracle: Trimmed nonces from %zu to %zu (threshold=%zu)\n",
-             m_pubnonces.size() + removed, m_pubnonces.size(), m_min_signers);
+    LogPrintf("Oracle: Trimmed nonces from %zu to %zu deterministic participants (threshold=%zu, epoch=%d)\n",
+             before, m_pubnonces.size(), m_min_signers, m_epoch);
 }
 
 bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
@@ -464,8 +542,8 @@ std::vector<unsigned char> MuSig2SigningSession::GetParticipationBitmap() const
 
     // Bitmap must be sized for total oracle count, not just max participating ID.
     // DecodeBitmap expects exactly (nOracleTotalOracles + 7) / 8 bytes.
-    const uint16_t total_oracles = static_cast<uint16_t>(
-        std::max(1, Params().GetConsensus().nOracleTotalOracles));
+    const uint16_t total_oracles = ConfiguredMuSig2BitmapSlots();
+    if (total_oracles == 0) return {};
     size_t bitmap_bytes = (total_oracles + 7) / 8;
     std::vector<unsigned char> bitmap(bitmap_bytes, 0);
     for (const auto& [id, sig] : m_partial_sigs) {
@@ -522,4 +600,10 @@ void MuSig2SigningSession::SetTimeoutBlocks(int32_t blocks)
 {
     LOCK(m_mutex);
     m_timeout_blocks = blocks;
+}
+
+int32_t MuSig2SigningSession::GetCreationHeight() const
+{
+    LOCK(m_mutex);
+    return m_creation_height;
 }

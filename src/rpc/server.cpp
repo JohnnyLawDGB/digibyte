@@ -165,12 +165,12 @@ static RPCHelpMan help()
 
 static RPCHelpMan stop()
 {
-    static const std::string RESULT{CLIENT_NAME + " stopping"};
+    static const std::string RESULT{std::string{CLIENT_NAME_RAW} + " stopping"};
     return RPCHelpMan{"stop",
     // Also accept the hidden 'wait' integer argument (milliseconds)
     // For instance, 'stop 1000' makes the call wait 1 second before returning
     // to the client (intended for testing)
-                "\nRequest a graceful shutdown of " + CLIENT_NAME + ".",
+                "\nRequest a graceful shutdown of " + std::string{CLIENT_NAME_RAW} + ".",
                 {
                     {"wait", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "how long to wait in ms", RPCArgOptions{.hidden=true}},
                 },

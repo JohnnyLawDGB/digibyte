@@ -14,8 +14,12 @@
 #include <cstdint>
 #include <vector>
 
+class CChainParams;
+
+bool IsAuthorizedMuSig2OracleIdForRelay(const CChainParams& params, uint32_t oracle_id);
+
 /**
- * MuSig2 Nonce Message for P2P Network (Phase 3 Round 1)
+ * MuSig2 Nonce Message for P2P Network (Round 1)
  * Carries an oracle's public nonce for the MuSig2 signing protocol.
  */
 class OracleMusigNonceMsg
@@ -46,7 +50,7 @@ public:
 };
 
 /**
- * MuSig2 Partial Signature Message for P2P Network (Phase 3 Round 2)
+ * MuSig2 Partial Signature Message for P2P Network (Round 2)
  * Carries an oracle's partial signature for the MuSig2 signing protocol.
  */
 class OracleMusigPartialSigMsg

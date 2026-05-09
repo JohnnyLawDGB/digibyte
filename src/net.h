@@ -598,6 +598,8 @@ private:
     const bool m_initiating;
     /** NodeId (for debug logging). */
     const NodeId m_nodeid;
+    /** Network magic used for V1 fallback detection. */
+    const MessageStartChars m_magic_bytes;
     /** Encapsulate a V1Transport to fall back to. */
     V1Transport m_v1_fallback;
 

@@ -94,6 +94,14 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         self.test_validate_empty_address()
         self.test_validate_response_format()
 
+        self.log.info("=== Wave 15 wrong-shape tests ===")
+        self.test_validate_whitespace_padded_address_wave15()
+        self.test_validate_invalid_base58_chars_wave15()
+        self.test_validate_bech32_address_rejected_wave15()
+        self.test_validate_oversized_address_wave15()
+        self.test_validate_invalid_address_field_blank_wave15()
+        self.test_send_rejects_cross_network_address_wave15()
+
         self.log.info("=== listdigidollaraddresses tests ===")
         self.test_list_addresses_empty_wallet()
         self.test_list_addresses_after_generation()
@@ -234,6 +242,131 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         assert isinstance(invalid_result['error'], str)
 
         self.log.info("Response format validation passed")
+
+    # === Wave 15 wrong-shape tests ===
+
+    def test_validate_whitespace_padded_address_wave15(self):
+        """Pin: validateddaddress must reject leading/trailing whitespace.
+
+        DecodeBase58 transparently skips leading/trailing whitespace, so a
+        valid DD payload wrapped in spaces decodes successfully. The
+        node-level prefix check must catch this and refuse the address
+        because addressStr.substr(0, 2) does NOT match the expected DD/TD/RD
+        prefix when the first byte is whitespace.
+        """
+        self.log.info("Wave 15: validateddaddress rejects whitespace-padded address...")
+
+        valid = self.nodes[0].getdigidollaraddress()
+        for padded in (" " + valid, valid + " ", " " + valid + " ",
+                       "\t" + valid, "\n" + valid, valid + "\n"):
+            result = self.nodes[0].validateddaddress(padded)
+            assert_equal(result["isvalid"], False)
+            # On invalid, the address echo MUST be empty so callers can
+            # never copy a whitespace-corrupted string back into a send.
+            assert_equal(result["address"], "")
+            assert "error" in result
+            assert result["error"], f"empty error for padded={padded!r}"
+
+        self.log.info("Whitespace-padded DD address correctly rejected")
+
+    def test_validate_invalid_base58_chars_wave15(self):
+        """Pin: validateddaddress rejects strings containing the four
+        non-base58 ASCII characters: '0', 'O', 'I', 'l'."""
+        self.log.info("Wave 15: validateddaddress rejects invalid base58 chars...")
+
+        valid = self.nodes[0].getdigidollaraddress()
+        # Replace position 4 with each forbidden character.
+        for bad_char in ("0", "O", "I", "l"):
+            corrupted = valid[:4] + bad_char + valid[5:]
+            result = self.nodes[0].validateddaddress(corrupted)
+            assert_equal(result["isvalid"], False)
+            assert_equal(result["address"], "")
+
+        self.log.info("Forbidden base58 chars correctly rejected")
+
+    def test_validate_bech32_address_rejected_wave15(self):
+        """Pin: validateddaddress rejects bech32m taproot addresses, which
+        are a different encoding family (HRP + bech32m) and must never
+        decode as DigiDollar base58check."""
+        self.log.info("Wave 15: validateddaddress rejects bech32m taproot input...")
+
+        # Generate a real bech32m P2TR DigiByte address on the regtest node;
+        # this is a structurally valid taproot address but in a wholly
+        # different encoding family from DigiDollar's base58check format.
+        bech32m_taproot = self.nodes[0].getnewaddress("wave15-bech32m", "bech32m")
+        assert bech32m_taproot.startswith("dgbrt1p"), \
+            f"Expected regtest taproot HRP, got {bech32m_taproot}"
+
+        result = self.nodes[0].validateddaddress(bech32m_taproot)
+        assert_equal(result["isvalid"], False)
+        assert_equal(result["address"], "")
+
+        # Also a fabricated bech32m string with the DD-style prefix glued on.
+        fabricated = "dgbrt1pddwave15fakebech32m000000000000000000000000"
+        result = self.nodes[0].validateddaddress(fabricated)
+        assert_equal(result["isvalid"], False)
+
+        self.log.info("Bech32m taproot input correctly rejected by validateddaddress")
+
+    def test_validate_oversized_address_wave15(self):
+        """Pin: validateddaddress rejects strings whose decoded payload is
+        not exactly 34 bytes (2-byte version + 32-byte taproot key)."""
+        self.log.info("Wave 15: validateddaddress rejects oversized input...")
+
+        # Length 200 of valid base58 chars; decodes to far more than 34 bytes
+        # so the constructor's `vchTemp.size() == 34` arm is not entered.
+        oversized = "RD" + ("a" * 200)
+        result = self.nodes[0].validateddaddress(oversized)
+        assert_equal(result["isvalid"], False)
+        assert_equal(result["address"], "")
+
+        # And a 1024-char garbage string; decoder length cap is 256 bytes,
+        # so this also fails cleanly without raising.
+        result_huge = self.nodes[0].validateddaddress("RD" + ("D" * 1024))
+        assert_equal(result_huge["isvalid"], False)
+
+        self.log.info("Oversized DD address correctly rejected")
+
+    def test_validate_invalid_address_field_blank_wave15(self):
+        """Pin: every invalid validateddaddress result has address=='', so
+        UIs/integrators cannot accidentally echo attacker-controlled junk
+        back into a send."""
+        self.log.info("Wave 15: validateddaddress address echo is blank on failure...")
+
+        for junk in (
+            "",
+            "RD",
+            "XXnotanaddress123456789",
+            "DDgarbage" + "0" * 30,        # contains '0'
+            "RD!@#$%^&*()",
+            "../../etc/passwd",
+            "data:text/html;base64,UE9D",
+        ):
+            result = self.nodes[0].validateddaddress(junk)
+            assert_equal(result["isvalid"], False)
+            assert_equal(result["address"], "")
+
+        self.log.info("Invalid input never echoed back as 'address'")
+
+    def test_send_rejects_cross_network_address_wave15(self):
+        """Pin: senddigidollar rejects a cross-network DD address (mainnet
+        DD prefix submitted to a regtest node) before any wallet/oracle
+        side effects occur. This is the consensus-safety analog of the
+        cross-network validateddaddress rejection."""
+        self.log.info("Wave 15: senddigidollar rejects cross-network address...")
+
+        regtest = self.nodes[0].getdigidollaraddress()
+        mainnet_dd = reencode_digidollar_address(regtest, DD_VERSION_MAINNET)
+        testnet_dd = reencode_digidollar_address(regtest, DD_VERSION_TESTNET)
+
+        for cross in (mainnet_dd, testnet_dd):
+            assert_raises_rpc_error(
+                -5,  # RPC_INVALID_ADDRESS_OR_KEY
+                "DigiDollar address is for",
+                self.nodes[0].senddigidollar, cross, 100,
+            )
+
+        self.log.info("Cross-network senddigidollar correctly rejected")
 
     # === listdigidollaraddresses tests ===
 
@@ -384,7 +517,8 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         assert_equal(result['success'], False)
         assert_equal(result['rescan_performed'], False)
         assert_equal(result['transactions_found'], 0)
-        assert 'not implemented' in result['warning']
+        assert 'warning' in result
+        assert 'unsupported' in result['warning']
 
         self.log.info(f"Import result: {result}")
         self.log.info("Valid address import test passed")
@@ -403,7 +537,8 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         assert_equal(result['label'], label)
         assert 'success' in result
         assert_equal(result['success'], False)
-        assert 'not implemented' in result['warning']
+        assert 'warning' in result
+        assert 'unsupported' in result['warning']
 
         self.log.info(f"Import with label result: {result}")
         self.log.info("Import with label test passed")

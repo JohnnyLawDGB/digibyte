@@ -21,15 +21,12 @@ Test workflow:
 """
 
 from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import (
-    assert_equal,
-    assert_greater_than,
-)
+from test_framework.util import assert_greater_than
 from decimal import Decimal
 
 class WalletDigiDollarRestoreTest(DigiByteTestFramework):
     def add_options(self, parser):
-        self.add_wallet_options(parser)
+        self.add_wallet_options(parser, descriptors=True, legacy=False)
 
     def set_test_params(self):
         self.num_nodes = 1
@@ -84,10 +81,7 @@ class WalletDigiDollarRestoreTest(DigiByteTestFramework):
 
         except Exception as e:
             self.log.error(f"Minting failed: {e}")
-            # DigiDollar may not be fully activated in test environment
-            # Skip test gracefully if DD not available
-            self.log.info("Skipping test - DigiDollar minting not available in test environment")
-            return
+            raise
 
         # Step 3: Record original state
         self.log.info("Recording original state...")
@@ -104,12 +98,12 @@ class WalletDigiDollarRestoreTest(DigiByteTestFramework):
             for i, pos in enumerate(positions_before):
                 self.log.info(f"Position {i}: {pos}")
 
-            assert_greater_than(len(positions_before), 0, "Should have DD positions")
-            assert_greater_than(balance_before, 0, "Should have DD balance")
+            assert_greater_than(len(positions_before), 0)
+            assert_greater_than(balance_before, 0)
 
         except Exception as e:
             self.log.error(f"Failed to get DD state: {e}")
-            return
+            raise
 
         # Step 4: Export descriptors (with private keys)
         self.log.info("Exporting wallet descriptors...")
@@ -174,17 +168,13 @@ class WalletDigiDollarRestoreTest(DigiByteTestFramework):
                 self.log.info(f"Restored Position {i}: {pos}")
 
             # THE KEY ASSERTIONS
-            assert_equal(
-                len(positions_after),
-                len(positions_before),
-                f"Position count mismatch: {len(positions_after)} vs {len(positions_before)}"
-            )
+            if len(positions_after) != len(positions_before):
+                raise AssertionError(
+                    f"Position count mismatch: {len(positions_after)} vs {len(positions_before)}"
+                )
 
-            assert_equal(
-                balance_after,
-                balance_before,
-                f"Balance mismatch: {balance_after} vs {balance_before}"
-            )
+            if balance_after != balance_before:
+                raise AssertionError(f"Balance mismatch: {balance_after} vs {balance_before}")
 
             # Verify position details match
             # Sort positions by amount for comparison (since order may differ)
@@ -199,11 +189,10 @@ class WalletDigiDollarRestoreTest(DigiByteTestFramework):
                 amount_before = get_position_amount(pos_before)
                 amount_after = get_position_amount(pos_after)
 
-                assert_equal(
-                    amount_after,
-                    amount_before,
-                    f"Position {i} amount mismatch: {amount_after} vs {amount_before}"
-                )
+                if amount_after != amount_before:
+                    raise AssertionError(
+                        f"Position {i} amount mismatch: {amount_after} vs {amount_before}"
+                    )
 
             self.log.info("SUCCESS: DD positions correctly restored!")
 

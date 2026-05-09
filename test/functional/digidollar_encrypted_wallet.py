@@ -13,6 +13,8 @@ from test_framework.util import (
     assert_raises_rpc_error,
 )
 
+ORACLE_PRICE_MICRO_USD = 500000
+
 
 class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
     def set_test_params(self):
@@ -58,8 +60,7 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.sync_all()
 
         # Set oracle price on both nodes ($0.50 / DGB = 500000 micro-USD)
-        for node in self.nodes:
-            node.setmockoracleprice(500000)
+        self.refresh_oracle_quotes()
 
         # Fund node 1 with DGB so it can mint
         addr1 = self.nodes[1].getnewaddress()
@@ -74,6 +75,7 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.restart_node(1)
         self.connect_nodes(0, 1)
         self.sync_all()
+        self.refresh_oracle_quotes()
 
     def unlock(self, timeout=60):
         """Unlock node 1 wallet."""
@@ -86,6 +88,11 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
     def mine_and_sync(self, count=1):
         self.nodes[0].generate(count)
         self.sync_all()
+
+    def refresh_oracle_quotes(self, price=ORACLE_PRICE_MICRO_USD):
+        for node in self.nodes:
+            result = node.setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
 
     # ── tests ──────────────────────────────────────────────────────────
 
@@ -106,6 +113,7 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
     def test_mint_after_unlock(self):
         self.log.info("test_mint_after_unlock")
         self.unlock()
+        self.refresh_oracle_quotes()
         result = self.nodes[1].mintdigidollar(10000, 0)
         assert 'txid' in result
         # Wait for TX to relay to node 0 before mining
@@ -125,8 +133,10 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.log.info("test_send_after_unlock")
         dest = self.nodes[0].getdigidollaraddress()
         self.unlock()
+        self.refresh_oracle_quotes()
         result = self.nodes[1].senddigidollar(dest, 1000)
         assert 'txid' in result
+        self.sync_mempools()
         self.mine_and_sync()
         self.lock()
 
@@ -135,7 +145,9 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         # We need an expired position to redeem. Mint one at tier 0 (1 hour)
         # and advance past its lock period.
         self.unlock()
+        self.refresh_oracle_quotes()
         mint_result = self.nodes[1].mintdigidollar(10000, 0)
+        self.sync_mempools()
         self.mine_and_sync()
         self.lock()
 
@@ -145,6 +157,11 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.sync_all()
 
         # Now try to redeem while locked
+        self.refresh_oracle_quotes()
+        pos_id = mint_result.get('position_id', mint_result['txid'])
+        redemption_info = self.nodes[1].getredemptioninfo(pos_id, 10000)
+        assert_equal(redemption_info["can_redeem"], False)
+
         positions = self.nodes[1].listdigidollarpositions()
         redeemable = [p for p in positions if p.get('is_redeemable', False) or p.get('redeemable', False)]
         if redeemable:
@@ -156,7 +173,6 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
             )
         else:
             # If no redeemable positions found, just test the RPC rejects while locked
-            pos_id = mint_result.get('position_id', mint_result['txid'])
             assert_raises_rpc_error(
                 -13, "Please enter the wallet passphrase with walletpassphrase first",
                 self.nodes[1].redeemdigidollar, pos_id, 10000
@@ -170,8 +186,10 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         if redeemable:
             pos_id = redeemable[0].get('position_id', redeemable[0].get('txid', ''))
             dd_amount = redeemable[0].get('dd_amount', 10000)
+            self.refresh_oracle_quotes()
             result = self.nodes[1].redeemdigidollar(pos_id, dd_amount)
             assert 'txid' in result
+            self.sync_mempools()
             self.mine_and_sync()
         else:
             self.log.info("No redeemable positions found — skipping actual redeem call")
@@ -225,8 +243,10 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.mine_and_sync()
 
         # Step 1: unlock → mint succeeds
+        self.refresh_oracle_quotes()
         result1 = self.nodes[1].mintdigidollar(10000, 0)
         assert 'txid' in result1
+        self.sync_mempools()
         self.mine_and_sync()
 
         # Step 2: lock → mint fails
@@ -238,8 +258,10 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
 
         # Step 3: unlock again → mint succeeds
         self.unlock()
+        self.refresh_oracle_quotes()
         result3 = self.nodes[1].mintdigidollar(10000, 0)
         assert 'txid' in result3
+        self.sync_mempools()
         self.mine_and_sync()
         self.lock()
 
@@ -263,8 +285,10 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
         self.log.info(f"DD balance after encryption: {balance}")
 
         # Test 1: Mint new DD in an encrypted wallet — keys should be stored encrypted
+        self.refresh_oracle_quotes()
         mint_result = self.nodes[1].mintdigidollar(5000, 0)  # 50.00 DD
         assert 'txid' in mint_result, "Mint in encrypted wallet should succeed when unlocked"
+        self.sync_mempools()
         self.mine_and_sync()
 
         new_balance = self.nodes[1].getdigidollarbalance()
@@ -272,8 +296,10 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
 
         # Test 2: Send DD from encrypted wallet — proves owner key decrypts correctly
         dest = self.nodes[0].getdigidollaraddress()
+        self.refresh_oracle_quotes()
         send_result = self.nodes[1].senddigidollar(dest, 1000)  # 10.00 DD
         assert 'txid' in send_result, "Send from encrypted wallet should succeed when unlocked"
+        self.sync_mempools()
         self.mine_and_sync()
 
         # Test 3: Lock wallet and verify signing fails
@@ -285,8 +311,10 @@ class DigiDollarEncryptedWalletTest(DigiByteTestFramework):
 
         # Test 4: Unlock and verify send still works (keys survive lock/unlock cycle)
         self.unlock()
+        self.refresh_oracle_quotes()
         send_result2 = self.nodes[1].senddigidollar(dest, 500)
         assert 'txid' in send_result2, "Send after re-unlock should succeed"
+        self.sync_mempools()
         self.mine_and_sync()
 
         # Test 5: Generate a new DD address in encrypted wallet

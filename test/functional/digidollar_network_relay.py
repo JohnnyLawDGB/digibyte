@@ -43,6 +43,29 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
+    def publish_musig2_quotes(self, node_indices=None, price=None):
+        """Publish fresh regtest MuSig2 oracle bundles for the next block."""
+        if price is None:
+            price = self.oracle_price_micro_usd
+        if node_indices is None:
+            node_indices = range(self.num_nodes)
+        for index in node_indices:
+            result = self.nodes[index].setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
+
+    def connected_nodes(self, node_indices):
+        return [self.nodes[index] for index in node_indices]
+
+    def mine_and_sync_dd(self, node_idx, blocks=1, sync_indices=None):
+        if sync_indices is None:
+            sync_indices = range(self.num_nodes)
+        self.publish_musig2_quotes(sync_indices)
+        block_hashes = self.nodes[node_idx].generate(blocks)
+        sync_nodes = self.connected_nodes(sync_indices)
+        self.sync_blocks(sync_nodes)
+        self.sync_mempools(sync_nodes)
+        return block_hashes
+
     def setup_network(self):
         """Setup network topology for relay testing."""
         self.setup_nodes()
@@ -79,24 +102,21 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # Only sync the connected nodes (0, 1, 2)
         self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
 
-        # Set mock oracle price ($0.50 per DGB)
-        base_price = 50000  # 50000 satoshis per USD
-        for node in self.nodes:
-            node.setmockoracleprice(base_price)
+        # Set mock oracle price ($0.05 per DGB)
+        base_price = 50000  # 50000 micro-USD per DGB
+        self.oracle_price_micro_usd = base_price
+        self.publish_musig2_quotes()
 
         # Create DD positions on nodes for testing
         self.log.info("Minting DigiDollars on test nodes...")
 
         # Node 0: Large position for testing
         self.nodes[0].mintdigidollar(100000, 4)  # $1000.00 in cents, tier 4 (365 days)
+        self.mine_and_sync_dd(0, sync_indices=[0, 1, 2])
 
         # Node 1: Medium position
         self.nodes[1].mintdigidollar(50000, 3)  # $500.00 in cents, tier 3 (180 days)
-
-        # Mine blocks to confirm
-        self.nodes[0].generate(3)
-        # Only sync the connected nodes (0, 1, 2)
-        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+        self.mine_and_sync_dd(1, sync_indices=[0, 1, 2])
 
         # Verify initial balances
         balance_0 = self.nodes[0].getdigidollarbalance()
@@ -120,6 +140,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         # Create and broadcast DD transfer from node 0
         self.log.info(f"Node 0 sending {transfer_amount} DD to node 2...")
+        self.publish_musig2_quotes([0, 1, 2])
         result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
@@ -140,9 +161,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.log.info("✓ Transaction relayed to node 2")
 
         # Mine block and verify confirmation
-        block_hashes = self.nodes[0].generate(1)
-        # Only sync the connected nodes (0, 1, 2)
-        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+        block_hashes = self.mine_and_sync_dd(0, sync_indices=[0, 1, 2])
 
         # Verify all connected nodes see the confirmed transaction
         for i in range(3):
@@ -168,6 +187,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
 
         # Create DD transfer from node 0 (must hop through node 1 to reach node 2)
         self.log.info(f"Node 0 sending {transfer_amount} DD (will relay through node 1)...")
+        self.publish_musig2_quotes([0, 1, 2])
         result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
@@ -187,8 +207,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.log.info(f"✓ Transaction relayed to destination (node 2)")
 
         # Mine and verify
-        self.nodes[0].generate(1)
-        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+        self.mine_and_sync_dd(0, sync_indices=[0, 1, 2])
 
         self.log.info("✓ Multi-hop relay test passed")
 
@@ -204,6 +223,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         transfer_amount_cents = int(transfer_amount * 100)
 
         # Send from node 0, should relay through hub (node 1) to node 2
+        self.publish_musig2_quotes([0, 1, 2])
         result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
@@ -218,8 +238,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         assert txid in mempool_2, "Spoke (node 2) did not receive relay from hub"
 
         # Mine block to confirm transfer (needed for txindex to index the change output)
-        self.nodes[0].generate(1)
-        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+        self.mine_and_sync_dd(0, sync_indices=[0, 1, 2])
 
         self.log.info("✓ Star topology relay test passed")
 
@@ -234,6 +253,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # Measure relay time
         start_time = time.time()
 
+        self.publish_musig2_quotes([0, 1, 2])
         result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
@@ -246,8 +266,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.log.info(f"✓ Relay completed successfully")
 
         # Mine block to confirm transfer (needed for txindex to index the change output)
-        self.nodes[0].generate(1)
-        self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+        self.mine_and_sync_dd(0, sync_indices=[0, 1, 2])
 
         self.log.info("✓ Relay timing test passed")
 
@@ -263,11 +282,11 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # validate the change outputs for the next transfer's DD conservation check.
         txids = []
         for i in range(3):
+            self.publish_musig2_quotes([0, 1, 2])
             result = self.nodes[0].senddigidollar(receiver_address, transfer_amount_cents)
             txids.append(result['txid'])
             # Mine after each transfer to confirm and index change outputs
-            self.nodes[0].generate(1)
-            self.sync_blocks([self.nodes[0], self.nodes[1], self.nodes[2]])
+            self.mine_and_sync_dd(0, sync_indices=[0, 1, 2])
 
         # Verify all transactions are confirmed on all nodes
         # Use getblock + verbosity to find tx, since not all nodes have -txindex
@@ -305,12 +324,14 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         # Mint DD on nodes 3 and 4
         self.nodes[3].generate(110)  # Get mature coinbase
         self.nodes[3].mintdigidollar(20000, 4)  # $200.00 in cents, tier 4 (365 days)
-        self.nodes[3].generate(3)
+        self.mine_and_sync_dd(3, sync_indices=[3])
         # Only sync node 3 (Dandelion test, node 4 not connected yet)
         # Don't sync_all as nodes aren't fully connected
 
         # Connect Dandelion nodes in a topology
         self.connect_nodes(3, 4)
+        self.sync_blocks([self.nodes[3], self.nodes[4]])
+        self.publish_musig2_quotes([3, 4])
 
         # Important: With Dandelion, transactions go through stempool first
         # The stempool phase is private (not broadcast), then "fluffs" to mempool
@@ -320,6 +341,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         transfer_amount_cents = int(transfer_amount * 100)
 
         self.log.info(f"Sending DD with Dandelion++ enabled...")
+        self.publish_musig2_quotes([3, 4])
         result = self.nodes[3].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
 
@@ -358,8 +380,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
             # Ensure the miner has the fluffed transaction before mining. It
             # may have appeared first on the receiver during Dandelion relay.
             self.sync_mempools([self.nodes[3], self.nodes[4]])
-            self.nodes[3].generate(1)
-            self.sync_blocks([self.nodes[3], self.nodes[4]])
+            self.mine_and_sync_dd(3, sync_indices=[3, 4])
         else:
             # Transaction still in stempool after embargo wait.
             # Force embargo expiry by bumping mocktime past the embargo window,
@@ -382,15 +403,13 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
             if fluffed:
                 self.log.info("✓ Transaction fluffed after mocktime bump")
                 self.sync_mempools([self.nodes[3], self.nodes[4]])
-                self.nodes[3].generate(1)
-                self.sync_blocks([self.nodes[3], self.nodes[4]])
+                self.mine_and_sync_dd(3, sync_indices=[3, 4])
             else:
                 # Last resort: get the raw tx and rebroadcast it directly
                 self.log.info("Stempool did not flush, rebroadcasting raw transaction...")
                 raw_tx = self.nodes[3].getrawtransaction(txid)
                 self.nodes[3].sendrawtransaction(raw_tx)
-                self.nodes[3].generate(1)
-                self.sync_blocks([self.nodes[3], self.nodes[4]])
+                self.mine_and_sync_dd(3, sync_indices=[3, 4])
 
         # Verify transaction is now confirmed. Search recent blocks instead of
         # relying on wallet gettransaction state, because the Dandelion fluff

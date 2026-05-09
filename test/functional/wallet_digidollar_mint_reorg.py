@@ -5,9 +5,9 @@
 """
 Test DigiDollar wallet balance after a confirmed mint block is disconnected.
 
-If the disconnected mint transaction is not in the mempool, its DD output is no
-longer confirmed or pending. The wallet must not report spendable or pending
-DigiDollar balance for that orphaned wallet transaction.
+A disconnected mint that remains valid under the current oracle quote returns
+to the mempool. The wallet must drop confirmed DD balance while still reporting
+the pending DigiDollar output as unconfirmed.
 """
 
 from test_framework.test_framework import DigiByteTestFramework
@@ -47,12 +47,17 @@ class WalletDigiDollarMintReorgTest(DigiByteTestFramework):
         node.invalidateblock(mint_block)
         node.syncwithvalidationinterfacequeue()
 
-        assert mint_txid not in node.getrawmempool()
+        assert mint_txid in node.getrawmempool()
 
-        balance = node.getdigidollarbalance()
+        confirmed_only = node.getdigidollarbalance()
+        assert_equal(confirmed_only["confirmed"], 0)
+        assert_equal(confirmed_only["unconfirmed"], 0)
+        assert_equal(confirmed_only["total"], 0)
+
+        balance = node.getdigidollarbalance("", 0)
         assert_equal(balance["confirmed"], 0)
-        assert_equal(balance["unconfirmed"], 0)
-        assert_equal(balance["total"], 0)
+        assert_equal(balance["unconfirmed"], 100000)
+        assert_equal(balance["total"], 100000)
 
 
 if __name__ == "__main__":

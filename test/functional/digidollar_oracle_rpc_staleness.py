@@ -35,10 +35,10 @@ class DigiDollarOracleRPCStalenessTest(DigiByteTestFramework):
         base_time = int(time.time()) + 60
         node.setmocktime(base_time)
 
-        self.log.info("Submit a fresh 4-of-7 regtest oracle bundle")
-        for oracle_id in range(4):
-            result = node.submitoracleprice(oracle_id, 6500)
-            assert_equal(result["accepted"], True)
+        self.log.info("Publish a fresh regtest MuSig2 oracle bundle")
+        result = node.setmockoracleprice(6500)
+        assert_equal(result["price_micro_usd"], 6500)
+        node.mintdigidollar(1000, 0)
         self.generate(node, 1)
 
         fresh = node.getoracleprice()

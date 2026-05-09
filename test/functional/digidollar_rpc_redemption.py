@@ -75,7 +75,7 @@ class DigiDollarRPCRedemptionTest(DigiByteTestFramework):
         assert isinstance(result['timelock_remaining'], int), "timelock_remaining should be int"
         assert isinstance(result['status'], str), "status should be string"
         
-        valid_paths = ['normal', 'emergency', 'liquidation', 'early']
+        valid_paths = ['normal', 'emergency']
         assert result['redemption_path'] in valid_paths, f"Invalid redemption_path: {result['redemption_path']}"
         
         self.log.info("All field types verified correctly")

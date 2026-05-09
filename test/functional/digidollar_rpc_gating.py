@@ -3,10 +3,10 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
-Test DigiDollar RPC gating — all 27 gated RPCs must be blocked before activation.
+Test DigiDollar RPC gating — all 28 gated RPCs must be blocked before activation.
 
 Verifies that:
-  - All 27 gated DD/Oracle RPCs return "DigiDollar is not yet active" pre-activation
+  - All 28 gated DD/Oracle RPCs return "DigiDollar is not yet active" pre-activation
   - getdigidollardeploymentinfo (ungated) works at any time
   - After BIP9 activation, key RPCs become functional
 
@@ -64,6 +64,7 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             ("validateddaddress", lambda: node.validateddaddress(dummy_addr)),
             # Oracle query RPCs
             ("getoracleprice", lambda: node.getoracleprice()),
+            ("getmockoracleprice", lambda: node.getmockoracleprice()),
             ("getalloracleprices", lambda: node.getalloracleprices()),
             ("getoracles", lambda: node.getoracles()),
             ("listoracle", lambda: node.listoracle()),
@@ -72,8 +73,6 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             ("createoraclekey", lambda: node.createoraclekey(0)),
             ("startoracle", lambda: node.startoracle(0)),
             ("stoporacle", lambda: node.stoporacle(0)),
-            # Oracle price submission RPCs
-            ("submitoracleprice", lambda: node.submitoracleprice(0, 6500)),
             ("simulatepricevolatility", lambda: node.simulatepricevolatility(10)),
         ]
 
@@ -119,7 +118,7 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
-        # ── Phase 1: Verify all 27 gated RPCs are blocked at DEFINED state ──
+        # ── Phase 1: Verify all gated RPCs are blocked at DEFINED state ──
         self.log.info("Phase 1: Testing all 27 gated RPCs at DEFINED state (height 0)...")
         info = node.getdeploymentinfo()
         assert_equal(info["deployments"]["digidollar"]["bip9"]["status"], "defined")

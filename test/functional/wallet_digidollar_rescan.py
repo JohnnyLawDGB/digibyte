@@ -27,6 +27,8 @@ from test_framework.util import (
 )
 import time
 
+ORACLE_PRICE_MICRO_USD = 500000
+
 
 class DigiDollarRescanTest(DigiByteTestFramework):
     def add_options(self, parser):
@@ -56,14 +58,17 @@ class DigiDollarRescanTest(DigiByteTestFramework):
 
         # Set mock oracle price for DD minting
         # Oracle price is in micro-USD: 500,000 = $0.50 per DGB
-        oracle_price = 500000
-        for node in self.nodes:
-            node.setmockoracleprice(oracle_price)
+        self.refresh_oracle_quotes()
 
         # Verify we have funds
         balance = self.nodes[0].getbalance()
         assert_greater_than(balance, 100000)
         self.log.info(f"Initial DGB balance: {balance}")
+
+    def refresh_oracle_quotes(self, price=ORACLE_PRICE_MICRO_USD):
+        for node in self.nodes:
+            result = node.setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
 
     def run_test(self):
         self.log.info("=== Starting DigiDollar Rescan Tests ===")
@@ -90,6 +95,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
         # Position 1: 10000 cents ($100), tier 4 (365 days)
         self.log.info("  Creating position 1 at current height...")
         try:
+            self.refresh_oracle_quotes()
             mint1 = self.nodes[0].mintdigidollar(10000, 4)
             height1 = self.nodes[0].getblockcount()
             self.generate(self.nodes[0], 10)
@@ -108,6 +114,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
 
         # Position 2: 5000 cents ($50), tier 2 (90 days)
         self.log.info("  Creating position 2...")
+        self.refresh_oracle_quotes()
         mint2 = self.nodes[0].mintdigidollar(5000, 2)
         height2 = self.nodes[0].getblockcount()
         self.generate(self.nodes[0], 10)
@@ -122,6 +129,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
 
         # Position 3: 20000 cents ($200), tier 3 (180 days)
         self.log.info("  Creating position 3...")
+        self.refresh_oracle_quotes()
         mint3 = self.nodes[0].mintdigidollar(20000, 3)
         height3 = self.nodes[0].getblockcount()
         self.generate(self.nodes[0], 5)
@@ -188,9 +196,11 @@ class DigiDollarRescanTest(DigiByteTestFramework):
         # Create new positions after initial_height
         self.log.info("  Creating new positions after initial height...")
 
+        self.refresh_oracle_quotes()
         mint1 = self.nodes[0].mintdigidollar(8000, 1)  # tier 1 (30 days)
         self.generate(self.nodes[0], 5)
 
+        self.refresh_oracle_quotes()
         mint2 = self.nodes[0].mintdigidollar(12000, 2)  # tier 2 (90 days)
         self.generate(self.nodes[0], 5)
         self.sync_all()
@@ -231,6 +241,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
         mint_amount = 15000  # $150
         dca_tier = 3  # 180 days
 
+        self.refresh_oracle_quotes()
         mint_result = self.nodes[0].mintdigidollar(mint_amount, dca_tier)
         mint_txid = mint_result['txid']
         self.generate(self.nodes[0], 3)
@@ -306,6 +317,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
 
         # Create a position
         mint_amount = 25000  # $250
+        self.refresh_oracle_quotes()
         mint_result = self.nodes[0].mintdigidollar(mint_amount, 2)
         self.generate(self.nodes[0], 2)
         self.sync_all()
@@ -313,6 +325,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
         # Transfer some DD to node 1
         transfer_amount = 10000  # $100
         receiver_addr = self.nodes[1].getdigidollaraddress()
+        self.refresh_oracle_quotes()
         send_result = self.nodes[0].senddigidollar(receiver_addr, transfer_amount)
         self.generate(self.nodes[0], 2)
         self.sync_all()

@@ -11,6 +11,7 @@ Verifies 4 RPC reporting issues found during testnet stress testing:
 2. price_cents rounds sub-cent prices to 1 in getoracleprice
 3. usd_value off by ~100,000x in estimatecollateral
 4. system_health hardcoded to 150 in estimatecollateral
+5. oracle_price_age is hardcoded to 0 in getdigidollarstats
 
 These tests should FAIL before fixes and PASS after.
 """
@@ -48,10 +49,22 @@ class DigiDollarRPCDisplayBugsTest(DigiByteTestFramework):
         bugs_confirmed = []
 
         try:
+            self.test_bug5_oracle_price_age()
+        except AssertionError as e:
+            self.log.info(f"✗ Bug 5 CONFIRMED (oracle_price_age): {e}")
+            bugs_confirmed.append("Bug 5: oracle_price_age hardcoded 0")
+
+        try:
             self.test_bug1_active_positions()
         except AssertionError as e:
             self.log.info(f"✗ Bug 1 CONFIRMED (active_positions): {e}")
             bugs_confirmed.append("Bug 1: active_positions always 0")
+
+        try:
+            self.test_bug4_system_health_estimatecollateral()
+        except AssertionError as e:
+            self.log.info(f"✗ Bug 4 CONFIRMED (system_health): {e}")
+            bugs_confirmed.append("Bug 4: system_health hardcoded 150")
 
         try:
             self.test_bug2_price_cents_subcent()
@@ -64,12 +77,6 @@ class DigiDollarRPCDisplayBugsTest(DigiByteTestFramework):
         except AssertionError as e:
             self.log.info(f"✗ Bug 3 CONFIRMED (usd_value): {e}")
             bugs_confirmed.append("Bug 3: usd_value off by 100,000x")
-
-        try:
-            self.test_bug4_system_health_estimatecollateral()
-        except AssertionError as e:
-            self.log.info(f"✗ Bug 4 CONFIRMED (system_health): {e}")
-            bugs_confirmed.append("Bug 4: system_health hardcoded 150")
 
         self.log.info(f"\n=== BUGS CONFIRMED: {len(bugs_confirmed)} / 4 ===")
         for b in bugs_confirmed:
@@ -103,6 +110,31 @@ class DigiDollarRPCDisplayBugsTest(DigiByteTestFramework):
         # After fix, this assertion should pass:
         assert_greater_than(positions_after, 0)
         self.log.info("✓ Bug 1 FIXED: active_positions reflects real vault count")
+
+    def test_bug5_oracle_price_age(self):
+        """Bug 5: oracle_price_age should advance after the last price update."""
+        self.log.info("Testing Bug 5: oracle_price_age in getdigidollarstats...")
+
+        update = self.nodes[0].setmockoracleprice(500000)
+        self.nodes[1].setmockoracleprice(500000)
+        update_height = update["update_height"]
+        self.generate(self.nodes[0], 3)
+        self.sync_all()
+
+        mock_price = self.nodes[0].getmockoracleprice()
+        stats = self.nodes[0].getdigidollarstats()
+        current_height = self.nodes[0].getblockcount()
+        expected_age = current_height - update_height
+
+        self.log.info(f"mock update_height: {update_height}")
+        self.log.info(f"mock last_update_height: {mock_price['last_update_height']}")
+        self.log.info(f"current height: {current_height}")
+        self.log.info(f"oracle_price_age: {stats['oracle_price_age']}")
+
+        assert_greater_than(expected_age, 0)
+        assert_equal(mock_price["last_update_height"], update_height)
+        assert_equal(stats["oracle_price_age"], expected_age)
+        self.log.info("✓ Bug 5 FIXED: oracle_price_age tracks blocks since update")
 
     def test_bug2_price_cents_subcent(self):
         """Bug 2: price_cents should handle sub-cent DGB prices correctly."""
@@ -166,14 +198,8 @@ class DigiDollarRPCDisplayBugsTest(DigiByteTestFramework):
         """Bug 4: system_health in estimatecollateral should match getdigidollarstats."""
         self.log.info("Testing Bug 4: system_health consistency...")
 
-        # Set oracle price and mint some DD to establish system health
-        self.nodes[0].setmockoracleprice(50000)
-        self.nodes[1].setmockoracleprice(50000)
-        self.nodes[0].mintdigidollar(1000, 0)
-        self.generate(self.nodes[0], 2)
-        self.sync_all()
-
-        # Get system health from both RPCs
+        # Reuse the position from Bug 1 so intentional price swings in later
+        # display checks do not trip volatility freeze before this comparison.
         stats = self.nodes[0].getdigidollarstats()
         estimate = self.nodes[0].estimatecollateral(1000, 0)
 

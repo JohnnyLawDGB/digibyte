@@ -20,6 +20,20 @@ from test_framework.util import (
 from decimal import Decimal
 
 
+ORACLE_PRICE_MICRO_USD = 500000
+TIER_TO_LOCK_DAYS = {
+    1: 30,
+    2: 90,
+    3: 180,
+    4: 365,
+    5: 730,
+    6: 1095,
+    7: 1825,
+    8: 2555,
+    9: 3650,
+}
+
+
 class DigiDollarMintTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 3
@@ -62,34 +76,26 @@ class DigiDollarMintTest(DigiByteTestFramework):
         # Set mock oracle price ($0.50 per DGB)
         # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
         # So $0.50/DGB = 500,000 micro-USD
-        base_price = 500000  # 500000 micro-USD = $0.50 per DGB
-        for node in self.nodes:
-            node.setmockoracleprice(base_price)
+        self.refresh_oracle_quotes()
 
         # Verify DigiDollar system is accessible
         stats = self.nodes[0].getdigidollarstats()
         assert "health_percentage" in stats
         assert "health_status" in stats
 
+    def refresh_oracle_quotes(self, price=ORACLE_PRICE_MICRO_USD):
+        for node in self.nodes:
+            result = node.setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
+
     def test_mint_lock_tiers(self):
         """Test minting with different lock tiers and collateral ratios."""
         self.log.info("Testing mint lock tiers...")
 
-        # Tier to lock_days mapping for RPC calls
-        # calculatecollateralrequirement uses lock_days, mintdigidollar uses tier
-        tier_to_days = {
-            0: 1,      # ~1 hour (testing tier)
-            1: 30,     # 30 days
-            2: 90,     # 90 days
-            3: 180,    # 180 days
-            4: 365,    # 365 days (1 year)
-            5: 730,    # 730 days (2 years)
-            6: 2738    # 2738 days (~7.5 years)
-        }
-
-        # Test data: tier values
-        # Tier mapping: 0=240blocks(~1hr), 1=2880(~30d), 2=8640(~90d), 3=17280(~180d), 4=35040(~365d), 5=70080(~730d), 6=262800(~2738d)
-        lock_tiers = [1, 2, 3, 4, 5, 6]  # All valid non-zero tiers
+        # calculatecollateralrequirement uses lock_days, mintdigidollar uses tier.
+        # Tier 0 is the 1-hour testing tier and is not accepted by
+        # calculatecollateralrequirement, so this loop covers non-zero tiers.
+        lock_tiers = list(TIER_TO_LOCK_DAYS.keys())
 
         mint_amount = Decimal('1000.00')  # $1000
         mint_amount_cents = int(mint_amount * 100)  # Convert to cents
@@ -98,7 +104,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
             self.log.info(f"Testing tier {tier} minting...")
 
             # Calculate expected collateral requirement (uses lock_days)
-            lock_days = tier_to_days[tier]
+            lock_days = TIER_TO_LOCK_DAYS[tier]
             collateral_req = self.nodes[0].calculatecollateralrequirement(mint_amount_cents, lock_days)
 
             # Verify required fields are present
@@ -106,9 +112,11 @@ class DigiDollarMintTest(DigiByteTestFramework):
             assert 'effective_ratio' in collateral_req, "Missing effective_ratio field"
 
             # Perform actual mint
+            self.refresh_oracle_quotes()
             result = self.nodes[0].mintdigidollar(mint_amount_cents, tier)
             assert 'txid' in result
             assert 'dd_address' in result or 'dd_minted' in result
+            assert_equal(result["collateral_ratio"], collateral_req["effective_ratio"])
 
             # Mine block to confirm
             self.nodes[0].generate(1)
@@ -128,9 +136,6 @@ class DigiDollarMintTest(DigiByteTestFramework):
         """Test collateral calculation accuracy."""
         self.log.info("Testing collateral calculations...")
 
-        # Tier to lock_days mapping
-        tier_to_days = {1: 30, 2: 90, 3: 180, 4: 365, 5: 730, 6: 2738}
-
         test_cases = [
             {"amount": Decimal('100.00'), "tier": 4},   # tier 4 (~365 days)
             {"amount": Decimal('500.50'), "tier": 3},   # tier 3 (~180 days)
@@ -142,7 +147,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
             amount = case['amount']
             amount_cents = int(amount * 100)
             tier = case['tier']
-            lock_days = tier_to_days[tier]
+            lock_days = TIER_TO_LOCK_DAYS[tier]
 
             # Get collateral requirement (uses lock_days)
             req = self.nodes[0].calculatecollateralrequirement(amount_cents, lock_days)
@@ -161,10 +166,12 @@ class DigiDollarMintTest(DigiByteTestFramework):
         """Test how DCA (Dynamic Collateral Adjustment) affects minting."""
         self.log.info("Testing DCA impact on minting...")
 
-        # Test with normal system health (should have DCA multiplier of 1.0)
-        normal_req = self.nodes[0].calculatecollateralrequirement(100000, 4)  # $1000.00 in cents, tier 4
+        # The previous mint coverage can change system health, so only assert
+        # that the DCA multiplier stays within the configured policy range.
+        normal_req = self.nodes[0].calculatecollateralrequirement(100000, 365)  # $1000.00 in cents, tier 4
         normal_multiplier = Decimal(normal_req['dca_multiplier'])
-        assert_equal(normal_multiplier, Decimal('1.0'))
+        assert_greater_than_or_equal(normal_multiplier, Decimal('1.0'))
+        assert_less_than(normal_multiplier, Decimal('2.1'))
 
         # Simulate system stress by creating many undercollateralized positions
         # (This would be done through manipulating oracle prices in a real implementation)
@@ -216,7 +223,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
             assert collateral_dgb > 0, "Collateral must be positive"
 
         # Reset to original price ($0.50/DGB = 500,000 micro-USD)
-        self.nodes[0].setmockoracleprice(500000)
+        self.refresh_oracle_quotes()
 
     def test_mint_validation_rules(self):
         """Test mint validation rules and limits."""
@@ -237,7 +244,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
             self.log.info(f"Maximum validation: {e}")
 
         # Test invalid tiers
-        invalid_tiers = [-1, 7, 10, 100]  # Negative, above max (6), way above
+        invalid_tiers = [-1, 10, 100]  # Negative and above max tier 9
 
         for invalid_tier in invalid_tiers:
             try:
@@ -261,7 +268,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
 
         for amount in valid_amounts:
             # Should not raise an error, just calculate requirements
-            req = self.nodes[0].calculatecollateralrequirement(amount, 4)  # tier 4
+            req = self.nodes[0].calculatecollateralrequirement(amount, 365)  # tier 4
             assert 'required_dgb' in req
 
     def test_edge_cases(self):
@@ -276,18 +283,14 @@ class DigiDollarMintTest(DigiByteTestFramework):
         ]
 
         for amount in precise_amounts:
-            req = self.nodes[0].calculatecollateralrequirement(amount, 4)  # tier 4 (~365 days)
+            req = self.nodes[0].calculatecollateralrequirement(amount, 365)  # tier 4 (~365 days)
             assert 'required_dgb' in req
 
             # Verify precision is maintained
             assert amount > 0
 
-        # Test all valid tiers
-        tier_to_days = {0: 1, 1: 30, 2: 90, 3: 180, 4: 365, 5: 730, 6: 2738}
-        valid_tiers = [0, 1, 2, 3, 4, 5, 6]  # All valid tiers
-
-        for tier in valid_tiers:
-            lock_days = tier_to_days[tier]
+        # Test all calculatecollateralrequirement-supported tiers.
+        for tier, lock_days in TIER_TO_LOCK_DAYS.items():
             req = self.nodes[0].calculatecollateralrequirement(100000, lock_days)  # $1000.00 in cents
             ratio = int(req['effective_ratio'])
 
@@ -328,7 +331,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
             self.log.info(f"Invalid oracle price rejected: {e}")
 
         # Reset to valid oracle price after test ($0.50/DGB = 500,000 micro-USD)
-        self.nodes[0].setmockoracleprice(500000)
+        self.refresh_oracle_quotes()
 
         # Test concurrent minting (stress test)
         import threading
@@ -343,6 +346,7 @@ class DigiDollarMintTest(DigiByteTestFramework):
                 return None
 
         # Launch multiple concurrent mint operations
+        self.refresh_oracle_quotes()
         threads = []
         for i in range(3):
             thread = threading.Thread(target=mint_worker)

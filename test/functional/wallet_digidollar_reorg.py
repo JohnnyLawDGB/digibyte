@@ -6,12 +6,15 @@
 Test DigiDollar wallet bookkeeping across block disconnect.
 
 A confirmed redeem marks the collateral position inactive. If the redeem block
-is disconnected, wallet DD state must make the position active again so the
-wallet view matches the active chain.
+is disconnected and the redeem returns to mempool, wallet DD state must keep
+the position reserved/inactive until the pending spend is gone. After the
+pending redeem is dropped, the wallet view must match the active chain again.
 """
 
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
+
+ORACLE_PRICE_MICRO_USD = 500000
 
 
 def position_is_active(position):
@@ -35,7 +38,8 @@ class WalletDigiDollarReorgTest(DigiByteTestFramework):
 
         self.log.info("Mining spendable funds")
         node.generate(200)
-        node.setmockoracleprice(500000)
+        result = node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+        assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
 
         self.log.info("Minting tier-0 DigiDollar position")
         mint = node.mintdigidollar(100000, 0)
@@ -53,6 +57,8 @@ class WalletDigiDollarReorgTest(DigiByteTestFramework):
         if blocks_needed:
             node.generate(blocks_needed)
 
+        result = node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+        assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
         redeem = node.redeemdigidollar(position_id, 100000)
         redeem_txid = redeem["txid"]
         redeem_block = node.generate(1)[0]
@@ -67,12 +73,24 @@ class WalletDigiDollarReorgTest(DigiByteTestFramework):
 
         positions = node.listdigidollarpositions(False)
         position = next(p for p in positions if p["position_id"] == position_id)
-        assert_equal(position_is_active(position), True)
+        assert_equal(position_is_active(position), False)
 
-        # The redeem transaction may be back in mempool, so spendable DD can
-        # remain zero while the mempool spend is live. The important invariant
-        # here is that the confirmed-chain position state was reversed.
+        # The disconnected redeem is back in mempool, so the wallet must keep
+        # the position reserved and spendable DD at zero while that pending
+        # collateral spend is live.
         assert redeem_txid in node.getrawmempool()
+        assert_equal(node.getdigidollarbalance()["total"], 0)
+
+        self.log.info("Restarting without mempool persistence or wallet rebroadcast")
+        self.restart_node(0, extra_args=["-txindex=1", "-persistmempool=0", "-walletbroadcast=0"])
+        node = self.nodes[0]
+        node.syncwithvalidationinterfacequeue()
+        assert redeem_txid not in node.getrawmempool()
+
+        positions = node.listdigidollarpositions(False)
+        position = next(p for p in positions if p["position_id"] == position_id)
+        assert_equal(position_is_active(position), True)
+        assert_equal(node.getdigidollarbalance()["total"], 100000)
 
 
 if __name__ == "__main__":

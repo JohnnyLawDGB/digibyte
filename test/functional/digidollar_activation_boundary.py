@@ -15,11 +15,18 @@ Uses -digidollaractivationheight=200 to enable real BIP9 signaling with
 min_activation_height=200 on regtest.
 """
 
+from decimal import Decimal
+
+from test_framework.address import address_to_scriptpubkey
+from test_framework.blocktools import create_block, create_coinbase
+from test_framework.messages import COutPoint, CTransaction, CTxIn, CTxOut, tx_from_hex
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
 # Regtest BIP9 parameters
 REGTEST_CONFIRMATION_WINDOW = 144
+DD_TX_MINT_VERSION = (1 << 24) | 0x0770
+DD_TX_TRANSFER_VERSION = (2 << 24) | 0x0770
 
 
 class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
@@ -79,6 +86,22 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
             assert "not yet active" in error_msg.lower(), \
                 f"Expected 'not yet active' error, got: {error_msg}"
 
+        # A DD-looking coinbase must not change base-chain validity before the
+        # BIP9 deployment is active. Before DD-FA-SEC-022, ConnectBlock rejected
+        # this block with bad-cb-dd-marker even though the deployment was only
+        # STARTED.
+        self.log.info("Phase 3b: Pre-activation DD-marker coinbase remains a valid DGB block...")
+        pre_marker_hash = self.submit_coinbase_marker_block(node, expected_result=None)
+        self.log.info(f"  Accepted pre-activation DD-marker coinbase block {pre_marker_hash}")
+
+        # A signed, otherwise ordinary body transaction with DD marker bits must
+        # also remain a valid pre-activation DGB transaction when mined directly.
+        # Before DD-FA-SEC-023, ConnectBlock rejected this block with
+        # digidollar-not-active even though the deployment was only STARTED.
+        self.log.info("Phase 3c: Pre-activation DD-marker body tx remains a valid DGB block...")
+        pre_body_hash = self.submit_body_marker_block(node, expected_result=None)
+        self.log.info(f"  Accepted pre-activation DD-marker body block {pre_body_hash}")
+
         # ── Phase 4: Verify block version bit 23 signaling ──
         self.log.info("Phase 4: Verifying block version bit signaling...")
         template = node.getblocktemplate({"rules": ["segwit"]})
@@ -133,8 +156,11 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         assert_equal(dep['enabled'], True)
         self.log.info(f"  Deployment: status={dep['status']}, enabled={dep['enabled']}")
 
-        # ── Phase 7: Test post-activation acceptance ──
+        # ── Phase 7: Test post-activation acceptance and coinbase defense ──
         self.log.info("Phase 7: Testing post-activation acceptance...")
+
+        self.submit_coinbase_marker_block(node, expected_result="bad-cb-dd-marker")
+        self.log.info("  Rejected post-activation DD-marker coinbase block")
 
         # Mine extra blocks for coinbase maturity
         node.generate(110)
@@ -171,6 +197,19 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         assert len(positions) > 0, "Expected at least one DD position"
         self.log.info(f"  Positions: {len(positions)}")
 
+        # A non-final DD transaction must be rejected before the expensive DD
+        # parser/validation path. Before DD-RH-120 this returned a DD-specific
+        # structural error because ATMP ran DD validation before finality.
+        future_dd = CTransaction()
+        future_dd.nVersion = (2 << 24) | 0x0770  # DD_TX_TRANSFER
+        future_dd.nLockTime = node.getblockcount() + 20
+        future_dd.vin = [CTxIn(COutPoint(1, 0), b"", 0xFFFFFFFE)]
+        future_dd.vout = [CTxOut(100000, address_to_scriptpubkey(node.getnewaddress()))]
+        nonfinal = node.testmempoolaccept([future_dd.serialize().hex()], maxfeerate=0)[0]
+        assert not nonfinal["allowed"], nonfinal
+        assert_equal(nonfinal["reject-reason"], "non-final")
+        self.log.info("  Non-final DD tx rejected before DD validation")
+
         # Final verification: deployment info still ACTIVE
         dep = node.getdigidollardeploymentinfo()
         assert_equal(dep['status'], 'active')
@@ -205,6 +244,64 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
             f"DD tx {pending_txid} must be removed from mempool after reorg below activation"
 
         self.log.info("All activation boundary tests PASSED ✓")
+
+    def submit_coinbase_marker_block(self, node, expected_result):
+        prev_hash_hex = node.getbestblockhash()
+        prev_hash = int(prev_hash_hex, 16)
+        prev_time = node.getblock(prev_hash_hex)["time"]
+        next_height = node.getblockcount() + 1
+
+        coinbase = create_coinbase(next_height)
+        coinbase.nVersion = DD_TX_MINT_VERSION
+        coinbase.rehash()
+        block = create_block(prev_hash, coinbase, prev_time + 1)
+        block.solve()
+
+        baseline_hash = node.getbestblockhash()
+        baseline_height = node.getblockcount()
+        result = node.submitblock(block.serialize().hex())
+        assert_equal(result, expected_result)
+        if expected_result is None:
+            assert_equal(node.getblockcount(), baseline_height + 1)
+            return node.getbestblockhash()
+        assert_equal(node.getbestblockhash(), baseline_hash)
+        assert_equal(node.getblockcount(), baseline_height)
+        return block.hash
+
+    def submit_body_marker_block(self, node, expected_result):
+        raw = node.createrawtransaction([], {node.getnewaddress(): Decimal("1.0")})
+        funded = node.fundrawtransaction(raw, {"fee_rate": 1000})
+        tx = tx_from_hex(funded["hex"])
+        tx.nVersion = DD_TX_TRANSFER_VERSION
+        tx.rehash()
+
+        signed = node.signrawtransactionwithwallet(tx.serialize().hex())
+        assert signed["complete"], signed
+        signed_tx = tx_from_hex(signed["hex"])
+        assert_equal(signed_tx.nVersion, DD_TX_TRANSFER_VERSION)
+
+        prev_hash_hex = node.getbestblockhash()
+        prev_hash = int(prev_hash_hex, 16)
+        prev_time = node.getblock(prev_hash_hex)["time"]
+        next_height = node.getblockcount() + 1
+
+        coinbase = create_coinbase(next_height)
+        coinbase.rehash()
+        block = create_block(prev_hash, coinbase, prev_time + 1)
+        block.vtx.append(signed_tx)
+        block.hashMerkleRoot = block.calc_merkle_root()
+        block.solve()
+
+        baseline_hash = node.getbestblockhash()
+        baseline_height = node.getblockcount()
+        result = node.submitblock(block.serialize().hex())
+        assert_equal(result, expected_result)
+        if expected_result is None:
+            assert_equal(node.getblockcount(), baseline_height + 1)
+            return node.getbestblockhash()
+        assert_equal(node.getbestblockhash(), baseline_hash)
+        assert_equal(node.getblockcount(), baseline_height)
+        return block.hash
 
 
 if __name__ == '__main__':

@@ -51,6 +51,7 @@ class DigiDollarBackupTest(DigiByteTestFramework):
         self.test_backup_multiple_positions()
         self.test_restore_to_different_wallet_name()
         self.test_backup_file_permissions()
+        self.test_encrypted_backup_restores_dd_keys_after_unlock()
 
         self.log.info("All DigiDollar backup tests passed!")
 
@@ -295,6 +296,83 @@ class DigiDollarBackupTest(DigiByteTestFramework):
                 raise AssertionError("Backup file should be restorable")
 
             self.log.info("Backup file permissions test passed!")
+
+    def test_encrypted_backup_restores_dd_keys_after_unlock(self):
+        self.log.info("Testing encrypted backup restores DD keys after unlock...")
+
+        node = self.nodes[0]
+        restored_wallet_name = "restored_encrypted_dd"
+        passphrase = "DigiDollarEncryptedBackupPass123!"
+        mint_amount_cents = 7500
+
+        self.log.info("Encrypting wallet that already contains DD state...")
+        node.encryptwallet(passphrase)
+        self.restart_node(0)
+        node = self.nodes[0]
+        node.setmockoracleprice(ORACLE_PRICE_HALF_USD)
+        node.walletpassphrase(passphrase, 300)
+
+        mint_result = node.mintdigidollar(mint_amount_cents, 0)
+        position_id = mint_result["position_id"]
+        unlock_height = mint_result["unlock_height"]
+        self.generate(node, 1)
+
+        balance_before = node.getdigidollarbalance()["total"]
+        positions_before = node.listdigidollarpositions(False)
+        assert any(p.get("position_id") == position_id for p in positions_before)
+
+        node.walletlock()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            backup_path = os.path.join(temp_dir, "encrypted_dd_backup.dat")
+
+            try:
+                node.backupwallet(backup_path)
+                assert os.path.exists(backup_path)
+
+                node.restorewallet(restored_wallet_name, backup_path)
+                restored_wallet = node.get_wallet_rpc(restored_wallet_name)
+
+                assert_equal(restored_wallet.getdigidollarbalance()["total"], balance_before)
+                restored_positions = restored_wallet.listdigidollarpositions(False)
+                assert any(p.get("position_id") == position_id for p in restored_positions)
+
+                assert_raises_rpc_error(
+                    -13,
+                    "Please enter the wallet passphrase with walletpassphrase first",
+                    restored_wallet.redeemdigidollar,
+                    position_id,
+                    mint_amount_cents,
+                )
+
+                restored_wallet.walletpassphrase(passphrase, 300)
+
+                current_height = node.getblockcount()
+                if current_height <= unlock_height:
+                    self.generate(node, unlock_height - current_height + 1)
+
+                node.setmockoracleprice(ORACLE_PRICE_HALF_USD)
+                redeem_result = restored_wallet.redeemdigidollar(position_id, mint_amount_cents)
+                assert "txid" in redeem_result
+                self.generate(node, 1)
+
+                assert_equal(
+                    restored_wallet.getdigidollarbalance()["total"],
+                    balance_before - mint_amount_cents,
+                )
+                positions_after = restored_wallet.listdigidollarpositions(False)
+                restored_position = next(
+                    p for p in positions_after if p.get("position_id") == position_id
+                )
+                assert_equal(restored_position["status"], "redeemed")
+
+                self.log.info("Encrypted DD backup restored and redeemed successfully")
+
+            finally:
+                try:
+                    node.unloadwallet(restored_wallet_name)
+                except Exception:
+                    pass
 
     def _positions_match(self, pos1, pos2):
         key_fields = [

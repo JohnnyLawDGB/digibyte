@@ -14,6 +14,8 @@ wallet must make the position active/redeemable again.
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
+ORACLE_PRICE_MICRO_USD = 500000
+
 
 def position_is_active(position):
     return position.get("is_active", position.get("status") in ("active", "unlocked"))
@@ -36,7 +38,8 @@ class WalletDigiDollarPendingRedeemRestartTest(DigiByteTestFramework):
 
         self.log.info("Mining spendable funds")
         node.generate(200)
-        node.setmockoracleprice(500000)
+        result = node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+        assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
 
         self.log.info("Minting and confirming tier-0 DigiDollar")
         mint = node.mintdigidollar(100000, 0)
@@ -49,6 +52,8 @@ class WalletDigiDollarPendingRedeemRestartTest(DigiByteTestFramework):
             node.generate(blocks_needed)
 
         self.log.info("Creating a pending redeem")
+        result = node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+        assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
         redeem = node.redeemdigidollar(position_id, 100000)
         redeem_txid = redeem["txid"]
         assert redeem_txid in node.getrawmempool()
@@ -68,6 +73,8 @@ class WalletDigiDollarPendingRedeemRestartTest(DigiByteTestFramework):
         balance = node.getdigidollarbalance()
         assert_equal(balance["total"], 100000)
 
+        result = node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+        assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
         retry = node.redeemdigidollar(position_id, 100000)
         assert "txid" in retry
 

@@ -48,14 +48,17 @@ class OracleRPCConsistencyTest(DigiByteTestFramework):
 
         # Set mock oracle price
         node.setmockoracleprice(6500)
+        node.mintdigidollar(1000, 0)
 
-        # Mine a few more blocks so oracle bundles get embedded
+        # Mine a few more blocks so the DD-touching block embeds a v0x03
+        # oracle bundle and later RPC scans see on-chain participants.
         self.generate(node, 5)
 
         self.test_same_scan_depth_same_data(node)
         self.test_blocks_param_accepted(node)
         self.test_status_strings_consistent(node)
         self.test_price_consistency(node)
+        self.test_v03_onchain_signature_status(node)
 
         self.log.info("=== Bug #15 regression tests passed! ===")
 
@@ -140,6 +143,19 @@ class OracleRPCConsistencyTest(DigiByteTestFramework):
                 assert o_price == p_price, (
                     f"Oracle {oid} price mismatch: getoracles={o_price} vs getalloracleprices={p_price}"
                 )
+
+    def test_v03_onchain_signature_status(self, node):
+        """v0x03 on-chain participants should report aggregate signature validity."""
+        self.log.info("Test: v0x03 on-chain participants report valid aggregate signature status")
+
+        prices_result = node.getalloracleprices(20)
+        onchain_reporting = [
+            o for o in prices_result["oracles"]
+            if o["price_source"] == "on-chain" and o["status"] == "reporting"
+        ]
+        assert_greater_than(len(onchain_reporting), 0)
+        for oracle in onchain_reporting:
+            assert_equal(oracle["signature_valid"], True)
 
 
 if __name__ == '__main__':

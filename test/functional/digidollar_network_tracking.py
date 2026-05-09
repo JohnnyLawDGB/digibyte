@@ -60,10 +60,9 @@ class DigiDollarNetworkTrackingTest(DigiByteTestFramework):
         # Phase 1: Bob mints 3 DigiDollars (matching Qt test structure)
         self.log.info("\n--- Phase 1: Bob (node 0) mints 3 DigiDollars ---")
 
-        # CRITICAL FIX: Use higher fee rate to handle large transactions with many inputs
-        # Default 100k sat/kB is often insufficient when wallet selects many small UTXOs
-        # Use 500k sat/kB to ensure mint transactions meet min relay fee requirements
-        fee_rate = 500000  # 500k sat/kB = 0.005 DGB/kB
+        # Use the current DD mint minimum rate so the test does not rely on
+        # mintdigidollar's low-fee floor.
+        fee_rate = 35000000
 
         # Mint #1: $100.00 DD, tier 4 (365 days)
         bob_mint1 = self.nodes[0].mintdigidollar(10000, 4, fee_rate)

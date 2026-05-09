@@ -57,6 +57,12 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.test_redemption_validation()
         self.test_redemption_edge_cases()
 
+    def publish_musig2_quote(self, node, price_micro_usd=None):
+        """Publish a fresh regtest MuSig2 oracle quote for this node's current epoch."""
+        if price_micro_usd is None:
+            price_micro_usd = self.base_oracle_price
+        node.setmockoracleprice(price_micro_usd)
+
     def setup_digidollar_test(self):
         """Setup test environment for DigiDollar."""
         # Generate initial blocks past coinbase maturity for all nodes
@@ -70,8 +76,9 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
         # So $0.50/DGB = 500,000 micro-USD
         base_price = 500000  # 500000 micro-USD = $0.50 per DGB
+        self.base_oracle_price = base_price
         for node in self.nodes:
-            node.setmockoracleprice(base_price)
+            self.publish_musig2_quote(node, base_price)
 
         # Create DD positions for testing redemption
         self.log.info("Creating DD positions for redemption testing...")
@@ -100,9 +107,15 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         # Sync mempools to ensure all mint transactions reach Node 0 before mining
         self.sync_mempools()
 
-        # Mine blocks to confirm and pass the 1-hour lock period (240 blocks)
-        self.nodes[0].generate(250)
+        # Mine blocks to confirm and pass tier-0 lock (240 blocks) plus 100-block mint confirmation buffer
+        self.nodes[0].generate(350)
         self.sync_all()
+
+        # The 350-block timelock advance crosses many short regtest oracle
+        # epochs. Refresh each node's local MuSig2 quote before redemption tests
+        # start so mempool policy has a current-epoch v0x03 bundle available.
+        for node in self.nodes:
+            self.publish_musig2_quote(node)
 
         # Verify positions were created
         total_expected = 225000  # Node 0 total in cents ($2250)
@@ -126,6 +139,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.log.info(f"Redeeming EXACT amount {dd_amount} cents (not partial)...")
 
         # Redeem EXACT amount
+        self.publish_musig2_quote(self.nodes[1])
         result = self.nodes[1].redeemdigidollar(position_id, dd_amount)
 
         assert 'txid' in result, "Redemption should return txid"
@@ -147,13 +161,15 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.log.info("Testing partial redemption rejection...")
 
         # First mint a new position for this test
+        self.publish_musig2_quote(self.nodes[0])
         mint_result = self.nodes[0].mintdigidollar(100000, 0)  # $1000 DD, tier 0 (1 hour test)
         position_id = mint_result['position_id']
         position_amount = 100000  # cents
 
-        # Generate blocks to pass timelock
-        self.nodes[0].generate(250)
+        # Generate blocks to pass tier-0 timelock plus the 100-block mint confirmation buffer
+        self.nodes[0].generate(350)
         self.sync_all()
+        self.publish_musig2_quote(self.nodes[0])
 
         # Try to redeem HALF the position (should fail with exact-amount enforcement)
         partial_amount = position_amount // 2  # 50000 cents = $500
@@ -182,11 +198,13 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
 
         # Mint a position
         mint_cents = 50000  # $500 DD
+        self.publish_musig2_quote(self.nodes[0])
         mint_result = self.nodes[0].mintdigidollar(mint_cents, 0)
         position_id = mint_result['position_id']
 
-        self.nodes[0].generate(250)
+        self.nodes[0].generate(350)
         self.sync_all()
+        self.publish_musig2_quote(self.nodes[0])
 
         # Test 1: Try slightly less than exact (should fail)
         self.log.info("Test 1: Trying amount slightly less than minted...")
@@ -258,6 +276,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.log.info(f"Redeeming full position {position_id} with {redeem_amount_cents} cents...")
 
         # Redeem exact position amount
+        self.publish_musig2_quote(self.nodes[0])
         result = self.nodes[0].redeemdigidollar(position_id, redeem_amount_cents)
 
         self.nodes[0].generate(1)
@@ -279,6 +298,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.log.info("Testing timelock expiry redemption...")
 
         # Create a position with very short lock (for testing)
+        self.publish_musig2_quote(self.nodes[2])
         short_lock_result = self.nodes[2].mintdigidollar(50000, 0)  # $500, 1 hour (tier 0)
 
         self.nodes[2].generate(1)
@@ -347,7 +367,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
 
         self.log.info(f"Simulating DGB price crash by setting oracle price to {crisis_price}...")
         for node in self.nodes:
-            node.setmockoracleprice(crisis_price)
+            self.publish_musig2_quote(node, crisis_price)
 
         # Generate block to make price change effective
         self.nodes[0].generate(1)
@@ -368,8 +388,10 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             # Get a position to redeem from
             positions = self.nodes[0].listdigidollarpositions()
             if len(positions) > 0:
-                position_id = positions[0]['position_id']
-                err_amount_cents = 10000  # $100
+                position = positions[0]
+                position_id = position['position_id']
+                err_amount_cents = int(position.get('dd_minted', position.get('dd_amount', 0)))
+                self.publish_musig2_quote(self.nodes[0], crisis_price)
                 result = self.nodes[0].redeemdigidollar(position_id, err_amount_cents)
 
                 assert 'txid' in result
@@ -402,7 +424,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             assert 'volatility' in protection_status, "Volatility protection status should be available"
 
         # Restore normal price ($0.50/DGB = 500,000 micro-USD)
-        self.nodes[0].setmockoracleprice(500000)
+        self.publish_musig2_quote(self.nodes[0])
 
     def test_collateral_return_calculations(self):
         """Test accuracy of collateral return calculations."""
@@ -412,7 +434,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         # Oracle price is in micro-USD: 500000 micro-USD = $0.50 per DGB
         base_price = 500000
         for node in self.nodes:
-            node.setmockoracleprice(base_price)
+            self.publish_musig2_quote(node, base_price)
 
         # Get positions to test with
         positions = self.nodes[1].listdigidollarpositions()
@@ -443,8 +465,16 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             assert 'dgb_return' in info or 'dgb_unlocked' in info
 
             predicted_dgb = Decimal(info.get('dgb_return', info.get('dgb_unlocked', '0')))
+            expected_full_collateral = Decimal(str(position['dgb_collateral']))
+            assert_equal(
+                predicted_dgb,
+                expected_full_collateral,
+                "getredemptioninfo must report the full locked collateral return; "
+                "fees are paid from separate fee inputs and are not a DGB haircut",
+            )
 
             # Perform actual redemption
+            self.publish_musig2_quote(self.nodes[1], base_price)
             result = self.nodes[1].redeemdigidollar(position_id, amount_cents)
             actual_dgb = Decimal(result['dgb_unlocked'])
 
@@ -587,7 +617,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         # Modify oracle price to create stress
         # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
         stress_price = 250000  # 250000 micro-USD = $0.25 per DGB (half the normal $0.50)
-        self.nodes[0].setmockoracleprice(stress_price)
+        self.publish_musig2_quote(self.nodes[0], stress_price)
 
         try:
             # Get positions for stress test
@@ -607,7 +637,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
             self.log.info(f"Redemption during stress failed (may be acceptable): {e}")
 
         # Restore normal price ($0.50/DGB = 500,000 micro-USD)
-        self.nodes[0].setmockoracleprice(500000)
+        self.publish_musig2_quote(self.nodes[0])
 
 
 if __name__ == '__main__':

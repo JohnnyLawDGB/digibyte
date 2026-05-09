@@ -8,18 +8,17 @@ Test comprehensive DigiDollar functionality with descriptor wallets including:
 - Export DD descriptors via listdescriptors
 - Import descriptors to new wallets
 - DD operations on descriptor wallets
-- Migration from legacy to descriptor wallets
+- Legacy wallet DD creation rejection and descriptor migration target checks
 - Watch-only descriptor import
 """
 
 from test_framework.test_framework import DigiByteTestFramework
-from test_framework.descriptors import descsum_create
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
     assert_raises_rpc_error,
 )
-from decimal import Decimal
+ORACLE_PRICE_MICRO_USD = 500000
 
 
 class DigiDollarDescriptorTest(DigiByteTestFramework):
@@ -53,7 +52,7 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         self.test_export_dd_descriptors()
         self.test_import_dd_descriptors()
         self.test_descriptor_wallet_dd_operations()
-        self.test_migration_legacy_to_descriptor()
+        self.test_legacy_wallet_dd_creation_rejected()
         self.test_watchonly_descriptor_import()
 
     def setup_digidollar_test(self):
@@ -74,14 +73,18 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
 
         # Set mock oracle price on both nodes
         # Oracle price is in micro-USD: 500000 = $0.50/DGB
-        oracle_price = 500000
-        self.nodes[0].setmockoracleprice(oracle_price)
-        self.nodes[1].setmockoracleprice(oracle_price)
+        self.refresh_oracle_quotes()
 
         # Verify DigiDollar system is accessible
         stats = self.nodes[0].getdigidollarstats()
         assert "health_percentage" in stats
         self.log.info(f"DigiDollar system ready, oracle price: {stats['oracle_price_cents']} cents/DGB")
+
+    def refresh_oracle_quotes(self, *node_indices, price=ORACLE_PRICE_MICRO_USD):
+        indices = node_indices if node_indices else range(len(self.nodes))
+        for index in indices:
+            result = self.nodes[index].setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
 
     def test_export_dd_descriptors(self):
         """Test exporting DD-related descriptors from a wallet."""
@@ -94,6 +97,7 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         # Create DD position via minting
         mint_amount = 10000  # 100.00 DD = 10000 cents
         dca_tier = 1  # 30 days lock
+        self.refresh_oracle_quotes(0)
         mint_result = self.source_wallet.mintdigidollar(mint_amount, dca_tier)
         assert 'txid' in mint_result, "Mint should return transaction ID"
         assert 'dd_minted' in mint_result, "Mint should return DD minted amount"
@@ -145,6 +149,7 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         # Create another DD position in source wallet for testing
         additional_mint = 5000  # 50.00 DD = 5000 cents
         dca_tier = 2  # 90 days
+        self.refresh_oracle_quotes(0)
         mint_result = self.source_wallet.mintdigidollar(additional_mint, dca_tier)
         self.generate(self.nodes[0], 2)
         self.sync_all()
@@ -243,6 +248,7 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         # Test minting on descriptor wallet
         mint_amount = 20000  # 200.00 DD = 20000 cents
         dca_tier = 3  # 180 days
+        self.refresh_oracle_quotes(0)
         mint_result = ops_wallet.mintdigidollar(mint_amount, dca_tier)
         assert 'txid' in mint_result
         assert 'dd_minted' in mint_result
@@ -259,6 +265,7 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         # Test sending DD from descriptor wallet
         send_amount = 5000  # 50.00 DD = 5000 cents
         receiver_address = self.source_wallet.getdigidollaraddress()
+        self.refresh_oracle_quotes(0)
         send_result = ops_wallet.senddigidollar(receiver_address, send_amount)
         assert 'txid' in send_result
         self.log.info(f"Sent {send_amount} cents DD from descriptor wallet")
@@ -283,9 +290,9 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
 
         self.log.info("Descriptor wallet DD operations test passed")
 
-    def test_migration_legacy_to_descriptor(self):
-        """Test migrating DD data from legacy to descriptor wallet."""
-        self.log.info("Testing legacy to descriptor wallet migration...")
+    def test_legacy_wallet_dd_creation_rejected(self):
+        """Test legacy wallets cannot create new DigiDollar V1 state."""
+        self.log.info("Testing legacy wallet DigiDollar creation rejection...")
 
         # Check if BDB (legacy wallet support) is available
         if not self.is_bdb_compiled():
@@ -302,79 +309,49 @@ class DigiDollarDescriptorTest(DigiByteTestFramework):
         self.generate(self.nodes[0], 2)
         self.sync_all()
 
-        # Create DD position in legacy wallet
+        # Legacy wallets cannot create V1 DigiDollar owner/address keys. They
+        # may still exist for ordinary DGB usage, but DD creation must fail
+        # before any owner-key fallback or BECH32 downgrade can occur.
         legacy_mint_amount = 8000  # 80.00 DD = 8000 cents
         dca_tier = 1  # 30 days
-        legacy_mint = legacy_wallet.mintdigidollar(legacy_mint_amount, dca_tier)
-        self.generate(self.nodes[0], 2)
-        self.sync_all()
+        self.refresh_oracle_quotes(0)
+        assert_raises_rpc_error(
+            -4,
+            "descriptor/bech32m HD wallet",
+            legacy_wallet.mintdigidollar,
+            legacy_mint_amount,
+            dca_tier,
+        )
+        assert_raises_rpc_error(
+            -4,
+            "descriptor/bech32m HD wallet",
+            legacy_wallet.getdigidollaraddress,
+        )
 
-        # Get legacy wallet state
+        # Legacy wallet remains usable for ordinary DGB and has no DD state.
         legacy_balance_info = legacy_wallet.getdigidollarbalance()
         legacy_balance = legacy_balance_info['total'] if isinstance(legacy_balance_info, dict) else legacy_balance_info
         legacy_positions = legacy_wallet.listdigidollarpositions()
         self.log.info(f"Legacy wallet: {legacy_balance} DD cents, {len(legacy_positions)} positions")
+        assert_equal(legacy_balance, 0)
+        assert_equal(len(legacy_positions), 0)
 
-        # Export private keys from legacy wallet for key addresses
-        # Get addresses associated with DD positions
-        dd_addresses = legacy_wallet.listdigidollaraddresses()
-
-        # Create descriptor wallet to migrate to
-        self.nodes[0].createwallet(wallet_name='dd_migrated', descriptors=True, blank=True)
+        # A descriptor wallet is the supported DD migration target for future
+        # use; it can create fresh DD receive keys.
+        self.nodes[0].createwallet(wallet_name='dd_migrated', descriptors=True)
         migrated_wallet = self.nodes[0].get_wallet_rpc('dd_migrated')
+        migrated_dd_addr = migrated_wallet.getdigidollaraddress()
+        assert migrated_dd_addr.startswith('RD') or migrated_dd_addr.startswith('DD') or migrated_dd_addr.startswith('TD')
+        self.log.info(f"Descriptor migration target can generate DD addresses: {migrated_dd_addr}")
 
-        # For each DD address, export and import the key
-        imported_count = 0
-        for addr_entry in dd_addresses:
-            try:
-                # Handle both formats: list of strings or list of objects
-                if isinstance(addr_entry, dict):
-                    address = addr_entry.get('address', addr_entry.get('ddaddress', ''))
-                else:
-                    address = addr_entry
-
-                if not address:
-                    continue
-
-                # Get the underlying DGB address if this is a DD address
-                # DD addresses are typically derived from standard addresses
-                try:
-                    privkey = legacy_wallet.dumpprivkey(address)
-                    # Create descriptor from private key
-                    desc = descsum_create(f"wpkh({privkey})")
-                    result = migrated_wallet.importdescriptors([{
-                        "desc": desc,
-                        "timestamp": 0,
-                    }])
-                    if result[0].get('success', False):
-                        imported_count += 1
-                except Exception as e:
-                    self.log.debug(f"Could not export key for {address}: {e}")
-                    continue
-
-            except Exception as e:
-                self.log.debug(f"Migration step failed: {e}")
-                continue
-
-        self.log.info(f"Migrated {imported_count} keys to descriptor wallet")
-
-        if imported_count > 0:
-            try:
-                migrated_dd_addr = migrated_wallet.getdigidollaraddress()
-                assert migrated_dd_addr.startswith('RD') or migrated_dd_addr.startswith('DD') or migrated_dd_addr.startswith('TD')
-                self.log.info(f"Migrated wallet can generate DD addresses: {migrated_dd_addr}")
-            except Exception as e:
-                self.log.info(f"Migrated wallet cannot generate new addresses (expected): {e}")
-        else:
-            self.log.info("No keys migrated - skipping DD address generation test")
-
-        self.log.info("Legacy to descriptor migration test passed")
+        self.log.info("Legacy wallet DigiDollar creation rejection test passed")
 
     def test_watchonly_descriptor_import(self):
         """Test importing DD descriptors as watch-only."""
         self.log.info("Testing watch-only descriptor import...")
 
         self.log.info("Creating an unlocked tier-0 source position for watch-only redemption preflight checks")
+        self.refresh_oracle_quotes(0)
         watchonly_redeem_mint = self.source_wallet.mintdigidollar(10000, 0)
         self.generate(self.nodes[0], 241)
         self.sync_all()

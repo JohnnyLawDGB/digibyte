@@ -121,7 +121,7 @@ class DigiDollarTxAmountsTest(DigiByteTestFramework):
 
         # Generate blocks past lock expiry
         self.log.info("\n=== Step 4: Generate blocks past lock expiry ===")
-        alice.generate(250)  # Past 1-hour lock (240 blocks)
+        alice.generate(350)  # Past tier-0 lock (240 blocks) + 100-block mint confirmation buffer
         current_height = alice.getblockcount()
         self.log.info(f"✓ Current height: {current_height}")
 

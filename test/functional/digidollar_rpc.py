@@ -57,10 +57,11 @@ class DigiDollarRPCTest(DigiByteTestFramework):
         """Setup test environment for DigiDollar."""
         # Generate initial blocks past coinbase maturity
         self.log.info("Generating initial blocks for test setup...")
-        self.nodes[0].generate(110)
+        self.generate(self.nodes[0], 110)
+        self.sync_all()
 
         # Give node 1 some coins
-        self.nodes[1].generate(110)
+        self.generate(self.nodes[1], 110)
         self.sync_all()
 
         # Set mock oracle price
@@ -75,10 +76,10 @@ class DigiDollarRPCTest(DigiByteTestFramework):
         # lock_tier: 3=180d, 4=365d
         # Max allowed: 100000 cents ($1000)
         self.nodes[0].mintdigidollar(50000, 4)  # $500.00, 365 days (tier 4)
-        self.nodes[1].mintdigidollar(30000, 3)  # $300.00, 180 days (tier 3)
+        self.generate(self.nodes[0], 1)
 
-        self.nodes[0].generate(2)
-        self.sync_all()
+        self.nodes[1].mintdigidollar(30000, 3)  # $300.00, 180 days (tier 3)
+        self.generate(self.nodes[1], 1)
 
     def test_system_monitoring_commands(self):
         """Test system monitoring RPC commands."""

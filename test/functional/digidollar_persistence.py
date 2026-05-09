@@ -11,6 +11,9 @@ from decimal import Decimal
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal, assert_greater_than
 
+ORACLE_PRICE_MICRO_USD = 500000
+
+
 class DigiDollarPersistenceTest(DigiByteTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
@@ -34,6 +37,7 @@ class DigiDollarPersistenceTest(DigiByteTestFramework):
         self.log.info("Setting up DigiDollar environment...")
         self.nodes[0].generate(650)  # Activate DigiDollar
         self.sync_all()
+        self.refresh_oracle_quotes()
 
         # Test 1: Balance persistence
         self.test_balance_persistence()
@@ -55,12 +59,18 @@ class DigiDollarPersistenceTest(DigiByteTestFramework):
 
         self.log.info("=== All Persistence Tests Passed! ===")
 
+    def refresh_oracle_quotes(self, price=ORACLE_PRICE_MICRO_USD):
+        for node in self.nodes:
+            result = node.setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
+
     def test_balance_persistence(self):
         """Test 1: Verify balance persists after wallet restart."""
         self.log.info("Test 1: Balance persistence...")
 
         # Mint DD
         self.log.info("  Minting 100000 cents (1000 DD)...")
+        self.refresh_oracle_quotes()
         mint_result = self.nodes[0].mintdigidollar(100000, 1)
         self.nodes[0].generate(1)
         self.sync_all()
@@ -146,6 +156,7 @@ class DigiDollarPersistenceTest(DigiByteTestFramework):
         self.log.info("  Sending 50000 cents (500 DD) to node 1...")
         try:
             dd_addr = self.nodes[1].getnewdigidollaraddress()
+            self.refresh_oracle_quotes()
             send_result = self.nodes[0].senddigidollar(dd_addr, 50000)
             self.log.info(f"  Send txid: {send_result['txid']}")
             self.nodes[0].generate(1)
@@ -190,6 +201,7 @@ class DigiDollarPersistenceTest(DigiByteTestFramework):
         self.log.info("  Sending 10000 cents (100 DD) to node 1...")
         try:
             dd_addr = self.nodes[1].getnewdigidollaraddress()
+            self.refresh_oracle_quotes()
             send_result = self.nodes[0].senddigidollar(dd_addr, 10000)
             self.log.info(f"  Send txid: {send_result['txid']}")
 
@@ -218,6 +230,7 @@ class DigiDollarPersistenceTest(DigiByteTestFramework):
         node0_balance = self.nodes[0].getdigidollarbalance()
         if node0_balance['total'] < 10000:
             self.log.info("  Minting more DD on node 0...")
+            self.refresh_oracle_quotes()
             self.nodes[0].mintdigidollar(100000, 1)
             self.nodes[0].generate(1)
             self.sync_all()
@@ -226,6 +239,7 @@ class DigiDollarPersistenceTest(DigiByteTestFramework):
         self.log.info("  Sending 10000 cents (100 DD) from node 0 to node 1...")
         try:
             dd_addr = self.nodes[1].getnewdigidollaraddress()
+            self.refresh_oracle_quotes()
             send_result = self.nodes[0].senddigidollar(dd_addr, 10000)
             self.log.info(f"  Send txid: {send_result['txid']}")
 

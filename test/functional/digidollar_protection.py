@@ -37,6 +37,16 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
             self.log.info(f"Block generation blocked (protection active): {e}")
             return False
 
+    def mint_and_confirm(self, node_index, amount_cents, tier):
+        """Mint a DD position and mine it in the next block."""
+        node = self.nodes[node_index]
+        result = node.mintdigidollar(amount_cents, tier)
+        block_hash = node.generate(1)[0]
+        block = node.getblock(block_hash)
+        assert result["txid"] in block["tx"]
+        self.sync_all()
+        return result
+
     def set_test_params(self):
         self.num_nodes = 3
         self.setup_clean_chain = True
@@ -98,15 +108,13 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
             {"amount_cents": 100000, "tier": 6}  # $1000, tier 6 (2738 days) - max allowed
         ]
 
+        # DD mints encode a lock height for the next block. Confirm each mint
+        # immediately so peers do not later see stale tier/duration metadata.
         for pos in positions:
-            self.nodes[0].mintdigidollar(pos["amount_cents"], pos["tier"])
+            self.mint_and_confirm(0, pos["amount_cents"], pos["tier"])
 
         # Node 1: Medium position
-        self.nodes[1].mintdigidollar(100000, 3)  # $1000.00 in cents, tier 3 (180 days)
-
-        # Mine blocks to confirm
-        self.nodes[0].generate(3)
-        self.sync_all()
+        self.mint_and_confirm(1, 100000, 3)  # $1000.00 in cents, tier 3 (180 days)
 
         # Verify system is in healthy state initially
         initial_health = self.nodes[0].getdigidollarstats()

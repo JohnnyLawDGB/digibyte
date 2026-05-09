@@ -15,7 +15,7 @@ class DigiDollarPendingPositionStatusTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0", "-walletbroadcast=0"]]
+        self.extra_args = [["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"]]
 
     def add_options(self, parser):
         self.add_wallet_options(parser)
@@ -25,11 +25,12 @@ class DigiDollarPendingPositionStatusTest(DigiByteTestFramework):
 
     def run_test(self):
         self.generate(self.nodes[0], 110)
-        self.nodes[0].setmockoracleprice(500000)
+        result = self.nodes[0].setmockoracleprice(500000)
+        assert_equal(result["price_micro_usd"], 500000)
 
         result = self.nodes[0].mintdigidollar(1000, 0)
         txid = result["txid"]
-        assert txid not in self.nodes[0].getrawmempool(), "walletbroadcast=0 mint should not enter mempool"
+        assert txid in self.nodes[0].getrawmempool(), "broadcast mint should enter mempool"
 
         positions = self.nodes[0].listdigidollarpositions(False)
         matching = [pos for pos in positions if pos["position_id"] == txid]

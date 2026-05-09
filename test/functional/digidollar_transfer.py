@@ -38,6 +38,20 @@ class DigiDollarTransferTest(DigiByteTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
+    def publish_musig2_quotes(self, node_indices=None, price=None):
+        """Publish fresh regtest MuSig2 oracle bundles for the next block."""
+        if price is None:
+            price = self.oracle_price_micro_usd
+        if node_indices is None:
+            node_indices = range(self.num_nodes)
+        for index in node_indices:
+            result = self.nodes[index].setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
+
+    def mine_and_sync_dd(self, node_idx, blocks=1):
+        self.publish_musig2_quotes()
+        return self.generate(self.nodes[node_idx], blocks)
+
     def run_test(self):
         self.log.info("Testing DigiDollar transfer operations...")
 
@@ -69,55 +83,23 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
         # So $0.50/DGB = 500,000 micro-USD
         base_price = 500000  # 500000 micro-USD = $0.50 per DGB
-        for node in self.nodes:
-            node.setmockoracleprice(base_price)
+        self.oracle_price_micro_usd = base_price
+        self.publish_musig2_quotes()
 
         # Create initial DD balances for testing
         self.log.info("Creating initial DD positions for testing...")
 
         # Node 0: Large position for testing ($50.00 = 5000 cents, 1 year = tier 4)
-        mint0_result = self.nodes[0].mintdigidollar(5000, 4)
-        mint0_txid = mint0_result['txid']
+        self.nodes[0].mintdigidollar(5000, 4)
+        self.mine_and_sync_dd(0)
 
         # Node 1: Medium position ($20.00 = 2000 cents, 180 days = tier 3)
-        mint1_result = self.nodes[1].mintdigidollar(2000, 3)
-        mint1_txid = mint1_result['txid']
+        self.nodes[1].mintdigidollar(2000, 3)
+        self.mine_and_sync_dd(1)
 
         # Node 2: Small position ($10.00 = 1000 cents, 90 days = tier 2)
-        mint2_result = self.nodes[2].mintdigidollar(1000, 2)
-        mint2_txid = mint2_result['txid']
-
-        # WORKAROUND: Force broadcast using sendrawtransaction
-        # DD transactions may not auto-broadcast from CommitTransaction
-        for i, txid in enumerate([mint0_txid, mint1_txid, mint2_txid]):
-            raw_tx = self.nodes[i].gettransaction(txid)['hex']
-            try:
-                # Use maxfeerate=0 to bypass fee checks for test
-                self.nodes[i].sendrawtransaction(hexstring=raw_tx, maxfeerate=0)
-                self.log.info(f"Broadcast mint transaction for node {i}: {txid}")
-            except Exception as e:
-                self.log.warning(f"Failed to broadcast mint for node {i}: {e}")
-
-        # Wait for transactions to propagate
-        import time
-        time.sleep(2)
-
-        # Mine blocks to confirm
-        self.nodes[0].generate(3)
-        time.sleep(1)
-
-        # Reconnect nodes if needed before sync
-        try:
-            self.sync_all()
-        except AssertionError:
-            # Nodes may have disconnected, reconnect them
-            self.log.info("Reconnecting nodes...")
-            self.connect_nodes(0, 1)
-            self.connect_nodes(1, 2)
-            self.connect_nodes(2, 3)
-            self.connect_nodes(0, 3)
-            time.sleep(1)
-            self.sync_all()
+        self.nodes[2].mintdigidollar(1000, 2)
+        self.mine_and_sync_dd(2)
 
         # Verify initial setup
         for i in range(3):
@@ -147,8 +129,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         txid = result['txid']
 
         # Mine block to confirm
-        self.nodes[0].generate(1)
-        self.sync_all()
+        self.mine_and_sync_dd(0)
 
         # Verify balances
         sender_final = Decimal(self.nodes[0].getdigidollarbalance()['total'])
@@ -203,8 +184,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
             100,
         )
 
-        self.nodes[0].generate(1)
-        self.sync_all()
+        self.mine_and_sync_dd(0)
 
         sender_final = Decimal(self.nodes[0].getdigidollarbalance()['total'])
         node1_final = Decimal(self.nodes[1].getdigidollarbalance()['total'])
@@ -230,8 +210,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         local_txid = local_result['txid']
         assert_equal(local_result['total_amount'], 500)
 
-        self.nodes[0].generate(1)
-        self.sync_all()
+        self.mine_and_sync_dd(0)
 
         local_final = Decimal(self.nodes[0].getdigidollarbalance()['total'])
         assert_equal(local_final, local_initial)
@@ -268,8 +247,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         result = self.nodes[1].senddigidollar(receiver_address, transfer_amount)
 
         # Mine block to confirm
-        self.nodes[1].generate(1)
-        self.sync_all()
+        self.mine_and_sync_dd(1)
 
         # Verify the transfer succeeded
         final_sender_balance = Decimal(self.nodes[1].getdigidollarbalance()['total'])
@@ -303,8 +281,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         result = self.nodes[2].senddigidollar(receiver_address, transfer_amount)
 
         # Mine block to confirm
-        self.nodes[2].generate(1)
-        self.sync_all()
+        self.mine_and_sync_dd(2)
 
         # Verify change was properly handled
         remaining_balance = Decimal(self.nodes[2].getdigidollarbalance()['total'])
@@ -323,8 +300,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
             small_transfer = 100
             small_result = self.nodes[2].senddigidollar(receiver_address, small_transfer)
 
-            self.nodes[2].generate(1)
-            self.sync_all()
+            self.mine_and_sync_dd(2)
 
             # Verify it worked and balance updated correctly
             assert 'txid' in small_result
@@ -382,8 +358,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         result = self.nodes[0].senddigidollar(receiver_address, transfer_amount)
 
         # Mine block to confirm
-        self.nodes[0].generate(1)
-        self.sync_all()
+        self.mine_and_sync_dd(0)
 
         sender_balance_after = Decimal(self.nodes[0].getdigidollarbalance()['total'])
         dgb_balance_after = self.nodes[0].getbalance()
@@ -417,8 +392,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         # Mine block on the sender node to guarantee the transaction is included.
         # DD transactions may not propagate via normal P2P mempool relay, so
         # mining on a remote node risks producing a block without the tx.
-        block_hashes = self.nodes[0].generate(1)
-        self.sync_all()
+        block_hashes = self.mine_and_sync_dd(0)
 
         # Verify the confirmed block (and its transaction) propagated to all nodes
         for i in range(self.num_nodes):
@@ -438,8 +412,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
 
         result = self.nodes[0].senddigidollar(self_address, transfer_amount)
 
-        self.nodes[0].generate(1)
-        self.sync_all()
+        self.mine_and_sync_dd(0)
 
         # Balance should remain approximately the same (minus fees)
         final_balance = Decimal(self.nodes[0].getdigidollarbalance()['total'])
@@ -454,8 +427,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         for amount in test_amounts:
             try:
                 result = self.nodes[0].senddigidollar(receiver_address, amount)
-                self.nodes[0].generate(1)
-                self.sync_all()
+                self.mine_and_sync_dd(0)
                 self.log.info(f"Amount {amount} cents transferred successfully")
             except Exception as e:
                 self.log.info(f"Amount {amount} cents failed: {e}")

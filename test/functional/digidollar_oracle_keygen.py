@@ -88,6 +88,30 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         self.log.info("Test: createoraclekey 30 should fail (invalid oracle_id)")
         assert_raises_rpc_error(None, None, wallet.createoraclekey, 30)
 
+        # --- DD-FA-FUNC-029: createoraclekey parameter validation parity ---
+        # createoraclekey must reject negative IDs with a signed-int error
+        # message matching the other oracle CRUD RPCs (startoracle /
+        # stoporacle / getoraclepubkey). Previously a negative input was cast
+        # to uint32_t and surfaced as the unsigned wrap-around (e.g. -1 ->
+        # 4294967295), which still rejected the request but with a
+        # confusing diagnostic.
+        self.log.info("Test: createoraclekey -1 should fail with signed -1 in error message")
+        assert_raises_rpc_error(-8, "Invalid oracle ID -1", wallet.createoraclekey, -1)
+
+        # createoraclekey must also refuse IDs that have no slot in the
+        # active chainparams oracle roster (regtest publishes only 7
+        # oracle slots: 0..6). Without this check, the wallet would
+        # persist an unusable private key for slot 7..29 that startoracle
+        # later refuses with "Oracle ID N not found in chain parameters".
+        self.log.info("Test: createoraclekey 7 should fail on regtest (only 7 oracle slots)")
+        assert_raises_rpc_error(-8, "not found in chain parameters", wallet.createoraclekey, 7)
+
+        self.log.info("Test: stoporacle 7 should fail on regtest (only 7 oracle slots)")
+        assert_raises_rpc_error(-8, "not found in chain parameters", node.stoporacle, 7)
+
+        self.log.info("Test: getoraclepubkey 7 should fail on regtest (only 7 oracle slots)")
+        assert_raises_rpc_error(-8, "not found in chain parameters", node.getoraclepubkey, 7)
+
         # --- Test 8: startoracle 0 without private_key loads from wallet ---
         # On regtest, chainparams oracle keys are test keys, so the wallet-generated
         # key won't match. We expect a pubkey mismatch error.
@@ -99,7 +123,7 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
             assert_equal(start_result["success"], False)
             assert_equal(start_result["status"], "stopped")
             assert_equal(start_result["initialized"], True)
-            assert "price thread not active" in start_result["message"]
+            assert "price fetcher is not running" in start_result["message"]
         except Exception as e:
             err_msg = str(e)
             self.log.info(f"startoracle 0 failed as expected: {err_msg}")
@@ -126,7 +150,7 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
             assert_equal(start_result["success"], False)
             assert_equal(start_result["status"], "stopped")
             assert_equal(start_result["initialized"], True)
-            assert "price thread not active" in start_result["message"]
+            assert "price fetcher is not running" in start_result["message"]
         except Exception as e:
             err_msg = str(e)
             self.log.info(f"startoracle 0 after reload failed as expected: {err_msg}")

@@ -89,7 +89,7 @@ class DigiDollarRedemptionAmountsTest(DigiByteTestFramework):
 
         # Generate blocks past lock expiry
         self.log.info("\n=== STEP 4: Generate blocks past timelock ===")
-        node.generate(250)
+        node.generate(350)
         current_height = node.getblockcount()
         self.log.info(f"Current height: {current_height}")
 

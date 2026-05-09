@@ -21,6 +21,20 @@ import os
 import tempfile
 
 
+ORACLE_PRICE_MICRO_USD = 500000
+TIER_TO_LOCK_DAYS = {
+    1: 30,
+    2: 90,
+    3: 180,
+    4: 365,
+    5: 730,
+    6: 1095,
+    7: 1825,
+    8: 2555,
+    9: 3650,
+}
+
+
 class DigiDollarWalletTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 3
@@ -64,14 +78,18 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         # Set mock oracle price
         # Oracle price is in micro-USD: 1,000,000 micro-USD = $1.00
         # So $0.50/DGB = 500,000 micro-USD
-        base_price = 500000  # 500000 micro-USD = $0.50 per DGB
-        for node in self.nodes:
-            node.setmockoracleprice(base_price)
+        self.refresh_oracle_quotes()
 
         # Verify wallets are ready
         for i, node in enumerate(self.nodes):
             wallet_info = node.getwalletinfo()
             self.log.info(f"Node {i} wallet info: balance={wallet_info['balance']}")
+
+    def refresh_oracle_quotes(self, *node_indices, price=ORACLE_PRICE_MICRO_USD):
+        indices = node_indices if node_indices else range(len(self.nodes))
+        for index in indices:
+            result = self.nodes[index].setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
 
     def test_wallet_balance_tracking(self):
         """Test wallet DD balance tracking accuracy."""
@@ -85,6 +103,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         # Create DD position and verify balance tracking
         mint_amount = 100000  # 1000.00 DD = 100000 cents
         dca_tier = 0  # 1 hour = tier 0 (for testing redemptions)
+        self.refresh_oracle_quotes(0)
         mint_result = self.nodes[0].mintdigidollar(mint_amount, dca_tier)
 
         # Mine block to confirm
@@ -104,6 +123,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         receiver_initial_info = self.nodes[1].getdigidollarbalance()
         receiver_initial = receiver_initial_info['total'] if isinstance(receiver_initial_info, dict) else receiver_initial_info
 
+        self.refresh_oracle_quotes(0)
         self.nodes[0].senddigidollar(receiver_address, transfer_amount)
 
         self.nodes[0].generate(2)
@@ -136,7 +156,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         self.log.info("Testing wallet position management...")
 
         # Create multiple positions with different characteristics
-        # Tier mapping: 1=30d, 2=90d, 3=180d, 4=365d, 5=3y(1095d), 6=5y, 7=7y, 8=10y
+        # Tier mapping: 1=30d, 2=90d, 3=180d, 4=365d, 5=2y, 6=3y, 7=5y, 8=7y, 9=10y
         # Note: Max mint amount is 100,000 cents ($1000)
         positions_data = [
             {"amount": 30000, "tier": 1, "label": "short_term"},    # 300.00 DD, 30 days
@@ -145,6 +165,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         ]
 
         created_positions = []
+        self.refresh_oracle_quotes(0)
         for pos_data in positions_data:
             result = self.nodes[0].mintdigidollar(pos_data["amount"], pos_data["tier"])
             pos_data["txid"] = result["txid"]
@@ -207,6 +228,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         # Create mint transaction through wallet
         mint_amount = 80000  # 800.00 DD = 80000 cents
         dca_tier = 2  # 90 days = tier 2
+        self.refresh_oracle_quotes(1)
 
         # Test transaction preparation (if supported)
         try:
@@ -243,8 +265,9 @@ class DigiDollarWalletTest(DigiByteTestFramework):
 
         # DGB used should be approximately the collateral required plus fees
         try:
-            collateral_estimate = self.nodes[1].calculatecollateralrequirement(mint_amount, dca_tier)
-            expected_dgb = Decimal(collateral_estimate['collateral_dgb'])
+            lock_days = TIER_TO_LOCK_DAYS[dca_tier]
+            collateral_estimate = self.nodes[1].calculatecollateralrequirement(mint_amount, lock_days)
+            expected_dgb = Decimal(collateral_estimate['required_dgb'])
 
             # Allow for transaction fees
             tolerance = expected_dgb * Decimal('0.01')  # 1% tolerance
@@ -256,6 +279,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         transfer_amount = 10000  # 100.00 DD = 10000 cents
         receiver_address = self.nodes[2].getdigidollaraddress()
 
+        self.refresh_oracle_quotes(1)
         transfer_result = self.nodes[1].senddigidollar(receiver_address, transfer_amount)
         transfer_txid = transfer_result['txid']
 
@@ -301,6 +325,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
 
             # Test transferring DD to new wallet
             transfer_amount = 15000  # 150.00 DD = 15000 cents
+            self.refresh_oracle_quotes(1)
             self.nodes[1].senddigidollar(new_wallet_address, transfer_amount)
 
             self.nodes[1].generate(1)
@@ -313,6 +338,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
 
             # Test operations from new wallet
             recipient_address = self.nodes[2].getdigidollaraddress()
+            self.refresh_oracle_quotes(0)
             send_result = new_wallet.senddigidollar(recipient_address, 5000)  # 50.00 DD = 5000 cents
 
             self.nodes[0].generate(1)
@@ -346,6 +372,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         # Create DD position to backup
         backup_amount = 60000  # 600.00 DD = 60000 cents
         dca_tier = 3  # 180 days = tier 3
+        self.refresh_oracle_quotes(0)
         backup_result = wallet.mintdigidollar(backup_amount, dca_tier)
 
         self.nodes[0].generate(1)
@@ -514,6 +541,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
             encrypted_wallet.walletpassphrase(passphrase, 60)
 
             # Now DD operations should work
+            self.refresh_oracle_quotes(2)
             unlock_result = encrypted_wallet.mintdigidollar(30000, 2)  # 300.00 DD, tier 2
             assert 'txid' in unlock_result
 
@@ -551,6 +579,7 @@ class DigiDollarWalletTest(DigiByteTestFramework):
         start_time = time.time()
 
         batch_operations = []
+        self.refresh_oracle_quotes(0)
         for i in range(10):
             try:
                 amount = 10000 + i * 1000  # 100.00 DD + i * 10.00 DD

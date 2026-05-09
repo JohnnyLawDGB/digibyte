@@ -55,14 +55,25 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
         self.sync_all()
 
         # $0.50 / DGB = 500000 micro-USD.
-        for node in self.nodes:
-            node.setmockoracleprice(500000)
+        self.oracle_price_micro_usd = 500000
+        self.publish_musig2_quotes()
 
         stats = self.nodes[0].getdigidollarstats()
         assert 'health_status' in stats
         assert 'total_dd_supply' in stats
 
+    def publish_musig2_quotes(self, node_indices=None, price=None):
+        """Publish fresh regtest MuSig2 oracle bundles for the next block."""
+        if price is None:
+            price = self.oracle_price_micro_usd
+        if node_indices is None:
+            node_indices = range(self.num_nodes)
+        for index in node_indices:
+            result = self.nodes[index].setmockoracleprice(price)
+            assert_equal(result["price_micro_usd"], price)
+
     def mine_and_sync(self, node_idx=0, blocks=1):
+        self.publish_musig2_quotes()
         self.generate(self.nodes[node_idx], blocks)
         self.sync_all()
 
@@ -202,6 +213,7 @@ class DigiDollarTransactionsTest(DigiByteTestFramework):
 
         for node in self.nodes:
             node.setmockoracleprice(1000000)  # $1.00 / DGB, should reduce required collateral vs $0.50
+        self.oracle_price_micro_usd = 1000000
 
         high = self.nodes[0].calculatecollateralrequirement(10000, 180)
         high_required = high['required_dgb']

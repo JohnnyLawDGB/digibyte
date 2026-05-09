@@ -74,8 +74,9 @@ class DigiDollarRedeemStatsTest(DigiByteTestFramework):
         # Mint with 1-hour lock (tier 0)
         # RPC signature: mintdigidollar dd_amount lock_tier ( fee_rate )
         # dd_amount is in CENTS, not dollars!
-        # fee_rate in sat/kB - use 100000 sat/kB (0.001 DGB/kB) to ensure acceptance
-        fee_rate_sat_kb = 100000
+        # fee_rate is in sat/kB; mintdigidollar floors lower values to the
+        # current DD minimum rate.
+        fee_rate_sat_kb = 35000000
         mint_result = alice.mintdigidollar(dd_cents, lock_tier, fee_rate_sat_kb)
 
         mint_txid = mint_result['txid']
@@ -167,7 +168,7 @@ class DigiDollarRedeemStatsTest(DigiByteTestFramework):
         self.log.info(f"Blocks until unlock: {blocks_remaining}")
 
         # Attempt early redemption - should fail
-        # RPC signature: redeemdigidollar "position_id" dd_amount ( "redemption_address" fee_rate )
+        # RPC signature: redeemdigidollar "position_id" dd_amount ( "redemption_address" )
         try:
             alice.redeemdigidollar(mint_txid, dd_cents)
             raise AssertionError("Early redemption should have been rejected!")
@@ -192,7 +193,7 @@ class DigiDollarRedeemStatsTest(DigiByteTestFramework):
         self.log.info("=== Step 6: Redeem after lock expires (should SUCCEED) ===")
 
         # Redeem the vault
-        # RPC signature: redeemdigidollar "position_id" dd_amount ( "redemption_address" fee_rate )
+        # RPC signature: redeemdigidollar "position_id" dd_amount ( "redemption_address" )
         redeem_result = alice.redeemdigidollar(mint_txid, dd_cents)
         redeem_txid = redeem_result['txid']
         dgb_unlocked = redeem_result['dgb_unlocked']

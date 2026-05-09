@@ -7,6 +7,8 @@
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal, assert_greater_than
 
+ORACLE_PRICE_MICRO_USD = 500000
+
 
 class WalletDigiDollarActiveRestoreRedeemTest(DigiByteTestFramework):
     def set_test_params(self):
@@ -31,7 +33,8 @@ class WalletDigiDollarActiveRestoreRedeemTest(DigiByteTestFramework):
 
         self.log.info("Mining spendable DGB and setting mock oracle price")
         self.generate(node, 200)
-        node.setmockoracleprice(500000)
+        result = node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+        assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
 
         self.log.info("Minting an active tier-0 DD position")
         mint = node.mintdigidollar(amount, 0)
@@ -82,6 +85,8 @@ class WalletDigiDollarActiveRestoreRedeemTest(DigiByteTestFramework):
             self.generate(node, unlock_height - current_height + 1)
 
         self.log.info("Redeeming from the restored wallet")
+        result = node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+        assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
         redeem = restored.redeemdigidollar(position_id, amount)
         assert "txid" in redeem
         self.generate(node, 1)

@@ -23,15 +23,16 @@ class DigiDollarRPCDeploymentTest(DigiByteTestFramework):
     def run_test(self):
         self.log.info("Testing DigiDollar deployment info RPC...")
         node = self.nodes[0]
-        
+
         self.log.info("Generating initial blocks for test setup...")
         self.generate(node, 110)
-        
+
         self.test_deployment_info_basic()
         self.test_deployment_info_fields()
         self.test_deployment_status_values()
         self.test_deployment_after_activation()
-        
+        self.test_deployment_info_oracle_activation_fields()
+
         self.log.info("All deployment info tests passed!")
 
     def test_deployment_info_basic(self):
@@ -91,6 +92,44 @@ class DigiDollarRPCDeploymentTest(DigiByteTestFramework):
             assert 'threshold' in result, "Missing threshold for started/locked_in"
             assert 'period_blocks' in result, "Missing period_blocks for started/locked_in"
             self.log.info(f"Signaling: {result.get('signaling_blocks', 0)}/{result.get('threshold', 0)}")
+
+    def test_deployment_info_oracle_activation_fields(self):
+        # Wave 9 (Agent C): operators need a single RPC that exposes the
+        # MuSig2 oracle activation height and the active roster shape so
+        # they can correlate `nDigiDollarMuSig2Height`, `nOracleConsensusRequired`,
+        # and `nOraclePubkeyCount` with the BIP9 deployment status. Before
+        # this fix the RPC only exposed BIP9 fields; operators had to read
+        # chainparams source to discover the oracle quorum.
+        self.log.info("Testing deployment info exposes oracle activation fields...")
+        node = self.nodes[0]
+        result = node.getdigidollardeploymentinfo()
+
+        for field in (
+                "oracle_activation_height",
+                "musig2_format_activation_height",
+                "oracle_pubkey_count",
+                "oracle_consensus_required",
+                "oracle_total_slots"):
+            assert field in result, f"Missing '{field}' field — operator cannot see oracle roster shape"
+            assert isinstance(result[field], int), f"'{field}' should be integer"
+
+        # Regtest keeps mandatory oracle/DD activation at height 650 while the
+        # V1 MuSig2 bundle format itself is available from genesis.
+        assert_equal(result["oracle_activation_height"], 650)
+        assert_equal(result["musig2_format_activation_height"], 0)
+        # Regtest 4-of-7 quorum.
+        assert_equal(result["oracle_pubkey_count"], 7)
+        assert_equal(result["oracle_consensus_required"], 4)
+        # Regtest configures 7 oracle slots.
+        assert_equal(result["oracle_total_slots"], 7)
+
+        self.log.info(
+            "Oracle activation fields verified: oracle_height=%d, musig2_height=%d, consensus=%d-of-%d, slots=%d" % (
+                result["oracle_activation_height"],
+                result["musig2_format_activation_height"],
+                result["oracle_consensus_required"],
+                result["oracle_pubkey_count"],
+                result["oracle_total_slots"]))
 
     def test_deployment_after_activation(self):
         self.log.info("Testing deployment info consistency...")

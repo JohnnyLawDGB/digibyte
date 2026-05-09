@@ -439,7 +439,9 @@ if [ -z "$BOB_TXID4" ]; then
 fi
 echo "  ✓ txid: ${BOB_TXID4:0:16}..."
 echo "  ✓ Collateral: $(echo "$BOB_MINT4" | jq -r '.result.dgb_collateral') DGB"
-echo "  ✓ Lock blocks: 240 (1 hour)"
+MINT4_UNLOCK_HEIGHT=$(echo "$BOB_MINT4" | jq -r '.result.unlock_height // 0')
+echo "  ✓ Lock blocks: 240 + 100 confirmation-buffer blocks (1 hour tier)"
+echo "  ✓ Unlock height: $MINT4_UNLOCK_HEIGHT"
 echo ""
 
 MINT4_TXID=$(echo "$BOB_MINT4" | jq -r '.result.txid')
@@ -470,7 +472,11 @@ if [ "$TX_CONFIRMATIONS" -eq 0 ]; then
 fi
 
 echo "✓ Mint #4 confirmed (height: $BOB_HEIGHT, confirmations: $TX_CONFIRMATIONS)"
-echo "✓ Lock will expire at height: $((BOB_HEIGHT + 238))"
+if [ "$MINT4_UNLOCK_HEIGHT" -le 0 ]; then
+    echo "❌ ERROR: Mint #4 RPC did not return a valid unlock_height"
+    exit 1
+fi
+echo "✓ Lock will expire at height: $MINT4_UNLOCK_HEIGHT"
 echo ""
 
 # Monitor network state after 4th mint
@@ -492,7 +498,7 @@ CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcp
 echo "✓ Bob height: $BOB_HEIGHT"
 echo "✓ Alice height: $ALICE_HEIGHT"
 echo "✓ Charlie height: $CHARLIE_HEIGHT"
-echo "✓ Blocks until unlock: $((BOB_HEIGHT + 118))"
+echo "✓ Blocks until unlock: $((MINT4_UNLOCK_HEIGHT - BOB_HEIGHT))"
 echo ""
 
 # Monitor network state halfway through lock
@@ -521,12 +527,19 @@ else
 fi
 echo ""
 
-# Step 14: Generate another 125 blocks (past lock expiry)
+# Step 14: Generate enough blocks to pass lock expiry
 echo "=========================================="
-echo "Step 14: Generate 125 more blocks (past lock)"
+echo "Step 14: Generate remaining blocks to lock expiry"
 echo "=========================================="
 echo ""
-./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 125 > /dev/null
+BLOCKS_TO_UNLOCK=$((MINT4_UNLOCK_HEIGHT - BOB_HEIGHT))
+if [ "$BLOCKS_TO_UNLOCK" -lt 0 ]; then
+    BLOCKS_TO_UNLOCK=0
+fi
+echo "Mining $BLOCKS_TO_UNLOCK blocks to reach unlock height $MINT4_UNLOCK_HEIGHT..."
+if [ "$BLOCKS_TO_UNLOCK" -gt 0 ]; then
+    ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate "$BLOCKS_TO_UNLOCK" > /dev/null
+fi
 sleep 10
 echo "  Waiting for wallet to process blocks..."
 BOB_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
@@ -535,6 +548,10 @@ CHARLIE_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/charlie_regtest -rpcp
 echo "✓ Bob height: $BOB_HEIGHT"
 echo "✓ Alice height: $ALICE_HEIGHT"
 echo "✓ Charlie height: $CHARLIE_HEIGHT"
+if [ "$BOB_HEIGHT" -lt "$MINT4_UNLOCK_HEIGHT" ]; then
+    echo "❌ ERROR: Bob height $BOB_HEIGHT is still below unlock height $MINT4_UNLOCK_HEIGHT"
+    exit 1
+fi
 echo "✓ Lock period EXPIRED - redemption should now work"
 echo ""
 
@@ -1010,6 +1027,7 @@ ERR_TEST_MINT=$(curl --silent --user "$BOB_COOKIE" \
 
 ERR_TEST_TXID=$(echo "$ERR_TEST_MINT" | jq -r '.result.txid // empty')
 ERR_TEST_COLLATERAL=$(echo "$ERR_TEST_MINT" | jq -r '.result.dgb_collateral // 0')
+ERR_TEST_UNLOCK_HEIGHT=$(echo "$ERR_TEST_MINT" | jq -r '.result.unlock_height // 0')
 
 if [ -z "$ERR_TEST_TXID" ]; then
     echo "❌ ERR test mint failed:"
@@ -1021,7 +1039,8 @@ else
     echo "   TXID: ${ERR_TEST_TXID:0:16}..."
     echo "   DD Minted: 2000 cents (\$20)"
     echo "   Collateral Locked: $ERR_TEST_COLLATERAL DGB"
-    echo "   Lock Period: 240 blocks (1 hour)"
+    echo "   Lock Period: 240 + 100 confirmation-buffer blocks (1 hour tier)"
+    echo "   Unlock Height: $ERR_TEST_UNLOCK_HEIGHT"
     echo ""
 
     # Mine 10 blocks to confirm
@@ -1109,15 +1128,30 @@ echo "=========================================="
 echo "DCA-3: Expiring ERR Test Vault Lock Period"
 echo "=========================================="
 echo ""
-echo "The ERR test vault has a 240 block lock."
-echo "Mining 250 blocks to ensure lock expires..."
+echo "The ERR test vault has a 240 block lock plus a 100-block confirmation buffer."
+CURRENT_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
+if [ -n "$ERR_TEST_TXID" ] && [ "${ERR_TEST_UNLOCK_HEIGHT:-0}" -gt 0 ]; then
+    BLOCKS_TO_ERR_UNLOCK=$((ERR_TEST_UNLOCK_HEIGHT - CURRENT_HEIGHT))
+else
+    BLOCKS_TO_ERR_UNLOCK=350
+fi
+if [ "$BLOCKS_TO_ERR_UNLOCK" -lt 0 ]; then
+    BLOCKS_TO_ERR_UNLOCK=0
+fi
+echo "Mining $BLOCKS_TO_ERR_UNLOCK blocks to ensure lock expires..."
 echo ""
 
-./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate 250 > /dev/null
+if [ "$BLOCKS_TO_ERR_UNLOCK" -gt 0 ]; then
+    ./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 -generate "$BLOCKS_TO_ERR_UNLOCK" > /dev/null
+fi
 sleep 10
 
 CURRENT_HEIGHT=$(./src/digibyte-cli -regtest -datadir=/tmp/bob_regtest -rpcport=18443 getblockcount)
 echo "✅ Mined to height: $CURRENT_HEIGHT"
+if [ -n "$ERR_TEST_TXID" ] && [ "${ERR_TEST_UNLOCK_HEIGHT:-0}" -gt 0 ] && [ "$CURRENT_HEIGHT" -lt "$ERR_TEST_UNLOCK_HEIGHT" ]; then
+    echo "❌ ERROR: ERR test vault is still locked until $ERR_TEST_UNLOCK_HEIGHT"
+    exit 1
+fi
 echo "   ERR test vault lock should now be expired"
 echo ""
 

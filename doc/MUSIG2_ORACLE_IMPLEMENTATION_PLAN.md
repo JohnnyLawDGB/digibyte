@@ -1,5 +1,9 @@
 # MuSig2 Oracle Bundle Implementation Plan
 
+> Historical planning note: V1 implementation is complete and production
+> validation is MuSig2 v0x03-only. Older transition/fallback language in this
+> plan is retained as design history, not current release guidance.
+
 > **Goal:** Replace individual per-oracle Schnorr signatures in oracle bundles with MuSig2 aggregate signatures, reducing on-chain oracle data from ~609 bytes (9-of-17) to ~88 bytes (constant, any N).
 >
 > **Status:** PLANNING — awaiting review before implementation begins

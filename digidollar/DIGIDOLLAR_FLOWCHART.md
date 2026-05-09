@@ -472,7 +472,7 @@ The Oracle provides real-world DGB/USD prices to the blockchain. Without it, the
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  STEP 1: FETCH PRICES (Every 15 seconds)                                     │
+│  STEP 1: FETCH PRICES (Every 60 seconds)                                     │
 │  ───────────────────────────────────────                                     │
 │                                                                              │
 │  Exchange Fetchers in src/oracle/exchange.cpp:                               │
@@ -538,8 +538,8 @@ The Oracle provides real-world DGB/USD prices to the blockchain. Without it, the
 │  │  vector<uchar> schnorr_sig = [64 bytes]       (BIP-340 signature)  │     │
 │  └────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
-│  Full message size: ~128 bytes                                               │
-│  Compact format (OP_RETURN): 20 bytes                                        │
+│  Operator message size: ~128 bytes before MuSig2 aggregation                 │
+│  V1 coinbase format: MuSig2 v0x03 aggregate bundle                           │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -547,17 +547,15 @@ The Oracle provides real-world DGB/USD prices to the blockchain. Without it, the
 │  STEP 5: EMBED IN BLOCK (Coinbase Transaction)                               │
 │  ─────────────────────────────────────────────                               │
 │                                                                              │
-│  Phase One (1-of-1): Single oracle price embedded directly                   │
-│  Phase Two (8-of-15): Bundle of 8+ oracle messages with consensus            │
+│  V1: MuSig2 v0x03 bundle with signer bitmap and aggregate signature          │
 │                                                                              │
-│  Compact Format in Coinbase OP_RETURN:                                       │
+│  V1 Coinbase OP_RETURN:                                                      │
 │  ┌────────────────────────────────────────────────────────────────────┐     │
 │  │  Byte 0:     OP_RETURN (0x6a)                                      │     │
 │  │  Byte 1:     OP_ORACLE (0xbf)                                      │     │
-│  │  Bytes 2-3:  Version (0x0001)                                      │     │
-│  │  Bytes 4-11: Price in micro-USD (little-endian uint64)             │     │
-│  │  Bytes 12-19: Timestamp (little-endian int64)                      │     │
-│  │  Total: 20 bytes                                                   │     │
+│  │  Byte 2:     Push version byte                                      │     │
+│  │  Byte 3:     Version (0x03)                                        │     │
+│  │  Payload:    signer bitmap, epoch, price, timestamp, MuSig2 sig    │     │
 │  └────────────────────────────────────────────────────────────────────┘     │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -592,7 +590,7 @@ The Oracle provides real-world DGB/USD prices to the blockchain. Without it, the
   RPC Command: setmockoracleprice <price_micro_usd>
 
   Example:
-  $ digibyte-cli setmockoracleprice 6500
+  $ digibyte-cli -regtest setmockoracleprice 6500
   → Sets price to $0.0065/DGB (6500 micro-USD)
 
   Default mock price: 6500 micro-USD ($0.0065/DGB)

@@ -1011,8 +1011,8 @@ graph TD
 
 Think of the Oracle as a **decentralized price reporter**:
 
-1. **Exchange APIs** - The oracle connects to 8 major exchanges (Binance, Coinbase, Kraken, etc.)
-2. **Fetch Prices** - Every 15 seconds, it fetches current DGB/USD prices
+1. **Exchange APIs** - The oracle connects to 6 active exchange sources (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko)
+2. **Fetch Prices** - Every 60 seconds, it fetches current DGB/USD prices
 3. **Calculate Median** - Removes outliers and calculates the median price
 4. **Sign Message** - Creates a cryptographically signed price message
 5. **Broadcast** - Sends the message to all network nodes via P2P
@@ -1020,19 +1020,15 @@ Think of the Oracle as a **decentralized price reporter**:
 7. **Validation** - All nodes verify the price data when validating blocks
 8. **Caching** - The price is cached and available for DigiDollar operations
 
-### Phase One Oracle (TestNet 2025)
+### V1 Oracle (TestNet 2025)
 
 **Current Status:**
-- ✅ **Single Oracle** (1-of-1 consensus) for simplicity
-- ✅ **Mock Price System** for testing ($0.05/DGB default)
-- ✅ **Compact Format** (20 bytes in OP_RETURN)
+- ✅ **17 configured oracle slots** with a 9-signature launch quorum
+- ✅ **Live exchange-backed pricing** on testnet/mainnet
+- ✅ **MuSig2 v0x03 bundles** in the coinbase oracle output
 - ✅ **Activates at Block 650** (with DigiDollar)
 
-**Phase Two Oracle (Future Mainnet):**
-- 🔄 **15 Active Oracles** from 30 total
-- 🔄 **8-of-15 Consensus** (threshold signatures)
-- 🔄 **Real Exchange APIs** (live market data)
-- 🔄 **Advanced Validation** (outlier detection, reputation system)
+Mock price RPCs are regtest-only helpers and are not a testnet/mainnet fallback.
 
 ### Checking Oracle Price
 
@@ -1044,19 +1040,19 @@ Think of the Oracle as a **decentralized price reporter**:
 **Example Output:**
 ```json
 {
-  "price_cents": 5,
-  "price_usd": "$0.05",
+  "price_micro_usd": 6500,
+  "price_usd": 0.0065,
   "last_update_height": 650,
   "last_update_time": 1732204800,
   "validity_blocks": 240,
   "is_stale": false,
-  "oracle_count": 1,
+  "oracle_count": 9,
   "status": "active"
 }
 ```
 
 **Understanding the Output:**
-- `price_cents`: 5 = $0.05 per DGB (5 cents, NOT micro-USD!)
+- `price_micro_usd`: 6500 = $0.0065 per DGB
 - `price_usd`: Human-readable format
 - `last_update_height`: Block when price was last updated
 - `validity_blocks`: Blocks until price is considered stale (240 = 1 hour)
@@ -1066,44 +1062,42 @@ Think of the Oracle as a **decentralized price reporter**:
 
 ```bash
 # Set mock oracle price to $0.50/DGB
-./src/digibyte-cli -testnet setmockoracleprice 50
+./src/digibyte-cli -regtest setmockoracleprice 500000
 
 # Set mock oracle price to $1.00/DGB
-./src/digibyte-cli -testnet setmockoracleprice 100
+./src/digibyte-cli -regtest setmockoracleprice 1000000
 
 # Check updated price
-./src/digibyte-cli -testnet getoracleprice
+./src/digibyte-cli -regtest getoracleprice
 
 # Simulate 50% price increase
-./src/digibyte-cli -testnet simulatepricevolatility 50
+./src/digibyte-cli -regtest simulatepricevolatility 50
 
 # Simulate 20% price decrease
-./src/digibyte-cli -testnet simulatepricevolatility -20
+./src/digibyte-cli -regtest simulatepricevolatility -20
 ```
+
+Do not use mock-price RPCs on testnet or mainnet. Those networks use the live
+oracle feed and MuSig2 bundle path.
 
 ### Oracle Price Format (IMPORTANT!)
 
-**⚠️ CRITICAL UNDERSTANDING:**
-
-The oracle uses **DigiDollar cents format**, NOT micro-USD:
-
-```
-100 DigiDollar cents = $1.00 USD
-```
+**Critical unit rule:** DD amounts are stored in cents, while oracle DGB/USD
+prices are stored in micro-USD.
 
 **Examples:**
-| Price (USD/DGB) | DigiDollar Cents | Micro-USD (NOT USED) |
-|-----------------|------------------|----------------------|
-| $0.01/DGB | 1 | 10,000 |
-| $0.05/DGB | 5 | 50,000 |
-| $0.10/DGB | 10 | 100,000 |
-| $1.00/DGB | 100 | 1,000,000 |
-| $10.00/DGB | 1000 | 10,000,000 |
+| Price (USD/DGB) | Oracle micro-USD |
+|-----------------|------------------|
+| $0.01/DGB | 10,000 |
+| $0.05/DGB | 50,000 |
+| $0.10/DGB | 100,000 |
+| $1.00/DGB | 1,000,000 |
+| $10.00/DGB | 10,000,000 |
 
 **Why this matters:**
-- When you see `price_cents: 5`, it means $0.05 per DGB
-- When minting $100 DD with price 5 cents/DGB, you need: `$100 ÷ $0.05 = 2,000 DGB`
-- Plus collateral ratio (e.g., 300% = 6,000 DGB total)
+- When you see `price_micro_usd: 50000`, it means $0.05 per DGB
+- When minting $100 DD with price 50,000 micro-USD/DGB, base collateral is `$100 / $0.05 = 2,000 DGB`
+- Then apply the canonical collateral ratio (for example, 300% = 6,000 DGB total before wallet safety margin)
 
 ---
 
@@ -1148,7 +1142,7 @@ Minting is the process of **creating new DigiDollars by locking DGB as collatera
 
 | Lock Tier | Lock Period | Collateral Ratio | Example | Use Case |
 |-----------|-------------|------------------|---------|----------|
-| **0** | 1 hour | 1000% | Test only | Testing |
+| **0** | 1 hour | 1000% | 10x collateral | Short-term / high-volatility |
 | **1** | 30 days | 500% | 5x collateral | Short-term liquidity |
 | **2** | 90 days | 400% | 4x collateral | Quarterly needs |
 | **3** | 180 days | 350% | 3.5x collateral | Semi-annual |
@@ -1186,12 +1180,12 @@ This means you have **4,680,000 DGB** (from mining 650 blocks × 72,000 DGB/bloc
 **Example Output:**
 ```json
 {
-  "price_cents": 5,
-  "price_usd": "$0.05"
+  "price_micro_usd": 50000,
+  "price_usd": 0.05
 }
 ```
 
-**Understanding:** 5 cents = $0.05 per DGB
+**Understanding:** 50,000 micro-USD = $0.05 per DGB
 
 #### Step 3: Calculate Required Collateral
 
@@ -1207,37 +1201,28 @@ This means you have **4,680,000 DGB** (from mining 650 blocks × 72,000 DGB/bloc
 **Example Output:**
 ```json
 {
-  "required_dgb": 600000.00000000,
+  "required_dgb": "6000.00000000",
+  "minimum_required_dgb": "6000.00000000",
+  "wallet_collateral_dgb": "6000.00000000",
+  "collateral_safety_margin_dgb": "0.00000000",
   "dd_amount_cents": 10000,
-  "dd_amount_usd": "$100.00",
+  "dd_amount_usd": 100,
   "lock_days": 365,
   "lock_blocks": 2102400,
   "base_ratio": 300,
   "dca_multiplier": 1.0,
   "effective_ratio": 300,
-  "oracle_price": 5,
+  "oracle_price_micro_usd": 50000,
+  "oracle_price_usd": 0.05,
   "system_health": 100,
   "dca_tier": "healthy"
 }
 ```
 
 **Understanding:**
-- Need **600,000 DGB** to mint $100 DD
-- Calculation: ($100 ÷ $0.05) × 300% = 2,000 × 3 = 6,000 DGB... wait, that's wrong!
-
-**CORRECTION:** The math is:
+- Need **6,000 DGB** minimum collateral to mint $100 DD at $0.05/DGB with a 300% ratio
 - Value needed: $100 ÷ $0.05/DGB = 2,000 DGB
 - With 300% collateral: 2,000 × 3 = 6,000 DGB
-
-But the output shows 600,000 DGB... Let me recalculate for clarity.
-
-**Actually, the calculation in the architecture doc shows:**
-- Oracle price is in **DigiDollar cents per DGB** (NOT USD per DGB!)
-- So `price_cents: 5` means 5 DD cents per DGB
-- To mint 10,000 DD cents, need: 10,000 ÷ 5 = 2,000 DGB worth
-- With 300% collateral: 2,000 × 3 = 6,000 DGB
-
-The output showing 600,000 suggests the mock price might be different or there's scaling involved. For this guide, I'll use the example from the functional tests.
 
 #### Step 4: Execute the Mint
 
@@ -1692,7 +1677,7 @@ graph TD
     H --> I[Mine Block]
     I --> J[DGB Unlocked!]
     D --> K[Emergency Redemption]
-    K --> L[8-of-15 Oracle Approval]
+    K --> L[ERR extra DD burn if health < 100%]
     L --> E
 ```
 
@@ -1700,12 +1685,12 @@ graph TD
 
 **What is Redemption?**
 
-Redemption is the process of **burning DigiDollars to unlock your DGB collateral**. There are 4 redemption paths:
+Redemption is the process of **burning DigiDollars to unlock your DGB collateral**. V1 uses full-vault redemption:
 
 1. **Normal Redemption** - After timelock expires (most common)
-2. **Emergency Redemption** - With 8-of-15 oracle approval (Phase Two)
-3. **Partial Redemption** - Redeem some DD, keep vault open
-4. **Emergency Redemption Ratio (ERR)** - When system is undercollateralized (<100%)
+2. **Emergency Redemption Ratio (ERR)** - After timelock expiry when system health is below 100%; the wallet burns the extra DD required by the ERR ratio and receives full collateral back
+
+Partial redemption is not supported in V1.
 
 ### Step-by-Step Redemption Guide
 
@@ -2024,7 +2009,7 @@ graph TD
 
 **Steps:**
 1. **Enter Amount** - Type amount in USD
-2. **Select Lock Period** - Choose from dropdown (30d to 10y)
+2. **Select Lock Period** - Choose from dropdown (1h to 10y)
 3. **Review Collateral** - See required DGB amount
 4. **Click "Mint DigiDollars"** - Executes mint
 5. **Confirm Transaction** - Shows summary, confirm
@@ -2330,7 +2315,7 @@ error: {"code":-1,"message":"Oracle price not available"}
 **Causes:**
 - Below activation height (650)
 - No oracle bundle in recent blocks
-- Mock oracle not set (RegTest)
+- On regtest only: mock oracle not set
 
 **Solutions:**
 
@@ -2340,9 +2325,9 @@ error: {"code":-1,"message":"Oracle price not available"}
 # Must be >= 650
 ```
 
-2. **Set mock price (RegTest only):**
+2. **Verify live oracle price:**
 ```bash
-./src/digibyte-cli -testnet setmockoracleprice 5
+./src/digibyte-cli -testnet getoracleprice
 ```
 
 3. **Mine blocks to trigger oracle:**

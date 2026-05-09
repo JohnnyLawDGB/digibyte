@@ -2,11 +2,12 @@
 
 ## Overview
 
-This document describes the complete integration flow of the DigiDollar Oracle System (Phase One) across all components of the DigiByte blockchain.
+This document describes the DigiDollar Oracle System integration flow. Older
+Phase One single-oracle diagrams in this file are historical context only.
 
-**Phase One Status**: 1-of-1 Consensus (Single Oracle)
-**Network**: Testnet Only
-**Price Source**: 8 Exchange APIs
+**V1 Status**: MuSig2 v0x03 bundle validation, launch quorum 9 signatures
+**Network**: mainnet/testnet/regtest with deployment gates
+**Price Source**: 6 active exchange-backed fetchers; regtest mock helpers only
 
 ---
 
@@ -14,7 +15,7 @@ This document describes the complete integration flow of the DigiDollar Oracle S
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ LAYER 1: Exchange API Layer (8 Exchanges)                               │
+│ LAYER 1: Exchange API Layer (Active Sources)                            │
 │                                                                          │
 │ ┌────────────┐ ┌─────────────┐ ┌────────────┐ ┌──────────┐             │
 │ │  Binance   │ │ CoinMarketCap│ │ CoinGecko  │ │ Coinbase │             │
@@ -33,10 +34,10 @@ This document describes the complete integration flow of the DigiDollar Oracle S
 │ LAYER 2: Oracle Node Layer (Price Fetching & Signing)                   │
 │                                                                          │
 │ ┌───────────────────────────────────────────────────────────────────┐   │
-│ │ Oracle Node (ID 0 - Phase One)                                    │   │
+│ │ Oracle Node (active V1 participant)                               │   │
 │ │                                                                   │   │
-│ │ • Fetches prices every 15 seconds (1 DGB block)                  │   │
-│ │ • Calculates median from 8 exchanges                             │   │
+│ │ • Fetches prices every 60 seconds                                │   │
+│ │ • Calculates median from active exchange sources                  │   │
 │ │ • Creates COraclePriceMessage                                    │   │
 │ │ • Signs with BIP-340 Schnorr signature                           │   │
 │ │ • Broadcasts to P2P network                                      │   │
@@ -74,9 +75,9 @@ This document describes the complete integration flow of the DigiDollar Oracle S
 │ ┌───────────────────────────────────────────────────────────────────┐   │
 │ │ OracleBundleManager (Singleton)                                   │   │
 │ │                                                                   │   │
-│ │ Phase One Consensus: 1-of-1                                       │   │
+│ │ V1 Consensus: MuSig2 quorum                                      │   │
 │ │ • Collects oracle messages from P2P network                      │   │
-│ │ • Creates bundles (1 message required in Phase One)              │   │
+│ │ • Creates v0x03 bundles when the MuSig2 session completes        │   │
 │ │ • Validates signatures using Schnorr verification                │   │
 │ │ • Manages price cache (block height → price)                     │   │
 │ │ • Provides oracle data to miner and validation                   │   │
@@ -84,7 +85,7 @@ This document describes the complete integration flow of the DigiDollar Oracle S
 │                                                                          │
 │ Files: src/oracle/bundle_manager.{h,cpp}                                │
 │ Classes: OracleBundleManager, OracleDataValidator                       │
-│ Data: COracleBundle (contains 1 message in Phase One)                   │
+│ Data: COracleBundle (v0x03 aggregate bundle for V1)                     │
 └──────────────────────────┬───────────────────────────────────────────────┘
                            │ AddOracleBundleToBlock()
                            ↓
@@ -117,7 +118,7 @@ This document describes the complete integration flow of the DigiDollar Oracle S
 │ │ CheckBlock() - Basic Validation                                   │   │
 │ │ • Validates bundle structure                                      │   │
 │ │ • Verifies Schnorr signatures                                     │   │
-│ │ • Checks message count (1 in Phase One)                          │   │
+│ │ • Checks v0x03 bundle format, roster, quorum, and domain         │   │
 │ │ • Validates OP_RETURN size limits                                │   │
 │ │                                                                   │   │
 │ │ ContextualCheckBlock() - Contextual Validation                   │   │
@@ -184,7 +185,7 @@ CAmount OracleNode::FetchMedianPrice()
 ```
 
 **Data Flow**:
-- Oracle node queries 8 exchanges
+- Oracle node queries the active exchange set
 - Each exchange returns DGB/USD price
 - Median price calculated from valid responses
 - Minimum 3 exchanges required for valid price
@@ -359,8 +360,8 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block,
         }
     }
 
-    // Phase One: Require exactly 1 message
-    if (bundle.messages.size() != 1) {
+    // V1: require enough active participants for the chainparams quorum.
+    if (bundle.messages.size() < params.nOracleRequiredMessages) {
         return false;
     }
 
@@ -372,7 +373,7 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block,
 - Block validation extracts oracle bundle from coinbase
 - Validates bundle structure
 - Verifies all Schnorr signatures
-- Checks Phase One consensus (1-of-1)
+- Checks V1 MuSig2 quorum/roster/domain rules
 - Rejects block if validation fails
 
 ---
@@ -384,8 +385,8 @@ bool OracleDataValidator::ValidateBlockOracleData(const CBlock& block,
 **Code**:
 ```cpp
 // In ConnectBlock() after transaction processing
-// Update oracle price cache (Phase One: testnet only)
-if (m_chainman.GetParams().GetChainType() == ChainType::TESTNET && !fJustCheck) {
+// Update oracle price cache after accepted V1 oracle bundle validation.
+if (!fJustCheck) {
     if (!block.vtx.empty() && block.vtx[0]->vout.size() >= 2) {
         const CTxOut& oracle_output = block.vtx[0]->vout[1];
 
@@ -493,32 +494,17 @@ bool ValidateDigiDollarMint(const CTransaction& tx, int block_height)
 
 ---
 
-## Phase One Specifications
+## V1 Specifications
 
-### Consensus Model: 1-of-1
+### Consensus Model: MuSig2 v0x03
 
-Phase One uses simplified consensus:
-- **Single oracle** (Oracle ID 0)
-- **No multi-oracle aggregation**
-- **No median calculation** (single price is the price)
-- **Testnet only**
+V1 uses the live multi-oracle path:
+- **MuSig2 v0x03 bundle** in the coinbase oracle output
+- **Launch quorum floor: 9 signatures**
+- **Median aggregation** from active exchange-backed oracle participants
+- **Mainnet/testnet/regtest validator parity** behind deployment gates
 
-This allows for:
-- Rapid deployment and testing
-- Simple validation logic
-- Easy debugging
-- Smooth transition to Phase Two
-
-### Phase Two Upgrade Path
-
-Phase Two will implement:
-- **15 active oracles** (rotated from pool of 30)
-- **8-of-15 consensus** (majority required)
-- **Median price calculation** from multiple oracles
-- **Outlier filtering** (MAD-based)
-- **Mainnet deployment**
-
-The integration points remain the same - only the bundle creation and validation logic changes.
+The old 1-of-1 Phase One model is retained only as historical design context.
 
 ---
 
@@ -529,10 +515,10 @@ The integration points remain the same - only the bundle creation and validation
 **Scenario**: Oracle system disabled or no messages received
 
 **Behavior**:
-- Miner creates block without oracle data
-- Block validation passes (oracle data optional in Phase One)
-- DigiDollar uses fallback price ($0.05 default)
-- System logs warning
+- Ordinary DGB blocks do not require oracle data
+- DD-touching active blocks require a valid V1 oracle bundle and fail closed
+- Wallet/RPC quote paths fail closed when no live consensus price is available
+- Regtest alone may use mock-price helpers for deterministic tests
 
 **Code**:
 ```cpp
@@ -600,7 +586,7 @@ std::vector<ExchangePrice> MultiExchangeAggregator::FilterOutliers(
     std::vector<ExchangePrice> filtered;
 
     for (const auto& price : prices) {
-        double deviation = std::abs(price.price_cents - median) / static_cast<double>(median);
+        double deviation = std::abs(price.price_micro_usd - median) / static_cast<double>(median);
         if (deviation <= outlier_threshold) {
             filtered.push_back(price);
         }
@@ -649,23 +635,17 @@ Tests:
 - schnorr_sig: 64 bytes
 - **Total**: ~128 bytes
 
-**COracleBundle** (Phase One):
-- messages: 1 × 128 bytes
-- epoch: 4 bytes
-- median_price_micro_usd: 8 bytes
-- timestamp: 8 bytes
-- **Total**: ~148 bytes
-
-**OP_RETURN overhead**: 2 bytes (OP_RETURN + push)
-**Coinbase size increase**: ~150 bytes
+**Oracle bundle** (V1):
+- MuSig2 v0x03 aggregate signature
+- signer bitmap plus epoch, price, timestamp, and domain-bound payload
+- constant-size aggregate signature regardless of signer count
 
 ### Network Bandwidth
 
-**Per Block** (15 seconds):
-- 1 oracle message broadcast: ~128 bytes
-- 1 block with oracle bundle: ~150 bytes overhead
-- **Total**: ~278 bytes per 15 seconds
-- **Rate**: ~18.5 bytes/second
+**Operator cadence**:
+- exchange fetch/broadcast loop every 60 seconds
+- 15-second target block spacing still applies to block production
+- DD-touching active blocks require the V1 oracle bundle; ordinary DGB blocks do not
 
 **Negligible impact** on network bandwidth.
 
@@ -673,7 +653,7 @@ Tests:
 
 **Schnorr Signature Verification**:
 - ~0.5ms per signature on modern CPU
-- 1 signature per block in Phase One
+- aggregate MuSig2 signature verification on DD-touching V1 blocks
 - **Negligible impact** on block validation time
 
 ### Memory Usage
@@ -695,20 +675,15 @@ Tests:
 
 ### DOS Protection
 
-- **Rate limiting**: Max 1 message per oracle per 15 seconds
+- **Rate limiting**: P2P admission limits messages before relay; the operator fetch/broadcast loop is 60 seconds
 - **Message size limits**: Max 200 bytes per message
 - **Duplicate detection**: Hash-based seen filter
 - **Signature verification**: Before relay, not after
 
 ### Price Manipulation Resistance
 
-**Phase One** (1-of-1):
-- Single oracle = **trusted setup**
-- Suitable for testnet only
-- Median of 8 exchanges provides some protection
-
-**Phase Two** (8-of-15):
-- Requires majority oracle compromise
+**V1 MuSig2 quorum**:
+- Requires quorum compromise or withholding for malicious consensus data
 - Multiple independent operators
 - Outlier filtering (MAD-based)
 - Significantly more secure
@@ -768,11 +743,10 @@ See `ORACLE_INTEGRATION_CHECKLIST.md` for complete deployment checklist.
 
 ## Future Enhancements
 
-### Phase Two Upgrades
-- [ ] Multi-oracle consensus (8-of-15)
-- [ ] Dynamic oracle selection (rotation)
-- [ ] Advanced outlier filtering (MAD-based)
-- [ ] Mainnet deployment
+### Post-V1 Decisions
+- [ ] Active roster expansion governance beyond the launch set
+- [ ] Intra-epoch signer reselection policy after withholding
+- [ ] Additional operator status and recovery tooling
 
 ### Additional Features
 - [ ] Oracle node discovery (P2P)
@@ -793,5 +767,5 @@ See `ORACLE_INTEGRATION_CHECKLIST.md` for complete deployment checklist.
 ---
 
 **Document Version**: 1.0
-**Last Updated**: 2025-11-18
-**Status**: Phase One Implementation Complete
+**Last Updated**: 2026-05-05
+**Status**: Historical integration guide refreshed for V1 terminology

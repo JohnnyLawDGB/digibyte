@@ -1,15 +1,27 @@
 # Oracle Discovery Architecture
 
-## The Problem
+> **Status:** Design proposal. The features described in Layers 1–3 (on-chain registry, DNS seeds, gossip) are NOT implemented. Today's discovery is the pre-Layer-1 baseline described under "Current Implementation" below. Pull-on-demand of missing oracle messages from peers via `getoracles` is the only oracle-aware peer interaction in production code.
 
-Currently, oracle endpoints (e.g., `oracle1.digibyte.io`) are hardcoded in chainparams. This creates several issues:
+## Current Implementation (V1, code as shipped)
+
+`src/kernel/chainparams.cpp` populates `vOracleNodes` for each network. Each entry contains a compressed pubkey, an `endpoint` string, and an `is_active` flag. Mainnet declares 30 metadata slots, but only slots 0–16 are in `consensus.vOraclePublicKeys` and participate in V1 quorum; slots 17–29 are reserve metadata that require a future coordinated software update before they can sign consensus bundles. Testnet23 declares only the 17 active slots, and regtest declares 7.
+
+The `endpoint` field is informational metadata for operator coordination (it shows up in `getoracles` and `listoracle` RPC output). DigiByte Core does **not** make outbound connections to those endpoints — oracle data flows over the standard P2P graph. Wallet/light nodes therefore do not need to discover oracle endpoints to use DigiDollar; they only need a working P2P link to any peer that has the latest MuSig2 bundle.
+
+The `getoracles` P2P message (`src/protocol.cpp:55`, handler in `src/net_processing.cpp` ~line 6062) lets a node pull missing oracle attestations from a peer rather than waiting for them to be re-gossiped. It carries a request descriptor; the peer responds by re-pushing matching `oracleprice` messages. There is no Layer-3 `oracleaddr` style endpoint announcement on the wire today.
+
+Everything below this section is design intent for adding decentralized endpoint discovery on top of that baseline.
+
+## The Problem (design motivation)
+
+Today the `endpoint` strings in `vOracleNodes` are static metadata in chainparams. That has the same drawbacks any hardcoded endpoint list would:
 
 1. **New oracles can't be added** without a software update
 2. **Oracle operators need domain names** — barrier to entry
-3. **Single points of failure** — if a domain goes down, that oracle is unreachable
-4. **Centralization risk** — whoever controls the DNS controls oracle discovery
+3. **Single points of failure** — if a domain goes down, the metadata is wrong
+4. **Centralization risk** — whoever controls the DNS controls how operators are discovered out-of-band
 
-**Core question:** How do wallet nodes discover oracle endpoints for P2P oracle message relay, without hardcoding URLs?
+**Core question:** How could wallet/operator tooling discover oracle endpoints in the future, without hardcoding URLs?
 
 ## Design Constraints
 
@@ -151,24 +163,30 @@ Requires 5-of-7 (or similar threshold) existing oracle signatures to add a new o
 
 ## P2P Oracle Message Relay
 
-**Current state (RC30+):** Oracle nodes started via `startoracle` fetch live exchange prices, sign them, and broadcast `ORACLEPRICE` messages over P2P; peers relay them and miners aggregate the bundle into the next coinbase. The legacy `sendoracleprice` RPC was removed as a fake-price-injection vulnerability and the regtest-only `submitoracleprice` is the only manual price entry surface that remains.
+**Current state (V1):** Oracle nodes started via `startoracle` fetch live exchange prices through `MultiExchangeAggregator` (`src/oracle/exchange.cpp`), sign attestations as `COraclePriceMessage`, and broadcast `oracleprice` (`NetMsgType::ORACLEPRICE`) over P2P. Peers validate and relay them. MuSig2 coordination then exchanges `oracleconsns` proposals, `oracleattest` per-oracle attestations, `oramusnonce` round-1 nonces, and `oramusigpsig` round-2 partial signatures (`src/oracle/musig2_*.{cpp,h}` and `src/oracle/signing_orchestrator.cpp`). The aggregator emits a single 64-byte BIP-340 Schnorr signature plus a participation bitmap, which the miner embeds in the coinbase as a v0x03 OP_ORACLE bundle. The legacy `sendoracleprice` RPC was removed as a fake-price-injection vulnerability; no operator-facing manual price entry RPC remains in any network (`submitoracleprice` does not exist in the source tree). The legacy `oraclebundle` gossip message is dropped on receipt — the bundle lives on-chain only (commit `bbb85cf363`).
 
 **Still needed:** Endpoint discovery so wallet/light nodes can choose which oracle nodes to peer with, especially as new oracles are added without a software update. The rest of this document is the design proposal for that piece.
 
-### P2P Message Flow
+### P2P Message Flow (today)
 
 ```
 Oracle Node                    Regular Node                  Miner Node
     |                              |                             |
-    |-- oraclepricemsg ---------->|                             |
-    |                              |-- oraclepricemsg --------->|
+    |-- oracleprice -------------->|                             |
+    |                              |-- oracleprice ------------->|
     |                              |                             |
-    |                              |                   [validates sig]
-    |                              |                   [adds to bundle]
-    |                              |                   [mines block]
+    |-- oracleconsns ----------->  |                             |
+    |-- oracleattest ----------->  |                             |
+    |-- oramusnonce ------------>  |                             |
+    |-- oramusigpsig ----------->  |                             |
+    |                              |       [aggregator finishes MuSig2]
+    |                              |       [embeds v0x03 bundle in coinbase]
+    |                              |       [mines block]
 ```
 
-### New P2P Message: `oraclepricemsg`
+### Proposed `oracleaddr` message (NOT IMPLEMENTED)
+
+The encoding below is design-only. The repository does not declare an `oracleaddr` constant in `src/protocol.{cpp,h}` and `net_processing.cpp` does not handle it.
 
 ```
 Payload:
@@ -178,17 +196,16 @@ Payload:
   timestamp (8 bytes)
   oracle_pubkey (32 bytes, x-only)
   schnorr_sig (64 bytes)
-Total: 117 bytes
 ```
 
-**Validation before relay:**
+**Validation before relay (proposed):**
 1. oracle_id is in range [0, ORACLE_TOTAL_COUNT)
 2. oracle_pubkey matches chainparams for that oracle_id
 3. Schnorr signature is valid
 4. Timestamp is within acceptable range
 5. No duplicate from same oracle_id in last epoch
 
-**Rate limiting:** Max 1 message per oracle per epoch. Reject duplicates.
+**Rate limiting (proposed):** Max 1 message per oracle per epoch. Reject duplicates. (For comparison, the *implemented* `oracleprice` rate limiter is 3,600 novel messages per peer per hour — silent-drop, no misbehavior penalty — see `src/net_processing.cpp` around line 5511.)
 
 ## Summary
 

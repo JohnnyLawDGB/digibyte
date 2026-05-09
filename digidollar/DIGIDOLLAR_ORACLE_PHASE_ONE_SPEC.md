@@ -1,4 +1,10 @@
 # DigiDollar Oracle Phase 1 Specification
+
+> Historical pre-V1 note: this Phase One single-oracle/mock-price plan is
+> retained for audit history only. Current V1 release behavior uses live
+> exchange-backed oracle data and MuSig2 v0x03 bundles; mock price RPCs are
+> regtest-only helpers.
+
 **MVP for Testnet - Single Oracle Implementation**
 
 **Version**: 2.1

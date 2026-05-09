@@ -1,8 +1,8 @@
 # REPO_MAP.md — DigiByte Core v9.26
 
-*Auto-generated: 2026-02-14*
+*Last validated: 2026-04-30 against `feature/digidollar-v1`*
 
-> This map covers **core DigiByte C++ code only**. DigiDollar subsystem (`src/digidollar/`, `src/oracle/`, `src/rpc/digidollar*`) is documented in `REPO_MAP_DIGIDOLLAR.md`. Third-party libs (leveldb, secp256k1, crc32c, minisketch, univalue) and the `depends/` directory are excluded.
+> This map covers **core DigiByte C++ code only**. DigiDollar subsystem (`src/digidollar/`, `src/oracle/`, `src/rpc/digidollar*`, `src/consensus/{dca,err,volatility,digidollar*}.{cpp,h}`, `src/index/digidollarstatsindex.{cpp,h}`, DD wallet code, DD Qt widgets) is documented in `REPO_MAP_DIGIDOLLAR.md`. Third-party libs (leveldb, secp256k1, crc32c, minisketch, univalue) and the `depends/` directory are excluded.
 >
 > Legend: ⚠️ = contains DigiDollar-specific additions on top of base DGB code
 
@@ -11,9 +11,11 @@
 ## Source Files — src/ (Root-Level)
 
 ### src/addrdb.cpp / .h
-- `CBanDB` (class) → serializes/deserializes ban list to `banlist.json` on disk
+- `CBanDB` (class) → serializes/deserializes ban list to `banlist.json` on disk (legacy `.dat` is detected and ignored)
 - `DumpPeerAddresses()` → writes `peers.dat` from AddrMan to disk
-- `ReadFromStream()` → deserializes AddrMan peers from a data stream with format versioning
+- `LoadAddrman()` → loads `peers.dat` into a fresh AddrMan, recreating on `DbNotFoundError`/`InvalidAddrManVersionError` and renaming the bad file to `.bak`
+- `ReadFromStream()` → deserializes AddrMan peers directly from a `DataStream` without checksum verification (commit `3c710088d8` switched the no-checksum path to read raw streams instead of wrapping in `HashVerifier`)
+- `DumpAnchors()` / `ReadAnchors()` → block-relay-only anchor address persistence (`anchors.dat`)
 
 ### src/addresstype.cpp / .h
 - `CTxDestination` (variant) → variant type holding all address types (PKHash, ScriptHash, WitnessV0KeyHash, WitnessV0ScriptHash, WitnessV1Taproot, WitnessUnknown)
@@ -30,6 +32,13 @@
   - `GetAddr()` → returns addresses for `getaddr` P2P response, filtered by network reachability
   - `Attempt()` → records a connection attempt timestamp for retry backoff
   - `ResolveCollisions()` → resolves bucket collisions between new and tried table entries
+
+### src/addrman_impl.h
+- `AddrInfo` (class extends CAddress) → internal AddrMan entry with last-try/last-success timestamps and bucket metadata
+- `AddrManImpl` (forward) and bucket-size constants (`ADDRMAN_TRIED_BUCKET_COUNT`, `ADDRMAN_NEW_BUCKET_COUNT`, `ADDRMAN_BUCKET_SIZE`)
+
+### src/attributes.h
+- `[[nodiscard]]` and other portable attribute macros used across the codebase
 
 ### src/arith_uint256.cpp / .h
 - `base_uint<BITS>` (class template) → arithmetic operations on unsigned big integers (add, sub, multiply, divide, shift, compare)
@@ -96,6 +105,16 @@
 - `CreateChainParams()` → factory that creates CChainParams for mainnet/testnet/signet/regtest
 - `Params()` → returns the currently active chain parameters (singleton)
 - `SelectParams()` → selects active chain (mainnet/testnet/signet/regtest) at startup
+- `ReadSigNetArgs()` / `ReadRegTestArgs()` → reads CLI overrides for signet/regtest (`-signetchallenge`, `-testactivationheight`, `-fastprune`)
+
+### src/chainparamsbase.cpp / .h
+- `CBaseChainParams` (class) → base shared parameters between digibyte-cli and digibyted: data dir, RPC port, onion service target port
+- `CreateBaseChainParams()` → returns `unique_ptr<CBaseChainParams>` for the chosen ChainType
+- `BaseParams()` → returns current base params singleton
+- `SetupChainParamsBaseOptions()` → registers `-testnet`/`-regtest`/`-signet` CLI args
+
+### src/chainparamsseeds.h
+- Hardcoded DNS-style address seeds compiled into the binary for mainnet/testnet bootstrap (auto-generated from `contrib/seeds/nodes_main.txt`/`nodes_test.txt`).
 
 ### src/checkpoints.cpp / .h
 - `GetLastCheckpoint()` → returns the most recent hardcoded checkpoint block index for fast initial sync validation
@@ -122,6 +141,13 @@
 - `AddCoins()` → adds all outputs from a transaction to the UTXO cache
 - `AccessByTxid()` → finds any UTXO from a given txid (scans outputs)
 
+### src/compat.h
+- Cross-platform compatibility shims (socket type aliases, `MAX_PATH`, `closesocket`, errno handling)
+
+### src/core_io.h / src/core_memusage.h
+- `core_io.h` → declarations for transaction/block hex/JSON serialization helpers (`DecodeHexTx`, `DecodeHexBlk`, `EncodeHexTx`, `TxToUniv`, `ScriptToAsmStr`, etc.; implementations in `core_read.cpp` / `core_write.cpp`)
+- `core_memusage.h` → `RecursiveDynamicUsage()` template specializations for COutPoint/CTxIn/CTxOut/CTransaction memory accounting
+
 ### src/compressor.cpp / .h
 - `CompressScript()` → compresses standard scriptPubKey types (P2PKH, P2SH, P2PK) for compact UTXO storage
 - `DecompressScript()` → decompresses stored script back to full scriptPubKey
@@ -145,6 +171,13 @@
 ### src/cuckoocache.h
 - `CuckooCache::cache<Element>` (class) → concurrent cuckoo-hash-based cache for fast script verification signature lookups
 - `CuckooCache::bit_packed_atomic_flags` (class) → thread-safe bit-packed flag array for cache occupancy tracking
+
+### src/indirectmap.h / src/limitedmap.h
+- `indirectmap<K, V>` → `std::map`-like container that hashes/orders by the pointed-to value (used in mempool for stempool indexing)
+- `limitedmap<K, V>` → bounded-size map with eviction (legacy helper retained for narrow internal use)
+
+### src/memusage.h
+- `DynamicUsage()` template family → memory accounting helpers used by mempool, AddrMan, and validation caches
 
 ### src/dandelion.cpp
 - `CConnman::isDandelionInbound()` → checks if a peer is an inbound Dandelion++ relay
@@ -191,6 +224,12 @@
 
 ### src/digibyte-wallet.cpp
 - Offline wallet utility — create, info, salvage, dump wallet files without a running node
+
+### src/dummywallet.cpp
+- `DummyWalletInit` (class implements `WalletInitInterface`) → fallback used when wallet support is disabled at compile time; logs "No wallet support compiled in!" and registers wallet args as hidden so `-help-debug` still recognizes them.
+
+### src/ui_interface.cpp
+- Defines the global `uiInterface` (`CClientUIInterface`) singleton plus `InitError()`/`InitWarning()` thin wrappers; the matching declarations live in `src/node/ui_interface.h` / `src/node/interface_ui.h`.
 
 ### src/external_signer.cpp / .h
 - `ExternalSigner` (class) → interface to HWI-compatible external hardware wallet signers
@@ -328,6 +367,9 @@
 - `NetPermissions` (class) → parses and manages per-peer permission flags (bloomfilter, relay, forcerelay, noban, mempool, download, addr)
 - `NetWhitebindPermissions` / `NetWhitelistPermissions` → whitebind/whitelist permission sets from config
 
+### src/netmessagemaker.h
+- `CNetMsgMaker` (struct) → small helper that wraps `CSerializedNetMsg` construction with a fixed protocol version, used by `PeerManager` to build outgoing P2P messages.
+
 ### src/net_processing.cpp / .h
 - `PeerManager` (class) → high-level P2P message processing: validates messages, manages block/tx download, peer scoring
   - `Make()` → factory method creating the implementation
@@ -432,6 +474,10 @@
 - `CKeyID` (class) → Hash160 of a public key, used as key identifier for lookups
 - `CExtPubKey` (class) → BIP32 extended public key (key + chain code + depth + fingerprint)
 
+### src/randomenv.cpp / .h
+- `RandAddDynamicEnv()` → mixes time-varying environment data (CPU counters, getrusage, getauxval) into a SHA512 hasher for entropy seeding
+- `RandAddStaticEnv()` → mixes process-static environment data (hostname, /proc/cpuinfo, env vars) into the entropy pool at startup
+
 ### src/random.cpp / .h
 - `GetRandBytes()` → fills buffer with cryptographically secure random bytes (OS entropy + hardware RNG + ChaCha20 mixer)
 - `GetRand<T>()` → returns uniformly distributed random number in [0, max)
@@ -459,6 +505,12 @@
 - `CSizeComputer` (class) → dry-run serializer that computes serialized size without writing data
 - `VarIntFormatter` / `CompactSizeFormatter` — variable-length integer encoding formats
 - Serialization wrappers: `VARINT()`, `COMPACTSIZE()`, `LIMITED_STRING()`, `FLATDATA()`
+
+### src/prevector.h
+- `prevector<N, T>` → small-buffer-optimized vector that stores up to `N` elements inline before falling back to heap; used heavily in script and serialization paths
+
+### src/reverse_iterator.h / src/reverselock.h / src/threadinterrupt.h / src/threadsafety.h / src/tinyformat.h / src/utilmemory.h / src/span.h
+- Header-only utilities: `reverse_iterator.h` reverse iteration helper, `reverselock.h` `LeaveCritical/EnterCritical` RAII pair, `threadinterrupt.h` legacy include re-export, `threadsafety.h` Clang lock-annotation macros, `tinyformat.h` printf-style formatting, `utilmemory.h` `make_unique`-style helpers, `span.h` `Span<T>` lightweight contiguous-range view
 
 ### src/shutdown.cpp / .h
 - `StartShutdown()` → signals the node to begin graceful shutdown
@@ -552,7 +604,7 @@
 - `CBlockUndo` (class) → undo data for an entire block: all CTxUndo entries (excluding coinbase)
 
 ### src/validation.cpp / .h
-- ⚠️ Contains DigiDollar activation height checks, oracle price lookups, DD transaction validation
+- ⚠️ ~6900 lines. DigiDollar/oracle-aware: activation gating via `DigiDollar::IsDigiDollarEnabled`, `Consensus::IsOracleActive`, MuSig2 v0x03 bundle extraction in `ConnectBlock` (~line 3010), `SCRIPT_VERIFY_DIGIDOLLAR` flag set when `DEPLOYMENT_DIGIDOLLAR` is active (lines ~2706-2707), and incremental DD supply tracking via `DigiDollar::SystemHealthMonitor::OnMint{Connected,Disconnected}` / `OnRedeem{Connected,Disconnected}`.
 - `Chainstate` (class) → manages a single validated chain state (UTXO set + block index)
   - `ActivateBestChain()` → selects and activates the best valid chain tip, connecting new blocks
   - `ConnectTip()` → connects a single new block to the chain tip, executing all transactions
@@ -577,6 +629,8 @@
   - `GenerateCoinbaseCommitment()` → creates SegWit witness commitment for coinbase
   - `SnapshotBlockhash()` → returns the snapshot base block if using assumeUTXO
 - `CheckBlock()` → validates block structure: size limits, merkle root, duplicate txns, first tx is coinbase, algo-specific PoW
+- `ContextualCheckBlockHeader()` (file-static) → validates header against pindexPrev (timestamps, BIP9 version checks, future-time bound)
+- `ContextualCheckBlock()` (file-static) → context-dependent block checks (finality, witness commitment, ⚠️ MuSig2 oracle-bundle structural checks before full validation)
 - `CheckFinalTxAtTip()` → checks transaction finality (locktime) against current chain tip
 - `HasValidProofOfWork()` → validates PoW for a vector of block headers
 - `IsBlockMutated()` → detects witness malleation attacks on block data
@@ -604,8 +658,11 @@
 - `SyncWithValidationInterfaceQueue()` → blocks until all queued validation callbacks have been processed
 
 ### src/version.h
-- `PROTOCOL_VERSION` → current P2P protocol version (70019)
-- Protocol version constants for feature negotiation (SHORT_IDS_BLOCKS_VERSION, etc.)
+- `PROTOCOL_VERSION` → current P2P protocol version (70019, `version.h:12`)
+- Protocol version constants for feature negotiation (`SHORT_IDS_BLOCKS_VERSION = 70014`, etc.)
+
+### src/walletinitinterface.h
+- `WalletInitInterface` (abstract class) → wallet/non-wallet build seam: `HasWalletSupport()`, `AddWalletOptions()`, `ParameterInteraction()`, `Construct()`. Concrete implementations live in `wallet/init.cpp` (real wallet) and `dummywallet.cpp` (no-wallet build).
 
 ### src/versionbits.cpp / .h
 - `AbstractThresholdConditionChecker` (class) → BIP9-style soft fork activation state machine
@@ -778,15 +835,22 @@
 - `Consensus::Params` (struct) → all consensus parameters for a chain: genesis hash, subsidy halving interval, BIP activation heights, PoW limits per algo, difficulty adjustment heights, MultiShield parameters
   - `hashGenesisBlock` → genesis block hash
   - `nSubsidyHalvingInterval` → blocks between halvings
-  - `powLimit` / `powLimitSHA` / `powLimitScrypt` / `powLimitGroestl` / `powLimitSkein` / `powLimitQubit` → per-algo difficulty limits
-  - `nMultiAlgoStartBlock` → height where 5-algo mining begins
-  - `nDigiShieldStartBlock` → height where DigiShield difficulty adjustment activates
-  - `nOdoStartBlock` / `nOdoEndBlock` → height range for Odocrypt algorithm (replaces Qubit)
-  - ⚠️ `nDDActivationHeight` / `nOracleActivationHeight` / `nDigiDollarPhase2Height` → DigiDollar activation heights
-  - ⚠️ `nDDOracleEpochBlocks` / `nOracleEpochLength` / `nOracleRequiredMessages` → oracle system parameters
-  - ⚠️ `vOraclePublicKeys` → hardcoded oracle signing keys
-- `BuriedDeployment` enum → activation heights for BIP34, BIP65, BIP66, CSV, SegWit, Taproot, Odocrypt
-- ⚠️ `IsOracleActive()` → checks if oracle system is active at a given height
+  - `powLimit`, `initialTarget[ALGO_*]` → per-algo difficulty limits/initial targets
+  - `multiAlgoDiffChangeTarget` / `alwaysUpdateDiffChangeTarget` / `workComputationChangeTarget` / `algoSwapChangeTarget` → DigiByte multi-algo / DigiShield / DigiSpeed / Odo activation heights
+  - `OdoHeight` / `nOdoShapechangeInterval` → Odocrypt activation height + 10-day key rotation interval
+  - `nMinerConfirmationWindow` / `nRuleChangeActivationThreshold` → BIP9 window/threshold
+  - `vDeployments[]` (BIP9): includes `DEPLOYMENT_TESTDUMMY`, `DEPLOYMENT_TAPROOT` (bit 2), and ⚠️ `DEPLOYMENT_DIGIDOLLAR` (bit 23, gates `SCRIPT_VERIFY_DIGIDOLLAR`)
+  - ⚠️ `nDDActivationHeight` / `nOracleActivationHeight` / `nDigiDollarMuSig2Height` → DigiDollar / oracle / MuSig2 v0x03 activation heights
+  - ⚠️ `nDDOracleEpochBlocks` / `nDDOracleUpdateInterval` / `nOracleEpochLength` / `nOracleRequiredMessages` / `nOracleTotalOracles` → oracle system parameters
+  - ⚠️ `nOraclePubkeyCount` / `nOracleConsensusRequired` → MuSig2 quorum sizing (e.g. 9-of-17 mainnet)
+  - ⚠️ `vOraclePublicKeys` → hardcoded oracle x-only Schnorr keys (slot order matches MuSig2 participation bitmap)
+  - ⚠️ `IsMuSig2OracleActive(height)` → inline helper returning `height >= nDigiDollarMuSig2Height`
+- `BuriedDeployment` enum → activation heights for BIP34, BIP65, BIP66, CSV, SegWit, NVERSIONBIPS, RESERVEALGO, Odocrypt
+- `DeploymentPos` enum (`DEPLOYMENT_TESTDUMMY`, `DEPLOYMENT_TAPROOT`, ⚠️ `DEPLOYMENT_DIGIDOLLAR`)
+- `BIP9Deployment` (struct) with `bit`, `nStartTime`, `nTimeout`, `min_activation_height`, `ALWAYS_ACTIVE`/`NEVER_ACTIVE`/`NO_TIMEOUT` sentinels
+- ⚠️ `IsOracleActive(params, height)` → free function returning `height >= params.nOracleActivationHeight`
+- ⚠️ `IsMuSig2Active(params, height)` → wrapper around `Params::IsMuSig2OracleActive`
+- ⚠️ `ValidateOracleConfiguration(params)` → static check that pubkey count, hex format, uniqueness, and quorum lower bound (≥ majority) all hold
 
 ### src/consensus/tx_check.cpp / .h
 - `CheckTransaction()` → validates transaction structure: non-empty inputs/outputs, output amounts positive and within range, no duplicate inputs, coinbase scriptSig size limits
@@ -809,32 +873,7 @@
 - `GetBlockWeight()` → calculates total block weight
 - `GetWitnessCommitmentIndex()` → finds the SegWit commitment output in coinbase transaction
 
-### src/consensus/dca.cpp / .h
-- ⚠️ `DigiDollar::DCA::DynamicCollateralAdjustment` (class) → adjusts collateral requirements based on system health
-  - `CalculateSystemHealth(totalCollateral, totalDD, oraclePrice)` → returns health % (0–30000)
-  - `GetDCAMultiplier(systemHealth)` → returns multiplier: >150%: 1.0×, 120–150%: 1.2×, 100–120%: 1.5×, <100%: 2.0×
-  - `ApplyDCA(baseRatio, systemHealth)` → baseRatio × multiplier
-  - `GetCurrentTier(systemHealth)` → returns HealthTier for current health level
-  - `IsSystemEmergency(systemHealth)` → true if health < 100%
-
-### src/consensus/err.cpp / .h
-- ⚠️ `DigiDollar::ERR::EmergencyRedemptionRatio` (class) → emergency protection when system < 100% collateralized
-  - `ShouldActivateERR(systemHealth)` → true if health < 100%
-  - `CalculateERRAdjustment(systemHealth)` → tiered ratio: 95–100%: 0.95, 90–95%: 0.90, 85–90%: 0.85, <85%: 0.80
-  - `GetRequiredDDBurn(originalDDMinted, systemHealth)` → originalDD / ERRRatio
-  - `ShouldBlockMinting()` → returns true during ERR to prevent destabilization
-
-### src/consensus/volatility.cpp / .h
-- ⚠️ `DigiDollar::Volatility::VolatilityMonitor` (class) → monitors price volatility and manages freeze mechanisms
-  - `RecordPrice(price, timestamp, height)` → adds price point to history deque
-  - `CalculateVolatility(timeWindow)` → standard deviation-based volatility for time window in seconds
-  - `GetCurrentState()` → returns current VolatilityState (hourly/daily/weekly volatility, freeze flags)
-  - `UpdateState(currentHeight)` → recalculates all volatility metrics, triggers/clears freezes
-  - `ShouldFreezeMinting()` → true if 1-hour volatility > 20%
-  - `ShouldFreezeAll()` → true if 24-hour volatility > 30%
-- `FormatVolatility()` → formats volatility as human-readable percentage string
-- `CalculatePercentageChange()` → computes percentage change between two prices
-- `ExceedsThreshold()` → checks if price change exceeds a given percentage threshold
+> ⚠️ The remaining `src/consensus/` files — `dca.{cpp,h}`, `err.{cpp,h}`, `volatility.{cpp,h}`, `digidollar.{cpp,h}`, `digidollar_tx.{cpp,h}`, `digidollar_transaction_validation.{cpp,h}` — are part of the DigiDollar/oracle subsystem and are documented in `REPO_MAP_DIGIDOLLAR.md`.
 
 ---
 
@@ -966,6 +1005,8 @@
 ### src/index/disktxpos.h
 - `CDiskTxPos` (struct) → on-disk position of a transaction: block file position + offset within block
 
+> ⚠️ `src/index/digidollarstatsindex.{cpp,h}` (DigiDollar supply/health statistics index) is documented in `REPO_MAP_DIGIDOLLAR.md`.
+
 ---
 
 ## Source Files — src/init/
@@ -1038,6 +1079,16 @@
   - `getReindex()` → reindex progress
 - `interfaces::ExternalSigner` (class) → interface for hardware wallet operations
 
+### src/interfaces/echo.cpp / .h
+- `interfaces::Echo` (class) → trivial round-trip interface used to validate IPC connectivity
+- `interfaces::MakeEcho()` → factory
+
+### src/interfaces/handler.cpp
+- Concrete implementation of `interfaces::Handler` (RAII signal/cleanup wrapper declared in `handler.h`)
+
+### src/interfaces/init.cpp
+- Concrete implementation of `interfaces::Init` (multiprocess initialization shim declared in `init.h`)
+
 ### src/interfaces/wallet.h
 - `interfaces::Wallet` (class) → abstract wallet interface for GUI and RPC
   - `encryptWallet()` / `lock()` / `unlock()` / `changeWalletPassphrase()` → encryption operations
@@ -1060,7 +1111,7 @@
 ### src/ipc/interfaces.cpp
 - `MakeIpc()` → factory for IPC implementation (multiprocess node architecture)
 
-### src/ipc/process.h
+### src/ipc/process.cpp / .h
 - `ipc::Process` (class) → manages child processes for multiprocess architecture
   - `spawn()` → spawns a new node subprocess
   - `waitSpawned()` → waits for subprocess to be ready
@@ -1069,8 +1120,15 @@
 ### src/ipc/protocol.h
 - `ipc::Protocol` (class) → Cap'n Proto-based IPC protocol for type-safe cross-process communication
 
+### src/ipc/exception.h
+- `ipc::Exception` (class) → IPC-specific exception type used by the Cap'n Proto bridge
+
 ### src/ipc/context.h
 - `ipc::Context` (struct) → shared context passed through IPC connections
+
+### src/ipc/capnp/
+- `protocol.cpp` / `protocol.h` → Cap'n Proto wire protocol implementation
+- `context.h`, `init-types.h` → Cap'n Proto schema-side context and helper types
 
 ---
 
@@ -1366,31 +1424,20 @@
 - ⚠️ `MakeDigiDollarVersion()` → encodes DD type and flags into transaction version
 - ⚠️ `GetDigiDollarTxTypeName()` → human-readable DD transaction type name
 
-### src/primitives/oracle.cpp / .h
-- ⚠️ `COraclePriceMessage` (class) → signed oracle price report: DGB/USD price, timestamp, oracle ID, Schnorr signature
-  - `GetHash()` → message hash for signature verification
-  - `Verify()` → verifies Schnorr signature against oracle's public key
-  - `IsValid(reference_time)` → validates message structure and checks if not expired based on reference timestamp
-- ⚠️ `COracleBundle` (class) → collection of oracle price messages forming a consensus price
-  - `GetConsensusPrice()` → computes IQR-filtered median price from valid messages (replaces old `GetMedianPrice`)
-  - `HasConsensus()` → checks if bundle has minimum required oracle messages
-  - `IsValid(min_required, reference_time)` → validates bundle completeness, signatures, and consistency
-  - `epoch` (field) → the oracle epoch this bundle belongs to (direct public member)
-  - `ValidateEpoch(current_epoch)` → checks epoch consistency between bundle and current epoch
-- ⚠️ `OracleNodeInfo` (struct) → oracle identity: ID, public key, and status
-- ⚠️ `SelectOraclesForEpoch()` → deterministically selects which oracles are active in a given epoch
-- ⚠️ `GetCurrentEpoch()` → calculates current oracle epoch from block height
+> ⚠️ `src/primitives/oracle.{cpp,h}` (price-message + bundle types, MuSig2 v0x03 fields, IQR consensus helper, oracle roster) is part of the DigiDollar/oracle subsystem and is documented in detail in `REPO_MAP_DIGIDOLLAR.md`.
 
 ---
 
 ## Source Files — src/qt/ (Lighter Coverage)
 
-The Qt GUI provides graphical interface for DigiByte Core. Key components:
+The Qt GUI provides the graphical interface for DigiByte Core. Key non-DigiDollar components:
 
-- `digibyte.cpp` → GUI application entry point, initializes Qt and node
+- `digibyte.cpp` / `digibyte.h` → GUI application entry point, initializes Qt and the node
+- `digibytegui.cpp` / `digibytegui.h` → main window (`DigiByteGUI`) with menu/toolbar/status-bar wiring
 - `digibyteamountfield.cpp` → input widget for DGB amounts with unit switching
 - `digibyteunits.cpp` → DGB unit conversion (DGB, mDGB, µDGB, sat)
 - `digibyteaddressvalidator.cpp` → validates DigiByte addresses in input fields
+- `digibytestrings.cpp` → translation strings registered with Qt's translation system
 - `walletmodel.cpp` → bridges CWallet to Qt model for display/interaction
 - `clientmodel.cpp` → bridges node state (peers, blocks, sync progress) to Qt model
 - `sendcoinsdialog.cpp` → send coins dialog with address, amount, fee controls
@@ -1403,6 +1450,9 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 - `notificator.cpp` → OS-native desktop notifications
 - `splashscreen.cpp` → startup splash with initialization progress
 - `guiutil.cpp` → shared GUI utility functions (clipboard, file dialogs, formatting)
+- `coincontroldialog.cpp`, `coincontroltreewidget.cpp`, `addressbookpage.cpp`, `addresstablemodel.cpp`, `bantablemodel.cpp`, `peertablemodel.cpp`, `createwalletdialog.cpp`, `csvmodelwriter.cpp`, `askpassphrasedialog.cpp` → standard wallet UI building blocks
+
+> ⚠️ DigiDollar Qt widgets — `digidollartab.{cpp,h}`, `digidollarmintwidget.{cpp,h}`, `digidollarsendwidget.{cpp,h}`, `digidollarreceivewidget.{cpp,h}`, `digidollarreceiverequest.{cpp,h}`, `digidollarredeemwidget.{cpp,h}`, `digidollaroverviewwidget.{cpp,h}`, `digidollarpositionswidget.{cpp,h}`, `digidollartransactionswidget.{cpp,h}`, `digidollarcoincontroldialog.{cpp,h}`, `ddaddressbookpage.{cpp,h}` and the `qt/test/digidollarwidgettests.{cpp,h}` suite — are documented in `REPO_MAP_DIGIDOLLAR.md`.
 
 ---
 
@@ -1462,8 +1512,8 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 - `SignTransaction()` → signs a transaction using provided keys
 
 ### src/rpc/register.h
-- `RegisterAllCoreRPCCommands()` → registers all core RPC command groups (blockchain, mining, net, mempool, misc, rawtransaction, signer)
-- Individual registration functions for each RPC module
+- `RegisterAllCoreRPCCommands()` → registers all core RPC command groups (blockchain, ⚠️ digidollar, fees, mempool, mining, node, net, output script, rawtransaction, sign-message, signer (HW), txoutproof). DigiDollar registration is documented in `REPO_MAP_DIGIDOLLAR.md`.
+- Individual `Register*RPCCommands(CRPCTable&)` declarations for each RPC module.
 
 ### src/rpc/request.cpp / .h
 - `JSONRPCRequest` (class) → parsed JSON-RPC request with method, params, auth context
@@ -1517,6 +1567,13 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 ### src/script/digibyteconsensus.cpp / .h
 - `digibyteconsensus_verify_script()` → C API for script verification (shared library export)
 - `digibyteconsensus_version()` → returns consensus library version
+
+### src/script/keyorigin.h
+- `KeyOriginInfo` (struct) → BIP32 key origin metadata (master fingerprint + derivation path) for PSBTs and signing providers
+
+### src/script/script_error.cpp / .h
+- `ScriptError` enum → script execution failure codes (`SCRIPT_ERR_OK`, `SCRIPT_ERR_EVAL_FALSE`, `SCRIPT_ERR_OP_RETURN`, BIP-specific errors, taproot errors, ⚠️ DigiDollar errors)
+- `ScriptErrorString()` → maps `ScriptError` to a human-readable message
 
 ### src/script/interpreter.cpp / .h
 - `EvalScript()` → executes a Bitcoin script on the stack machine, handling all opcodes including SegWit v0 and Tapscript
@@ -1616,6 +1673,11 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 - `LockedPool` (class) → allocator that locks memory pages to prevent sensitive data (keys) from being written to swap
   - `alloc()` / `free()` → allocate/free locked memory
 - `Arena` (class) → memory arena with chunk management for the locked pool
+
+### src/support/allocators/
+- `pool.h` → `PoolAllocator<T>` arena-style STL allocator used by validation caches
+- `secure.h` → `secure_allocator<T>` STL allocator backed by `LockedPool` for sensitive data
+- `zeroafterfree.h` → `zero_after_free_allocator<T>` STL allocator that zeros memory on free
 
 ---
 
@@ -1774,6 +1836,19 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 - `Cat()` → concatenates vectors
 - `Vector()` → constructs vector from arguments
 
+### Other small util/ headers (single-purpose helpers)
+- `any.h` → `util::AnyPtr<T>` lightweight type-erased pointer wrapper used for context injection
+- `bitdeque.h` → `bitdeque<>` packed bit container
+- `fastrange.h` → Lemire-style fast-range integer reduction
+- `hash_type.h` → strong-typed hash wrappers used by descriptor/Taproot code
+- `insert.h` → range-insertion helpers for ordered containers
+- `macros.h` → portable `_PASTE`, `STRINGIZE`, etc. macros
+- `overflow.h` → checked-arithmetic helpers (`MoreOrEqualTwoComplement`, `CheckedAdd`)
+- `overloaded.h` → `Overloaded` lambda visitor combinator
+- `trace.h` → USDT/SystemTap tracing macros (no-op when tracing disabled)
+- `types.h` → small typed wrappers (`NoDestination`, etc.)
+- `ui_change_type.h` → `ChangeType` enum used by Qt signals
+
 ---
 
 ## Source Files — src/wallet/
@@ -1789,4 +1864,77 @@ The Qt GUI provides graphical interface for DigiByte Core. Key components:
 ### src/wallet/coincontrol.cpp / .h
 - `CCoinControl` (class) → user preferences for coin selection: manually selected inputs, change address, fee rate, estimated tx weight, min/max confirmation depth
 
-> **NOTE:** The wallet section of this document is truncated. See `src/wallet/` directory for full wallet source files including `wallet.cpp/.h`, `spend.cpp/.h`, `receive.cpp/.h`, `walletdb.cpp/.h`, `rpc/` wallet RPCs, `scriptpubkeyman.cpp/.h`, `sqlite.cpp/.h`, and DigiDollar wallet integration (`digidollarwallet.cpp/.h`, `ddcoincontrol.h/.cpp`). DigiDollar-specific wallet code is documented in `REPO_MAP_DIGIDOLLAR.md`.
+### src/wallet/coinselection.cpp / .h
+- `BnB`, `KnapsackSolver`, `SelectCoinsSRD` → coin-selection algorithms used by `wallet/spend.cpp`
+- `OutputGroup` (struct) → groups outputs sharing a destination for selection cost accounting
+
+### src/wallet/context.cpp / .h
+- `WalletContext` (struct) → injected dependencies for wallet code (chain, scheduler, args)
+
+### src/wallet/crypter.cpp / .h
+- `CCrypter` / `CKeyingMaterial` → AES-256-CBC wallet-encryption primitives backing `EncryptWallet`/`Unlock`
+
+### src/wallet/db.cpp / .h
+- `WalletDatabase` (abstract) / `DatabaseBatch` / `DatabaseCursor` → backend-agnostic key-value DB interface (BDB and SQLite implementations)
+- `MakeDatabase()` → factory choosing the BDB or SQLite backend based on file format
+
+### src/wallet/dump.cpp / .h, src/wallet/external_signer_scriptpubkeyman.cpp / .h
+- `DumpWallet()` / `CreateFromDump()` → wallet hex-record export/import
+- `ExternalSignerScriptPubKeyMan` → SPK manager that delegates signing to an external HWI signer
+
+### src/wallet/feebumper.cpp / .h
+- `wallet::feebumper::CreateRateBumpTransaction()` → BIP125 RBF helper; produces a replacement tx with bumped fee
+
+### src/wallet/fees.cpp / .h
+- `GetMinimumFee()` / `GetRequiredFee()` / `EstimateRequiredFee()` → wallet-side fee computation/estimation
+
+### src/wallet/init.cpp
+- `WalletInit` (class implements `WalletInitInterface`) → registers wallet command-line args, parameter interaction, and constructs wallets at startup
+
+### src/wallet/interfaces.cpp
+- `WalletImpl` (implements `interfaces::Wallet`) and `WalletLoaderImpl` (implements `interfaces::WalletLoader`) — the bridges from the abstract interfaces declared in `src/interfaces/wallet.h` to `CWallet`
+
+### src/wallet/load.cpp / .h
+- `LoadWallets()`, `StartWallets()`, `FlushWallets()`, `StopWallets()` → wallet lifecycle hooks called from `init.cpp`
+
+### src/wallet/receive.cpp / .h
+- `IsMine()`, `GetCredit()`, `GetDebit()`, `GetChange()`, `CachedTxIs*` → balance/ownership accounting for received UTXOs
+
+### src/wallet/salvage.cpp / .h
+- `RecoverDatabaseFile()` → BDB salvage path used by `digibyte-wallet salvage`
+
+### src/wallet/scriptpubkeyman.cpp / .h
+- `ScriptPubKeyMan` (abstract) and concrete subclasses `LegacyScriptPubKeyMan`, `DescriptorScriptPubKeyMan` → key/script management strategies (HD chains, descriptor wallets, Taproot)
+
+### src/wallet/spend.cpp / .h
+- `CreateTransaction()`, `FundTransaction()`, `SignTransaction()` → coin selection + signing orchestration; integrates BnB/Knapsack/SRD via `coinselection.cpp`
+
+### src/wallet/sqlite.cpp / .h
+- `SQLiteDatabase` / `SQLiteBatch` → SQLite wallet backend (default for descriptor wallets)
+
+### src/wallet/transaction.cpp / .h
+- `CWalletTx` → wallet's view of a transaction (status, conflicts, change cache, sender labels)
+
+### src/wallet/types.h
+- Wallet-internal type aliases (e.g., `bilingual_str`, `WalletDescriptor`, `WalletDatabaseStatus`)
+
+### src/wallet/wallet.cpp / .h
+- `CWallet` (class) → the main wallet container: keys, transactions, address book, encryption state, signal connections
+- Public methods: `LoadWallet`, `EncryptWallet`, `Unlock`, `AddNewKey`, `CommitTransaction`, `MarkDirty`, `BlockUntilSyncedToCurrentChain`
+- ⚠️ Holds `m_dd_wallet` (DigiDollar wallet pointer) and DD UTXO maps; full DD-specific surface is in `REPO_MAP_DIGIDOLLAR.md`.
+
+### src/wallet/walletdb.cpp / .h
+- `WalletBatch` → typed DB record reader/writer for the wallet (record types: keymeta, ckey, hdchain, descriptor, name, purpose, ⚠️ DD positions / DD UTXOs / DD oracle keys; the DD-specific records are documented in `REPO_MAP_DIGIDOLLAR.md`)
+
+### src/wallet/wallettool.cpp / .h
+- `digibyte-wallet` (CLI tool) backend: `create`, `info`, `salvage`, `dump`, `createfromdump`
+
+### src/wallet/walletutil.cpp / .h
+- `GetWalletDir()`, `IsFeatureSupported()`, `MakeWalletPath()` → wallet directory and feature-flag utilities
+
+### src/wallet/rpc/*.cpp
+- `addresses.cpp`, `backup.cpp`, `coins.cpp`, `encrypt.cpp`, `signmessage.cpp`, `spend.cpp`, `transactions.cpp`, `util.cpp`, `wallet.cpp` → modular wallet RPC command groups
+- `wallet.cpp::GetWalletRPCCommands()` aggregates all wallet-context RPCs; ⚠️ also registers DigiDollar/oracle wallet commands (see `REPO_MAP_DIGIDOLLAR.md`).
+- Legacy entry points `rpcwallet.cpp` and `rpcdump.cpp` remain in-tree but their content was redistributed across the `rpc/` modular files; treat as transitional scaffolding.
+
+> **DigiDollar-specific wallet code** (`digidollarwallet.cpp/.h`, `ddcoincontrol.cpp/.h`, the DD-wallet RPCs registered from `wallet/rpc/wallet.cpp`, the `wallet/test/digidollar_*` test files, and the `rh59` lock-bypass test) is documented in `REPO_MAP_DIGIDOLLAR.md`.

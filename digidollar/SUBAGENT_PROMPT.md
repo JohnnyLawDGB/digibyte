@@ -38,7 +38,7 @@ You are working on DigiByte v8.26, which has these critical differences from Bit
 
 ### DigiDollar System Overview
 DigiDollar is a USD-pegged stablecoin with:
-- **Collateral Model**: Time-locked DGB backing (500%-200% ratios)
+- **Collateral Model**: Time-locked DGB backing (1000%-200% ratios)
 - **Protection Systems**: DCA, ERR, volatility monitoring
 - **Technology**: P2TR (Taproot) outputs for privacy and efficiency
 - **Oracles**: Decentralized price feeds with 8-of-15 consensus

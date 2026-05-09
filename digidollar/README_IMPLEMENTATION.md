@@ -46,12 +46,12 @@ Comprehensive task list with 70+ specific tasks organized in 7 phases:
 ## Key Technical Innovations
 
 ### Multi-Tier Collateral System
-- **8 lock periods**: 30 days to 10 years
-- **Treasury-model ratios**: 500% (30 days) down to 200% (10 years)
+- **10 canonical lock periods**: 1 hour to 10 years
+- **Treasury-model ratios**: 1000% (1 hour) down to 200% (10 years)
 - **Rewards patience**: Longer commitments = better efficiency
 
 ### Four-Layer Protection System
-1. **Higher Base Collateral**: 500%-200% ratios provide substantial buffer
+1. **Higher Base Collateral**: 1000%-200% ratios provide substantial buffer
 2. **Dynamic Collateral Adjustment (DCA)**: Increases requirements during stress
 3. **Emergency Redemption Ratio (ERR)**: Adjusts redemption requirements when undercollateralized
 4. **Market Dynamics**: DGB becomes strategic reserve asset

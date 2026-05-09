@@ -1,15 +1,15 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2026-04-14*
-*Document Version: 3.7 - Second-pass verification: fixed testnet oracle operator count (was 11+4, actually 12+3)*
+*Updated: 2026-04-30*
+*Document Version: 3.8 — V1 alignment*
 
 ## Overview
 
 DigiDollar is the world's first truly decentralized stablecoin native on a UTXO blockchain, enabling stable value transactions without centralized control.
 
 ### Key Points
-- **DGB becomes the strategic reserve asset** (21B max supply, 1.94 per person on Earth)
-- **Everything happens inside DigiByte Core wallet** - you never give up control of your private keys
-- **Status**: Testnet-ready implementation (Phase One) - see DIGIDOLLAR_MVP_STATUS.md for details
+- **DGB becomes the strategic reserve asset** (21B max supply, ~1.94 per person on Earth at 8.1B population)
+- **Everything happens inside DigiByte Core wallet** — you never give up control of your private keys
+- **Status (V1, `feature/digidollar-v1`)**: Testnet active (BIP9 bit 23 already past `min_activation_height`); mainnet activation gate is configured for height 22,014,720 (start time 2026-05-01) — see `DIGIDOLLAR_ARCHITECTURE.md` for details
 
 ---
 
@@ -115,7 +115,7 @@ DigiDollar uses a sliding collateral scale to prevent attacks while rewarding lo
 
 | Lock Period | Collateral Ratio | Undercollateralized After | DGB for $100 | Notes |
 |------------|------------------|---------------------------|--------------|-------|
-| 1 hour     | 1000%           | 90% drop                  | 1000 DGB     | Testing only (regtest/testnet) |
+| 1 hour     | 1000%           | 90% drop                  | 1000 DGB     | Shortest/onboarding tier (canonical on all networks) |
 | 30 days    | 500%            | 80% drop                  | 500 DGB      | |
 | 3 months   | 400%            | 75% drop                  | 400 DGB      | |
 | 6 months   | 350%            | 71.4% drop                | 350 DGB      | |
@@ -126,7 +126,7 @@ DigiDollar uses a sliding collateral scale to prevent attacks while rewarding lo
 | 7 years    | 212%            | 52.8% drop                | 212 DGB      | |
 | 10 years   | 200%            | 50% drop                  | 200 DGB      | |
 
-**Note**: The updated collateral schedule (1000% → 200%) provides enhanced stability. The 1-hour tier is only available on testnet/regtest for development testing. The "Undercollateralized After" column shows how much DGB price can drop before position becomes undercollateralized.
+**Note**: The updated collateral schedule (1000% → 200%) provides enhanced stability. The 1-hour tier is canonical on all networks and locks real collateral until expiry. The "Undercollateralized After" column shows how much DGB price can drop before position becomes undercollateralized.
 
 ---
 
@@ -156,9 +156,9 @@ From supply chain to gaming, DigiDollar enables countless innovations
 
 ### Revolutionary Architecture
 
-DigiDollar is the world's first truly decentralized stablecoin built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet - users maintain complete control of their private keys throughout the entire process.
+DigiDollar is the world's first truly decentralized stablecoin built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet — users maintain complete control of their private keys throughout the entire process.
 
-**Implementation Status**: Core transaction system 90% complete, GUI 92% complete, RPC interface 95% complete. See DIGIDOLLAR_ARCHITECTURE.md for detailed status.
+**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The May 1, 2026 BIP9 start time has passed; mainnet remains gated by the configured minimum height/threshold, testnet-only RC34 status, the green Wave 26 backward-compatibility/activation proof, and Jared's architecture-review decisions. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
 
 ### Core Technologies
 
@@ -166,7 +166,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-Mainnet/testnet: 17 oracle slots (9-of-17 MuSig2 threshold consensus via `consensus.nOracleRequiredMessages=9, nOracleTotalOracles=17`). Regtest: 7 oracle slots with 4-of-7 consensus (`consensus`), though `digidollarParams` uses 1-of-1 for simplified testing. Oracle prices use micro-USD format (1,000,000 = $1.00). Note: `primitives/oracle.h` defines legacy constants (30/15/8) but chainparams overrides these per-network.
+Mainnet/testnet: 17 consensus-active oracle slots (9-of-17 MuSig2 BIP-327 threshold consensus producing a single BIP-340 Schnorr aggregate signature). Mainnet also carries reserve metadata in `vOracleNodes` slots 17-29, but those reserve entries are not in `consensus.vOraclePublicKeys` and do not participate in V1 quorum; testnet23 has only the 17 active slots configured. Regtest: 4-of-7 (chainparams overrides the header defaults). Oracle prices are reported in micro-USD format (1,000,000 = $1.00). The legacy constants in `primitives/oracle.h` (30/15/8) are header defaults; `consensus.nOracleTotalOracles`, `consensus.nOracleRequiredMessages`, and `consensus.nOracleConsensusRequired` from chainparams are authoritative.
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees. The collateral vault uses **2 redemption paths**:
@@ -175,7 +175,7 @@ Efficient script execution with Merkleized Alternative Script Trees. The collate
 
 Both paths **require the timelock to expire first** - there is no early redemption, no forced liquidation, and no exceptions.
 
-**Implementation Note**: Partial redemption has wallet-level code (`CloseCollateralPosition()`), but consensus rules enforce FULL redemption only. Each collateral UTXO must be fully redeemed in a single transaction - partial redemption is validated as INVALID at the consensus layer (validation.cpp:ValidateCollateralReleaseAmount, security check T2-03).
+**Implementation Note**: Partial redemption is rejected at consensus. `ValidateCollateralReleaseAmount` (`src/digidollar/validation.cpp:1888+`) requires the redeemer to burn at least `requiredDDBurn` (= `originalDDMinted` for healthy systems, or the ERR-adjusted amount when health < 100%) AND release the full locked collateral; otherwise the transaction is rejected with `bad-collateral-release-partial-burn`. Non-DD transactions cannot spend a registered collateral vault at all (`bad-collateral-spend-missing-dd-burn`).
 
 ### Key Features
 
@@ -193,7 +193,7 @@ DigiDollar leverages advanced Bitcoin Script opcodes and DigiByte's unique capab
 ### Time Lock Mechanism
 
 #### OP_CHECKLOCKTIMEVERIFY (CLTV)
-Enforces time-based collateral lock periods (30 days to 10 years)
+Enforces canonical time-based collateral lock periods (1 hour to 10 years)
 
 #### OP_CHECKSEQUENCEVERIFY (CSV)
 ⚠️ Not yet implemented: Listed as a capability but not currently used in DigiDollar scripts. Only CLTV (absolute timelocks) is used.
@@ -204,7 +204,7 @@ Prevents transactions from being mined until specified block height
 ### Core Script Functions
 
 #### Multi-Sig Oracle Validation
-9-of-17 Schnorr threshold signatures for price consensus (mainnet/testnet; regtest: 4-of-7 at consensus layer)
+9-of-17 BIP-327 MuSig2 Schnorr threshold (single 64-byte BIP-340 aggregate signature) for price consensus on mainnet/testnet; regtest uses 4-of-7. `OP_CHECKPRICE` consults the live consensus price via `g_get_oracle_consensus_price` and fails closed when no price is available — there is no production fallback to a mock value.
 
 #### Taproot Script Paths
 Multiple redemption conditions in a single P2TR output
@@ -218,7 +218,7 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-17 oracle slots configured (15 active operators + 2 reserved placeholders on both mainnet and testnet). Script requires 9-of-17 signatures using MuSig2 Schnorr threshold aggregation, ensuring decentralized price consensus (mainnet/testnet configuration).
+Mainnet/testnet expose 17 active oracle slots in `consensus.vOraclePublicKeys`. Mainnet additionally carries reserve metadata in `vOracleNodes` slots 17-29, while testnet23 has no reserve metadata slots configured. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 9-of-17 oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.
@@ -237,18 +237,20 @@ Since collateral is cryptographically time-locked, there are **NO forced liquida
 
 ### 1️⃣ Higher Collateral Requirements (First Defense)
 
-The 500%→200% sliding scale provides massive buffer against price drops. Short-term positions require up to 5x collateral, protecting against volatility.
+The 1000%→200% sliding scale provides massive buffer against price drops. The one-hour tier requires 10x collateral, protecting against short-term volatility.
 
-**Example**: With 500% collateral, DGB can drop 80% before undercollateralization.
+**Example**: With 1000% collateral, DGB can drop 90% before undercollateralization; with 500% collateral, DGB can drop 80%.
 
 ### 2️⃣ Dynamic Collateral Adjustment (Second Defense)
 
-As system health changes, collateral requirements automatically adjust:
+As system health changes, collateral requirements automatically adjust (`src/consensus/dca.cpp` HEALTH_TIERS, basis points):
 
-- **≥150% healthy**: Normal operations (1.0x multiplier)
-- **120-149%**: Warning tier (+20% collateral required, 1.2x multiplier)
-- **100-119%**: Critical tier (+50% collateral required, 1.5x multiplier)
-- **<100%**: Emergency tier (+100% collateral required, 2.0x multiplier)
+- **≥150% healthy**: 1.00× (no adjustment, 10000 bps)
+- **120–149% warning**: 1.25× (+25% collateral, 12500 bps)
+- **110–119% critical**: 1.50× (+50% collateral, 15000 bps)
+- **<110% emergency**: 2.00× (+100% collateral, 20000 bps)
+
+DCA math runs entirely in `__int128` ceiling arithmetic and `ApplyDCA` fails closed (returns INT_MAX) when supplied with health that's stale relative to the canonical cached value, so an attacker cannot trick collateral calculations by feeding a frozen old health number.
 
 ### 3️⃣ Emergency Redemption Ratio (Third Defense)
 
@@ -350,8 +352,8 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ### Important Notes
 
-- **Legacy wallets**: May have random keys that cannot be regenerated - always keep backups
-- **Descriptor wallets** (default since v8.23): Full restore capability via descriptors
+- **Legacy wallets**: Unsupported for DigiDollar V1 mint/address creation; migrate to a descriptor/bech32m HD wallet before using DD
+- **Descriptor wallets** (default since v8.23): Required for DD V1 and provide full restore capability via descriptors
 - **Position data**: Reconstructed from blockchain during rescan, not stored in descriptors
 
 ---
@@ -367,49 +369,49 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ## Implementation Status & Code Alignment
 
-**Last Verified**: 2026-04-14
+**Last Verified**: 2026-04-30
 
-| Feature | Document Spec | Code Status | Notes |
-|---------|---------------|-------------|-------|
-| 2 MAST Paths | Normal + ERR only | ✅ Correct | Only 2 paths in MAST tree (scripts.cpp:113-173) |
-| Emergency Path | Not used | ✅ Removed | `CreateEmergencyPath()` was dead code and removed |
-| Partial Redemption | Consensus: FULL only | ⚠️ Clarified | Wallet code exists, but consensus enforces full redemption |
-| ERR Returns | 100% collateral, burns more DD | ✅ Correct | `GetRequiredDDBurn()` increases burn, `GetAdjustedRedemption()` returns 100% |
-| Minting Blocked During ERR | Yes | ✅ Correct | `ShouldBlockMinting()` returns true when health < 100% |
-| Timelock Required | Both paths need CLTV | ✅ Correct | Both Normal and ERR paths start with CLTV check |
-| Collateral Tiers | 10 tiers (1hr→10yr) | ✅ Correct | 2-year tier (275%) verified in consensus/digidollar.h |
-| DCA Multipliers | 1.0x/1.2x/1.5x/2.0x | ✅ Correct | dca.cpp:GetDCAMultiplier() matches; note: ConsensusParams::dcaLevels uses 125 (1.25x) for warning but DCA class uses 1.2x |
-| ERR Ratios | 0.95/0.90/0.85/0.80 | ✅ Correct | err.cpp:CalculateERRAdjustment() matches documentation |
-| Oracle Config | 9-of-17 (mainnet/testnet) | ✅ Correct | primitives/oracle.h has legacy 30/15/8 constants; chainparams overrides to 17/17/9 |
-| Cooldown Period | 8640 blocks (~36 hours) | ✅ Correct | volatility.h:COOLDOWN_BLOCKS = 8640 (was 144, fixed in RH-30a) |
+| Feature | Document Spec | Code Reference |
+|---------|---------------|----------------|
+| 2 MAST Paths | Normal + ERR only | `src/digidollar/scripts.cpp:117-177` |
+| Emergency oracle override | Removed | Comment at `src/digidollar/scripts.cpp:85-86` records removal |
+| Partial redemption | Rejected at consensus | `src/digidollar/validation.cpp:2047-2055` (`bad-collateral-release-partial-burn`) |
+| Non-DD spend of collateral vault | Rejected at consensus | `src/digidollar/validation.cpp:2212-2219` (`bad-collateral-spend-missing-dd-burn`) |
+| ERR semantics | 100% collateral, MORE DD burned | `src/consensus/err.cpp:100-149` (`__int128` ceiling math) |
+| Minting blocked during ERR | Yes; also blocked when oracle absent | `src/consensus/err.cpp:417-469` |
+| Both MAST paths require CLTV | Both leaves prefix-match `<lockHeight> OP_CLTV OP_DROP` | `src/digidollar/scripts.cpp:73-99` |
+| Lock tiers | 10 tiers (1h, 30d, 90d, 180d, 1y, 2y, 3y, 5y, 7y, 10y) | `src/consensus/digidollar.h:50-61` |
+| Custom durations rejected | Mint validation enforces canonical tier and exact lock-block math | `src/digidollar/validation.cpp:980-1008, 1221-1227` |
+| DCA tiers | 1.00 / 1.25 / 1.50 / 2.00 (≥150 / 120-149 / 110-119 / <110) | `src/consensus/dca.cpp:51-57` (HEALTH_TIERS) and `src/consensus/digidollar.h:87-92` (dcaLevels) |
+| ERR ratios | 0.95 / 0.90 / 0.85 / 0.80 | `src/consensus/err.cpp:53-58` (ERR_TIERS) |
+| Oracle config | 9-of-17 (mainnet/testnet) and 4-of-7 (regtest) | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
+| Cooldown period | 8640 blocks (~36h) | `src/consensus/volatility.h:63` (`COOLDOWN_BLOCKS`) |
+| DD amount unit | Cents (100 = $1.00) | `src/consensus/digidollar.h:64-66`, `src/digidollar/digidollar.h` |
+| Oracle price unit | Micro-USD (1,000,000 = $1.00) | `src/oracle/bundle_manager.*`, `src/script/interpreter.cpp` |
+| DD supply alert | Monitoring only — no hard cap | `src/digidollar/health.h:83` (`ALERT_DD_SUPPLY`) |
 
-**Code Verification Complete** (2026-04-14):
-- MAST tree contains exactly 2 paths (Normal + ERR) - verified in `CreateCollateralP2TR()`
-- Both redemption paths enforce CLTV timelock expiry before collateral can be unlocked
-- Only 4 transaction types: NONE=0, MINT=1, TRANSFER=2, REDEEM=3
-- Partial redemption: wallet code exists but consensus enforces FULL redemption only
-- DD amounts stored in cents (100 = $1.00), oracle prices in micro-USD (1,000,000 = $1.00)
-- Oracle config: mainnet/testnet use 9-of-17 (chainparams overrides default 30/15/8 from oracle.h)
-- Cooldown period: 8640 blocks (~36 hours), fixed from original 144 blocks in RH-30a
+The full code-to-spec verification table lives in `DIGIDOLLAR_ARCHITECTURE.md` Section 18.
 
 ---
 
-## 🚨 Critical Issues (Current State)
+## V1 State at a Glance
 
-**Implementation Completion: ~85%** - Core functionality works but critical production blockers remain.
+The V1 branch closes the consensus and policy gaps that the previous draft of this document called out. The status is now:
 
-| Issue | Location | Impact |
-|-------|----------|--------|
-| System health hardcoded 150% | txbuilder.cpp:29,279 | ERR/DCA can never activate in production (validation.cpp has partial fix, txbuilder still uses constant) |
-| MockOracleManager in non-regtest | ~~err.cpp:397~~ | **FIXED**: All MockOracleManager calls are now guarded by REGTEST checks |
-| Mainnet validation disabled | bundle_manager.cpp:2228-2229 | Returns `true` without validating on mainnet |
-| GetBestHeight() stub | bundle_manager.cpp:47-51 | Returns hardcoded 0 instead of actual height |
-| Tests use DD_TX_ERR=5 | test files | Transaction type 5 doesn't exist (only 0-3) |
+| Subsystem | Source | Status |
+|-----------|--------|--------|
+| OP_CHECKPRICE production wiring | `src/script/interpreter.cpp:436-746` | Live `g_get_oracle_consensus_price`; fails closed on missing price |
+| MuSig2-only oracle bundles | `src/validation.cpp:115-217` | Pre-V1 (legacy) bundles rejected; mempool requires recent valid MuSig2 quote |
+| Mainnet/testnet validator parity | `src/validation.cpp` | Mainnet short-circuit removed (commit `f0d9a7b2c7`) |
+| DCA/ERR integer math | `src/consensus/dca.cpp`, `src/consensus/err.cpp` | `__int128` ceiling arithmetic; `ApplyDCA` fails closed on stale health |
+| Confirmed-only DD chaining | `src/digidollar/validation.cpp:1425, 1564` | `MEMPOOL_HEIGHT` DD inputs rejected (commit `0b4959f563`) |
+| Mining graceful degradation | `src/node/miner.cpp:707-744` | Failing DD txs are stripped from `mapModifiedTx`; assembler continues |
+| DD supply alert (not a cap) | `src/digidollar/health.h:83` | Monitoring threshold only |
 
-**What This Means**:
-- ✅ Testnet/Regtest: Fully functional for testing
-- ⚠️ Mainnet: Requires fixes before deployment - ERR and DCA tiers will never activate due to hardcoded 150% system health
+**Where this leaves operators**:
+- **Regtest / testnet**: Fully exercisable today (testnet23 is past its `min_activation_height`).
+- **Mainnet**: Configuration is in place (BIP9 bit 23, start time 2026-05-01, `min_activation_height = 22014720`). Outstanding work is operational — mainnet oracle operator deployment and continued testnet validation.
 
 ---
 
-_DigiDollar represents a paradigm shift in decentralized finance - the world's first truly decentralized stablecoin on a UTXO blockchain where DGB becomes the strategic reserve asset and users never surrender control of their private keys._
+_DigiDollar is a decentralized stablecoin on a UTXO blockchain where DGB serves as the strategic reserve asset and users retain custody of their keys throughout mint, transfer, and redeem operations._

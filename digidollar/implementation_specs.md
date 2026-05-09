@@ -169,14 +169,17 @@ bool CheckDigiDollarTransaction(const CTransaction& tx, TxValidationState& state
 
 **Key Settings Explained**:
 - **Collateral Ratios (Treasury-Based Model)**:
-  - 30 days: 300% ($3.00 DGB locked per $1.00 DD)
-  - 3 months: 250% ($2.50 DGB locked per $1.00 DD)
-  - 6 months: 200% ($2.00 DGB locked per $1.00 DD)
-  - 1 year: 175% ($1.75 DGB locked per $1.00 DD)
-  - 3 years: 150% ($1.50 DGB locked per $1.00 DD)
-  - 5 years: 125% ($1.25 DGB locked per $1.00 DD)
-  - 10 years: 100% ($1.00 DGB locked per $1.00 DD)
-- **Lock Time Options**: From 30 days to 10 years
+  - 1 hour: 1000% ($10.00 DGB locked per $1.00 DD)
+  - 30 days: 500% ($5.00 DGB locked per $1.00 DD)
+  - 3 months: 400% ($4.00 DGB locked per $1.00 DD)
+  - 6 months: 350% ($3.50 DGB locked per $1.00 DD)
+  - 1 year: 300% ($3.00 DGB locked per $1.00 DD)
+  - 2 years: 275% ($2.75 DGB locked per $1.00 DD)
+  - 3 years: 250% ($2.50 DGB locked per $1.00 DD)
+  - 5 years: 225% ($2.25 DGB locked per $1.00 DD)
+  - 7 years: 212% ($2.12 DGB locked per $1.00 DD)
+  - 10 years: 200% ($2.00 DGB locked per $1.00 DD)
+- **Lock Time Options**: From 1 hour to 10 years
 - **Mint Amount ($100 min)**: You must create at least $100 worth of DigiDollars at a time
 - **Oracle Settings**: 15 price reporters, need 8 to agree on the price
 
@@ -626,7 +629,7 @@ bool CreateTransferTransaction(const CWallet& wallet,
 4. Unlocks your DGB collateral and sends it back to you
 5. Uses the appropriate unlocking method (normal timelock or emergency)
 
-**Important**: You can only redeem after your timelock expires (30 days to 10 years, depending on what you chose), unless there's an emergency situation validated by oracles.
+**Important**: You can only redeem after your timelock expires (1 hour to 10 years, depending on what you chose), unless there's an emergency situation validated by oracles.
 
 ```cpp
 bool CreateRedemptionTransaction(const CWallet& wallet,

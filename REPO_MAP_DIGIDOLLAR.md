@@ -24,7 +24,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ## DigiDollar Core
 
 ### src/digidollar/digidollar.h
-- `MAX_DIGIDOLLAR` → static constant: 21 billion DGB equivalent in cents (21B × 100), hard cap on total DD supply
+- `MAX_DIGIDOLLAR` → `21000000000LL * 100` (21B dollars in cents): per-output serialization bound only. DigiDollar has no global supply cap; total circulating DD is constrained by available DGB collateral, per-block minting rate, and the alerting threshold `AlertThresholds::ALERT_DD_SUPPLY` (= 10000000000 cents = 100M DD) which fires monitoring alerts but does NOT block minting (commit `99b1f79480`).
 - `CDigiDollarOutput` (class) → represents a DigiDollar UTXO with Taproot-based redemption paths
   - `CDigiDollarOutput()` → default constructor, zeroes amount/locktime, nulls collateral ID
   - `CDigiDollarOutput(nDDAmountIn, collateralIdIn, nLockTimeIn)` → parameterized constructor linking DD to specific collateral
@@ -49,7 +49,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ### src/digidollar/health.h
 - `DigiDollar::SystemMetrics` (struct) → aggregates all system-wide DD health data: supply, collateral, per-tier breakdown, DCA/ERR/volatility status, oracle status
   - `TierMetrics` (nested struct) → per-tier stats: lockDays, ddMinted, dgbLocked, positions count, healthRatio
-- `DigiDollar::AlertThresholds` (struct) → static constexpr thresholds for alerts: MAX_DD_SUPPLY (100M), MIN_HEALTH_RATIO (120%), CRITICAL (110%), MIN_ORACLES (5), MAX_VOLATILITY (30%), STALE_ORACLE_BLOCKS (100)
+- `DigiDollar::AlertThresholds` (struct) → static constexpr monitoring alert thresholds: ALERT_DD_SUPPLY (monitoring trigger at 100M, not a supply cap), MIN_HEALTH_RATIO (120%), CRITICAL (110%), MIN_ORACLES (5), MAX_VOLATILITY (30%), STALE_ORACLE_BLOCKS (100)
 - `DigiDollar::SystemHealthMonitor` (class) → real-time system health tracking and alerting
   - `GetSystemMetrics()` → returns current SystemMetrics after updating tiers/protection/oracle status
   - `GetTierBreakdown()` → returns per-tier metrics vector with health ratios per lock period
@@ -88,7 +88,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `DigiDollar::CreateDigiDollarP2TR(owner, ddAmount)` → creates simple key-path-only P2TR for freely transferable DD tokens, applies standard Taproot tweak
 - `DigiDollar::GetOracleKeys(count)` → generates deterministic oracle keys for Phase 1 testing (Phase 2 connects to real oracles)
 - `DigiDollar::CreateNormalRedemptionPath(params)` → script: `<lockHeight> OP_CLTV OP_DROP <ownerKey> OP_CHECKSIG`
-- `DigiDollar::CreateERRPath(params)` → script: `<lockHeight> OP_CLTV OP_DROP OP_CHECKCOLLATERAL <100> OP_LESSTHAN OP_VERIFY OP_DIGIDOLLAR OP_DDVERIFY <ownerKey> OP_CHECKSIG`
+- `DigiDollar::CreateERRPath(params)` → script: `<lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP <100> OP_CHECKCOLLATERAL OP_NOT OP_VERIFY OP_DIGIDOLLAR <ddAmount> OP_DDVERIFY <ownerKey> OP_CHECKSIG`. Witness stack is `<signature> <collateralRatio>`; `OP_CHECKCOLLATERAL` consumes `<ratio> <100>` and pushes `ratio>=100`, then `OP_NOT` flips it to `ratio<100`, `OP_VERIFY` enforces ERR-only path (system under-collateralized) — see `src/digidollar/scripts.cpp:88-115`.
 - `DigiDollar::RegisterScriptMetadata(script, type, ddAmount, lockHeight)` → Phase 1 workaround: stores script→metadata mapping in global map (max 10k entries, FIFO eviction)
 - `DigiDollar::GetScriptMetadata(script, metadata)` → retrieves metadata by script hash from global registry
 
@@ -169,15 +169,15 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `ValidateRedemptionTransaction(tx, ctx, state)` → validates collateral + DD inputs, burns check (totalDDInputs > totalDDOutputs), path routing by system health, delegates to normal/ERR conditions
 - **Redemption Helpers:**
   - `ValidateNormalRedemptionConditions(tx, ctx, state)` → checks nHeight ≥ nLockTime and system health ≥ 100%
-  - `ValidateEmergencyRedemptionConditions(tx, ctx, state)` → validates ERR: timelock expired, system < 100%, calculates DD burn multiplier; currently rejects (RED phase incomplete)
-  - `ValidateCollateralReleaseAmount(tx, ctx, ddBurned, state)` → SECURITY [T1-08]: looks up original DD via registry → txindex → block-db, REJECTS if unknown; SECURITY [T2-03]: requires full DD burn (ddBurned ≥ originalDDMinted) to prevent cross-mint collateral theft; validates total DGB release ≤ locked + tolerance
+  - `ValidateEmergencyRedemptionConditions(tx, ctx, state)` → validates ERR: timelock expired, system < 100%, and collateral release burns the consensus ERR-adjusted DD amount while returning full locked collateral
+  - `ValidateCollateralReleaseAmount(tx, ctx, ddBurned, state)` → SECURITY [T1-08]: extract original DD and lock height from creating MINT tx via txindex → block-db → ephemeral metadata registry, REJECTS as `bad-collateral-release-utxo-not-found` / `bad-collateral-release-zero-collateral` / `bad-collateral-release-unknown-lock-height` if unknown; SECURITY [T2-03]: requires `ddBurned >= requiredDDBurn` where `requiredDDBurn = ERR::GetRequiredDDBurn(originalDDMinted, systemHealth)` when health < 100 else `originalDDMinted` — partial burn rejected as `bad-collateral-release-partial-burn`; SECURITY [T2-06b]: detects collateral-as-fee-input attack and rejects as `bad-redeem-collateral-as-fee-input`; net DGB release must equal full locked amount within `feeTolerance = max(1000, allowedRelease/1000)` — over-release rejected as `bad-collateral-release-excessive`, under-release as `bad-collateral-release-incomplete`; input 0 must be the canonical collateral vault output of the creating mint and `tx.nLockTime` must be at least the original mint lock height.
   - `ValidateScriptPathSpending(tx, ctx, state)` → Phase 1: allows key-path Schnorr spending
   - `ValidateCollateralOutput(output, tx, state)` → checks P2TR format via Solver, value ≥ 546 sats dust
   - `ValidateDDOutput(output, tx, state)` → checks nValue == 0, P2TR format via Solver
   - `ExtractLockTime(script)` → parses script for OP_CLTV, extracts lock period, defaults to 30 days
   - `GetSystemCollateralRatio()` → placeholder returning 150% (Phase 1)
 - **ERR Validation:**
-  - `ValidateERRRedemption(tx, ctx, state)` → framework: checks ERR active, placeholder DD burn/collateral calculation; currently returns "err-validation-incomplete"
+  - `ValidateERRRedemption(tx, ctx, state)` → routes through `ValidateEmergencyRedemptionConditions()` and `ValidateCollateralReleaseAmount()` so ERR requires expired timelock, system health < 100%, full collateral return, and ERR-adjusted DD burn
   - `ShouldBlockMintingDuringERR(ctx)` → delegates to ERR::EmergencyRedemptionRatio::ShouldBlockMinting()
   - `ShouldBlockNormalRedemptionsDuringERR(ctx)` → checks ERRState.isActive
   - `ValidateERRAdjustmentAmount(original, adjusted, systemHealth)` → verifies ERR ratio within tolerance
@@ -197,8 +197,8 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ### src/consensus/digidollar.h
 - `DigiDollar::BLOCKS_PER_DAY` → 5760 blocks (15-second block time)
 - `DigiDollarTxType` (enum) → DD_TX_NONE(0), DD_TX_MINT(1), DD_TX_TRANSFER(2), DD_TX_REDEEM(3), DD_TX_MAX(4)
-- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%), mint limits ($100–$100k), minOutputAmount ($1), oracle config (30 total, 17 active, 9-of-17 threshold), DCA levels
-- `GetCollateralRatioForLockTime(lockBlocks, params)` → returns collateral ratio % for lock period; uses higher ratio for between-tier periods
+- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%); mint limits (`minMintAmount=10000`, `maxMintAmount=10000000` in cents = $100–$100k); `minOutputAmount=100` ($1); oracle config defaults `oracleCount=30`, `activeOracles=17`, `oracleThreshold=9` (RC30); DCA levels `dcaLevels = [{150,100},{120,125},{110,150},{100,200}]` (system collateral % → multiplier %, e.g. 110-119% triggers 150%) — these match `src/consensus/dca.cpp:51-57` HEALTH_TIERS (1.00/1.25/1.50/2.00x).
+- `GetCollateralRatioForLockTime(lockBlocks, params)` → returns collateral ratio % only for exact canonical lock periods; returns 0 for custom/in-between periods
 - `GetDCAMultiplier(systemCollateral, params)` → returns collateral requirement multiplier from DCA levels
 - `IsValidMintAmount(amount, params)` → validates against min/max mint amounts
 - `GetMinimumDDOutput(params)` → returns minOutputAmount from consensus params
@@ -219,7 +219,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `DigiDollar::DCA::HealthTier` (struct) → minCollateral %, maxCollateral %, multiplier, status string
 - `DigiDollar::DCA::DynamicCollateralAdjustment` (class) → adjusts collateral requirements based on system health
   - `CalculateSystemHealth(totalCollateral, totalDD, oraclePrice)` → returns health % (0–30000); 30000 if no DD, 0 if no price/collateral
-  - `GetDCAMultiplier(systemHealth)` → >150%: 1.0×, 120–150%: 1.2×, 100–120%: 1.5×, <100%: 2.0×
+  - `GetDCAMultiplier(systemHealth)` → >=150%: 1.0x, 120-149%: 1.25x, 110-119%: 1.5x, <110%: 2.0x
   - `ApplyDCA(baseRatio, systemHealth)` → baseRatio × multiplier
   - `GetCurrentTier(systemHealth)` → returns HealthTier for current health level
   - `IsSystemEmergency(systemHealth)` → true if health < 100%
@@ -230,7 +230,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetCurrentDCAMultiplier()` → convenience: current multiplier from live data
   - `ValidateDCAConfig(error)` → validates tier configuration
   - `FormatSystemHealth(systemHealth)` → formatted percentage string
-  - `FormatDCAMultiplier(multiplier)` → formatted multiplier string (e.g. "1.2x")
+  - `FormatDCAMultiplier(multiplier)` → formatted multiplier string (e.g. "1.25x")
   - `HandleRapidTransition()`, `ValidateExtremeValues()`, `ValidateMultiplierPrecision()`, `PreventIntegerOverflow()`, `HandleConcurrentUpdates()`, `VerifyMemoryStability()`, `ValidateErrorHandling()`, `IsStateTransitionTracked()`, `HasHysteresis()`, `TrackSystemRecovery()`, `ValidateConcurrentCalculations()`, `SimulateResourceExhaustion()` → extreme scenario testing functions
 
 ### src/consensus/dca.cpp
@@ -242,8 +242,8 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `DigiDollar::ERR::EmergencyRedemptionRatio` (class) → emergency protection when system < 100% collateralized
   - `ShouldActivateERR(systemHealth)` → true if health < 100%
   - `CalculateERRAdjustment(systemHealth)` → 95–100%: 0.95, 90–95%: 0.90, 85–90%: 0.85, <85%: 0.80
-  - `GetRequiredDDBurn(originalDDMinted, systemHealth)` → originalDD / ERRRatio (e.g., at 80% health: burn 125 DD to get back 100 DD worth of collateral)
-  - `GetAdjustedRedemption(normalRedemption, systemHealth)` → DEPRECATED alias for backwards compat
+  - `GetRequiredDDBurn(originalDDMinted, systemHealth)` → returns `ceil(originalDDMinted * 10000 / ratioBps)` using `__int128` (no double-precision): e.g. at 80% health (ratioBps=8000), 100 DD requires 125 DD burn. Saturates at `numeric_limits<CAmount>::max()` for extreme values (`src/consensus/err.cpp:120-128`, commits `55926c372a` / `9cca6970ae`).
+  - `GetAdjustedRedemption(normalRedemption, systemHealth)` → DEPRECATED identity passthrough; returns `normalRedemption` unchanged. Kept for ABI compatibility; new code MUST use `GetRequiredDDBurn` (collateral return is always 100% under V1 ERR semantics, commit `55926c372a`).
   - `HasOracleConsensus(bundle)` → validates 9-of-17 oracle signatures for ERR activation
   - `GetCurrentState()` → returns current ERRState
   - `GetERRQueue()` → returns pending ERR redemption outpoints
@@ -354,20 +354,18 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
     - `GetLatestPrice()` → returns most recent consensus price
     - `UpdateCachedPrice(epoch)` → refreshes price cache
   - **Validation:**
-    - `ValidateOracleBundle(bundle, height, params)` → validates bundle for block inclusion
-    - `ValidateOracleDataInBlock(block, height, params)` → validates oracle data in a block
-    - `ValidatePhaseTwoBundle(bundle, params)` → static: Phase 2 validation rules
-    - `ValidatePhaseOneBundle(bundle, params)` → static: Phase 1 validation rules
-    - `ValidateBundle(bundle, height, params)` → static: dispatches to correct phase validator
-    - `GetRequiredConsensus(height, params)` → returns required oracle count for height
-    - `CalculateConsensusPrice(bundle, params)` → static: calculates IQR-filtered median price (1.5×IQR outlier rule); uses price-range checks only (no wall-clock time) for deterministic consensus
+    - `ValidateMuSig2Bundle(bundle, block_height, params, error)` → static: V1 validator; checks bitmap parses, participants ≥ `nOracleConsensusRequired`, members ∈ [0, `nOraclePubkeyCount`), runs `MuSig2OracleAggregator::ComputeAggregatePubkeyFromBitmap`, and BIP-340-verifies the aggregate signature against `ComputeOracleBundleHash(bundle)` (`src/oracle/bundle_manager.cpp:2144`)
+    - `ValidateBundle(bundle, height, params)` → static: thin wrapper around `HasMuSig2Quorum` (used by tests/RPC)
+    - `GetRequiredConsensus(height, params)` → returns `nOracleConsensusRequired`
+    - `CalculateConsensusPrice(bundle, params)` → static: IQR-filtered median over the off-chain attestations; price-range checks only (no wall-clock dependence) so consensus is deterministic during IBD/replay
+    - `HasMuSig2Quorum(bundle, params)` (free function in `bundle_manager.cpp:69`) → checks that a v0x03 bundle is complete (signature length = 64, bitmap parses, ≥ `nOracleConsensusRequired` participants)
   - **Network:**
     - `BroadcastMessage(message)` → broadcasts via P2P
     - `ProcessIncomingMessage(message)` → handles incoming P2P oracle message
     - `HasOracleMessage(hash)` → duplicate detection
     - `SetConnman(connman)` → sets P2P connection manager
-    - `BroadcastConsensusProposal(epoch, price, timestamp)` → Phase 2 Round 2: broadcasts consensus values to P2P for remote oracle attestation; tracks epochs to prevent spam
-    - `HasBroadcastConsensusProposal(epoch)` → checks if proposal was already sent for epoch
+    - `BroadcastConsensusProposal(epoch, price, timestamp)` → off-chain consensus proposal (input to MuSig2). Tracked per-epoch to prevent spam.
+    - `HasBroadcastConsensusProposal(epoch)` → checks if a proposal was already sent for `epoch`.
     - `RegisterSeenAttestation(hash)` → tracks attestation hashes for replay prevention
   - **Status:**
     - `OracleStats` (struct) → pending_messages, active_bundles, latest_price, latest_epoch, last_update, has_consensus
@@ -383,10 +381,12 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
     - `GetOraclePriceForHeight(height)` → retrieves cached price for height
     - `RemovePriceCache(height)` → removes price during block disconnect
 - `OracleDataValidator` (class) → validates oracle data in blocks and transactions
-  - `ValidateBlockOracleData(block, pindex_prev, params, state)` → validates block's oracle data
-  - `ValidateOraclePriceForTx(tx, oracle_price, height)` → validates oracle price for DD tx
-  - `ValidateOracleMessage(message, params)` → validates individual oracle message
-  - `ValidateOracleBundle(bundle, epoch, params)` → validates bundle for epoch
+  - `ValidateBlockOracleData(block, pindex_prev, params, state)` → V1 entry point. Returns true pre-activation; otherwise requires DD-touching blocks to carry exactly one valid v0x03 bundle (`bad-oracle-missing`, `bad-oracle-multiple-outputs`, `bad-oracle-malformed`, `bad-oracle-legacy`, `bad-oracle-musig2`, `bad-oracle-timestamp`). Non-DD blocks may omit the bundle. Implemented at `src/oracle/bundle_manager.cpp:1888`.
+  - `ValidateOraclePriceForTx(tx, oracle_price, height)` → sanity-check the oracle price feeding a DD tx (range and non-zero)
+  - `ValidateOracleMessage(message, params)` → checks `message.IsValid()` plus chainparams authorization and `VerifyAttestation()`
+  - `ValidateOracleBundle(bundle, height, params)` → wraps `OracleBundleManager::ValidateMuSig2Bundle`; rejects non-MuSig2 bundles with `bad-oracle-legacy`-style logging
+  - `CheckOracleSignatures(bundle, params)` / `CheckOracleConsensus(bundle, params)` → both delegate to `HasMuSig2Quorum`
+  - `CheckOracleEpoch(bundle, current_epoch)` → epoch consistency check
 - `OracleIntegration` (namespace) → utility functions for integration
   - `GetCurrentOraclePrice()` → legacy, returns cents (rounds sub-cent to 1)
   - `GetCurrentOraclePriceMicroUSD()` → full precision: 1,000,000 = $1.00
@@ -399,9 +399,10 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - Full implementation of OracleBundleManager, OracleDataValidator, and OracleIntegration
 - Epoch-based bundle management with configurable consensus thresholds
 - Price cache with per-height storage for block connect/disconnect
-- **Phase 2 multi-oracle validation:** `ValidatePhaseTwoBundle()` verifies multiple Schnorr signatures, `ValidatePhaseOneBundle()` verifies single oracle
-- **IQR consensus price:** `CalculateConsensusPrice()` sorts prices, computes Q1/Q3, filters outliers outside Q1−1.5×IQR to Q3+1.5×IQR, returns median of filtered set; falls back to unfiltered median if <4 prices or all filtered
-- **Consensus attestations:** `AddConsensusAttestation()` / `ClearPendingAttestations()` for multi-oracle consensus flow
+- **V1 validator:** `ValidateMuSig2Bundle()` verifies bitmap, threshold, key membership, aggregate-pubkey derivation, and BIP-340 Schnorr aggregate signature; runs identically on mainnet, testnet, and regtest (commit `f0d9a7b2c7`).
+- **Legacy bundle rejection:** `ExtractOracleBundle()` short-circuits on raw v0x01/v0x02 OP_RETURN payloads at lines 915-919 by returning false (commits `bbb85cf363`, `fa29405adc`, `f2bb0a19a4`); the validator emits `bad-oracle-malformed` (`ValidateBlockOracleData` lines 1979-1983). The `bad-oracle-legacy` branch (lines 1989-1995) only fires when extraction succeeds with a non-MuSig2 version; since v0x03 returns true at line 913, it is structurally unreachable from current wire payloads and is kept as defense-in-depth.
+- **IQR consensus price:** `CalculateConsensusPrice()` sorts prices, computes Q1/Q3, filters outliers outside Q1−1.5×IQR to Q3+1.5×IQR, returns median of filtered set; falls back to unfiltered median if <4 prices or all filtered.
+- **Consensus attestations:** `AddConsensusAttestation()` / `ClearPendingAttestations()` accumulate per-oracle attestations as off-chain inputs to MuSig2 (they do NOT update the canonical price cache; only a complete on-chain MuSig2 bundle does).
 
 ### src/oracle/exchange.h
 - `ExchangeAPI::BaseExchangeFetcher` (base class) → persistent CURL handle to prevent socket exhaustion on Windows
@@ -410,18 +411,16 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `ExtractJsonValue(json, key)` → basic JSON value extraction
   - `HttpGet(url)` → makes HTTP GET request via reusable CURL handle
 - **Exchange Fetchers (all override FetchPrice → micro-USD):**
-  - `BinanceFetcher` → DGBUSDT direct or DGBBTC→BTCUSDT cross-pair
-  - `CoinbaseFetcher` → Coinbase Pro or regular API
-  - `KrakenFetcher` → DGB/USD with custom response parsing
-  - `CoinGeckoFetcher` → public API, no key required
-  - `BittrexFetcher` → DGB/USD
-  - `PoloniexFetcher` → DGB/USDT
-  - `MessariFetcher` → public API, no key required
+  Active in `MultiExchangeAggregator::InitializeFetchers()` (`src/oracle/exchange.cpp:984-1010`):
+  - `BinanceFetcher` → DGBUSDT direct or DGBBTC→BTCUSDT cross-pair (`data-api.binance.vision`)
+  - `CoinGeckoFetcher` → public API aggregator, no key required
   - `KuCoinFetcher` → DGB/USDT, no key required
-  - `CryptoComFetcher` → DGB/USD, no key required
   - `GateIOFetcher` → DGB/USDT, no key required
   - `HTXFetcher` → DGB/USDT (formerly Huobi), no key required
-- `ExchangeAPI::MultiExchangeAggregator` (class) → fetches from all 11 exchanges, calculates consensus price
+  - `CryptoComFetcher` → DGB/USD, no key required
+  Defined but **NOT** initialized into `fetchers` (still compile, used only by tests / kept as future hooks):
+  - `CoinbaseFetcher`, `KrakenFetcher`, `BittrexFetcher`, `PoloniexFetcher`, `MessariFetcher` — each marked as broken or paywalled in code comments; `CoinMarketCap` was removed entirely.
+- `ExchangeAPI::MultiExchangeAggregator` (class) → fetches from the 6 initialized exchanges and calculates a consensus price
   - `ExchangePrice` (struct) → exchange name, price_micro_usd, timestamp, success, weight
   - `FetchAggregatePrice()` → fetches all, filters outliers, returns median
   - `FetchAllPrices()` → fetches from all exchanges in parallel
@@ -434,8 +433,9 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `SetExchangeWeight(exchange, weight)` / `GetExchangeWeight(exchange)` → per-exchange weights
 
 ### src/oracle/exchange.cpp
-- Implementation of all 11 exchange fetchers with HTTP/JSON parsing
-- Aggregator with outlier filtering and configurable consensus
+- Implementation of fetchers and the `MultiExchangeAggregator`. Six fetchers (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko) are pushed into `fetchers` by `InitializeFetchers()`; the remaining classes compile but are not initialized.
+- `MultiExchangeAggregator::min_required_sources = 2` (`src/oracle/exchange.h:231`); aggregation requires at least two responsive sources both before and after outlier filtering.
+- `FilterOutliers()` uses a percentage-threshold rule (10% deviation from median by default); `CalculateConsensusPrice` in `bundle_manager.cpp` is the IQR-based deterministic-consensus path used at validation time.
 
 ### src/oracle/mock_oracle.h
 - `MockOracleManager` (class, singleton) → regtest helper for scripted price tests. **Not a production fallback for `OP_CHECKPRICE`**: as of commit `f77678cd0f` the script interpreter consults the live oracle consensus price via `g_get_oracle_consensus_price` and fails closed when no consensus is available.
@@ -450,8 +450,9 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `Reset()` → restores default state
 
 ### src/oracle/mock_oracle.cpp
-- Implementation with deterministic keys derived from `SHA256("digibyte_regtest_oracle_N")`.
-- Builds bundles whose signature count satisfies the regtest 4-of-7 quorum (`consensus.nOracleConsensusRequired`); the legacy header default (8) is no longer authoritative.
+- Deterministic regtest helper. Test keys derived from `SHA256("digibyte_regtest_oracle_N")` (N=0..6); matching pubkeys are pushed into `consensus.vOraclePublicKeys` in `chainparams.cpp:1131-1138`.
+- Builds bundles that satisfy the regtest 4-of-7 quorum (`consensus.nOracleConsensusRequired`).
+- Used only by regtest. Production `OP_CHECKPRICE` reaches the live oracle consensus via `g_get_oracle_consensus_price` and never falls back to `MockOracleManager` (commit `f77678cd0f`).
 
 ### src/oracle/node.h
 - `OracleNode` (class) → oracle node daemon: price fetching, signing, broadcasting
@@ -518,23 +519,24 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `CheckTimeouts()` → timeout detection per new block tip
 
 ### src/oracle/musig2_session_mining.h
-- Bridge header declaring MuSig2SigningSession globals for AddOracleBundleToBlock (Phase 3 v0x03 bundle creation)
-  - `g_oracle_signing_sessions` → global session map keyed by epoch
-  - `g_oracle_signing_sessions_mutex` → protecting mutex
+- Re-declares the legacy `g_oracle_signing_sessions` / `g_oracle_signing_sessions_mutex` globals (defined in `musig2_orchestrator.cpp`) so P2P ingestion shims and tests can include them from a single header.
+- IMPORTANT: this map is **not** the miner's source of truth. `OracleBundleManager::AddOracleBundleToBlock` queries `g_signing_orchestrator->GetCompletedSession(epoch, ...)` (which reads the orchestrator's private `m_signing_sessions`) for completed v0x03 bundles. The legacy globals and `OracleBundleManager::CompleteMuSig2Session` are retained only for the P2P ingestion shim and the `musig2_p2p_ingestion_tests` regression suite.
 
 ### src/oracle/signing_orchestrator.h / .cpp
-- `OracleSigningOrchestrator` (class, extends CValidationInterface) → drives MuSig2 signing protocol on every BlockConnected
-  - Oracle nodes: generate nonces, create partial sigs, broadcast
-  - Non-oracle nodes: collect nonces/sigs, aggregate final signature
+- `OracleSigningOrchestrator` (class, extends `CValidationInterface`) → drives the per-epoch MuSig2 signing protocol on every `BlockConnected`/`UpdatedBlockTip` callback.
+  - Oracle nodes: generate round-1 nonces (`oramusnonce`), wait for the consensus value to be agreed off-chain, then issue round-2 partial signatures (`oramusigpsig`).
+  - Non-oracle nodes: collect nonces and partial sigs from peers, aggregate the final 64-byte BIP-340 signature plus participation bitmap.
+  - Provides `GetCompletedSession(epoch, ...)` — `OracleBundleManager::AddOracleBundleToBlock` (`src/oracle/bundle_manager.cpp:690-727`) calls this when assembling the coinbase template.
+  - rh58 cap on partialsig DoS: orchestrator bounds the number of cached partial signatures per epoch to prevent memory amplification.
 
 ---
 
 ## Oracle Primitives
 
 ### src/primitives/oracle.h
-- **Constants:**
-  - `ORACLE_CONSENSUS_REQUIRED` = 8 (legacy header default; chainparams overrides to 9 for mainnet/testnet — 9 of 17 in RC30)
-  - `ORACLE_ACTIVE_COUNT` = 15 (legacy header default; chainparams overrides to 17 for mainnet/testnet in RC30)
+- **Constants** (`src/primitives/oracle.h:19-24`):
+  - `ORACLE_CONSENSUS_REQUIRED` = 9 (RC30 — header default; chainparams `nOracleConsensusRequired` is the authoritative value the validator uses)
+  - `ORACLE_ACTIVE_COUNT` = 17 (RC30 — header default; chainparams `nOraclePubkeyCount` is authoritative)
   - `ORACLE_TOTAL_COUNT` = 30
   - `ORACLE_MAX_AGE_SECONDS` = 3600 (1 hour)
   - `ORACLE_MIN_PRICE_MICRO_USD` = 100 ($0.0001)
@@ -542,11 +544,11 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `COraclePriceMessage` (class) → individual oracle price report with BIP-340 Schnorr signatures
   - Fields: oracle_id, price_micro_usd, timestamp, block_height, nonce, oracle_pubkey (XOnlyPubKey), schnorr_sig (64 bytes)
   - `IsValid(reference_time)` → validates structure and timing
-  - `Sign(key, merkle_root, aux)` → BIP-340 Schnorr signature creation
-  - `Verify()` → Schnorr signature verification
-  - `GetSignatureHash()` → Phase 1 hash (all fields)
-  - `GetPhase2SignatureHash()` → Phase 2 hash (oracle_id + price + timestamp only)
-  - `SignPhase2(key)` / `VerifyPhase2()` → Phase 2 signing/verification
+  - `Sign(key, merkle_root, aux)` → BIP-340 Schnorr signature over `GetSignatureHash()`
+  - `Verify()` → Schnorr signature verification using the full-field hash
+  - `GetSignatureHash()` → SHA256d over oracle_id + price_micro_usd + timestamp + block_height + nonce (legacy full-field hash)
+  - `GetAttestationSignatureHash()` → compact attestation hash (oracle_id + price + timestamp only); off-chain input to MuSig2
+  - `SignAttestation(key)` / `VerifyAttestation()` → sign / verify using the attestation hash
   - `CheckForConflictingMessages(messages)` → detects duplicate/conflicting oracle submissions
 - `COracleBundle` (class) → collection of oracle messages for consensus
   - Fields: messages vector, epoch, median_price_micro_usd, timestamp
@@ -558,7 +560,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `OracleNodeInfo` (struct) → oracle node definition: id, pubkey, endpoint, is_active
 - `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of 17 active oracles for epoch (RC30)
 - `GetCurrentEpoch(block_height)` → calculates epoch from block height
-- `OracleP2P` (namespace) → P2P validation with DOS protection
+- `OracleP2P` (namespace) → unit-testable P2P validation helpers; production relay admission, per-peer rate limiting, stale-epoch rejection, and dedup live in `src/net_processing.cpp`
   - `ValidateIncomingMessage(message)` → comprehensive P2P message validation
   - `ValidateBundleMessage(bundle)` → bundle size limits and duplicate checks
   - `ValidateGetOracleRequest(request)` → request parameter bounds checking
@@ -587,7 +589,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `getdigidollaraddress()` → generates new DD receive address
   - `validateddaddress()` → validates DD address format
   - `listdigidollaraddresses()` → lists all DD addresses in wallet
-  - `importdigidollaraddress()` → imports external DD address
+  - `importdigidollaraddress()` → validates an external DD address and returns an explicit V1 unsupported/no-op warning; it does not import or rescan wallet state
 - **Utility:**
   - `getdigidollarbalance()` → returns DD balance
   - `estimatecollateral()` → estimates collateral needed without minting
@@ -598,18 +600,18 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - **Oracle:**
   - `createoraclekey()` → generates oracle signing key pair
   - `startoracle()` → starts oracle node with given key
-- `RegisterDigiDollarRPCCommands(t)` → registers all DD RPC commands with the RPC table
+- `RegisterDigiDollarRPCCommands(t)` → registers 17 commands with the RPC table (4 system-monitoring, 1 unsupported address-validation/import stub, 1 utility, 1 oracle price, 1 protection-status, 1 multi-oracle price, 4 oracle management, 4 mock oracle for regtest only). Wallet-context DD/oracle commands are registered separately via `GetWalletRPCCommands()` in `src/wallet/rpc/wallet.cpp`.
 
 ### src/rpc/digidollar.cpp
 - Full implementation of all DD RPC commands
 - Integrates with wallet, oracle, health monitoring systems
 
 ### src/rpc/digidollar_transactions.{h,cpp} *(legacy / unregistered)*
-- Defines `getdigidollarinfo`, `getdigidollaraddress`, `getdigidollarbalance`, `mintdigidollar`, `transferdigidollar`, `redeemdigidollar`, `getredemptioninfo`, `listredeemablepositions`, `setmockoracleprice`, `createrawddtransaction`, plus `GetDigiDollarTransactionRPCCommands()`.
-- ⚠️ **NOT registered** anywhere in the build (no caller of `GetDigiDollarTransactionRPCCommands()`). The active versions of all callable RPCs live in `src/rpc/digidollar.cpp` (`RegisterDigiDollarRPCCommands`) and `src/wallet/rpc/wallet.cpp` (`GetWalletRPCCommands`). Treat this file as legacy until removed or rewired.
+- 9-entry command table (`digidollar_transaction_commands` at `src/rpc/digidollar_transactions.cpp:384–395`) defining `getdigidollarinfo`, `getdigidollaraddress`, `getdigidollarbalance`, `mintdigidollar`, `transferdigidollar`, `redeemdigidollar`, `getredemptioninfo`, `listredeemablepositions`, `createrawddtransaction`. (`setmockoracleprice` is NOT in this table — comment at line 393 explicitly delegates to `rpc/digidollar.cpp`.)
+- ⚠️ **NOT registered** anywhere in the build. `GetDigiDollarTransactionRPCCommands()` is defined but never called. The active versions of all callable RPCs live in `src/rpc/digidollar.cpp` (`RegisterDigiDollarRPCCommands`) and `src/wallet/rpc/wallet.cpp` (`GetWalletRPCCommands`). Treat this file as legacy until removed or rewired.
 
 ### src/wallet/rpc/wallet.cpp *(DigiDollar/oracle wallet-context registrations)*
-- Registers 13 wallet-context commands: `mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `validateddaddress`, `createoraclekey`, `startoracle`. These require a loaded wallet for key access.
+- `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` registers 13 wallet-context commands at lines 962–974: `mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `validateddaddress`, `createoraclekey`, `startoracle`. These require a loaded wallet because they read DD owner/address keys (`StoreOwnerKey`/`GetOwnerKey`) or oracle private keys (`StoreOracleKey`/`GetOracleKey`).
 
 ---
 
@@ -767,7 +769,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ Manages `g_digidollar_stats_index` lifecycle (init, interrupt, stop)
 
 ### src/script/script.h / src/script/script.cpp
-- ⚠️ Defines `OP_DIGIDOLLAR` (0xbb), `OP_DDVERIFY` (0xbc), `OP_CHECKPRICE` (0xbd), `OP_CHECKCOLLATERAL` (0xbe) opcodes
+- ⚠️ Defines DigiDollar Tapscript opcodes (consume BIP-342 OP_SUCCESSx slots, gated by `SCRIPT_VERIFY_DIGIDOLLAR`): `OP_DIGIDOLLAR` (0xbb), `OP_DDVERIFY` (0xbc), `OP_CHECKPRICE` (0xbd), `OP_CHECKCOLLATERAL` (0xbe), `OP_ORACLE` (0xbf)
 - ⚠️ Opcode name mapping in `GetOpName()`
 
 ### src/script/interpreter.h / src/script/interpreter.cpp
@@ -908,16 +910,18 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 
 ### C++ Unit Tests (`src/test/`)
 
+Representative source inventory is listed below. Authoritative C++ unit
+registration is `src/Makefile.test.include`; rows marked source-only are
+present in the tree but not compiled into the current unit-test binary.
+
 | File | Coverage Area |
 |------|--------------|
 | `digidollar_activation_tests.cpp` | BIP9 activation logic, height-based feature gating, deployment status checks |
 | `digidollar_address_tests.cpp` | DD address encoding/decoding, version bytes, network-specific prefixes, validation |
-| `digidollar_bughunt_tests.cpp` | Regression tests for specific bugs: overflow, rounding, edge cases |
 | `digidollar_change_tests.cpp` | DD change output creation, dust handling, balance conservation in transfers |
 | `digidollar_consensus_tests.cpp` | Consensus parameter validation, collateral ratios, tier calculations, DCA levels |
 | `digidollar_dca_tests.cpp` | DCA health tiers, multiplier calculations, system health boundaries, rapid transitions |
 | `digidollar_err_tests.cpp` | ERR activation/deactivation, adjustment ratios, DD burn multiplier, queue management, oracle consensus |
-| `digidollar_gui_tests.cpp` | Qt widget integration tests for DD tab and sub-widgets |
 | `digidollar_health_tests.cpp` | SystemHealthMonitor metrics, tier breakdown, alert thresholds, health history, UTXO scanning |
 | `digidollar_mint_tests.cpp` | Mint tx building, collateral calculation, OP_RETURN metadata, NUMS verification, tier/lock validation |
 | `digidollar_opcodes_tests.cpp` | OP_DIGIDOLLAR, OP_DDVERIFY, OP_CHECKCOLLATERAL, OP_CHECKPRICE execution in script interpreter |
@@ -992,7 +996,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_rh44_thread_safety_tests.cpp` | RH-44: Thread safety and concurrent access tests |
 | `digidollar_rh46_rpc_input_validation_tests.cpp` | RH-46: RPC input validation and DoS surface tests |
 | `digidollar_rh47_consensus_fork_deep_tests.cpp` | RH-47: Consensus fork scenario deep dive (builds on RH-31) |
-| `digidollar_rh49_find_opreturn_tests.cpp` | RH-49: FindDDOpReturn helper validation and dynamic OP_RETURN detection |
+| `digidollar_rh49_find_opreturn_tests.cpp` | Registered RH-49: FindDDOpReturn helper validation and dynamic OP_RETURN detection |
 | `rh05_bundle_validation_attacks_tests.cpp` | RH-05: oracle bundle validation — v0x02 downgrade, epoch mismatch, oversized data, bitmap attacks, zero-length bypass |
 | `rh15_crypto_primitives_tests.cpp` | RH-15: hash domain separation, __int128 edge cases, version-marker ambiguity, MuSig2 nonce/key validation |
 | `rh29_coinbase_oracle_manipulation_tests.cpp` | RH-29: coinbase OP_RETURN injection, multiple oracle bundles, version confusion, signature replay, withholding |
@@ -1048,20 +1052,35 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 
 ### Python Functional Tests (`test/functional/`)
 
+Authoritative registration is `test/functional/test_runner.py:261-340`.
+As of the Wave 23 rerun the standard runner contains 80 DD/oracle/wallet
+functional entries. `feature_oracle_p2p.py` remains registered for historical
+compatibility but is a legacy/superseded scaffold; the live oracle P2P proof is
+`digidollar_wave20_oracle_p2p.py`.
+
 | File | Coverage Area |
 |------|--------------|
 | `digidollar_activation.py` | Basic BIP9 activation of DD features on regtest |
 | `digidollar_activation_boundary.py` | Activation edge cases: exact height, off-by-one, pre/post activation behavior |
+| `digidollar_activation_multinode.py` | Multi-node activation state and deployment synchronization |
 | `digidollar_basic.py` | End-to-end DD workflow: mint → transfer → redeem on regtest |
+| `digidollar_collateral_spend_guards.py` | Mempool/RPC/submitblock collateral-spend burn-enforcement guards |
 | `digidollar_encrypted_wallet.py` | DD operations with encrypted wallet: unlock, mint, send, lock |
+| `digidollar_getoracles_consensus_field.py` | `getoracles` consensus field and pending-message status regression coverage |
+| `digidollar_lock_tier_canonical.py` | Canonical lock tier acceptance/rejection in wallet/functional flows |
 | `digidollar_mint.py` | Mint transaction creation, collateral validation, tier selection |
+| `digidollar_musig2_session_status.py` | MuSig2 oracle session status and aggregate signing progress |
 | `digidollar_network_relay.py` | DD transaction propagation across multi-node network |
 | `digidollar_network_tracking.py` | Network-wide DD supply tracking and consistency |
 | `digidollar_oracle.py` | Basic oracle price feeding and DD integration |
+| `digidollar_oracle_block_rules_relay.py` | DD-touching block oracle-bundle relay/mining rules |
 | `digidollar_oracle_keygen.py` | Oracle key generation and authorization |
-| `digidollar_oracle_phase2.py` | Phase 2 oracle protocol: on-chain bundles, Schnorr verification |
+| `digidollar_oracle_bundle_reject_matrix.py` | Oracle bundle reject matrix: malformed, stale, missing, legacy formats |
+| `digidollar_oracle_reorg_cache.py` | Oracle cache behavior across reorgs |
+| `digidollar_oracle_rpc_staleness.py` | Oracle RPC stale-price/status display regression coverage |
 | `digidollar_persistence.py` | DD data persistence across node restart |
-| `digidollar_phase2_integration.py` | Phase 2 integration: oracle + DD mint + transfer + redeem pipeline |
+| `digidollar_mempool_miner_parity.py` | DD mempool/miner/ConnectBlock parity for oracle quote and validation paths |
+| `digidollar_pending_position_status.py` | Pending DD position/balance status reporting |
 | `digidollar_protection.py` | DCA, ERR, and volatility protection mechanisms |
 | `digidollar_redeem.py` | Basic redemption: timelock expiry, collateral release |
 | `digidollar_redeem_stats.py` | Redemption statistics tracking via DigiDollarStatsIndex |
@@ -1069,6 +1088,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_redemption_e2e.py` | End-to-end redemption: mint → wait → redeem → verify balance |
 | `digidollar_rpc.py` | General DD RPC command testing |
 | `digidollar_rpc_addresses.py` | getdigidollaraddress, validateddaddress, listdigidollaraddresses |
+| `digidollar_rpc_amount_filters.py` | Fixed-precision DD cent parsing and amount-filter regressions |
 | `digidollar_rpc_collateral.py` | calculatecollateralrequirement, estimatecollateral |
 | `digidollar_rpc_dca.py` | getdcamultiplier, DCA-related RPC |
 | `digidollar_rpc_deployment.py` | DD deployment status RPC queries |
@@ -1078,16 +1098,19 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_rpc_protection.py` | getprotectionstatus, DCA/ERR/volatility via RPC |
 | `digidollar_rpc_redemption.py` | redeemdigidollar, getredemptioninfo |
 | `digidollar_stress.py` | Stress testing: high tx volume, many positions, rapid mints/transfers |
+| `digidollar_stats_reorg.py` | DigiDollar stats index behavior across reorgs |
+| `digidollar_stats_reordered_mint.py` | Stats index handling for reordered mint outputs |
 | `digidollar_transactions.py` | Transaction structure validation, version markers, OP_RETURN parsing |
 | `digidollar_transfer.py` | DD transfer: single/multi recipient, conservation, change outputs |
 | `digidollar_tx_amounts_debug.py` | Debugging tool for DD amount extraction and validation |
+| `digidollar_verifychain_cache_side_effect.py` | Proves `verifychain` memory-only checks do not mutate live DD/oracle caches |
 | `digidollar_wallet.py` | Wallet DD integration: balance, history, UTXO management |
 | `digidollar_watchonly_rescan.py` | Watch-only wallet DD rescan and position detection |
 | `digidollar_rpc_display_bugs.py` | RPC display formatting bug regression tests |
 | `wallet_digidollar_backup.py` | DD wallet backup and restore from backup file |
-| `wallet_digidollar_descriptors.py` | Descriptor wallet compatibility with DD keys |
+| `wallet_digidollar_descriptors.py --descriptors` | Descriptor wallet compatibility with DD keys |
 | `wallet_digidollar_encryption.py` | Wallet encryption impact on DD operations |
-| `wallet_digidollar_persistence_restart.py` | DD data survival across wallet/node restart cycles |
+| `wallet_digidollar_persistence_restart.py --descriptors` | DD data survival across wallet/node restart cycles |
 | `wallet_digidollar_rescan.py` | Wallet rescan reconstructs DD positions from blockchain |
 | `digidollar_bug11_bug13_regression.py` | Bug #11 and #13 regression tests (fee display, listdigidollartxs) |
 | `digidollar_oracle_consistency.py` | Oracle price consistency across multiple nodes |
@@ -1098,6 +1121,30 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 | `digidollar_transaction_fees.py` | DD transaction fee calculation and display |
 | `digidollar_validate_address.py` | validateddaddress RPC address format validation |
 | `digidollar_wallet_restore_redeem.py` | Wallet restore followed by redemption of restored positions |
-| `wallet_digidollar_restore.py` | Full wallet restore from seed with DD position reconstruction |
-| `feature_oracle_p2p.py` | Oracle P2P networking: message broadcast, relay, validation |
-| `rpc_getoracles_pending.py` | Oracle pending messages RPC query |
+| `wallet_digidollar_restore.py --descriptors` | Full wallet restore from seed with DD position reconstruction |
+| `feature_oracle_p2p.py` | Legacy/superseded oracle P2P scaffold retained in the runner; real coverage is `digidollar_wave20_oracle_p2p.py` |
+| `digidollar_wave14_multinode_ibd_reorg.py` | Multi-node IBD/reorg replay for DD/oracle state |
+| `digidollar_wave17_spendability.py --descriptors` | Descriptor-wallet DD spendability/watch-only/locked-wallet regression coverage |
+| `digidollar_wave18_rpc_matrix.py --descriptors` | DD RPC matrix across wallet states, networks, and activation gates |
+| `digidollar_wave20_oracle_p2p.py` | Oracle P2P pending-bundle flow and recovery |
+| `digidollar_wave21_musig2_p2p_dos.py` | MuSig2 nonce/partial-sig stale-epoch relay rejection and current+1 boundary liveness |
+| `digidollar_wave21_dos_paging.py` | DD RPC paging/resource-bound functional coverage |
+| `digidollar_wave26_mixed_node_compat.py` | Mixed upgraded/legacy-behavior compatibility proof for ordinary DGB transactions |
+| `wallet_digidollar_active_restore_redeem.py` | Active DD restore followed by redemption |
+| `wallet_digidollar_encrypted_received_redeem.py` | Encrypted wallet receive/redeem path |
+| `wallet_digidollar_mint_reorg.py` | Wallet DD mint state across reorgs |
+| `wallet_digidollar_mixed_output_accounting.py` | Wallet accounting for mixed DD/non-DD outputs |
+| `wallet_digidollar_pending_redeem_restart.py` | Pending redemption state across wallet/node restart |
+| `wallet_digidollar_reindex.py` | DD wallet state reconstruction during reindex |
+| `wallet_digidollar_reorg.py` | Wallet DD position/balance state across reorgs |
+| `wallet_digidollar_transfer_ancestor_reorg.py` | DD transfer ancestor reorg replay |
+| `wallet_digidollar_transfer_reorg.py` | DD transfer reorg replay |
+| `wallet_digidollar_wave16_load_rescan.py` | Wave 16 wallet load/rescan persistence coverage |
+
+### Fuzz Targets (`src/test/fuzz/`)
+
+Wave 23 registered 247 total fuzz targets in the active fuzz binary. Of those,
+52 target names currently match DigiDollar/oracle/MuSig2/DD surfaces. The tree
+contains additional DD/oracle fuzz source files and helpers; authoritative
+target registration is the `PRINT_ALL_FUZZ_TARGETS_AND_ABORT=1` output from
+`src/test/fuzz/fuzz` plus `src/Makefile.test.include`.

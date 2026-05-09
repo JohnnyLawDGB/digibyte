@@ -194,7 +194,7 @@ This prevents panic actions during extreme market conditions.
 | **Collateral Type** | Algorithmic (LUNA token) | Real asset (DGB) |
 | **Collateral Ratio** | 0% (unbacked) | 200-1000% |
 | **Backing Asset Supply** | Unlimited (could mint LUNA) | Fixed 21B DGB |
-| **Redemption Speed** | Instant | Time-locked (30 days to 10 years) |
+| **Redemption Speed** | Instant | Time-locked (1 hour to 10 years) |
 | **Forced Liquidation** | N/A (no real collateral) | IMPOSSIBLE (cryptographic lock) |
 | **Bank Run Possible** | YES (happened in 72 hours) | NO (collateral cannot move) |
 | **Reflexive Loop** | YES (UST↔LUNA mint/burn) | NO (DGB supply fixed) |

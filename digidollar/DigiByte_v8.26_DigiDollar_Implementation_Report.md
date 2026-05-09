@@ -123,7 +123,7 @@ These addresses are P2TR (Taproot) addresses encoded using Base58Check. Implemen
 ┌─────────────────────────────────────────────┐
 │            MINT PROCESS                      │
 ├─────────────────────────────────────────────┤
-│ 1. Select lock period (30d to 10y)          │
+│ 1. Select lock period (1h to 10y)           │
 │ 2. Get current oracle price                 │
 │ 3. Check system health (DCA status)         │
 │ 4. Calculate required collateral:           │
@@ -597,7 +597,7 @@ The Qt wallet includes a complete DigiDollar tab with all six sections fully imp
 - **Backend**: `WalletModel::getNewDigiDollarAddress()` generates valid P2TR addresses
 
 #### 4. **Mint DigiDollar Widget** ✅ COMPLETE UI, ⚠️ MOCK ORACLE
-- Lock period dropdown (8 tiers: 30d to 10y)
+- Lock period dropdown (10 canonical tiers: 1h to 10y)
 - Amount input with USD equivalent
 - Real-time collateral calculation:
   - Formula: `(DD × ratio / 100 × $1) / DGB_price`
@@ -1214,7 +1214,7 @@ The gaps are clearly documented with TODO comments, and the existing code provid
 
 ### Key Innovations
 
-1. **Treasury Model Collateralization**: 8-tier system rewards long-term stability
+1. **Treasury Model Collateralization**: 10-tier system rewards long-term stability
 2. **DD Address Format**: User-friendly addresses with clear network identification
 3. **MAST-based Redemption**: Four distinct paths for maximum flexibility
 4. **Real-time Protection**: DCA and ERR respond to market conditions

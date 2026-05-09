@@ -1,5 +1,14 @@
 # DigiByte Testnet Reset Guide - v9.26 DigiDollar Edition
 
+> **Archived historical guide - do not use for RC34 operator setup.**
+> This document records a November 2025 reset procedure and contains stale
+> values such as old ports, old data-directory names, and height-650 testnet
+> activation assumptions. The current RC34 release remains on `testnet23`;
+> it requires no reset, uses P2P port `12030`, RPC port `14026`, and activates
+> DigiDollar/oracle rules on testnet at height `600`. Use
+> `RELEASE_v9.26.0-rc34.md` and `src/kernel/chainparams.cpp` as the current
+> source of truth.
+
 **Document Version:** 2.0 - COMPLETE WITH SCRYPT GENESIS MINING
 **Target Release:** DigiByte v9.26.0
 **Date:** November 23, 2025 (Updated with successful testnet reset)
@@ -2372,7 +2381,7 @@ So after mining ~750 blocks total, you can start minting. This takes about **~3.
 
 A: No, redemptions require:
 1. **Minting first** (create a vault position)
-2. **Waiting for timelock** (30 days to 10 years depending on lock period)
+2. **Waiting for timelock** (1 hour to 10 years depending on lock period)
 3. **Having DigiDollars to burn** (to unlock collateral)
 
 For rapid testing, use regtest where you can control time:
@@ -2389,16 +2398,18 @@ digibyte-cli -regtest redeemdigidollar [position_id]
 
 **Q: What if the oracle price is wrong?**
 
-A: In Phase One (testnet), the oracle uses **mock prices** by default:
-- Default: $0.05/DGB
-- Configurable: `setmockoracleprice` RPC
+A: Current V1 testnet and mainnet operators use the live exchange-backed
+oracle and MuSig2 v0x03 bundles. Mock price RPCs such as
+`setmockoracleprice` are regtest-only helpers and are not production or
+testnet fallbacks.
 
-Phase One focuses on **mechanism testing**, not accurate price feeds.
-
-Phase Two (mainnet) will use **8 real exchange APIs**:
+The active oracle fetcher set uses 6 exchange sources:
 - Binance
-- Coinbase
-- Kraken
+- KuCoin
+- Gate.io
+- HTX
+- Crypto.com
+- CoinGecko
 - Bittrex
 - Poloniex
 - Messari
@@ -2517,8 +2528,8 @@ digibyte-cli -testnet getrawmempool
 # Abandon stuck transaction
 digibyte-cli -testnet abandontransaction [txid]
 
-# Retry with higher fee
-digibyte-cli -testnet senddigidollar [address] [amount] [fee_rate]
+# Retry after the stuck transaction clears
+digibyte-cli -testnet senddigidollar [address] [amount]
 ```
 
 ---
@@ -2566,7 +2577,7 @@ index 1234567..abcdefg 100644
 
 -        consensus.nDDActivationHeight = 1000;              // DigiDollar active from block 1000
 +        consensus.nDDActivationHeight = 100;               // DigiDollar active from block 100 (~25 minutes)
-         consensus.nDDOracleEpochBlocks = 50;               // Rotate oracles every 50 blocks (~12.5 minutes)
+         consensus.nDDOracleEpochBlocks = 40;               // Rotate oracle signing epochs every 40 blocks (~10 minutes)
          consensus.nDDOracleUpdateInterval = 2;             // Update price every 2 blocks (~30 seconds)
 
 @@ -521,7 +523,7 @@ public:

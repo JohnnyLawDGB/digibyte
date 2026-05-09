@@ -7,7 +7,7 @@
 
 DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `src/kernel/chainparams.cpp`** — every oracle operator must:
 
-1. Run a current DigiByte Core release (RC30 or later; RC33 is the latest at the time of writing) and create a descriptor wallet
+1. Run a current DigiByte Core release (RC30 or later; RC34 is the latest at the time of writing) and create a descriptor wallet
 2. Run `createoraclekey` to generate their oracle keypair inside the wallet
 3. Send their **public key only** to the DigiByte Core maintainer
 4. The maintainer adds their key to `chainparams.cpp` and ships a new release
@@ -49,7 +49,7 @@ Current releases create descriptor wallets by default. No special flags needed.
 
 Replace `0` with the oracle ID slot assigned to you by the maintainer.
 
-The chainparams `vOracleNodes` table allocates 30 mainnet/testnet slots (IDs 0–29), but only slots **0–16** are part of the active 17-of-17 roster (`consensus.vOraclePublicKeys`) participating in 9-of-17 MuSig2 consensus. Slots 17–29 are reserve placeholders and are not validated against MuSig2 quorum. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
+The mainnet chainparams `vOracleNodes` table allocates 30 metadata slots (IDs 0–29), but only slots **0–16** are part of the consensus-active MuSig2 roster (`consensus.vOraclePublicKeys`) participating in 9-of-17 consensus. Slots 17–29 are reserve placeholders and are rejected from pending-message quorum and final MuSig2 validation. Testnet23 has only the 17 active slots configured. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
 
 **Output:**
 ```json
@@ -72,7 +72,7 @@ The chainparams `vOracleNodes` table allocates 30 mainnet/testnet slots (IDs 0�
 
 Send **only these two things**:
 1. Your **pubkey** from the output above (66-char hex starting with `02` or `03`)
-2. Your **server endpoint** (e.g., `myserver.com:12028`)
+2. Your **server endpoint** (e.g., `myserver.com:12030` for testnet23, or `myserver.com:12024` for mainnet)
 
 **⚠️ NEVER share your private key. It stays in your wallet.**
 
@@ -121,7 +121,7 @@ You can also provide the key explicitly if needed:
 ### Step 8: Monitor
 
 ```bash
-tail -f ~/.digibyte/testnet4/debug.log | grep -i oracle
+tail -f ~/.digibyte/testnet23/debug.log | grep -i oracle
 ```
 
 ---
@@ -129,19 +129,78 @@ tail -f ~/.digibyte/testnet4/debug.log | grep -i oracle
 ## What Your Oracle Does
 
 Once running, your oracle automatically:
-- Fetches DGB/USD prices from 7 exchanges every 15 seconds (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko, CoinMarketCap)
-- Calculates median price with MAD outlier filtering
+- Fetches DGB/USD prices from 6 active exchanges every 60 seconds (Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com — see `src/oracle/exchange.cpp:1013-1018`)
+- Calculates median price with median-distance outlier filtering (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1150`); the live oracle daemon requires **at least 3 valid exchange responses** to publish — `OracleNode::FetchMedianPrice` overrides the aggregator's default floor of 2 (`src/oracle/node.cpp:386`, `src/oracle/exchange.h:231`)
 - Signs the price with BIP-340 Schnorr using your wallet-stored private key
-- Broadcasts the signed 128-byte message to the P2P network
+- Broadcasts the signed price message to the P2P network; in V1, MuSig2 bundle attestations are the consensus path
 
 ---
 
 ## Important Notes
 
-- **Key persists in wallet** — Your oracle key survives wallet unload/reload. But after restarting `digibyted`, you need to run `startoracle` again.
+- **Key persists in wallet** — Your oracle key survives wallet unload/reload. Since RC25, an unencrypted wallet auto-starts its oracle on load (`CWallet::TryAutoStartOracles` in `src/wallet/wallet.cpp:4797`); an encrypted wallet auto-starts after `walletpassphrase` unlock. Running `startoracle` manually after restart is still a safe fallback.
 - **One key per oracle ID** — `createoraclekey` rejects if a key already exists for that ID. This prevents accidental overwrites.
 - **Descriptor wallets** are the default in current releases. `dumpprivkey` exists for legacy wallets; descriptor-wallet operators do not need it because the oracle private key is stored under the `oraclekey` record (see `WriteOracleKey/ReadOracleKey` in `src/wallet/walletdb.cpp` and `StoreOracleKey/GetOracleKey` in `src/wallet/wallet.cpp`).
 - **Backup your wallet** — `backupwallet` includes your oracle key. Losing the wallet means losing your oracle key.
+- **P2P anti-abuse is enforced by the node** — oracle price, attestation, consensus, and MuSig2 nonce/partial-signature messages are admission checked in `src/net_processing.cpp` before relay/session ingestion. Stale MuSig2 epochs are dropped; the current and next epoch are the only accepted relay windows.
+
+---
+
+## Reset and Recovery
+
+The oracle daemon is stateless beyond the wallet-resident private key plus the in-memory MuSig2 session. There is no on-disk session/secnonce store, so a clean restart cannot leak nonces. Use the steps below when the local oracle stops broadcasting, gets stuck on a stale price, or after a node restart.
+
+### 1. Confirm the local oracle status
+
+```bash
+digibyte-cli -testnet listoracle
+digibyte-cli -testnet getoraclepubkey <id>
+digibyte-cli -testnet getdigidollardeploymentinfo   # check musig2_session.state for current epoch
+```
+
+Healthy output: `running=true`, `authorized=true`, and `musig2_session.state` cycles through `NONCES_COLLECTING` → `NONCES_COMPLETE` → `SIGNING` → `COMPLETE` once per epoch.
+
+### 2. Confirm the network sees your oracle
+
+```bash
+digibyte-cli -testnet getoracles true 20 | jq '.[] | select(.is_running_locally==true)'
+digibyte-cli -testnet getalloracleprices 20 | jq '.oracles[] | select(.oracle_id==<id>)'
+```
+
+Look for `price_source` values. `local` means the daemon has a fresh exchange quote; `pending` means an attestation is gossiping; `on-chain` means a recent v0x03 bundle included your slot. `none` plus `status=no_data` for several blocks means the daemon is not contributing — go to step 3.
+
+### 3. Restart cleanly
+
+```bash
+digibyte-cli -testnet stoporacle <id>
+digibyte-cli -testnet -rpcwallet=oracle walletpassphrase "<passphrase>" 600   # encrypted wallets only
+digibyte-cli -testnet -rpcwallet=oracle startoracle <id>
+```
+
+`stoporacle` joins the price thread and clears pending oracle-message state; `startoracle` rebuilds the price thread from the wallet-resident key. A full daemon restart drops in-memory MuSig2 sessions, and the current-epoch session is recreated lazily on the next remote nonce or block tick (see `OracleSigningOrchestrator::OnBlockConnected`). Pre-restart secnonce material is unrecoverable by design — a recreated session generates fresh nonces.
+
+### 4. Diagnose exchange-feed issues
+
+The live oracle requires **3 of 6 exchange responses** to publish (see "What Your Oracle Does" above). Search the debug log for fetcher errors:
+
+```bash
+tail -n 2000 ~/.digibyte/testnet23/debug.log | grep -E "Oracle: (Insufficient|Exception|Failed to fetch|Initialized)"
+```
+
+Specifically:
+- `Oracle: Insufficient price sources (N < 3 required)` — fewer than 3 exchanges responded; check outbound HTTPS, DNS, and CA bundle path.
+- `Oracle: Exception fetching from <Exchange>` — that exchange's API or the local TLS path failed for that round.
+- `Oracle: WARNING - 5 consecutive price fetch failures` / `ALERT - 15` / `CRITICAL - %d` — escalating reachability problems (`src/oracle/node.cpp:362-377`).
+- `HttpGet: SECURITY - No CA bundle found` — your host has no recognized system CA store; install `ca-certificates` (Debian/Ubuntu) or equivalent so libcurl can verify TLS.
+
+A single broken endpoint (bad URL or quota-blocked) is non-fatal; the round logs the per-fetcher error and proceeds with the remaining sources as long as ≥3 succeed. There is no API-key configuration: the daemon uses only public unauthenticated endpoints, so missing-key is not a startup failure mode.
+
+### 5. Recover from wallet corruption
+
+If the wallet DB is unreadable, the oracle key is gone. There is no on-chain way to rotate keys without a chainparams update.
+
+- Restore the wallet from `backupwallet` if one exists; the `oraclekey` record carries the private key.
+- Otherwise, run `createoraclekey <id>` to generate a new key, send the new pubkey to the maintainer, and wait for the next release before resuming as that slot. Until the chainparams update ships, the slot stays inactive.
 
 ---
 
@@ -151,9 +210,9 @@ When an operator sends you their 33-byte compressed public key, add it to **two 
 
 ### 1. vOracleNodes (33-byte compressed CPubKey)
 
-In `InitializeOracleNodes()`:
+In `InitializeOracleNodes()` — match the network's P2P port (mainnet 12024, testnet23 12030):
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12028", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12030", true},
 ```
 
 ### 2. consensus.vOraclePublicKeys (32-byte x-only key — strip the 02/03 prefix)
@@ -172,9 +231,15 @@ Then recompile and distribute the updated binary.
 
 | Network | Total Slots | Active (in MuSig2 quorum) | Consensus | Notes |
 |---------|------------|---------------------------|-----------|-------|
-| Mainnet | 30 (IDs 0–29) | 17 (slots 0–16) | 9-of-17 MuSig2 (RC30) | Slots 17–29 are reserve placeholders, not in `consensus.vOraclePublicKeys`. Active for use only after BIP9 activation at min height 22,014,720. |
-| Testnet | 30 (IDs 0–29) | 17 (slots 0–16) | 9-of-17 MuSig2 (RC30) | Active on testnet23 from height 600. |
+| Mainnet | 30 (IDs 0–29) | 17 (slots 0–16) | 9-of-17 MuSig2 (RC30) | DigiDollar/MuSig2 activates at BIP9 min height 22,014,720. Slots 17–29 stay reserve placeholders after activation: they are *not* in `consensus.vOraclePublicKeys` and `ValidateMuSig2Bundle` rejects any signer with `id ≥ 17`. Promoting a reserve to active requires a chainparams change in a future release (see `DD-FA-ARCH-001`). |
+| Testnet (testnet23) | 17 (IDs 0–16) | 17 (slots 0–16) | 9-of-17 MuSig2 (RC30) | Active from height 600. Testnet has no reserve slots configured. |
 | Regtest | 7 (IDs 0–6) | 7 | 4-of-7 MuSig2 | Always active. |
+
+To confirm a slot is in the active quorum at runtime, call
+`getoracles` and inspect the `in_consensus` field, or call
+`getdigidollardeploymentinfo` and read `oracle_pubkey_count` /
+`oracle_total_slots`. A slot is in the active quorum iff
+`oracle_id < oracle_pubkey_count`.
 
 ---
 
@@ -186,7 +251,7 @@ Then recompile and distribute the updated binary.
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12028 (testnet) | Open inbound + outbound |
+| Ports | 12030 (testnet23 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
 
 ---
 
@@ -194,13 +259,14 @@ Then recompile and distribute the updated binary.
 
 | Command | Description |
 |---------|-------------|
-| `createoraclekey <oracle_id>` | Generate oracle keypair in wallet (NEW) |
-| `startoracle <id> [privkey_hex]` | Start oracle — loads from wallet if no privkey given |
+| `createoraclekey <oracle_id>` | Generate oracle keypair in wallet (wallet-context RPC) |
+| `startoracle <id> [privkey_hex]` | Start oracle — loads private key from wallet if no privkey given (wallet-context RPC) |
 | `stoporacle <id>` | Stop oracle price thread |
 | `getoraclepubkey <id>` | Check oracle key and status |
-| `listoracles [active_only]` | List all configured oracles |
-| `submitoracleprice <price>` | Submit price (regtest / Phase 2 oracle testing only) |
-| `getoracleprice` | Get current oracle price |
+| `getoracles [active_only] [scan_blocks]` | List all configured oracles with chain status |
+| `listoracle` | Show this node's running oracle |
+| `getoracleprice` | Get current consensus DGB/USD oracle price |
+| `getalloracleprices` | Per-oracle price view (debug/status) |
 
 ---
 
@@ -208,10 +274,12 @@ Then recompile and distribute the updated binary.
 
 | Component | File | Key Lines |
 |-----------|------|-----------|
-| `createoraclekey` RPC | `src/rpc/digidollar.cpp` | ~line 4033 |
-| `startoracle` RPC (wallet loading) | `src/rpc/digidollar.cpp` | ~line 4137 |
-| Wallet DB storage | `src/wallet/walletdb.cpp` | `WriteOracleKey` / `ReadOracleKey` |
-| CWallet key methods | `src/wallet/wallet.cpp` | `StoreOracleKey` / `GetOracleKey` |
+| `createoraclekey` RPC | `src/rpc/digidollar.cpp` | line 4473 |
+| `startoracle` RPC (wallet loading) | `src/rpc/digidollar.cpp` | line 4611 |
+| Wallet RPC registration (`createoraclekey`, `startoracle`) | `src/wallet/rpc/wallet.cpp` | lines 973–974 |
+| Base RPC registration (other oracle commands) | `src/rpc/digidollar.cpp` | `RegisterDigiDollarRPCCommands` line 5222 |
+| Wallet DB storage | `src/wallet/walletdb.cpp` | `WriteOracleKey` line 778, `ReadOracleKey` line 793 |
+| CWallet key methods | `src/wallet/wallet.cpp` | `StoreOracleKey` line 4688, `GetOracleKey` line 4711 |
 | OracleNodeInfo struct | `src/primitives/oracle.h` | OracleNodeInfo |
 | chainparams oracle slots | `src/kernel/chainparams.cpp` | `InitializeOracleNodes()`, `vOraclePublicKeys` |
 | Unit tests | `src/test/oracle_wallet_key_tests.cpp` | Wallet key generation / persistence |

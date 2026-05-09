@@ -2,11 +2,13 @@
 
 ## Overview
 
-This checklist ensures complete oracle system integration for Phase One deployment.
+This checklist is a historical integration checklist refreshed with V1-critical
+terminology. Use the final audit ledger/report as the authoritative release
+readiness checklist.
 
-**Phase**: Phase One (1-of-1 Consensus, Testnet Only)
+**Phase**: V1 MuSig2 oracle bundles
 **Status**: Pre-Deployment Verification
-**Target Network**: Testnet
+**Target Network**: mainnet/testnet/regtest behind deployment gates
 
 ---
 
@@ -45,7 +47,7 @@ This checklist ensures complete oracle system integration for Phase One deployme
 ### 2. Oracle Node Integration
 
 - [ ] **OracleNode initialization** - Node starts with valid keypair
-- [ ] **Price fetching** - Fetches median from exchanges every 15 seconds
+- [ ] **Price fetching** - Fetches median from exchanges every 60 seconds
 - [ ] **Message creation** - Creates COraclePriceMessage with valid data
 - [ ] **Schnorr signing** - Signs message with BIP-340 signature
 - [ ] **Signature verification** - Verify() returns true
@@ -66,7 +68,7 @@ tail -f ~/.digibyte/testnet3/debug.log | grep "Oracle:"
 
 **Expected Results**:
 - Oracle node starts successfully
-- Price fetched every 15 seconds
+- Price fetched every 60 seconds
 - Messages signed with valid Schnorr signatures
 - Messages broadcast to peers
 - No crashes or errors
@@ -115,9 +117,9 @@ tail -f ~/.digibyte/testnet3/debug.log | grep "Oracle:"
 - [ ] **Singleton initialization** - GetInstance() works
 - [ ] **AddOracleMessage()** - Adds messages to pending pool
 - [ ] **Message validation** - Validates signatures before adding
-- [ ] **Bundle creation** - Creates bundles with 1-of-1 consensus
+- [ ] **Bundle creation** - Creates v0x03 MuSig2 bundles at quorum
 - [ ] **GetCurrentBundle()** - Returns valid bundle for epoch
-- [ ] **HasConsensus()** - Returns true with 1 message (Phase One)
+- [ ] **HasConsensus()** - Returns true only at the active quorum threshold
 - [ ] **ExtractOracleBundle()** - Extracts bundle from coinbase
 - [ ] **CreateOracleScript()** - Creates valid OP_RETURN script
 - [ ] **AddOracleBundleToBlock()** - Adds bundle to coinbase
@@ -184,7 +186,7 @@ digibyte-cli -testnet getblock <blockhash> 2
 - [ ] **CheckBlock()** - Calls ValidateBlockOracleData()
 - [ ] **ValidateBlockOracleData()** - Validates bundle structure
 - [ ] **Signature verification** - Verifies Schnorr signatures
-- [ ] **Message count check** - Requires exactly 1 message (Phase One)
+- [ ] **Quorum check** - Requires the V1 active signer threshold
 - [ ] **Timestamp validation** - Messages not too old
 - [ ] **Epoch validation** - Bundle epoch matches block height
 - [ ] **OP_RETURN extraction** - Correctly extracts from coinbase
@@ -222,7 +224,7 @@ digibyte-cli -testnet getblock <blockhash> 2
 - [ ] **GetOraclePriceForHeight()** - Retrieves cached price
 - [ ] **Thread safety** - Mutex-protected cache access
 - [ ] **LRU eviction** - Keeps last 1000 blocks
-- [ ] **Testnet-only** - Only active on testnet (Phase One)
+- [ ] **Deployment-gated** - Active only when the deployment predicate is active
 - [ ] **Reorg handling** - Handles chain reorganizations
 - [ ] **Persistence** - Price cache survives restarts (optional)
 
@@ -382,7 +384,7 @@ digibyte-cli -testnet sendrawtransaction <signed_tx>
 ### Memory Usage
 
 - [ ] **Price cache size** - ~16 KB (1000 blocks)
-- [ ] **Pending messages** - < 1 KB (1 message in Phase One)
+- [ ] **Pending messages** - bounded by P2P/session admission limits
 - [ ] **Bundle manager state** - < 10 KB
 - [ ] **Total overhead** - < 100 KB
 
@@ -405,7 +407,7 @@ watch -n 1 "ps -p $PID -o rss | tail -1"
 
 ### DOS Protection
 
-- [ ] **Rate limiting** - Max 1 message per oracle per 15 seconds
+- [ ] **Rate limiting** - P2P admission limits messages before relay; operator fetch loop is 60 seconds
 - [ ] **Message size limits** - Rejects oversized messages
 - [ ] **Signature verification** - Before relay, not after
 - [ ] **Duplicate detection** - Rejects duplicate messages
@@ -450,8 +452,8 @@ watch -n 1 "ps -p $PID -o rss | tail -1"
 - [ ] **Median calculation** - Resistant to 1-2 outliers
 - [ ] **Fallback price** - Safe default if all fail
 
-**Note**: Phase One uses 1-of-1 consensus (single oracle), so price manipulation
-resistance is limited. Full resistance requires Phase Two (8-of-15 consensus).
+**Note**: Current V1 release behavior uses MuSig2 v0x03 oracle bundles with a
+9-signature launch quorum. Older 1-of-1 Phase One language is historical only.
 
 **Verification**:
 ```bash
@@ -596,14 +598,14 @@ digibyte-cli -testnet createdigidollarmint 100
 
 ---
 
-## Phase Two Preparation
+## Post-V1 Preparation
 
 ### Future Enhancements
 
-- [ ] **Multi-oracle consensus** - 8-of-15 implementation planned
-- [ ] **Oracle rotation** - Deterministic oracle selection
-- [ ] **Advanced outlier filtering** - MAD-based filtering
-- [ ] **Mainnet deployment** - Security audit required
+- [ ] **Roster expansion** - deterministic governance/activation for post-launch slots
+- [ ] **Signer reselection** - policy for intra-epoch withholding
+- [ ] **Operator recovery** - clearer status and restart procedures
+- [ ] **Mainnet deployment** - gated by final audit and Jared decisions
 - [ ] **Oracle reputation** - Track oracle accuracy
 
 **Status**: ⬜ Planned | ⬜ In Progress | ⬜ Not Started
@@ -652,5 +654,5 @@ digibyte-cli -testnet createdigidollarmint 100
 ---
 
 **Document Version**: 1.0
-**Last Updated**: 2025-11-18
-**Next Review**: Weekly during Phase One deployment
+**Last Updated**: 2026-05-05
+**Next Review**: Final-audit closure

@@ -10,8 +10,8 @@ This document tracks all tasks required to implement DigiDollar on DigiByte v8.2
   - ✅ DigiDollar Tab fully implemented with 6 sections
   - ✅ Send, Receive, Mint, Redeem, Overview, and Vault widgets complete
   - ✅ DD address validation throughout GUI
-  - ✅ Time-based lock periods (8 tiers: 30 days to 10 years)
-  - ✅ Accurate collateral calculations (500% to 200% ratios)
+  - ✅ Time-based lock periods (10 canonical tiers: 1 hour to 10 years)
+  - ✅ Accurate collateral calculations (1000% to 200% ratios)
   - ✅ Vault manager with health monitoring
   - ✅ All RPC commands operational
 - **Phase 7**: Soft fork activation FULLY completed (10/10 tasks - 100%)
@@ -64,7 +64,7 @@ This document tracks all tasks required to implement DigiDollar on DigiByte v8.2
 - [✅] **1.3** Implement consensus parameters 🟡
   - **RED Phase COMPLETED**: Test coverage in `digidollar_consensus_tests.cpp` (262 lines)
   - **GREEN Phase COMPLETED**: Implementation in `src/consensus/digidollar.h` and `digidollar.cpp`
-  - **Details**: 8-tier collateral system (500%-200%), DCA levels, oracle config
+  - **Details**: 10-tier collateral system (1000%-200%), DCA levels, oracle config
   - **Features**: Helper functions for collateral ratios, DCA multipliers, validation
   - **Tests**: 11 test cases covering all consensus parameters and edge cases
   - **FULLY COMPLETED**: Full consensus params with DCA levels and network-specific settings
@@ -476,8 +476,8 @@ This document tracks all tasks required to implement DigiDollar on DigiByte v8.2
   - **RED Phase COMPLETED**: GUI component test coverage planned
   - **GREEN Phase COMPLETED**: Implementation in `src/qt/digidollarmintwidget.cpp` and `digidollarmintwidget.h`
   - **Features Implemented**:
-    - Lock period dropdown with 8 tiers (30 days to 10 years)
-    - Collateral ratios: 500%, 400%, 350%, 300%, 250%, 225%, 212%, 200%
+    - Lock period dropdown with 10 canonical tiers (1 hour to 10 years)
+    - Collateral ratios: 1000%, 500%, 400%, 350%, 300%, 275%, 250%, 225%, 212%, 200%
     - Dynamic collateral calculator with real-time updates
     - Oracle price display
     - USD equivalent display
@@ -935,8 +935,8 @@ This document tracks all tasks required to implement DigiDollar on DigiByte v8.2
 - [✅] Complete RPC interface operational
 - [✅] Users can mint/send/receive/redeem DD via GUI
 - [✅] Vault manager with health monitoring fully operational
-- [✅] Time-based lock periods (8 tiers: 30 days to 10 years)
-- [✅] Collateral calculations accurate (500% to 200% ratios)
+- [✅] Time-based lock periods (10 canonical tiers: 1 hour to 10 years)
+- [✅] Collateral calculations accurate (1000% to 200% ratios)
 - [✅] Main binary and Qt GUI compile successfully with all features
 - [ ] Backend wallet transaction creation (currently GUI only)
 - [ ] Transaction list integration for DD transactions
@@ -953,7 +953,7 @@ This document tracks all tasks required to implement DigiDollar on DigiByte v8.2
 - **Phase 5 Wallet Integration**: 🔄 SUBSTANTIALLY COMPLETE (14/25 tasks - 56%) - GUI fully functional, RPC complete
   - ✅ Complete DigiDollar Tab with 6 widgets (Overview, Send, Receive, Mint, Redeem, Vault)
   - ✅ DD address validation and display throughout
-  - ✅ Time-based lock period system (8 tiers)
+  - ✅ Time-based lock period system (10 canonical tiers)
   - ✅ Collateral calculation with accurate ratios
   - ✅ Vault health monitoring (0-200% display)
   - ✅ All core RPC commands operational

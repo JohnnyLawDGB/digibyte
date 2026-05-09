@@ -53,9 +53,9 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - **What happens:** Nothing. DigiDollar deployment exists in the code but signaling hasn't begun.
 - **Miner behavior:** Miners don't need to do anything. Block versions don't include bit 23.
 - **User experience:** DigiDollar tab visible in Qt but shows "DigiDollar is not yet active on this blockchain" with current BIP9 status.
-- **RPC behavior:** All 31 DD/Oracle RPCs return error: "DigiDollar is not yet active on this blockchain"
-- **P2P behavior:** Oracle price/bundle/discovery messages are silently dropped.
-- **Consensus:** DD transactions rejected with "digidollar-not-active". DD opcodes treated as NOPs.
+- **RPC behavior:** All DD/oracle RPCs (17 base + 13 wallet-context) return error: "DigiDollar is not yet active on this blockchain"
+- **P2P behavior:** Oracle price/bundle/MuSig2 nonce/partial-sig/getoracles messages are silently dropped (`Consensus::IsOracleActive` returns false until height ≥ `nOracleActivationHeight`).
+- **Consensus:** DD transactions rejected with "digidollar-not-active". DD opcodes treated as NOPs (`SCRIPT_VERIFY_DIGIDOLLAR` flag not yet set).
 
 ### Phase 2: STARTED (blocks 200–399 on testnet)
 - **What happens:** Miners can now signal support by setting bit 23 in their block version.
@@ -71,81 +71,61 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - **Why the delay:** `min_activation_height` ensures all nodes have time to upgrade before DD transactions become valid.
 
 ### Phase 4: ACTIVE (block 600+ on testnet)
-- **What happens:** DigiDollar is fully operational.
-- **RPC behavior:** All 31 DD/Oracle RPCs become functional.
-- **P2P behavior:** Oracle messages are processed, relayed, and validated.
-- **Consensus:** DD transactions are validated. DD opcodes are enforced. `SCRIPT_VERIFY_DIGIDOLLAR` flag is set.
-- **Qt behavior:** Activation overlay disappears. Full DD tab (overview, send, receive, mint, redeem, vault, transactions) becomes accessible.
-- **Oracle behavior:** Oracle operators can start oracles, submit prices, and participate in consensus.
+- **What happens:** DigiDollar is fully operational. MuSig2 oracle bundles are required in DD blocks.
+- **RPC behavior:** DD/oracle RPCs become functional (17 base in `src/rpc/digidollar.cpp`, 13 wallet-context in `src/wallet/rpc/wallet.cpp`).
+- **P2P behavior:** Oracle messages (`oracleprice`, `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigpsig`, `getoracles`) are processed, relayed, and validated. Legacy `oraclebundle` messages are accepted on-wire but explicitly dropped — V1 carries the bundle on-chain in the coinbase, not via the bundle gossip message.
+- **Consensus:** DD transactions are validated. DD opcodes are enforced via `SCRIPT_VERIFY_DIGIDOLLAR` (set in script flags when `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` returns true).
+- **Qt behavior:** Activation overlay disappears. Full DD tab (overview, send, receive, mint, redeem, positions, transactions) becomes accessible.
+- **Oracle behavior:** Authorized oracle operators (slots 0–16 in `consensus.vOraclePublicKeys`, mainnet/testnet) can start their daemon, broadcast off-chain attestations, participate in MuSig2 nonce/partial-sig rounds, and aggregate into the v0x03 on-chain bundle that miners embed in the coinbase. `nDigiDollarMuSig2Height = 0` on every network — MuSig2 v0x03 is the only accepted on-chain format from the moment DigiDollar is BIP9-active.
+
+> **Activation boundary nuance (1-block off-by-one).** `getdeploymentinfo` exposes a BIP9 view (`bip9.status = active`) that flips at the period boundary block — i.e. the block whose `pindexPrev->nHeight + 1 == min_activation_height`. The height-based gate `Consensus::IsOracleActive(params, height) == (height >= nOracleActivationHeight)` flips one block later, at `height == min_activation_height` itself. There is therefore a single-block window where `bip9.status` reports `active` but `IsOracleActive(tip)` is still `false`. This is harmless on production because `IsDigiDollarEnabled(prev_block)` already returns true at the period boundary and the miner refuses DD-touching templates without a valid v0x03 bundle, so no DD-touching block can be mined inside that window. Boundary tests should use the height-based predicate (`IsOracleActive`/`IsDigiDollarEnabled`) rather than `getdeploymentinfo.bip9.status` when they need the consensus-rule moment, and Wave 12's `DD-FA-SEC-010` fix in `SpendsDigiDollarCollateralVault` deliberately uses `min(nDDActivationHeight, BIP9 min_activation_height)` for the same reason.
+
+> **Regtest activation knobs.** The direct `-digidollaractivationheight=N` regtest knob defined in `src/chainparams.cpp:99-109` now retargets both BIP9 `min_activation_height` and the static DD/oracle height gates (`nDDActivationHeight` / `nOracleActivationHeight`) in `src/kernel/chainparams.cpp:1116-1119`. Generic `-vbparams=digidollar:start:timeout:minheight` still overrides BIP9 only. Default regtest remains intentionally special: BIP9 is `ALWAYS_ACTIVE` with `min_activation_height=0`, while the DD/oracle P2P height gates default to `650` for local testing. Startup oracle-price reconstruction follows the BIP9 predicate used by block connection, so BIP9-active default-regtest blocks below 650 are not skipped during restart/reindex cache rebuilds.
 
 ---
 
 ## What Gets Gated (Complete List)
 
-### RPC Commands (31 total — all gated)
+### RPC Commands (all gated by `IsDigiDollarEnabled`)
 
-**Core DD Operations:**
-- `mintdigidollar` — Mint new DigiDollar
-- `redeemdigidollar` — Redeem DD back to DGB
-- `senddigidollar` — Send DD to another address
-- `sendmanydigidollar` — Send DD to multiple addresses in one transaction
+The DigiDollar/oracle RPC surface is split between the node-context registration in `src/rpc/digidollar.cpp` (registered via `RegisterDigiDollarRPCCommands`) and the wallet-context registration in `src/wallet/rpc/wallet.cpp` (added inside `GetWalletRPCCommands`).
 
-**DD Wallet/Balance:**
-- `getdigidollaraddress` — Generate DD address
-- `getdigidollarbalance` — Get DD balance
-- `listdigidollarpositions` — List minted positions
-- `listdigidollartxs` — List DD transactions
-- `listdigidollaraddresses` — List DD addresses
-- `importdigidollaraddress` — Import watch-only DD address
+**Node-context (17, registered in `src/rpc/digidollar.cpp:4981`):**
+- `getdigidollarstats`, `getdcamultiplier`, `calculatecollateralrequirement`, `getdigidollardeploymentinfo`, `importdigidollaraddress`, `estimatecollateral`
+- `getoracleprice`, `getalloracleprices`, `getprotectionstatus`, `getoracles`, `listoracle`, `stoporacle`, `getoraclepubkey`
+- Regtest helpers: `setmockoracleprice`, `getmockoracleprice`, `simulatepricevolatility`, `enablemockoracle`
 
-**DD Info/Stats:**
-- `getdigidollarstats` — System health stats
-- `getdigidollardeploymentinfo` — BIP9 deployment info
-- `calculatecollateralrequirement` — Calculate collateral needed
-- `estimatecollateral` — Estimate collateral for mint
-- `getredemptioninfo` — Get redemption details
-- `getprotectionstatus` — DCA protection status
-- `getdcamultiplier` — DCA multiplier value
-- `validateddaddress` — Validate DD address format
+**Wallet-context (13, added in `src/wallet/rpc/wallet.cpp:888`, DigiDollar block at lines 962–974):**
+`mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `validateddaddress`, `createoraclekey`, `startoracle`.
 
-**Oracle Operations:**
-- `getoracleprice` — Get current oracle price
-- `getalloracleprices` — Get all oracle prices
-- `getoracles` — List oracle configuration
-- `listoracle` — Show running oracle status
-- `getoraclepubkey` — Get oracle public key
-- `createoraclekey` — Generate oracle key in wallet
-- `startoracle` — Start oracle service
-- `stoporacle` — Stop oracle service
-- `submitoracleprice` — Submit price via P2P (regtest only)
-- `simulatepricevolatility` — Simulate price changes (regtest only)
-- `setmockoracleprice` — Set mock oracle price (regtest only)
-- `getmockoracleprice` — Get mock oracle price (regtest only)
-- `enablemockoracle` — Enable/disable mock oracle (regtest only)
+**Removed / never present:** `sendoracleprice` was deleted as a fake-price-injection vulnerability; `submitoracleprice` does not exist anywhere in the source tree. Oracle prices come exclusively from live exchange aggregation aggregated under MuSig2. `src/rpc/digidollar_transactions.cpp` declares `getdigidollarinfo`, `transferdigidollar`, `createrawddtransaction`, and `listredeemablepositions`, but the file is **not registered** anywhere — treat it as legacy/unused.
 
-**Note:** `sendoracleprice` was REMOVED as a security vulnerability (fake price injection). Oracle prices come exclusively from live exchange aggregation.
+**Gate pattern:** Each DD/oracle RPC calls `DigiDollar::IsDigiDollarEnabled(tip, chainman)` near the top of its handler. That helper checks the BIP9 `DEPLOYMENT_DIGIDOLLAR` state via `DeploymentActiveAfter()`.
 
-**Gate pattern:** Each RPC checks `DigiDollar::IsDigiDollarEnabled(tip, chainman)` which calls `DeploymentActiveAfter()` — the BIP9 status check.
+### P2P Message Handlers (all gated by `Consensus::IsOracleActive`)
 
-### P2P Message Handlers (7 total — all gated)
+`src/protocol.cpp` defines the on-wire command names; `src/net_processing.cpp` handles each one and bails out early with `Consensus::IsOracleActive(params, height)` returning false.
 
-| Message | Handler | Gate |
-|---------|---------|------|
-| `ORACLEPRICE` | Line ~5440 | `IsOracleActive()` — height-based (nOracleActivationHeight=600) |
-| `ORACLEBUNDLE` | Line ~5607 | `IsOracleActive()` — height-based |
-| `ORACLECONSENSUS` | Line ~5762 | `IsOracleActive()` — height-based |
-| `ORACLEATTESTATION` | Line ~5892 | `IsOracleActive()` — height-based |
-| `ORACLEMUSIGNONCE` | Line ~5991 | `IsOracleActive()` — height-based |
-| `ORACLEMUSIGPARTIALSIG` | Line ~6103 | `IsOracleActive()` — height-based |
-| `GETORACLES` | Line ~6206 | `IsOracleActive()` — height-based |
+| Wire command (`src/protocol.cpp`) | C++ constant | Handler in `src/net_processing.cpp` | Notes |
+|-----------------------------------|--------------|-------------------------------------|-------|
+| `oracleprice` | `NetMsgType::ORACLEPRICE` | ~line 5440 | Off-chain oracle attestation (input to MuSig2) |
+| `oraclebundle` | `NetMsgType::ORACLEBUNDLE` | ~line 5607 | **Accepted on the wire but always dropped** — V1 puts the bundle on-chain in the coinbase, not via gossip |
+| `oracleconsns` | `NetMsgType::ORACLECONSENSUS` | ~line 5624 | Off-chain consensus proposal driving MuSig2 |
+| `oracleattest` | `NetMsgType::ORACLEATTESTATION` | ~line 5743 | Per-oracle attestation supporting a consensus proposal |
+| `oramusnonce` | `NetMsgType::ORACLEMUSIGNONCE` | ~line 5847 | MuSig2 round-1 public nonces |
+| `oramusigpsig` | `NetMsgType::ORACLEMUSIGPARTIALSIG` | ~line 5959 | MuSig2 round-2 partial signatures |
+| `getoracles` | `NetMsgType::GETORACLES` | ~line 6062 | Pull request for missing oracle messages |
 
-**Note:** P2P handlers use `Consensus::IsOracleActive()` which is height-based (`nHeight >= nOracleActivationHeight`), not BIP9. On testnet, `nOracleActivationHeight=600` matches `min_activation_height=600`, so they align in practice. On mainnet, `nOracleActivationHeight` is set to `3000000`. A malicious node sending oracle messages before activation gets silently ignored (no ban, no penalty — just dropped).
+**Note:** All seven P2P gates use `Consensus::IsOracleActive(params, ActiveChain().Height())`, which is `nHeight >= params.nOracleActivationHeight`. On mainnet and testnet `nOracleActivationHeight` equals `nDDActivationHeight` and the BIP9 `min_activation_height`; on default regtest BIP9 is `ALWAYS_ACTIVE` at min height 0 while the P2P height gates default to 650. A peer sending oracle messages before the height gate is silently ignored — no ban, no misbehaviour penalty — just dropped at the start of each handler.
+
+> **Caveat.** The height predicate `IsOracleActive` is independent of the BIP9 deployment view (`getdeploymentinfo.bip9.status`). On production they collapse to the same trigger because chainparams pins `nOracleActivationHeight == nDDActivationHeight == BIP9 min_activation_height`. There is a single-block boundary window described in the Phase 4 nuance above where the BIP9 view says `active` but the height gate is still `false`. On default regtest, BIP9 `ALWAYS_ACTIVE` means block validation can be DD-active before the 650 P2P height gate; use `IsOracleActive` and `IsDigiDollarEnabled` deliberately for boundary tests when the P2P moment and consensus-rule moment differ.
 
 ### Consensus Validation (all BIP9-gated)
 
-1. **Mempool acceptance** (`validation.cpp:~765`): `DigiDollar::HasDigiDollarMarker(tx)` + `IsDigiDollarEnabled()` → rejects DD TXs with `TX_CONSENSUS "digidollar-not-active"`
-2. **Block validation** (`validation.cpp:~2874`): Same check during `ConnectBlock()` → rejects blocks containing DD TXs before activation
-3. **Script verification** (`validation.cpp:~2566`): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true → DD opcodes are NOPs before activation
+1. **Mempool acceptance** (`validation.cpp:~765`): `DigiDollar::HasDigiDollarMarker(tx)` + `IsDigiDollarEnabled()` → rejects DD TXs with `TX_CONSENSUS "digidollar-not-active"`. After activation, mempool acceptance also requires that an oracle quote is available for any DD transaction (commit `81bf974f40`).
+2. **Block validation** (`validation.cpp:~2706`): `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` during `ConnectBlock()` → rejects blocks containing DD TXs before activation. After activation, `ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:1888`) requires DD-touching blocks to carry exactly one v0x03 MuSig2 oracle bundle in the coinbase. Non-DD blocks may omit oracle data; if they include one it must still be a valid v0x03 bundle (commit `1e08bd811f`).
+3. **Script verification** (`validation.cpp` script-flag setup): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true → DD opcodes are NOPs before activation. Once active, `OP_CHECKPRICE` consults the live oracle consensus price via `g_get_oracle_consensus_price` (`src/script/interpreter.cpp:725`) and fails closed (`vchFalse`) if the price is zero or unavailable; there is no mock fallback in production.
+4. **Mining graceful degradation** (`src/node/miner.cpp`, commit `6b5ff516c3`): `CreateNewBlock` strips DD txs that fail validation in `mapModifiedTx` rather than aborting block assembly. The block is still produced; the rejected DD tx remains in the mempool until either it confirms in a later attempt or it is evicted.
 
 ### Qt GUI
 
@@ -198,22 +178,23 @@ During STARTED/LOCKED_IN, blocks should have version `0x20800004` or similar (wi
 ### Manual Testing Checklist
 
 Before activation (any block < 600):
-- [ ] All 31 DD RPCs return "DigiDollar is not yet active on this blockchain"
+- [ ] All DD/oracle RPCs return "DigiDollar is not yet active on this blockchain"
 - [ ] `getdeploymentinfo` shows correct BIP9 state
 - [ ] Qt DD tab shows activation overlay
-- [ ] No oracle messages processed (check debug.log)
-- [ ] DD transactions rejected from mempool
+- [ ] No oracle messages processed (check debug.log; `IsOracleActive` returns false)
+- [ ] DD transactions rejected from mempool with "digidollar-not-active"
 - [ ] Block version includes bit 23 after STARTED (block 200+)
 
 After activation (block 600+):
-- [ ] All DD RPCs functional
-- [ ] Can mint DigiDollar
+- [ ] DD RPCs functional
+- [ ] Can mint DigiDollar (requires a valid MuSig2 oracle bundle in the mining template)
 - [ ] Can send DigiDollar
 - [ ] Can redeem DigiDollar
-- [ ] Oracle can start and submit prices
-- [ ] Oracle prices propagate via P2P
+- [ ] Oracles can start (`createoraclekey` + `startoracle`) and broadcast attestations
+- [ ] Oracle attestations and MuSig2 nonce/partial-sig messages propagate via P2P
 - [ ] Qt DD tab shows full functionality
 - [ ] `SCRIPT_VERIFY_DIGIDOLLAR` enabled in block script flags
+- [ ] DD-touching blocks include a v0x03 MuSig2 oracle bundle in the coinbase (raw v0x01 / v0x02 wire payloads short-circuit inside `ExtractOracleBundle` at `src/oracle/bundle_manager.cpp:915-919` and surface as `bad-oracle-malformed`; the `bad-oracle-legacy` branch is defense-in-depth and is not reached by current wire shapes)
 
 ---
 
@@ -247,6 +228,18 @@ On mainnet, the process is:
 
 ---
 
+## Mainnet `nOracleActivationHeight` and `nDDActivationHeight`
+
+Both heights are intentionally aligned in `src/kernel/chainparams.cpp`:
+
+| Network | `nDDActivationHeight` | `nOracleActivationHeight` | `nDigiDollarMuSig2Height` |
+|---------|-----------------------|---------------------------|---------------------------|
+| Mainnet | `22014720` (line 307) | `consensus.nDDActivationHeight` (line 310 — i.e. `22014720`) | `0` (line 314 — MuSig2 active immediately when DD is BIP9-active) |
+| Testnet | `600` (line 642) | `600` (line 571) | `0` (line 576) |
+| Regtest | `650` (line 1112) | `650` (line 1115) | `0` (line 1119) |
+
+A practical implication: there is no period in which the oracle P2P surface is live but DD itself is not, and there is no period in which DD is active but MuSig2 v0x03 is not yet the on-chain bundle format — the three heights collapse to one event per network. Documents that say "mainnet `nOracleActivationHeight = 3000000`" are stale; that earlier staging configuration was removed before V1 launch.
+
 ## File Reference
 
 | Component | File | Function |
@@ -255,11 +248,13 @@ On mainnet, the process is:
 | BIP9 state machine | `src/versionbits.cpp` | `ThresholdConditionChecker` |
 | Deployment info | `src/deploymentinfo.cpp` | `VersionBitsDeploymentInfo[]` |
 | RPC activation gate | `src/rpc/digidollar.cpp` | `IsDigiDollarEnabled()` check in each RPC |
-| P2P activation gate | `src/net_processing.cpp` | `IsOracleActive()` in ORACLEPRICE/BUNDLE/CONSENSUS/ATTESTATION/MUSIGNONCE/MUSIGPARTIALSIG/GETORACLES |
+| P2P activation gate | `src/net_processing.cpp` | `IsOracleActive()` in `ORACLEPRICE`/`ORACLEBUNDLE`/`ORACLECONSENSUS`/`ORACLEATTESTATION`/`ORACLEMUSIGNONCE`/`ORACLEMUSIGPARTIALSIG`/`GETORACLES` |
 | Mempool gate | `src/validation.cpp:~765` | `IsDigiDollarEnabled()` in `AcceptToMemoryPool` |
-| Block validation gate | `src/validation.cpp:~2874` | `IsDigiDollarEnabled()` in `ConnectBlock` |
-| Script flags | `src/validation.cpp:~2566` | `SCRIPT_VERIFY_DIGIDOLLAR` flag |
+| Block validation gate | `src/validation.cpp:~2706` | `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` in `ConnectBlock` |
+| Script flags | `src/validation.cpp` (script flag setup near `~2566`) | `SCRIPT_VERIFY_DIGIDOLLAR` flag |
 | Qt activation overlay | `src/qt/digidollartab.cpp` | `checkActivationStatus()` timer |
 | Qt widget polling guard | `src/qt/digidollar*widget.cpp` | `if (!isVisible()) return;` |
-| Oracle height gate | `src/consensus/params.h:244` | `IsOracleActive()` |
+| Oracle height gate | `src/consensus/params.h:243-245` | `IsOracleActive()` |
 | DD enabled check | `src/digidollar/digidollar.cpp` | `IsDigiDollarEnabled()` |
+| Oracle bundle V1 enforcement | `src/oracle/bundle_manager.cpp` (`ValidateBlockOracleData`, `ExtractOracleBundle`, `CreateOracleScript`) | Raw v0x01/v0x02 OP_RETURN payloads short-circuit in `ExtractOracleBundle` at lines 915-919 (returns false), surfaced by the validator as `bad-oracle-malformed`. Only v0x03 MuSig2 bundles are accepted; the `bad-oracle-legacy` branch (lines 1989-1995) is defense-in-depth |
+| Live consensus price hook for `OP_CHECKPRICE` | `src/script/interpreter.cpp:725-727` and `src/script/interpreter.h:168-169` | `g_get_oracle_consensus_price` — fails closed when 0/null |

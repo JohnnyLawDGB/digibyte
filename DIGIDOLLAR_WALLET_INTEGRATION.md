@@ -17,11 +17,12 @@ There are only 4 operations: **Mint**, **Transfer**, **Redeem**, and regular DGB
 | Feature | Detail |
 |---------|--------|
 | Token type | Native UTXO (not a layer-2 token) |
-| Address format | `DD...` (mainnet), `TD...` (testnet), `RD...` (regtest) |
+| Address format | `DD...` (mainnet), `TD...` (testnet), `RD...` (regtest) — Base58Check with 2-byte version prefix wrapping a P2TR x-only key |
 | Amount unit | **USD cents** (10000 = $100.00) |
 | Fees | Always paid in **DGB** (not DD) |
-| Minimum fee | 0.1 DGB per transaction |
-| Signing | Schnorr (P2TR) for DD, ECDSA for DGB fee inputs |
+| Minimum fee | 0.1 DGB per DD transaction for transfer builders; mint and redeem builders enforce their own DGB fee floors in `src/digidollar/txbuilder.cpp` |
+| Signing | Schnorr (BIP-340) for DD inputs, ECDSA/Schnorr for DGB fee inputs |
+| Wallet type | Descriptor/bech32m HD wallet required for DigiDollar V1 mint/address creation; legacy wallets are unsupported |
 | Confirmations | Same as DGB — 15-second blocks |
 | Backend | Requires DigiByte Core v9.26.0+ with `digidollar=1` |
 
@@ -32,7 +33,13 @@ There are only 4 operations: **Mint**, **Transfer**, **Redeem**, and regular DGB
 Your wallet must:
 - Run DigiByte Core v9.26.0 or later (with DigiDollar consensus rules)
 - Set `digidollar=1` in `digibyte.conf`
-- Wait for BIP9 activation (DigiDollar features are disabled until activation)
+- Wait for BIP9 activation (DigiDollar features are disabled until activation; status is exposed via `getdigidollardeploymentinfo`)
+- Use a descriptor/bech32m HD wallet with private keys enabled. DD mint
+  requires deriving an HD owner key for the time-lock; encryption is
+  supported, in which case the wallet must be unlocked with
+  `walletpassphrase` before mint/transfer/redeem. Legacy BDB wallets and
+  watch-only/private-key-disabled wallets cannot create DD addresses, mint,
+  send, redeem, or sign.
 
 ```ini
 # digibyte.conf
@@ -64,7 +71,7 @@ digibyte-cli getdigidollaraddress
 digibyte-cli listdigidollaraddresses
 ```
 
-DD addresses are P2TR (Taproot) under the hood, with a 2-byte Base58Check version prefix. Your wallet should validate addresses using the `DD/TD/RD` prefix before sending.
+DD addresses are P2TR (Taproot) under the hood, encoded with a 2-byte Base58Check version prefix (`0x52, 0x85` mainnet → "DD"; `0xb1, 0x29` testnet → "TD"; `0xa3, 0xa4` regtest → "RD" — see `src/base58.cpp:180-182`). Your wallet should validate addresses using the `DD/TD/RD` prefix before sending; programmatic validation is exposed via the `validateddaddress` RPC.
 
 ---
 
@@ -97,9 +104,11 @@ Minting locks DGB as collateral and creates new DD tokens.
 
 ### Lock Tiers
 
+The 10 canonical lock tiers (defined in `src/consensus/digidollar.h:50-61`):
+
 | Tier | Lock Period | Collateral Ratio |
 |------|-----------|-----------------|
-| 0 | 1 hour | 1000% (testing only) |
+| 0 | 1 hour (240 blocks) | 1000% (testing/onboarding) |
 | 1 | 30 days | 500% |
 | 2 | 90 days | 400% |
 | 3 | 180 days | 350% |
@@ -109,6 +118,8 @@ Minting locks DGB as collateral and creates new DD tokens.
 | 7 | 5 years | 225% |
 | 8 | 7 years | 212% |
 | 9 | 10 years | 200% |
+
+These tiers are consensus-enforced. **Custom (non-canonical) lock durations are rejected by the validator** — `src/digidollar/validation.cpp` checks `bad-mint-lock-tier`, `bad-mint-lock-tier-duration`, and `bad-mint-lock-period` paths so wallets must select a tier 0–9. The OP_RETURN encodes the tier explicitly so it can be cross-checked against the locktime.
 
 Longer lock = lower collateral requirement. The collateral stays in YOUR wallet — you never give up your keys.
 
@@ -131,9 +142,12 @@ digibyte-cli calculatecollateralrequirement 10000 180
 # 10000 cents ($100), 180 days lock (350% ratio)
 # Returns: required DGB amount
 
-# Or use estimatecollateral with tier number:
+# Or use estimatecollateral with tier (both args required):
 digibyte-cli estimatecollateral 10000 3
 # 10000 cents ($100), tier 3 (180 days)
+
+# Optionally pass a custom DGB price (micro-USD) for what-if calculations:
+digibyte-cli estimatecollateral 50000 5 6500
 ```
 
 **Step 3: Mint**
@@ -195,10 +209,11 @@ digibyte-cli senddigidollar "DDrecipientAddress..." 5000 "Payment for services"
 ### Important Notes
 
 - Transfers require **DD UTXOs** (for the value) AND **DGB UTXOs** (for the miner fee)
-- Minimum fee: **0.1 DGB** per transaction
-- Maximum single transfer: **$100,000**
+- Minimum fee: **0.1 DGB** for transfer builders; mint and redeem builders enforce DGB fee floors in their txbuilder paths
+- DigiByte uses **DGB/kB** for fee rates (not DGB/vB). The default DD fee rate is 35,000,000 sat/kB (≈0.35 DGB/kB), which yields ≈0.1 DGB on a typical ~300-vB tx
+- Maximum single transfer: **$100,000** (10,000,000 cents)
 - DD change is automatically returned to your wallet
-- Transfers are **confirmed-only** as of RC32: a DD UTXO must have at least one confirmation before it can be spent in a subsequent transfer or redeem. Consensus refuses to resolve DD amounts from `MEMPOOL_HEIGHT` inputs for transfer/redeem, and the wallet no longer chains unconfirmed DigiDollar outputs. Plan throughput around the 15-second block time.
+- Transfers are **confirmed-only** as of RC32: a DD UTXO must have at least one confirmation before it can be spent in a subsequent transfer or redeem. Consensus refuses to resolve DD amounts from `MEMPOOL_HEIGHT` inputs for transfer/redeem, and the wallet no longer chains unconfirmed DigiDollar outputs (commit `0b4959f563`). Plan throughput around the 15-second block time, or batch with `sendmanydigidollar`.
 
 ### Sending to many recipients in one transaction
 
@@ -274,13 +289,84 @@ digibyte-cli listdigidollarpositions
 digibyte-cli getredemptioninfo "position_id"
 ```
 
-`listdigidollarpositions` reports `unlock_height` and `is_redeemable` for each position; clients should filter on those fields rather than calling a separate "redeemable only" RPC. (The legacy `listredeemablepositions` symbol exists in `src/rpc/digidollar_transactions.cpp` but is not registered.)
+`listdigidollarpositions` reports `unlock_height` and `can_redeem` for each position (with optional filters: `[active_only=true] [tier] [min_amount]`); clients should filter on those fields rather than calling a separate "redeemable only" RPC. (The legacy `listredeemablepositions` symbol exists in `src/rpc/digidollar_transactions.cpp` but is not registered — that file's command table is never wired into the RPC server.)
 
 Each position tracks:
 - DD amount minted
 - DGB collateral locked
 - Lock tier and unlock height
 - Whether it's active or redeemed
+
+---
+
+## 8a. Wallet Lifecycle: load, unload, restart, rescan, restore
+
+DigiDollar position state and DD owner keys are persisted inside the
+wallet database as side tables (`dd_position`, `dd_balance`, `dd_owner_key`,
+`dd_address_key`, `dd_transaction`) loaded by `DigiDollarWallet::LoadFromDatabase`
+(`src/wallet/digidollarwallet.cpp:66`). Every standard wallet management
+command works with DigiDollar wallets:
+
+| Operation | What survives | Notes |
+|-----------|---------------|-------|
+| `unloadwallet "name"` | All DD records on disk | DD wallet RPCs return `-18 RPC_WALLET_NOT_FOUND` while no wallet is loaded. |
+| `loadwallet "name"` | Positions, balances, DD owner keys, dd_transactions | After load, `listdigidollarpositions` and `getdigidollarbalance` reflect the same on-chain state. |
+| `digibyted` stop / start | Same as above | `postInitProcess` re-runs `ScanForDDUTXOs()` to validate vault UTXO state against the active chain. |
+| `rescanblockchain` | Idempotent — no double counting | Triggers a post-rescan call to `ScanForDDUTXOs()` -> `ValidatePositionStates()` so any vault that was redeemed off-wallet is correctly marked inactive. |
+| `-reindex=1` | Same as restart | Wallet replays the chain; confirmed mints remain active until a real redeem/transfer spends the collateral on the active chain. |
+| `backupwallet path` / `restorewallet new_name path` | Full DD state including owner keys | Restored wallet is loaded under `new_name`; existing wallet is untouched. |
+| `importdescriptors` into a fresh wallet + `rescanblockchain` | Reconstructs DD positions from on-chain OP_RETURN metadata | The DD owner keys are re-derived deterministically from the imported descriptor's HD seed via `GetHDKeyForDigiDollar(...,"dd-owner")`. |
+
+### Operator wallet recovery (descriptor wallet)
+
+```bash
+# 1. From the original (still-loaded) wallet, export descriptors with private keys
+digibyte-cli -rpcwallet=mywallet listdescriptors true > /secure/path/dd_descriptors.json
+
+# 2. On the recovery host, create a blank descriptor wallet and import them
+digibyte-cli createwallet "restored" false true "" false true
+digibyte-cli -rpcwallet=restored importdescriptors "$(cat /secure/path/dd_descriptors.json | jq '.descriptors')"
+
+# 3. Run a full rescan so DigiDollar positions are reconstructed from the chain
+digibyte-cli -rpcwallet=restored rescanblockchain
+
+# 4. Verify
+digibyte-cli -rpcwallet=restored listdigidollarpositions
+digibyte-cli -rpcwallet=restored getdigidollarbalance
+```
+
+After step 4, the restored wallet may immediately `redeemdigidollar` any
+position whose `unlock_height` has passed. There is no separate "DD owner
+key import" step — the keys are derived from the HD seed inside the imported
+descriptor.
+
+### Recovering from a lost wallet file
+
+If the wallet file is lost but the BIP39 seed / extended private key is
+preserved, re-derive the descriptors with `derivedescriptors` (or your
+wallet stack's seed-restore tool), import them with
+`importdescriptors`, and `rescanblockchain` from genesis. The active DD
+positions and the DD owner keys for each `dd_timelock_id` will be
+reconstructed in-memory by `ProcessDDTxForRescan` and persisted to the new
+wallet database by `ScanForDDUTXOs` -> `ValidatePositionStates`.
+
+### Encrypted wallets
+
+Encrypted wallets must call `walletpassphrase` before mint, transfer, or
+redeem because `mintdigidollar` derives a new HD owner key (and persists
+the encrypted DD owner-key record) and `redeemdigidollar` signs a vault
+spend with a stored DD owner key. `loadwallet` and `unloadwallet` do not
+require the passphrase. Existing DD positions remain visible to
+`listdigidollarpositions` / `getdigidollarbalance` even while the wallet
+is locked.
+
+### Legacy (BDB) wallets are unsupported for V1
+
+DigiDollar V1 mint requires HD-derived owner keys persisted via the
+descriptor wallet path. Loading or restoring a BDB legacy wallet that has
+DD records is not supported and is not exercised by the V1 test suite.
+Operators with legacy wallets must migrate to a descriptor wallet
+(`migratewallet` or fresh export/import) before minting on mainnet.
 
 ---
 
@@ -345,21 +431,24 @@ If your wallet parses raw transactions, here's how to identify DD transactions:
 
 **DD token outputs** have 0-satoshi value with P2TR scripts. The actual DD value is in the OP_RETURN.
 
-**Custom opcodes (soft-fork via OP_NOP slots):**
+**Custom opcodes (Tapscript OP_SUCCESSx soft-fork, defined in `src/script/script.h:209-220`):**
 | Opcode | Hex | Purpose |
 |--------|-----|---------|
-| `OP_DIGIDOLLAR` | `0xbb` | Marks DD outputs |
-| `OP_DDVERIFY` | `0xbc` | Verify DD conditions |
-| `OP_CHECKPRICE` | `0xbd` | Oracle price verification |
+| `OP_DIGIDOLLAR` | `0xbb` | Marks DD outputs (Tapscript OP_SUCCESSx slot pre-activation) |
+| `OP_DDVERIFY` | `0xbc` | Verify DD conditions (Tapscript OP_SUCCESSx slot pre-activation) |
+| `OP_CHECKPRICE` | `0xbd` | Oracle price verification — wired to live consensus price (no mock fallback in production) |
 | `OP_CHECKCOLLATERAL` | `0xbe` | Collateral ratio check |
+| `OP_ORACLE` | `0xbf` | Coinbase oracle bundle marker (Tapscript OP_SUCCESSx slot pre-activation) |
 
-Non-DD-aware wallets can safely ignore these — they fall through as NOPs.
+Non-DD-aware wallets can safely ignore these — they behave as Tapscript OP_SUCCESSx (BIP-342) until `SCRIPT_VERIFY_DIGIDOLLAR` is set, which only happens after BIP9 `DEPLOYMENT_DIGIDOLLAR` is ACTIVE.
 
 ---
 
 ## 12. RPC Quick Reference
 
 ### Wallet RPCs (require loaded wallet)
+
+Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DD block at lines 962–974):
 
 | Command | Description |
 |---------|-------------|
@@ -373,17 +462,35 @@ Non-DD-aware wallets can safely ignore these — they fall through as NOPs.
 | `listdigidollarpositions` | List all collateral positions |
 | `getredemptioninfo <position_id>` | Check redemption status of a position |
 | `redeemdigidollar <position_id> <cents>` | Redeem DD → unlock DGB collateral |
+| `validateddaddress <address>` | Validate a DD address |
 
 ### Information RPCs (no wallet needed)
 
+Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp:5222`:
+
 | Command | Description |
 |---------|-------------|
-| `getdigidollardeploymentinfo` | BIP9 activation status |
-| `getdigidollarstats` | Network-wide DD supply and health |
-| `getoracleprice` | Current DGB/USD oracle price |
-| `calculatecollateralrequirement <cents> <lock_days>` | Calculate needed collateral |
-| `estimatecollateral <cents> <tier>` | Estimate collateral at current price |
 | `getdigidollardeploymentinfo` | BIP9 activation status, signaling progress |
+| `getdigidollarstats` | Network-wide DD supply and health |
+| `getdcamultiplier` | Current Dynamic Collateral Adjustment multiplier |
+| `getoracleprice` | Current DGB/USD oracle price (from MuSig2 consensus) |
+| `getalloracleprices` | Per-oracle price view (debug/status) |
+| `getprotectionstatus` | DCA / ERR / volatility protection state |
+| `calculatecollateralrequirement <cents> <lock_days> [oracle_price_micro_usd]` | Calculate needed collateral by lock days (NOT tier) |
+| `estimatecollateral <cents> <tier> [oracle_price_micro_usd]` | Estimate collateral; both `cents` and `tier` are required |
+| `importdigidollaraddress <address> [label]` | Validate a DD address and return the V1 unsupported/no-op warning; it does not import, mutate wallet state, or rescan |
+
+### Qt GUI integration
+
+DigiByte Core ships 10 Qt widgets covering the DD lifecycle: `digidollartab`, `digidollarmintwidget`, `digidollarsendwidget`, `digidollarreceivewidget`, `digidollarredeemwidget`, `digidollaroverviewwidget`, `digidollarpositionswidget`, `digidollartransactionswidget`, `digidollarcoincontroldialog`, and `digidollarreceiverequest`. The DigiDollar tab shows an activation overlay until BIP9 activates (gated through `DigiDollarTab` in `src/qt/digidollartab.cpp`); pre-activation, all DD widgets are inert. The Qt mint flow derives an HD owner key and persists it before broadcasting (commit `1e95478b7e`), so an HD wallet with private keys enabled is required. See `REPO_MAP_DIGIDOLLAR.md` (Qt GUI section) for individual widget responsibilities.
+
+#### Qt mint reject-reason translation (`DD-FA-DOC-010`)
+
+The Qt mint widget broadcasts the assembled mint transaction directly through `node().broadcastTransaction` rather than through the `mintdigidollar` RPC. As a result the Wave 6 RPC pre-check that translates Emergency Redemption Ratio (ERR) state into a friendly RPC error does **not** run on the Qt code path: the widget's owner-key derivation, two-step confirmation dialogs, and HD wallet flow are all driven before broadcast, and the consensus reject reason (`minting-blocked-during-err`, `bad-tx-no-musig2-quote`, `volatility-freeze`, `bad-mint-lock-tier-duration`, `bad-oracle-price`, `bad-mint-collateral`) reaches the user only when mempool refuses the transaction.
+
+Starting with v9.26.0-rc34 (`DD-FA-FUNC-032`), the mint widget routes the broadcast reason through `qt/digidollar_qt_translate.h::TranslateMintRejectReasonForUser` before display. Known DD/oracle reject tokens are rewritten with a plain-English explanation and a remediation hint (e.g. `minting-blocked-during-err` is shown as "DigiDollar minting is paused because the system is in Emergency Redemption Ratio (ERR) recovery mode."). Unknown reasons pass through unchanged so operators retain forensic detail. The translator is unit-tested by `src/test/digidollar_qt_translate_tests.cpp` and is buildable without enabling Qt.
+
+For wallet integrators that bypass the Qt widget and submit raw mint transactions via `sendrawtransaction`, the canonical consensus reject tokens above are stable and may be matched directly by RPC consumers; see `src/digidollar/validation.cpp` (`ValidateDigiDollarTransaction`) for the authoritative list.
 
 ---
 
@@ -399,7 +506,7 @@ DigiDollar is **live and activated on testnet23**. You can start integrating tod
    testnet=1
    [test]
    digidollar=1
-   addnode=oracle1.digibyte.io
+   addnode=oracle1.digibyte.io:12030
    server=1
    rpcuser=yourusername
    rpcpassword=yourpassword
@@ -413,10 +520,11 @@ DigiDollar is **live and activated on testnet23**. You can start integrating tod
 | Parameter | Value |
 |-----------|-------|
 | Testnet name | testnet23 |
-| P2P Port | 12030 |
+| P2P Port | 12030 (set in `src/kernel/chainparams.cpp:504`) |
 | DD Address Prefix | `TD` |
 | Oracle Consensus | 9-of-17 MuSig2 Schnorr threshold (RC30+) |
-| Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com |
+| Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders, see `src/oracle/exchange.cpp:1013-1018`) |
+| Outlier filter | Median-distance: prices ≥ `outlier_threshold × median` are dropped (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1150`) |
 | Activation | Active (BIP9 ACTIVE at block 600) |
 
 ### Mainnet Timeline

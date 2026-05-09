@@ -19,12 +19,14 @@ If you already run a DigiByte node, you're most of the way there.
 | Asset type | Native UTXO on DigiByte blockchain |
 | Value | 1 DD = $1.00 USD |
 | Amount unit in RPC | **USD cents** (10000 = $100.00) |
-| Address format | `DD...` (mainnet), `TD...` (testnet) |
+| Address format | `DD...` (mainnet), `TD...` (testnet), `RD...` (regtest) — Base58Check P2TR with 2-byte version prefix |
 | Transaction fees | Paid in **DGB** (not DD) |
-| Minimum fee | 0.1 DGB per transaction |
+| Minimum fee | 0.1 DGB for transfer builders; mint and redeem builders enforce DGB fee floors in their txbuilder paths |
+| Fee unit | DGB/kB (DigiByte uses kB, not vB) |
 | Block time | 15 seconds (same as DGB) |
 | Confirmations | Same security model as DGB |
 | Backend required | DigiByte Core v9.26.0+ with `digidollar=1` |
+| Wallet | Descriptor wallet recommended; private keys must be enabled to spend received DD |
 
 ---
 
@@ -44,7 +46,7 @@ rpcpassword=yourpassword
 # testnet=1
 # [test]
 # digidollar=1
-# addnode=oracle1.digibyte.io
+# addnode=oracle1.digibyte.io:12030
 ```
 
 That's it. Your existing DGB infrastructure stays the same — DD runs alongside it.
@@ -164,9 +166,9 @@ digibyte-cli getbalance
 
 ### Withdrawal Limits
 
-- No minimum send amount (any cent value works)
-- Maximum: $100,000 per transaction
-- DD inputs must be **confirmed** (≥1 confirmation) before they can be re-spent. As of RC32, the wallet does not chain unconfirmed DigiDollar UTXOs, and consensus rejects DD transfer/redeem inputs that resolve from `MEMPOOL_HEIGHT`. Plan withdrawal cadence around the 15-second block time, or batch with `sendmanydigidollar`.
+- Per-output dust floor: $1 (100 cents) — see `src/consensus/digidollar.h:66`
+- Maximum single transfer: **$100,000** (10,000,000 cents) per `maxMintAmount`-aligned policy in `src/consensus/digidollar.h:65`
+- DD inputs must be **confirmed** (≥1 confirmation) before they can be re-spent. As of RC32 the wallet does not chain unconfirmed DigiDollar UTXOs, and consensus rejects DD transfer/redeem inputs that resolve from `MEMPOOL_HEIGHT` (commit `0b4959f563`). Plan withdrawal cadence around the 15-second block time, or batch with `sendmanydigidollar`.
 
 ### Batch withdrawals
 
@@ -197,7 +199,7 @@ digibyte-cli getdigidollardeploymentinfo
 
 ### Watch-Only (Cold Wallet Monitoring)
 
-Both `getdigidollarbalance` and `listdigidollaraddresses` support `include_watchonly` for monitoring cold wallet addresses without the private keys on your hot node.
+Both `getdigidollarbalance` (third arg) and `listdigidollaraddresses` (first arg) accept `include_watchonly` for wallets that already contain watch-only DD state. DigiDollar V1 does **not** support importing a DD address for watch-only tracking: `importdigidollaraddress <addr> <label>` validates the address shape and returns an unsupported/no-op warning without mutating wallet state or rescanning. Cold-wallet monitoring for V1 requires a descriptor/watch-only wallet setup outside that stub, and spending DD still requires private keys in a spend-capable descriptor wallet.
 
 ---
 
@@ -213,8 +215,10 @@ digibyte-cli getoracleprice
 **Oracle details:**
 - 9-of-17 MuSig2 Schnorr threshold consensus on testnet23 and mainnet (RC30+)
 - 4-of-7 MuSig2 on regtest
-- Sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders)
-- Per-source weights and IQR-based outlier rejection (`src/oracle/exchange.cpp`)
+- Active price sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 feeders, registered in `src/oracle/exchange.cpp:1013-1018`)
+- Median-based aggregation with median-distance outlier rejection (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1137`); the live oracle daemon (`OracleNode::FetchMedianPrice` in `src/oracle/node.cpp:386`) requires **3** valid exchange responses before publishing, even though the aggregator's library default is 2 (`src/oracle/exchange.h:231`)
+- Coinbase/Kraken/Messari are *not* used: DGB is unlisted on those venues and Messari now requires a paid API key (see the in-source comment at `src/oracle/exchange.cpp:1009-1012`)
+- Oracle prices are derived **only** from live exchange aggregation; the `sendoracleprice` RPC was intentionally removed as a fake-price-injection vector
 
 ---
 
@@ -229,7 +233,7 @@ Returns system-wide metrics:
 - **Total collateral** — all DGB locked as backing
 - **System health ratio** — collateral value / DD supply (should be >100%)
 
-This is useful for risk monitoring. If system health drops significantly, new minting gets more expensive (Dynamic Collateral Adjustment) and the Emergency Reserve Ratio (ERR) may activate.
+This is useful for risk monitoring. If system health drops significantly, new minting gets more expensive (Dynamic Collateral Adjustment / DCA) and the Emergency Redemption Ratio (ERR) may activate (`src/consensus/err.cpp`).
 
 ---
 
@@ -353,7 +357,7 @@ DigiDollar is **live and activated on testnet23**. Start building your integrati
    testnet=1
    [test]
    digidollar=1
-   addnode=oracle1.digibyte.io
+   addnode=oracle1.digibyte.io:12030
    server=1
    rpcuser=youruser
    rpcpassword=yourpassword

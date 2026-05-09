@@ -75,7 +75,7 @@ private:
 
 ### What is DigiDollar?
 DigiDollar is a **USD-pegged stablecoin** built on DigiByte blockchain:
-- **Backed by**: Time-locked DGB collateral (500%-200% ratios)
+- **Backed by**: Time-locked DGB collateral (1000%-200% ratios)
 - **Technology**: P2TR (Taproot) outputs for privacy
 - **Oracles**: Decentralized price feeds (8-of-15 consensus)
 - **Protection**: DCA, ERR, volatility monitoring
@@ -176,7 +176,7 @@ You are implementing **ONE task** in **ONE phase**. The orchestrator has assigne
 
 ### About DigiDollar System:
 - [ ] I understand DigiDollar is a USD-pegged stablecoin
-- [ ] I know it uses time-locked DGB collateral (500%-200% ratios)
+- [ ] I know it uses time-locked DGB collateral (1000%-200% ratios)
 - [ ] I know addresses start with "DD" prefix
 - [ ] I've read what's already implemented (minting, GUI, RPC work)
 - [ ] I understand the problem: positions only in RAM, lost on restart

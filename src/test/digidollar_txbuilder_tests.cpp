@@ -288,8 +288,11 @@ BOOST_AUTO_TEST_CASE(transfer_transaction_invalid_address)
 
     BOOST_CHECK(!result.success);
     BOOST_CHECK(!result.error.empty());
-    // Should get "Invalid transfer parameters" error
-    BOOST_CHECK(result.error.find("Invalid transfer parameters") != std::string::npos);
+    // Should get a specific "Invalid DD address" error pointing at the offending input.
+    // (Previously this returned the generic "Invalid transfer parameters" catch-all,
+    // which forced integrators to grep logs to learn what was wrong. The validator
+    // now plumbs a per-failure reason.)
+    BOOST_CHECK(result.error.find("Invalid DD address") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_CASE(redeem_transaction_basic)

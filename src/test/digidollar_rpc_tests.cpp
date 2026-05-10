@@ -511,8 +511,9 @@ BOOST_FIXTURE_TEST_CASE(test_oracle_price_format, DigiDollarRPCTestSetup)
         int64_t micro_usd = result["price_micro_usd"].getInt<int64_t>();
         // USD should match micro-USD exactly
         BOOST_CHECK_CLOSE(usd, static_cast<double>(micro_usd) / 1000000.0, 0.001);
-        // Cents uses integer division: micro_usd / 10000
-        BOOST_CHECK_EQUAL(cents, micro_usd / 10000);
+        // price_cents uses round-half-up so sub-cent prices don't silently floor
+        // to 0 (callers needing sub-cent precision should use price_micro_usd).
+        BOOST_CHECK_EQUAL(cents, (micro_usd + 5000) / 10000);
     }
 }
 
@@ -547,15 +548,18 @@ BOOST_FIXTURE_TEST_CASE(test_dd_amount_calculation, DigiDollarRPCTestSetup)
 // Test 26: Lock Blocks Calculation
 BOOST_FIXTURE_TEST_CASE(test_lock_blocks_calculation, DigiDollarRPCTestSetup)
 {
-    // DigiByte has 15 second blocks, so:
-    // 1 day = 86400 seconds / 15 = 5760 blocks
-    UniValue result = CallRPC("calculatecollateralrequirement 10000 1");
+    // DigiByte has 15 second blocks: 1 day = 86400 / 15 = 5760 blocks.
+    // calculatecollateralrequirement only accepts canonical tier values (the RPC
+    // rejects arbitrary lock_days to keep advisory math aligned with mintdigidollar's
+    // strict lock_tier enforcement). Use the smallest documented tier (30 days) and
+    // verify the per-day conversion factor.
+    UniValue result = CallRPC("calculatecollateralrequirement 10000 30");
 
     BOOST_CHECK(result.exists("lock_blocks"));
     int64_t lockBlocks = result["lock_blocks"].getInt<int64_t>();
 
-    // Should be approximately 5760 blocks per day (within 1%)
-    double expectedBlocks = 5760.0;
+    // 30 days * 5760 blocks/day = 172800 blocks (within 1%)
+    double expectedBlocks = 30.0 * 5760.0;
     double actualBlocks = static_cast<double>(lockBlocks);
     BOOST_CHECK_CLOSE(actualBlocks, expectedBlocks, 1.0);
 }

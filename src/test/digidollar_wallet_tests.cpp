@@ -1878,15 +1878,18 @@ BOOST_FIXTURE_TEST_CASE(test_select_dd_coins_exact_match, DDWalletTestFixture)
     wallet.AddMockPosition(InsecureRand256(), 25000, 250*COIN, 2, 100);   // 250 DD
     wallet.AddMockPosition(InsecureRand256(), 50000, 500*COIN, 3, 100);   // 500 DD
 
-    // Test: Select exactly 250 DD (greedy should select 100 + 250 = 350)
+    // Test: Select 250 DD. Best-fit-first selector picks the smallest single UTXO
+    // that covers the target with valid change — here, the 250-DD UTXO is an exact
+    // match (change == 0) so it is chosen alone. Old smallest-first selector would
+    // have combined 100 + 250 to reach 350; that wasted an input.
     std::vector<COutPoint> selected;
     CAmount total = 0;
     bool result = wallet.SelectDDCoins(25000, selected, total);
 
     BOOST_CHECK_EQUAL(result, true);
-    BOOST_CHECK_GE(total, 25000);  // Should have at least 250 DD
-    BOOST_CHECK_EQUAL(selected.size(), 2);  // Greedy: 100 + 250
-    BOOST_CHECK_EQUAL(total, 35000);  // 100 + 250 = 350 DD
+    BOOST_CHECK_GE(total, 25000);
+    BOOST_CHECK_EQUAL(selected.size(), 1);  // Best-fit single (exact match)
+    BOOST_CHECK_EQUAL(total, 25000);        // 250 DD exact
 }
 
 BOOST_FIXTURE_TEST_CASE(test_select_dd_coins_insufficient_balance, DDWalletTestFixture)
@@ -1916,14 +1919,18 @@ BOOST_FIXTURE_TEST_CASE(test_select_dd_coins_multiple_utxos, DDWalletTestFixture
     wallet.AddMockPosition(InsecureRand256(), 15000, 150*COIN, 2, 100);  // 150 DD
     wallet.AddMockPosition(InsecureRand256(), 20000, 200*COIN, 2, 100);  // 200 DD
 
-    // Test: Select 300 DD (should use greedy: 50+100+150 = 300)
+    // Test: Select 300 DD. No single UTXO ≥ 300 exists (max is 200), so the
+    // selector falls through best-fit and runs largest-first greedy: 200 + 150 =
+    // 350 covers the target with valid 50-DD change. Old smallest-first would
+    // have combined 50 + 100 + 150 = 300 (3 UTXOs); largest-first uses 2.
     std::vector<COutPoint> selected;
     CAmount total = 0;
     bool result = wallet.SelectDDCoins(30000, selected, total);
 
     BOOST_CHECK_EQUAL(result, true);
-    BOOST_CHECK_GE(total, 30000);  // At least 300 DD
-    BOOST_CHECK_GE(selected.size(), 3);  // At least 3 UTXOs (50+100+150)
+    BOOST_CHECK_GE(total, 30000);
+    BOOST_CHECK_EQUAL(selected.size(), 2);  // Largest-first greedy: 200 + 150
+    BOOST_CHECK_EQUAL(total, 35000);        // 200 + 150 = 350 DD
 }
 
 BOOST_FIXTURE_TEST_CASE(test_select_dd_coins_empty_wallet, DDWalletTestFixture)

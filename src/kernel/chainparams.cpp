@@ -497,22 +497,22 @@ public:
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274
 
         // NEW TESTNET MAGIC BYTES (2026) - DigiDollar Reset
-        pchMessageStart[0] = 0xfd;
-        pchMessageStart[1] = 0xd2;
-        pchMessageStart[2] = 0xb9;
-        pchMessageStart[3] = 0xe4;
-        nDefaultPort = 12030;
+        pchMessageStart[0] = 0xfe;
+        pchMessageStart[1] = 0xc4;
+        pchMessageStart[2] = 0xb7;
+        pchMessageStart[3] = 0xe5;
+        nDefaultPort = 12031;
         nPruneAfterHeight = 1000;
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
 
-        // DigiDollar testnet23 genesis (RC30, 2026) — 9-of-17 MuSig2 oracle consensus
-        const char* pszTimestamp = "DigiDollar Testnet23: 9-of-17 MuSig2 Oracle Consensus on DigiByte";
+        // DigiDollar testnet24 genesis (RC34, 2026) — 9-of-17 MuSig2 oracle consensus
+        const char* pszTimestamp = "DigiDollar Testnet24: RC34 40-block MuSig2 Oracle Consensus on DigiByte";
         const CScript genesisOutputScript = CScript() << 0x0 << OP_CHECKSIG;
-        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1776456000, 561075, 0x1e0ffff0, 1, 8000 * COIN);
+        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1778507580, 57535, 0x1e0ffff0, 1, 8000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0xa19e809bb060f7f50c05a9bec7fdefedd8497aa0bd6ccca6f55c86090963e4ca"));
-        assert(genesis.hashMerkleRoot == uint256S("0x14d23080efd3f7ff071e1c250b6fa57d7a3be839c19f05d70d7d04b1341bba97"));
+        assert(consensus.hashGenesisBlock == uint256S("0xe42636c490059fafe7e0278acc6fb451b901b6a316b31e10d7ccff565baf23df"));
+        assert(genesis.hashMerkleRoot == uint256S("0x502bf477644933ced36281bbfdcc6755895b3d9f75262eb148d2c1c2c21d7e73"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -537,7 +537,7 @@ public:
 
         checkpointData = {
             {
-                // testnet23: fresh chain, no checkpoints yet
+                // testnet24: fresh chain, no checkpoints yet
             }
         };
 
@@ -546,8 +546,8 @@ public:
         };
 
         chainTxData = ChainTxData{
-            // testnet23 starts from a fresh RC30 reset genesis
-            .nTime    = 1776456000,
+            // testnet24 starts from a fresh RC34 reset genesis
+            .nTime    = 1778507580,
             .nTxCount = 1,
             .dTxRate  = 0.0,
         };

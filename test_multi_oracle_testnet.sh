@@ -10,7 +10,7 @@
 # LOCAL MINI-TESTNET MODE
 # ============================================================================
 # This script now starts every testnet node with -easypow.
-# On testnet23 that debug flag does two things for local harnesses only:
+# On testnet24 that debug flag does two things for local harnesses only:
 #   1. Enables easy PoW so generatetoaddress can reach BIP9 height 600 quickly
 #   2. Switches CTestNetParams to the local oracle key/node set on localhost
 #
@@ -80,7 +80,7 @@ echo ""
 # Deterministic keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..16.
 # The x-only pubkeys corresponding to these privkeys are in the
 # "FOR LOCAL MINI-TESTNET TESTING" block of src/kernel/chainparams.cpp
-# (which must be temporarily uncommented — see banner at top of this file).
+# (selected automatically when -easypow local mini-testnet mode is used).
 ORACLE_KEY_0="952f219b8442ac40e5d356c0dbf7a76d81904d196e859a75b63dfb02346501fe"
 ORACLE_KEY_1="7ede2d9b28569bcca3576e7982ce778cd3be4a6a0f1c99472c057e81cdebb0d8"
 ORACLE_KEY_2="dc025fb2dab1cb3bbb3a6763e53b32e7d6fa8c39c16465e3aae80dcaf684adfe"
@@ -142,7 +142,7 @@ EVE_DATADIR="/tmp/eve_minitestnet"
 FRANK_DATADIR="/tmp/frank_minitestnet"
 GRACE_DATADIR="/tmp/grace_minitestnet"
 HEIDI_DATADIR="/tmp/heidi_minitestnet"
-TESTNET_SUBDIR="testnet23"
+TESTNET_SUBDIR="testnet24"
 
 # CLI commands
 BOB_CLI="./src/digibyte-cli -testnet -datadir=$BOB_DATADIR -rpcport=$BOB_RPC"

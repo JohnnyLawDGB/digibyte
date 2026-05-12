@@ -134,7 +134,7 @@ public:
     /** Return the deterministic threshold participant set selected from collected nonces. */
     std::vector<uint8_t> GetRequiredParticipants() const;
     /**
-     * Trim nonces to exactly m_min_signers. Keeps the lowest oracle IDs from the collected set.
+     * Trim nonces to exactly m_min_signers. Keeps the epoch-scored committee from the collected set.
      * Must be called BEFORE AggregateNonces so the session is bound to
      * exactly the threshold number of participants.
      */

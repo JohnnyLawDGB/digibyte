@@ -20,7 +20,10 @@
 #include <util/strencodings.h>
 #include <util/time.h>
 
+#include <algorithm>
 #include <limits>
+#include <numeric>
+#include <set>
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_oracle_tests, BasicTestingSetup)
 
@@ -439,6 +442,47 @@ BOOST_AUTO_TEST_CASE(oracle_selection_deterministic)
         }
     }
     BOOST_CHECK(different); // Should be different for different epoch
+}
+
+BOOST_AUTO_TEST_CASE(oracle_selection_shuffles_exact_active_count)
+{
+    std::vector<OracleNodeInfo> active_oracles;
+    for (int i = 0; i < ORACLE_ACTIVE_COUNT; i++) {
+        CKey key;
+        key.MakeNewKey(true);
+        CPubKey pubkey = key.GetPubKey();
+
+        OracleNodeInfo node(i, pubkey, "oracle" + std::to_string(i) + ".digibyte.io:8332", true);
+        active_oracles.push_back(node);
+    }
+
+    const std::vector<OracleNodeInfo> selected40 = SelectOraclesForEpoch(active_oracles, 40);
+    const std::vector<OracleNodeInfo> selected41 = SelectOraclesForEpoch(active_oracles, 41);
+
+    BOOST_REQUIRE_EQUAL(selected40.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
+    BOOST_REQUIRE_EQUAL(selected41.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
+
+    std::vector<uint32_t> ids40;
+    std::vector<uint32_t> ids41;
+    std::set<uint32_t> unique40;
+    std::set<uint32_t> unique41;
+    for (const OracleNodeInfo& oracle : selected40) {
+        ids40.push_back(oracle.id);
+        unique40.insert(oracle.id);
+    }
+    for (const OracleNodeInfo& oracle : selected41) {
+        ids41.push_back(oracle.id);
+        unique41.insert(oracle.id);
+    }
+
+    BOOST_CHECK_EQUAL(unique40.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
+    BOOST_CHECK_EQUAL(unique41.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
+
+    std::vector<uint32_t> sequential(ORACLE_ACTIVE_COUNT);
+    std::iota(sequential.begin(), sequential.end(), 0);
+
+    BOOST_CHECK(ids40 != sequential);
+    BOOST_CHECK(ids40 != ids41);
 }
 
 BOOST_AUTO_TEST_CASE(oracle_selection_insufficient_oracles)

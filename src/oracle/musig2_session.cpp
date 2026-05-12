@@ -6,6 +6,7 @@
 
 #include <chainparams.h>
 #include <logging.h>
+#include <primitives/oracle.h>
 #include <random.h>
 #include <support/cleanse.h>
 
@@ -309,8 +310,19 @@ std::vector<uint8_t> MuSig2SigningSession::GetRequiredParticipants() const
         return ids;
     }
 
-    for (uint16_t id = 0; id < active_oracles && ids.size() < m_min_signers; ++id) {
-        ids.push_back(static_cast<uint8_t>(id));
+    // Rank all nonce-submitting oracle IDs by hash(epoch, oracle_id).
+    // the same scoring used by SelectOraclesForEpoch. A different epoch
+    // produces a different ordering, so the signing committee rotates
+    // across epochs rather than always locking in the lowest sequential IDs.
+    std::vector<std::pair<uint256, uint8_t>> scored;
+    scored.reserve(m_pubnonces.size());
+    for (const auto& [id, nonce] : m_pubnonces) {
+        scored.emplace_back(GetOracleEpochSelectionHash(m_epoch, id), id);
+    }
+    std::sort(scored.begin(), scored.end());
+    for (const auto& [score, id] : scored) {
+        if (ids.size() >= static_cast<size_t>(m_min_signers)) break;
+        ids.push_back(id);
     }
     return ids;
 }

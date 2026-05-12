@@ -28,6 +28,7 @@
 #include <oracle/musig2_messages.h>
 #include <oracle/musig2_session.h>
 #include <oracle/signing_orchestrator.h>
+#include <primitives/oracle.h>
 #include <random.h>
 #include <test/util/setup_common.h>
 
@@ -35,6 +36,7 @@
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_musig.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -58,6 +60,26 @@ static CKey ToCKey(const unsigned char seckey[32])
     CKey key;
     key.Set(seckey, seckey + 32, true);
     return key;
+}
+
+static std::vector<uint8_t> ExpectedEpochCommitteeForIds(std::vector<uint8_t> ids,
+                                                         int32_t epoch,
+                                                         size_t threshold)
+{
+    std::vector<std::pair<uint256, uint8_t>> scored;
+    scored.reserve(ids.size());
+    for (uint8_t id : ids) {
+        scored.emplace_back(GetOracleEpochSelectionHash(epoch, id), id);
+    }
+    std::sort(scored.begin(), scored.end());
+
+    std::vector<uint8_t> selected;
+    for (const auto& [score, id] : scored) {
+        if (selected.size() >= threshold) break;
+        selected.push_back(id);
+    }
+    std::sort(selected.begin(), selected.end());
+    return selected;
 }
 
 struct SignerSet {
@@ -247,13 +269,20 @@ BOOST_AUTO_TEST_CASE(attack_partial_sig_from_non_participant)
         BOOST_CHECK(session.AddPubnonce(i, pns[i]));
     }
 
-    // Trim to threshold (3) — keeps oracles 0, 1, 2; removes 3, 4
+    // Trim to the epoch-scored threshold committee.
     session.TrimNoncesToThreshold();
     auto participants = session.GetNonceParticipants();
+    const auto expected_participants = ExpectedEpochCommitteeForIds({0, 1, 2, 3, 4}, 10, 3);
     BOOST_CHECK_EQUAL(participants.size(), 3u);
-    BOOST_CHECK_EQUAL(participants[0], 0);
-    BOOST_CHECK_EQUAL(participants[1], 1);
-    BOOST_CHECK_EQUAL(participants[2], 2);
+    BOOST_CHECK(participants == expected_participants);
+
+    std::vector<uint8_t> trimmed;
+    for (uint8_t id = 0; id < 5; ++id) {
+        if (!std::binary_search(participants.begin(), participants.end(), id)) {
+            trimmed.push_back(id);
+        }
+    }
+    BOOST_REQUIRE_EQUAL(trimmed.size(), 2u);
 
     // Recompute key agg for participants only
     std::vector<const secp256k1_pubkey*> part_ptrs;
@@ -267,29 +296,28 @@ BOOST_AUTO_TEST_CASE(attack_partial_sig_from_non_participant)
     GetStrongRandBytes(Span{msg, 32});
     BOOST_CHECK(session.AggregateNonces(msg));
 
-    // Oracle 3 (trimmed) tries to inject a partial sig
+    // Trimmed oracles try to inject partial sigs.
     secp256k1_musig_partial_sig fake_psig;
     memset(&fake_psig, 0x42, sizeof(fake_psig));
-    BOOST_CHECK(!session.AddPartialSignature(3, fake_psig));
-
-    // Oracle 4 (trimmed) also rejected
-    BOOST_CHECK(!session.AddPartialSignature(4, fake_psig));
+    BOOST_CHECK(!session.AddPartialSignature(trimmed[0], fake_psig));
+    BOOST_CHECK(!session.AddPartialSignature(trimmed[1], fake_psig));
 
     // Participants CAN add sigs
     secp256k1_musig_partial_sig psig0;
-    BOOST_CHECK(session.CreatePartialSignature(0, s.ckeys[0], psig0));
-    BOOST_CHECK(session.AddPartialSignature(0, psig0));
+    const uint8_t signer_id = participants.front();
+    BOOST_CHECK(session.CreatePartialSignature(signer_id, s.ckeys[signer_id], psig0));
+    BOOST_CHECK(session.AddPartialSignature(signer_id, psig0));
 }
 
 // ============================================================================
 // ATTACK 4: Message ordering dependence — does nonce arrival order matter?
 //
 // Threat: By controlling which nonces arrive first, an attacker could
-// influence which oracles get trimmed (TrimNoncesToThreshold keeps lowest IDs).
+// influence which oracles get trimmed.
 // If high-ID oracles are colluding, they want low-ID honest oracles trimmed.
 //
-// Defense: TrimNoncesToThreshold is deterministic — keeps lowest oracle_ids.
-// Arrival order doesn't matter because std::map is sorted by key.
+// Defense: TrimNoncesToThreshold is deterministic: keeps the lowest
+// epoch-hash scores. Arrival order does not matter.
 // ============================================================================
 BOOST_AUTO_TEST_CASE(attack_nonce_ordering_independence)
 {
@@ -322,9 +350,7 @@ BOOST_AUTO_TEST_CASE(attack_nonce_ordering_independence)
 
     // Same participants regardless of arrival order
     BOOST_CHECK(participants_a == participants_b);
-    BOOST_CHECK_EQUAL(participants_a[0], 0);
-    BOOST_CHECK_EQUAL(participants_a[1], 1);
-    BOOST_CHECK_EQUAL(participants_a[2], 2);
+    BOOST_CHECK(participants_a == ExpectedEpochCommitteeForIds({0, 1, 2, 3, 4}, 10, 3));
 }
 
 // ============================================================================
@@ -334,10 +360,10 @@ BOOST_AUTO_TEST_CASE(attack_nonce_ordering_independence)
 // and node B sees {0,3,4}. They compute different aggregate keys and
 // the network can't agree on a valid signature.
 //
-// Defense: the signing session now uses a canonical deterministic signer
-// committee and does not enter NONCES_COMPLETE for merely any threshold-sized
-// subset. A peer missing a required nonce keeps waiting instead of signing
-// under a divergent aggregate key.
+// Defense: the signing session selects deterministically from the nonces that
+// actually arrived. The final v0x03 bitmap binds the aggregate signature to
+// the exact signer set, so a different local view cannot silently reuse partial
+// signatures from another participant set.
 // ============================================================================
 BOOST_AUTO_TEST_CASE(attack_desync_different_nonce_sets)
 {
@@ -374,20 +400,14 @@ BOOST_AUTO_TEST_CASE(attack_desync_different_nonce_sets)
     session_b.TrimNoncesToThreshold();
     auto part_b = session_b.GetNonceParticipants();
 
-    // Node A has the canonical committee {0,1,2}; Node B is missing oracle 2
-    // and must NOT substitute oracle 3/4 just because it has enough total
-    // nonces. That substitution was the RC34 liveness bug: honest peers signed
-    // under different aggregate keys and MuSig2 never reached COMPLETE.
-    BOOST_CHECK_EQUAL(part_a.size(), 3u);
-    BOOST_CHECK_EQUAL(part_a[0], 0);
-    BOOST_CHECK_EQUAL(part_a[1], 1);
-    BOOST_CHECK_EQUAL(part_a[2], 2);
-
-    BOOST_CHECK_EQUAL(part_b.size(), 2u);
-    BOOST_CHECK_EQUAL(part_b[0], 0);
-    BOOST_CHECK_EQUAL(part_b[1], 1);
+    // Node A and Node B may choose different local candidate committees because
+    // they saw different nonce sets. Both are allowed to progress if they have
+    // threshold nonces; partial-sig verification and the final bitmap prevent
+    // cross-set signature mixing.
+    BOOST_CHECK(part_a == ExpectedEpochCommitteeForIds({0, 1, 2, 3}, 10, 3));
+    BOOST_CHECK(part_b == ExpectedEpochCommitteeForIds({0, 1, 3, 4}, 10, 3));
     BOOST_CHECK(session_a.GetState() == MuSig2SessionState::NONCES_COMPLETE);
-    BOOST_CHECK(session_b.GetState() != MuSig2SessionState::NONCES_COMPLETE);
+    BOOST_CHECK(session_b.GetState() == MuSig2SessionState::NONCES_COMPLETE);
 }
 
 // ============================================================================

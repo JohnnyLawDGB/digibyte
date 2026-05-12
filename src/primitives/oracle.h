@@ -204,7 +204,10 @@ struct OracleNodeInfo
  * Deterministic oracle selection for each epoch
  */
 
-//! Select 17 active oracles for given epoch (deterministic, RC30)
+//! Deterministic per-epoch score for an oracle ID. Lower score wins.
+uint256 GetOracleEpochSelectionHash(int32_t epoch, uint32_t oracle_id);
+
+//! Select active oracles for given epoch (deterministic, RC30)
 std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeInfo>& all_oracles, int32_t epoch);
 
 //! Get current epoch based on block height

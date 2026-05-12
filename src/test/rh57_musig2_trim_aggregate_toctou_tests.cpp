@@ -114,12 +114,14 @@
 #include <test/util/setup_common.h>
 
 #include <oracle/musig2_session.h>
+#include <primitives/oracle.h>
 
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_musig.h>
 #include <secp256k1_schnorrsig.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -143,6 +145,37 @@ static CKey MakeCKey(const unsigned char sk[32])
     return k;
 }
 
+static std::vector<uint8_t> ExpectedEpochCommitteeForRange(uint8_t count,
+                                                           int32_t epoch,
+                                                           size_t threshold)
+{
+    std::vector<std::pair<uint256, uint8_t>> scored;
+    scored.reserve(count);
+    for (uint8_t id = 0; id < count; ++id) {
+        scored.emplace_back(GetOracleEpochSelectionHash(epoch, id), id);
+    }
+    std::sort(scored.begin(), scored.end());
+
+    std::vector<uint8_t> selected;
+    for (const auto& [score, id] : scored) {
+        if (selected.size() >= threshold) break;
+        selected.push_back(id);
+    }
+    std::sort(selected.begin(), selected.end());
+    return selected;
+}
+
+static std::vector<uint8_t> ComplementIds(uint8_t count, const std::vector<uint8_t>& selected)
+{
+    std::vector<uint8_t> trimmed;
+    for (uint8_t id = 0; id < count; ++id) {
+        if (!std::binary_search(selected.begin(), selected.end(), id)) {
+            trimmed.push_back(id);
+        }
+    }
+    return trimmed;
+}
+
 /**
  * Compute the MuSig2 keyagg cache over an arbitrary participant set
  * defined by pubkey pointers, in sorted BIP-327 order. Mimics what
@@ -164,10 +197,10 @@ static bool KeyAgg(secp256k1_context* ctx,
  * Interleaving reproduced:
  *   (A) Collect 7 pubnonces (oracle_ids 0..6); state -> NONCES_COMPLETE.
  *   (B) Simulate orchestrator step 1: TrimNoncesToThreshold() -> 4
- *       pubnonces {0,1,2,3}; state stays NONCES_COMPLETE.
- *   (C) Orchestrator step 2: KeyAgg over {0,1,2,3} computed here (same
- *       operation MuSig2OracleAggregator would do).
- *   (D) RACE: before step 3/4, attacker slips an AddPubnonce(4, pn4).
+ *       pubnonces chosen by epoch hash; state stays NONCES_COMPLETE.
+ *   (C) Orchestrator step 2: KeyAgg over that epoch-scored set is computed
+ *       here (same operation MuSig2OracleAggregator would do).
+ *   (D) RACE: before step 3/4, attacker slips an AddPubnonce for a trimmed ID.
  *       The session accepts it because:
  *             state is NONCES_COMPLETE (allowed)
  *             4 < nOracleTotalOracles (regtest=7)
@@ -183,8 +216,9 @@ static bool KeyAgg(secp256k1_context* ctx,
  * Demonstrating concrete harm: every local signer produces a partial
  * sig via this session, but the eventually-assembled 64-byte aggregate
  * does NOT verify under the correct bitmap-derived aggregate pubkey
- * (which validators reconstruct over {0,1,2,3}). `schnorrsig_verify`
- * returns 0 — block-level consensus rejection — every epoch.
+ * (which validators reconstruct over the frozen participant set).
+ * `schnorrsig_verify` returns 0: block-level consensus rejection every
+ * epoch.
  */
 BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
 {
@@ -198,6 +232,11 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     // in the race, and oracle_id values 0..6 pass on both chains.
     constexpr size_t N = 7;
     constexpr uint8_t T = 4;
+    const auto expected_ids = ExpectedEpochCommitteeForRange(N, 42, T);
+    const auto trimmed_out = ComplementIds(N, expected_ids);
+    BOOST_REQUIRE_EQUAL(expected_ids.size(), static_cast<size_t>(T));
+    BOOST_REQUIRE(!trimmed_out.empty());
+    const uint8_t local_id = expected_ids.front();
 
     // Document the consensus parameters the attack assumes. AddPubnonce
     // reads total_oracles from chainparams; as long as our oracle_ids
@@ -228,18 +267,19 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     MuSig2SigningSession session(/*epoch=*/42, /*min_signers=*/T);
     BOOST_CHECK(session.GetState() == MuSig2SessionState::CREATED);
 
-    // Local oracle is id=0 (use GenerateNonce so the session tracks
+    // Use a selected local oracle so the session tracks
     // a secnonce for local partial sig creation later).
-    CKey ck0 = MakeCKey(sks[0]);
+    CKey ck_local = MakeCKey(sks[local_id]);
     secp256k1_musig_pubnonce pn_local;
-    BOOST_REQUIRE(session.GenerateNonce(0, ck0, pks[0], cache_all, pn_local));
+    BOOST_REQUIRE(session.GenerateNonce(local_id, ck_local, pks[local_id], cache_all, pn_local));
     BOOST_CHECK(session.GetState() == MuSig2SessionState::NONCES_COLLECTING);
 
-    // Remote oracles 1..6: generate externally and submit as if from P2P.
+    // Remote oracles: generate externally and submit as if from P2P.
     secp256k1_musig_secnonce  ext_sn[N];
     secp256k1_musig_pubnonce  ext_pn[N];
-    ext_pn[0] = pn_local;
-    for (size_t i = 1; i < N; i++) {
+    ext_pn[local_id] = pn_local;
+    for (size_t i = 0; i < N; i++) {
+        if (i == local_id) continue;
         unsigned char rnd[32];
         GetStrongRandBytes(Span{rnd, 32});
         BOOST_REQUIRE(secp256k1_musig_nonce_gen(ctx, &ext_sn[i], &ext_pn[i],
@@ -256,7 +296,7 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
 
     // ────────────────────────────────────────────────────────
     // Phase 2: orchestrator step 1 — TrimNoncesToThreshold
-    // Drops oracle_ids 4,5,6; keeps {0,1,2,3}.
+    // Drops non-committee IDs; keeps the epoch-scored committee.
     // CRITICAL: state is NOT changed. Still NONCES_COMPLETE.
     // ────────────────────────────────────────────────────────
     session.TrimNoncesToThreshold();
@@ -265,15 +305,12 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
 
     std::vector<uint8_t> trimmed_ids = session.GetNonceParticipants();
     BOOST_REQUIRE_EQUAL(trimmed_ids.size(), static_cast<size_t>(T));
-    BOOST_CHECK_EQUAL(trimmed_ids[0], 0);
-    BOOST_CHECK_EQUAL(trimmed_ids[1], 1);
-    BOOST_CHECK_EQUAL(trimmed_ids[2], 2);
-    BOOST_CHECK_EQUAL(trimmed_ids[3], 3);
+    BOOST_CHECK(trimmed_ids == expected_ids);
 
     // ────────────────────────────────────────────────────────
     // Phase 3: orchestrator step 2 — compute participants-only keyagg
-    // over {0,1,2,3} ONLY. This is the cache that validators will
-    // reconstruct from the on-chain bitmap.
+    // over the frozen committee only. This is the cache that validators
+    // will reconstruct from the on-chain bitmap.
     // ────────────────────────────────────────────────────────
     std::vector<const secp256k1_pubkey*> pk_ptrs_trim;
     for (uint8_t id : trimmed_ids) pk_ptrs_trim.push_back(&pks[id]);
@@ -282,10 +319,11 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     BOOST_REQUIRE(KeyAgg(ctx, pk_ptrs_trim, agg_pk_trim, cache_trim));
 
     // ────────────────────────────────────────────────────────
-    // Phase 4: attack attempt. Oracle 4 was trimmed out of the selected
-    // participant set and must not be able to re-enter before AggregateNonces.
+    // Phase 4: attack attempt. A trimmed oracle must not be able to re-enter
+    // before AggregateNonces.
     // ────────────────────────────────────────────────────────
-    bool late_accepted = session.AddPubnonce(4, ext_pn[4]);
+    const uint8_t late_id = trimmed_out.front();
+    bool late_accepted = session.AddPubnonce(late_id, ext_pn[late_id]);
     BOOST_CHECK_MESSAGE(!late_accepted,
         "RH-57 defense: AddPubnonce must reject a late pubnonce after "
         "TrimNoncesToThreshold freezes the participant set.");
@@ -310,13 +348,13 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     //          under the same 4-participant aggregate pubkey validators
     //          reconstruct from the bitmap.
     // ────────────────────────────────────────────────────────
-    // Local (oracle 0) partial sig via the session's own API.
-    secp256k1_musig_partial_sig psig0;
-    BOOST_REQUIRE(session.CreatePartialSignature(0, ck0, psig0));
-    BOOST_CHECK(session.AddPartialSignature(0, psig0));
+    // Local partial sig via the session's own API.
+    secp256k1_musig_partial_sig psig_local;
+    BOOST_REQUIRE(session.CreatePartialSignature(local_id, ck_local, psig_local));
+    BOOST_CHECK(session.AddPartialSignature(local_id, psig_local));
 
-    // Remote oracles 1..3 partial sigs via the raw secp256k1 API, using
-    // the same frozen participant set.
+    // Remote partial sigs via the raw secp256k1 API, using the same frozen
+    // participant set.
     std::vector<const secp256k1_musig_pubnonce*> pn_ptrs;
     for (uint8_t id : trimmed_ids) pn_ptrs.push_back(&ext_pn[id]);
     BOOST_CHECK_EQUAL(pn_ptrs.size(), static_cast<size_t>(T));
@@ -329,7 +367,8 @@ BOOST_AUTO_TEST_CASE(rh57_trim_then_late_pubnonce_corrupts_aggregate)
     BOOST_REQUIRE(secp256k1_musig_nonce_process(ctx, &raw_sess, &aggn,
                                                 msg32, &cache_trim));
 
-    for (uint8_t id : {1, 2, 3}) {
+    for (uint8_t id : trimmed_ids) {
+        if (id == local_id) continue;
         secp256k1_musig_partial_sig psig;
         BOOST_REQUIRE(secp256k1_musig_partial_sign(ctx, &psig, &ext_sn[id],
                                                    &kps[id], &cache_trim,
@@ -375,6 +414,7 @@ BOOST_AUTO_TEST_CASE(rh57_trim_does_not_freeze_pubnonces)
 
     constexpr size_t N = 7;
     constexpr uint8_t T = 4;
+    const auto expected_ids = ExpectedEpochCommitteeForRange(N, 43, T);
 
     unsigned char sks[N][32];
     secp256k1_keypair kps[N];
@@ -409,13 +449,15 @@ BOOST_AUTO_TEST_CASE(rh57_trim_does_not_freeze_pubnonces)
 
     // Trim to threshold.
     session.TrimNoncesToThreshold();
+    auto trimmed_ids = session.GetNonceParticipants();
+    BOOST_CHECK(trimmed_ids == expected_ids);
 
     // Invariant: after trimming, the participant set is frozen even though
     // the public state remains NONCES_COMPLETE until AggregateNonces().
     BOOST_CHECK(session.GetState() == MuSig2SessionState::NONCES_COMPLETE);
 
     // Trimmed oracle IDs must not be able to re-enter via late AddPubnonce.
-    for (uint8_t id : {4, 5, 6}) {
+    for (uint8_t id : ComplementIds(N, trimmed_ids)) {
         bool ok = session.AddPubnonce(id, ext_pn[id]);
         BOOST_CHECK_MESSAGE(!ok,
             "RH-57: late AddPubnonce for trimmed oracle_id "
@@ -442,6 +484,10 @@ BOOST_AUTO_TEST_CASE(rh57_defense_asymmetry_partial_vs_nonce)
 
     constexpr size_t N = 7;
     constexpr uint8_t T = 4;
+    const auto expected_ids = ExpectedEpochCommitteeForRange(N, 44, T);
+    const auto trimmed_out = ComplementIds(N, expected_ids);
+    BOOST_REQUIRE(!trimmed_out.empty());
+    const uint8_t outsider_id = trimmed_out.front();
 
     unsigned char sks[N][32];
     secp256k1_keypair kps[N];
@@ -471,11 +517,13 @@ BOOST_AUTO_TEST_CASE(rh57_defense_asymmetry_partial_vs_nonce)
     }
     for (uint8_t i = 0; i < N; i++) BOOST_CHECK(session.AddPubnonce(i, ext_pn[i]));
 
-    session.TrimNoncesToThreshold();  // keeps {0,1,2,3}
+    session.TrimNoncesToThreshold();
+    auto trimmed_ids = session.GetNonceParticipants();
+    BOOST_REQUIRE(trimmed_ids == expected_ids);
 
     // Participants-only cache for the trimmed set.
     std::vector<const secp256k1_pubkey*> pkp_tr;
-    for (uint8_t id : {0,1,2,3}) pkp_tr.push_back(&pks[id]);
+    for (uint8_t id : trimmed_ids) pkp_tr.push_back(&pks[id]);
     secp256k1_xonly_pubkey agg_pk_tr;
     secp256k1_musig_keyagg_cache cache_tr;
     BOOST_REQUIRE(KeyAgg(ctx, pkp_tr, agg_pk_tr, cache_tr));
@@ -487,29 +535,28 @@ BOOST_AUTO_TEST_CASE(rh57_defense_asymmetry_partial_vs_nonce)
     BOOST_REQUIRE(session.AggregateNonces(msg32));
     BOOST_CHECK(session.GetState() == MuSig2SessionState::SIGNING);
 
-    // ── Defense on partial-sig path (see musig2_session.cpp:364): oracle 4
-    // was trimmed and no longer in m_pubnonces, so a partial sig from it is
-    // rejected at AddPartialSignature.
-    // Produce a valid (under cache_tr/raw_sess) partial sig from oracle 4
-    // to isolate the "participant-set" rejection from other failures.
+    // Defense on partial-sig path: the outsider was trimmed and no longer
+    // in m_pubnonces, so a partial sig from it is rejected at
+    // AddPartialSignature. Produce a valid raw partial sig from that outsider
+    // to isolate the participant-set rejection from other failures.
     std::vector<const secp256k1_musig_pubnonce*> pnp_tr;
-    for (uint8_t id : {0,1,2,3}) pnp_tr.push_back(&ext_pn[id]);
+    for (uint8_t id : trimmed_ids) pnp_tr.push_back(&ext_pn[id]);
     secp256k1_musig_aggnonce aggn_tr;
     BOOST_REQUIRE(secp256k1_musig_nonce_agg(ctx, &aggn_tr, pnp_tr.data(), 4));
     secp256k1_musig_session raw_sess_tr;
     BOOST_REQUIRE(secp256k1_musig_nonce_process(ctx, &raw_sess_tr, &aggn_tr,
                                                 msg32, &cache_tr));
 
-    // Oracle 4 crafts a sig against the trimmed session it wasn't invited
-    // to. The raw secp256k1 API will happily produce one — the defense
-    // lives in our higher-level AddPartialSignature.
-    secp256k1_musig_partial_sig psig4;
-    bool sigfor4 = secp256k1_musig_partial_sign(ctx, &psig4, &ext_sn[4],
-                                                &kps[4], &cache_tr,
-                                                &raw_sess_tr);
-    BOOST_CHECK(sigfor4);
+    // The outsider crafts a sig against the trimmed session it was not invited
+    // to. The raw secp256k1 API will happily produce one; the defense lives
+    // in our higher-level AddPartialSignature.
+    secp256k1_musig_partial_sig outsider_sig;
+    bool sig_for_outsider = secp256k1_musig_partial_sign(ctx, &outsider_sig, &ext_sn[outsider_id],
+                                                         &kps[outsider_id], &cache_tr,
+                                                         &raw_sess_tr);
+    BOOST_CHECK(sig_for_outsider);
 
-    bool ps_rejected = !session.AddPartialSignature(4, psig4);
+    bool ps_rejected = !session.AddPartialSignature(outsider_id, outsider_sig);
     BOOST_CHECK_MESSAGE(ps_rejected,
         "RH-57 defense evidence: AddPartialSignature has a participant-set "
         "check (musig2_session.cpp:364) that rejects partial sigs from "

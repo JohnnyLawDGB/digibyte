@@ -478,6 +478,13 @@ bool operator!=(const OracleNodeInfo& a, const OracleNodeInfo& b)
  * Oracle Selection Functions
  */
 
+uint256 GetOracleEpochSelectionHash(int32_t epoch, uint32_t oracle_id)
+{
+    HashWriter hasher{};
+    hasher << epoch << oracle_id;
+    return hasher.GetHash();
+}
+
 std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeInfo>& all_oracles, int32_t epoch)
 {
     // Filter active oracles
@@ -488,17 +495,12 @@ std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeIn
         }
     }
 
-    // If we have ORACLE_ACTIVE_COUNT (RC30: 17) or fewer active oracles, return all of them
-    if (active_oracles.size() <= ORACLE_ACTIVE_COUNT) {
-        return active_oracles;
-    }
-
-    // Use deterministic selection based on epoch
+    // Use deterministic scoring based on epoch for every roster size. When
+    // there are 17 or fewer active oracles we still return all of them, but in
+    // epoch-scored order so callers that take a threshold subset do not fall
+    // back to fixed chainparams order.
     std::vector<OracleNodeInfo> selected;
     selected.reserve(ORACLE_ACTIVE_COUNT);
-
-    // Note: We don't need to store the epoch seed since we'll use
-    // individual oracle hashes for deterministic sorting
 
     // Create indices for deterministic sorting
     std::vector<size_t> indices;
@@ -508,18 +510,20 @@ std::vector<OracleNodeInfo> SelectOraclesForEpoch(const std::vector<OracleNodeIn
 
     // Sort indices by oracle scores (deterministic based on epoch)
     std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
-        HashWriter hasher_a{}, hasher_b{};
-        hasher_a << epoch << active_oracles[a].id;
-        hasher_b << epoch << active_oracles[b].id;
-        return hasher_a.GetHash() < hasher_b.GetHash();
+        const uint256 score_a = GetOracleEpochSelectionHash(epoch, active_oracles[a].id);
+        const uint256 score_b = GetOracleEpochSelectionHash(epoch, active_oracles[b].id);
+        if (score_a == score_b) {
+            return active_oracles[a].id < active_oracles[b].id;
+        }
+        return score_a < score_b;
     });
 
-    // Select first 15 after deterministic sorting
+    // Select the first active-per-epoch entries after deterministic sorting.
     for (size_t i = 0; i < indices.size() && selected.size() < ORACLE_ACTIVE_COUNT; i++) {
         selected.push_back(active_oracles[indices[i]]);
     }
 
-    // Ensure we have exactly 15 (or all available if less)
+    // Ensure we have exactly ORACLE_ACTIVE_COUNT, or all available if fewer.
     selected.resize(std::min(selected.size(), size_t(ORACLE_ACTIVE_COUNT)));
 
     return selected;

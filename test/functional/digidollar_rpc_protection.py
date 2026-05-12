@@ -26,7 +26,9 @@ class DigiDollarRPCProtectionTest(DigiByteTestFramework):
         
         self.log.info("Generating initial blocks for test setup...")
         self.generate(node, 110)
-        
+
+        self.test_oracle_unavailable_is_separate_from_err()
+
         node.setmockoracleprice(6000)
         
         self.test_protection_status_basic()
@@ -38,12 +40,34 @@ class DigiDollarRPCProtectionTest(DigiByteTestFramework):
         
         self.log.info("All protection status tests passed!")
 
+    def test_oracle_unavailable_is_separate_from_err(self):
+        self.log.info("Testing no-oracle state is reported separately from ERR...")
+        node = self.nodes[0]
+        node.enablemockoracle(False)
+
+        stats = node.getdigidollarstats()
+        assert_equal(stats["oracle_available"], False)
+        assert_equal(stats["oracle_status"], "unavailable")
+        assert_equal(stats["minting_restricted_reason"], "oracle_unavailable")
+        assert_equal(stats["is_emergency"], False)
+
+        protection = node.getprotectionstatus()
+        assert 'oracle' in protection, "Missing 'oracle' section"
+        assert_equal(protection["oracle"]["available"], False)
+        assert_equal(protection["oracle"]["minting_restricted"], True)
+        assert_equal(protection["oracle"]["minting_restricted_reason"], "oracle_unavailable")
+        assert_equal(protection["err"]["active"], False)
+        assert_equal(protection["err"]["evaluation_status"], "oracle_unavailable")
+        assert "oracle_fail_closed" in protection["overall"]["active_protections"]
+        node.enablemockoracle(True)
+
     def test_protection_status_basic(self):
         self.log.info("Testing basic protection status response...")
         node = self.nodes[0]
         
         result = node.getprotectionstatus()
         
+        assert 'oracle' in result, "Missing 'oracle' section"
         assert 'dca' in result, "Missing 'dca' section"
         assert 'err' in result, "Missing 'err' section"
         assert 'volatility' in result, "Missing 'volatility' section"

@@ -174,8 +174,7 @@ BOOST_FIXTURE_TEST_CASE(non_ibd_rejects_zero_oracle_price, BasicTestingSetup)
                           std::to_string(result) + " reason: " + state.GetRejectReason());
         BOOST_CHECK_MESSAGE(!result,
             "SECURITY BUG: Mint accepted with zero oracle price in non-IBD mode!");
-        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price" ||
-                            state.GetRejectReason() == "minting-blocked-during-err",
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price",
             "unexpected fail-closed reason: " + state.GetRejectReason());
     }
 
@@ -189,8 +188,7 @@ BOOST_FIXTURE_TEST_CASE(non_ibd_rejects_zero_oracle_price, BasicTestingSetup)
                           std::to_string(result) + " reason: " + state.GetRejectReason());
         BOOST_CHECK_MESSAGE(!result,
             "SECURITY BUG [DD-RH-115]: IBD/catch-up mint accepted with zero oracle price");
-        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price" ||
-                            state.GetRejectReason() == "minting-blocked-during-err",
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price",
             "unexpected fail-closed reason: " + state.GetRejectReason());
     }
 }
@@ -293,8 +291,7 @@ BOOST_FIXTURE_TEST_CASE(ibd_err_blocks_minting_with_nonzero_supply, BasicTesting
                           std::to_string(result) + " reason=" + state.GetRejectReason());
         BOOST_CHECK_MESSAGE(!result,
             "SECURITY BUG [DD-RH-115]: IBD/catch-up mint accepted with zero oracle price");
-        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price" ||
-                            state.GetRejectReason() == "minting-blocked-during-err",
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price",
             "unexpected fail-closed reason: " + state.GetRejectReason());
     }
 
@@ -306,9 +303,10 @@ BOOST_FIXTURE_TEST_CASE(ibd_err_blocks_minting_with_nonzero_supply, BasicTesting
         bool result = DigiDollar::ValidateDigiDollarTransaction(tx, ctx, state);
         BOOST_TEST_MESSAGE("Non-IBD + nonzero supply + zero oracle: result=" +
                           std::to_string(result) + " reason=" + state.GetRejectReason());
-        // This should fail — either ERR blocks it or bad-oracle-price catches it
         BOOST_CHECK_MESSAGE(!result,
             "SECURITY: Non-IBD mint with zero oracle should be rejected!");
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-oracle-price",
+            "unexpected fail-closed reason: " + state.GetRejectReason());
     }
 
     // Clean up: reverse the earlier mint so other tests aren't affected

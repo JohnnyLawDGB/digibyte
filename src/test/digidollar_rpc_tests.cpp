@@ -83,6 +83,10 @@ BOOST_FIXTURE_TEST_CASE(test_getdigidollarstats_basic, DigiDollarRPCTestSetup)
     BOOST_CHECK(result.exists("total_collateral_dgb"));
     BOOST_CHECK(result.exists("total_dd_supply"));
     BOOST_CHECK(result.exists("oracle_price_cents"));
+    BOOST_CHECK(result.exists("oracle_price_micro_usd"));
+    BOOST_CHECK(result.exists("oracle_available"));
+    BOOST_CHECK(result.exists("oracle_status"));
+    BOOST_CHECK(result.exists("minting_restricted_reason"));
     BOOST_CHECK(result.exists("is_emergency"));
     BOOST_CHECK(result.exists("system_collateral_ratio"));
     BOOST_CHECK(result.exists("total_collateral_locked"));
@@ -102,6 +106,10 @@ BOOST_FIXTURE_TEST_CASE(test_getdigidollarstats_types, DigiDollarRPCTestSetup)
     BOOST_CHECK(result["total_collateral_dgb"].isNum());
     BOOST_CHECK(result["total_dd_supply"].isNum());
     BOOST_CHECK(result["oracle_price_cents"].isNum());
+    BOOST_CHECK(result["oracle_price_micro_usd"].isNum());
+    BOOST_CHECK(result["oracle_available"].isBool());
+    BOOST_CHECK(result["oracle_status"].isStr());
+    BOOST_CHECK(result["minting_restricted_reason"].isStr());
     BOOST_CHECK(result["is_emergency"].isBool());
     BOOST_CHECK(result["system_collateral_ratio"].isNum());
     BOOST_CHECK(result["total_collateral_locked"].isNum());
@@ -121,6 +129,7 @@ BOOST_FIXTURE_TEST_CASE(test_getdigidollarstats_ranges, DigiDollarRPCTestSetup)
     BOOST_CHECK_GE(result["total_collateral_dgb"].get_real(), 0.0);
     BOOST_CHECK_GE(result["total_dd_supply"].getInt<int64_t>(), 0);
     BOOST_CHECK_GE(result["oracle_price_cents"].getInt<int64_t>(), 0);
+    BOOST_CHECK_GE(result["oracle_price_micro_usd"].getInt<int64_t>(), 0);
     BOOST_CHECK_GE(result["active_positions"].getInt<int>(), 0);
     BOOST_CHECK_GE(result["oracle_price_age"].getInt<int>(), 0);
 }

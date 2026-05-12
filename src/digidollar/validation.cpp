@@ -2652,7 +2652,7 @@ bool ValidateDigiDollarTransaction(const CTransaction& tx,
 
     // ERR pre-validation for mints is consensus-critical. skipOracleValidation
     // is local sync state and must not make post-activation mint validity differ.
-    if (txType == DD_TX_MINT && ShouldBlockMintingDuringERR(ctx)) {
+    if (txType == DD_TX_MINT && ctx.oraclePriceMicroUSD > 0 && ShouldBlockMintingDuringERR(ctx)) {
         LogPrintf("DigiDollar: Minting blocked during ERR activation\n");
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "minting-blocked-during-err");
     }

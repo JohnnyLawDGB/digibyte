@@ -803,7 +803,7 @@ void DigiDollarReceiveWidget::addRequestToTable(const QString& date, const QStri
 
     // Date column
     QTableWidgetItem* dateItem = new QTableWidgetItem(date);
-    dateItem->setToolTip(date);
+    dateItem->setToolTip(date.isEmpty() ? tr("No date") : date);
     m_requestsTable->setItem(0, 0, dateItem);
 
     // Label column
@@ -819,7 +819,7 @@ void DigiDollarReceiveWidget::addRequestToTable(const QString& date, const QStri
     // Address column - store full address in UserRole for retrieval, show with tooltip
     QTableWidgetItem* addressItem = new QTableWidgetItem(address);
     addressItem->setData(Qt::UserRole, address);  // Store full address
-    addressItem->setToolTip(address);  // Show full address on hover
+    addressItem->setToolTip(address.isEmpty() ? tr("No address available") : address);  // Show full address on hover
     addressItem->setFont(GUIUtil::fixedPitchFont());
     m_requestsTable->setItem(0, 3, addressItem);
 

@@ -660,7 +660,7 @@ void DigiDollarOverviewWidget::updateOraclePrice()
     if (m_oraclePrice > 0) {
         m_oraclePriceValue->setText(QString("$%1").arg(QString::number(m_oraclePrice, 'f', 6)));
     } else {
-        m_oraclePriceValue->setText("Loading...");
+        m_oraclePriceValue->setText(tr("Oracle unavailable"));
     }
 }
 
@@ -695,6 +695,8 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         CAmount totalCollateralSats = AmountFromValue(result.find_value("total_collateral_dgb"));
         CAmount totalDDCents = result.find_value("total_dd_supply").getInt<int64_t>();
         bool isEmergency = result.find_value("is_emergency").get_bool();
+        const UniValue& oracleAvailableValue = result.find_value("oracle_available");
+        const bool oracleAvailable = oracleAvailableValue.isNull() ? true : oracleAvailableValue.get_bool();
 
         // Get DCA tier info
         const UniValue& dcaTier = result.find_value("dca_tier");
@@ -720,6 +722,15 @@ void DigiDollarOverviewWidget::updateSystemHealth()
 
         m_networkTotalCollateralValue->setTextFormat(Qt::RichText);
         m_networkTotalCollateralValue->setText(QString("<span style='color: #00FF88; font-weight: bold;'>%1</span><span style='color: white;'> DGB</span>").arg(dgbFormatted));
+
+        if (!oracleAvailable) {
+            m_systemHealthValue->setText(tr("Oracle Unavailable"));
+            m_dcaLevelValue->setText(tr("Paused"));
+            m_errLevelValue->setText(tr("Not Evaluated"));
+            m_systemHealthBar->setValue(0);
+            m_systemHealthBar->setFormat(tr("Oracle price unavailable"));
+            return;
+        }
 
         // Update system health display
         // RPC returns health_percentage as actual percentage (e.g., 151 = 151%)

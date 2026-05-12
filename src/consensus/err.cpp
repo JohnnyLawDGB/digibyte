@@ -436,7 +436,7 @@ bool EmergencyRedemptionRatio::ShouldBlockMinting(CAmount oraclePriceOverride)
     // otherwise query the global oracle.
     CAmount oraclePriceMicroUSD = oraclePriceOverride;
     if (oraclePriceMicroUSD <= 0) {
-        if (Params().GetChainType() == ChainType::REGTEST) {
+        if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
             oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
         } else {
             oraclePriceMicroUSD = OracleBundleManager::GetInstance().GetLatestPrice();

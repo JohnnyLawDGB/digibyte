@@ -1479,11 +1479,16 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
         }
         // Try real oracle first, fall back to mock only in regtest
         oraclePrice = OracleBundleManager::GetInstance().GetLatestPrice();
-        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+            MockOracleManager::GetInstance().IsEnabled()) {
             oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
         }
         if (currentHeight <= 0) currentHeight = 100000; // Safe fallback for tests
-        if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback ($0.0065)
+        if (oraclePrice <= 0) {
+            error = "No oracle price available";
+            LogPrintf("DigiDollar: Transfer blocked because no oracle price is available\n");
+            return false;
+        }
 
         DigiDollar::TransferTxBuilder builder(Params(), currentHeight, oraclePrice);
         DigiDollar::TxBuilderResult result = builder.BuildTransferTransaction(params);
@@ -4659,10 +4664,14 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // BUG #5 FIX: Get real height and oracle price
         int currentHeight = m_wallet ? m_wallet->GetLastBlockHeight() : 100000;
         CAmount oraclePrice = OracleBundleManager::GetInstance().GetLatestPrice();
-        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+            MockOracleManager::GetInstance().IsEnabled()) {
             oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
         }
-        if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback
+        if (oraclePrice <= 0) {
+            LogPrintf("DigiDollar: TransferDigiDollar blocked because no oracle price is available\n");
+            return false;
+        }
 
         // Build transaction
         DigiDollar::TransferTxBuilder builder(Params(), currentHeight, oraclePrice);
@@ -4790,10 +4799,14 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         // BUG #5 FIX: Get real height and oracle price
         int currentHeight = m_wallet ? m_wallet->GetLastBlockHeight() : 100000;
         CAmount oraclePrice = OracleBundleManager::GetInstance().GetLatestPrice();
-        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+        if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+            MockOracleManager::GetInstance().IsEnabled()) {
             oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
         }
-        if (oraclePrice <= 0) oraclePrice = 6500; // Safe fallback
+        if (oraclePrice <= 0) {
+            LogPrintf("DigiDollar: RedeemDigiDollar blocked because no oracle price is available\n");
+            return false;
+        }
 
         DigiDollar::RedeemTxBuilder builder(Params(), currentHeight, oraclePrice);
 

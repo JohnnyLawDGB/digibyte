@@ -324,7 +324,7 @@ void DigiDollarTransactionsWidget::populateTable()
                 noteText = QString::fromStdString(commentVal.get_str());
             }
             QTableWidgetItem* noteItem = new QTableWidgetItem(noteText);
-            noteItem->setToolTip(noteText);
+            noteItem->setToolTip(noteText.isEmpty() ? tr("No note") : noteText);
             m_table->setItem(row, Column::Note, noteItem);
 
             QString displayTxid = txid.left(16) + "..." + txid.right(8);

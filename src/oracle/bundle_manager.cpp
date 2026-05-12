@@ -2487,7 +2487,7 @@ namespace OracleIntegration {
 CAmount GetCurrentOraclePrice()
 {
     // In RegTest mode, use MockOracleManager for testing
-    if (Params().GetChainType() == ChainType::REGTEST) {
+    if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         CAmount mockPrice = MockOracleManager::GetInstance().GetCurrentPrice();
         if (mockPrice > 0) {
             return mockPrice;
@@ -2522,7 +2522,7 @@ CAmount GetCurrentOraclePriceMicroUSD()
 {
     // In RegTest mode, use MockOracleManager for testing
     // MockOracleManager stores and returns micro-USD directly (set via setmockoracleprice RPC)
-    if (Params().GetChainType() == ChainType::REGTEST) {
+    if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         CAmount mockPriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
         if (mockPriceMicroUSD > 0) {
             LogPrintf("Oracle: GetCurrentOraclePriceMicroUSD returning %lld micro-USD ($%.6f) from MockOracleManager\n",
@@ -2560,7 +2560,7 @@ CAmount GetOraclePriceForHeight(int nHeight)
     }
 
     // In RegTest mode, fall back to MockOracleManager for simple tests
-    if (Params().GetChainType() == ChainType::REGTEST) {
+    if (Params().GetChainType() == ChainType::REGTEST && MockOracleManager::GetInstance().IsEnabled()) {
         CAmount mockPrice = MockOracleManager::GetInstance().GetCurrentPrice();
         if (mockPrice > 0) {
             LogPrint(BCLog::DIGIDOLLAR, "Oracle: Using mock price for height %d: %lld (MockOracleManager regtest)\n",

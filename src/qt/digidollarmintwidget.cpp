@@ -519,7 +519,7 @@ void DigiDollarMintWidget::updateOraclePrice()
     if (m_oraclePrice > 0) {
         m_oraclePriceValue->setText(formatUSDAmount(m_oraclePrice) + " USD/DGB");
     } else {
-        m_oraclePriceValue->setText("Loading...");
+        m_oraclePriceValue->setText(tr("Oracle unavailable"));
     }
     updateCollateralCalculation();
 }
@@ -1026,6 +1026,12 @@ void DigiDollarMintWidget::updateAmountValidation()
             m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
             m_amountWarningLabel->setText(tr("⚠️ Maximum mint amount is $%1").arg(QString::number(maxAmount, 'f', 0)));
             m_amountWarningLabel->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(errorColor));
+            m_amountWarningLabel->setVisible(true);
+        } else if (m_oraclePrice <= 0) {
+            // Oracle price is unavailable; minting must remain fail-closed.
+            m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(warningColor));
+            m_amountWarningLabel->setText(tr("Oracle price unavailable - minting is paused"));
+            m_amountWarningLabel->setStyleSheet(QString("QLabel { color: %1; font-weight: bold; }").arg(warningColor));
             m_amountWarningLabel->setVisible(true);
         } else if (!hasCollateral) {
             // Valid format but insufficient collateral

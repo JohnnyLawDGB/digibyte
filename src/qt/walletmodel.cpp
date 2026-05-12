@@ -44,7 +44,9 @@
 #include <kernel/chainparams.h> // for CChainParams
 
 #include <stdint.h>
+#include <algorithm>
 #include <functional>
+#include <optional>
 
 #include <QDebug>
 #include <QMessageBox>
@@ -956,6 +958,49 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
             LogPrintf("DigiDollar Qt: UTXO fragmentation detected (%zu UTXOs). Auto-consolidating...\n",
                       availableUtxos.size());
 
+            auto sort_available_utxos_by_value = [&]() {
+                std::sort(availableUtxos.begin(), availableUtxos.end(),
+                    [&](const COutPoint& a, const COutPoint& b) {
+                        const CAmount av = utxoValues.count(a) ? utxoValues.at(a) : 0;
+                        const CAmount bv = utxoValues.count(b) ? utxoValues.at(b) : 0;
+                        if (av != bv) return av > bv;
+                        return a < b;
+                    });
+            };
+
+            auto refresh_available_utxos = [&]() {
+                availableUtxos.clear();
+                utxoValues.clear();
+                totalAvailable = 0;
+                LOCK(pWallet->cs_wallet);
+                wallet::CoinsResult coins = wallet::AvailableCoins(*pWallet);
+                for (const wallet::COutput& coin : coins.All()) {
+                    availableUtxos.push_back(coin.outpoint);
+                    utxoValues[coin.outpoint] = coin.txout.nValue;
+                    totalAvailable += coin.txout.nValue;
+                }
+                sort_available_utxos_by_value();
+            };
+
+            auto broadcast_and_commit_consolidation = [&](const CTransactionRef& consolidation_tx) -> std::optional<QString> {
+                std::string broadcast_error;
+                const TransactionError broadcast_result =
+                    m_node.broadcastTransaction(consolidation_tx, wallet::DEFAULT_TRANSACTION_MAXFEE, broadcast_error);
+                if (broadcast_result != TransactionError::OK) {
+                    const std::string reason = !broadcast_error.empty()
+                        ? broadcast_error
+                        : TransactionErrorString(broadcast_result).original;
+                    return QString("Auto-consolidation transaction rejected by mempool: %1")
+                        .arg(QString::fromStdString(reason));
+                }
+
+                LOCK(pWallet->cs_wallet);
+                pWallet->CommitTransaction(consolidation_tx, {}, {});
+                return std::nullopt;
+            };
+
+            sort_available_utxos_by_value();
+
             CAmount minRequired = result.collateralRequired + 20000000; // collateral + 0.2 DGB margin
             if (totalAvailable < minRequired) {
                 return DigiDollarMintResult(AmountExceedsBalance, "", "",
@@ -1008,27 +1053,15 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
 
                 const CTransactionRef& consolidation_tx = consolidation_result->tx;
                 consolidation_txid = consolidation_tx->GetHash().GetHex();
-                {
-                    LOCK(pWallet->cs_wallet);
-                    pWallet->CommitTransaction(consolidation_tx, {}, {});
+                if (auto error = broadcast_and_commit_consolidation(consolidation_tx)) {
+                    return DigiDollarMintResult(TransactionCreationFailed, "", "", *error);
                 }
 
                 LogPrintf("DigiDollar Qt: Consolidation pass %d tx: %s (swept %.2f DGB from %zu inputs)\n",
                           pass, consolidation_txid, batchTotal / 100000000.0, batch_size);
 
                 // Refresh UTXO set after consolidation
-                availableUtxos.clear();
-                utxoValues.clear();
-                totalAvailable = 0;
-                {
-                    LOCK(pWallet->cs_wallet);
-                    wallet::CoinsResult coins = wallet::AvailableCoins(*pWallet);
-                    for (const wallet::COutput& coin : coins.All()) {
-                        availableUtxos.push_back(coin.outpoint);
-                        utxoValues[coin.outpoint] = coin.txout.nValue;
-                        totalAvailable += coin.txout.nValue;
-                    }
-                }
+                refresh_available_utxos();
                 LogPrintf("DigiDollar Qt: After pass %d: %zu UTXOs available\n", pass, availableUtxos.size());
             }
 
@@ -1054,27 +1087,15 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
 
                 const CTransactionRef& consolidation_tx = consolidation_result->tx;
                 consolidation_txid = consolidation_tx->GetHash().GetHex();
-                {
-                    LOCK(pWallet->cs_wallet);
-                    pWallet->CommitTransaction(consolidation_tx, {}, {});
+                if (auto error = broadcast_and_commit_consolidation(consolidation_tx)) {
+                    return DigiDollarMintResult(TransactionCreationFailed, "", "", *error);
                 }
 
                 LogPrintf("DigiDollar Qt: Single-pass consolidation tx: %s (swept %.2f DGB from %zu inputs)\n",
                           consolidation_txid, batchTotal / 100000000.0, availableUtxos.size());
 
                 // Refresh UTXO set after consolidation
-                availableUtxos.clear();
-                utxoValues.clear();
-                totalAvailable = 0;
-                {
-                    LOCK(pWallet->cs_wallet);
-                    wallet::CoinsResult coins = wallet::AvailableCoins(*pWallet);
-                    for (const wallet::COutput& coin : coins.All()) {
-                        availableUtxos.push_back(coin.outpoint);
-                        utxoValues[coin.outpoint] = coin.txout.nValue;
-                        totalAvailable += coin.txout.nValue;
-                    }
-                }
+                refresh_available_utxos();
             }
 
             LogPrintf("DigiDollar Qt: After consolidation: %zu UTXOs available (passes: %d)\n",

@@ -328,6 +328,7 @@ BASE_SCRIPTS = [
     'wallet_digidollar_mint_reorg.py',
     'wallet_digidollar_mixed_output_accounting.py',
     'wallet_digidollar_pending_redeem_restart.py',
+    'wallet_digidollar_rc33_regressions.py',
     'wallet_digidollar_reindex.py',
     'wallet_digidollar_reorg.py',
     'wallet_digidollar_rescan.py',

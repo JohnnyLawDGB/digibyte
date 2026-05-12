@@ -139,6 +139,7 @@ namespace {
     void RefreshRegtestMockMuSig2QuoteForMempool(const wallet::CWallet& wallet)
     {
         if (Params().GetChainType() != ChainType::REGTEST) return;
+        if (!MockOracleManager::GetInstance().IsEnabled()) return;
         if (MockOracleManager::GetInstance().GetCurrentPrice() <= 0) return;
 
         node::NodeContext* node_ctx = wallet.chain().context();
@@ -328,6 +329,9 @@ RPCHelpMan getdigidollarstats()
                         {RPCResult::Type::NUM, "total_dd_supply", "Total DigiDollar supply in circulation (in cents)"},
                         {RPCResult::Type::NUM, "oracle_price_cents", "Current DGB/USD price from oracle (in cents per DGB)"},
                         {RPCResult::Type::NUM, "oracle_price_micro_usd", "Current DGB/USD price from oracle in micro-USD (1,000,000 = $1.00)"},
+                        {RPCResult::Type::BOOL, "oracle_available", "True when a live oracle price is available"},
+                        {RPCResult::Type::STR, "oracle_status", "Oracle availability status: available or unavailable"},
+                        {RPCResult::Type::STR, "minting_restricted_reason", "Why minting is restricted: none, oracle_unavailable, or err_active"},
                         {RPCResult::Type::BOOL, "is_emergency", "True if system is in emergency state (<100% collateralized)"},
                         {RPCResult::Type::NUM, "system_collateral_ratio", "Alias for health_percentage (for backward compatibility)"},
                         {RPCResult::Type::NUM, "total_collateral_locked", "Alias for total_collateral_dgb (in satoshis)"},
@@ -438,10 +442,12 @@ RPCHelpMan getdigidollarstats()
             CAmount oraclePriceMicroUSD = oracle_manager.GetLatestPrice();
 
             // Fall back to MockOracleManager for regtest/testing if no real oracle data
-            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                MockOracleManager::GetInstance().IsEnabled()) {
                 // MockOracleManager already returns micro-USD (see mock_oracle.cpp)
                 oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
             }
+            const bool oracleAvailable = oraclePriceMicroUSD > 0;
 
             // Convert micro-USD to millicents for CalculateSystemHealth
             // micro-USD / 10 = millicents (e.g., 6310 micro-USD / 10 = 631 millicents = $0.00631)
@@ -465,7 +471,9 @@ RPCHelpMan getdigidollarstats()
             auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
 
             // Check emergency status
-            bool isEmergency = totalDD > 0 && DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+            bool isEmergency = oracleAvailable && totalDD > 0 && DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+            const std::string mintingRestrictedReason = !oracleAvailable ? "oracle_unavailable" :
+                (isEmergency ? "err_active" : "none");
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("health_percentage", systemHealth);
@@ -474,6 +482,9 @@ RPCHelpMan getdigidollarstats()
             result.pushKV("total_dd_supply", int64_t{totalDD});
             result.pushKV("oracle_price_cents", int64_t{oraclePriceCents});   // Rounded to cents for display
             result.pushKV("oracle_price_micro_usd", int64_t{oraclePriceMicroUSD}); // Full precision micro-USD
+            result.pushKV("oracle_available", oracleAvailable);
+            result.pushKV("oracle_status", oracleAvailable ? "available" : "unavailable");
+            result.pushKV("minting_restricted_reason", mintingRestrictedReason);
             result.pushKV("is_emergency", isEmergency);
 
             // Add fields expected by tests
@@ -529,7 +540,11 @@ RPCHelpMan getdigidollarstats()
             double errRatio = DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRAdjustment(systemHealth);
             double burnMultiplier = 1.0;
             std::string errDescription;
-            if (systemHealth >= 100) {
+            if (!oracleAvailable) {
+                errDescription = "Oracle unavailable: ERR cannot be evaluated";
+                errRatio = 1.0;
+                burnMultiplier = 1.0;
+            } else if (systemHealth >= 100) {
                 errDescription = "Normal (1.0x burn)";
                 errRatio = 1.0;
                 burnMultiplier = 1.0;
@@ -602,7 +617,8 @@ static RPCHelpMan getdcamultiplier()
                 }
             } else {
                 CAmount oraclePriceMicroUSD = OracleBundleManager::GetInstance().GetLatestPrice();
-                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                    MockOracleManager::GetInstance().IsEnabled()) {
                     oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
                 }
                 systemHealth = GetDigiDollarRpcSystemHealth(request, oraclePriceMicroUSD, 0);
@@ -693,7 +709,8 @@ static RPCHelpMan calculatecollateralrequirement()
             } else {
                 // Use real oracle price from OracleIntegration (returns micro-USD)
                 oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                    MockOracleManager::GetInstance().IsEnabled()) {
                     // Fall back to mock oracle ONLY in regtest
                     oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
                 }
@@ -1068,7 +1085,8 @@ RPCHelpMan mintdigidollar()
 
             // Get oracle price in micro-USD from real oracle system first, fall back to mock only in regtest
             CAmount oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                MockOracleManager::GetInstance().IsEnabled()) {
                 oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
             }
             if (oraclePriceMicroUSD <= 0) {
@@ -1190,6 +1208,51 @@ RPCHelpMan mintdigidollar()
                 LogPrintf("DigiDollar RPC Mint: UTXO fragmentation detected (%zu UTXOs). Auto-consolidating...\n",
                           availableUtxos.size());
 
+                if (!pwallet->GetBroadcastTransactions()) {
+                    throw JSONRPCError(RPC_WALLET_ERROR,
+                        "Auto-consolidation requires wallet transaction broadcast to be enabled");
+                }
+
+                auto sort_available_utxos_by_value = [&]() {
+                    std::sort(availableUtxos.begin(), availableUtxos.end(),
+                        [&](const COutPoint& a, const COutPoint& b) {
+                            const CAmount av = utxoValues.count(a) ? utxoValues.at(a) : 0;
+                            const CAmount bv = utxoValues.count(b) ? utxoValues.at(b) : 0;
+                            if (av != bv) return av > bv;
+                            return a < b;
+                        });
+                };
+
+                auto refresh_available_utxos = [&]() {
+                    availableUtxos.clear();
+                    utxoValues.clear();
+                    LOCK(pwallet->cs_wallet);
+                    wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
+                    for (const wallet::COutput& coin : coins.All()) {
+                        availableUtxos.push_back(coin.outpoint);
+                        utxoValues[coin.outpoint] = coin.txout.nValue;
+                    }
+                    sort_available_utxos_by_value();
+                };
+
+                auto broadcast_and_commit_consolidation = [&](const CTransactionRef& consolidation_tx) {
+                    std::string broadcast_error;
+                    const bool broadcast_success = pwallet->chain().broadcastTransaction(
+                        consolidation_tx,
+                        wallet::DEFAULT_TRANSACTION_MAXFEE,
+                        true,
+                        broadcast_error);
+                    if (!broadcast_success) {
+                        throw JSONRPCError(RPC_TRANSACTION_REJECTED,
+                            strprintf("Auto-consolidation transaction rejected by mempool: %s", broadcast_error));
+                    }
+
+                    LOCK(pwallet->cs_wallet);
+                    pwallet->CommitTransaction(consolidation_tx, {}, {});
+                };
+
+                sort_available_utxos_by_value();
+
                 CAmount totalAvailable = 0;
                 for (const auto& [outpoint, value] : utxoValues) {
                     totalAvailable += value;
@@ -1244,24 +1307,12 @@ RPCHelpMan mintdigidollar()
 
                     const CTransactionRef& consolidation_tx = consolidation_result->tx;
                     consolidation_txid = consolidation_tx->GetHash().GetHex();
-                    {
-                        LOCK(pwallet->cs_wallet);
-                        pwallet->CommitTransaction(consolidation_tx, {}, {});
-                    }
+                    broadcast_and_commit_consolidation(consolidation_tx);
 
                     LogPrintf("DigiDollar RPC Mint: Consolidation pass %d tx: %s (swept %.2f DGB from %zu inputs)\n",
                               pass, consolidation_txid, batchTotal / 100000000.0, batch_size);
 
-                    availableUtxos.clear();
-                    utxoValues.clear();
-                    {
-                        LOCK(pwallet->cs_wallet);
-                        wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
-                        for (const wallet::COutput& coin : coins.All()) {
-                            availableUtxos.push_back(coin.outpoint);
-                            utxoValues[coin.outpoint] = coin.txout.nValue;
-                        }
-                    }
+                    refresh_available_utxos();
                     LogPrintf("DigiDollar RPC Mint: After pass %d: %zu UTXOs available\n", pass, availableUtxos.size());
                 }
 
@@ -1286,24 +1337,12 @@ RPCHelpMan mintdigidollar()
 
                     const CTransactionRef& consolidation_tx = consolidation_result->tx;
                     consolidation_txid = consolidation_tx->GetHash().GetHex();
-                    {
-                        LOCK(pwallet->cs_wallet);
-                        pwallet->CommitTransaction(consolidation_tx, {}, {});
-                    }
+                    broadcast_and_commit_consolidation(consolidation_tx);
 
                     LogPrintf("DigiDollar RPC Mint: Single-pass consolidation tx: %s (swept %.2f DGB from %zu inputs)\n",
                               consolidation_txid, batchTotal / 100000000.0, availableUtxos.size());
 
-                    availableUtxos.clear();
-                    utxoValues.clear();
-                    {
-                        LOCK(pwallet->cs_wallet);
-                        wallet::CoinsResult coins = wallet::AvailableCoins(*pwallet);
-                        for (const wallet::COutput& coin : coins.All()) {
-                            availableUtxos.push_back(coin.outpoint);
-                            utxoValues[coin.outpoint] = coin.txout.nValue;
-                        }
-                    }
+                    refresh_available_utxos();
                 }
 
                 LogPrintf("DigiDollar RPC Mint: After consolidation: %zu UTXOs available (passes: %d)\n",
@@ -1913,7 +1952,8 @@ RPCHelpMan redeemdigidollar()
 
             // Get oracle price - use real oracle, fall back to mock only in regtest
             CAmount oraclePrice = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-            if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+            if (oraclePrice <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                MockOracleManager::GetInstance().IsEnabled()) {
                 oraclePrice = MockOracleManager::GetInstance().GetCurrentPrice();
             }
             if (oraclePrice <= 0) {
@@ -2358,7 +2398,8 @@ RPCHelpMan listdigidollarpositions()
                 int healthRatio = 0;
                 if (pos.dgb_collateral > 0 && pos.dd_minted > 0) {
                     CAmount oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-                    if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                    if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                        MockOracleManager::GetInstance().IsEnabled()) {
                         oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
                     }
                     if (oraclePriceMicroUSD > 0) {
@@ -3132,7 +3173,8 @@ static RPCHelpMan estimatecollateral()
             } else {
                 // Use real oracle price from OracleIntegration (returns micro-USD)
                 oraclePriceMicroUSD = OracleIntegration::GetCurrentOraclePriceMicroUSD();
-                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+                if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                    MockOracleManager::GetInstance().IsEnabled()) {
                     oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
                 }
                 if (oraclePriceMicroUSD <= 0) {
@@ -3740,6 +3782,14 @@ static RPCHelpMan getprotectionstatus()
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
+                        {RPCResult::Type::OBJ, "oracle", "Oracle availability and fail-closed minting status",
+                            {
+                                {RPCResult::Type::BOOL, "available", "Whether a live oracle price is available"},
+                                {RPCResult::Type::STR, "status", "Oracle status: available or unavailable"},
+                                {RPCResult::Type::BOOL, "minting_restricted", "Whether minting is restricted because the oracle is unavailable"},
+                                {RPCResult::Type::STR, "minting_restricted_reason", "Reason for minting restriction"}
+                            }
+                        },
                         {RPCResult::Type::OBJ, "dca", "Dynamic Collateral Adjustment status",
                             {
                                 {RPCResult::Type::BOOL, "active", "Whether DCA is currently active"},
@@ -3756,7 +3806,8 @@ static RPCHelpMan getprotectionstatus()
                                 {RPCResult::Type::NUM, "current_ratio", "Current system ratio (%)"},
                                 {RPCResult::Type::NUM, "err_ratio_bps", "ERR ratio in basis points"},
                                 {RPCResult::Type::NUM, "required_burn_per_10000", "DD burn required for 10000 cents under current ERR state"},
-                                {RPCResult::Type::STR, "status", "ERR status (normal/warning/active)"}
+                                {RPCResult::Type::STR, "status", "ERR status (normal/warning/active)"},
+                                {RPCResult::Type::STR, "evaluation_status", "priced or oracle_unavailable"}
                             }
                         },
                         {RPCResult::Type::OBJ, "volatility", "Volatility protection status",
@@ -3845,9 +3896,11 @@ static RPCHelpMan getprotectionstatus()
             // Oracle price
             OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
             CAmount oraclePriceMicroUSD = oracle_manager.GetLatestPrice();
-            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST) {
+            if (oraclePriceMicroUSD <= 0 && Params().GetChainType() == ChainType::REGTEST &&
+                MockOracleManager::GetInstance().IsEnabled()) {
                 oraclePriceMicroUSD = MockOracleManager::GetInstance().GetCurrentPrice();
             }
+            const bool oracleAvailable = oraclePriceMicroUSD > 0;
             CAmount oraclePriceMillicents = oraclePriceMicroUSD / 10;
 
             // System health
@@ -3860,9 +3913,16 @@ static RPCHelpMan getprotectionstatus()
             }
 
             auto tier = DynamicCollateralAdjustment::GetCurrentTier(systemHealth);
-            bool isEmergency = totalDD > 0 && DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
+            bool isEmergency = oracleAvailable && totalDD > 0 && DynamicCollateralAdjustment::IsSystemEmergency(systemHealth);
 
             UniValue result(UniValue::VOBJ);
+
+            UniValue oracle(UniValue::VOBJ);
+            oracle.pushKV("available", oracleAvailable);
+            oracle.pushKV("status", oracleAvailable ? "available" : "unavailable");
+            oracle.pushKV("minting_restricted", !oracleAvailable);
+            oracle.pushKV("minting_restricted_reason", oracleAvailable ? "none" : "oracle_unavailable");
+            result.pushKV("oracle", oracle);
 
             // DCA status
             UniValue dca(UniValue::VOBJ);
@@ -3878,11 +3938,12 @@ static RPCHelpMan getprotectionstatus()
             err.pushKV("active", isEmergency);
             err.pushKV("threshold", 100);
             err.pushKV("current_ratio", systemHealth);
-            err.pushKV("err_ratio_bps", DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRRatioBps(systemHealth));
-            err.pushKV("required_burn_per_10000", int64_t{
-                DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(10000, systemHealth)});
+            err.pushKV("err_ratio_bps", oracleAvailable ?
+                DigiDollar::ERR::EmergencyRedemptionRatio::CalculateERRRatioBps(systemHealth) : 10000);
+            err.pushKV("required_burn_per_10000", int64_t{oracleAvailable ?
+                DigiDollar::ERR::EmergencyRedemptionRatio::GetRequiredDDBurn(10000, systemHealth) : 10000});
             std::string errStatus;
-            if (totalDD == 0 || systemHealth >= 100) {
+            if (!oracleAvailable || totalDD == 0 || systemHealth >= 100) {
                 errStatus = "normal";
             } else if (systemHealth >= 95) {
                 errStatus = "warning";
@@ -3892,6 +3953,7 @@ static RPCHelpMan getprotectionstatus()
                 errStatus = "critical";
             }
             err.pushKV("status", errStatus);
+            err.pushKV("evaluation_status", oracleAvailable ? "priced" : "oracle_unavailable");
             result.pushKV("err", err);
 
             // Volatility protection
@@ -3913,7 +3975,9 @@ static RPCHelpMan getprotectionstatus()
             // Overall status
             UniValue overall(UniValue::VOBJ);
             std::string overallStatus;
-            if (totalDD == 0) {
+            if (!oracleAvailable) {
+                overallStatus = totalDD > 0 ? "critical" : "warning";
+            } else if (totalDD == 0) {
                 overallStatus = "secure";
             } else if (isEmergency && systemHealth < 85) {
                 overallStatus = "emergency";
@@ -3930,12 +3994,18 @@ static RPCHelpMan getprotectionstatus()
 
             UniValue activeProtections(UniValue::VARR);
             activeProtections.push_back("dca");
+            if (!oracleAvailable) {
+                activeProtections.push_back("oracle_fail_closed");
+            }
             if (isEmergency) {
                 activeProtections.push_back("err");
             }
             overall.pushKV("active_protections", activeProtections);
 
             UniValue warnings(UniValue::VARR);
+            if (!oracleAvailable) {
+                warnings.push_back("Oracle price unavailable; minting is paused");
+            }
             if (systemHealth > 0 && systemHealth < 150) {
                 warnings.push_back("System health below optimal threshold");
             }

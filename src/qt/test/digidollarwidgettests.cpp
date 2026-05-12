@@ -1839,11 +1839,13 @@ void DigiDollarWidgetTests::transactionsWidgetShowsRpcHistorySignsAndFields()
     const QString recvTxid = "b000000000000000000000000000000000000000000000000000000000000002";
     const QString redeemTxid = "b000000000000000000000000000000000000000000000000000000000000003";
     const QString mintTxid = "b000000000000000000000000000000000000000000000000000000000000004";
+    const QString emptyNoteTxid = "b000000000000000000000000000000000000000000000000000000000000005";
 
     pushTx(sendTxid.toStdString(), 500, false, "send", "multiple", "sendmany functional test", -1, 4);
     pushTx(recvTxid.toStdString(), 200, true, "receive", "TDlocalrecipient1", "local receive row", -1, 3);
     pushTx(redeemTxid.toStdString(), 1250, false, "redeem", "TDredeemaddress", "redeem note", 1, 2);
     pushTx(mintTxid.toStdString(), 700, true, "mint", "TDmintaddress", "mint note", 9, 1);
+    pushTx(emptyNoteTxid.toStdString(), 300, true, "receive", "TDempty", "", -1, 0);
 
     DigiDollarMiniGUI mini_gui(m_node);
     mini_gui.initModelForWallet(m_node, wallet);
@@ -1863,7 +1865,7 @@ void DigiDollarWidgetTests::transactionsWidgetShowsRpcHistorySignsAndFields()
 
     QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
     QVERIFY(table != nullptr);
-    QCOMPARE(table->rowCount(), 4);
+    QCOMPARE(table->rowCount(), 5);
 
     auto findRowByTxid = [&](const QString& txid) -> int {
         for (int row = 0; row < table->rowCount(); ++row) {
@@ -1876,7 +1878,8 @@ void DigiDollarWidgetTests::transactionsWidgetShowsRpcHistorySignsAndFields()
     };
 
     auto checkRow = [&](const QString& txid, const QString& type, const QString& amount,
-                        const QString& lockPeriod, const QString& note) {
+                        const QString& lockPeriod, const QString& note,
+                        const QString& noteTooltip = QString()) {
         const int row = findRowByTxid(txid);
         QVERIFY2(row >= 0, qPrintable(QString("missing DD transaction row for %1").arg(txid)));
         QTableWidgetItem* txidItem = table->item(row, 5);
@@ -1887,7 +1890,7 @@ void DigiDollarWidgetTests::transactionsWidgetShowsRpcHistorySignsAndFields()
         QCOMPARE(table->item(row, 2)->text(), amount);
         QCOMPARE(table->item(row, 3)->text(), lockPeriod);
         QCOMPARE(table->item(row, 4)->text(), note);
-        QCOMPARE(table->item(row, 4)->toolTip(), note);
+        QCOMPARE(table->item(row, 4)->toolTip(), noteTooltip.isNull() ? note : noteTooltip);
         QCOMPARE(table->item(row, 6)->text(), QString("Pending"));
     };
 
@@ -1895,6 +1898,7 @@ void DigiDollarWidgetTests::transactionsWidgetShowsRpcHistorySignsAndFields()
     checkRow(recvTxid, "Receive", "+$2.00 DD", "-", "local receive row");
     checkRow(redeemTxid, "Redeem 30-day", "-$12.50 DD", "30 days", "redeem note");
     checkRow(mintTxid, "Mint 10-yr", "+$7.00 DD", "10 years", "mint note");
+    checkRow(emptyNoteTxid, "Receive", "+$3.00 DD", "-", "", QString("No note"));
 }
 
 // Regression test for the DD Vault "Lock Tier" column truncation: with the

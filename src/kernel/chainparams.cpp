@@ -695,23 +695,23 @@ private:
         //
         // Production testnet oracle nodes.
         vOracleNodes = {
-            { 0, ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12030",  true},  // Jared
-            { 1, ParsePubKey("033dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digibyte.io:12030",  true},  // Green Candle
-            { 2, ParsePubKey("03172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digibyte.io:12030",  true},  // Bastian
-            { 3, ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12030",  true},  // DanGB
-            { 4, ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12030",  true},  // Shenger
-            { 5, ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12030",  true},  // Ycagel
-            { 6, ParsePubKey("037a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digibyte.io:12030",  true},  // Aussie
-            { 7, ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12030",  true},  // LookInto
-            { 8, ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12030",  true},  // JohnnyLawDGB
-            { 9, ParsePubKey("02d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "129.212.182.152:12030",      true},  // Ogilvie
-            {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digibyte.io:12030", true},  // ChopperBrian
-            {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digibyte.io:12030", true},  // hallvardo (key rotated for RC31)
-            {12, ParsePubKey("0375d7494b55ebc3874450954ac5caca402bbd068467a89d48fe877f3e2d09eda9"), "oracle13.digibyte.io:12030", true},  // DaPunzy (key rotated for RC31)
-            {13, ParsePubKey("024770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573"), "oracle14.digibyte.io:12030", true},  // DigiByteForce (key rotated for RC31)
-            {14, ParsePubKey("03f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digibyte.io:12030", true},  // Neel (RC30)
-            {15, ParsePubKey("03447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digibyte.io:12030", true},  // DigiSwarm (RC30)
-            {16, ParsePubKey("0283b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digibyte.io:12030", true},  // GTO90 (RC30)
+            { 0, ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12031",  true},  // Jared
+            { 1, ParsePubKey("033dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digibyte.io:12031",  true},  // Green Candle
+            { 2, ParsePubKey("03172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digibyte.io:12031",  true},  // Bastian
+            { 3, ParsePubKey("03546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digibyte.io:12031",  true},  // DanGB
+            { 4, ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digibyte.io:12031",  true},  // Shenger
+            { 5, ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digibyte.io:12031",  true},  // Ycagel
+            { 6, ParsePubKey("037a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digibyte.io:12031",  true},  // Aussie
+            { 7, ParsePubKey("032d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digibyte.io:12031",  true},  // LookInto
+            { 8, ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digibyte.io:12031",  true},  // JohnnyLawDGB
+            { 9, ParsePubKey("02d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "129.212.182.152:12031",      true},  // Ogilvie
+            {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digibyte.io:12031", true},  // ChopperBrian
+            {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digibyte.io:12031", true},  // hallvardo (key rotated for RC31)
+            {12, ParsePubKey("0375d7494b55ebc3874450954ac5caca402bbd068467a89d48fe877f3e2d09eda9"), "oracle13.digibyte.io:12031", true},  // DaPunzy (key rotated for RC31)
+            {13, ParsePubKey("024770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573"), "oracle14.digibyte.io:12031", true},  // DigiByteForce (key rotated for RC31)
+            {14, ParsePubKey("03f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digibyte.io:12031", true},  // Neel (RC30)
+            {15, ParsePubKey("03447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digibyte.io:12031", true},  // DigiSwarm (RC30)
+            {16, ParsePubKey("0283b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digibyte.io:12031", true},  // GTO90 (RC30)
         };
         //
         // LOCAL MINI-TESTNET TESTING (disabled; retained for future use).

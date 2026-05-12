@@ -5,6 +5,8 @@
 #include <oracle/musig2_session.h>
 
 #include <chainparams.h>
+#include <hash.h>
+#include <oracle/musig2_messages.h>
 #include <logging.h>
 #include <primitives/oracle.h>
 #include <random.h>
@@ -42,6 +44,18 @@ uint16_t ConfiguredMuSig2BitmapSlots()
     const int configured_total = std::max(consensus.nOracleTotalOracles, consensus.nOraclePubkeyCount);
     if (configured_total <= 0 || configured_total > 256) return 0;
     return static_cast<uint16_t>(configured_total);
+}
+
+std::vector<unsigned char> BuildRawParticipationBitmap(const std::vector<uint8_t>& oracle_ids, uint16_t total_oracles)
+{
+    if (oracle_ids.empty()) return {};
+    if (total_oracles == 0 || total_oracles > 256) return {};
+    std::vector<unsigned char> bitmap((total_oracles + 7) / 8, 0);
+    for (const uint8_t id : oracle_ids) {
+        if (id >= total_oracles) return {};
+        bitmap[id / 8] |= static_cast<unsigned char>(1U << (id % 8));
+    }
+    return bitmap;
 }
 
 } // namespace
@@ -357,6 +371,45 @@ void MuSig2SigningSession::TrimNoncesToThreshold()
              before, m_pubnonces.size(), m_min_signers, m_epoch);
 }
 
+bool MuSig2SigningSession::TrimNoncesToParticipants(const std::vector<uint8_t>& participants)
+{
+    LOCK(m_mutex);
+
+    if (m_state != MuSig2SessionState::NONCES_COMPLETE &&
+        m_state != MuSig2SessionState::SIGNING) {
+        return false;
+    }
+    if (participants.size() < static_cast<size_t>(m_min_signers)) return false;
+
+    std::set<uint8_t> keep(participants.begin(), participants.end());
+    if (keep.size() != participants.size()) return false;
+    for (uint8_t id : keep) {
+        if (m_pubnonces.find(id) == m_pubnonces.end()) return false;
+    }
+
+    if (m_participants_frozen) {
+        if (m_pubnonces.size() != keep.size()) return false;
+        for (const auto& [id, nonce] : m_pubnonces) {
+            if (!keep.count(id)) return false;
+        }
+        return true;
+    }
+
+    const size_t before = m_pubnonces.size();
+    for (auto it = m_pubnonces.begin(); it != m_pubnonces.end(); ) {
+        if (!keep.count(it->first)) {
+            it = m_pubnonces.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    m_participants_frozen = true;
+    LogPrintf("Oracle: Trimmed nonces from %zu to %zu proposed participants (threshold=%zu, epoch=%d)\n",
+             before, m_pubnonces.size(), m_min_signers, m_epoch);
+    return m_pubnonces.size() == keep.size();
+}
+
 bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
 {
     LOCK(m_mutex);
@@ -386,6 +439,45 @@ bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
         m_state = MuSig2SessionState::FAILED;
         return false;
     }
+
+    std::vector<uint8_t> participants;
+    participants.reserve(m_pubnonces.size());
+    CHashWriter nonce_hasher(0);
+    nonce_hasher << std::string("DigiDollar/MuSig2NonceSet/v1");
+    nonce_hasher << Params().GetConsensus().hashGenesisBlock;
+    nonce_hasher << m_epoch;
+    for (const auto& [id, nonce] : m_pubnonces) {
+        participants.push_back(id);
+        unsigned char ser_nonce[66];
+        if (!secp256k1_musig_pubnonce_serialize(m_ctx, ser_nonce, &nonce)) {
+            m_state = MuSig2SessionState::FAILED;
+            return false;
+        }
+        std::vector<unsigned char> nonce_bytes(ser_nonce, ser_nonce + 66);
+        nonce_hasher << id;
+        nonce_hasher << nonce_bytes;
+    }
+
+    m_message_hash.SetNull();
+    std::memcpy(m_message_hash.begin(), msg32, 32);
+    m_nonce_set_hash = nonce_hasher.GetHash();
+
+    const std::vector<unsigned char> bitmap =
+        BuildRawParticipationBitmap(participants, ConfiguredMuSig2BitmapSlots());
+    if (bitmap.empty()) {
+        m_state = MuSig2SessionState::FAILED;
+        return false;
+    }
+
+    CHashWriter context_hasher(0);
+    context_hasher << std::string("DigiDollar/MuSig2SessionContext/v1");
+    context_hasher << Params().GetConsensus().hashGenesisBlock;
+    context_hasher << m_epoch;
+    context_hasher << static_cast<uint8_t>(ORACLE_MUSIG2_SESSION_CONTEXT_VERSION);
+    context_hasher << m_message_hash;
+    context_hasher << bitmap;
+    context_hasher << m_nonce_set_hash;
+    m_session_context_id = context_hasher.GetHash();
 
     m_state = MuSig2SessionState::SIGNING;
     return true;
@@ -583,6 +675,24 @@ int64_t MuSig2SigningSession::GetSignedTimestamp() const
 {
     LOCK(m_mutex);
     return m_signed_timestamp;
+}
+
+uint256 MuSig2SigningSession::GetSessionContextId() const
+{
+    LOCK(m_mutex);
+    return m_session_context_id;
+}
+
+uint256 MuSig2SigningSession::GetNonceSetHash() const
+{
+    LOCK(m_mutex);
+    return m_nonce_set_hash;
+}
+
+uint256 MuSig2SigningSession::GetMessageHash() const
+{
+    LOCK(m_mutex);
+    return m_message_hash;
 }
 
 // ============================================================================

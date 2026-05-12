@@ -5970,6 +5970,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             Misbehaving(*peer, 10, "invalid MuSig2 partial signature message");
             return;
         }
+        if (partial_sig_msg.context_version != ORACLE_MUSIG2_SESSION_CONTEXT_VERSION ||
+            partial_sig_msg.session_context_id.IsNull()) {
+            LogPrint(BCLog::NET,
+                     "MuSig2 partial sig missing valid session context (epoch=%d oracle=%u peer=%d)\n",
+                     partial_sig_msg.epoch, partial_sig_msg.oracle_id, pfrom.GetId());
+            Misbehaving(*peer, 10, "MuSig2 partial sig missing session context");
+            return;
+        }
 
         // MuSig2 v0x03 relay is limited to the active consensus pubkey roster.
         if (!IsAuthorizedMuSig2OracleIdForRelay(m_chainparams, partial_sig_msg.oracle_id)) {

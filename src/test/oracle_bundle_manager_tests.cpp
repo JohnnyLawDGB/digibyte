@@ -793,6 +793,30 @@ BOOST_AUTO_TEST_CASE(compute_consensus_values_correctness)
     BOOST_CHECK_EQUAL(consensus_timestamp, expected_median_ts);
 }
 
+BOOST_AUTO_TEST_CASE(rc36_compute_consensus_values_for_selected_oracles_only)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+    manager.SetMinOracleCount(3);
+
+    const int64_t now = GetTime();
+    manager.InjectTestMessage(MakeRegtestOracleMessage(0, 1000, now - 3));
+    manager.InjectTestMessage(MakeRegtestOracleMessage(1, 1100, now - 2));
+    manager.InjectTestMessage(MakeRegtestOracleMessage(2, 900, now - 1));
+    manager.InjectTestMessage(MakeRegtestOracleMessage(3, 1000000, now));
+
+    uint64_t selected_price = 0;
+    int64_t selected_timestamp = 0;
+    BOOST_CHECK(manager.ComputeConsensusValuesForOracles({0, 1, 2}, selected_price, selected_timestamp));
+    BOOST_CHECK_EQUAL(selected_price, 1000U);
+    BOOST_CHECK_EQUAL(selected_timestamp, now - 2);
+
+    uint64_t missing_price = 0;
+    int64_t missing_timestamp = 0;
+    BOOST_CHECK(!manager.ComputeConsensusValuesForOracles({0, 1, 4}, missing_price, missing_timestamp));
+}
+
 /**
  * Test: BroadcastConsensusProposal tracks broadcast epochs (no spam)
  */

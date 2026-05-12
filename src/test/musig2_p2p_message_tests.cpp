@@ -31,6 +31,7 @@ static OracleMusigNonceMsg MakeNonceMsg(int32_t epoch, uint8_t oracle_id, size_t
 static OracleMusigPartialSigMsg MakePartialSigMsg(int32_t epoch, uint8_t oracle_id, size_t sig_size = 32) {
     OracleMusigPartialSigMsg msg;
     msg.epoch = epoch;
+    msg.session_context_id = uint256(1);
     msg.oracle_id = oracle_id;
     msg.partial_sig.assign(sig_size, 0xCC);
     msg.signature.assign(64, 0xDD); // dummy sig for IsValid()
@@ -316,6 +317,7 @@ BOOST_AUTO_TEST_CASE(rh03_partialsig_unique_hashes)
 {
     OracleMusigPartialSigMsg base;
     base.epoch = 100;
+    base.session_context_id = uint256(1);
     base.oracle_id = 5;
     base.partial_sig.assign(32, 0xAA);
 
@@ -334,7 +336,39 @@ BOOST_AUTO_TEST_CASE(rh03_partialsig_unique_hashes)
     m3.partial_sig[0] = 0xBB;
     hashes.insert(m3.GetHash());
 
-    BOOST_CHECK_EQUAL(hashes.size(), 4U);
+    OracleMusigPartialSigMsg m4 = base;
+    m4.session_context_id = uint256(2);
+    hashes.insert(m4.GetHash());
+
+    BOOST_CHECK_EQUAL(hashes.size(), 5U);
+}
+
+BOOST_AUTO_TEST_CASE(rc36_partialsig_auth_binds_session_context)
+{
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey pubkey(key.GetPubKey());
+
+    OracleMusigPartialSigMsg msg;
+    msg.epoch = 100;
+    msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    msg.session_context_id = uint256(1);
+    msg.oracle_id = 5;
+    msg.partial_sig.assign(32, 0xAA);
+    BOOST_REQUIRE(msg.Sign(key));
+    BOOST_CHECK(msg.VerifySignature(pubkey));
+
+    OracleMusigPartialSigMsg changed_context = msg;
+    changed_context.session_context_id = uint256(2);
+    BOOST_CHECK(msg.GetHash() != changed_context.GetHash());
+    BOOST_CHECK(msg.GetSignatureHash() != changed_context.GetSignatureHash());
+    BOOST_CHECK(!changed_context.VerifySignature(pubkey));
+
+    OracleMusigPartialSigMsg changed_version = msg;
+    ++changed_version.context_version;
+    BOOST_CHECK(msg.GetHash() != changed_version.GetHash());
+    BOOST_CHECK(msg.GetSignatureHash() != changed_version.GetSignatureHash());
+    BOOST_CHECK(!changed_version.VerifySignature(pubkey));
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -366,6 +400,7 @@ BOOST_AUTO_TEST_CASE(rh03_partialsig_serialization_roundtrip)
 {
     OracleMusigPartialSigMsg orig;
     orig.epoch = 12345;
+    orig.session_context_id = uint256(1);
     orig.oracle_id = 7;
     orig.partial_sig.assign(32, 0x42);
     orig.signature.assign(64, 0xBB); // RH-24: signature now required for IsValid()
@@ -377,6 +412,8 @@ BOOST_AUTO_TEST_CASE(rh03_partialsig_serialization_roundtrip)
     ss >> recovered;
 
     BOOST_CHECK_EQUAL(recovered.epoch, orig.epoch);
+    BOOST_CHECK_EQUAL(recovered.context_version, orig.context_version);
+    BOOST_CHECK(recovered.session_context_id == orig.session_context_id);
     BOOST_CHECK_EQUAL(recovered.oracle_id, orig.oracle_id);
     BOOST_CHECK(recovered.partial_sig == orig.partial_sig);
     BOOST_CHECK(recovered.IsValid());

@@ -28,10 +28,11 @@
  * short-circuits `if (m_state != SIGNING) return false;`
  * (musig2_session.cpp:379) because the just-created session is in CREATED
  * state. Control falls to the `else` branch at :154 which runs
- * `m_pending_partialsigs[msg.epoch].push_back(msg)`. The comment at :157
- * promises replay once the local session enters SIGNING. The post-fix
- * invariant is that the queue stays capped, stale epochs are pruned,
- * Clear() resets it, and SIGNING sessions drain it into verified partials.
+ * `m_pending_partialsigs[msg.epoch][msg.session_context_id].push_back(msg)`.
+ * The post-fix invariant is that context-less messages are rejected, the
+ * queue stays capped per context and per epoch, stale epochs are pruned,
+ * Clear() resets it, and SIGNING sessions drain the matching context into
+ * verified partials.
  *
  * Authenticated rate-limit context
  * ─────────────────────────────────
@@ -41,6 +42,8 @@
  *   rate from ONE authenticated attacker peer is 600/hr. Each buffered
  *   `OracleMusigPartialSigMsg` retains:
  *       - int32_t epoch             (4 bytes, inline)
+ *       - uint8_t context_version   (1 byte, inline)
+ *       - uint256 session_context_id (32 bytes, inline)
  *       - uint8_t oracle_id         (1 byte, inline)
  *       - vector<uchar> partial_sig (32 bytes on heap + sizeof(vector))
  *       - vector<uchar> signature   (64 bytes on heap + sizeof(vector))
@@ -181,12 +184,22 @@ static OracleMusigPartialSigMsg MakeMsg(int32_t epoch, uint8_t oracle_id,
 {
     OracleMusigPartialSigMsg m;
     m.epoch = epoch;
+    m.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    m.session_context_id = uint256(1);
     m.oracle_id = oracle_id;
     m.partial_sig = MakeParseableScalar(seed);
     m.signature.assign(64, 0x00);
     for (size_t i = 0; i < 64; ++i) {
         m.signature[i] = static_cast<unsigned char>(seed + i);
     }
+    return m;
+}
+
+static OracleMusigPartialSigMsg MakeMsgForContext(int32_t epoch, uint8_t oracle_id,
+                                                  uint64_t seed, const uint256& context_id)
+{
+    OracleMusigPartialSigMsg m = MakeMsg(epoch, oracle_id, seed);
+    m.session_context_id = context_id;
     return m;
 }
 
@@ -304,6 +317,56 @@ BOOST_AUTO_TEST_CASE(rh58_buffer_grows_without_bound_under_direct_ingest)
                        << "/" << ingest_delta << " bytes (≈"
                        << (ingest_delta ? 100 * reclaimed / ingest_delta : 0)
                        << "%).");
+#endif
+}
+
+BOOST_AUTO_TEST_CASE(rh58_contextless_partialsig_rejected_before_buffering)
+{
+    OracleSigningOrchestrator orch;
+
+    const int32_t kEpoch = 43;
+    OracleMusigPartialSigMsg msg = MakeMsg(kEpoch, 0, 1);
+    msg.session_context_id.SetNull();
+
+    orch.IngestRemotePartialSig(msg);
+
+    BOOST_CHECK_MESSAGE(!orch.HasSession(kEpoch),
+        "RC36: context-less partial signatures must be rejected before lazy "
+        "session creation or pending buffer insertion.");
+}
+
+BOOST_AUTO_TEST_CASE(rh58_context_spam_is_bounded_per_epoch)
+{
+    OracleSigningOrchestrator orch;
+
+    const int32_t kEpoch = 44;
+    const size_t kN = 2000;
+    const size_t before_heap = HeapBytesInUse();
+
+    for (size_t i = 0; i < kN; ++i) {
+        OracleMusigPartialSigMsg msg = MakeMsgForContext(
+            kEpoch,
+            static_cast<uint8_t>(i % 7),
+            i + 1,
+            uint256(i + 1));
+        orch.IngestRemotePartialSig(msg);
+    }
+
+    BOOST_CHECK_MESSAGE(orch.HasSession(kEpoch),
+        "Valid context-bearing early partial sigs still lazy-create a session "
+        "so honest faster peers can be replayed once the local context is ready.");
+
+#if RH58_HAVE_MALLINFO2
+    const size_t after_heap = HeapBytesInUse();
+    const size_t delta = (after_heap > before_heap) ? (after_heap - before_heap) : 0;
+    constexpr size_t kContextSpamBoundBytes = 256 * 1024;
+    BOOST_CHECK_MESSAGE(delta <= kContextSpamBoundBytes,
+        "RC36 context-spam bound: after " << kN << " unique-context "
+        "partial sigs, heap grew by " << delta << " bytes; expected <= "
+        << kContextSpamBoundBytes << " because pending partials are capped "
+        "per epoch as well as per context.");
+#else
+    (void)before_heap;
 #endif
 }
 

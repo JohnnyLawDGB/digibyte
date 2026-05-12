@@ -599,6 +599,63 @@ bool OracleBundleManager::ComputeConsensusValues(uint64_t& consensus_price, int6
     return true;
 }
 
+bool OracleBundleManager::ComputeConsensusValuesForOracles(const std::vector<uint8_t>& oracle_ids,
+                                                           uint64_t& consensus_price,
+                                                           int64_t& consensus_timestamp) const
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+
+    if (static_cast<int>(oracle_ids.size()) < min_oracle_count) return false;
+
+    const int64_t now = GetTime();
+    COracleBundle temp;
+    temp.messages.reserve(oracle_ids.size());
+
+    std::set<uint8_t> seen;
+    for (uint8_t id : oracle_ids) {
+        if (!seen.insert(id).second) return false;
+        if (!IsActiveConsensusOracle(id)) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Signing context cannot compute consensus: oracle %u outside active keyset\n",
+                     id);
+            return false;
+        }
+        auto it = pending_messages.find(id);
+        if (it == pending_messages.end()) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Signing context waiting for price message from oracle %u\n",
+                     id);
+            return false;
+        }
+        if (!IsFreshLiveOracleTimestamp(it->second.timestamp, now)) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Signing context price from oracle %u is stale/future timestamp=%lld now=%lld\n",
+                     id, static_cast<long long>(it->second.timestamp), static_cast<long long>(now));
+            return false;
+        }
+        temp.messages.push_back(it->second);
+    }
+
+    if (static_cast<int>(temp.messages.size()) < min_oracle_count) return false;
+
+    const Consensus::Params& cparams = Params().GetConsensus();
+    const CAmount price = CalculateConsensusPrice(temp, cparams);
+    if (price <= 0) return false;
+    consensus_price = static_cast<uint64_t>(price);
+
+    std::vector<int64_t> timestamps;
+    timestamps.reserve(temp.messages.size());
+    for (const auto& msg : temp.messages) {
+        timestamps.push_back(msg.timestamp);
+    }
+    std::sort(timestamps.begin(), timestamps.end());
+    const size_t mid = timestamps.size() / 2;
+    consensus_timestamp = (timestamps.size() % 2 == 0) ?
+        (timestamps[mid - 1] + timestamps[mid]) / 2 : timestamps[mid];
+
+    return true;
+}
+
 bool OracleBundleManager::ValidateConsensusProposal(uint64_t consensus_price, int64_t consensus_timestamp) const
 {
     if (consensus_price < ORACLE_MIN_PRICE_MICRO_USD ||
@@ -1362,8 +1419,11 @@ bool OracleBundleManager::CompleteMuSig2Session(int32_t block_height)
 
     OracleMusigPartialSigMsg msg;
     msg.epoch = epoch;
+    msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    msg.session_context_id = session.GetSessionContextId();
     msg.oracle_id = local_oracle_id;
     msg.partial_sig.resize(32);
+    if (msg.session_context_id.IsNull()) return false;
 
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
     if (!ctx) return false;
@@ -1442,6 +1502,13 @@ bool OracleBundleManager::ProcessRemoteMusigNonce(const OracleMusigNonceMsg& msg
 bool OracleBundleManager::ProcessRemoteMusigPartialSig(const OracleMusigPartialSigMsg& msg)
 {
     if (!msg.IsValid()) return false;
+    if (msg.context_version != ORACLE_MUSIG2_SESSION_CONTEXT_VERSION ||
+        msg.session_context_id.IsNull()) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Rejecting MuSig2 partial sig from oracle %u epoch %d without valid session context\n",
+                 msg.oracle_id, msg.epoch);
+        return false;
+    }
 
     // RH-24: Verify authentication signature before processing
     {
@@ -1464,6 +1531,14 @@ bool OracleBundleManager::ProcessRemoteMusigPartialSig(const OracleMusigPartialS
     }
 
     MuSig2SigningSession& session = it->second;
+    const uint256 session_context = session.GetSessionContextId();
+    if (session_context.IsNull() || session_context != msg.session_context_id) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Rejecting MuSig2 partial sig from oracle %u epoch %d due context mismatch msg=%s session=%s\n",
+                 msg.oracle_id, msg.epoch, msg.session_context_id.ToString(),
+                 session_context.ToString());
+        return false;
+    }
 
     // Deserialize the 32-byte partial sig
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);

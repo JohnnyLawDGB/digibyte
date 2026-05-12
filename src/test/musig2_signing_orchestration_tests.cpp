@@ -142,6 +142,8 @@ static std::vector<OracleMusigPartialSigMsg> MakeThresholdPartialSigMessages(
 
         OracleMusigPartialSigMsg msg;
         msg.epoch = epoch;
+        msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+        msg.session_context_id = signing_session.GetSessionContextId();
         msg.oracle_id = oracle_id;
         msg.partial_sig.resize(32);
         BOOST_REQUIRE(secp256k1_musig_partial_sig_serialize(ctx, msg.partial_sig.data(), &partial_sig));

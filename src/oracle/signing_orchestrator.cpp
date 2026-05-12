@@ -25,12 +25,26 @@
 std::unique_ptr<OracleSigningOrchestrator> g_signing_orchestrator;
 
 namespace {
+constexpr size_t MAX_PENDING_PARTIALSIGS_PER_CONTEXT = 32;   // > any honest oracle count
+constexpr size_t MAX_PENDING_PARTIALSIG_CONTEXTS_PER_EPOCH = 8;
+constexpr size_t MAX_PENDING_PARTIALSIGS_PER_EPOCH = 128;
+constexpr size_t MAX_PENDING_PARTIALSIG_EPOCHS = 8;           // +/- 4 epochs around current
+
 int32_t GetEpochStartHeight(int32_t epoch)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
     int32_t epoch_length = consensus.nDDOracleEpochBlocks;
     if (epoch_length <= 0) epoch_length = 1440;
     return epoch * epoch_length;
+}
+
+size_t CountPendingPartialSigsForEpoch(const std::map<uint256, std::vector<OracleMusigPartialSigMsg>>& contexts)
+{
+    size_t count = 0;
+    for (const auto& [context_id, partials] : contexts) {
+        count += partials.size();
+    }
+    return count;
 }
 } // namespace
 
@@ -148,6 +162,14 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
 
 void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialSigMsg& msg)
 {
+    if (msg.context_version != ORACLE_MUSIG2_SESSION_CONTEXT_VERSION ||
+        msg.session_context_id.IsNull()) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Ignoring MuSig2 partial sig for epoch %d oracle %u without valid session context\n",
+                 msg.epoch, msg.oracle_id);
+        return;
+    }
+
     // RC30: auto-create the session so partial sigs arriving from faster peers
     // (who already progressed past NONCES_COMPLETE) aren't lost. Session is
     // also needed to hold a pending buffer if local side is still in
@@ -188,6 +210,16 @@ bool OracleSigningOrchestrator::TryApplyRemotePartialSig(const OracleMusigPartia
                                                          MuSig2SigningSession& session) const
 {
     if (msg.partial_sig.size() != 32) return false;
+    if (msg.context_version != ORACLE_MUSIG2_SESSION_CONTEXT_VERSION ||
+        msg.session_context_id.IsNull()) return false;
+    const uint256 session_context = session.GetSessionContextId();
+    if (session_context.IsNull() || msg.session_context_id != session_context) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Rejected MuSig2 partial sig for epoch %d oracle %u: context mismatch msg=%s session=%s\n",
+                 msg.epoch, msg.oracle_id, msg.session_context_id.ToString(),
+                 session_context.ToString());
+        return false;
+    }
 
     secp256k1_musig_partial_sig partial_sig;
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
@@ -213,47 +245,76 @@ bool OracleSigningOrchestrator::TryApplyRemotePartialSig(const OracleMusigPartia
 
 void OracleSigningOrchestrator::BufferPendingPartialSig(const OracleMusigPartialSigMsg& msg)
 {
-    // Keep early partial sig replay bounded. Honest epochs need at most one
-    // message per oracle; malformed overflow is dropped until the next epoch.
-    constexpr size_t MAX_PENDING_PER_EPOCH = 32;   // > any honest oracle count
-    constexpr size_t MAX_PENDING_EPOCHS    = 8;    // ±4 epochs around current
+    // Keep early partial sig replay bounded. Honest epochs need one context
+    // with at most one message per oracle. Context-level and epoch-level caps
+    // prevent a peer from bypassing the per-context limit by grinding random
+    // session_context_id values.
+    auto& epoch_contexts = m_pending_partialsigs[msg.epoch];
+    auto context_it = epoch_contexts.find(msg.session_context_id);
+    if (context_it == epoch_contexts.end()) {
+        const size_t total_pending = CountPendingPartialSigsForEpoch(epoch_contexts);
+        if (epoch_contexts.size() >= MAX_PENDING_PARTIALSIG_CONTEXTS_PER_EPOCH ||
+            total_pending >= MAX_PENDING_PARTIALSIGS_PER_EPOCH) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Dropping buffered partial sig for epoch %d oracle %d context=%s: pending epoch cap reached (contexts=%zu total=%zu)\n",
+                     msg.epoch, msg.oracle_id, msg.session_context_id.ToString(),
+                     epoch_contexts.size(), total_pending);
+            return;
+        }
+        context_it = epoch_contexts.emplace(msg.session_context_id, std::vector<OracleMusigPartialSigMsg>{}).first;
+    }
 
-    auto& epoch_buf = m_pending_partialsigs[msg.epoch];
-    auto existing = std::find_if(epoch_buf.begin(), epoch_buf.end(),
+    auto& context_buf = context_it->second;
+    auto existing = std::find_if(context_buf.begin(), context_buf.end(),
                                  [&msg](const OracleMusigPartialSigMsg& pending) {
                                      return pending.oracle_id == msg.oracle_id;
                                  });
-    if (existing != epoch_buf.end()) {
+    if (existing != context_buf.end()) {
         *existing = msg;
         LogPrint(BCLog::DIGIDOLLAR,
-                 "Oracle: Replaced buffered partial sig for epoch %d oracle %d (session not SIGNING yet)\n",
-                 msg.epoch, msg.oracle_id);
+                 "Oracle: Replaced buffered partial sig for epoch %d oracle %d context=%s (session not SIGNING yet)\n",
+                 msg.epoch, msg.oracle_id, msg.session_context_id.ToString());
         return;
     }
 
-    if (epoch_buf.size() < MAX_PENDING_PER_EPOCH) {
-        epoch_buf.push_back(msg);
+    const size_t total_pending = CountPendingPartialSigsForEpoch(epoch_contexts);
+    if (context_buf.size() >= MAX_PENDING_PARTIALSIGS_PER_CONTEXT ||
+        total_pending >= MAX_PENDING_PARTIALSIGS_PER_EPOCH) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Dropping buffered partial sig for epoch %d oracle %d context=%s: pending context/epoch cap reached (context=%zu total=%zu)\n",
+                 msg.epoch, msg.oracle_id, msg.session_context_id.ToString(),
+                 context_buf.size(), total_pending);
+        return;
     }
-    if (m_pending_partialsigs.size() > MAX_PENDING_EPOCHS) {
+
+    context_buf.push_back(msg);
+    if (m_pending_partialsigs.size() > MAX_PENDING_PARTIALSIG_EPOCHS) {
         m_pending_partialsigs.erase(m_pending_partialsigs.begin());
     }
     LogPrint(BCLog::DIGIDOLLAR,
-             "Oracle: Buffered partial sig for epoch %d oracle %d (session not SIGNING yet)\n",
-             msg.epoch, msg.oracle_id);
+             "Oracle: Buffered partial sig for epoch %d oracle %d context=%s (session not SIGNING yet)\n",
+             msg.epoch, msg.oracle_id, msg.session_context_id.ToString());
 }
 
 size_t OracleSigningOrchestrator::DrainPendingPartialSigsForEpoch(int32_t epoch,
                                                                   MuSig2SigningSession& session)
 {
     if (session.GetState() != MuSig2SessionState::SIGNING) return 0;
+    const uint256 session_context = session.GetSessionContextId();
+    if (session_context.IsNull()) return 0;
 
     std::vector<OracleMusigPartialSigMsg> pending;
     {
         std::lock_guard<std::mutex> lock(m_sessions_mutex);
         auto it = m_pending_partialsigs.find(epoch);
         if (it == m_pending_partialsigs.end()) return 0;
-        pending = std::move(it->second);
-        m_pending_partialsigs.erase(it);
+        auto context_it = it->second.find(session_context);
+        if (context_it == it->second.end()) return 0;
+        pending = std::move(context_it->second);
+        it->second.erase(context_it);
+        if (it->second.empty()) {
+            m_pending_partialsigs.erase(it);
+        }
     }
 
     size_t accepted = 0;
@@ -553,13 +614,21 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
 
     // ── Step 2: Oracle creates partial sigs for ALL local oracle IDs when nonces complete ──
     if (is_oracle && state == MuSig2SessionState::NONCES_COMPLETE) {
+        std::vector<uint8_t> participant_ids = session->GetRequiredParticipants();
+        if (participant_ids.size() < static_cast<size_t>(Params().GetConsensus().nOracleConsensusRequired)) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Step 2 waiting for threshold participant set for epoch %d\n",
+                     epoch);
+            return;
+        }
+
         uint64_t consensus_price = 0;
         int64_t consensus_timestamp = 0;
         bool have_consensus = false;
 
         if (g_oracle_bundle_manager) {
-            have_consensus = OracleBundleManager::GetInstance().ComputeConsensusValues(
-                consensus_price, consensus_timestamp);
+            have_consensus = OracleBundleManager::GetInstance().ComputeConsensusValuesForOracles(
+                participant_ids, consensus_price, consensus_timestamp);
         }
 
         if (have_consensus) {
@@ -575,8 +644,11 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
             // partial sigs, and aggregate signature are all bound to this
             // threshold-sized participant set. This ensures the validator can
             // reconstruct the same aggregate key from the bitmap.
-            session->TrimNoncesToThreshold();
-            std::vector<uint8_t> participant_ids = session->GetNonceParticipants();
+            if (!session->TrimNoncesToParticipants(participant_ids)) {
+                LogPrintf("Oracle: Step 2 - failed to freeze participants for epoch %d\n", epoch);
+                return;
+            }
+            participant_ids = session->GetNonceParticipants();
             secp256k1_xonly_pubkey part_agg_pk;
             secp256k1_musig_keyagg_cache part_cache;
             if (!m_aggregator->ComputeAggregatePubkey(participant_ids, part_agg_pk, part_cache)) {
@@ -589,7 +661,14 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
             }
 
             if (session->AggregateNonces(msg32)) {
-                LogPrintf("Oracle: Nonces aggregated for epoch %d, SIGNING\n", epoch);
+                const uint256 session_context = session->GetSessionContextId();
+                LogPrintf("Oracle: Nonces aggregated for epoch %d, SIGNING context=%s\n",
+                         epoch, session_context.ToString());
+                if (session_context.IsNull()) {
+                    LogPrintf("Oracle: Step 2 - refusing to broadcast partial sigs for epoch %d with null context\n",
+                             epoch);
+                    return;
+                }
 
                 OracleManager& om = OracleManager::GetInstance();
                 const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
@@ -612,6 +691,8 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
                         if (secp256k1_musig_partial_sig_serialize(ctx, ser_psig, &partial_sig)) {
                             OracleMusigPartialSigMsg psig_msg;
                             psig_msg.epoch = epoch;
+                            psig_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+                            psig_msg.session_context_id = session_context;
                             psig_msg.oracle_id = oid8;
                             psig_msg.partial_sig.assign(ser_psig, ser_psig + 32);
 
@@ -712,26 +793,6 @@ bool OracleSigningOrchestrator::GetCompletedSession(
     participation_bitmap_out = session.GetParticipationBitmap();
     signed_price_out = session.GetSignedPrice();
     signed_timestamp_out = session.GetSignedTimestamp();
-
-    // Some nodes can complete aggregation from received partial signatures even
-    // if their local signing tick did not persist the signed values before the
-    // miner queries the completed session. Recover the same consensus values the
-    // signing round used. The resulting bundle is still verified against the
-    // aggregate signature before mining/acceptance, so a mismatched recovery
-    // cannot create an invalid-but-accepted block; it simply fails validation.
-    if ((signed_price_out == 0 || signed_timestamp_out == 0) && g_oracle_bundle_manager) {
-        uint64_t consensus_price = 0;
-        int64_t consensus_timestamp = 0;
-        if (OracleBundleManager::GetInstance().ComputeConsensusValues(consensus_price, consensus_timestamp)) {
-            signed_price_out = consensus_price;
-            signed_timestamp_out = consensus_timestamp;
-            LogPrint(BCLog::DIGIDOLLAR,
-                     "Oracle: Recovered missing signed MuSig2 values for completed epoch %d: price=%llu timestamp=%lld\n",
-                     epoch,
-                     static_cast<unsigned long long>(signed_price_out),
-                     static_cast<long long>(signed_timestamp_out));
-        }
-    }
 
     return !aggregate_sig_out.empty() && signed_price_out > 0 && signed_timestamp_out > 0;
 }

@@ -17,6 +17,7 @@
 class CChainParams;
 
 bool IsAuthorizedMuSig2OracleIdForRelay(const CChainParams& params, uint32_t oracle_id);
+static constexpr uint8_t ORACLE_MUSIG2_SESSION_CONTEXT_VERSION = 1;
 
 /**
  * MuSig2 Nonce Message for P2P Network (Round 1)
@@ -57,13 +58,16 @@ class OracleMusigPartialSigMsg
 {
 public:
     int32_t epoch{0};
+    uint8_t context_version{ORACLE_MUSIG2_SESSION_CONTEXT_VERSION};
+    uint256 session_context_id;
     uint8_t oracle_id{0};
     std::vector<unsigned char> partial_sig;  // 32 bytes serialized secp256k1_musig_partial_sig
     std::vector<unsigned char> signature;    // 64 bytes Schnorr signature (RH-24)
 
     SERIALIZE_METHODS(OracleMusigPartialSigMsg, obj)
     {
-        READWRITE(obj.epoch, obj.oracle_id, obj.partial_sig, obj.signature);
+        READWRITE(obj.epoch, obj.context_version, obj.session_context_id,
+                  obj.oracle_id, obj.partial_sig, obj.signature);
     }
 
     uint256 GetHash() const;

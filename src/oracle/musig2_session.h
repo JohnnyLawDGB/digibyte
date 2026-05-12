@@ -7,6 +7,7 @@
 
 #include <key.h>
 #include <sync.h>
+#include <uint256.h>
 
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
@@ -139,6 +140,8 @@ public:
      * exactly the threshold number of participants.
      */
     void TrimNoncesToThreshold();
+    /** Freeze an already-selected participant set. */
+    bool TrimNoncesToParticipants(const std::vector<uint8_t>& participants);
     bool AggregateNonces(const unsigned char* msg32);
 
     /**
@@ -218,6 +221,9 @@ public:
     void SetSignedValues(uint64_t price, int64_t timestamp);
     uint64_t GetSignedPrice() const;
     int64_t GetSignedTimestamp() const;
+    uint256 GetSessionContextId() const;
+    uint256 GetNonceSetHash() const;
+    uint256 GetMessageHash() const;
 
 private:
     mutable Mutex m_mutex;
@@ -252,6 +258,9 @@ private:
     std::vector<unsigned char> m_aggregate_sig GUARDED_BY(m_mutex); //!< Cached agg sig
     uint64_t m_signed_price{0};     //!< The exact price that was signed
     int64_t m_signed_timestamp{0};  //!< The exact timestamp that was signed
+    uint256 m_message_hash GUARDED_BY(m_mutex);
+    uint256 m_nonce_set_hash GUARDED_BY(m_mutex);
+    uint256 m_session_context_id GUARDED_BY(m_mutex);
 
     //! Timeout configuration
     int32_t m_creation_height GUARDED_BY(m_mutex); //!< Height at which session was created (= epoch)

@@ -344,7 +344,11 @@ bool OracleMusigNonceMsg::VerifySignature(const XOnlyPubKey& pubkey) const
 uint256 OracleMusigPartialSigMsg::GetHash() const
 {
     CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/MuSig2PartialSigMsg/v2");
+    hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
+    hasher << context_version;
+    hasher << session_context_id;
     hasher << oracle_id;
     hasher << partial_sig;
     return hasher.GetHash();
@@ -353,13 +357,16 @@ uint256 OracleMusigPartialSigMsg::GetHash() const
 uint256 OracleMusigPartialSigMsg::GetSignatureHash() const
 {
     // Tagged hash for authentication:
-    // "DigiDollar/MuSig2PartialSig" || hashGenesisBlock || epoch || oracle_id || partial_sig.
-    // This mirrors nonce auth and keeps partial-sig relay replay-scoped to the
-    // chain whose session message/key aggregation produced it.
+    // "DigiDollar/MuSig2PartialSig" || hashGenesisBlock || epoch ||
+    // context_version || session_context_id || oracle_id || partial_sig.
+    // session_context_id binds the relay auth to the exact MuSig2 transcript:
+    // bundle message hash, frozen signer bitmap, and nonce set.
     CHashWriter hasher(0);
     hasher << std::string("DigiDollar/MuSig2PartialSig");
     hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
+    hasher << context_version;
+    hasher << session_context_id;
     hasher << oracle_id;
     hasher << partial_sig;
     return hasher.GetHash();

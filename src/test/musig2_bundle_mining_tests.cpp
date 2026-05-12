@@ -187,7 +187,7 @@ BOOST_AUTO_TEST_CASE(add_bundle_skips_oracle_data_when_session_incomplete)
     BOOST_CHECK_EQUAL(block.vtx[0]->vout.size(), 1);
 }
 
-BOOST_AUTO_TEST_CASE(completed_session_recovers_missing_signed_values_from_live_consensus)
+BOOST_AUTO_TEST_CASE(completed_session_requires_signed_values_not_live_recovery)
 {
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
@@ -221,12 +221,12 @@ BOOST_AUTO_TEST_CASE(completed_session_recovers_missing_signed_values_from_live_
     std::vector<unsigned char> participation_bitmap;
     uint64_t signed_price = 0;
     int64_t signed_timestamp = 0;
-    BOOST_REQUIRE(g_signing_orchestrator->GetCompletedSession(
+    BOOST_CHECK(!g_signing_orchestrator->GetCompletedSession(
         epoch, aggregate_sig, participation_bitmap, signed_price, signed_timestamp));
     BOOST_CHECK(!aggregate_sig.empty());
     BOOST_CHECK(!participation_bitmap.empty());
-    BOOST_CHECK_EQUAL(signed_price, live_price_micro_usd);
-    BOOST_CHECK_EQUAL(signed_timestamp, live_timestamp);
+    BOOST_CHECK_EQUAL(signed_price, 0U);
+    BOOST_CHECK_EQUAL(signed_timestamp, 0);
 }
 
 BOOST_AUTO_TEST_CASE(add_bundle_consumes_session_and_prunes_old_epochs)

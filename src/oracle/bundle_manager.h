@@ -98,6 +98,10 @@ public:
     //! @param[out] consensus_timestamp Computed consensus timestamp (median of message timestamps)
     //! @return true if enough messages exist for consensus computation
     bool ComputeConsensusValues(uint64_t& consensus_price, int64_t& consensus_timestamp) const;
+    //! Compute consensus values from the exact oracle IDs selected for a MuSig2 signing context.
+    bool ComputeConsensusValuesForOracles(const std::vector<uint8_t>& oracle_ids,
+                                          uint64_t& consensus_price,
+                                          int64_t& consensus_timestamp) const;
     //! Return true only when proposed consensus values exactly match locally computed pending-message consensus.
     bool ValidateConsensusProposal(uint64_t consensus_price, int64_t consensus_timestamp) const;
 

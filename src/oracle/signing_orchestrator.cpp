@@ -29,6 +29,8 @@ constexpr size_t MAX_PENDING_PARTIALSIGS_PER_CONTEXT = 32;   // > any honest ora
 constexpr size_t MAX_PENDING_PARTIALSIG_CONTEXTS_PER_EPOCH = 8;
 constexpr size_t MAX_PENDING_PARTIALSIGS_PER_EPOCH = 128;
 constexpr size_t MAX_PENDING_PARTIALSIG_EPOCHS = 8;           // +/- 4 epochs around current
+constexpr int32_t CONTEXT_PROPOSAL_ROUND_BLOCKS = 2;
+constexpr int32_t CONTEXT_NONCE_GRACE_BLOCKS = 2;
 
 int32_t GetEpochStartHeight(int32_t epoch)
 {
@@ -36,6 +38,30 @@ int32_t GetEpochStartHeight(int32_t epoch)
     int32_t epoch_length = consensus.nDDOracleEpochBlocks;
     if (epoch_length <= 0) epoch_length = 1440;
     return epoch * epoch_length;
+}
+
+std::optional<uint256> ResolveEpochSelectionSeed(const CBlockIndex* pindex, int32_t epoch)
+{
+    if (!pindex || epoch < 0) return std::nullopt;
+    int32_t seed_height = GetEpochStartHeight(epoch) - 1;
+    if (seed_height < 0) seed_height = 0;
+    if (seed_height > pindex->nHeight) return std::nullopt;
+    const CBlockIndex* seed_index = pindex->GetAncestor(seed_height);
+    if (!seed_index) return std::nullopt;
+    return seed_index->GetBlockHash();
+}
+
+std::vector<uint8_t> SortOracleIdsByEpochSeed(std::vector<uint8_t> ids,
+                                              int32_t epoch,
+                                              const uint256& seed)
+{
+    std::sort(ids.begin(), ids.end(), [&](uint8_t a, uint8_t b) {
+        const uint256 score_a = GetOracleEpochSelectionHash(epoch, a, seed);
+        const uint256 score_b = GetOracleEpochSelectionHash(epoch, b, seed);
+        if (score_a == score_b) return a < b;
+        return score_a < score_b;
+    });
+    return ids;
 }
 
 size_t CountPendingPartialSigsForEpoch(const std::map<uint256, std::vector<OracleMusigPartialSigMsg>>& contexts)
@@ -99,8 +125,11 @@ void OracleSigningOrchestrator::Clear()
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
     m_signing_sessions.clear();
     m_nonce_broadcast_tracker.clear();
+    m_context_broadcast_tracker.clear();
     m_partialsig_broadcast_tracker.clear();
+    m_pending_contexts.clear();
     m_pending_partialsigs.clear();
+    m_epoch_selection_seeds.clear();
     m_aggregator.reset();
     m_cached_oracle_key.reset();
     m_cached_oracle_id = 255;
@@ -125,6 +154,10 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
         auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        const auto seed_it = m_epoch_selection_seeds.find(msg.epoch);
+        if (seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull()) {
+            session->SetEpochSelectionSeed(seed_it->second);
+        }
         session->SetCreationHeight(GetEpochStartHeight(msg.epoch));
         session->SetTimeoutBlocks(100);
         LogPrintf("Oracle: Lazily created MuSig2 session for epoch %d on remote nonce arrival\n", msg.epoch);
@@ -160,6 +193,48 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
     secp256k1_context_destroy(ctx);
 }
 
+void OracleSigningOrchestrator::IngestRemoteContext(const OracleMusigContextMsg& msg)
+{
+    if (!msg.IsValid()) return;
+
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    const auto seed_it = m_epoch_selection_seeds.find(msg.epoch);
+    const bool have_local_seed =
+        seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull();
+    if (have_local_seed && seed_it->second != msg.epoch_selection_seed) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Rejected MuSig2 context proposal epoch=%d proposer=%u: seed mismatch msg=%s local=%s\n",
+                 msg.epoch, msg.proposer_id, msg.epoch_selection_seed.ToString(),
+                 seed_it->second.ToString());
+        return;
+    }
+
+    auto it = m_signing_sessions.find(msg.epoch);
+    if (it == m_signing_sessions.end() || !it->second) {
+        const Consensus::Params& consensus = Params().GetConsensus();
+        const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
+        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        if (have_local_seed) {
+            session->SetEpochSelectionSeed(seed_it->second);
+        }
+        session->SetCreationHeight(GetEpochStartHeight(msg.epoch));
+        session->SetTimeoutBlocks(100);
+        LogPrintf("Oracle: Lazily created MuSig2 session for epoch %d on context proposal arrival\n", msg.epoch);
+        it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
+    } else if (have_local_seed) {
+        it->second->SetEpochSelectionSeed(seed_it->second);
+    }
+
+    m_pending_contexts[msg.epoch][msg.session_context_id] = msg;
+    if (m_pending_contexts.size() > MAX_PENDING_PARTIALSIG_EPOCHS) {
+        m_pending_contexts.erase(m_pending_contexts.begin());
+    }
+    LogPrint(BCLog::DIGIDOLLAR,
+             "Oracle: Stored MuSig2 context proposal epoch=%d proposer=%u context=%s participants=%zu\n",
+             msg.epoch, msg.proposer_id, msg.session_context_id.ToString(),
+             msg.participant_ids.size());
+}
+
 void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialSigMsg& msg)
 {
     if (msg.context_version != ORACLE_MUSIG2_SESSION_CONTEXT_VERSION ||
@@ -180,6 +255,10 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
         auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        const auto seed_it = m_epoch_selection_seeds.find(msg.epoch);
+        if (seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull()) {
+            session->SetEpochSelectionSeed(seed_it->second);
+        }
         session->SetCreationHeight(GetEpochStartHeight(msg.epoch));
         session->SetTimeoutBlocks(100);
         LogPrintf("Oracle: Lazily created MuSig2 session for epoch %d on remote partial sig arrival\n", msg.epoch);
@@ -330,6 +409,196 @@ size_t OracleSigningOrchestrator::DrainPendingPartialSigsForEpoch(int32_t epoch,
     return accepted;
 }
 
+bool OracleSigningOrchestrator::IsEligibleContextProposer(int32_t epoch,
+                                                          uint8_t proposer_id,
+                                                          int32_t block_height) const
+{
+    std::vector<uint8_t> order = SortOracleIdsByEpochSeed(
+        GetConsensusOracleIdsForSigning(), epoch, GetSelectionSeedForEpoch(epoch));
+    const auto it = std::find(order.begin(), order.end(), proposer_id);
+    if (it == order.end()) return false;
+
+    int32_t round_start_height = GetEpochStartHeight(epoch) - 1;
+    if (round_start_height < 0) round_start_height = 0;
+    if (block_height < round_start_height) return false;
+
+    const int32_t elapsed = block_height - round_start_height;
+    const size_t max_rank = static_cast<size_t>(elapsed / CONTEXT_PROPOSAL_ROUND_BLOCKS);
+    const size_t proposer_rank = static_cast<size_t>(std::distance(order.begin(), it));
+    return proposer_rank <= max_rank;
+}
+
+bool OracleSigningOrchestrator::ValidateContextProposal(const OracleMusigContextMsg& msg,
+                                                        MuSig2SigningSession& session) const
+{
+    if (!msg.IsValid()) return false;
+    if (msg.epoch != session.GetEpoch()) return false;
+    if (msg.epoch_selection_seed != session.GetEpochSelectionSeed()) return false;
+
+    const OracleNodeInfo* proposer_config = Params().GetOracleNode(msg.proposer_id);
+    if (!proposer_config) return false;
+    XOnlyPubKey proposer_pubkey(proposer_config->pubkey);
+    if (!msg.VerifySignature(proposer_pubkey)) return false;
+
+    const Consensus::Params& consensus = Params().GetConsensus();
+    if (msg.participant_ids.size() != static_cast<size_t>(consensus.nOracleConsensusRequired)) {
+        return false;
+    }
+
+    std::set<uint8_t> unique_ids(msg.participant_ids.begin(), msg.participant_ids.end());
+    if (unique_ids.size() != msg.participant_ids.size()) return false;
+    for (uint8_t id : msg.participant_ids) {
+        if (!IsAuthorizedMuSig2OracleIdForRelay(Params(), id)) return false;
+    }
+
+    std::vector<uint8_t> sorted_by_seed = SortOracleIdsByEpochSeed(
+        msg.participant_ids, msg.epoch, msg.epoch_selection_seed);
+    if (sorted_by_seed != msg.participant_ids) return false;
+    if (!session.MatchesRequiredParticipants(msg.participant_ids)) return false;
+
+    uint64_t local_price = 0;
+    int64_t local_timestamp = 0;
+    if (!g_oracle_bundle_manager ||
+        !OracleBundleManager::GetInstance().ComputeConsensusValuesForOracles(
+            msg.participant_ids, local_price, local_timestamp)) {
+        return false;
+    }
+    if (local_price != msg.consensus_price || local_timestamp != msg.consensus_timestamp) {
+        return false;
+    }
+
+    unsigned char msg32[32];
+    ComputeOracleMessageHash(msg.epoch, msg.consensus_price, msg.consensus_timestamp, msg32);
+    uint256 nonce_set_hash;
+    uint256 context_id;
+    if (!session.ComputeContextIdForParticipants(msg.participant_ids, msg32,
+                                                 nonce_set_hash, context_id)) {
+        return false;
+    }
+    return context_id == msg.session_context_id;
+}
+
+std::optional<OracleMusigContextMsg> OracleSigningOrchestrator::SelectReadyContextProposal(
+    int32_t epoch,
+    int32_t block_height,
+    MuSig2SigningSession& session) const
+{
+    std::vector<OracleMusigContextMsg> candidates;
+    {
+        std::lock_guard<std::mutex> lock(m_sessions_mutex);
+        const auto epoch_it = m_pending_contexts.find(epoch);
+        if (epoch_it == m_pending_contexts.end()) return std::nullopt;
+        for (const auto& [context_id, msg] : epoch_it->second) {
+            candidates.push_back(msg);
+        }
+    }
+
+    const uint256 seed = session.GetEpochSelectionSeed();
+    std::vector<uint8_t> proposer_order = SortOracleIdsByEpochSeed(
+        GetConsensusOracleIdsForSigning(), epoch, seed);
+
+    std::optional<OracleMusigContextMsg> best;
+    size_t best_rank = std::numeric_limits<size_t>::max();
+    for (const OracleMusigContextMsg& msg : candidates) {
+        if (!IsEligibleContextProposer(epoch, msg.proposer_id, block_height)) continue;
+        if (!ValidateContextProposal(msg, session)) continue;
+
+        const auto rank_it = std::find(proposer_order.begin(), proposer_order.end(), msg.proposer_id);
+        if (rank_it == proposer_order.end()) continue;
+        const size_t rank = static_cast<size_t>(std::distance(proposer_order.begin(), rank_it));
+        if (!best || rank < best_rank ||
+            (rank == best_rank && msg.session_context_id < best->session_context_id)) {
+            best = msg;
+            best_rank = rank;
+        }
+    }
+    return best;
+}
+
+std::optional<OracleMusigContextMsg> OracleSigningOrchestrator::BuildLocalContextProposal(
+    int32_t epoch,
+    int32_t block_height,
+    MuSig2SigningSession& session)
+{
+    OracleManager& om = OracleManager::GetInstance();
+    std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
+    if (local_ids.empty()) return std::nullopt;
+
+    const uint256 seed = GetSelectionSeedForEpoch(epoch);
+    session.SetEpochSelectionSeed(seed);
+
+    std::vector<uint8_t> proposer_order = SortOracleIdsByEpochSeed(
+        GetConsensusOracleIdsForSigning(), epoch, seed);
+
+    uint8_t proposer_id = 255;
+    OracleNode* proposer_node = nullptr;
+    for (uint8_t candidate : proposer_order) {
+        if (!IsEligibleContextProposer(epoch, candidate, block_height)) continue;
+        {
+            std::lock_guard<std::mutex> lock(m_sessions_mutex);
+            const auto tracker_it = m_context_broadcast_tracker.find(epoch);
+            if (tracker_it != m_context_broadcast_tracker.end() &&
+                tracker_it->second.count(candidate)) {
+                continue;
+            }
+        }
+        for (uint32_t local_id : local_ids) {
+            if (local_id != candidate) continue;
+            OracleNode* node = om.GetOracleNode(local_id);
+            if (!node) continue;
+            proposer_id = candidate;
+            proposer_node = node;
+            break;
+        }
+        if (proposer_node) break;
+    }
+    if (!proposer_node || proposer_id == 255) return std::nullopt;
+
+    std::vector<uint8_t> participant_ids = session.GetRequiredParticipants();
+    const Consensus::Params& consensus = Params().GetConsensus();
+    if (participant_ids.size() != static_cast<size_t>(consensus.nOracleConsensusRequired)) {
+        return std::nullopt;
+    }
+
+    uint64_t consensus_price = 0;
+    int64_t consensus_timestamp = 0;
+    if (!g_oracle_bundle_manager ||
+        !OracleBundleManager::GetInstance().ComputeConsensusValuesForOracles(
+            participant_ids, consensus_price, consensus_timestamp)) {
+        return std::nullopt;
+    }
+
+    unsigned char msg32[32];
+    ComputeOracleMessageHash(epoch, consensus_price, consensus_timestamp, msg32);
+    uint256 nonce_set_hash;
+    uint256 context_id;
+    if (!session.ComputeContextIdForParticipants(participant_ids, msg32,
+                                                 nonce_set_hash, context_id)) {
+        return std::nullopt;
+    }
+
+    CKey key = proposer_node->GetOraclePrivateKey();
+    if (!key.IsValid()) return std::nullopt;
+
+    OracleMusigContextMsg msg;
+    msg.epoch = epoch;
+    msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    msg.epoch_selection_seed = seed;
+    msg.proposer_id = proposer_id;
+    msg.participant_ids = participant_ids;
+    msg.consensus_price = consensus_price;
+    msg.consensus_timestamp = consensus_timestamp;
+    msg.session_context_id = context_id;
+    if (!msg.Sign(key)) return std::nullopt;
+
+    {
+        std::lock_guard<std::mutex> lock(m_sessions_mutex);
+        m_pending_contexts[epoch][msg.session_context_id] = msg;
+        m_context_broadcast_tracker[epoch].insert(proposer_id);
+    }
+    return msg;
+}
+
 OracleSigningOrchestrator& OracleSigningOrchestrator::GetInstance()
 {
     assert(g_signing_orchestrator);
@@ -424,6 +693,10 @@ MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32
     const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
     auto session = std::make_unique<MuSig2SigningSession>(
         epoch, min_signers);
+    const auto seed_it = m_epoch_selection_seeds.find(epoch);
+    if (seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull()) {
+        session->SetEpochSelectionSeed(seed_it->second);
+    }
     session->SetCreationHeight(block_height > 0 ? block_height : GetEpochStartHeight(epoch));
     session->SetTimeoutBlocks(100);
 
@@ -441,6 +714,35 @@ bool OracleSigningOrchestrator::HasSession(int32_t epoch) const
     return m_signing_sessions.find(epoch) != m_signing_sessions.end();
 }
 
+uint256 OracleSigningOrchestrator::GetSelectionSeedForEpoch(int32_t epoch) const
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    const auto it = m_epoch_selection_seeds.find(epoch);
+    if (it != m_epoch_selection_seeds.end() && !it->second.IsNull()) {
+        return it->second;
+    }
+    return Params().GetConsensus().hashGenesisBlock;
+}
+
+bool OracleSigningOrchestrator::HasSelectionSeedForEpoch(int32_t epoch) const
+{
+    if (epoch == 0) return true;
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    const auto it = m_epoch_selection_seeds.find(epoch);
+    return it != m_epoch_selection_seeds.end() && !it->second.IsNull();
+}
+
+void OracleSigningOrchestrator::SetEpochSelectionSeed(int32_t epoch, const uint256& seed)
+{
+    if (seed.IsNull()) return;
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    m_epoch_selection_seeds[epoch] = seed;
+    const auto it = m_signing_sessions.find(epoch);
+    if (it != m_signing_sessions.end() && it->second) {
+        it->second->SetEpochSelectionSeed(seed);
+    }
+}
+
 void OracleSigningOrchestrator::CleanupOldSessions(int32_t current_epoch)
 {
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
@@ -456,12 +758,21 @@ void OracleSigningOrchestrator::CleanupOldSessions(int32_t current_epoch)
     for (auto it = m_nonce_broadcast_tracker.begin(); it != m_nonce_broadcast_tracker.end(); ) {
         it = (it->first < current_epoch - 2) ? m_nonce_broadcast_tracker.erase(it) : std::next(it);
     }
+    for (auto it = m_context_broadcast_tracker.begin(); it != m_context_broadcast_tracker.end(); ) {
+        it = (it->first < current_epoch - 2) ? m_context_broadcast_tracker.erase(it) : std::next(it);
+    }
     for (auto it = m_partialsig_broadcast_tracker.begin(); it != m_partialsig_broadcast_tracker.end(); ) {
         it = (it->first < current_epoch - 2) ? m_partialsig_broadcast_tracker.erase(it) : std::next(it);
+    }
+    for (auto it = m_pending_contexts.begin(); it != m_pending_contexts.end(); ) {
+        it = (it->first < current_epoch - 2) ? m_pending_contexts.erase(it) : std::next(it);
     }
     // W6-H-01: prune stale buffered partial sigs along with sessions.
     for (auto it = m_pending_partialsigs.begin(); it != m_pending_partialsigs.end(); ) {
         it = (it->first < current_epoch - 2) ? m_pending_partialsigs.erase(it) : std::next(it);
+    }
+    for (auto it = m_epoch_selection_seeds.begin(); it != m_epoch_selection_seeds.end(); ) {
+        it = (it->first < current_epoch - 2) ? m_epoch_selection_seeds.erase(it) : std::next(it);
     }
 }
 
@@ -476,6 +787,13 @@ void OracleSigningOrchestrator::BlockConnected(
 {
     if (role != ChainstateRole::NORMAL) return;
     if (!pindex) return;
+    const int32_t current_epoch = GetCurrentEpoch(pindex->nHeight);
+    if (const auto seed = ResolveEpochSelectionSeed(pindex, current_epoch)) {
+        SetEpochSelectionSeed(current_epoch, *seed);
+    }
+    if (const auto seed = ResolveEpochSelectionSeed(pindex, current_epoch + 1)) {
+        SetEpochSelectionSeed(current_epoch + 1, *seed);
+    }
     OnBlockConnected(block, pindex->nHeight);
 }
 
@@ -517,6 +835,11 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
 {
     MuSig2SigningSession* session = GetOrCreateSigningSession(epoch, block_height);
     if (!session) return;
+
+    const int32_t current_epoch = GetCurrentEpoch(block_height);
+    if (HasSelectionSeedForEpoch(epoch)) {
+        session->SetEpochSelectionSeed(GetSelectionSeedForEpoch(epoch));
+    }
 
     MuSig2SessionState state = session->GetState();
     bool is_oracle = IsOracleNode();
@@ -612,26 +935,43 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
 
     state = session->GetState();
 
-    // ── Step 2: Oracle creates partial sigs for ALL local oracle IDs when nonces complete ──
+    // ── Step 2: converge on one context, then selected local oracles sign it ──
     if (is_oracle && state == MuSig2SessionState::NONCES_COMPLETE) {
-        std::vector<uint8_t> participant_ids = session->GetRequiredParticipants();
-        if (participant_ids.size() < static_cast<size_t>(Params().GetConsensus().nOracleConsensusRequired)) {
+        if (epoch > current_epoch && !HasSelectionSeedForEpoch(epoch)) {
             LogPrint(BCLog::DIGIDOLLAR,
-                     "Oracle: Step 2 waiting for threshold participant set for epoch %d\n",
-                     epoch);
+                     "Oracle: Step 2 waiting for epoch selection seed epoch=%d h=%d\n",
+                     epoch, block_height);
+            return;
+        }
+        session->SetEpochSelectionSeed(GetSelectionSeedForEpoch(epoch));
+
+        if (block_height < session->GetCreationHeight() + CONTEXT_NONCE_GRACE_BLOCKS) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Step 2 waiting for nonce grace window epoch %d h=%d creation=%d\n",
+                     epoch, block_height, session->GetCreationHeight());
             return;
         }
 
-        uint64_t consensus_price = 0;
-        int64_t consensus_timestamp = 0;
-        bool have_consensus = false;
+        std::optional<OracleMusigContextMsg> chosen_context =
+            SelectReadyContextProposal(epoch, block_height, *session);
 
-        if (g_oracle_bundle_manager) {
-            have_consensus = OracleBundleManager::GetInstance().ComputeConsensusValuesForOracles(
-                participant_ids, consensus_price, consensus_timestamp);
+        if (!chosen_context) {
+            std::optional<OracleMusigContextMsg> local_context =
+                BuildLocalContextProposal(epoch, block_height, *session);
+            if (local_context) {
+                BroadcastMusigContext(*local_context);
+                LogPrintf("Oracle: Broadcast MuSig2 context proposal epoch=%d proposer=%u context=%s\n",
+                         epoch, local_context->proposer_id,
+                         local_context->session_context_id.ToString());
+                chosen_context = local_context;
+            }
         }
 
-        if (have_consensus) {
+        if (chosen_context) {
+            std::vector<uint8_t> participant_ids = chosen_context->participant_ids;
+            const uint64_t consensus_price = chosen_context->consensus_price;
+            const int64_t consensus_timestamp = chosen_context->consensus_timestamp;
+
             unsigned char msg32[32];
             ComputeOracleMessageHash(epoch, consensus_price, consensus_timestamp, msg32);
 
@@ -682,6 +1022,10 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
                     if (!onode) continue;
                     CKey key = onode->GetOraclePrivateKey();
                     if (!key.IsValid()) continue;
+
+                    if (std::find(participant_ids.begin(), participant_ids.end(), oid8) == participant_ids.end()) {
+                        continue;
+                    }
 
                     secp256k1_musig_partial_sig partial_sig;
                     if (session->CreatePartialSignature(oid8, key, partial_sig)) {
@@ -750,6 +1094,22 @@ bool OracleSigningOrchestrator::BroadcastMusigNonce(const OracleMusigNonceMsg& m
         m_connman->PushMessage(node,
             CNetMsgMaker(node->GetCommonVersion()).Make(
                 NetMsgType::ORACLEMUSIGNONCE, msg));
+    });
+
+    return true;
+}
+
+bool OracleSigningOrchestrator::BroadcastMusigContext(const OracleMusigContextMsg& msg)
+{
+    if (!m_connman) {
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Cannot broadcast MuSig2 context proposal - no P2P\n");
+        return false;
+    }
+
+    m_connman->ForEachNode([this, &msg](CNode* node) {
+        m_connman->PushMessage(node,
+            CNetMsgMaker(node->GetCommonVersion()).Make(
+                NetMsgType::ORACLEMUSIGCONTEXT, msg));
     });
 
     return true;

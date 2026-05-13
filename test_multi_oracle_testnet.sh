@@ -1,6 +1,6 @@
 #!/bin/bash
 # DigiDollar Qt GUI TestNet Test with Live Oracle
-# VERSION 12 (RC34): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE
+# VERSION 13 (RC37): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE
 # Tests the full DigiDollar cycle on TestNet with real-time exchange price data
 # Opens 8 SEPARATE Qt wallet instances, each hosting exactly 2 test oracles (16 active).
 # Slot 16 (GTO90 placeholder) remains UNRUN; the 9-of-17 chainparams threshold is
@@ -57,7 +57,7 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/test_run_$(date +%Y%m%d_%H%M%S).log"
 echo "=========================================="
 echo "DigiDollar Qt TestNet Automated Test"
-echo "VERSION 12 (RC34) - 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE"
+echo "VERSION 13 (RC37) - 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE"
 echo "=========================================="
 echo "Log file: $LOG_FILE"
 echo ""
@@ -69,13 +69,13 @@ echo "=========================================="
 echo "DigiDollar Qt TestNet Automated Test"
 echo "With 8 SEPARATE Qt GUI Instances (16 active oracles across 8 nodes; slot 16 unrun)"
 echo "Using LIVE Oracle Price Data"
-echo "VERSION 12 (RC34): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER + WALLET PERSISTENCE"
+echo "VERSION 13 (RC37): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER + WALLET PERSISTENCE"
 echo "=========================================="
 echo "Test started: $(date)"
 echo ""
 
 # ============================================================================
-# Configuration - Multi-Oracle Keys (9-of-17 threshold, RC34)
+# Configuration - Multi-Oracle Keys (9-of-17 threshold, RC37)
 # ============================================================================
 # Deterministic keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..16.
 # The x-only pubkeys corresponding to these privkeys are in the
@@ -102,7 +102,7 @@ ORACLE_KEY_15="a080aacffc0b681952cc7d9f0a698ae8e0ac8604e92abd8c1e1392d94fa7e20f"
 ORACLE_KEY_16="e2cf94f4a32b332b7c852ba5e00e0caf41e793cabfc048b5b0d3eed4366c585f"
 
 # ============================================================================
-# Mini Testnet ports (8 nodes hosting 16 active oracles — 9-of-17 consensus, RC34)
+# Mini Testnet ports (8 nodes hosting 16 active oracles — 9-of-17 consensus, RC37)
 # ============================================================================
 # Oracle distribution (exactly 2 oracles per node):
 #   Bob     : oracles 0, 1      (2 oracles)
@@ -512,7 +512,7 @@ refresh_local_p2p_links() {
     $HEIDI_CLI   addnode "127.0.0.1:$BOB_PORT" onetry >/dev/null 2>&1 || true
 }
 
-# Sync all nodes to the same height (8 nodes total for RC34)
+# Sync all nodes to the same height (8 nodes total for RC37)
 sync_all_nodes() {
     echo "Syncing all 8 nodes to a common tip..."
 
@@ -561,7 +561,7 @@ sync_all_nodes() {
     return 1
 }
 
-# Oracle distribution across nodes (RC34: 16 active oracles, 9-of-17 consensus):
+# Oracle distribution across nodes (RC37: 16 active oracles, 9-of-17 consensus):
 #   Bob     : oracles 0, 1      (2 oracles)
 #   Alice   : oracles 2, 3      (2 oracles)
 #   Charlie : oracles 4, 5      (2 oracles)
@@ -583,7 +583,7 @@ refresh_oracle_prices() {
 }
 
 start_all_oracles() {
-    # Distribute 16 active oracles across all 8 nodes (9-of-17 threshold, RC34).
+    # Distribute 16 active oracles across all 8 nodes (9-of-17 threshold, RC37).
     # Slot 16 (GTO90) is a chainparams placeholder and is intentionally NOT
     # started; 16 of 17 slots signing still meets the 9-of-17 quorum.
     # Bob: oracles 0, 1
@@ -1073,7 +1073,7 @@ echo "Mining 50 blocks to Eve..."
 $BOB_CLI generatetoaddress 50 "$EVE_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
 print_status "ok" "Eve funded: 50 blocks mined"
 
-# Mine 10 blocks each to the new RC34 oracle hosts
+# Mine 10 blocks each to the RC37 oracle hosts
 # (plenty to pay fees; they do not mint DD).
 for name in FRANK GRACE HEIDI; do
     addr_var="${name}_ADDR"
@@ -1091,7 +1091,7 @@ sync_all_nodes
 print_status "ok" "All nodes synced"
 
 # Step 8B: Start oracles NOW (BIP9 is active, height > 600)
-print_header "Step 8B: Starting 16 Live Oracles (BIP9 now active — 9-of-17 RC34, slot 16 unrun)"
+print_header "Step 8B: Starting 16 Live Oracles (BIP9 now active — 9-of-17 RC37, slot 16 unrun)"
 HEIGHT_8B=$($BOB_CLI getblockcount)
 echo "Current height: $HEIGHT_8B (BIP9 activates at 600)"
 
@@ -1140,23 +1140,46 @@ sync_all_nodes
 print_header "Step 8C: MuSig2 Phase 3 Nonce Exchange"
 echo "Mining blocks one-at-a-time to allow MuSig2 P2P nonce exchange..."
 MUSIG_SUCCESS=false
+MUSIG_START_HEIGHT=$($BOB_CLI getblockcount 2>/dev/null || echo 0)
+MUSIG_LOG_MARK=$(wc -l < "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" 2>/dev/null || echo 0)
 for i in {1..15}; do
     $BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
     sleep 3  # Give P2P time to propagate nonces between nodes
-    # Check if v0x03 bundle appeared in debug.log
-    if grep -q "Added MuSig2 v0x03 bundle to block\|Added cached MuSig2 v0x03 bundle to block" "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" 2>/dev/null; then
+
+    MUSIG_BLOCK_HASH=$($BOB_CLI getbestblockhash 2>/dev/null || echo "")
+    MUSIG_BLOCK_JSON=""
+    MUSIG_ORACLE_HEX=""
+    MUSIG_ORACLE_LEN_BYTES=0
+    if [ -n "$MUSIG_BLOCK_HASH" ]; then
+        MUSIG_BLOCK_JSON=$($BOB_CLI getblock "$MUSIG_BLOCK_HASH" 2 2>/dev/null || echo "")
+        MUSIG_ORACLE_HEX=$(echo "$MUSIG_BLOCK_JSON" | jq -r '[.tx[].vout[].scriptPubKey.hex // empty | select(startswith("6abf"))][0] // ""' 2>/dev/null || echo "")
+        if [ -n "$MUSIG_ORACLE_HEX" ]; then
+            MUSIG_ORACLE_LEN_BYTES=$(( ${#MUSIG_ORACLE_HEX} / 2 ))
+        fi
+    fi
+
+    # Require a fresh on-chain v0x03 bundle, not a stale debug.log line from
+    # earlier setup mining.
+    if [[ "$MUSIG_ORACLE_HEX" == 6abf0103* && "$MUSIG_ORACLE_LEN_BYTES" -gt 60 ]]; then
         MUSIG_SUCCESS=true
-        MUSIG_BLOCK=$(grep "Added MuSig2 v0x03 bundle to block\|Added cached MuSig2 v0x03 bundle to block" "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" | tail -1)
-        print_status "ok" "MuSig2 v0x03 bundle in block! $MUSIG_BLOCK"
+        MUSIG_BLOCK_HEIGHT=$(echo "$MUSIG_BLOCK_JSON" | jq -r '.height // "unknown"' 2>/dev/null || echo "unknown")
+        print_status "ok" "Fresh MuSig2 v0x03 bundle mined at height $MUSIG_BLOCK_HEIGHT (size=$MUSIG_ORACLE_LEN_BYTES bytes)"
         break
+    fi
+
+    NEW_MUSIG_LOGS=$(tail -n +"$((MUSIG_LOG_MARK + 1))" "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" 2>/dev/null | grep "Added MuSig2 v0x03 bundle to block\|Added cached MuSig2 v0x03 bundle to block" | tail -1 || true)
+    if [ -n "$NEW_MUSIG_LOGS" ]; then
+        echo "  Fresh MuSig2 log seen but no v0x03 OP_ORACLE found on best block yet: $NEW_MUSIG_LOGS"
     fi
     echo "  Block $i mined, waiting for nonce exchange..."
 done
-	if [ "$MUSIG_SUCCESS" = "false" ]; then
-	    echo "MuSig2 v0x03 bundle not yet produced; V1 does not accept legacy fallback bundles"
-	    echo "Nonce exchange status:"
-	    grep "Ingested remote nonce\|Step 2.*recomputed\|auto-aggregated" "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" 2>/dev/null | tail -5
-	fi
+if [ "$MUSIG_SUCCESS" = "false" ]; then
+    print_status "fail" "No fresh on-chain MuSig2 v0x03 oracle bundle mined after 15 blocks from height $MUSIG_START_HEIGHT"
+    echo "MuSig2 v0x03 bundle not yet produced; V1 does not accept legacy fallback bundles"
+    echo "Nonce/context/signature status:"
+    grep "Ingested remote nonce\|Stored MuSig2 context\|Broadcast MuSig2 context\|context mismatch\|Rejected MuSig2 context\|Step 2.*recomputed\|auto-aggregated\|MuSig2 COMPLETE" "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" 2>/dev/null | tail -40 || true
+    exit 1
+fi
 
 sync_all_nodes
 
@@ -1994,7 +2017,7 @@ list_dd_positions "$ALICE_CLI" "alice" "Alice"
 list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 
 # ====================================================================================
-# Step 27A: 9-of-17 Oracle Consensus Verification (RC34)
+# Step 27A: 9-of-17 Oracle Consensus Verification (RC37)
 # ====================================================================================
 # All 16 active oracles are running and reporting the live exchange price (slot
 # 16 GTO90 placeholder is not started). This step verifies that the network
@@ -2002,7 +2025,7 @@ list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 # threshold is being met on-chain by the 16-of-17 signing slots. (Oracle
 # prices are not forged — they are the real exchange-aggregator median, so we
 # only assert the price is > 0.)
-print_header "Step 27A: 9-of-17 Oracle Consensus Verification (RC34)"
+print_header "Step 27A: 9-of-17 Oracle Consensus Verification (RC37)"
 echo ""
 echo "Verifying that at least 9 of 17 oracles agree on the live exchange price."
 echo "Mining blocks so oracle price threads broadcast and bundles form, then"
@@ -2025,11 +2048,11 @@ fi
 # ====================================================================================
 # Step 27B: Manual Oracle Injection Removal Check
 # ====================================================================================
-# RC34 removed sendoracleprice/fake price injection. That is intentional security
+# RC37 keeps sendoracleprice/fake price injection removed. That is intentional security
 # hardening: oracle prices must come from live exchange aggregation only.
 print_header "Step 27B: Manual Oracle Injection Removed"
 echo ""
-echo "Verifying the insecure sendoracleprice RPC is unavailable on RC34."
+echo "Verifying the insecure sendoracleprice RPC is unavailable on RC37."
 echo ""
 
 SENDORACLE_HELP=$($BOB_CLI help sendoracleprice 2>&1 || true)
@@ -3489,7 +3512,7 @@ echo "  [x] Network DD supply verification at every step"
 echo "  [x] Balance verification at every step"
 echo ""
 echo "MULTI-ORACLE COVERAGE:"
-echo "  [x] 16 active oracles started across 8 wallet nodes (9-of-17 threshold, RC34)"
+echo "  [x] 16 active oracles started across 8 wallet nodes (9-of-17 threshold, RC37)"
 echo "  [x] Slot 16 (GTO90) chainparams placeholder intentionally NOT started"
 echo "  [x] Oracle prices refreshed before every mint"
 echo "  [x] 9-of-17 consensus verification (Step 27A)"
@@ -3549,9 +3572,9 @@ echo "  - (slot 16 GTO90 chainparams placeholder — NO Qt instance running)"
 echo ""
 
 # ============================================================================
-# RC34 MINI-TESTNET NOTE
+# RC37 MINI-TESTNET NOTE
 # ============================================================================
-print_header "RC34 MINI-TESTNET NOTE"
+print_header "RC37 MINI-TESTNET NOTE"
 echo ""
 echo "Local oracle keys are enabled only through -easypow local mini-testnet mode."
 echo "Production testnet oracle keys remain the default when -easypow is absent."

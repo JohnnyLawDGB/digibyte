@@ -45,6 +45,7 @@
 #include <oracle/musig2_session_manager.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <test/util/setup_common.h>
 #include <uint256.h>
 
 #include <cassert>
@@ -55,9 +56,15 @@ namespace {
 
 constexpr int kMaxIterations = 256;
 
+void initialize_musig2_session_manager_drive()
+{
+    static const auto testing_setup = MakeNoLogFileContext<const BasicTestingSetup>(ChainType::REGTEST);
+    (void)testing_setup;
+}
+
 } // namespace
 
-FUZZ_TARGET(musig2_session_manager_drive)
+FUZZ_TARGET(musig2_session_manager_drive, .init = initialize_musig2_session_manager_drive)
 {
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
 

@@ -300,6 +300,7 @@ extern const char* ORACLECONSENSUS;
  */
 extern const char* ORACLEATTESTATION;
 extern const char* ORACLEMUSIGNONCE;
+extern const char* ORACLEMUSIGCONTEXT;
 extern const char* ORACLEMUSIGPARTIALSIG;
 }; // namespace NetMsgType
 
@@ -531,6 +532,7 @@ enum GetDataMsg : uint32_t {
     MSG_ORACLE_ATTESTATION = 0x40000004,
     MSG_ORACLE_MUSIG_NONCE = 0x40000005,
     MSG_ORACLE_MUSIG_PARTIALSIG = 0x40000006,
+    MSG_ORACLE_MUSIG_CONTEXT = 0x40000007,
 };
 
 /** inv message data */
@@ -572,7 +574,8 @@ public:
     {
         return type == MSG_ORACLE_PRICE || type == MSG_ORACLE_BUNDLE || type == MSG_GET_ORACLE_DATA ||
                type == MSG_ORACLE_CONSENSUS || type == MSG_ORACLE_ATTESTATION ||
-               type == MSG_ORACLE_MUSIG_NONCE || type == MSG_ORACLE_MUSIG_PARTIALSIG;
+               type == MSG_ORACLE_MUSIG_NONCE || type == MSG_ORACLE_MUSIG_PARTIALSIG ||
+               type == MSG_ORACLE_MUSIG_CONTEXT;
     }
 
     uint32_t type;

@@ -7,6 +7,7 @@
 #include <pubkey.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <test/util/setup_common.h>
 #include <util/strencodings.h>
 
 #include <cassert>
@@ -17,7 +18,8 @@
 namespace {
 void initialize_musig2_aggregation()
 {
-    ECC_Start();
+    static const auto testing_setup = MakeNoLogFileContext<const BasicTestingSetup>(ChainType::MAIN);
+    (void)testing_setup;
 }
 } // namespace
 

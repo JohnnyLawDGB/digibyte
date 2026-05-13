@@ -38,6 +38,20 @@ static OracleMusigPartialSigMsg MakePartialSigMsg(int32_t epoch, uint8_t oracle_
     return msg;
 }
 
+static OracleMusigContextMsg MakeContextMsg(int32_t epoch, uint8_t proposer_id) {
+    OracleMusigContextMsg msg;
+    msg.epoch = epoch;
+    msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    msg.epoch_selection_seed = uint256(7);
+    msg.proposer_id = proposer_id;
+    msg.participant_ids = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    msg.consensus_price = 3777;
+    msg.consensus_timestamp = 1710000000;
+    msg.session_context_id = uint256(9);
+    msg.signature.assign(64, 0xEE);
+    return msg;
+}
+
 BOOST_FIXTURE_TEST_SUITE(musig2_p2p_message_tests, BasicTestingSetup)
 
 // ──────────────────────────────────────────────────────────────────────
@@ -369,6 +383,65 @@ BOOST_AUTO_TEST_CASE(rc36_partialsig_auth_binds_session_context)
     BOOST_CHECK(msg.GetHash() != changed_version.GetHash());
     BOOST_CHECK(msg.GetSignatureHash() != changed_version.GetSignatureHash());
     BOOST_CHECK(!changed_version.VerifySignature(pubkey));
+}
+
+BOOST_AUTO_TEST_CASE(rc37_context_message_serialization_roundtrip)
+{
+    OracleMusigContextMsg orig = MakeContextMsg(12345, 7);
+
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << orig;
+
+    OracleMusigContextMsg recovered;
+    ss >> recovered;
+
+    BOOST_CHECK_EQUAL(recovered.epoch, orig.epoch);
+    BOOST_CHECK_EQUAL(recovered.context_version, orig.context_version);
+    BOOST_CHECK(recovered.epoch_selection_seed == orig.epoch_selection_seed);
+    BOOST_CHECK_EQUAL(recovered.proposer_id, orig.proposer_id);
+    BOOST_CHECK(recovered.participant_ids == orig.participant_ids);
+    BOOST_CHECK_EQUAL(recovered.consensus_price, orig.consensus_price);
+    BOOST_CHECK_EQUAL(recovered.consensus_timestamp, orig.consensus_timestamp);
+    BOOST_CHECK(recovered.session_context_id == orig.session_context_id);
+    BOOST_CHECK(recovered.signature == orig.signature);
+    BOOST_CHECK(recovered.IsValid());
+    BOOST_CHECK_EQUAL(recovered.GetHash(), orig.GetHash());
+}
+
+BOOST_AUTO_TEST_CASE(rc37_context_auth_binds_seed_participants_price_and_context)
+{
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey pubkey(key.GetPubKey());
+
+    OracleMusigContextMsg msg = MakeContextMsg(100, 5);
+    msg.signature.clear();
+    BOOST_REQUIRE(msg.Sign(key));
+    BOOST_CHECK(msg.VerifySignature(pubkey));
+
+    OracleMusigContextMsg changed_seed = msg;
+    changed_seed.epoch_selection_seed = uint256(8);
+    BOOST_CHECK(msg.GetHash() != changed_seed.GetHash());
+    BOOST_CHECK(msg.GetSignatureHash() != changed_seed.GetSignatureHash());
+    BOOST_CHECK(!changed_seed.VerifySignature(pubkey));
+
+    OracleMusigContextMsg changed_participants = msg;
+    changed_participants.participant_ids[0] = 9;
+    BOOST_CHECK(msg.GetHash() != changed_participants.GetHash());
+    BOOST_CHECK(msg.GetSignatureHash() != changed_participants.GetSignatureHash());
+    BOOST_CHECK(!changed_participants.VerifySignature(pubkey));
+
+    OracleMusigContextMsg changed_price = msg;
+    ++changed_price.consensus_price;
+    BOOST_CHECK(msg.GetHash() != changed_price.GetHash());
+    BOOST_CHECK(msg.GetSignatureHash() != changed_price.GetSignatureHash());
+    BOOST_CHECK(!changed_price.VerifySignature(pubkey));
+
+    OracleMusigContextMsg changed_context = msg;
+    changed_context.session_context_id = uint256(10);
+    BOOST_CHECK(msg.GetHash() != changed_context.GetHash());
+    BOOST_CHECK(msg.GetSignatureHash() != changed_context.GetSignatureHash());
+    BOOST_CHECK(!changed_context.VerifySignature(pubkey));
 }
 
 // ──────────────────────────────────────────────────────────────────────

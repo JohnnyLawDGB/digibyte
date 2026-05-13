@@ -40,6 +40,7 @@
 #include <random.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <test/util/setup_common.h>
 #include <util/chaintype.h>
 
 #include <secp256k1.h>
@@ -60,8 +61,8 @@ constexpr int kMaxIterations = 80;
 
 void initialize_oracle_musig2_session_real()
 {
-    ECC_Start();
-    SelectParams(ChainType::REGTEST);
+    static const auto testing_setup = MakeNoLogFileContext<const BasicTestingSetup>(ChainType::REGTEST);
+    (void)testing_setup;
 }
 
 struct OracleKeyset {

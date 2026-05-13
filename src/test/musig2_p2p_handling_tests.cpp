@@ -15,6 +15,7 @@ BOOST_AUTO_TEST_CASE(test_musig2_p2p_message_types_registered)
 {
     // Verify P2P message type strings are registered
     BOOST_CHECK_EQUAL(std::string(NetMsgType::ORACLEMUSIGNONCE), "oramusnonce");
+    BOOST_CHECK_EQUAL(std::string(NetMsgType::ORACLEMUSIGCONTEXT), "oramusigctx");
     BOOST_CHECK_EQUAL(std::string(NetMsgType::ORACLEMUSIGPARTIALSIG), "oramusigpsig");
 }
 

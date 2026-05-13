@@ -5958,6 +5958,100 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         return;
     }
 
+    if (msg_type == NetMsgType::ORACLEMUSIGCONTEXT) {
+        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+            return;
+        }
+
+        OracleMusigContextMsg context_msg;
+        vRecv >> context_msg;
+
+        if (!context_msg.IsValid()) {
+            Misbehaving(*peer, 10, "invalid MuSig2 context message");
+            return;
+        }
+
+        if (!IsAuthorizedMuSig2OracleIdForRelay(m_chainparams, context_msg.proposer_id)) {
+            Misbehaving(*peer, 10, "MuSig2 context proposer outside active consensus roster");
+            return;
+        }
+
+        {
+            const OracleNodeInfo* oracle_config = m_chainparams.GetOracleNode(context_msg.proposer_id);
+            if (!oracle_config) {
+                Misbehaving(*peer, 10, "unknown oracle ID in MuSig2 context");
+                return;
+            }
+            XOnlyPubKey oracle_pubkey(oracle_config->pubkey);
+            if (!context_msg.VerifySignature(oracle_pubkey)) {
+                LogPrint(BCLog::NET, "MuSig2 context signature verification failed proposer=%u peer=%d\n",
+                         context_msg.proposer_id, pfrom.GetId());
+                Misbehaving(*peer, 20, "invalid MuSig2 context signature");
+                return;
+            }
+        }
+
+        {
+            int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
+            if (context_msg.epoch <= 0 || context_msg.epoch < current_epoch ||
+                context_msg.epoch > current_epoch + 1) {
+                LogPrint(BCLog::NET, "MuSig2 context epoch out of range (epoch=%d, current=%d) peer=%d\n",
+                         context_msg.epoch, current_epoch, pfrom.GetId());
+                Misbehaving(*peer, 5, "MuSig2 context epoch out of range");
+                return;
+            }
+        }
+
+        {
+            static constexpr int MUSIG_CONTEXT_RATE_LIMIT_PER_HOUR = 600;
+            static std::map<NodeId, std::pair<int64_t, int>> musig_context_rate_limit;
+            int64_t now_rl = GetTime();
+            if (musig_context_rate_limit.size() > 100) {
+                auto it = musig_context_rate_limit.begin();
+                while (it != musig_context_rate_limit.end()) {
+                    if (now_rl - it->second.first > 3600) it = musig_context_rate_limit.erase(it);
+                    else ++it;
+                }
+            }
+            auto& [last_reset, count] = musig_context_rate_limit[pfrom.GetId()];
+            if (now_rl - last_reset > 3600) { last_reset = now_rl; count = 0; }
+            if (++count > MUSIG_CONTEXT_RATE_LIMIT_PER_HOUR) {
+                LogPrint(BCLog::NET, "MuSig2 context rate limit reached peer=%d (%d/%d/hr)\n",
+                         pfrom.GetId(), count, MUSIG_CONTEXT_RATE_LIMIT_PER_HOUR);
+                return;
+            }
+        }
+
+        const uint256 context_hash = context_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        if (bundleManager.HasOracleMessage(context_hash)) {
+            return;
+        }
+        bundleManager.RegisterSeenHash(context_hash);
+
+        AddKnownOracle(*peer, context_hash);
+        m_connman.ForEachNode([this, &pfrom, &context_msg, &context_hash](CNode* pnode) {
+            if (pnode->GetId() == pfrom.GetId()) return;
+
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
+            if (PeerKnowsOracle(*relay_peer, context_hash)) return;
+
+            AddKnownOracle(*relay_peer, context_hash);
+            m_connman.PushMessage(pnode,
+                CNetMsgMaker(pnode->GetCommonVersion()).Make(
+                    NetMsgType::ORACLEMUSIGCONTEXT, context_msg));
+        });
+
+        if (g_signing_orchestrator) {
+            g_signing_orchestrator->IngestRemoteContext(context_msg);
+        }
+
+        LogPrint(BCLog::NET, "Accepted and relayed MuSig2 context: epoch=%d proposer=%u peer=%d\n",
+                 context_msg.epoch, context_msg.proposer_id, pfrom.GetId());
+        return;
+    }
+
     if (msg_type == NetMsgType::ORACLEMUSIGPARTIALSIG) {
         if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
             return;

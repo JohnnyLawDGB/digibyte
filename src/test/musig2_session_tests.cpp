@@ -24,6 +24,7 @@
 #include <test/util/setup_common.h>
 #include <oracle/musig2_session.h>
 #include <oracle/musig2_session_manager.h>
+#include <uint256.h>
 
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
@@ -94,12 +95,13 @@ static secp256k1_musig_pubnonce MakeValidPubnonceForOracle(secp256k1_context* ct
 
 static std::vector<uint8_t> ExpectedEpochCommittee(std::vector<uint8_t> ids,
                                                    int32_t epoch,
-                                                   size_t threshold)
+                                                   size_t threshold,
+                                                   const uint256& seed)
 {
     std::vector<std::pair<uint256, uint8_t>> scored;
     scored.reserve(ids.size());
     for (uint8_t id : ids) {
-        scored.emplace_back(GetOracleEpochSelectionHash(epoch, id), id);
+        scored.emplace_back(GetOracleEpochSelectionHash(epoch, id, seed), id);
     }
     std::sort(scored.begin(), scored.end());
 
@@ -109,6 +111,21 @@ static std::vector<uint8_t> ExpectedEpochCommittee(std::vector<uint8_t> ids,
         selected.push_back(id);
     }
     return selected;
+}
+
+static std::vector<uint8_t> ExpectedEpochCommittee(std::vector<uint8_t> ids,
+                                                   int32_t epoch,
+                                                   size_t threshold)
+{
+    return ExpectedEpochCommittee(std::move(ids), epoch, threshold,
+                                  Params().GetConsensus().hashGenesisBlock);
+}
+
+static uint256 FilledSeed(unsigned char value)
+{
+    uint256 seed;
+    std::fill(seed.begin(), seed.end(), value);
+    return seed;
 }
 
 // ============================================================================
@@ -343,6 +360,197 @@ BOOST_AUTO_TEST_CASE(required_participants_use_epoch_hash_not_sequential_ids)
 
     std::vector<uint8_t> next_expected = ExpectedEpochCommittee(submitted, epoch + 1, threshold);
     BOOST_CHECK(next_expected != expected);
+
+    secp256k1_context_destroy(ctx);
+}
+
+BOOST_AUTO_TEST_CASE(required_participants_use_chain_seeded_epoch_hash)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    constexpr int32_t epoch = 52;
+    constexpr uint8_t threshold = 9;
+    const uint256 seed_a = FilledSeed(0x11);
+    const uint256 seed_b = FilledSeed(0x22);
+
+    MuSig2SigningSession session_a(epoch, threshold);
+    MuSig2SigningSession session_b(epoch, threshold);
+    session_a.SetEpochSelectionSeed(seed_a);
+    session_b.SetEpochSelectionSeed(seed_b);
+    BOOST_REQUIRE(session_a.InitializePassive(MakeSingleKeyAggCache(ctx)));
+    BOOST_REQUIRE(session_b.InitializePassive(MakeSingleKeyAggCache(ctx)));
+
+    std::vector<uint8_t> submitted;
+    for (uint8_t id = 0; id < ORACLE_ACTIVE_COUNT; ++id) {
+        submitted.push_back(id);
+        secp256k1_musig_pubnonce pubnonce = MakeValidPubnonceForOracle(ctx, id, epoch);
+        BOOST_REQUIRE(session_a.AddPubnonce(id, pubnonce));
+        BOOST_REQUIRE(session_b.AddPubnonce(id, pubnonce));
+    }
+
+    const std::vector<uint8_t> expected_a =
+        ExpectedEpochCommittee(submitted, epoch, threshold, seed_a);
+    const std::vector<uint8_t> expected_b =
+        ExpectedEpochCommittee(submitted, epoch, threshold, seed_b);
+    BOOST_CHECK(session_a.GetRequiredParticipants() == expected_a);
+    BOOST_CHECK(session_b.GetRequiredParticipants() == expected_b);
+    BOOST_CHECK(expected_a != expected_b);
+
+    secp256k1_context_destroy(ctx);
+}
+
+BOOST_AUTO_TEST_CASE(required_participants_and_context_converge_across_nonce_arrival_order)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    constexpr int32_t epoch = 61;
+    constexpr uint8_t threshold = 9;
+    const uint256 seed = FilledSeed(0x37);
+
+    std::vector<uint8_t> all_ids(ORACLE_ACTIVE_COUNT);
+    std::iota(all_ids.begin(), all_ids.end(), 0);
+
+    std::vector<secp256k1_musig_pubnonce> pubnonces(ORACLE_ACTIVE_COUNT);
+    for (uint8_t id : all_ids) {
+        pubnonces[id] = MakeValidPubnonceForOracle(ctx, id, epoch);
+    }
+
+    std::vector<uint8_t> descending = all_ids;
+    std::reverse(descending.begin(), descending.end());
+    const std::vector<uint8_t> mixed{6, 2, 15, 0, 8, 14, 1, 10, 3, 16, 7, 4, 12, 5, 11, 9, 13};
+
+    MuSig2SigningSession ascending_session(epoch, threshold);
+    MuSig2SigningSession descending_session(epoch, threshold);
+    MuSig2SigningSession mixed_session(epoch, threshold);
+    ascending_session.SetEpochSelectionSeed(seed);
+    descending_session.SetEpochSelectionSeed(seed);
+    mixed_session.SetEpochSelectionSeed(seed);
+    BOOST_REQUIRE(ascending_session.InitializePassive(MakeSingleKeyAggCache(ctx)));
+    BOOST_REQUIRE(descending_session.InitializePassive(MakeSingleKeyAggCache(ctx)));
+    BOOST_REQUIRE(mixed_session.InitializePassive(MakeSingleKeyAggCache(ctx)));
+
+    for (uint8_t id : all_ids) {
+        BOOST_REQUIRE(ascending_session.AddPubnonce(id, pubnonces[id]));
+    }
+    for (uint8_t id : descending) {
+        BOOST_REQUIRE(descending_session.AddPubnonce(id, pubnonces[id]));
+    }
+    for (uint8_t id : mixed) {
+        BOOST_REQUIRE(mixed_session.AddPubnonce(id, pubnonces[id]));
+    }
+
+    const std::vector<uint8_t> expected =
+        ExpectedEpochCommittee(all_ids, epoch, threshold, seed);
+    BOOST_CHECK(ascending_session.GetRequiredParticipants() == expected);
+    BOOST_CHECK(descending_session.GetRequiredParticipants() == expected);
+    BOOST_CHECK(mixed_session.GetRequiredParticipants() == expected);
+
+    unsigned char msg32[32];
+    std::fill(msg32, msg32 + 32, 0x42);
+    uint256 nonce_hash_ascending;
+    uint256 context_ascending;
+    uint256 nonce_hash_descending;
+    uint256 context_descending;
+    uint256 nonce_hash_mixed;
+    uint256 context_mixed;
+    BOOST_REQUIRE(ascending_session.ComputeContextIdForParticipants(
+        expected, msg32, nonce_hash_ascending, context_ascending));
+    BOOST_REQUIRE(descending_session.ComputeContextIdForParticipants(
+        expected, msg32, nonce_hash_descending, context_descending));
+    BOOST_REQUIRE(mixed_session.ComputeContextIdForParticipants(
+        expected, msg32, nonce_hash_mixed, context_mixed));
+
+    BOOST_CHECK(nonce_hash_ascending == nonce_hash_descending);
+    BOOST_CHECK(nonce_hash_ascending == nonce_hash_mixed);
+    BOOST_CHECK(context_ascending == context_descending);
+    BOOST_CHECK(context_ascending == context_mixed);
+
+    secp256k1_context_destroy(ctx);
+}
+
+BOOST_AUTO_TEST_CASE(required_participants_reject_committee_that_omits_known_better_nonce)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    constexpr int32_t epoch = 63;
+    constexpr uint8_t threshold = 9;
+    const uint256 seed = FilledSeed(0x63);
+
+    std::vector<uint8_t> all_ids(ORACLE_ACTIVE_COUNT);
+    std::iota(all_ids.begin(), all_ids.end(), 0);
+
+    MuSig2SigningSession session(epoch, threshold);
+    session.SetEpochSelectionSeed(seed);
+    BOOST_REQUIRE(session.InitializePassive(MakeSingleKeyAggCache(ctx)));
+
+    for (uint8_t id : all_ids) {
+        secp256k1_musig_pubnonce pubnonce = MakeValidPubnonceForOracle(ctx, id, epoch);
+        BOOST_REQUIRE(session.AddPubnonce(id, pubnonce));
+    }
+
+    const std::vector<uint8_t> expected =
+        ExpectedEpochCommittee(all_ids, epoch, threshold, seed);
+    BOOST_REQUIRE_EQUAL(expected.size(), threshold);
+    BOOST_CHECK(session.MatchesRequiredParticipants(expected));
+
+    std::vector<uint8_t> biased = expected;
+    const auto replacement_it = std::find_if(all_ids.begin(), all_ids.end(), [&](uint8_t id) {
+        return std::find(expected.begin(), expected.end(), id) == expected.end();
+    });
+    BOOST_REQUIRE(replacement_it != all_ids.end());
+    biased.back() = *replacement_it;
+    std::sort(biased.begin(), biased.end(), [&](uint8_t a, uint8_t b) {
+        const uint256 score_a = GetOracleEpochSelectionHash(epoch, a, seed);
+        const uint256 score_b = GetOracleEpochSelectionHash(epoch, b, seed);
+        if (score_a == score_b) return a < b;
+        return score_a < score_b;
+    });
+
+    BOOST_CHECK(!session.MatchesRequiredParticipants(biased));
+
+    secp256k1_context_destroy(ctx);
+}
+
+BOOST_AUTO_TEST_CASE(session_context_id_changes_when_epoch_selection_seed_changes)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    constexpr int32_t epoch = 62;
+    constexpr uint8_t threshold = 9;
+    const uint256 seed_a = FilledSeed(0x51);
+    const uint256 seed_b = FilledSeed(0x52);
+    const std::vector<uint8_t> participants{0, 1, 2, 3, 4, 5, 6, 7, 8};
+
+    MuSig2SigningSession session_a(epoch, threshold);
+    MuSig2SigningSession session_b(epoch, threshold);
+    session_a.SetEpochSelectionSeed(seed_a);
+    session_b.SetEpochSelectionSeed(seed_b);
+    BOOST_REQUIRE(session_a.InitializePassive(MakeSingleKeyAggCache(ctx)));
+    BOOST_REQUIRE(session_b.InitializePassive(MakeSingleKeyAggCache(ctx)));
+
+    for (uint8_t id : participants) {
+        secp256k1_musig_pubnonce pubnonce = MakeValidPubnonceForOracle(ctx, id, epoch);
+        BOOST_REQUIRE(session_a.AddPubnonce(id, pubnonce));
+        BOOST_REQUIRE(session_b.AddPubnonce(id, pubnonce));
+    }
+
+    unsigned char msg32[32];
+    std::fill(msg32, msg32 + 32, 0x24);
+    uint256 nonce_hash_a;
+    uint256 context_a;
+    uint256 nonce_hash_b;
+    uint256 context_b;
+    BOOST_REQUIRE(session_a.ComputeContextIdForParticipants(
+        participants, msg32, nonce_hash_a, context_a));
+    BOOST_REQUIRE(session_b.ComputeContextIdForParticipants(
+        participants, msg32, nonce_hash_b, context_b));
+
+    BOOST_CHECK(nonce_hash_a == nonce_hash_b);
+    BOOST_CHECK(context_a != context_b);
 
     secp256k1_context_destroy(ctx);
 }

@@ -57,6 +57,7 @@ public:
 
     // P2P broadcast
     bool BroadcastMusigNonce(const OracleMusigNonceMsg& msg);
+    bool BroadcastMusigContext(const OracleMusigContextMsg& msg);
     bool BroadcastMusigPartialSig(const OracleMusigPartialSigMsg& msg);
     void SetConnman(CConnman* connman) { m_connman = connman; }
 
@@ -99,6 +100,8 @@ public:
 
     /** Ingest remote nonce from P2P (called from net_processing). */
     void IngestRemoteNonce(const OracleMusigNonceMsg& msg);
+    /** Ingest remote context proposal from P2P (called from net_processing). */
+    void IngestRemoteContext(const OracleMusigContextMsg& msg);
     /** Ingest remote partial sig from P2P (called from net_processing). */
     void IngestRemotePartialSig(const OracleMusigPartialSigMsg& msg);
 
@@ -120,6 +123,18 @@ private:
      * templated by miners.
      */
     void TickEpochSession(int32_t epoch, int32_t block_height);
+    bool HasSelectionSeedForEpoch(int32_t epoch) const;
+    uint256 GetSelectionSeedForEpoch(int32_t epoch) const;
+    void SetEpochSelectionSeed(int32_t epoch, const uint256& seed);
+    bool IsEligibleContextProposer(int32_t epoch, uint8_t proposer_id, int32_t block_height) const;
+    bool ValidateContextProposal(const OracleMusigContextMsg& msg,
+                                 MuSig2SigningSession& session) const;
+    std::optional<OracleMusigContextMsg> SelectReadyContextProposal(int32_t epoch,
+                                                                    int32_t block_height,
+                                                                    MuSig2SigningSession& session) const;
+    std::optional<OracleMusigContextMsg> BuildLocalContextProposal(int32_t epoch,
+                                                                   int32_t block_height,
+                                                                   MuSig2SigningSession& session);
     bool TryApplyRemotePartialSig(const OracleMusigPartialSigMsg& msg,
                                   MuSig2SigningSession& session) const;
     void BufferPendingPartialSig(const OracleMusigPartialSigMsg& msg);
@@ -130,7 +145,10 @@ private:
     mutable std::mutex m_sessions_mutex;
     std::unique_ptr<MuSig2OracleAggregator> m_aggregator;
     std::map<int32_t, std::set<uint8_t>> m_nonce_broadcast_tracker;
+    std::map<int32_t, std::set<uint8_t>> m_context_broadcast_tracker;
     std::map<int32_t, std::set<uint8_t>> m_partialsig_broadcast_tracker;
+    std::map<int32_t, std::map<uint256, OracleMusigContextMsg>> m_pending_contexts;
+    std::map<int32_t, uint256> m_epoch_selection_seeds;
     // Buffer context-bound partial sigs that arrive before local session enters SIGNING.
     std::map<int32_t, std::map<uint256, std::vector<OracleMusigPartialSigMsg>>> m_pending_partialsigs;
     mutable std::unique_ptr<CKey> m_cached_oracle_key;

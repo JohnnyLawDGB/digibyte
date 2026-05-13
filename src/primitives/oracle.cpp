@@ -480,8 +480,17 @@ bool operator!=(const OracleNodeInfo& a, const OracleNodeInfo& b)
 
 uint256 GetOracleEpochSelectionHash(int32_t epoch, uint32_t oracle_id)
 {
+    return GetOracleEpochSelectionHash(epoch, oracle_id, Params().GetConsensus().hashGenesisBlock);
+}
+
+uint256 GetOracleEpochSelectionHash(int32_t epoch, uint32_t oracle_id, const uint256& epoch_seed)
+{
     HashWriter hasher{};
-    hasher << epoch << oracle_id;
+    hasher << std::string{"DigiDollar/OracleEpochSelection/v1"};
+    hasher << Params().GetConsensus().hashGenesisBlock;
+    hasher << epoch_seed;
+    hasher << epoch;
+    hasher << oracle_id;
     return hasher.GetHash();
 }
 

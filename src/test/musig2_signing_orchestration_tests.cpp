@@ -505,6 +505,34 @@ BOOST_AUTO_TEST_CASE(sub_quorum_session_does_not_complete)
     BOOST_CHECK_EQUAL(info->partial_sig_count, 0U);
 }
 
+BOOST_AUTO_TEST_CASE(remote_context_proposal_does_not_define_epoch_seed)
+{
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 401;
+    const uint256 remote_seed = uint256(123);
+    BOOST_REQUIRE(remote_seed != Params().GetConsensus().hashGenesisBlock);
+
+    OracleMusigContextMsg msg;
+    msg.epoch = epoch;
+    msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    msg.epoch_selection_seed = remote_seed;
+    msg.proposer_id = 1;
+    msg.participant_ids = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    msg.consensus_price = 123456789;
+    msg.consensus_timestamp = 1710000000;
+    msg.session_context_id = uint256S("0x456");
+    msg.signature.assign(64, 0xAA);
+    BOOST_REQUIRE(msg.IsValid());
+
+    orch.IngestRemoteContext(msg);
+    BOOST_REQUIRE(orch.HasSession(epoch));
+
+    MuSig2SigningSession* session = orch.GetOrCreateSigningSession(epoch, epoch * Params().GetConsensus().nDDOracleEpochBlocks);
+    BOOST_REQUIRE(session != nullptr);
+    BOOST_CHECK(session->GetEpochSelectionSeed() == Params().GetConsensus().hashGenesisBlock);
+    BOOST_CHECK(session->GetEpochSelectionSeed() != remote_seed);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 struct MainParamsMuSig2Setup : public BasicTestingSetup {

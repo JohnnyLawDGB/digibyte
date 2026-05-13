@@ -67,6 +67,7 @@ MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers)
       m_creation_height(0),
       m_timeout_blocks(100)
 {
+    m_epoch_selection_seed = Params().GetConsensus().hashGenesisBlock;
     m_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
     assert(m_ctx != nullptr);
     memset(&m_keyagg_cache, 0, sizeof(m_keyagg_cache));
@@ -102,6 +103,7 @@ MuSig2SigningSession::MuSig2SigningSession(MuSig2SigningSession&& other) noexcep
     m_keyagg_cache = other.m_keyagg_cache;
     m_pubnonces = std::move(other.m_pubnonces);
     m_participants_frozen = other.m_participants_frozen;
+    m_epoch_selection_seed = other.m_epoch_selection_seed;
     m_aggnonce = other.m_aggnonce;
     m_session = other.m_session;
     m_partial_sigs = std::move(other.m_partial_sigs);
@@ -139,6 +141,7 @@ MuSig2SigningSession& MuSig2SigningSession::operator=(MuSig2SigningSession&& oth
     m_keyagg_cache = other.m_keyagg_cache;
     m_pubnonces = std::move(other.m_pubnonces);
     m_participants_frozen = other.m_participants_frozen;
+    m_epoch_selection_seed = other.m_epoch_selection_seed;
     m_aggnonce = other.m_aggnonce;
     m_session = other.m_session;
     m_partial_sigs = std::move(other.m_partial_sigs);
@@ -264,7 +267,7 @@ bool MuSig2SigningSession::AddPubnonce(uint8_t oracle_id,
     // secnonce owner; otherwise a remote injected nonce can prematurely complete
     // the session and exclude the local signer. Passive sessions without a local
     // secnonce may still converge on the lowest collected nonce.
-    const std::vector<uint8_t> required = GetRequiredParticipants();
+    const std::vector<uint8_t> required = GetRequiredParticipantsUnsafe();
     bool have_required = required.size() >= m_min_signers;
     for (uint8_t id : required) {
         if (m_pubnonces.find(id) == m_pubnonces.end()) {
@@ -301,7 +304,25 @@ void MuSig2SigningSession::SetKeyAggCache(const secp256k1_musig_keyagg_cache& ca
     m_keyagg_cache = cache;
 }
 
+void MuSig2SigningSession::SetEpochSelectionSeed(const uint256& seed)
+{
+    LOCK(m_mutex);
+    m_epoch_selection_seed = seed;
+}
+
+uint256 MuSig2SigningSession::GetEpochSelectionSeed() const
+{
+    LOCK(m_mutex);
+    return m_epoch_selection_seed;
+}
+
 std::vector<uint8_t> MuSig2SigningSession::GetRequiredParticipants() const
+{
+    LOCK(m_mutex);
+    return GetRequiredParticipantsUnsafe();
+}
+
+std::vector<uint8_t> MuSig2SigningSession::GetRequiredParticipantsUnsafe() const
 {
     std::vector<uint8_t> ids;
     const uint16_t active_oracles = ConfiguredMuSig2ActiveRosterSize();
@@ -331,7 +352,7 @@ std::vector<uint8_t> MuSig2SigningSession::GetRequiredParticipants() const
     std::vector<std::pair<uint256, uint8_t>> scored;
     scored.reserve(m_pubnonces.size());
     for (const auto& [id, nonce] : m_pubnonces) {
-        scored.emplace_back(GetOracleEpochSelectionHash(m_epoch, id), id);
+        scored.emplace_back(GetOracleEpochSelectionHash(m_epoch, id, m_epoch_selection_seed), id);
     }
     std::sort(scored.begin(), scored.end());
     for (const auto& [score, id] : scored) {
@@ -339,6 +360,12 @@ std::vector<uint8_t> MuSig2SigningSession::GetRequiredParticipants() const
         ids.push_back(id);
     }
     return ids;
+}
+
+bool MuSig2SigningSession::MatchesRequiredParticipants(const std::vector<uint8_t>& participants) const
+{
+    LOCK(m_mutex);
+    return participants == GetRequiredParticipantsUnsafe();
 }
 
 std::vector<uint8_t> MuSig2SigningSession::GetNonceParticipants() const
@@ -355,7 +382,7 @@ std::vector<uint8_t> MuSig2SigningSession::GetNonceParticipants() const
 void MuSig2SigningSession::TrimNoncesToThreshold()
 {
     LOCK(m_mutex);
-    const std::vector<uint8_t> required = GetRequiredParticipants();
+    const std::vector<uint8_t> required = GetRequiredParticipantsUnsafe();
     const size_t before = m_pubnonces.size();
 
     for (auto it = m_pubnonces.begin(); it != m_pubnonces.end(); ) {
@@ -408,6 +435,60 @@ bool MuSig2SigningSession::TrimNoncesToParticipants(const std::vector<uint8_t>& 
     LogPrintf("Oracle: Trimmed nonces from %zu to %zu proposed participants (threshold=%zu, epoch=%d)\n",
              before, m_pubnonces.size(), m_min_signers, m_epoch);
     return m_pubnonces.size() == keep.size();
+}
+
+bool MuSig2SigningSession::ComputeContextIdForParticipants(const std::vector<uint8_t>& participants,
+                                                           const unsigned char* msg32,
+                                                           uint256& nonce_set_hash_out,
+                                                           uint256& context_id_out) const
+{
+    LOCK(m_mutex);
+
+    nonce_set_hash_out.SetNull();
+    context_id_out.SetNull();
+    if (!msg32) return false;
+    if (participants.size() < static_cast<size_t>(m_min_signers)) return false;
+
+    std::set<uint8_t> keep(participants.begin(), participants.end());
+    if (keep.size() != participants.size()) return false;
+
+    CHashWriter nonce_hasher(0);
+    nonce_hasher << std::string("DigiDollar/MuSig2NonceSet/v1");
+    nonce_hasher << Params().GetConsensus().hashGenesisBlock;
+    nonce_hasher << m_epoch;
+    for (uint8_t id : keep) {
+        const auto it = m_pubnonces.find(id);
+        if (it == m_pubnonces.end()) return false;
+        unsigned char ser_nonce[66];
+        if (!secp256k1_musig_pubnonce_serialize(m_ctx, ser_nonce, &it->second)) {
+            return false;
+        }
+        std::vector<unsigned char> nonce_bytes(ser_nonce, ser_nonce + 66);
+        nonce_hasher << id;
+        nonce_hasher << nonce_bytes;
+    }
+
+    uint256 message_hash;
+    std::memcpy(message_hash.begin(), msg32, 32);
+
+    std::vector<uint8_t> sorted_participants(keep.begin(), keep.end());
+    const std::vector<unsigned char> bitmap =
+        BuildRawParticipationBitmap(sorted_participants, ConfiguredMuSig2BitmapSlots());
+    if (bitmap.empty()) return false;
+
+    nonce_set_hash_out = nonce_hasher.GetHash();
+
+    CHashWriter context_hasher(0);
+    context_hasher << std::string("DigiDollar/MuSig2SessionContext/v1");
+    context_hasher << Params().GetConsensus().hashGenesisBlock;
+    context_hasher << m_epoch;
+    context_hasher << m_epoch_selection_seed;
+    context_hasher << static_cast<uint8_t>(ORACLE_MUSIG2_SESSION_CONTEXT_VERSION);
+    context_hasher << message_hash;
+    context_hasher << bitmap;
+    context_hasher << nonce_set_hash_out;
+    context_id_out = context_hasher.GetHash();
+    return true;
 }
 
 bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
@@ -473,6 +554,7 @@ bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
     context_hasher << std::string("DigiDollar/MuSig2SessionContext/v1");
     context_hasher << Params().GetConsensus().hashGenesisBlock;
     context_hasher << m_epoch;
+    context_hasher << m_epoch_selection_seed;
     context_hasher << static_cast<uint8_t>(ORACLE_MUSIG2_SESSION_CONTEXT_VERSION);
     context_hasher << m_message_hash;
     context_hasher << bitmap;
@@ -499,6 +581,7 @@ bool MuSig2SigningSession::CreatePartialSignature(uint8_t oracle_id,
     // Check we have a secnonce for this oracle and it hasn't been used
     auto nonce_it = m_secnonces.find(oracle_id);
     if (nonce_it == m_secnonces.end()) return false;
+    if (m_pubnonces.find(oracle_id) == m_pubnonces.end()) return false;
     if (m_secnonces_used.count(oracle_id)) return false;
 
     // Create keypair from CKey for secp256k1_musig_partial_sign

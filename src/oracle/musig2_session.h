@@ -120,20 +120,18 @@ public:
     bool HasEnoughNonces() const;
     size_t GetNonceCount() const;
 
-    /**
-     * Aggregate collected pubnonces and initialize signing session.
-     * Transitions: NONCES_COMPLETE → SIGNING.
-     *
-     * @param[in] msg32 The 32-byte message to sign
-     * @return true on success
-     */
     /** Override the key aggregation cache (for threshold MuSig2: set to
      *  participants-only aggregate BEFORE calling AggregateNonces). */
     void SetKeyAggCache(const secp256k1_musig_keyagg_cache& cache);
+    /** Set the blockchain-derived epoch selection seed used for committee priority. */
+    void SetEpochSelectionSeed(const uint256& seed);
+    uint256 GetEpochSelectionSeed() const;
     /** Return sorted oracle IDs that contributed nonces. */
     std::vector<uint8_t> GetNonceParticipants() const;
     /** Return the deterministic threshold participant set selected from collected nonces. */
     std::vector<uint8_t> GetRequiredParticipants() const;
+    /** True when the supplied participant list is the current deterministic threshold set. */
+    bool MatchesRequiredParticipants(const std::vector<uint8_t>& participants) const;
     /**
      * Trim nonces to exactly m_min_signers. Keeps the epoch-scored committee from the collected set.
      * Must be called BEFORE AggregateNonces so the session is bound to
@@ -142,6 +140,17 @@ public:
     void TrimNoncesToThreshold();
     /** Freeze an already-selected participant set. */
     bool TrimNoncesToParticipants(const std::vector<uint8_t>& participants);
+    bool ComputeContextIdForParticipants(const std::vector<uint8_t>& participants,
+                                         const unsigned char* msg32,
+                                         uint256& nonce_set_hash_out,
+                                         uint256& context_id_out) const;
+    /**
+     * Aggregate collected pubnonces and initialize signing session.
+     * Transitions: NONCES_COMPLETE -> SIGNING.
+     *
+     * @param[in] msg32 The 32-byte message to sign
+     * @return true on success
+     */
     bool AggregateNonces(const unsigned char* msg32);
 
     /**
@@ -228,6 +237,8 @@ public:
 private:
     mutable Mutex m_mutex;
 
+    std::vector<uint8_t> GetRequiredParticipantsUnsafe() const;
+
     int32_t m_epoch;                          //!< Epoch this session is signing for
     uint8_t m_min_signers;                    //!< Minimum signers required
     MuSig2SessionState m_state GUARDED_BY(m_mutex);
@@ -245,6 +256,7 @@ private:
     //! Collected public nonces, keyed by oracle_id
     std::map<uint8_t, secp256k1_musig_pubnonce> m_pubnonces GUARDED_BY(m_mutex);
     bool m_participants_frozen GUARDED_BY(m_mutex){false};
+    uint256 m_epoch_selection_seed GUARDED_BY(m_mutex);
 
     //! Aggregate nonce (computed from collected pubnonces)
     secp256k1_musig_aggnonce m_aggnonce GUARDED_BY(m_mutex);

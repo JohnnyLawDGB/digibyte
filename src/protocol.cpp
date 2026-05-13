@@ -57,6 +57,7 @@ const char* GETORACLES = "getoracles";
 const char* ORACLECONSENSUS = "oracleconsns";
 const char* ORACLEATTESTATION = "oracleattest";
 const char* ORACLEMUSIGNONCE = "oramusnonce";
+const char* ORACLEMUSIGCONTEXT = "oramusigctx";
 const char* ORACLEMUSIGPARTIALSIG = "oramusigpsig";
 } // namespace NetMsgType
 
@@ -106,6 +107,7 @@ const static std::vector<std::string> g_all_net_message_types{
     NetMsgType::ORACLECONSENSUS,
     NetMsgType::ORACLEATTESTATION,
     NetMsgType::ORACLEMUSIGNONCE,
+    NetMsgType::ORACLEMUSIGCONTEXT,
     NetMsgType::ORACLEMUSIGPARTIALSIG,
 };
 
@@ -183,6 +185,7 @@ std::string CInv::GetCommand() const
     case MSG_ORACLE_CONSENSUS:   return NetMsgType::ORACLECONSENSUS;
     case MSG_ORACLE_ATTESTATION: return NetMsgType::ORACLEATTESTATION;
     case MSG_ORACLE_MUSIG_NONCE: return NetMsgType::ORACLEMUSIGNONCE;
+    case MSG_ORACLE_MUSIG_CONTEXT: return NetMsgType::ORACLEMUSIGCONTEXT;
     case MSG_ORACLE_MUSIG_PARTIALSIG:
         return NetMsgType::ORACLEMUSIGPARTIALSIG;
     }
@@ -384,6 +387,57 @@ bool OracleMusigPartialSigMsg::Sign(const CKey& key)
 }
 
 bool OracleMusigPartialSigMsg::VerifySignature(const XOnlyPubKey& pubkey) const
+{
+    if (signature.size() != 64) return false;
+    if (!pubkey.IsFullyValid()) return false;
+    uint256 hash = GetSignatureHash();
+    return pubkey.VerifySchnorr(hash, signature);
+}
+
+uint256 OracleMusigContextMsg::GetHash() const
+{
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/MuSig2ContextMsg/v1");
+    hasher << Params().GetConsensus().hashGenesisBlock;
+    hasher << epoch;
+    hasher << context_version;
+    hasher << epoch_selection_seed;
+    hasher << proposer_id;
+    hasher << participant_ids;
+    hasher << consensus_price;
+    hasher << consensus_timestamp;
+    hasher << session_context_id;
+    return hasher.GetHash();
+}
+
+uint256 OracleMusigContextMsg::GetSignatureHash() const
+{
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/MuSig2ContextProposal");
+    hasher << Params().GetConsensus().hashGenesisBlock;
+    hasher << epoch;
+    hasher << context_version;
+    hasher << epoch_selection_seed;
+    hasher << proposer_id;
+    hasher << participant_ids;
+    hasher << consensus_price;
+    hasher << consensus_timestamp;
+    hasher << session_context_id;
+    return hasher.GetHash();
+}
+
+bool OracleMusigContextMsg::Sign(const CKey& key)
+{
+    uint256 hash = GetSignatureHash();
+    signature.resize(64);
+    if (!key.SignSchnorr(hash, signature, nullptr, uint256())) {
+        signature.clear();
+        return false;
+    }
+    return true;
+}
+
+bool OracleMusigContextMsg::VerifySignature(const XOnlyPubKey& pubkey) const
 {
     if (signature.size() != 64) return false;
     if (!pubkey.IsFullyValid()) return false;

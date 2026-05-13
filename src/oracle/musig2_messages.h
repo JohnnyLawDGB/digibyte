@@ -84,4 +84,49 @@ public:
     bool IsValid() const { return partial_sig.size() == 32 && oracle_id < 255 && signature.size() == 64; }
 };
 
+/**
+ * MuSig2 Context Proposal Message
+ *
+ * Announces the exact signer set and price/timestamp that define a MuSig2
+ * session context before partial signatures are broadcast. This gives honest
+ * nodes one verifiable transcript to join instead of independently freezing
+ * different local nonce views.
+ */
+class OracleMusigContextMsg
+{
+public:
+    int32_t epoch{0};
+    uint8_t context_version{ORACLE_MUSIG2_SESSION_CONTEXT_VERSION};
+    uint256 epoch_selection_seed;
+    uint8_t proposer_id{0};
+    std::vector<uint8_t> participant_ids;
+    uint64_t consensus_price{0};
+    int64_t consensus_timestamp{0};
+    uint256 session_context_id;
+    std::vector<unsigned char> signature; // 64 bytes Schnorr signature
+
+    SERIALIZE_METHODS(OracleMusigContextMsg, obj)
+    {
+        READWRITE(obj.epoch, obj.context_version, obj.epoch_selection_seed,
+                  obj.proposer_id, obj.participant_ids, obj.consensus_price,
+                  obj.consensus_timestamp, obj.session_context_id, obj.signature);
+    }
+
+    uint256 GetHash() const;
+    uint256 GetSignatureHash() const;
+    bool Sign(const CKey& key);
+    bool VerifySignature(const XOnlyPubKey& pubkey) const;
+
+    bool IsValid() const
+    {
+        return context_version == ORACLE_MUSIG2_SESSION_CONTEXT_VERSION &&
+               !epoch_selection_seed.IsNull() &&
+               proposer_id < 255 &&
+               !participant_ids.empty() &&
+               participant_ids.size() <= 32 &&
+               !session_context_id.IsNull() &&
+               signature.size() == 64;
+    }
+};
+
 #endif // DIGIBYTE_ORACLE_MUSIG2_MESSAGES_H

@@ -1,303 +1,206 @@
 # DigiDollar Oracle Testing Guide
 
-## Overview
+This guide describes the current DigiDollar V1 oracle system used by RC38.
 
-This guide documents how to test the DigiDollar Oracle system on DigiByte testnet. The oracle fetches **real DGB/USD prices** from multiple cryptocurrency exchanges and embeds them in the blockchain via miner oracle bundles.
+It is no longer a single-oracle Phase One setup. Production-style testnet uses a MuSig2 quorum:
 
-### Phase One Configuration (Testnet)
-- **Consensus**: 1-of-1 (single oracle for testing)
-- **Activation Height**: 650
-- **Oracle 0 Private Key**: `0000000000000000000000000000000000000000000000000000000000000001`
-- **Oracle 0 Public Key**: `0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798`
+- Public testnet: `testnet24`
+- DigiDollar/oracle activation height: `600`
+- Oracle epoch length: `40` blocks
+- Oracle quorum: `9-of-17`
+- On-chain bundle format: v0x03 MuSig2 aggregate bundle
+- Local developer harness: `./test_multi_oracle_testnet.sh`
 
-### Price Formats
-- **micro-USD**: 1,000,000 = $1.00 (full precision)
-- **cents**: 100 = $1.00 (rounded)
-- **USD**: Standard decimal format
+The oracle price is valid only when a block contains a verified v0x03 bundle. Wallet caches, pending P2P messages, and operator heartbeats are useful for monitoring, but they are not consensus truth.
 
----
-
-## Quick Start (TL;DR)
+## Quick Operator Checks
 
 ```bash
-# 1. Start oracle with testnet key
-digibyte-cli -testnet startoracle 0 "0000000000000000000000000000000000000000000000000000000000000001"
-
-# 2. Verify oracle is fetching real prices
-digibyte-cli -testnet listoracles | grep -A5 '"oracle_id": 0'
-
-# 3. Mine a block to embed the price
-digibyte-cli -testnet generatetoaddress 1 "YOUR_ADDRESS"
-
-# 4. Check oracle price
+digibyte-cli -testnet getblockchaininfo
+digibyte-cli -testnet getnetworkinfo
+digibyte-cli -testnet listoracle
+digibyte-cli -testnet getoracles
 digibyte-cli -testnet getoracleprice
 ```
 
----
+`listoracle` shows the oracle running on the local node.
 
-## Step-by-Step Testing
+`getoracles` shows what this node currently knows about every configured oracle, including:
 
-### Step 1: Verify DigiDollar is Active
+- Latest price source: local, pending, on-chain, or none.
+- Whether the oracle is selected for the current epoch.
+- Whether it is running locally.
+- Latest signed version heartbeat.
+- Reported client, P2P, oracle protocol, and MuSig2 context versions.
 
-DigiDollar activates at block 650 on testnet. Check current height:
+## Starting A Local Oracle
 
-```bash
-digibyte-cli -testnet getblockcount
-# Must be >= 650
-```
-
-### Step 2: Start the Oracle
-
-Start oracle 0 with the testnet private key:
+Use the private key assigned to the oracle ID. Do not use old Phase One demo keys on public testnet.
 
 ```bash
-digibyte-cli -testnet startoracle 0 "0000000000000000000000000000000000000000000000000000000000000001"
+digibyte-cli -testnet startoracle <oracle_id> "<32-byte-private-key-hex>"
 ```
 
-**Expected Output:**
-```json
-{
-  "success": true,
-  "oracle_id": 0,
-  "status": "running",
-  "message": "Oracle added and started with provided private key",
-  "was_already_running": false
-}
-```
-
-### Step 3: Verify Oracle is Fetching Real Prices
-
-Wait 5 seconds for the oracle to fetch prices from exchanges, then check:
+Then verify:
 
 ```bash
-digibyte-cli -testnet listoracles | head -20
+digibyte-cli -testnet listoracle
+digibyte-cli -testnet getoracles true
 ```
 
-**Expected Output (Oracle 0):**
-```json
-{
-  "oracle_id": 0,
-  "pubkey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
-  "endpoint": "oracle1.digidollar.org:9001",
-  "is_active": true,
-  "is_running": true,
-  "is_enabled": true,
-  "last_price": 6422,      <-- REAL DGB price in micro-USD ($0.006422)
-  "last_update": 1764798804,
-  "status": "running",
-  "selected_for_epoch": true
-}
+Expected signs of health:
+
+- `running: true` in `listoracle`.
+- A fresh local price source when exchange fetching works.
+- A fresh heartbeat for the oracle ID in `getoracles`.
+- `musig2_context_version` matches the release.
+- Other upgraded oracle nodes also show fresh heartbeats.
+
+## What A Passing Epoch Looks Like
+
+Every epoch should follow this pattern:
+
+```text
+Live exchange prices
+      |
+      v
+Signed ORACLEPRICE gossip
+      |
+      v
+Signed ORACLEMUSIGNONCE gossip
+      |
+      v
+Chain-seeded signer ranking chooses threshold signers
+      |
+      v
+Signed ORACLEMUSIGCONTEXT proposal with nonce and price evidence
+      |
+      v
+Selected oracles broadcast ORACLEMUSIGPARTIALSIG
+      |
+      v
+Aggregate Schnorr signature completes
+      |
+      v
+Miner includes v0x03 bundle in coinbase
+      |
+      v
+getoracleprice returns a nonzero validated chain price
 ```
 
-**Key Fields:**
-- `is_running: true` - Oracle is actively running
-- `last_price: 6422` - Real price from exchanges (6422 micro-USD = $0.006422)
+## Main RC38 End-To-End Gate
 
-### Step 4: Mine a Block
-
-Mine a block to embed the oracle price in the blockchain:
+The most important local release gate is:
 
 ```bash
-digibyte-cli -testnet generatetoaddress 1 "dgbt1q5h54gt205546jnl4wvzn0sm9q4mqsz5kv8fulc"
+./test_multi_oracle_testnet.sh
 ```
 
-### Step 5: Verify Oracle Price via RPC
+This script is the ecosystem test. It exercises live oracle price flow, MuSig2 signing, mining, minting, transfer chains, redemption, wallet persistence, restart, rescan, and reindex behavior on the local testnet harness.
+
+Partial script progress is not a pass. It must finish end-to-end.
+
+## Unit And Functional Gates
+
+Run the full unit suite:
 
 ```bash
-digibyte-cli -testnet getoracleprice
+./src/test/test_digibyte --show_progress
 ```
 
-**Expected Output:**
-```json
-{
-  "price_micro_usd": 6422,     <-- Full precision (6422 = $0.006422)
-  "price_cents": 1,            <-- Rounded to nearest cent
-  "price_usd": 0.006422,       <-- Human-readable USD value
-  "last_update_height": 662,
-  "last_update_time": 1764798952,
-  "validity_blocks": 20,
-  "is_stale": false,
-  "oracle_count": 1,
-  "status": "active",
-  "24h_high": 1,
-  "24h_low": 1,
-  "volatility": 2.5
-}
-```
+Run the default functional suite:
 
----
-
-## Testing in Qt Wallet
-
-### Using Debug Console
-
-1. Open DigiByte-Qt with testnet: `digibyte-qt -testnet`
-2. Go to **Help > Debug Window > Console**
-3. Run these commands:
-
-```
-# Start the oracle
-startoracle 0 "0000000000000000000000000000000000000000000000000000000000000001"
-
-# Wait 5 seconds, then check status
-listoracles
-
-# Mine a block
-generatetoaddress 1 "dgbt1qYOUR_ADDRESS"
-
-# Check oracle price
-getoracleprice
-```
-
-### GUI Price Display
-
-The oracle price is displayed in the Qt wallet's overview area. After mining a block with a running oracle, the DigiDollar price should update automatically.
-
----
-
-## Exchange Price Sources
-
-The oracle fetches prices from multiple exchanges and aggregates them:
-
-| Exchange | API | Pair |
-|----------|-----|------|
-| Binance | Public | DGB/USDT or DGB/BTC→BTC/USDT |
-| CoinGecko | Public | DGB/USD |
-| Kraken | Public | DGB/USD |
-| KuCoin | Public | DGB/USDT |
-| Gate.io | Public | DGB/USDT |
-| HTX (Huobi) | Public | DGB/USDT |
-| Crypto.com | Public | DGB/USD |
-| CoinMarketCap | API Key | DGB/USD |
-
-The oracle uses a median price with outlier detection (10% threshold) to ensure accuracy.
-
----
-
-## Troubleshooting
-
-### Problem: `getoracleprice` returns all zeros
-
-**Cause:** Oracle is not running or no price has been mined yet.
-
-**Solution:**
 ```bash
-# Check if oracle is running
-digibyte-cli -testnet listoracles | grep -A10 '"oracle_id": 0'
-
-# If not running, start it
-digibyte-cli -testnet startoracle 0 "0000000000000000000000000000000000000000000000000000000000000001"
-
-# Wait 5 seconds for price fetch
-sleep 5
-
-# Mine a block
-digibyte-cli -testnet generatetoaddress 1 "YOUR_ADDRESS"
+test/functional/test_runner.py --jobs=4
 ```
 
-### Problem: `last_price: 0` in listoracles
+Run the fuzz gate for all registered targets using the available corpus mode for the local build:
 
-**Cause:** Exchange API fetch failed or network issue.
-
-**Solution:** Wait and retry. The oracle retries automatically. Check debug.log for errors:
 ```bash
-tail -100 ~/.digibyte/testnet4/debug.log | grep -i oracle
+PRINT_ALL_FUZZ_TARGETS_AND_ABORT=1 ./src/test/fuzz/fuzz
+test/fuzz/test_runner.py -l INFO --par=4 <corpus-path>
 ```
 
-### Problem: Oracle shows `is_stale: true`
+If no corpus is available and the build supports the empty-corpus runner, use:
 
-**Cause:** Price is older than `validity_blocks` (20 blocks).
-
-**Solution:** Mine more blocks with the oracle running:
 ```bash
-digibyte-cli -testnet generatetoaddress 5 "YOUR_ADDRESS"
+mkdir -p /tmp/rc38_fuzz_corpus
+test/fuzz/test_runner.py -l INFO --par=4 --empty_min_time=30 /tmp/rc38_fuzz_corpus
 ```
 
----
+## Debug Log Checks
 
-## Verified Test Results (2025-12-03)
+Useful filters:
 
-### Test Environment
-- DigiByte testnet (DigiDollar Phase One)
-- Block height: 662
-- Network: Local testnet node
+```bash
+tail -n 500 ~/.digibyte/testnet24/debug.log | rg -i 'oracle|musig|heartbeat|bundle|context|partial'
+```
 
-### Test Execution
+Healthy logs should show:
 
-1. **Started Oracle:**
-   ```bash
-   $ digibyte-cli -testnet startoracle 0 "0000000000000000000000000000000000000000000000000000000000000001"
-   {
-     "success": true,
-     "oracle_id": 0,
-     "status": "running"
-   }
-   ```
+- Exchange price fetches.
+- Oracle price broadcasts.
+- Version heartbeat broadcasts.
+- Nonce broadcasts for the current or next epoch.
+- Context proposal acceptance.
+- Partial signature broadcasts with a non-null context ID.
+- MuSig2 session completion.
+- Miner adding a v0x03 oracle bundle.
 
-2. **Verified Real Price Fetch:**
-   ```bash
-   $ digibyte-cli -testnet listoracles | head -15
-   {
-     "oracle_id": 0,
-     "is_running": true,
-     "last_price": 6422,    <-- Real DGB price: $0.006422
-     "status": "running"
-   }
-   ```
+## Common Failure Patterns
 
-3. **Mined Block:**
-   ```bash
-   $ digibyte-cli -testnet generatetoaddress 1 "dgbt1q5h54gt205546jnl4wvzn0sm9q4mqsz5kv8fulc"
-   ["fdc8293501f5a76d1278ff65b9ee28c8d1bc119585b2eab040557f670a36bae9"]
-   ```
+### No price in `getoracleprice`
 
-4. **Verified Oracle Price:**
-   ```bash
-   $ digibyte-cli -testnet getoracleprice
-   {
-     "price_micro_usd": 6422,    <-- Correct!
-     "price_cents": 1,
-     "price_usd": 0.006422,      <-- Real DGB/USD price!
-     "oracle_count": 1,
-     "status": "active"
-   }
-   ```
+Meaning:
 
-### Test Result: **PASS**
+No recent block has a valid v0x03 oracle bundle.
 
-The oracle successfully:
-- Fetched real DGB/USD prices from live exchanges
-- Returned accurate price of ~$0.0064 (matching current market)
-- Embedded price in mined block
-- Made price available via `getoracleprice` RPC
-- Set status to "active" with oracle_count: 1
+Check:
 
----
+- Are at least 9 oracle operators online and upgraded?
+- Does `getoracles` show fresh heartbeats?
+- Are fresh price messages present?
+- Are nonce messages arriving for the current epoch?
+- Are context proposals accepted or rejected?
+- Are partial signatures all using the same `attempt_id` and `session_context_id`?
 
-## RPC Commands Reference
+### Prices are visible but no bundle arrives
 
-| Command | Description |
-|---------|-------------|
-| `startoracle <id> "<privkey>"` | Start an oracle with private key |
-| `stoporacle <id>` | Stop a running oracle |
-| `listoracles` | List all oracles with status |
-| `getoracleprice` | Get current oracle price |
-| `getoracleinfo` | Get oracle system info |
-| `getdigidollarinfo` | Get DigiDollar system status |
+Meaning:
 
----
+The issue is probably MuSig2 convergence, not exchange fetching.
 
-## Important Notes
+Check:
 
-1. **Oracle Must Be Started Each Session**: When the wallet/daemon restarts, you must run `startoracle` again to begin fetching prices.
+- Context proposal evidence: nonce evidence and price evidence must verify.
+- The selected signers must match chain-seeded ranking for known nonces.
+- The proposer cannot use a remote seed; the local chain seed wins.
+- Partial signatures from old attempts or old contexts must be ignored.
 
-2. **Price Persistence**: Once a price is mined into a block, it persists in the blockchain. The `getoracleprice` RPC reads from the most recent oracle bundle.
+### Heartbeats are missing
 
-3. **Testnet Only**: The testnet private key (`0000...0001`) is **only for testnet**. Mainnet will use different, securely managed keys.
+Meaning:
 
-4. **Phase One Limitations**: Single oracle consensus means any oracle can set the price. This is intentional for Phase One testing. Phase Two introduces multi-oracle consensus (e.g., 5-of-8).
+The node has not seen a signed status heartbeat from that oracle.
 
----
+Check:
 
-*Last Updated: 2025-12-03*
-*Tested on: DigiByte v8.26 testnet, DigiDollar Phase One*
+- The operator is running RC38 or newer.
+- The oracle key matches its assigned chainparams slot.
+- P2P peers are connected.
+- `debug.log` contains `Broadcast version heartbeat`.
+
+Heartbeats are monitoring data only. Missing heartbeats do not invalidate the chain, but they are a strong clue that an operator is offline, isolated, or on an old build.
+
+## Rules
+
+Do not fix tests by weakening oracle safety:
+
+- Do not add production fallback prices.
+- Do not fake exchange prices in production-style testnet.
+- Do not reduce the quorum.
+- Do not accept unsigned or wrong-context MuSig2 messages.
+- Do not reuse MuSig2 secret nonces.
+- Do not let wallet/RPC caches become consensus truth.
+
+If fewer than threshold oracles are available, the correct behavior is no new price bundle. That is fail-closed behavior, not a reason to invent a price.

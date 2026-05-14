@@ -7,14 +7,15 @@ It describes the current DigiDollar V1 design used by this branch:
 - Live exchange prices feed independent oracle operators.
 - Oracles use MuSig2 to create one aggregate Schnorr signature.
 - Oracle signer ranking is seeded from the blockchain at the epoch boundary.
-- Oracle nodes converge on one signed context proposal before broadcasting partial signatures.
+- Oracle nodes converge on one signed, evidence-bound context proposal before broadcasting partial signatures.
+- Oracle nodes broadcast signed version heartbeats so operators can see who is running which oracle protocol.
 - Blocks carry compact v0x03 oracle bundles in the coinbase transaction.
 - Full nodes verify the bundle before accepting DigiDollar price-dependent blocks.
 - Wallet and RPC code fail closed when the chain does not have a valid price.
 
 The main idea is simple:
 
-> The chain only trusts a price when enough independent oracle keys signed the same price, timestamp, signer set, and nonce set for the same epoch.
+> The chain only trusts a price when enough independent oracle keys signed the same price, timestamp, signer set, nonce set, and attempt for the same epoch.
 
 ## Who This Is For
 
@@ -151,6 +152,14 @@ There are two parts:
 
 Never reuse a secret nonce. Reusing signing nonces can leak private keys.
 
+### Attempt
+
+An attempt is a retry number inside one epoch.
+
+Most epochs use attempt `0`. If a session fails before it completes, the network can start a fresh attempt with fresh nonces. Attempt IDs are off-chain signing metadata. They do not change the on-chain v0x03 bundle format.
+
+Attempt IDs matter because a MuSig2 secret nonce may only be used once. A partial signature from attempt `0` must never be accepted into attempt `1`.
+
 ### Partial Signature
 
 Each selected oracle signs the same message and broadcasts one partial signature.
@@ -175,6 +184,22 @@ The bitmap says which oracle IDs signed.
 If bit 5 is set, oracle ID 5 signed. If bit 14 is set, oracle ID 14 signed.
 
 Validators use the bitmap to reconstruct the aggregate public key and verify the aggregate signature.
+
+### Version Heartbeat
+
+A version heartbeat is a signed off-chain status message from an oracle. It reports:
+
+- Oracle ID.
+- DigiByte Core client version.
+- P2P protocol version.
+- Oracle protocol version.
+- MuSig2 context version.
+- Software version string.
+- Timestamp and nonce.
+
+Heartbeats help operators answer a simple live-network question: "Which oracle slots are online, and what version are they running?"
+
+Heartbeats are not mined, do not set the price, and do not change consensus.
 
 ### Fail Closed
 
@@ -313,6 +338,8 @@ m_pubnonces = {
 
 Once enough valid nonces exist, the node can select the threshold signing set.
 
+RC38 keeps the signed nonce messages as evidence. A later context proposal includes the nonce evidence for the signing set, so a node can reconstruct the exact nonce set before it signs.
+
 ## How The 9 Oracles Are Selected
 
 No central node picks the signers.
@@ -445,7 +472,7 @@ That message is built from:
 - Consensus price.
 - Consensus timestamp.
 
-For RC37, the price calculation used for the signing context is scoped to the selected signer IDs.
+For RC38, the price calculation used for the signing context is scoped to the selected signer IDs and is committed as price evidence in the context proposal.
 
 That matters because the signed message must not drift while nodes are signing.
 
@@ -471,9 +498,11 @@ The price algorithm uses the existing oracle consensus price calculation. Outlie
 
 If a selected signer does not have a fresh price message, the node waits instead of signing a different message.
 
+The context proposal carries the selected signers' signed price messages. Validators of the off-chain context recompute the consensus price and timestamp from that evidence. This prevents one node from signing a price that another node cannot reproduce from the same context.
+
 ## Phase 5: Propose And Freeze The Signing Context
 
-This is the RC37 convergence point.
+This is the RC38 convergence point.
 
 MuSig2 partial signatures are only valid for one exact signing transcript. The transcript includes:
 
@@ -485,25 +514,30 @@ MuSig2 partial signatures are only valid for one exact signing transcript. The t
 - Signer bitmap.
 - Public nonce set hash.
 
-RC37 has an explicit context proposal message:
+RC38 has an explicit context proposal message:
 
 ```text
 OracleMusigContextMsg {
   epoch,
+  attempt_id,
   context_version,
   epoch_selection_seed,
   proposer_id,
   participant_ids,
+  nonce_set_hash,
+  quote_set_hash,
   consensus_price,
   consensus_timestamp,
   session_context_id,
+  nonce_evidence[],
+  price_evidence[],
   auth_signature
 }
 ```
 
 The proposal says, "this is the exact transcript selected oracles should sign."
 
-Every node independently validates the proposal before signing it. If the proposal does not match local chain data, local nonces, or local selected-signer prices, the node rejects it.
+Every node independently validates the proposal before signing it. If the proposal does not match local chain data, the signed nonce evidence, the signed price evidence, or locally known higher-priority nonces, the node rejects it.
 
 The context ID is computed from:
 
@@ -513,6 +547,7 @@ session_context_id =
     "DigiDollar/MuSig2SessionContext/v1",
     chain_genesis_hash,
     epoch,
+    attempt_id,
     epoch_selection_seed,
     context_version,
     message_hash,
@@ -532,7 +567,7 @@ Why it matters:
 
 Before this hardening, partial signature messages identified the epoch and oracle ID, but not the exact transcript. That was safe in the sense that invalid aggregate signatures failed verification, but it hurt liveness because honest nodes could produce partial signatures for slightly different local contexts and then reject each other's partials.
 
-RC37 makes the context explicit before partial signatures are broadcast.
+RC38 makes the context explicit and evidence-bound before partial signatures are broadcast.
 
 ## Phase 6: Broadcast Partial Signatures
 
@@ -541,6 +576,7 @@ Each selected local oracle signs only after it has accepted the same context pro
 ```text
 OracleMusigPartialSigMsg {
   epoch,
+  attempt_id,
   context_version,
   session_context_id,
   oracle_id,
@@ -600,7 +636,7 @@ This keeps the oracle proof inside the block. Validators do not need the off-cha
 
 ## v0x03 Bundle Format
 
-The on-chain bundle format is unchanged by RC37.
+The on-chain bundle format is unchanged by RC38.
 
 ```text
 +------------+---------------+-------------------------------+
@@ -721,7 +757,7 @@ The miner cannot choose an arbitrary price because it cannot forge the aggregate
 
 A single oracle cannot choose the price because threshold signing is required.
 
-A stale partial signature cannot be mixed into a new context because RC37 binds partial signatures to `session_context_id`.
+A stale partial signature cannot be mixed into a new context because RC38 binds partial signatures to `attempt_id` and `session_context_id`.
 
 A message from another network cannot be replayed because oracle message hashes bind to the chain genesis hash.
 
@@ -744,9 +780,9 @@ Several independent pieces must line up:
 
 The bundle only becomes useful when enough independent oracle keys signed the same thing.
 
-## What RC37 Hardens
+## What RC38 Hardens
 
-RC37 keeps the on-chain v0x03 format and the 9-of-17 V1 model. It hardens the off-chain signing path so real testnet oracles can converge after restarts, timing drift, and partial outages.
+RC38 keeps the on-chain v0x03 format and the 9-of-17 V1 model. It hardens the off-chain signing path so real testnet oracles can converge after restarts, timing drift, partial outages, and mixed message arrival order.
 
 ### Problem
 
@@ -754,30 +790,33 @@ Live logs showed nodes collecting prices and nonces, then getting stuck with too
 
 The deeper issue was convergence. Nodes could honestly see nonce and price gossip in different orders, then freeze slightly different local contexts. MuSig2 correctly rejects mismatched partial signatures, but that means the bundle never finishes.
 
-The previous hardening bound partial signatures to a context ID. RC37 goes one step earlier: it makes nodes agree on the context proposal before they sign.
+The previous hardening made nodes agree on a context proposal before they sign. RC38 tightens that proposal so it carries the nonce and price evidence needed to reproduce the context. It also adds attempt IDs so a retry cannot mix messages from an older failed attempt.
 
 ### Fix
 
-RC37 adds and enforces these rules:
+RC38 adds and enforces these rules:
 
 - The 9 signers are ranked with `GetOracleEpochSelectionHash(epoch, oracle_id, epoch_selection_seed)`.
 - The epoch seed comes from the chain boundary block, not from a remote peer.
 - Future epoch nonce prestart is allowed, but context signing waits until the seed exists.
-- A signed `OracleMusigContextMsg` announces the exact signer set, price, timestamp, epoch seed, and context ID.
-- Nodes validate the context proposal before signing.
+- A signed `OracleMusigContextMsg` announces the exact attempt, signer set, nonce set hash, price evidence hash, price, timestamp, epoch seed, and context ID.
+- Nodes validate the context proposal from the included signed nonce and price evidence before signing.
 - Remote context proposals cannot define the local seed. The local chain defines the seed.
-- Partial signatures still bind to the accepted `session_context_id`.
+- Partial signatures bind to both `attempt_id` and the accepted `session_context_id`.
+- The old epoch-only bundle-manager MuSig2 ingestion path is bypassed for live P2P relay, so the signing orchestrator is the single off-chain session owner.
+- Signed oracle version heartbeats are relayed and exposed through RPC for operator visibility.
 
 The context ID binds:
 
 - Chain genesis hash.
 - Epoch.
+- Attempt ID.
 - Epoch selection seed.
 - Price/timestamp message.
 - Selected signer bitmap.
 - Public nonce set.
 
-Nodes now reject or buffer partial signatures by exact context.
+Nodes now reject or buffer partial signatures by exact attempt and context.
 
 ### Result
 
@@ -809,9 +848,9 @@ This works for testnet and mainnet because the bundle is validated from the bloc
 
 ### Existing testnet
 
-RC37 does not reset testnet24 and does not change the v0x03 bundle format.
+RC38 does not reset testnet24 and does not change the v0x03 bundle format.
 
-Oracle nodes running RC37 need the context proposal P2P message for live signing. Mixed oracle versions may gossip prices and nonces, but they will not reliably converge on the RC37 signing context.
+Oracle nodes running RC38 need the attempt-aware, evidence-bound context proposal messages for live signing. Mixed oracle versions may gossip prices and nonces, but they will not reliably converge on the RC38 signing context.
 
 The chain-visible bundle remains v0x03. Validators still verify the same on-chain data shape.
 
@@ -848,14 +887,14 @@ src/oracle/signing_orchestrator.{h,cpp}
 
 src/oracle/bundle_manager.{h,cpp}
   Price message pool, selected-oracle consensus values,
-  bundle assembly and validation helpers.
+  version heartbeat storage, bundle assembly and validation helpers.
 
 src/oracle/musig2_messages.h
   P2P message structures for MuSig2 nonce, context proposal,
   and partial signatures.
 
 src/protocol.cpp
-  Oracle P2P message hashes and authentication hash binding.
+  Oracle P2P message hashes, heartbeat hashes, and authentication hash binding.
 
 src/net_processing.cpp
   P2P relay and rejection rules for oracle messages.
@@ -884,9 +923,11 @@ Unit tests should prove:
 - Offline low IDs do not block a valid threshold set.
 - Nodes converge on the same selected signers and context ID even when nonce arrival order differs.
 - Remote context proposals cannot define the local epoch seed.
-- Context proposal authentication binds seed, proposer, participants, price, timestamp, and context ID.
-- Partial signature authentication binds the session context.
+- Context proposal authentication binds attempt, seed, proposer, participants, nonce evidence, price evidence, price, timestamp, and context ID.
+- Partial signature authentication binds attempt and session context.
 - Partial signatures from the wrong context are rejected.
+- Attempt ID changes alter nonce, context, and partial-signature hashes.
+- Signed version heartbeats verify, serialize, store latest status, and reject tampering.
 - Selected-oracle price calculation ignores non-signer outliers for the signing context.
 - v0x03 bundle parsing and validation reject malformed bundles.
 
@@ -909,6 +950,7 @@ Fuzz tests should exercise:
 - MuSig2 aggregate validation boundaries.
 - Context proposal authentication and mutation boundaries.
 - Partial signature message serialization.
+- Oracle version heartbeat message serialization.
 - Price and timestamp edge cases.
 
 ### Live multi-oracle script
@@ -945,10 +987,11 @@ For oracle operators:
 2. Confirm the wallet/oracle key for the assigned oracle ID is available.
 3. Confirm live price fetching is working.
 4. Confirm nonce messages are being sent and received.
-5. Confirm context proposal messages are being sent and received.
-6. Confirm partial signature messages include a non-null session context.
-7. Confirm v0x03 bundles appear after activation.
-8. Confirm getoracleprice returns a nonzero validated chain price.
+5. Confirm `getoracles` shows a fresh heartbeat and the expected RC/protocol versions for your oracle ID.
+6. Confirm context proposal messages are being sent and received.
+7. Confirm partial signature messages include the current attempt and a non-null session context.
+8. Confirm v0x03 bundles appear after activation.
+9. Confirm getoracleprice returns a nonzero validated chain price.
 9. Do not use mock prices on production-style testnet or mainnet.
 ```
 
@@ -958,6 +1001,8 @@ Useful RPCs:
 digibyte-cli -testnet getblockchaininfo
 digibyte-cli -testnet getnetworkinfo
 digibyte-cli -testnet getoracleinfo
+digibyte-cli -testnet getoracles
+digibyte-cli -testnet listoracle
 digibyte-cli -testnet listoraclekeys
 digibyte-cli -testnet getoracleprice
 digibyte-cli -testnet getdigidollarstats
@@ -974,13 +1019,15 @@ Check:
   Are at least threshold public nonces present for the epoch?
   Is the epoch selection seed known locally?
   Are valid context proposals being accepted?
-  Are partial signatures using the same session_context_id?
+  Do context proposals include valid nonce and price evidence?
+  Are partial signatures using the same attempt_id and session_context_id?
 
 Symptom:
   Partial signatures arrive but do not aggregate.
 
 Check:
   Does the message context match the local session context?
+  Does the attempt ID match the local session attempt?
   Are all partials for the same price/timestamp, bitmap, and nonce set?
   Did every selected signer accept the same context proposal?
   Are old buffered partials being ignored by context?

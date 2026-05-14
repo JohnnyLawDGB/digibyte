@@ -59,6 +59,7 @@ const char* ORACLEATTESTATION = "oracleattest";
 const char* ORACLEMUSIGNONCE = "oramusnonce";
 const char* ORACLEMUSIGCONTEXT = "oramusigctx";
 const char* ORACLEMUSIGPARTIALSIG = "oramusigpsig";
+const char* ORACLEHEARTBEAT = "oraclehb";
 } // namespace NetMsgType
 
 /** All known message types. Keep this in the same order as the list of
@@ -109,6 +110,7 @@ const static std::vector<std::string> g_all_net_message_types{
     NetMsgType::ORACLEMUSIGNONCE,
     NetMsgType::ORACLEMUSIGCONTEXT,
     NetMsgType::ORACLEMUSIGPARTIALSIG,
+    NetMsgType::ORACLEHEARTBEAT,
 };
 
 CMessageHeader::CMessageHeader(const MessageStartChars& pchMessageStartIn, const char* pszCommand, unsigned int nMessageSizeIn)
@@ -188,6 +190,8 @@ std::string CInv::GetCommand() const
     case MSG_ORACLE_MUSIG_CONTEXT: return NetMsgType::ORACLEMUSIGCONTEXT;
     case MSG_ORACLE_MUSIG_PARTIALSIG:
         return NetMsgType::ORACLEMUSIGPARTIALSIG;
+    case MSG_ORACLE_HEARTBEAT:
+        return NetMsgType::ORACLEHEARTBEAT;
     }
 
     // Handle witness flag for standard messages
@@ -457,4 +461,49 @@ bool OracleMusigContextMsg::VerifySignature(const XOnlyPubKey& pubkey) const
     if (!pubkey.IsFullyValid()) return false;
     uint256 hash = GetSignatureHash();
     return pubkey.VerifySchnorr(hash, signature);
+}
+
+uint256 OracleVersionHeartbeatMsg::GetHash() const
+{
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/OracleHeartbeatMsg/v1");
+    hasher << GetSignatureHash();
+    hasher << signature;
+    return hasher.GetHash();
+}
+
+uint256 OracleVersionHeartbeatMsg::GetSignatureHash() const
+{
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/OracleHeartbeat/v1");
+    hasher << Params().GetConsensus().hashGenesisBlock;
+    hasher << heartbeat_version;
+    hasher << oracle_id;
+    hasher << timestamp;
+    hasher << nonce;
+    hasher << client_version;
+    hasher << p2p_protocol_version;
+    hasher << oracle_protocol_version;
+    hasher << musig2_context_version;
+    hasher << software_version;
+    hasher << subversion;
+    return hasher.GetHash();
+}
+
+bool OracleVersionHeartbeatMsg::Sign(const CKey& key)
+{
+    const uint256 hash = GetSignatureHash();
+    signature.resize(64);
+    if (!key.SignSchnorr(hash, signature, nullptr, uint256())) {
+        signature.clear();
+        return false;
+    }
+    return true;
+}
+
+bool OracleVersionHeartbeatMsg::VerifySignature(const XOnlyPubKey& pubkey) const
+{
+    if (signature.size() != 64) return false;
+    if (!pubkey.IsFullyValid()) return false;
+    return pubkey.VerifySchnorr(GetSignatureHash(), signature);
 }

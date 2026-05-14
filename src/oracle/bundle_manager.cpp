@@ -1210,6 +1210,62 @@ void OracleBundleManager::RegisterSeenHash(const uint256& hash)
     }
 }
 
+bool OracleBundleManager::AddVersionHeartbeat(const OracleVersionHeartbeatMsg& heartbeat)
+{
+    if (!heartbeat.IsValid()) return false;
+    if (!IsAuthorizedMuSig2OracleIdForRelay(Params(), heartbeat.oracle_id)) return false;
+
+    const OracleNodeInfo* oracle_config = Params().GetOracleNode(heartbeat.oracle_id);
+    if (!oracle_config || !heartbeat.VerifySignature(XOnlyPubKey(oracle_config->pubkey))) {
+        return false;
+    }
+
+    const int64_t now = GetTime();
+    if (heartbeat.timestamp > now + 10 * 60) return false;
+    if (heartbeat.timestamp < now - 7 * 24 * 60 * 60) return false;
+
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    auto it = version_heartbeats.find(heartbeat.oracle_id);
+    if (it != version_heartbeats.end() && it->second.timestamp > heartbeat.timestamp) {
+        return false;
+    }
+    version_heartbeats[heartbeat.oracle_id] = heartbeat;
+    return true;
+}
+
+bool OracleBundleManager::GetVersionHeartbeat(uint32_t oracle_id,
+                                              OracleVersionHeartbeatMsg& heartbeat_out) const
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    const auto it = version_heartbeats.find(oracle_id);
+    if (it == version_heartbeats.end()) return false;
+    heartbeat_out = it->second;
+    return true;
+}
+
+std::vector<OracleVersionHeartbeatMsg> OracleBundleManager::GetVersionHeartbeats() const
+{
+    std::lock_guard<std::recursive_mutex> lock(mtx_messages);
+    std::vector<OracleVersionHeartbeatMsg> heartbeats;
+    heartbeats.reserve(version_heartbeats.size());
+    for (const auto& [oracle_id, heartbeat] : version_heartbeats) {
+        heartbeats.push_back(heartbeat);
+    }
+    return heartbeats;
+}
+
+bool OracleBundleManager::BroadcastVersionHeartbeat(const OracleVersionHeartbeatMsg& heartbeat)
+{
+    if (!AddVersionHeartbeat(heartbeat)) return false;
+    if (!m_connman) return true;
+
+    m_connman->ForEachNode([this, &heartbeat](CNode* node) {
+        m_connman->PushMessage(node,
+            CNetMsgMaker(node->GetCommonVersion()).Make(NetMsgType::ORACLEHEARTBEAT, heartbeat));
+    });
+    return true;
+}
+
 bool OracleBundleManager::BroadcastMessage(const COraclePriceMessage& message)
 {
     std::lock_guard<std::recursive_mutex> lock(mtx_messages);
@@ -1844,6 +1900,7 @@ void OracleBundleManager::Clear()
         pending_messages.clear();
         pending_attestations.clear();
         seen_message_hashes.clear();
+        version_heartbeats.clear();
         broadcast_proposal_epochs.clear();
         seen_attestation_hashes.clear();
         near_quorum_wait_attempts = 0;

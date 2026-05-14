@@ -16,6 +16,7 @@
 #endif
 
 #include <chainparams.h>
+#include <clientversion.h>
 #include <kernel/chainparams.h>
 #include <logging.h>
 #include <net.h>
@@ -23,10 +24,12 @@
 #include <node/context.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/exchange.h>
+#include <oracle/musig2_messages.h>
 #include <random.h>
 #include <util/strencodings.h>
 #include <util/time.h>
 #include <validation.h>
+#include <version.h>
 
 //! Global oracle manager instance
 std::unique_ptr<OracleManager> g_oracle_manager;
@@ -53,6 +56,7 @@ OracleNode::OracleNode()
     // Previous 15s interval caused 7200 novel P2P msgs/hr with 30 mainnet oracles,
     // overwhelming the rate limiter and causing cascading peer disconnections.
     broadcast_interval = 60;
+    heartbeat_interval = 300;
 }
 
 OracleNode::OracleNode(uint32_t oracle_id_in, const CKey& private_key_in)
@@ -62,6 +66,7 @@ OracleNode::OracleNode(uint32_t oracle_id_in, const CKey& private_key_in)
     // 60-second intervals — see default constructor comment for rationale
     price_update_interval = 60;
     broadcast_interval = 60;
+    heartbeat_interval = 300;
 }
 
 OracleNode::~OracleNode()
@@ -306,6 +311,54 @@ bool OracleNode::BroadcastPriceMessage(const COraclePriceMessage& message)
     return true;
 }
 
+OracleVersionHeartbeatMsg OracleNode::CreateVersionHeartbeat()
+{
+    OracleVersionHeartbeatMsg message;
+    message.heartbeat_version = 1;
+    message.oracle_id = oracle_id;
+    message.timestamp = GetTime();
+    message.nonce = GetRand<uint64_t>(std::numeric_limits<uint64_t>::max());
+    message.client_version = CLIENT_VERSION;
+    message.p2p_protocol_version = PROTOCOL_VERSION;
+    message.oracle_protocol_version = 1;
+    message.musig2_context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    message.software_version = FormatFullVersion();
+    message.subversion = FormatSubVersion(CLIENT_NAME, CLIENT_VERSION, std::vector<std::string>{});
+
+    if (!message.Sign(private_key)) {
+        LogPrintf("Oracle: Failed to sign version heartbeat for oracle %d\n", oracle_id);
+        return OracleVersionHeartbeatMsg{};
+    }
+    return message;
+}
+
+bool OracleNode::BroadcastVersionHeartbeat()
+{
+    if (!private_key.IsValid() || !public_key.IsValid()) {
+        LogPrintf("Oracle: Cannot broadcast version heartbeat for oracle %d: invalid key state\n", oracle_id);
+        return false;
+    }
+
+    OracleVersionHeartbeatMsg heartbeat = CreateVersionHeartbeat();
+    if (!heartbeat.IsValid()) {
+        LogPrintf("Oracle: Refusing invalid version heartbeat for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+    if (!bundleManager.BroadcastVersionHeartbeat(heartbeat)) {
+        LogPrintf("Oracle: Failed to broadcast version heartbeat for oracle %d\n", oracle_id);
+        return false;
+    }
+
+    last_heartbeat_time = heartbeat.timestamp;
+    LogPrint(BCLog::DIGIDOLLAR,
+             "Oracle: Broadcast version heartbeat oracle=%u client=%d oracle_protocol=%u musig2_context=%u version=%s\n",
+             oracle_id, heartbeat.client_version, heartbeat.oracle_protocol_version,
+             heartbeat.musig2_context_version, heartbeat.software_version);
+    return true;
+}
+
 void OracleNode::InjectTestPriceState(CAmount current_price_in, int64_t last_update_time_in,
                                       CAmount last_broadcast_price_in, int64_t last_broadcast_timestamp_in)
 {
@@ -323,6 +376,13 @@ void OracleNode::PriceThreadFunc()
     while (running.load()) {
         try {
             if (enabled.load()) {
+                // Heartbeats are independent of price health. They let operators
+                // see who is online and what oracle protocol version they run,
+                // even while exchange fetches or price consensus are stalled.
+                if ((GetTime() - last_heartbeat_time) >= heartbeat_interval) {
+                    BroadcastVersionHeartbeat();
+                }
+
                 // Fetch and update price
                 FetchAndUpdatePrice();
 

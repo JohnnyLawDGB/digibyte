@@ -302,6 +302,7 @@ extern const char* ORACLEATTESTATION;
 extern const char* ORACLEMUSIGNONCE;
 extern const char* ORACLEMUSIGCONTEXT;
 extern const char* ORACLEMUSIGPARTIALSIG;
+extern const char* ORACLEHEARTBEAT;
 }; // namespace NetMsgType
 
 /* Get a vector of all valid message types (see above) */
@@ -533,6 +534,7 @@ enum GetDataMsg : uint32_t {
     MSG_ORACLE_MUSIG_NONCE = 0x40000005,
     MSG_ORACLE_MUSIG_PARTIALSIG = 0x40000006,
     MSG_ORACLE_MUSIG_CONTEXT = 0x40000007,
+    MSG_ORACLE_HEARTBEAT = 0x40000008,
 };
 
 /** inv message data */
@@ -575,7 +577,7 @@ public:
         return type == MSG_ORACLE_PRICE || type == MSG_ORACLE_BUNDLE || type == MSG_GET_ORACLE_DATA ||
                type == MSG_ORACLE_CONSENSUS || type == MSG_ORACLE_ATTESTATION ||
                type == MSG_ORACLE_MUSIG_NONCE || type == MSG_ORACLE_MUSIG_PARTIALSIG ||
-               type == MSG_ORACLE_MUSIG_CONTEXT;
+               type == MSG_ORACLE_MUSIG_CONTEXT || type == MSG_ORACLE_HEARTBEAT;
     }
 
     uint32_t type;
@@ -693,6 +695,46 @@ public:
         hasher << attestation.schnorr_sig;
         return hasher.GetHash();
     }
+};
+
+class OracleVersionHeartbeatMsg
+{
+public:
+    uint8_t heartbeat_version{1};
+    uint32_t oracle_id{0};
+    int64_t timestamp{0};
+    uint64_t nonce{0};
+    int32_t client_version{0};
+    int32_t p2p_protocol_version{0};
+    uint8_t oracle_protocol_version{1};
+    uint8_t musig2_context_version{0};
+    std::string software_version;
+    std::string subversion;
+    std::vector<unsigned char> signature;
+
+    SERIALIZE_METHODS(OracleVersionHeartbeatMsg, obj)
+    {
+        READWRITE(obj.heartbeat_version, obj.oracle_id, obj.timestamp, obj.nonce,
+                  obj.client_version, obj.p2p_protocol_version,
+                  obj.oracle_protocol_version, obj.musig2_context_version,
+                  LIMITED_STRING(obj.software_version, 128),
+                  LIMITED_STRING(obj.subversion, 128),
+                  obj.signature);
+    }
+
+    bool IsValid() const
+    {
+        return heartbeat_version == 1 &&
+               oracle_id < 255 &&
+               software_version.size() <= 128 &&
+               subversion.size() <= 128 &&
+               signature.size() == 64;
+    }
+
+    uint256 GetHash() const;
+    uint256 GetSignatureHash() const;
+    bool Sign(const CKey& key);
+    bool VerifySignature(const XOnlyPubKey& pubkey) const;
 };
 
 #endif // DIGIBYTE_PROTOCOL_H

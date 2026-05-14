@@ -6163,6 +6163,89 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         return;
     }
 
+    if (msg_type == NetMsgType::ORACLEHEARTBEAT) {
+        OracleVersionHeartbeatMsg heartbeat_msg;
+        vRecv >> heartbeat_msg;
+
+        if (!heartbeat_msg.IsValid()) {
+            Misbehaving(*peer, 10, "invalid oracle heartbeat message");
+            return;
+        }
+
+        if (!IsAuthorizedMuSig2OracleIdForRelay(m_chainparams, heartbeat_msg.oracle_id)) {
+            Misbehaving(*peer, 10, "oracle heartbeat oracle_id outside active consensus roster");
+            return;
+        }
+
+        {
+            const OracleNodeInfo* oracle_config = m_chainparams.GetOracleNode(heartbeat_msg.oracle_id);
+            if (!oracle_config) {
+                Misbehaving(*peer, 10, "unknown oracle ID in heartbeat");
+                return;
+            }
+            XOnlyPubKey oracle_pubkey(oracle_config->pubkey);
+            if (!heartbeat_msg.VerifySignature(oracle_pubkey)) {
+                LogPrint(BCLog::NET, "Oracle heartbeat signature verification failed oracle=%u peer=%d\n",
+                         heartbeat_msg.oracle_id, pfrom.GetId());
+                Misbehaving(*peer, 20, "invalid oracle heartbeat signature");
+                return;
+            }
+        }
+
+        {
+            static constexpr int ORACLE_HEARTBEAT_RATE_LIMIT_PER_HOUR = 240;
+            static std::map<NodeId, std::pair<int64_t, int>> heartbeat_rate_limit;
+            int64_t now_rl = GetTime();
+            if (heartbeat_rate_limit.size() > 100) {
+                auto it = heartbeat_rate_limit.begin();
+                while (it != heartbeat_rate_limit.end()) {
+                    if (now_rl - it->second.first > 3600) it = heartbeat_rate_limit.erase(it);
+                    else ++it;
+                }
+            }
+            auto& [last_reset, count] = heartbeat_rate_limit[pfrom.GetId()];
+            if (now_rl - last_reset > 3600) { last_reset = now_rl; count = 0; }
+            if (++count > ORACLE_HEARTBEAT_RATE_LIMIT_PER_HOUR) {
+                LogPrint(BCLog::NET, "Oracle heartbeat rate limit reached peer=%d (%d/%d/hr)\n",
+                         pfrom.GetId(), count, ORACLE_HEARTBEAT_RATE_LIMIT_PER_HOUR);
+                return;
+            }
+        }
+
+        const uint256 heartbeat_hash = heartbeat_msg.GetHash();
+        OracleBundleManager& bundleManager = OracleBundleManager::GetInstance();
+        if (bundleManager.HasOracleMessage(heartbeat_hash)) {
+            return;
+        }
+        if (!bundleManager.AddVersionHeartbeat(heartbeat_msg)) {
+            LogPrint(BCLog::NET, "Rejected oracle heartbeat after validation oracle=%u peer=%d\n",
+                     heartbeat_msg.oracle_id, pfrom.GetId());
+            return;
+        }
+        bundleManager.RegisterSeenHash(heartbeat_hash);
+
+        AddKnownOracle(*peer, heartbeat_hash);
+        m_connman.ForEachNode([this, &pfrom, &heartbeat_msg, &heartbeat_hash](CNode* pnode) {
+            if (pnode->GetId() == pfrom.GetId()) return;
+
+            PeerRef relay_peer = GetPeerRef(pnode->GetId());
+            if (!relay_peer) return;
+            if (PeerKnowsOracle(*relay_peer, heartbeat_hash)) return;
+
+            AddKnownOracle(*relay_peer, heartbeat_hash);
+            m_connman.PushMessage(pnode,
+                CNetMsgMaker(pnode->GetCommonVersion()).Make(
+                    NetMsgType::ORACLEHEARTBEAT, heartbeat_msg));
+        });
+
+        LogPrint(BCLog::NET,
+                 "Accepted and relayed oracle heartbeat: oracle_id=%u client=%d oracle_protocol=%u musig2_context=%u peer=%d\n",
+                 heartbeat_msg.oracle_id, heartbeat_msg.client_version,
+                 heartbeat_msg.oracle_protocol_version, heartbeat_msg.musig2_context_version,
+                 pfrom.GetId());
+        return;
+    }
+
     if (msg_type == NetMsgType::GETORACLES) {
         // Gate: ignore oracle messages before activation height
         if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
@@ -6235,8 +6318,25 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             sent_count++;
         }
 
-        LogPrint(BCLog::NET, "Sent %d oracle messages to peer=%d for epoch %d request (skipped %d stale/future)\n",
-                 sent_count, pfrom.GetId(), request.epoch, skipped_stale_count);
+        int heartbeat_count = 0;
+        int skipped_heartbeat_count = 0;
+        for (const auto& heartbeat : bundleManager.GetVersionHeartbeats()) {
+            if (request.oracle_id != 0xFFFFFFFF && heartbeat.oracle_id != request.oracle_id) {
+                continue;
+            }
+            if (heartbeat.timestamp < now - 7 * 24 * 60 * 60 || heartbeat.timestamp > now + 600) {
+                skipped_heartbeat_count++;
+                continue;
+            }
+            m_connman.PushMessage(&pfrom,
+                CNetMsgMaker(pfrom.GetCommonVersion()).Make(NetMsgType::ORACLEHEARTBEAT, heartbeat));
+            heartbeat_count++;
+        }
+
+        LogPrint(BCLog::NET,
+                 "Sent %d oracle messages and %d heartbeats to peer=%d for epoch %d request (skipped %d stale prices, %d stale heartbeats)\n",
+                 sent_count, heartbeat_count, pfrom.GetId(), request.epoch,
+                 skipped_stale_count, skipped_heartbeat_count);
         return;
     }
 

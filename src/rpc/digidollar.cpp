@@ -21,6 +21,7 @@
 #include <digidollar/health.h>
 #include <index/digidollarstatsindex.h>
 #include <chainparams.h>
+#include <clientversion.h>
 #include <kernel/chainparams.h>
 #include <node/context.h>
 #include <core_io.h>
@@ -45,9 +46,11 @@
 #include <script/standard.h>
 #include <script/signingprovider.h>
 #include <rpc/protocol.h>
+#include <oracle/musig2_messages.h>
 #include <versionbits.h>
 #include <deploymentstatus.h>
 #include <key_io.h>
+#include <version.h>
 
 #include <util/time.h>
 #include <univalue.h>
@@ -4326,7 +4329,16 @@ static RPCHelpMan getoracles()
                                 {RPCResult::Type::STR, "price_source", "Where price came from: local/on-chain/pending/none"},
                                 {RPCResult::Type::STR, "status", "Oracle status: reporting/no_data/outlier"},
                                 {RPCResult::Type::BOOL, "selected_for_epoch", "Whether oracle is selected for current epoch"},
-                                {RPCResult::Type::BOOL, "is_running_locally", "Whether this oracle is running on YOUR node"}
+                                {RPCResult::Type::BOOL, "is_running_locally", "Whether this oracle is running on YOUR node"},
+                                {RPCResult::Type::STR, "heartbeat_status", "Latest signed operator-version heartbeat status: fresh/stale/unknown/invalid_signature"},
+                                {RPCResult::Type::STR, "software_version", "Software version reported by the oracle heartbeat"},
+                                {RPCResult::Type::NUM, "client_version", "Integer client version reported by the oracle heartbeat"},
+                                {RPCResult::Type::NUM, "p2p_protocol_version", "P2P protocol version reported by the oracle heartbeat"},
+                                {RPCResult::Type::NUM, "oracle_protocol_version", "Oracle off-chain protocol version reported by the heartbeat"},
+                                {RPCResult::Type::NUM, "musig2_context_version", "MuSig2 context protocol version reported by the heartbeat"},
+                                {RPCResult::Type::NUM, "heartbeat_timestamp", "Unix timestamp of the latest heartbeat"},
+                                {RPCResult::Type::NUM, "heartbeat_age_seconds", "Age of the latest heartbeat in seconds, or -1 if unknown"},
+                                {RPCResult::Type::BOOL, "heartbeat_signature_valid", "Whether the stored heartbeat signature verifies against chainparams"}
                             }
                         }
                     }
@@ -4368,6 +4380,7 @@ static RPCHelpMan getoracles()
             for (const auto& oracle : selected_oracles) {
                 selected_ids.insert(oracle.id);
             }
+            const int64_t now = GetTime();
 
             // Use shared scanner (Bug #15: consistent with getalloracleprices)
             OracleScanResult scan = ScanOracleDataFromChain(chainman, bundle_manager, oracle_manager, scan_blocks);
@@ -4415,6 +4428,34 @@ static RPCHelpMan getoracles()
                 info.pushKV("selected_for_epoch", is_selected);
                 info.pushKV("is_running_locally", is_running);
 
+                OracleVersionHeartbeatMsg heartbeat;
+                const bool has_heartbeat = bundle_manager.GetVersionHeartbeat(oc.id, heartbeat);
+                bool heartbeat_signature_valid = false;
+                int64_t heartbeat_age = -1;
+                std::string heartbeat_status = "unknown";
+                if (has_heartbeat) {
+                    XOnlyPubKey oracle_pubkey(oc.pubkey);
+                    heartbeat_signature_valid = heartbeat.VerifySignature(oracle_pubkey);
+                    heartbeat_age = now - heartbeat.timestamp;
+                    if (!heartbeat_signature_valid) {
+                        heartbeat_status = "invalid_signature";
+                    } else if (heartbeat_age >= 0 && heartbeat_age <= 1800) {
+                        heartbeat_status = "fresh";
+                    } else {
+                        heartbeat_status = "stale";
+                    }
+                }
+
+                info.pushKV("heartbeat_status", heartbeat_status);
+                info.pushKV("software_version", has_heartbeat ? heartbeat.software_version : "");
+                info.pushKV("client_version", has_heartbeat ? heartbeat.client_version : 0);
+                info.pushKV("p2p_protocol_version", has_heartbeat ? heartbeat.p2p_protocol_version : 0);
+                info.pushKV("oracle_protocol_version", has_heartbeat ? heartbeat.oracle_protocol_version : 0);
+                info.pushKV("musig2_context_version", has_heartbeat ? heartbeat.musig2_context_version : 0);
+                info.pushKV("heartbeat_timestamp", has_heartbeat ? heartbeat.timestamp : 0);
+                info.pushKV("heartbeat_age_seconds", heartbeat_age);
+                info.pushKV("heartbeat_signature_valid", heartbeat_signature_valid);
+
                 result.push_back(info);
             }
             return result;
@@ -4438,6 +4479,12 @@ static RPCHelpMan listoracle()
                         {RPCResult::Type::NUM, "price_micro_usd", /*optional=*/ true, "Current price being reported"},
                         {RPCResult::Type::NUM, "price_usd", /*optional=*/ true, "Current price in USD"},
                         {RPCResult::Type::NUM, "last_update", /*optional=*/ true, "Last update timestamp"},
+                        {RPCResult::Type::STR, "software_version", /*optional=*/ true, "Local node software version"},
+                        {RPCResult::Type::NUM, "client_version", /*optional=*/ true, "Local integer client version"},
+                        {RPCResult::Type::NUM, "p2p_protocol_version", /*optional=*/ true, "Local P2P protocol version"},
+                        {RPCResult::Type::NUM, "oracle_protocol_version", /*optional=*/ true, "Local oracle off-chain protocol version"},
+                        {RPCResult::Type::NUM, "musig2_context_version", /*optional=*/ true, "Local MuSig2 context protocol version"},
+                        {RPCResult::Type::NUM, "last_heartbeat_time", /*optional=*/ true, "Last local heartbeat broadcast timestamp"},
                         {RPCResult::Type::BOOL, "enabled", /*optional=*/ true, "Whether oracle is enabled"},
                         {RPCResult::Type::STR, "message", /*optional=*/ true, "Status message"}
                     }
@@ -4537,6 +4584,12 @@ static RPCHelpMan listoracle()
                     result.pushKV("price_usd", static_cast<double>(price) / 1000000.0);
                     result.pushKV("last_update", update_time);
                     result.pushKV("price_source", price_source);
+                    result.pushKV("software_version", FormatFullVersion());
+                    result.pushKV("client_version", CLIENT_VERSION);
+                    result.pushKV("p2p_protocol_version", PROTOCOL_VERSION);
+                    result.pushKV("oracle_protocol_version", 1);
+                    result.pushKV("musig2_context_version", ORACLE_MUSIG2_SESSION_CONTEXT_VERSION);
+                    result.pushKV("last_heartbeat_time", node->GetLastHeartbeatTime());
 
                     result.pushKV("enabled", node->IsEnabled());
                     result.pushKV("message", "Oracle is running");

@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <protocol.h>
 #include <set>
 #include <unordered_map>
 
@@ -149,6 +150,10 @@ public:
     bool BroadcastMessage(const COraclePriceMessage& message);
     void ProcessIncomingMessage(const COraclePriceMessage& message);
     bool HasOracleMessage(const uint256& hash) const;
+    bool AddVersionHeartbeat(const OracleVersionHeartbeatMsg& heartbeat);
+    bool GetVersionHeartbeat(uint32_t oracle_id, OracleVersionHeartbeatMsg& heartbeat_out) const;
+    std::vector<OracleVersionHeartbeatMsg> GetVersionHeartbeats() const;
+    bool BroadcastVersionHeartbeat(const OracleVersionHeartbeatMsg& heartbeat);
 
     /**
      * Broadcast a consensus proposal (epoch, price, timestamp) to the P2P network.
@@ -255,6 +260,9 @@ private:
 
     //! Track seen attestation hashes (replay prevention)
     std::set<uint256> seen_attestation_hashes;
+
+    //! Latest verified oracle software/protocol heartbeat per oracle ID.
+    std::unordered_map<uint32_t, OracleVersionHeartbeatMsg> version_heartbeats;
 
     //! Price cache (block height -> price in micro-USD)
     std::map<int, uint64_t> height_to_price;

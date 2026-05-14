@@ -16,6 +16,7 @@
 #include <consensus/amount.h>
 #include <key.h>
 #include <primitives/oracle.h>
+#include <protocol.h>
 #include <pubkey.h>
 
 /**
@@ -40,6 +41,7 @@ private:
     CAmount current_price{0};
     int64_t last_update_time{0};
     int64_t last_broadcast_time{0};
+    int64_t last_heartbeat_time{0};
 
     // Last successfully broadcast price (never expires — this is what we reported)
     CAmount last_broadcast_price{0};
@@ -50,6 +52,7 @@ private:
     // Configuration
     int price_update_interval{30};  // seconds
     int broadcast_interval{60};     // 60 seconds: 1 broadcast/min gives 12x-25x redundancy per epoch
+    int heartbeat_interval{300};    // seconds: version/status telemetry, independent of price health
 
 public:
     //! Constructor
@@ -67,6 +70,8 @@ public:
     void SetUpdateInterval(int seconds) { price_update_interval = seconds; }
     void SetBroadcastInterval(int seconds) { broadcast_interval = seconds; }
     int GetBroadcastInterval() const { return broadcast_interval; }
+    void SetHeartbeatInterval(int seconds) { heartbeat_interval = seconds; }
+    int GetHeartbeatInterval() const { return heartbeat_interval; }
 
     //! Control functions
     void Start();
@@ -84,6 +89,7 @@ public:
     uint32_t GetOracleId() const { return oracle_id; }
     CPubKey GetPublicKey() const { return public_key; }
     int64_t GetLastBroadcastTime() const { return last_broadcast_time; }
+    int64_t GetLastHeartbeatTime() const { return last_heartbeat_time; }
     int64_t GetStartTime() const { return start_time; }
 
     //! Key management
@@ -118,6 +124,8 @@ public:
     COraclePriceMessage CreateConsensusAttestation(uint64_t consensus_price, int64_t consensus_timestamp);
 
     bool BroadcastPriceMessage(const COraclePriceMessage& message);
+    OracleVersionHeartbeatMsg CreateVersionHeartbeat();
+    bool BroadcastVersionHeartbeat();
 
     /** Test-only: inject price freshness state without running the price thread. */
     void InjectTestPriceState(CAmount current_price_in, int64_t last_update_time_in,

@@ -65,7 +65,7 @@ public:
      * @param[in] epoch       The epoch this session is signing for.
      * @param[in] min_signers Minimum number of signers required (e.g., 9 for 9-of-17).
      */
-    MuSig2SigningSession(int32_t epoch, uint8_t min_signers);
+    MuSig2SigningSession(int32_t epoch, uint8_t min_signers, uint32_t attempt_id = 0);
     ~MuSig2SigningSession();
 
     // Non-copyable (secnonce must not be copied)
@@ -81,6 +81,8 @@ public:
 
     /** Get the epoch this session is for. */
     int32_t GetEpoch() const;
+    /** Get the retry attempt this session is for. */
+    uint32_t GetAttemptId() const;
 
     /**
      * Initialize passive (non-oracle) session: CREATED -> NONCES_COLLECTING without secnonce.
@@ -240,6 +242,7 @@ private:
     std::vector<uint8_t> GetRequiredParticipantsUnsafe() const;
 
     int32_t m_epoch;                          //!< Epoch this session is signing for
+    uint32_t m_attempt_id;                    //!< Retry attempt inside the epoch
     uint8_t m_min_signers;                    //!< Minimum signers required
     MuSig2SessionState m_state GUARDED_BY(m_mutex);
 

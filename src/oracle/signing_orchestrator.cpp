@@ -14,6 +14,7 @@
 #include <primitives/oracle.h>
 #include <protocol.h>
 #include <serialize.h>
+#include <util/time.h>
 
 #include <secp256k1.h>
 
@@ -71,6 +72,89 @@ size_t CountPendingPartialSigsForEpoch(const std::map<uint256, std::vector<Oracl
         count += partials.size();
     }
     return count;
+}
+
+uint256 ComputeOracleQuoteSetHash(int32_t epoch,
+                                  const std::vector<COraclePriceMessage>& messages)
+{
+    std::vector<COraclePriceMessage> sorted = messages;
+    std::sort(sorted.begin(), sorted.end(), [](const COraclePriceMessage& a,
+                                               const COraclePriceMessage& b) {
+        return a.oracle_id < b.oracle_id;
+    });
+
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/MuSig2QuoteSet/v1");
+    hasher << Params().GetConsensus().hashGenesisBlock;
+    hasher << epoch;
+    for (const COraclePriceMessage& msg : sorted) {
+        hasher << msg.oracle_id;
+        hasher << msg.price_micro_usd;
+        hasher << msg.timestamp;
+        hasher << msg.oracle_pubkey;
+        hasher << msg.schnorr_sig;
+    }
+    return hasher.GetHash();
+}
+
+bool ComputeConsensusValuesFromEvidence(const std::vector<COraclePriceMessage>& messages,
+                                        uint64_t& consensus_price,
+                                        int64_t& consensus_timestamp)
+{
+    if (messages.empty()) return false;
+
+    COracleBundle temp;
+    temp.messages = messages;
+    const CAmount price = OracleBundleManager::CalculateConsensusPrice(
+        temp, Params().GetConsensus());
+    if (price <= 0) return false;
+    consensus_price = static_cast<uint64_t>(price);
+
+    std::vector<int64_t> timestamps;
+    timestamps.reserve(messages.size());
+    for (const COraclePriceMessage& msg : messages) {
+        timestamps.push_back(msg.timestamp);
+    }
+    std::sort(timestamps.begin(), timestamps.end());
+    const size_t mid = timestamps.size() / 2;
+    consensus_timestamp = (timestamps.size() % 2 == 0) ?
+        (timestamps[mid - 1] + timestamps[mid]) / 2 : timestamps[mid];
+    return true;
+}
+
+bool VerifyOraclePriceEvidence(const OracleMusigContextMsg& msg)
+{
+    if (msg.price_evidence.size() != msg.participant_ids.size()) return false;
+
+    std::set<uint8_t> participants(msg.participant_ids.begin(), msg.participant_ids.end());
+    std::set<uint8_t> seen;
+    const int64_t now = GetTime();
+    for (const COraclePriceMessage& price_msg : msg.price_evidence) {
+        if (price_msg.oracle_id > std::numeric_limits<uint8_t>::max()) return false;
+        const uint8_t id = static_cast<uint8_t>(price_msg.oracle_id);
+        if (!participants.count(id)) return false;
+        if (!seen.insert(id).second) return false;
+        if (!IsAuthorizedMuSig2OracleIdForRelay(Params(), id)) return false;
+
+        const OracleNodeInfo* oracle_config = Params().GetOracleNode(id);
+        if (!oracle_config) return false;
+        if (XOnlyPubKey(oracle_config->pubkey) != price_msg.oracle_pubkey) return false;
+        if (!price_msg.IsValid(now)) return false;
+    }
+
+    if (seen.size() != participants.size()) return false;
+
+    uint64_t evidence_price = 0;
+    int64_t evidence_timestamp = 0;
+    if (!ComputeConsensusValuesFromEvidence(msg.price_evidence,
+                                            evidence_price,
+                                            evidence_timestamp)) {
+        return false;
+    }
+
+    return evidence_price == msg.consensus_price &&
+           evidence_timestamp == msg.consensus_timestamp &&
+           ComputeOracleQuoteSetHash(msg.epoch, msg.price_evidence) == msg.quote_set_hash;
 }
 } // namespace
 
@@ -130,6 +214,8 @@ void OracleSigningOrchestrator::Clear()
     m_pending_contexts.clear();
     m_pending_partialsigs.clear();
     m_epoch_selection_seeds.clear();
+    m_epoch_attempts.clear();
+    m_nonce_evidence.clear();
     m_aggregator.reset();
     m_cached_oracle_key.reset();
     m_cached_oracle_id = 255;
@@ -139,7 +225,18 @@ void OracleSigningOrchestrator::Clear()
 void OracleSigningOrchestrator::InjectSession(int32_t epoch, std::unique_ptr<MuSig2SigningSession> session)
 {
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    if (session) {
+        m_epoch_attempts[epoch] = static_cast<uint8_t>(session->GetAttemptId());
+    }
     m_signing_sessions[epoch] = std::move(session);
+}
+
+uint8_t OracleSigningOrchestrator::GetActiveAttemptId(int32_t epoch) const
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    const auto it = m_epoch_attempts.find(epoch);
+    if (it == m_epoch_attempts.end()) return 0;
+    return it->second;
 }
 
 void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg)
@@ -153,7 +250,8 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
     if (it == m_signing_sessions.end() || !it->second) {
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
-        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers, msg.attempt_id);
+        m_epoch_attempts[msg.epoch] = msg.attempt_id;
         const auto seed_it = m_epoch_selection_seeds.find(msg.epoch);
         if (seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull()) {
             session->SetEpochSelectionSeed(seed_it->second);
@@ -164,33 +262,54 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
         it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
     }
     if (it == m_signing_sessions.end() || !it->second) return;
+    if (it->second->GetAttemptId() != msg.attempt_id) return;
 
-    if (it->second->GetState() == MuSig2SessionState::CREATED) {
+    if (AddNonceEvidenceToSession(msg, *it->second)) {
+        m_nonce_evidence[msg.epoch][msg.oracle_id] = msg;
+        LogPrintf("Oracle: Ingested remote nonce for epoch %d attempt %u from oracle %d\n",
+                 msg.epoch, msg.attempt_id, msg.oracle_id);
+    }
+}
+
+bool OracleSigningOrchestrator::AddNonceEvidenceToSession(const OracleMusigNonceMsg& msg,
+                                                          MuSig2SigningSession& session) const
+{
+    if (!msg.IsValid()) return false;
+    if (msg.epoch != session.GetEpoch()) return false;
+    if (msg.attempt_id != session.GetAttemptId()) return false;
+    if (!IsAuthorizedMuSig2OracleIdForRelay(Params(), msg.oracle_id)) return false;
+
+    const OracleNodeInfo* oracle_config = Params().GetOracleNode(msg.oracle_id);
+    if (!oracle_config) return false;
+    if (!msg.VerifySignature(XOnlyPubKey(oracle_config->pubkey))) return false;
+
+    if (session.GetState() == MuSig2SessionState::CREATED) {
         std::vector<uint8_t> all_oracle_ids = GetConsensusOracleIdsForSigning();
 
         MuSig2OracleAggregator aggregator;
         secp256k1_xonly_pubkey agg_pk;
         secp256k1_musig_keyagg_cache cache;
         if (!aggregator.ComputeAggregatePubkey(all_oracle_ids, agg_pk, cache) ||
-            !it->second->InitializePassive(cache)) {
+            !session.InitializePassive(cache)) {
             LogPrint(BCLog::DIGIDOLLAR,
                      "Oracle: Failed to initialize passive MuSig2 session for epoch %d on remote nonce arrival\n",
                      msg.epoch);
-            return;
+            return false;
         }
     }
 
     // Deserialize pubnonce
-    if (msg.pubnonce.size() != 66) return;
+    if (msg.pubnonce.size() != 66) return false;
     secp256k1_musig_pubnonce pubnonce;
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    bool accepted = false;
     if (secp256k1_musig_pubnonce_parse(ctx, &pubnonce, msg.pubnonce.data())) {
-        if (it->second->AddPubnonce(msg.oracle_id, pubnonce)) {
-            LogPrintf("Oracle: Ingested remote nonce for epoch %d from oracle %d\n",
-                     msg.epoch, msg.oracle_id);
-        }
+        accepted = session.AddPubnonce(msg.oracle_id, pubnonce);
     }
     secp256k1_context_destroy(ctx);
+    if (accepted) return true;
+    const std::vector<uint8_t> participants = session.GetNonceParticipants();
+    return std::find(participants.begin(), participants.end(), msg.oracle_id) != participants.end();
 }
 
 void OracleSigningOrchestrator::IngestRemoteContext(const OracleMusigContextMsg& msg)
@@ -213,7 +332,8 @@ void OracleSigningOrchestrator::IngestRemoteContext(const OracleMusigContextMsg&
     if (it == m_signing_sessions.end() || !it->second) {
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
-        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers, msg.attempt_id);
+        m_epoch_attempts[msg.epoch] = msg.attempt_id;
         if (have_local_seed) {
             session->SetEpochSelectionSeed(seed_it->second);
         }
@@ -223,6 +343,18 @@ void OracleSigningOrchestrator::IngestRemoteContext(const OracleMusigContextMsg&
         it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
     } else if (have_local_seed) {
         it->second->SetEpochSelectionSeed(seed_it->second);
+    }
+    if (it == m_signing_sessions.end() || !it->second) return;
+    if (it->second->GetAttemptId() != msg.attempt_id) return;
+
+    for (const OracleMusigNonceMsg& nonce_msg : msg.nonce_evidence) {
+        if (!AddNonceEvidenceToSession(nonce_msg, *it->second)) {
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: Rejected MuSig2 context epoch=%d proposer=%u: invalid nonce evidence oracle=%u\n",
+                     msg.epoch, msg.proposer_id, nonce_msg.oracle_id);
+            return;
+        }
+        m_nonce_evidence[msg.epoch][nonce_msg.oracle_id] = nonce_msg;
     }
 
     m_pending_contexts[msg.epoch][msg.session_context_id] = msg;
@@ -254,7 +386,8 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
     if (it == m_signing_sessions.end() || !it->second) {
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
-        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers);
+        auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers, msg.attempt_id);
+        m_epoch_attempts[msg.epoch] = msg.attempt_id;
         const auto seed_it = m_epoch_selection_seeds.find(msg.epoch);
         if (seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull()) {
             session->SetEpochSelectionSeed(seed_it->second);
@@ -265,6 +398,7 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
         it = m_signing_sessions.emplace(msg.epoch, std::move(session)).first;
     }
     if (it == m_signing_sessions.end() || !it->second) return;
+    if (it->second->GetAttemptId() != msg.attempt_id) return;
 
     if (TryApplyRemotePartialSig(msg, *it->second)) {
         LogPrintf("Oracle: Ingested remote partial sig for epoch %d from oracle %d\n",
@@ -289,6 +423,7 @@ bool OracleSigningOrchestrator::TryApplyRemotePartialSig(const OracleMusigPartia
                                                          MuSig2SigningSession& session) const
 {
     if (msg.partial_sig.size() != 32) return false;
+    if (msg.attempt_id != session.GetAttemptId()) return false;
     if (msg.context_version != ORACLE_MUSIG2_SESSION_CONTEXT_VERSION ||
         msg.session_context_id.IsNull()) return false;
     const uint256 session_context = session.GetSessionContextId();
@@ -433,6 +568,7 @@ bool OracleSigningOrchestrator::ValidateContextProposal(const OracleMusigContext
 {
     if (!msg.IsValid()) return false;
     if (msg.epoch != session.GetEpoch()) return false;
+    if (msg.attempt_id != session.GetAttemptId()) return false;
     if (msg.epoch_selection_seed != session.GetEpochSelectionSeed()) return false;
 
     const OracleNodeInfo* proposer_config = Params().GetOracleNode(msg.proposer_id);
@@ -454,16 +590,31 @@ bool OracleSigningOrchestrator::ValidateContextProposal(const OracleMusigContext
     std::vector<uint8_t> sorted_by_seed = SortOracleIdsByEpochSeed(
         msg.participant_ids, msg.epoch, msg.epoch_selection_seed);
     if (sorted_by_seed != msg.participant_ids) return false;
-    if (!session.MatchesRequiredParticipants(msg.participant_ids)) return false;
+    if (!VerifyOraclePriceEvidence(msg)) return false;
 
-    uint64_t local_price = 0;
-    int64_t local_timestamp = 0;
-    if (!g_oracle_bundle_manager ||
-        !OracleBundleManager::GetInstance().ComputeConsensusValuesForOracles(
-            msg.participant_ids, local_price, local_timestamp)) {
+    if (msg.nonce_evidence.size() < msg.participant_ids.size()) return false;
+    std::set<uint8_t> nonce_seen;
+    std::vector<uint8_t> evidence_ids;
+    evidence_ids.reserve(msg.nonce_evidence.size());
+    for (const OracleMusigNonceMsg& nonce_msg : msg.nonce_evidence) {
+        if (nonce_msg.epoch != msg.epoch || nonce_msg.attempt_id != msg.attempt_id) return false;
+        if (!nonce_seen.insert(nonce_msg.oracle_id).second) return false;
+        if (!IsAuthorizedMuSig2OracleIdForRelay(Params(), nonce_msg.oracle_id)) return false;
+        const OracleNodeInfo* oracle_config = Params().GetOracleNode(nonce_msg.oracle_id);
+        if (!oracle_config || !nonce_msg.VerifySignature(XOnlyPubKey(oracle_config->pubkey))) {
+            return false;
+        }
+        evidence_ids.push_back(nonce_msg.oracle_id);
+    }
+    const std::vector<uint8_t> expected_participants =
+        SortOracleIdsByEpochSeed(evidence_ids, msg.epoch, msg.epoch_selection_seed);
+    if (expected_participants.size() < msg.participant_ids.size()) return false;
+    if (!std::equal(msg.participant_ids.begin(), msg.participant_ids.end(),
+                    expected_participants.begin())) {
         return false;
     }
-    if (local_price != msg.consensus_price || local_timestamp != msg.consensus_timestamp) {
+    if (session.GetNonceCount() >= msg.participant_ids.size() &&
+        !session.MatchesRequiredParticipants(msg.participant_ids)) {
         return false;
     }
 
@@ -475,7 +626,8 @@ bool OracleSigningOrchestrator::ValidateContextProposal(const OracleMusigContext
                                                  nonce_set_hash, context_id)) {
         return false;
     }
-    return context_id == msg.session_context_id;
+    return nonce_set_hash == msg.nonce_set_hash &&
+           context_id == msg.session_context_id;
 }
 
 std::optional<OracleMusigContextMsg> OracleSigningOrchestrator::SelectReadyContextProposal(
@@ -560,12 +712,43 @@ std::optional<OracleMusigContextMsg> OracleSigningOrchestrator::BuildLocalContex
         return std::nullopt;
     }
 
+    std::vector<COraclePriceMessage> price_evidence;
+    if (!g_oracle_bundle_manager) {
+        return std::nullopt;
+    }
+    {
+        const std::vector<COraclePriceMessage> pending =
+            OracleBundleManager::GetInstance().GetPendingMessages();
+        std::map<uint32_t, COraclePriceMessage> by_id;
+        for (const COraclePriceMessage& pending_msg : pending) {
+            by_id[pending_msg.oracle_id] = pending_msg;
+        }
+        for (uint8_t participant_id : participant_ids) {
+            const auto it = by_id.find(participant_id);
+            if (it == by_id.end()) return std::nullopt;
+            price_evidence.push_back(it->second);
+        }
+    }
+
     uint64_t consensus_price = 0;
     int64_t consensus_timestamp = 0;
-    if (!g_oracle_bundle_manager ||
-        !OracleBundleManager::GetInstance().ComputeConsensusValuesForOracles(
-            participant_ids, consensus_price, consensus_timestamp)) {
+    if (!ComputeConsensusValuesFromEvidence(price_evidence,
+                                            consensus_price,
+                                            consensus_timestamp)) {
         return std::nullopt;
+    }
+
+    std::vector<OracleMusigNonceMsg> nonce_evidence;
+    {
+        std::lock_guard<std::mutex> lock(m_sessions_mutex);
+        const auto epoch_it = m_nonce_evidence.find(epoch);
+        if (epoch_it == m_nonce_evidence.end()) return std::nullopt;
+        for (uint8_t participant_id : participant_ids) {
+            const auto it = epoch_it->second.find(participant_id);
+            if (it == epoch_it->second.end()) return std::nullopt;
+            if (it->second.attempt_id != session.GetAttemptId()) return std::nullopt;
+            nonce_evidence.push_back(it->second);
+        }
     }
 
     unsigned char msg32[32];
@@ -582,13 +765,18 @@ std::optional<OracleMusigContextMsg> OracleSigningOrchestrator::BuildLocalContex
 
     OracleMusigContextMsg msg;
     msg.epoch = epoch;
+    msg.attempt_id = static_cast<uint8_t>(session.GetAttemptId());
     msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
     msg.epoch_selection_seed = seed;
     msg.proposer_id = proposer_id;
     msg.participant_ids = participant_ids;
+    msg.nonce_set_hash = nonce_set_hash;
+    msg.quote_set_hash = ComputeOracleQuoteSetHash(epoch, price_evidence);
     msg.consensus_price = consensus_price;
     msg.consensus_timestamp = consensus_timestamp;
     msg.session_context_id = context_id;
+    msg.nonce_evidence = nonce_evidence;
+    msg.price_evidence = price_evidence;
     if (!msg.Sign(key)) return std::nullopt;
 
     {
@@ -691,8 +879,9 @@ MuSig2SigningSession* OracleSigningOrchestrator::GetOrCreateSigningSession(int32
 
     const Consensus::Params& consensus = Params().GetConsensus();
     const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
+    const uint8_t attempt_id = m_epoch_attempts[epoch];
     auto session = std::make_unique<MuSig2SigningSession>(
-        epoch, min_signers);
+        epoch, min_signers, attempt_id);
     const auto seed_it = m_epoch_selection_seeds.find(epoch);
     if (seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull()) {
         session->SetEpochSelectionSeed(seed_it->second);
@@ -712,6 +901,44 @@ bool OracleSigningOrchestrator::HasSession(int32_t epoch) const
 {
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
     return m_signing_sessions.find(epoch) != m_signing_sessions.end();
+}
+
+bool OracleSigningOrchestrator::RestartEpochAttemptIfNeeded(int32_t epoch,
+                                                            int32_t block_height,
+                                                            MuSig2SigningSession*& session)
+{
+    if (!session || session->GetState() != MuSig2SessionState::FAILED) return false;
+
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    const uint8_t current_attempt = m_epoch_attempts[epoch];
+    static constexpr uint8_t MAX_MUSIG2_ATTEMPTS_PER_EPOCH = 8;
+    if (current_attempt + 1 >= MAX_MUSIG2_ATTEMPTS_PER_EPOCH) return false;
+
+    const uint8_t next_attempt = static_cast<uint8_t>(current_attempt + 1);
+    m_signing_sessions.erase(epoch);
+    m_nonce_broadcast_tracker.erase(epoch);
+    m_context_broadcast_tracker.erase(epoch);
+    m_partialsig_broadcast_tracker.erase(epoch);
+    m_pending_contexts.erase(epoch);
+    m_pending_partialsigs.erase(epoch);
+    m_nonce_evidence.erase(epoch);
+    m_epoch_attempts[epoch] = next_attempt;
+
+    const Consensus::Params& consensus = Params().GetConsensus();
+    const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
+    auto replacement = std::make_unique<MuSig2SigningSession>(epoch, min_signers, next_attempt);
+    const auto seed_it = m_epoch_selection_seeds.find(epoch);
+    if (seed_it != m_epoch_selection_seeds.end() && !seed_it->second.IsNull()) {
+        replacement->SetEpochSelectionSeed(seed_it->second);
+    }
+    replacement->SetCreationHeight(block_height > 0 ? block_height : GetEpochStartHeight(epoch));
+    replacement->SetTimeoutBlocks(100);
+    session = replacement.get();
+    m_signing_sessions[epoch] = std::move(replacement);
+
+    LogPrintf("Oracle: Restarted MuSig2 epoch %d with fresh attempt %u at height %d\n",
+              epoch, next_attempt, block_height);
+    return true;
 }
 
 uint256 OracleSigningOrchestrator::GetSelectionSeedForEpoch(int32_t epoch) const
@@ -774,6 +1001,12 @@ void OracleSigningOrchestrator::CleanupOldSessions(int32_t current_epoch)
     for (auto it = m_epoch_selection_seeds.begin(); it != m_epoch_selection_seeds.end(); ) {
         it = (it->first < current_epoch - 2) ? m_epoch_selection_seeds.erase(it) : std::next(it);
     }
+    for (auto it = m_epoch_attempts.begin(); it != m_epoch_attempts.end(); ) {
+        it = (it->first < current_epoch - 2) ? m_epoch_attempts.erase(it) : std::next(it);
+    }
+    for (auto it = m_nonce_evidence.begin(); it != m_nonce_evidence.end(); ) {
+        it = (it->first < current_epoch - 2) ? m_nonce_evidence.erase(it) : std::next(it);
+    }
 }
 
 // ============================================================================
@@ -834,6 +1067,8 @@ void OracleSigningOrchestrator::OnBlockConnected(
 void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_height)
 {
     MuSig2SigningSession* session = GetOrCreateSigningSession(epoch, block_height);
+    if (!session) return;
+    RestartEpochAttemptIfNeeded(epoch, block_height, session);
     if (!session) return;
 
     const int32_t current_epoch = GetCurrentEpoch(block_height);
@@ -904,6 +1139,7 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
                     if (secp256k1_musig_pubnonce_serialize(ctx, ser_nonce, &pubnonce)) {
                         OracleMusigNonceMsg nonce_msg;
                         nonce_msg.epoch = epoch;
+                        nonce_msg.attempt_id = static_cast<uint8_t>(session->GetAttemptId());
                         nonce_msg.oracle_id = oid8;
                         nonce_msg.pubnonce.assign(ser_nonce, ser_nonce + 66);
 
@@ -919,9 +1155,10 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
 
                         BroadcastMusigNonce(nonce_msg);
                         m_nonce_broadcast_tracker[epoch].insert(oid8);
+                        m_nonce_evidence[epoch][oid8] = nonce_msg;
 
-                        LogPrintf("Oracle: Generated and broadcast nonce for epoch %d (oracle_id=%d)\n",
-                                 epoch, oid8);
+                        LogPrintf("Oracle: Generated and broadcast nonce for epoch %d attempt %u (oracle_id=%d)\n",
+                                 epoch, nonce_msg.attempt_id, oid8);
                     }
                 } else {
                     LogPrintf("Oracle: GenerateNonce FAILED for oracle %d epoch %d\n", oid8, epoch);
@@ -963,7 +1200,7 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
                 LogPrintf("Oracle: Broadcast MuSig2 context proposal epoch=%d proposer=%u context=%s\n",
                          epoch, local_context->proposer_id,
                          local_context->session_context_id.ToString());
-                chosen_context = local_context;
+                return;
             }
         }
 
@@ -1035,6 +1272,7 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
                         if (secp256k1_musig_partial_sig_serialize(ctx, ser_psig, &partial_sig)) {
                             OracleMusigPartialSigMsg psig_msg;
                             psig_msg.epoch = epoch;
+                            psig_msg.attempt_id = static_cast<uint8_t>(session->GetAttemptId());
                             psig_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
                             psig_msg.session_context_id = session_context;
                             psig_msg.oracle_id = oid8;

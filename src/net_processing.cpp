@@ -5944,11 +5944,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     NetMsgType::ORACLEMUSIGNONCE, nonce_msg));
         });
 
-        // Feed the nonce into the local MuSig2 signing session so the
-        // miner can aggregate nonces from all oracle peers.
-        bundleManager.ProcessRemoteMusigNonce(nonce_msg);
-
-        // Also feed into the signing orchestrator for MuSig2 aggregation.
+        // Feed into the signing orchestrator for MuSig2 aggregation. The
+        // orchestrator is the RC38 source of truth for attempt-aware sessions;
+        // the older bundle-manager ingestion path is intentionally bypassed
+        // so relay cannot create a second epoch-only session view.
         if (g_signing_orchestrator) {
             g_signing_orchestrator->IngestRemoteNonce(nonce_msg);
         }
@@ -6153,11 +6152,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     NetMsgType::ORACLEMUSIGPARTIALSIG, partial_sig_msg));
         });
 
-        // Feed the partial sig into the local MuSig2 signing session so the
-        // miner can aggregate signatures from all oracle peers.
-        bundleManager.ProcessRemoteMusigPartialSig(partial_sig_msg);
-
-        // Also feed into the signing orchestrator for MuSig2 aggregation.
+        // Feed into the signing orchestrator for MuSig2 aggregation. The
+        // orchestrator owns the attempt/context id checks used by RC38.
         if (g_signing_orchestrator) {
             g_signing_orchestrator->IngestRemotePartialSig(partial_sig_msg);
         }

@@ -60,8 +60,9 @@ std::vector<unsigned char> BuildRawParticipationBitmap(const std::vector<uint8_t
 
 } // namespace
 
-MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers)
+MuSig2SigningSession::MuSig2SigningSession(int32_t epoch, uint8_t min_signers, uint32_t attempt_id)
     : m_epoch(epoch),
+      m_attempt_id(attempt_id),
       m_min_signers(min_signers),
       m_state(MuSig2SessionState::CREATED),
       m_creation_height(0),
@@ -89,6 +90,7 @@ MuSig2SigningSession::~MuSig2SigningSession()
 
 MuSig2SigningSession::MuSig2SigningSession(MuSig2SigningSession&& other) noexcept
     : m_epoch(other.m_epoch),
+      m_attempt_id(other.m_attempt_id),
       m_min_signers(other.m_min_signers),
       m_ctx(nullptr)
 {
@@ -130,6 +132,7 @@ MuSig2SigningSession& MuSig2SigningSession::operator=(MuSig2SigningSession&& oth
 
     LOCK(other.m_mutex);
     m_epoch = other.m_epoch;
+    m_attempt_id = other.m_attempt_id;
     m_min_signers = other.m_min_signers;
     m_state = other.m_state;
     m_ctx = other.m_ctx;
@@ -161,6 +164,11 @@ MuSig2SessionState MuSig2SigningSession::GetState() const
 int32_t MuSig2SigningSession::GetEpoch() const
 {
     return m_epoch; // immutable, no lock needed
+}
+
+uint32_t MuSig2SigningSession::GetAttemptId() const
+{
+    return m_attempt_id; // immutable, no lock needed
 }
 
 // ============================================================================
@@ -456,6 +464,7 @@ bool MuSig2SigningSession::ComputeContextIdForParticipants(const std::vector<uin
     nonce_hasher << std::string("DigiDollar/MuSig2NonceSet/v1");
     nonce_hasher << Params().GetConsensus().hashGenesisBlock;
     nonce_hasher << m_epoch;
+    nonce_hasher << m_attempt_id;
     for (uint8_t id : keep) {
         const auto it = m_pubnonces.find(id);
         if (it == m_pubnonces.end()) return false;
@@ -482,6 +491,7 @@ bool MuSig2SigningSession::ComputeContextIdForParticipants(const std::vector<uin
     context_hasher << std::string("DigiDollar/MuSig2SessionContext/v1");
     context_hasher << Params().GetConsensus().hashGenesisBlock;
     context_hasher << m_epoch;
+    context_hasher << m_attempt_id;
     context_hasher << m_epoch_selection_seed;
     context_hasher << static_cast<uint8_t>(ORACLE_MUSIG2_SESSION_CONTEXT_VERSION);
     context_hasher << message_hash;
@@ -527,6 +537,7 @@ bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
     nonce_hasher << std::string("DigiDollar/MuSig2NonceSet/v1");
     nonce_hasher << Params().GetConsensus().hashGenesisBlock;
     nonce_hasher << m_epoch;
+    nonce_hasher << m_attempt_id;
     for (const auto& [id, nonce] : m_pubnonces) {
         participants.push_back(id);
         unsigned char ser_nonce[66];
@@ -554,6 +565,7 @@ bool MuSig2SigningSession::AggregateNonces(const unsigned char* msg32)
     context_hasher << std::string("DigiDollar/MuSig2SessionContext/v1");
     context_hasher << Params().GetConsensus().hashGenesisBlock;
     context_hasher << m_epoch;
+    context_hasher << m_attempt_id;
     context_hasher << m_epoch_selection_seed;
     context_hasher << static_cast<uint8_t>(ORACLE_MUSIG2_SESSION_CONTEXT_VERSION);
     context_hasher << m_message_hash;

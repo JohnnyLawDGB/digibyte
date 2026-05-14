@@ -48,6 +48,7 @@ public:
 
     // Session management
     MuSig2SigningSession* GetOrCreateSigningSession(int32_t epoch, int32_t block_height = 0);
+    uint8_t GetActiveAttemptId(int32_t epoch) const;
     void CleanupOldSessions(int32_t current_epoch);
     /** Read-only session existence check — used by tests and diagnostics. */
     bool HasSession(int32_t epoch) const;
@@ -123,12 +124,15 @@ private:
      * templated by miners.
      */
     void TickEpochSession(int32_t epoch, int32_t block_height);
+    bool RestartEpochAttemptIfNeeded(int32_t epoch, int32_t block_height, MuSig2SigningSession*& session);
     bool HasSelectionSeedForEpoch(int32_t epoch) const;
     uint256 GetSelectionSeedForEpoch(int32_t epoch) const;
     void SetEpochSelectionSeed(int32_t epoch, const uint256& seed);
     bool IsEligibleContextProposer(int32_t epoch, uint8_t proposer_id, int32_t block_height) const;
     bool ValidateContextProposal(const OracleMusigContextMsg& msg,
                                  MuSig2SigningSession& session) const;
+    bool AddNonceEvidenceToSession(const OracleMusigNonceMsg& msg,
+                                   MuSig2SigningSession& session) const;
     std::optional<OracleMusigContextMsg> SelectReadyContextProposal(int32_t epoch,
                                                                     int32_t block_height,
                                                                     MuSig2SigningSession& session) const;
@@ -149,6 +153,8 @@ private:
     std::map<int32_t, std::set<uint8_t>> m_partialsig_broadcast_tracker;
     std::map<int32_t, std::map<uint256, OracleMusigContextMsg>> m_pending_contexts;
     std::map<int32_t, uint256> m_epoch_selection_seeds;
+    std::map<int32_t, uint8_t> m_epoch_attempts;
+    std::map<int32_t, std::map<uint8_t, OracleMusigNonceMsg>> m_nonce_evidence;
     // Buffer context-bound partial sigs that arrive before local session enters SIGNING.
     std::map<int32_t, std::map<uint256, std::vector<OracleMusigPartialSigMsg>>> m_pending_partialsigs;
     mutable std::unique_ptr<CKey> m_cached_oracle_key;

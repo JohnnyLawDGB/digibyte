@@ -294,6 +294,7 @@ uint256 OracleMusigNonceMsg::GetHash() const
 {
     CHashWriter hasher(0);
     hasher << epoch;
+    hasher << attempt_id;
     hasher << oracle_id;
     hasher << pubnonce;
     return hasher.GetHash();
@@ -313,13 +314,14 @@ bool IsAuthorizedMuSig2OracleIdForRelay(const CChainParams& params, uint32_t ora
 uint256 OracleMusigNonceMsg::GetSignatureHash() const
 {
     // Tagged hash for authentication:
-    // "DigiDollar/MuSig2Nonce" || hashGenesisBlock || epoch || oracle_id || pubnonce.
+    // "DigiDollar/MuSig2Nonce" || hashGenesisBlock || epoch || attempt_id || oracle_id || pubnonce.
     // Binding the active chain identity prevents captured nonce auth from one
     // network being replayed into another network that shares the oracle roster.
     CHashWriter hasher(0);
     hasher << std::string("DigiDollar/MuSig2Nonce");
     hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
+    hasher << attempt_id;
     hasher << oracle_id;
     hasher << pubnonce;
     return hasher.GetHash();
@@ -350,6 +352,7 @@ uint256 OracleMusigPartialSigMsg::GetHash() const
     hasher << std::string("DigiDollar/MuSig2PartialSigMsg/v2");
     hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
+    hasher << attempt_id;
     hasher << context_version;
     hasher << session_context_id;
     hasher << oracle_id;
@@ -361,13 +364,14 @@ uint256 OracleMusigPartialSigMsg::GetSignatureHash() const
 {
     // Tagged hash for authentication:
     // "DigiDollar/MuSig2PartialSig" || hashGenesisBlock || epoch ||
-    // context_version || session_context_id || oracle_id || partial_sig.
+    // attempt_id || context_version || session_context_id || oracle_id || partial_sig.
     // session_context_id binds the relay auth to the exact MuSig2 transcript:
     // bundle message hash, frozen signer bitmap, and nonce set.
     CHashWriter hasher(0);
     hasher << std::string("DigiDollar/MuSig2PartialSig");
     hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
+    hasher << attempt_id;
     hasher << context_version;
     hasher << session_context_id;
     hasher << oracle_id;
@@ -400,13 +404,18 @@ uint256 OracleMusigContextMsg::GetHash() const
     hasher << std::string("DigiDollar/MuSig2ContextMsg/v1");
     hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
+    hasher << attempt_id;
     hasher << context_version;
     hasher << epoch_selection_seed;
     hasher << proposer_id;
     hasher << participant_ids;
+    hasher << nonce_set_hash;
+    hasher << quote_set_hash;
     hasher << consensus_price;
     hasher << consensus_timestamp;
     hasher << session_context_id;
+    hasher << nonce_evidence;
+    hasher << price_evidence;
     return hasher.GetHash();
 }
 
@@ -416,13 +425,18 @@ uint256 OracleMusigContextMsg::GetSignatureHash() const
     hasher << std::string("DigiDollar/MuSig2ContextProposal");
     hasher << Params().GetConsensus().hashGenesisBlock;
     hasher << epoch;
+    hasher << attempt_id;
     hasher << context_version;
     hasher << epoch_selection_seed;
     hasher << proposer_id;
     hasher << participant_ids;
+    hasher << nonce_set_hash;
+    hasher << quote_set_hash;
     hasher << consensus_price;
     hasher << consensus_timestamp;
     hasher << session_context_id;
+    hasher << nonce_evidence;
+    hasher << price_evidence;
     return hasher.GetHash();
 }
 

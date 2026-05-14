@@ -166,6 +166,48 @@ BOOST_AUTO_TEST_CASE(rh03_partialsig_oracle_id_boundary)
     BOOST_CHECK(!msg.IsValid());
 }
 
+BOOST_AUTO_TEST_CASE(rc38_attempt_id_changes_musig_message_domains)
+{
+    OracleMusigNonceMsg nonce_a = MakeNonceMsg(10, 1);
+    OracleMusigNonceMsg nonce_b = nonce_a;
+    nonce_b.attempt_id = 1;
+    BOOST_CHECK(nonce_a.GetHash() != nonce_b.GetHash());
+    BOOST_CHECK(nonce_a.GetSignatureHash() != nonce_b.GetSignatureHash());
+
+    OracleMusigPartialSigMsg psig_a = MakePartialSigMsg(10, 1);
+    OracleMusigPartialSigMsg psig_b = psig_a;
+    psig_b.attempt_id = 1;
+    BOOST_CHECK(psig_a.GetHash() != psig_b.GetHash());
+    BOOST_CHECK(psig_a.GetSignatureHash() != psig_b.GetSignatureHash());
+
+    OracleMusigContextMsg ctx_a = MakeContextMsg(10, 1);
+    ctx_a.nonce_set_hash = uint256(11);
+    ctx_a.quote_set_hash = uint256(12);
+    OracleMusigContextMsg ctx_b = ctx_a;
+    ctx_b.attempt_id = 1;
+    BOOST_CHECK(ctx_a.GetHash() != ctx_b.GetHash());
+    BOOST_CHECK(ctx_a.GetSignatureHash() != ctx_b.GetSignatureHash());
+}
+
+BOOST_AUTO_TEST_CASE(rc38_context_signature_commits_nonce_and_price_evidence)
+{
+    OracleMusigContextMsg base = MakeContextMsg(10, 1);
+    base.nonce_set_hash = uint256(11);
+    base.quote_set_hash = uint256(12);
+    base.nonce_evidence.push_back(MakeNonceMsg(10, 2));
+    COraclePriceMessage price_msg(2, 12345, 1710000000);
+    price_msg.schnorr_sig.assign(64, 0x44);
+    base.price_evidence.push_back(price_msg);
+
+    OracleMusigContextMsg changed_nonce = base;
+    changed_nonce.nonce_evidence[0].attempt_id = 1;
+    BOOST_CHECK(base.GetSignatureHash() != changed_nonce.GetSignatureHash());
+
+    OracleMusigContextMsg changed_price = base;
+    changed_price.price_evidence[0].price_micro_usd += 1;
+    BOOST_CHECK(base.GetSignatureHash() != changed_price.GetSignatureHash());
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Attack Vector 3: Epoch mismatch / replay
 // ──────────────────────────────────────────────────────────────────────

@@ -28,6 +28,7 @@ from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
 REGTEST_ORACLE_ACTIVATION = 650
+MUSIG2_CONTEXT_VERSION = 2
 
 
 def regtest_oracle_privkey(oracle_id: int) -> bytes:
@@ -35,10 +36,12 @@ def regtest_oracle_privkey(oracle_id: int) -> bytes:
 
 
 def musig_nonce_signature_hash(genesis_hash_hex: str, epoch: int,
+                               attempt_id: int,
                                oracle_id: int, pubnonce: bytes) -> bytes:
     payload = ser_string(b"DigiDollar/MuSig2Nonce")
     payload += ser_uint256(int(genesis_hash_hex, 16))
     payload += struct.pack("<i", epoch)
+    payload += struct.pack("<B", attempt_id)
     payload += struct.pack("<B", oracle_id)
     payload += ser_string(pubnonce)
     return hash256(payload)
@@ -46,11 +49,13 @@ def musig_nonce_signature_hash(genesis_hash_hex: str, epoch: int,
 
 def build_signed_musig_nonce(genesis_hash_hex: str, epoch: int,
                              oracle_id: int, fill: int) -> msg_oraclemusignonce:
+    attempt_id = 0
     pubnonce = bytes([fill]) * 66
-    digest = musig_nonce_signature_hash(genesis_hash_hex, epoch, oracle_id, pubnonce)
+    digest = musig_nonce_signature_hash(genesis_hash_hex, epoch, attempt_id, oracle_id, pubnonce)
     sig = sign_schnorr(regtest_oracle_privkey(oracle_id), digest)
 
     payload = struct.pack("<i", epoch)
+    payload += struct.pack("<B", attempt_id)
     payload += struct.pack("<B", oracle_id)
     payload += ser_string(pubnonce)
     payload += ser_string(sig)
@@ -58,12 +63,15 @@ def build_signed_musig_nonce(genesis_hash_hex: str, epoch: int,
 
 
 def musig_partialsig_signature_hash(genesis_hash_hex: str, epoch: int,
+                                    attempt_id: int,
+                                    context_version: int,
                                     session_context_id: int, oracle_id: int,
                                     partial_sig: bytes) -> bytes:
     payload = ser_string(b"DigiDollar/MuSig2PartialSig")
     payload += ser_uint256(int(genesis_hash_hex, 16))
     payload += struct.pack("<i", epoch)
-    payload += struct.pack("<B", 1)
+    payload += struct.pack("<B", attempt_id)
+    payload += struct.pack("<B", context_version)
     payload += ser_uint256(session_context_id)
     payload += struct.pack("<B", oracle_id)
     payload += ser_string(partial_sig)
@@ -72,16 +80,19 @@ def musig_partialsig_signature_hash(genesis_hash_hex: str, epoch: int,
 
 def build_signed_musig_partialsig(genesis_hash_hex: str, epoch: int,
                                   oracle_id: int, fill: int) -> msg_oraclemusigpartialsig:
+    attempt_id = 0
+    context_version = MUSIG2_CONTEXT_VERSION
     partial_sig = bytes([fill]) * 32
     session_context_id = int.from_bytes(hashlib.sha256(
         b"functional-wave21-session-context" + struct.pack("<i", epoch) + bytes([oracle_id, fill])
     ).digest(), "little")
     digest = musig_partialsig_signature_hash(
-        genesis_hash_hex, epoch, session_context_id, oracle_id, partial_sig)
+        genesis_hash_hex, epoch, attempt_id, context_version, session_context_id, oracle_id, partial_sig)
     sig = sign_schnorr(regtest_oracle_privkey(oracle_id), digest)
 
     payload = struct.pack("<i", epoch)
-    payload += struct.pack("<B", 1)
+    payload += struct.pack("<B", attempt_id)
+    payload += struct.pack("<B", context_version)
     payload += ser_uint256(session_context_id)
     payload += struct.pack("<B", oracle_id)
     payload += ser_string(partial_sig)

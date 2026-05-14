@@ -22,6 +22,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <chainparams.h>
+#include <crypto/sha256.h>
 #include <key.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/musig2_aggregator.h>
@@ -31,6 +32,7 @@
 #include <primitives/oracle.h>
 #include <random.h>
 #include <test/util/setup_common.h>
+#include <uint256.h>
 
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
@@ -40,7 +42,7 @@
 #include <cstring>
 #include <vector>
 
-BOOST_FIXTURE_TEST_SUITE(musig2_p2p_network_attacks_tests, BasicTestingSetup)
+BOOST_FIXTURE_TEST_SUITE(musig2_p2p_network_attacks_tests, RegTestingSetup)
 
 // ── Helpers ──
 
@@ -59,6 +61,17 @@ static CKey ToCKey(const unsigned char seckey[32])
 {
     CKey key;
     key.Set(seckey, seckey + 32, true);
+    return key;
+}
+
+static CKey GetRegtestMusigOracleKey(uint32_t oracle_id)
+{
+    const std::string seed = "digibyte_regtest_oracle_" + std::to_string(oracle_id);
+    uint256 hash;
+    CSHA256().Write(reinterpret_cast<const unsigned char*>(seed.data()), seed.size()).Finalize(hash.begin());
+
+    CKey key;
+    key.Set(hash.begin(), hash.end(), true);
     return key;
 }
 
@@ -524,19 +537,19 @@ BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
     BOOST_REQUIRE(session != nullptr);
     BOOST_CHECK_EQUAL(session->GetState(), MuSig2SessionState::CREATED);
 
-    // An authenticated gateway injects a nonce for oracle 0 via IngestRemoteNonce.
+    // An authenticated oracle injects a nonce for oracle 0 via IngestRemoteNonce.
     OracleMusigNonceMsg remote_msg;
     remote_msg.epoch = 11;
     remote_msg.oracle_id = 0;
 
-    // Generate a valid-looking pubnonce
+    CKey oracle_key = GetRegtestMusigOracleKey(remote_msg.oracle_id);
+    const CPubKey oracle_pubkey = oracle_key.GetPubKey();
+
+    // Generate a pubnonce from the same chain-registered oracle key that will
+    // authenticate the message.
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-    unsigned char seckey[32];
-    GetStrongRandBytes(Span{seckey, 32});
-    secp256k1_keypair kp;
     secp256k1_pubkey pk;
-    BOOST_REQUIRE(secp256k1_keypair_create(ctx, &kp, seckey));
-    BOOST_REQUIRE(secp256k1_keypair_pub(ctx, &pk, &kp));
+    BOOST_REQUIRE(secp256k1_ec_pubkey_parse(ctx, &pk, oracle_pubkey.data(), oracle_pubkey.size()));
 
     // We need a keyagg cache to generate a nonce
     const secp256k1_pubkey* pk_ptr = &pk;
@@ -549,12 +562,13 @@ BOOST_AUTO_TEST_CASE(attack_epoch_boundary_race)
     unsigned char session_rand[32];
     GetStrongRandBytes(Span{session_rand, 32});
     BOOST_REQUIRE(secp256k1_musig_nonce_gen(ctx, &secnonce, &pubnonce,
-                                             session_rand, seckey, &pk,
+                                             session_rand, oracle_key.begin(), &pk,
                                              nullptr, &cache, nullptr));
 
     unsigned char ser[66];
     BOOST_REQUIRE(secp256k1_musig_pubnonce_serialize(ctx, ser, &pubnonce));
     remote_msg.pubnonce.assign(ser, ser + 66);
+    BOOST_REQUIRE(remote_msg.Sign(oracle_key));
 
     // Inject via orchestrator
     orch.IngestRemoteNonce(remote_msg);

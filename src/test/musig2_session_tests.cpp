@@ -555,6 +555,46 @@ BOOST_AUTO_TEST_CASE(session_context_id_changes_when_epoch_selection_seed_change
     secp256k1_context_destroy(ctx);
 }
 
+BOOST_AUTO_TEST_CASE(session_context_id_changes_when_attempt_id_changes)
+{
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    constexpr int32_t epoch = 63;
+    constexpr uint8_t threshold = 9;
+    const uint256 seed = FilledSeed(0x53);
+    const std::vector<uint8_t> participants{0, 1, 2, 3, 4, 5, 6, 7, 8};
+
+    MuSig2SigningSession attempt0(epoch, threshold, 0);
+    MuSig2SigningSession attempt1(epoch, threshold, 1);
+    attempt0.SetEpochSelectionSeed(seed);
+    attempt1.SetEpochSelectionSeed(seed);
+    BOOST_REQUIRE(attempt0.InitializePassive(MakeSingleKeyAggCache(ctx)));
+    BOOST_REQUIRE(attempt1.InitializePassive(MakeSingleKeyAggCache(ctx)));
+
+    for (uint8_t id : participants) {
+        secp256k1_musig_pubnonce pubnonce = MakeValidPubnonceForOracle(ctx, id, epoch);
+        BOOST_REQUIRE(attempt0.AddPubnonce(id, pubnonce));
+        BOOST_REQUIRE(attempt1.AddPubnonce(id, pubnonce));
+    }
+
+    unsigned char msg32[32];
+    std::fill(msg32, msg32 + 32, 0x25);
+    uint256 nonce_hash_0;
+    uint256 context_0;
+    uint256 nonce_hash_1;
+    uint256 context_1;
+    BOOST_REQUIRE(attempt0.ComputeContextIdForParticipants(
+        participants, msg32, nonce_hash_0, context_0));
+    BOOST_REQUIRE(attempt1.ComputeContextIdForParticipants(
+        participants, msg32, nonce_hash_1, context_1));
+
+    BOOST_CHECK(nonce_hash_0 != nonce_hash_1);
+    BOOST_CHECK(context_0 != context_1);
+
+    secp256k1_context_destroy(ctx);
+}
+
 BOOST_AUTO_TEST_CASE(required_participants_complete_with_offline_low_ids)
 {
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);

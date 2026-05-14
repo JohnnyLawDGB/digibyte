@@ -11,6 +11,7 @@
  *   - GetOracleDataMsg     (epoch + oracle_id request)
  *   - OracleConsensusMsg   (epoch + consensus_price + consensus_timestamp)
  *   - OracleAttestationMsg (wraps COraclePriceMessage attestation)
+ *   - OracleVersionHeartbeatMsg (signed operator version/status heartbeat)
  *
  * Existing oracle fuzz harnesses cover the *inner* COraclePriceMessage and
  * COracleBundle types, but not the P2P wire wrappers that net_processing
@@ -90,9 +91,9 @@ FUZZ_TARGET(oracle_p2p_wire_messages, .init = initialize_oracle_p2p_wire_message
 {
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
 
-    // Bucket the input across the five wrapper types so a single fuzz buffer
+    // Bucket the input across the six wrapper types so a single fuzz buffer
     // can probe any wrapper. Each wrapper consumes its own slice of the input.
-    const int which = fdp.ConsumeIntegralInRange<int>(0, 4);
+    const int which = fdp.ConsumeIntegralInRange<int>(0, 5);
     const size_t take = fdp.ConsumeIntegralInRange<size_t>(0, fdp.remaining_bytes());
     const std::vector<uint8_t> slice = fdp.ConsumeBytes<uint8_t>(take);
 
@@ -157,5 +158,8 @@ FUZZ_TARGET(oracle_p2p_wire_messages, .init = initialize_oracle_p2p_wire_message
         assert(OracleP2P::ValidateGetOracleRequest(decoded) == expected_valid);
         break;
     }
+    case 5:
+        fuzz_roundtrip<OracleVersionHeartbeatMsg>(slice);
+        break;
     }
 }

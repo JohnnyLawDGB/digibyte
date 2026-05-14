@@ -8,6 +8,7 @@
 #include <chainparams.h>
 #include <oracle/bundle_manager.h>
 #include <oracle/musig2_aggregator.h>
+#include <oracle/musig2_messages.h>
 #include <primitives/oracle.h>
 #include <serialize.h>
 #include <uint256.h>
@@ -70,6 +71,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_types_exist)
     BOOST_CHECK_EQUAL(std::string(NetMsgType::ORACLEPRICE), "oracleprice");
     BOOST_CHECK_EQUAL(std::string(NetMsgType::ORACLEBUNDLE), "oraclebundle");
     BOOST_CHECK_EQUAL(std::string(NetMsgType::GETORACLES), "getoracles");
+    BOOST_CHECK_EQUAL(std::string(NetMsgType::ORACLEHEARTBEAT), "oraclehb");
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_message_enum_values)
@@ -79,11 +81,15 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_enum_values)
     BOOST_CHECK_EQUAL(MSG_ORACLE_PRICE, 0x40000000);
     BOOST_CHECK_EQUAL(MSG_ORACLE_BUNDLE, 0x40000001);
     BOOST_CHECK_EQUAL(MSG_GET_ORACLE_DATA, 0x40000002);
+    BOOST_CHECK_EQUAL(MSG_ORACLE_HEARTBEAT, 0x40000008);
 
     // Ensure they are unique
     BOOST_CHECK_NE(MSG_ORACLE_PRICE, MSG_ORACLE_BUNDLE);
     BOOST_CHECK_NE(MSG_ORACLE_PRICE, MSG_GET_ORACLE_DATA);
     BOOST_CHECK_NE(MSG_ORACLE_BUNDLE, MSG_GET_ORACLE_DATA);
+    BOOST_CHECK_NE(MSG_ORACLE_PRICE, MSG_ORACLE_HEARTBEAT);
+    BOOST_CHECK_NE(MSG_ORACLE_BUNDLE, MSG_ORACLE_HEARTBEAT);
+    BOOST_CHECK_NE(MSG_GET_ORACLE_DATA, MSG_ORACLE_HEARTBEAT);
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_price_msg_serialization)
@@ -197,6 +203,45 @@ BOOST_AUTO_TEST_CASE(test_oracle_message_command_conversion)
 
     CInv get_oracle_inv{MSG_GET_ORACLE_DATA, uint256S("0x1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff")};
     BOOST_CHECK_EQUAL(get_oracle_inv.GetCommand(), "getoracles");
+
+    CInv heartbeat_inv{MSG_ORACLE_HEARTBEAT, uint256S("0x222233334444555566667777888899990000aaaabbbbccccddddeeeeffff1111")};
+    BOOST_CHECK_EQUAL(heartbeat_inv.GetCommand(), "oraclehb");
+    BOOST_CHECK(heartbeat_inv.IsOracleMsg());
+}
+
+BOOST_AUTO_TEST_CASE(rc38_oracle_heartbeat_sign_verify_and_serializes)
+{
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey pubkey(key.GetPubKey());
+
+    OracleVersionHeartbeatMsg msg;
+    msg.heartbeat_version = 1;
+    msg.oracle_id = 1;
+    msg.timestamp = GetTime();
+    msg.nonce = 42;
+    msg.client_version = 9260038;
+    msg.p2p_protocol_version = 70019;
+    msg.oracle_protocol_version = 1;
+    msg.musig2_context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    msg.software_version = "v9.26.0-rc38";
+    msg.subversion = "/DigiByte:9.26.0(rc38)/";
+
+    BOOST_REQUIRE(msg.Sign(key));
+    BOOST_CHECK(msg.IsValid());
+    BOOST_CHECK(msg.VerifySignature(pubkey));
+
+    DataStream stream{};
+    stream << msg;
+    OracleVersionHeartbeatMsg decoded;
+    stream >> decoded;
+    BOOST_CHECK_EQUAL(decoded.oracle_id, msg.oracle_id);
+    BOOST_CHECK_EQUAL(decoded.client_version, msg.client_version);
+    BOOST_CHECK_EQUAL(decoded.musig2_context_version, msg.musig2_context_version);
+    BOOST_CHECK(decoded.VerifySignature(pubkey));
+
+    decoded.musig2_context_version++;
+    BOOST_CHECK(!decoded.VerifySignature(pubkey));
 }
 
 BOOST_AUTO_TEST_CASE(test_oracle_message_validation_timestamp)

@@ -45,6 +45,24 @@ static COraclePriceMessage MakeRegtestOracleMessage(uint32_t oracle_id, uint64_t
     return msg;
 }
 
+static OracleVersionHeartbeatMsg MakeRegtestHeartbeat(uint32_t oracle_id, int64_t timestamp, int client_version)
+{
+    CKey key = GetRegtestBundleOracleKey(oracle_id);
+    OracleVersionHeartbeatMsg msg;
+    msg.heartbeat_version = 1;
+    msg.oracle_id = oracle_id;
+    msg.timestamp = timestamp;
+    msg.nonce = static_cast<uint64_t>(client_version);
+    msg.client_version = client_version;
+    msg.p2p_protocol_version = 70019;
+    msg.oracle_protocol_version = 1;
+    msg.musig2_context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    msg.software_version = "v9.26.0-rc38";
+    msg.subversion = "/DigiByte:9.26.0(rc38)/";
+    BOOST_REQUIRE(msg.Sign(key));
+    return msg;
+}
+
 /**
  * Test V1: individual oracle messages cannot become canonical bundles.
  */
@@ -99,6 +117,36 @@ BOOST_AUTO_TEST_CASE(single_message_does_not_create_v1_bundle)
     BOOST_CHECK_EQUAL(consensus_price, 0);
 
     LogPrintf("Test: V1 rejected single-message oracle bundle; price=%lld micro-USD\n", consensus_price);
+}
+
+BOOST_AUTO_TEST_CASE(rc38_version_heartbeat_store_and_replace_latest)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+
+    const int64_t now = GetTime();
+    OracleVersionHeartbeatMsg older = MakeRegtestHeartbeat(/*oracle_id=*/0, now - 60, 9260037);
+    OracleVersionHeartbeatMsg newer = MakeRegtestHeartbeat(/*oracle_id=*/0, now, 9260038);
+
+    BOOST_REQUIRE(manager.AddVersionHeartbeat(older));
+    OracleVersionHeartbeatMsg stored;
+    BOOST_REQUIRE(manager.GetVersionHeartbeat(0, stored));
+    BOOST_CHECK_EQUAL(stored.client_version, older.client_version);
+
+    BOOST_REQUIRE(manager.AddVersionHeartbeat(newer));
+    BOOST_REQUIRE(manager.GetVersionHeartbeat(0, stored));
+    BOOST_CHECK_EQUAL(stored.client_version, newer.client_version);
+
+    // Older heartbeats are well-formed but stale relative to the latest stored
+    // state, so the manager rejects them instead of rolling version visibility
+    // backward.
+    BOOST_CHECK(!manager.AddVersionHeartbeat(older));
+    BOOST_REQUIRE(manager.GetVersionHeartbeat(0, stored));
+    BOOST_CHECK_EQUAL(stored.client_version, newer.client_version);
+
+    OracleVersionHeartbeatMsg tampered = newer;
+    tampered.software_version = "tampered";
+    BOOST_CHECK(!manager.AddVersionHeartbeat(tampered));
 }
 
 /**

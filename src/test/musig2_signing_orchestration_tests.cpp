@@ -260,6 +260,32 @@ BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_accepts_first_nonce)
                 session->GetState() == MuSig2SessionState::NONCES_COMPLETE);
 }
 
+BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_timeout_uses_chain_epoch_length)
+{
+    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
+    BOOST_REQUIRE_GT(epoch_length, 0);
+    BOOST_REQUIRE_NE(epoch_length, 50);
+
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 3;
+    const int32_t epoch_start_height = epoch * epoch_length;
+
+    OracleMusigNonceMsg msg = MakeSignedMusigNonceMsg(epoch, 1);
+    orch.IngestRemoteNonce(msg);
+
+    MuSig2SigningSession* session = orch.GetOrCreateSigningSession(epoch, epoch_start_height);
+    BOOST_REQUIRE(session != nullptr);
+    BOOST_REQUIRE_EQUAL(session->GetNonceCount(), 1U);
+
+    std::shared_ptr<const CBlock> empty_block;
+    orch.OnBlockConnected(empty_block, epoch_start_height);
+
+    session = orch.GetOrCreateSigningSession(epoch, epoch_start_height);
+    BOOST_REQUIRE(session != nullptr);
+    BOOST_CHECK_MESSAGE(session->GetState() != MuSig2SessionState::FAILED,
+        "lazy-created MuSig2 session must use the active chain epoch length for timeout binding");
+}
+
 BOOST_AUTO_TEST_CASE(early_partial_sigs_replay_when_session_enters_signing)
 {
     OracleSigningOrchestrator orch;
@@ -558,32 +584,6 @@ BOOST_AUTO_TEST_CASE(mainnet_signing_roster_excludes_reserve_metadata_slots)
     secp256k1_musig_keyagg_cache cache;
     BOOST_CHECK_MESSAGE(aggregator.ComputeAggregatePubkey(signing_ids, agg_pk, cache),
                         "mainnet signing roster must aggregate without reserve slot ids");
-}
-
-BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_timeout_uses_chain_epoch_length)
-{
-    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
-    BOOST_REQUIRE_GT(epoch_length, 0);
-    BOOST_REQUIRE_NE(epoch_length, 50);
-
-    OracleSigningOrchestrator orch;
-    const int32_t epoch = 3;
-    const int32_t epoch_start_height = epoch * epoch_length;
-
-    OracleMusigNonceMsg msg = musig2_signing_orchestration_tests::MakeSignedMusigNonceMsg(epoch, 1);
-    orch.IngestRemoteNonce(msg);
-
-    MuSig2SigningSession* session = orch.GetOrCreateSigningSession(epoch, epoch_start_height);
-    BOOST_REQUIRE(session != nullptr);
-    BOOST_REQUIRE_EQUAL(session->GetNonceCount(), 1U);
-
-    std::shared_ptr<const CBlock> empty_block;
-    orch.OnBlockConnected(empty_block, epoch_start_height);
-
-    session = orch.GetOrCreateSigningSession(epoch, epoch_start_height);
-    BOOST_REQUIRE(session != nullptr);
-    BOOST_CHECK_MESSAGE(session->GetState() != MuSig2SessionState::FAILED,
-        "lazy-created MuSig2 session must use the active chain epoch length for timeout binding");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

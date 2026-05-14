@@ -1,6 +1,6 @@
 #!/bin/bash
 # DigiDollar Qt GUI TestNet Test with Live Oracle
-# VERSION 13 (RC37): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE
+# VERSION 14 (RC38): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE
 # Tests the full DigiDollar cycle on TestNet with real-time exchange price data
 # Opens 8 SEPARATE Qt wallet instances, each hosting exactly 2 test oracles (16 active).
 # Slot 16 (GTO90 placeholder) remains UNRUN; the 9-of-17 chainparams threshold is
@@ -57,7 +57,7 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/test_run_$(date +%Y%m%d_%H%M%S).log"
 echo "=========================================="
 echo "DigiDollar Qt TestNet Automated Test"
-echo "VERSION 13 (RC37) - 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE"
+echo "VERSION 14 (RC38) - 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER CHAIN + WALLET PERSISTENCE"
 echo "=========================================="
 echo "Log file: $LOG_FILE"
 echo ""
@@ -69,13 +69,13 @@ echo "=========================================="
 echo "DigiDollar Qt TestNet Automated Test"
 echo "With 8 SEPARATE Qt GUI Instances (16 active oracles across 8 nodes; slot 16 unrun)"
 echo "Using LIVE Oracle Price Data"
-echo "VERSION 13 (RC37): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER + WALLET PERSISTENCE"
+echo "VERSION 14 (RC38): 9-of-17 MULTI-ORACLE + ALL-TIER + TRANSFER + WALLET PERSISTENCE"
 echo "=========================================="
 echo "Test started: $(date)"
 echo ""
 
 # ============================================================================
-# Configuration - Multi-Oracle Keys (9-of-17 threshold, RC37)
+# Configuration - Multi-Oracle Keys (9-of-17 threshold, RC38)
 # ============================================================================
 # Deterministic keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..16.
 # The x-only pubkeys corresponding to these privkeys are in the
@@ -102,7 +102,7 @@ ORACLE_KEY_15="a080aacffc0b681952cc7d9f0a698ae8e0ac8604e92abd8c1e1392d94fa7e20f"
 ORACLE_KEY_16="e2cf94f4a32b332b7c852ba5e00e0caf41e793cabfc048b5b0d3eed4366c585f"
 
 # ============================================================================
-# Mini Testnet ports (8 nodes hosting 16 active oracles — 9-of-17 consensus, RC37)
+# Mini Testnet ports (8 nodes hosting 16 active oracles — 9-of-17 consensus, RC38)
 # ============================================================================
 # Oracle distribution (exactly 2 oracles per node):
 #   Bob     : oracles 0, 1      (2 oracles)
@@ -512,7 +512,7 @@ refresh_local_p2p_links() {
     $HEIDI_CLI   addnode "127.0.0.1:$BOB_PORT" onetry >/dev/null 2>&1 || true
 }
 
-# Sync all nodes to the same height (8 nodes total for RC37)
+# Sync all nodes to the same height (8 nodes total for RC38)
 sync_all_nodes() {
     echo "Syncing all 8 nodes to a common tip..."
 
@@ -561,7 +561,7 @@ sync_all_nodes() {
     return 1
 }
 
-# Oracle distribution across nodes (RC37: 16 active oracles, 9-of-17 consensus):
+# Oracle distribution across nodes (RC38: 16 active oracles, 9-of-17 consensus):
 #   Bob     : oracles 0, 1      (2 oracles)
 #   Alice   : oracles 2, 3      (2 oracles)
 #   Charlie : oracles 4, 5      (2 oracles)
@@ -583,7 +583,7 @@ refresh_oracle_prices() {
 }
 
 start_all_oracles() {
-    # Distribute 16 active oracles across all 8 nodes (9-of-17 threshold, RC37).
+    # Distribute 16 active oracles across all 8 nodes (9-of-17 threshold, RC38).
     # Slot 16 (GTO90) is a chainparams placeholder and is intentionally NOT
     # started; 16 of 17 slots signing still meets the 9-of-17 quorum.
     # Bob: oracles 0, 1
@@ -1073,7 +1073,7 @@ echo "Mining 50 blocks to Eve..."
 $BOB_CLI generatetoaddress 50 "$EVE_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
 print_status "ok" "Eve funded: 50 blocks mined"
 
-# Mine 10 blocks each to the RC37 oracle hosts
+# Mine 10 blocks each to the RC38 oracle hosts
 # (plenty to pay fees; they do not mint DD).
 for name in FRANK GRACE HEIDI; do
     addr_var="${name}_ADDR"
@@ -1091,7 +1091,7 @@ sync_all_nodes
 print_status "ok" "All nodes synced"
 
 # Step 8B: Start oracles NOW (BIP9 is active, height > 600)
-print_header "Step 8B: Starting 16 Live Oracles (BIP9 now active — 9-of-17 RC37, slot 16 unrun)"
+print_header "Step 8B: Starting 16 Live Oracles (BIP9 now active — 9-of-17 RC38, slot 16 unrun)"
 HEIGHT_8B=$($BOB_CLI getblockcount)
 echo "Current height: $HEIGHT_8B (BIP9 activates at 600)"
 
@@ -1101,6 +1101,32 @@ echo "DigiDollar BIP9 status: $DD_STATUS"
 
 start_all_oracles
 sleep 2
+
+# RC38: prove signed version heartbeats are flowing before relying on price
+# consensus. Heartbeats are off-chain monitoring data, but they tell operators
+# which oracle slots are live and upgraded.
+echo "Waiting for signed oracle version heartbeats..."
+HEARTBEAT_COUNT=0
+for i in {1..20}; do
+    HEARTBEAT_COUNT=$($BOB_CLI getoracles true 2>/dev/null \
+        | jq '[.[] | select(.heartbeat_status == "fresh")] | length' 2>/dev/null || echo "0")
+    if [ "$HEARTBEAT_COUNT" -ge 9 ] 2>/dev/null; then
+        break
+    fi
+    echo "  Fresh oracle heartbeats seen: $HEARTBEAT_COUNT/16 ($i/20)"
+    sleep 3
+done
+
+if [ "$HEARTBEAT_COUNT" -ge 9 ] 2>/dev/null; then
+    print_status "ok" "Signed oracle version heartbeats visible: $HEARTBEAT_COUNT fresh heartbeat(s)"
+    if [ "$HEARTBEAT_COUNT" -lt 16 ] 2>/dev/null; then
+        print_status "warn" "Only $HEARTBEAT_COUNT/16 active oracle heartbeats reached Bob so far; continuing because quorum visibility is present"
+    fi
+else
+    print_status "fail" "Fewer than 9 fresh signed oracle heartbeats visible after startup ($HEARTBEAT_COUNT/16)"
+    $BOB_CLI getoracles true 2>/dev/null | jq '[.[] | {oracle_id, heartbeat_status, software_version, client_version, musig2_context_version}]' || true
+    exit 1
+fi
 
 # Oracle prices come from LIVE exchange feeds (Binance, KuCoin, Gate.io, etc.)
 # Mine blocks so oracle price threads broadcast and bundles form on-chain
@@ -2017,7 +2043,7 @@ list_dd_positions "$ALICE_CLI" "alice" "Alice"
 list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 
 # ====================================================================================
-# Step 27A: 9-of-17 Oracle Consensus Verification (RC37)
+# Step 27A: 9-of-17 Oracle Consensus Verification (RC38)
 # ====================================================================================
 # All 16 active oracles are running and reporting the live exchange price (slot
 # 16 GTO90 placeholder is not started). This step verifies that the network
@@ -2025,7 +2051,7 @@ list_dd_positions "$CHARLIE_CLI" "charlie" "Charlie"
 # threshold is being met on-chain by the 16-of-17 signing slots. (Oracle
 # prices are not forged — they are the real exchange-aggregator median, so we
 # only assert the price is > 0.)
-print_header "Step 27A: 9-of-17 Oracle Consensus Verification (RC37)"
+print_header "Step 27A: 9-of-17 Oracle Consensus Verification (RC38)"
 echo ""
 echo "Verifying that at least 9 of 17 oracles agree on the live exchange price."
 echo "Mining blocks so oracle price threads broadcast and bundles form, then"
@@ -2048,11 +2074,11 @@ fi
 # ====================================================================================
 # Step 27B: Manual Oracle Injection Removal Check
 # ====================================================================================
-# RC37 keeps sendoracleprice/fake price injection removed. That is intentional security
+# RC38 keeps sendoracleprice/fake price injection removed. That is intentional security
 # hardening: oracle prices must come from live exchange aggregation only.
 print_header "Step 27B: Manual Oracle Injection Removed"
 echo ""
-echo "Verifying the insecure sendoracleprice RPC is unavailable on RC37."
+echo "Verifying the insecure sendoracleprice RPC is unavailable on RC38."
 echo ""
 
 SENDORACLE_HELP=$($BOB_CLI help sendoracleprice 2>&1 || true)
@@ -3512,7 +3538,7 @@ echo "  [x] Network DD supply verification at every step"
 echo "  [x] Balance verification at every step"
 echo ""
 echo "MULTI-ORACLE COVERAGE:"
-echo "  [x] 16 active oracles started across 8 wallet nodes (9-of-17 threshold, RC37)"
+echo "  [x] 16 active oracles started across 8 wallet nodes (9-of-17 threshold, RC38)"
 echo "  [x] Slot 16 (GTO90) chainparams placeholder intentionally NOT started"
 echo "  [x] Oracle prices refreshed before every mint"
 echo "  [x] 9-of-17 consensus verification (Step 27A)"
@@ -3572,9 +3598,9 @@ echo "  - (slot 16 GTO90 chainparams placeholder — NO Qt instance running)"
 echo ""
 
 # ============================================================================
-# RC37 MINI-TESTNET NOTE
+# RC38 MINI-TESTNET NOTE
 # ============================================================================
-print_header "RC37 MINI-TESTNET NOTE"
+print_header "RC38 MINI-TESTNET NOTE"
 echo ""
 echo "Local oracle keys are enabled only through -easypow local mini-testnet mode."
 echo "Production testnet oracle keys remain the default when -easypow is absent."

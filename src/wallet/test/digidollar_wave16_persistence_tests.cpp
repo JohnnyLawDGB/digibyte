@@ -40,6 +40,7 @@
 #include <wallet/walletutil.h>
 
 #include <base58.h>
+#include <oracle/mock_oracle.h>
 #include <hash.h>
 #include <key.h>
 #include <key_io.h>
@@ -338,6 +339,45 @@ BOOST_AUTO_TEST_CASE(w16_04_encrypted_locked_wallet_blocks_dd_key_decryption)
         BOOST_CHECK(dd_wallet->GetAddressKey(output_key, reloaded));
         BOOST_CHECK(reloaded.GetPubKey() == addr_key.GetPubKey());
     }
+}
+
+BOOST_AUTO_TEST_CASE(w16_04b_encrypted_locked_redeem_does_not_use_fallback_owner_key)
+{
+    m_wallet.EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = m_wallet.GetDDWallet();
+    BOOST_REQUIRE(dd_wallet != nullptr);
+
+    CKey owner_key;
+    owner_key.MakeNewKey(true);
+    const uint256 pos_id = uint256S(
+        "0x1604b0000000000000000000000000000000000000000000000000000000000aa");
+    dd_wallet->StoreOwnerKey(pos_id, owner_key);
+    dd_wallet->AddCollateralPosition(WalletCollateralPosition(
+        pos_id, /*dd_minted=*/10000, /*dgb_collateral=*/300 * COIN,
+        /*lock_tier=*/1, /*unlock_height=*/1));
+    dd_wallet->AddDDUTXO(COutPoint(pos_id, 1), 10000);
+    WITH_LOCK(m_wallet.cs_wallet, m_wallet.SetLastBlockProcessed(1, uint256::ZERO));
+
+    auto& mock = MockOracleManager::GetInstance();
+    const bool old_enabled = mock.IsEnabled();
+    const CAmount old_price = mock.GetCurrentPrice();
+    mock.SetEnabled(true);
+    mock.SetMockPrice(1000000, /*update_height=*/1);
+
+    SecureString passphrase{"wave16-redeem-locked-passphrase"};
+    BOOST_REQUIRE(m_wallet.EncryptWallet(passphrase));
+    BOOST_REQUIRE(m_wallet.IsCrypted());
+    BOOST_REQUIRE(m_wallet.IsLocked());
+
+    CTransactionRef out_tx;
+    BOOST_CHECK_MESSAGE(
+        !dd_wallet->RedeemDigiDollar(pos_id, /*amount=*/10000, out_tx),
+        "locked encrypted redeem must stop at unlock-needed owner-key failure, "
+        "not continue with a freshly generated fallback key");
+    BOOST_CHECK(out_tx == nullptr);
+
+    mock.SetMockPrice(old_price, /*update_height=*/1);
+    mock.SetEnabled(old_enabled);
 }
 
 // =============================================================================

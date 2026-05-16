@@ -4815,15 +4815,27 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         params.ddToRedeem = amount;
         params.path = builder.DetermineRedemptionPath(params);
 
-        // Get wallet spending key for this position
+        // Get wallet spending key for this position. Never synthesize a fallback
+        // key here: encrypted locked wallets must fail with unlock-needed
+        // semantics, and missing DD owner keys are a hard redeem failure.
         CKey ownerKey;
         if (!GetOwnerKey(dd_timelock_id, ownerKey)) {
-            // Fallback: generate new key (for testing/mock scenarios)
-            ownerKey.MakeNewKey(true);
-            LogPrintf("DigiDollar: WARNING - No owner key found for position %s, using generated key\n",
-                     dd_timelock_id.ToString());
+            if (m_wallet && m_wallet->IsCrypted() && m_wallet->IsLocked()) {
+                LogPrintf("DigiDollar: RedeemDigiDollar blocked because encrypted wallet is locked and DD owner key cannot be decrypted\n");
+            } else {
+                LogPrintf("DigiDollar: RedeemDigiDollar blocked because no DD owner key is available for position %s\n",
+                         dd_timelock_id.ToString());
+            }
+            return false;
         }
         params.ownerKey = ownerKey;
+
+        // Pass the wallet's authoritative position metadata into the builder.
+        // The builder cannot safely reconstruct this from a bare txid in wallet
+        // context; tx.nLockTime must match the original unlock height exactly.
+        params.collateralAmount = it->second.dgb_collateral;
+        params.ddMinted = it->second.dd_minted;
+        params.unlockHeight = static_cast<uint32_t>(it->second.unlock_height);
 
         // CRITICAL FIX: Get wallet addresses for BOTH collateral return AND DGB change
         // This ensures collateral and change are SEPARATE outputs, not merged

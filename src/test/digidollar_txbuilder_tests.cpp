@@ -378,6 +378,7 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
     BOOST_CHECK(result.error.empty());
     BOOST_CHECK(result.tx.vin.size() > 0);
     BOOST_CHECK(result.tx.vout.size() >= 1); // DGB output
+    BOOST_CHECK_EQUAL(result.tx.nLockTime, redeemParams.unlockHeight);
 
     // Check transaction type
     BOOST_CHECK(result.tx.IsDigiDollar());

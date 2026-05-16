@@ -100,9 +100,12 @@ void DigiDollarMintWidget::setupUI()
     m_mainLayout->setSpacing(0);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
-    // Create validators — DD amounts are in dollars with max 2 decimal places (cents)
-    // Mint limits: $100 minimum, $100,000 maximum (from consensus params)
-    m_amountValidator = new AmountValidator(100.00, 100000.00, 2, this);
+    // Create validators — DD amounts are in dollars with max 2 decimal places (cents).
+    // Mint limits must follow active chain params, not stale UI constants.
+    const auto& ddParams = Params().GetDigiDollarParams();
+    const double minMintAmount = ddParams.minMintAmount / 100.0;
+    const double maxMintAmount = ddParams.maxMintAmount / 100.0;
+    m_amountValidator = new AmountValidator(minMintAmount, maxMintAmount, 2, this);
 
     // Create horizontal layout for mint amount and lock period side-by-side
     QHBoxLayout* topLayout = new QHBoxLayout();
@@ -163,7 +166,12 @@ void DigiDollarMintWidget::setupMintAmountSection()
     m_amountEdit->setObjectName("amountEdit");
     m_amountEdit->setValidator(m_amountValidator);
     m_amountEdit->setPlaceholderText("0.00");
-    m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\n• Minimum: $100.00\n• Maximum: $100,000.00\n• Up to 2 decimal places (cents)"));
+    const auto& ddParams = Params().GetDigiDollarParams();
+    const double minMintAmount = ddParams.minMintAmount / 100.0;
+    const double maxMintAmount = ddParams.maxMintAmount / 100.0;
+    m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\n• Minimum: $%1\n• Maximum: $%2\n• Up to 2 decimal places (cents)")
+        .arg(QString::number(minMintAmount, 'f', 2))
+        .arg(QString::number(maxMintAmount, 'f', 2)));
     m_amountEdit->setFocusPolicy(Qt::StrongFocus);
     m_amountEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
     QFont monospaceFont = GUIUtil::fixedPitchFont();

@@ -558,7 +558,7 @@ public:
         // NOTE: DD amounts are in CENTS, not satoshis. 100 cents = $1.00
         digidollarParams.minMintAmount = 10000;            // 10,000 cents = $100 minimum
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
-        digidollarParams.maxMintAmount = 1000000;          // 1,000,000 cents = $10k maximum
+        digidollarParams.maxMintAmount = 10000000;         // 10,000,000 cents = $100k maximum
         digidollarParams.oracleThreshold = 9;                         // 9-of-17 MuSig2 quorum (RC30)
         digidollarParams.activeOracles = 17;                          // 17 active oracles (RC30)
         digidollarParams.oracleCount = 17;                            // Total 17 oracles defined (RC30)

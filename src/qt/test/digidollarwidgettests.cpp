@@ -5,6 +5,7 @@
 #include <qt/test/digidollarwidgettests.h>
 #include <qt/test/util.h>
 
+#include <consensus/digidollar.h>
 #include <consensus/merkle.h>
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
@@ -380,6 +381,41 @@ void DigiDollarWidgetTests::mintWidgetTests()
 
     const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
     TestMintWidget(m_node, wallet);
+}
+
+void DigiDollarWidgetTests::mintWidgetUsesChainParamMintLimits()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    DigiDollarMintWidget mintWidget;
+    QLineEdit* amountEdit = mintWidget.findChild<QLineEdit*>("amountEdit");
+    QVERIFY(amountEdit != nullptr);
+    QVERIFY(amountEdit->validator() != nullptr);
+
+    const auto& ddParams = Params().GetDigiDollarParams();
+    const QString minText = QString::number(ddParams.minMintAmount / 100.0, 'f', 2);
+    const QString maxText = QString::number(ddParams.maxMintAmount / 100.0, 'f', 2);
+
+    QVERIFY2(amountEdit->toolTip().contains("Minimum: $" + minText),
+             qPrintable(amountEdit->toolTip()));
+    QVERIFY2(amountEdit->toolTip().contains("Maximum: $" + maxText),
+             qPrintable(amountEdit->toolTip()));
+
+    QString belowMin = QString::number((ddParams.minMintAmount - 1) / 100.0, 'f', 2);
+    int pos = 0;
+    QCOMPARE(amountEdit->validator()->validate(belowMin, pos), QValidator::Intermediate);
+
+    QString maxAmount = maxText;
+    pos = 0;
+    QCOMPARE(amountEdit->validator()->validate(maxAmount, pos), QValidator::Acceptable);
+
+    QString aboveMax = QString::number((ddParams.maxMintAmount + 1) / 100.0, 'f', 2);
+    pos = 0;
+    QCOMPARE(amountEdit->validator()->validate(aboveMax, pos), QValidator::Invalid);
 }
 
 void DigiDollarWidgetTests::mintWidgetCollateralMatchesBuilderSafetyMargin()

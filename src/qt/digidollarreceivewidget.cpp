@@ -678,7 +678,7 @@ void DigiDollarReceiveWidget::onShowRequestClicked()
         recipient.label.clear();  // Clear placeholder label
     }
 
-    // Parse amount if present (format: "X.XXXXXXXX DD" or "Any")
+    // Parse amount if present (format: "X.XX DD" or "Any")
     if (amountItem) {
         QString amountStr = amountItem->text();
         if (amountStr != tr("Any") && !amountStr.isEmpty()) {
@@ -830,7 +830,7 @@ void DigiDollarReceiveWidget::addRequestToTable(const QString& date, const QStri
 
 QString DigiDollarReceiveWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 8) + " DD";
+    return QString::number(amount, 'f', 2) + " DD";
 }
 
 QString DigiDollarReceiveWidget::formatDDURI(const QString& address, const QString& label,

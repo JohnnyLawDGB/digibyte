@@ -292,7 +292,7 @@ void DigiDollarSendWidget::setupAmountSection()
     m_availableBalanceLabel = new QLabel(tr("Available:"), this);
     m_availableBalanceLabel->setObjectName("availableBalanceLabel");
     m_availableBalanceLabel->setToolTip(tr("Your current available DigiDollar balance"));
-    m_availableBalanceValue = new QLabel("0.00000000 DD", this);
+    m_availableBalanceValue = new QLabel("0.00 DD", this);
     m_availableBalanceValue->setObjectName("availableBalanceValue");
     m_availableBalanceValue->setFont(monospaceFont);
     m_availableBalanceValue->setToolTip(tr("Your current spendable DigiDollar balance"));
@@ -377,7 +377,7 @@ void DigiDollarSendWidget::setupFeeSection()
     boldFont.setBold(true);
     m_totalLabel->setFont(boldFont);
 
-    m_totalValue = new QLabel("0.000 DD", this);
+    m_totalValue = new QLabel("0.00 DD", this);
     m_totalValue->setObjectName("totalValue");
     m_totalValue->setFont(monospaceFont);
     m_totalValue->setToolTip(tr("Total DD to send (DGB fee is paid from your DGB balance)"));

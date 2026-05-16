@@ -169,7 +169,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     // DD Balance (Available / Confirmed)
     m_ddBalanceLabel = new QLabel(tr("Available"), this);
     m_ddBalanceLabel->setObjectName("ddBalanceLabel");
-    m_ddBalanceValue = new QLabel("0.00000000 DD", this);
+    m_ddBalanceValue = new QLabel("0.00 DD", this);
     m_ddBalanceValue->setObjectName("ddBalanceValue");
     m_ddBalanceValue->setCursor(QCursor(Qt::IBeamCursor));
     m_ddBalanceValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
@@ -181,7 +181,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     // DD Pending (Unconfirmed)
     m_ddPendingLabel = new QLabel(tr("Pending"), this);
     m_ddPendingLabel->setObjectName("ddPendingLabel");
-    m_ddPendingValue = new QLabel("0.00000000 DD", this);
+    m_ddPendingValue = new QLabel("0.00 DD", this);
     m_ddPendingValue->setObjectName("ddPendingValue");
     m_ddPendingValue->setCursor(QCursor(Qt::IBeamCursor));
     m_ddPendingValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
@@ -940,7 +940,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
 
 QString DigiDollarOverviewWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 8) + " DD";
+    return QString::number(amount, 'f', 2) + " DD";
 }
 
 QString DigiDollarOverviewWidget::formatDGBAmount(double amount) const

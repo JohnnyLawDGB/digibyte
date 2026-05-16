@@ -274,7 +274,7 @@ void DigiDollarRedeemWidget::setupAmountSection()
     // Redeemable amount
     m_redeemableLabel = new QLabel(tr("Amount to Redeem:"), this);  // Changed from "Max Redeemable"
     m_redeemableLabel->setObjectName("redeemableLabel");
-    m_redeemableValue = new QLabel("0.00000000 DD", this);
+    m_redeemableValue = new QLabel("0.00 DD", this);
     m_redeemableValue->setObjectName("redeemableValue");
     m_redeemableValue->setFont(monospaceFont);
 
@@ -307,7 +307,7 @@ void DigiDollarRedeemWidget::setupPositionInfoSection()
 
     // DD Minted
     m_ddMintedLabel = new QLabel(tr("DD Minted:"), this);
-    m_ddMintedValue = new QLabel("0.00000000 DD", this);
+    m_ddMintedValue = new QLabel("0.00 DD", this);
     m_ddMintedValue->setObjectName("ddMintedValue");
     m_ddMintedValue->setFont(monospaceFont);
     m_positionInfoLayout->addWidget(m_ddMintedLabel, 1, 0);
@@ -782,9 +782,9 @@ void DigiDollarRedeemWidget::updatePositionInfo()
             m_dgbCollateralValue->setText(maskValue(formatDGBAmount(0)));
             m_redeemableValue->setText(maskValue(formatDDAmount(0)));
         } else {
-            m_ddMintedValue->setText("0.00000000 DD");
-            m_dgbCollateralValue->setText("0.00000000 DGB");
-            m_redeemableValue->setText("0.00000000 DD");
+            m_ddMintedValue->setText(formatDDAmount(0));
+            m_dgbCollateralValue->setText(formatDGBAmount(0));
+            m_redeemableValue->setText(formatDDAmount(0));
         }
         m_lockTierValue->setText("N/A");
         m_timeRemainingValue->setText("N/A");

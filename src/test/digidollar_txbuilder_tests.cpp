@@ -10,6 +10,7 @@
 #include <kernel/chainparams.h>
 #include <chainparams.h>
 #include <key.h>
+#include <policy/policy.h>
 #include <random.h>
 #include <test/util/setup_common.h>
 
@@ -687,6 +688,49 @@ BOOST_AUTO_TEST_CASE(select_coins_fails_fragmented_wallet)
     BOOST_CHECK(!result.success);
     BOOST_CHECK(result.error.find("Too many small UTXOs") != std::string::npos ||
                 result.error.find("Insufficient funds") != std::string::npos);
+}
+
+
+BOOST_AUTO_TEST_CASE(sendmany_metadata_boundary_preflight)
+{
+    auto build_metadata = [](size_t outputs) {
+        CScript metadata;
+        metadata << OP_RETURN << std::vector<unsigned char>{'D', 'D'} << CScriptNum(2);
+        for (size_t i = 0; i < outputs; ++i) {
+            metadata << CScriptNum(CAmount{10000000}); // max per-recipient DD amount encodes worst-case here
+        }
+        return metadata;
+    };
+
+    // sendmanydigidollar includes one OP_RETURN amount per recipient plus DD change
+    // when selected inputs exceed the sent total. Fourteen recipients + change is the
+    // largest standard payload with max-sized transfer amounts.
+    BOOST_CHECK_LE(build_metadata(15).size(), MAX_OP_RETURN_RELAY);
+    BOOST_CHECK_GT(build_metadata(16).size(), MAX_OP_RETURN_RELAY);
+}
+
+BOOST_AUTO_TEST_CASE(sendmany_projected_vsize_fee_scales_with_recipient_count)
+{
+    CMutableTransaction small;
+    small.SetDigiDollarType(::DD_TX_TRANSFER);
+    uint256 hash1;
+    uint256 hash2;
+    hash1.SetHex("01");
+    hash2.SetHex("02");
+    small.vin.push_back(CTxIn(COutPoint(hash1, 0)));
+    small.vin.push_back(CTxIn(COutPoint(hash2, 0)));
+    small.vout.push_back(CTxOut(0, CScript() << OP_1 << std::vector<unsigned char>(32, 1)));
+    small.vout.push_back(CTxOut(0, CScript() << OP_RETURN << std::vector<unsigned char>{'D', 'D'} << CScriptNum(2) << CScriptNum(10000000)));
+
+    CMutableTransaction large = small;
+    for (int i = 0; i < 13; ++i) {
+        large.vout.insert(large.vout.end() - 1, CTxOut(0, CScript() << OP_1 << std::vector<unsigned char>(32, static_cast<unsigned char>(i + 2))));
+    }
+
+    const size_t small_vsize = EstimateTransactionVSize(small);
+    const size_t large_vsize = EstimateTransactionVSize(large);
+    BOOST_CHECK_GT(large_vsize, small_vsize);
+    BOOST_CHECK_LE(large_vsize * WITNESS_SCALE_FACTOR, static_cast<size_t>(MAX_STANDARD_TX_WEIGHT));
 }
 
 BOOST_AUTO_TEST_CASE(consolidation_input_weight_budget)

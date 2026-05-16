@@ -99,6 +99,17 @@ class DigiDollarRPCAmountFiltersTest(DigiByteTestFramework):
         self.sync_all()
         assert_equal(Decimal(node1.getdigidollarbalance()["total"]), before_node1 + Decimal(5000))
 
+        self.log.info("sendmanydigidollar rejects over-capacity recipient metadata before balance/coin selection")
+        too_many = {node2.getdigidollaraddress(): 10000000 for _ in range(40)}
+        assert_equal(len(too_many), 40)
+        assert_raises_rpc_error(
+            -8,
+            "Too many DigiDollar recipients",
+            node0.sendmanydigidollar,
+            "",
+            too_many,
+        )
+
         node2_addr = node2.getdigidollaraddress()
         before_node2 = Decimal(node2.getdigidollarbalance()["total"])
         sendmany_result = node0.sendmanydigidollar("", {node2_addr: "25.00"}, "decimal string regression")

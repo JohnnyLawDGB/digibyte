@@ -28,11 +28,83 @@
 #include <oracle/mock_oracle.h>
 #include <oracle/bundle_manager.h>
 #include <coins.h>
+#include <policy/policy.h>
 
 #include <algorithm>
 #include <limits>
 #include <regex>
 #include <set>
+
+namespace {
+static constexpr CAmount MIN_DD_TRANSFER_FEE_RATE{35000000}; // 0.35 DGB/kB
+static constexpr CAmount MIN_DD_TRANSFER_FEE{10000000};       // 0.1 DGB
+
+CScript BuildDDTransferMetadataScript(const std::vector<CAmount>& amounts)
+{
+    CScript metadata;
+    metadata << OP_RETURN << std::vector<unsigned char>{'D', 'D'} << CScriptNum(2);
+    for (const CAmount amount : amounts) metadata << CScriptNum(amount);
+    return metadata;
+}
+
+bool PreflightDDTransferCapacity(const DigiDollar::TxBuilderTransferParams& params,
+                                 CAmount selected_dd_total,
+                                 CAmount total_dd_out,
+                                 std::string& error,
+                                 size_t* projected_vsize = nullptr,
+                                 CAmount* projected_fee = nullptr)
+{
+    std::vector<CAmount> dd_output_amounts;
+    dd_output_amounts.reserve(params.recipients.size() + 1);
+    for (const auto& [address, amount] : params.recipients) dd_output_amounts.push_back(amount);
+    const CAmount dd_change = selected_dd_total - total_dd_out;
+    if (dd_change > 0) dd_output_amounts.push_back(dd_change);
+
+    const CScript metadata = BuildDDTransferMetadataScript(dd_output_amounts);
+    if (metadata.size() > MAX_OP_RETURN_RELAY) {
+        error = strprintf("Too many DigiDollar outputs for one transaction: metadata is %u bytes, standard relay limit is %u bytes. Reduce recipients or split into multiple sendmanydigidollar calls.",
+                          static_cast<unsigned>(metadata.size()), MAX_OP_RETURN_RELAY);
+        return false;
+    }
+
+    CMutableTransaction projected;
+    projected.SetDigiDollarType(::DD_TX_TRANSFER);
+    for (const auto& utxo : params.ddUtxos) projected.vin.push_back(CTxIn(utxo));
+    for (const auto& utxo : params.feeUtxos) projected.vin.push_back(CTxIn(utxo));
+
+    for (const auto& [address, amount] : params.recipients) {
+        CTxDestination dest = DecodeDigiDollarAddress(address);
+        const auto* taproot = std::get_if<WitnessV1Taproot>(&dest);
+        if (!taproot) {
+            error = "Invalid DigiDollar recipient address during capacity preflight";
+            return false;
+        }
+        CScript dd_script;
+        dd_script << OP_1 << ToByteVector(*taproot);
+        projected.vout.push_back(CTxOut(0, dd_script));
+    }
+    if (dd_change > 0) {
+        CScript change_script;
+        change_script << OP_1 << std::vector<unsigned char>(32, 0);
+        projected.vout.push_back(CTxOut(0, change_script));
+    }
+    // Worst-case DGB fee change output; including it makes the preflight deterministic and conservative.
+    projected.vout.push_back(CTxOut(1, CScript() << OP_0 << std::vector<unsigned char>(20, 0)));
+    projected.vout.push_back(CTxOut(0, metadata));
+
+    const size_t vsize = DigiDollar::EstimateTransactionVSize(projected);
+    const int64_t weight = static_cast<int64_t>(vsize) * WITNESS_SCALE_FACTOR;
+    if (weight > MAX_STANDARD_TX_WEIGHT) {
+        error = strprintf("Projected DigiDollar transaction is too large: %d weight units (%u vB), standard limit is %d WU. Reduce recipients or consolidate DD/DGB UTXOs first.",
+                          weight, static_cast<unsigned>(vsize), MAX_STANDARD_TX_WEIGHT);
+        return false;
+    }
+    const CAmount fee = std::max<CAmount>((static_cast<CAmount>(vsize) * MIN_DD_TRANSFER_FEE_RATE) / 1000, MIN_DD_TRANSFER_FEE);
+    if (projected_vsize) *projected_vsize = vsize;
+    if (projected_fee) *projected_fee = fee;
+    return true;
+}
+} // namespace
 
 // CDigiDollarAddress is defined in base58.h - no need to redefine
 
@@ -1267,24 +1339,49 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
         LogPrintf("DigiDollar: Transfer - Selected %zu DD UTXOs totaling %lld cents\n",
                   selected_dd_amounts.size(), static_cast<long long>(selectedDDTotal));
 
-        // Select DGB UTXOs for fees (estimated)
-        // CRITICAL: Exclude DD UTXOs from fee selection to prevent double-spend
+        // Deterministic capacity preflight before build/broadcast. The fee target is
+        // based on the projected transaction size, not a fixed 350-vB guess.
+        std::string preflight_error;
+        size_t projected_vsize = 0;
+        CAmount estimatedFee = 0;
+        if (!PreflightDDTransferCapacity(params, selectedDDTotal, totalAmount, preflight_error, &projected_vsize, &estimatedFee)) {
+            error = preflight_error;
+            LogPrintf("DigiDollar: Transfer capacity preflight failed - %s\n", error);
+            return false;
+        }
+        LogPrintf("DigiDollar: Preflight projected transfer size: %u vB, fee: %lld sats (%.8f DGB)\n",
+                  static_cast<unsigned>(projected_vsize), static_cast<long long>(estimatedFee), estimatedFee / 100000000.0);
+
+        // Select DGB UTXOs for fees. Re-run preflight after selection because the
+        // number of fee inputs affects vsize and therefore the required fee.
         std::vector<COutPoint> exclude_dd_utxos = params.ddUtxos;
-        // Bug #9 fix: Calculate fee from feeRate and estimated tx size instead of hardcoding.
-        // Transfer tx: ~2-3 inputs (DD + fee), ~2-3 outputs → ~350 vbytes.
-        // Use MIN_DD_FEE_RATE (35M sat/kB) with 50% safety margin.
-        static const CAmount MIN_DD_FEE_RATE = 35000000;
-        CAmount estimatedFee = (350 * MIN_DD_FEE_RATE) / 1000; // vsize * feeRate / 1000
-        estimatedFee = estimatedFee + (estimatedFee / 2); // 50% safety margin
-        if (estimatedFee < 10000000) estimatedFee = 10000000; // Floor at 0.1 DGB
-        LogPrintf("DigiDollar: Estimated transfer fee: %lld sats (%.8f DGB)\n",
-                  static_cast<long long>(estimatedFee), estimatedFee / 100000000.0);
         std::vector<CAmount> fee_amounts;
         CAmount selectedFeeTotal = 0;
-        if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_dd_utxos)) {
-            // CRITICAL: Do NOT use mock UTXOs - they cause "bad-txns-inputs-missingorspent" errors!
-            error = "Insufficient DGB balance for transaction fees (need 0.1 DGB minimum)";
-            LogPrintf("DigiDollar: Transfer failed - no DGB UTXOs available for fees\n");
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            params.feeUtxos.clear();
+            fee_amounts.clear();
+            selectedFeeTotal = 0;
+            if (!SelectFeeCoins(estimatedFee, params.feeUtxos, selectedFeeTotal, &fee_amounts, &exclude_dd_utxos)) {
+                error = strprintf("Insufficient DGB balance for transaction fees (need at least %lld sats based on projected %u vB transaction)",
+                                  static_cast<long long>(estimatedFee), static_cast<unsigned>(projected_vsize));
+                LogPrintf("DigiDollar: Transfer failed - no DGB UTXOs available for projected fee\n");
+                return false;
+            }
+            CAmount refinedFee = 0;
+            if (!PreflightDDTransferCapacity(params, selectedDDTotal, totalAmount, preflight_error, &projected_vsize, &refinedFee)) {
+                error = preflight_error;
+                LogPrintf("DigiDollar: Transfer capacity preflight failed after fee selection - %s\n", error);
+                return false;
+            }
+            if (selectedFeeTotal >= refinedFee) {
+                estimatedFee = refinedFee;
+                break;
+            }
+            estimatedFee = refinedFee;
+        }
+        if (selectedFeeTotal < estimatedFee) {
+            error = strprintf("Insufficient DGB fee inputs after projected-size fee calculation (selected=%lld sats, required=%lld sats). Consolidate DGB UTXOs or add funds.",
+                              static_cast<long long>(selectedFeeTotal), static_cast<long long>(estimatedFee));
             return false;
         }
         params.feeAmounts = fee_amounts;  // Pass actual fee UTXO amounts

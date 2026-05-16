@@ -50,6 +50,7 @@
 #include <versionbits.h>
 #include <deploymentstatus.h>
 #include <key_io.h>
+#include <policy/policy.h>
 #include <version.h>
 
 #include <util/time.h>
@@ -1758,6 +1759,22 @@ RPCHelpMan sendmanydigidollar()
                 recipients.push_back({dd_address, amount});
                 result_amounts.pushKV(keys[i], amount);
                 total_amount += amount;
+            }
+
+            // Preflight OP_RETURN capacity before wallet coin selection/build.
+            // Include a possible DD change amount so boundary behavior is deterministic
+            // and users get an actionable invalid-parameter error instead of a late
+            // mempool/wallet failure.
+            {
+                CScript metadata;
+                metadata << OP_RETURN << std::vector<unsigned char>{'D', 'D'} << CScriptNum(2);
+                for (const auto& [address, amount] : recipients) metadata << CScriptNum(amount);
+                metadata << CScriptNum(1); // possible DD change output amount
+                if (metadata.size() > MAX_OP_RETURN_RELAY) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER,
+                        strprintf("Too many DigiDollar recipients for one transaction: projected metadata is %u bytes, standard relay limit is %u bytes. Reduce recipients or split this into multiple sendmanydigidollar calls.",
+                                  static_cast<unsigned>(metadata.size()), MAX_OP_RETURN_RELAY));
+                }
             }
 
             CAmount balance = dd_wallet->GetTotalDDBalance();

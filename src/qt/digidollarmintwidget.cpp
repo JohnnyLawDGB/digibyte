@@ -676,6 +676,50 @@ void DigiDollarMintWidget::onMintClicked()
     }
     // --- End oracle price drift check ---
 
+    auto refreshAndRevalidateMintInputs = [this](const QString& title) -> bool {
+        const double previousCollateral = m_requiredCollateral;
+        const double previousOraclePrice = m_oraclePrice;
+
+        updateOraclePrice(); // also recalculates collateral from current oracle data
+        updateAmountValidation();
+        updateMintButton();
+
+        if (!validateAmount()) {
+            Q_EMIT message(tr("Invalid Amount"),
+                           tr("The mint amount is no longer valid under the active chain limits."),
+                           QMessageBox::Warning);
+            return false;
+        }
+
+        if (!validateCollateral()) {
+            Q_EMIT message(tr("Insufficient Collateral"),
+                           tr("The oracle price or wallet balance changed and you no longer have "
+                              "enough DGB to cover the required collateral.\n\n"
+                              "Required: %1\nAvailable: %2")
+                           .arg(formatDGBAmount(m_requiredCollateral))
+                           .arg(formatDGBAmount(m_availableDGBBalance)),
+                           QMessageBox::Warning);
+            return false;
+        }
+
+        const double collateralDrift = std::abs(m_requiredCollateral - previousCollateral);
+        if (previousCollateral > 0 && collateralDrift > 0.001) {
+            Q_EMIT message(title,
+                           tr("The oracle price changed during confirmation, so the mint details were refreshed.\n\n"
+                              "Required collateral is now %1 (was %2).\n"
+                              "Oracle price: %3 USD/DGB (was %4 USD/DGB)\n\n"
+                              "Please review the updated values and click Mint again if they look correct.")
+                           .arg(formatDGBAmount(m_requiredCollateral))
+                           .arg(formatDGBAmount(previousCollateral))
+                           .arg(formatUSDAmount(m_oraclePrice))
+                           .arg(formatUSDAmount(previousOraclePrice)),
+                           QMessageBox::Information);
+            return false;
+        }
+
+        return true;
+    };
+
     // Calculate unlock details for user warning
     int lockBlocks = getLockTierBlocks(m_selectedTier);
     int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
@@ -711,6 +755,16 @@ void DigiDollarMintWidget::onMintClicked()
     msgBox.setDefaultButton(QMessageBox::No);
 
     if (msgBox.exec() == QMessageBox::Yes) {
+        if (!refreshAndRevalidateMintInputs(tr("Oracle Price Updated"))) {
+            return;
+        }
+
+        // Refresh unlock details too; height may have advanced while the dialog was open.
+        lockBlocks = getLockTierBlocks(m_selectedTier);
+        currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
+        unlockHeight = currentHeight + lockBlocks;
+        lockPeriodStr = getLockTierDisplayName(m_selectedTier);
+
         // SECOND WARNING - Final "Are you ABSOLUTELY sure?" confirmation
         // IMPORTANT: These names MUST match getLockTierDisplayName() and consensus tier definitions
         QString periodName;
@@ -756,6 +810,10 @@ void DigiDollarMintWidget::onMintClicked()
 
         if (finalWarning.exec() != QMessageBox::Yes) {
             LogPrintf("DigiDollar Qt: User cancelled at final confirmation\n");
+            return;
+        }
+
+        if (!refreshAndRevalidateMintInputs(tr("Mint Details Refreshed"))) {
             return;
         }
 

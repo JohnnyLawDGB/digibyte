@@ -5,6 +5,8 @@
 #ifndef DIGIBYTE_QT_DIGIDOLLARRECEIVEWIDGET_H
 #define DIGIBYTE_QT_DIGIDOLLARRECEIVEWIDGET_H
 
+#include <qt/sendcoinsrecipient.h>
+
 #include <QWidget>
 
 class WalletModel;
@@ -76,6 +78,8 @@ private Q_SLOTS:
     void onRecentRequestSelected();
     /** Remove selected request */
     void onRemoveRequestClicked();
+    /** Edit selected request */
+    void onEditRequestClicked();
     /** Show selected request */
     void onShowRequestClicked();
     /** Recent request row double-clicked */
@@ -92,6 +96,8 @@ private Q_SLOTS:
     void copyMessage();
     /** Context menu action: copy amount */
     void copyAmount();
+    /** Context menu action: edit request */
+    void editRequest();
 
 private:
     void setupUI();
@@ -104,13 +110,19 @@ private:
     void generateNewAddress();
     void populateRecentRequests();
     void addRequestToTable(const QString& date, const QString& label,
-                          const QString& amount, const QString& address);
+                          const QString& amount, const QString& address, qint64 id = 0);
 
     QString formatDDAmount(double amount) const;
     QString formatDDURI(const QString& address, const QString& label = QString(),
                        const QString& amount = QString(), const QString& message = QString()) const;
-    int selectedRow();
-    const RecentRequestEntry* getSelectedRequest();
+    int selectedRow() const;
+    bool getSelectedRequest(RecentRequestEntry& entry) const;
+    bool findDigiDollarRequest(const QString& address, RecentRequestEntry& entry) const;
+    bool updateDigiDollarRequest(const RecentRequestEntry& entry);
+    bool removeDigiDollarRequest(const QString& address);
+    bool editDigiDollarRequest(int row);
+    SendCoinsRecipient recipientFromRow(int row) const;
+    QString addressFromRow(int row) const;
 
     // UI components
     QMenu* m_contextMenu;
@@ -147,6 +159,7 @@ private:
     QTableWidget* m_requestsTable;
     QHBoxLayout* m_requestsButtonLayout;
     QPushButton* m_showRequestButton;
+    QPushButton* m_editRequestButton;
     QPushButton* m_removeRequestButton;
     QLabel* m_noRequestsLabel;
 

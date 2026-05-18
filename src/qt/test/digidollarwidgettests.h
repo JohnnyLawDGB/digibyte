@@ -52,6 +52,10 @@ private Q_SLOTS:
     void walletViewRefreshesDigiDollarPageOnOpen();
     void ddReceivePanelFollowsSelectedRow();
     void ddReceiveDoubleClickShowsRequestDialog();
+    void ddReceiveEditPersistsAndKeepsDgbSeparated();
+    void ddReceiveEditCancelLeavesRequestUnchanged();
+    void ddReceiveRemovePersistsAndKeepsDgbSeparated();
+    void ddReceiveRequestDialogFormatsURIAndAmount();
     void darkThemePeerDetailWidgetHasExplicitRule();
     void overviewRecentTransactionsSendShowsNegativeSign();
     void transactionsWidgetShowsRpcHistorySignsAndFields();

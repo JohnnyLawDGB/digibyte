@@ -54,6 +54,8 @@
 #include <QTableWidget>
 #include <QTreeWidget>
 #include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QTimer>
 
 using wallet::AddWallet;
 using wallet::CreateMockableWalletDatabase;
@@ -109,6 +111,40 @@ CTransactionRef MakePendingDDTx()
     tx.vout[0].nValue = COIN;
     tx.vout[1].nValue = 0;
     return MakeTransactionRef(std::move(tx));
+}
+
+bool ReadRecentRequestEntry(const std::string& request_str, RecentRequestEntry& entry)
+{
+    std::vector<uint8_t> data(request_str.begin(), request_str.end());
+    DataStream ss{data};
+    ss >> entry;
+    return true;
+}
+
+bool FindStoredReceiveRequest(WalletModel& wallet_model, const QString& address, RecentRequestEntry& result)
+{
+    for (const std::string& request_str : wallet_model.wallet().getAddressReceiveRequests()) {
+        RecentRequestEntry entry;
+        ReadRecentRequestEntry(request_str, entry);
+        if (entry.recipient.address == address) {
+            result = entry;
+            return true;
+        }
+    }
+    return false;
+}
+
+int CountStoredReceiveRequests(WalletModel& wallet_model, const QString& address)
+{
+    int count = 0;
+    for (const std::string& request_str : wallet_model.wallet().getAddressReceiveRequests()) {
+        RecentRequestEntry entry;
+        ReadRecentRequestEntry(request_str, entry);
+        if (entry.recipient.address == address) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 void CreateAndProcessOracleQuoteBlock(TestChain100Setup& test, CAmount price_micro_usd)
@@ -1904,6 +1940,309 @@ void DigiDollarWidgetTests::ddReceiveDoubleClickShowsRequestDialog()
 
     dialog->close();
     QCoreApplication::processEvents();
+}
+
+void DigiDollarWidgetTests::ddReceiveEditPersistsAndKeepsDgbSeparated()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletModel* wallet_model = mini_gui.walletModel.get();
+    QVERIFY(wallet_model != nullptr);
+
+    const QString ddAddress = wallet_model->getNewDigiDollarAddress(QStringLiteral("edit-original-address-label"));
+    QVERIFY(!ddAddress.isEmpty());
+
+    SendCoinsRecipient recipient;
+    recipient.address = ddAddress;
+    recipient.label = QStringLiteral("original label");
+    recipient.message = QStringLiteral("original message");
+    recipient.amount = 1234;
+    wallet_model->getRecentRequestsTableModel()->addNewRequest(recipient);
+    QCOMPARE(wallet_model->getRecentRequestsTableModel()->rowCount(QModelIndex()), 0);
+
+    DigiDollarReceiveWidget receive;
+    receive.setWalletModel(wallet_model);
+    receive.updateRecentRequests();
+
+    QTableWidget* table = receive.findChild<QTableWidget*>("requestsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+    table->selectRow(0);
+
+    QTimer::singleShot(0, [&]() {
+        QDialog* dialog = nullptr;
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (widget->windowTitle() == QStringLiteral("Edit DigiDollar Payment Request")) {
+                dialog = qobject_cast<QDialog*>(widget);
+                break;
+            }
+        }
+        QVERIFY(dialog != nullptr);
+        QLineEdit* label = dialog->findChild<QLineEdit*>("ddRequestLabelEdit");
+        QLineEdit* message = dialog->findChild<QLineEdit*>("ddRequestMessageEdit");
+        QVERIFY(label != nullptr);
+        QVERIFY(message != nullptr);
+        label->setText(QStringLiteral("edited label"));
+        message->setText(QStringLiteral("edited message"));
+        QDoubleSpinBox* amount = dialog->findChild<QDoubleSpinBox*>("ddRequestAmountEdit");
+        QVERIFY(amount != nullptr);
+        amount->setValue(45.67);
+        QDialogButtonBox* buttons = dialog->findChild<QDialogButtonBox*>();
+        QVERIFY(buttons != nullptr);
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+
+    QVERIFY(QMetaObject::invokeMethod(&receive, "onEditRequestClicked", Qt::DirectConnection));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(CountStoredReceiveRequests(*wallet_model, ddAddress), 1);
+    RecentRequestEntry edited;
+    bool found = false;
+    for (const std::string& requestStr : wallet_model->wallet().getAddressReceiveRequests()) {
+        std::vector<uint8_t> data(requestStr.begin(), requestStr.end());
+        DataStream ss{data};
+        RecentRequestEntry entry;
+        ss >> entry;
+        if (entry.recipient.address == ddAddress) {
+            edited = entry;
+            found = true;
+            break;
+        }
+    }
+    QVERIFY(found);
+    QCOMPARE(edited.recipient.label, QStringLiteral("edited label"));
+    QCOMPARE(edited.recipient.message, QStringLiteral("edited message"));
+    QCOMPARE(edited.recipient.amount, CAmount(4567));
+    QCOMPARE(wallet_model->getRecentRequestsTableModel()->rowCount(QModelIndex()), 0);
+
+    DigiDollarReceiveWidget reloaded;
+    reloaded.setWalletModel(wallet_model);
+    reloaded.updateRecentRequests();
+    QTableWidget* reloadedTable = reloaded.findChild<QTableWidget*>("requestsTable");
+    QVERIFY(reloadedTable != nullptr);
+    QCOMPARE(reloadedTable->rowCount(), 1);
+    QCOMPARE(reloadedTable->item(0, 1)->text(), QStringLiteral("edited label"));
+    QCOMPARE(reloadedTable->item(0, 2)->text(), QStringLiteral("45.67 DD"));
+}
+
+void DigiDollarWidgetTests::ddReceiveEditCancelLeavesRequestUnchanged()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletModel* wallet_model = mini_gui.walletModel.get();
+    QVERIFY(wallet_model != nullptr);
+
+    const QString ddAddress = wallet_model->getNewDigiDollarAddress(QStringLiteral("edit-cancel-address-label"));
+    QVERIFY(!ddAddress.isEmpty());
+
+    SendCoinsRecipient recipient;
+    recipient.address = ddAddress;
+    recipient.label = QStringLiteral("cancel original label");
+    recipient.message = QStringLiteral("cancel original message");
+    recipient.amount = 9876;
+    wallet_model->getRecentRequestsTableModel()->addNewRequest(recipient);
+    QCOMPARE(wallet_model->getRecentRequestsTableModel()->rowCount(QModelIndex()), 0);
+    QCOMPARE(CountStoredReceiveRequests(*wallet_model, ddAddress), 1);
+
+    DigiDollarReceiveWidget receive;
+    receive.setWalletModel(wallet_model);
+    receive.updateRecentRequests();
+
+    QTableWidget* table = receive.findChild<QTableWidget*>("requestsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+    table->selectRow(0);
+
+    QTimer::singleShot(0, [&]() {
+        QDialog* dialog = nullptr;
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (widget->windowTitle() == QStringLiteral("Edit DigiDollar Payment Request")) {
+                dialog = qobject_cast<QDialog*>(widget);
+                break;
+            }
+        }
+        QVERIFY(dialog != nullptr);
+        QLineEdit* label = dialog->findChild<QLineEdit*>("ddRequestLabelEdit");
+        QLineEdit* message = dialog->findChild<QLineEdit*>("ddRequestMessageEdit");
+        QDoubleSpinBox* amount = dialog->findChild<QDoubleSpinBox*>("ddRequestAmountEdit");
+        QVERIFY(label != nullptr);
+        QVERIFY(message != nullptr);
+        QVERIFY(amount != nullptr);
+        label->setText(QStringLiteral("cancel edited label"));
+        message->setText(QStringLiteral("cancel edited message"));
+        amount->setValue(12.34);
+        QDialogButtonBox* buttons = dialog->findChild<QDialogButtonBox*>();
+        QVERIFY(buttons != nullptr);
+        buttons->button(QDialogButtonBox::Cancel)->click();
+    });
+
+    QVERIFY(QMetaObject::invokeMethod(&receive, "onEditRequestClicked", Qt::DirectConnection));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(CountStoredReceiveRequests(*wallet_model, ddAddress), 1);
+    RecentRequestEntry stored;
+    QVERIFY(FindStoredReceiveRequest(*wallet_model, ddAddress, stored));
+    QCOMPARE(stored.recipient.label, QStringLiteral("cancel original label"));
+    QCOMPARE(stored.recipient.message, QStringLiteral("cancel original message"));
+    QCOMPARE(stored.recipient.amount, CAmount(9876));
+    QCOMPARE(wallet_model->getRecentRequestsTableModel()->rowCount(QModelIndex()), 0);
+    QCOMPARE(table->rowCount(), 1);
+    QCOMPARE(table->item(0, 1)->text(), QStringLiteral("cancel original label"));
+    QCOMPARE(table->item(0, 2)->text(), QStringLiteral("98.76 DD"));
+}
+
+void DigiDollarWidgetTests::ddReceiveRemovePersistsAndKeepsDgbSeparated()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletModel* wallet_model = mini_gui.walletModel.get();
+    QVERIFY(wallet_model != nullptr);
+
+    RecentRequestsTableModel* dgb_requests = wallet_model->getRecentRequestsTableModel();
+    QVERIFY(dgb_requests != nullptr);
+
+    const CTxDestination dgbDest = GetDestinationForKey(test.coinbaseKey.GetPubKey(), wallet->m_default_address_type);
+    const QString dgbAddress = QString::fromStdString(EncodeDestination(dgbDest));
+    const QString ddAddress = wallet_model->getNewDigiDollarAddress(QStringLiteral("remove-dd-address-label"));
+    QVERIFY(!dgbAddress.isEmpty());
+    QVERIFY(!ddAddress.isEmpty());
+
+    SendCoinsRecipient dgbRecipient;
+    dgbRecipient.address = dgbAddress;
+    dgbRecipient.label = QStringLiteral("dgb request");
+    dgbRecipient.message = QStringLiteral("normal DGB request");
+    dgbRecipient.amount = 1234;
+    dgb_requests->addNewRequest(dgbRecipient);
+    QCOMPARE(dgb_requests->rowCount(QModelIndex()), 1);
+    QCOMPARE(dgb_requests->entry(0).recipient.address, dgbAddress);
+
+    SendCoinsRecipient ddRecipient;
+    ddRecipient.address = ddAddress;
+    ddRecipient.label = QStringLiteral("dd request");
+    ddRecipient.message = QStringLiteral("DigiDollar request");
+    ddRecipient.amount = 2345;
+    dgb_requests->addNewRequest(ddRecipient);
+
+    QCOMPARE(dgb_requests->rowCount(QModelIndex()), 1);
+    QCOMPARE(dgb_requests->entry(0).recipient.address, dgbAddress);
+    QCOMPARE(CountStoredReceiveRequests(*wallet_model, dgbAddress), 1);
+    QCOMPARE(CountStoredReceiveRequests(*wallet_model, ddAddress), 1);
+
+    DigiDollarReceiveWidget receive;
+    receive.setWalletModel(wallet_model);
+    receive.updateRecentRequests();
+
+    QTableWidget* table = receive.findChild<QTableWidget*>("requestsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+    QCOMPARE(table->item(0, 3)->data(Qt::UserRole).toString(), ddAddress);
+    for (int row = 0; row < table->rowCount(); ++row) {
+        for (int column = 0; column < table->columnCount(); ++column) {
+            QVERIFY(table->item(row, column)->text() != dgbAddress);
+        }
+    }
+
+    table->selectRow(0);
+    QVERIFY(QMetaObject::invokeMethod(&receive, "onRemoveRequestClicked", Qt::DirectConnection));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(table->rowCount(), 0);
+    QCOMPARE(CountStoredReceiveRequests(*wallet_model, ddAddress), 0);
+    QCOMPARE(CountStoredReceiveRequests(*wallet_model, dgbAddress), 1);
+    QCOMPARE(dgb_requests->rowCount(QModelIndex()), 1);
+    QCOMPARE(dgb_requests->entry(0).recipient.address, dgbAddress);
+
+    DigiDollarReceiveWidget reloaded;
+    reloaded.setWalletModel(wallet_model);
+    reloaded.updateRecentRequests();
+    QTableWidget* reloadedTable = reloaded.findChild<QTableWidget*>("requestsTable");
+    QVERIFY(reloadedTable != nullptr);
+    QCOMPARE(reloadedTable->rowCount(), 0);
+}
+
+void DigiDollarWidgetTests::ddReceiveRequestDialogFormatsURIAndAmount()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+
+    SendCoinsRecipient recipient;
+    recipient.address = QStringLiteral("RDrequestTestAddress");
+    recipient.label = QStringLiteral("invoice 42");
+    recipient.message = QStringLiteral("DGB-equivalent DD request");
+    recipient.amount = 12345;
+
+    DigiDollarReceiveRequestDialog dialog;
+    dialog.setInfo(recipient);
+
+    QString uri_text;
+    QString amount_text;
+    for (QLabel* label : dialog.findChildren<QLabel*>()) {
+        if (label->text().contains(QStringLiteral("digidollar:RDrequestTestAddress"))) {
+            uri_text = label->text();
+        }
+        if (label->text() == QStringLiteral("123.45 DD")) {
+            amount_text = label->text();
+        }
+    }
+
+    QVERIFY2(uri_text.contains(QStringLiteral("digidollar:RDrequestTestAddress?")),
+             "DD receive request dialog must use the digidollar URI scheme");
+    QVERIFY2(uri_text.contains(QStringLiteral("label=invoice%2042")),
+             "DD receive request dialog must percent-encode labels");
+    QVERIFY2(uri_text.contains(QStringLiteral("amount=123.45000000")),
+             "DD receive request dialog must encode cents as decimal DD units");
+    QVERIFY2(uri_text.contains(QStringLiteral("message=DGB-equivalent%20DD%20request")),
+             "DD receive request dialog must percent-encode messages");
+    QCOMPARE(amount_text, QStringLiteral("123.45 DD"));
 }
 
 // Regression test for shenger's Apr 20 RC30 UX report: on Windows dark

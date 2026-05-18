@@ -9,6 +9,7 @@
 #include <qt/optionsmodel.h>
 #include <qt/walletmodel.h>
 
+#include <base58.h>
 #include <clientversion.h>
 #include <interfaces/wallet.h>
 #include <key_io.h>
@@ -19,6 +20,22 @@
 
 #include <QLatin1Char>
 #include <QLatin1String>
+
+namespace {
+bool IsDigiDollarReceiveRequestAddress(const QString& address)
+{
+    return CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString());
+}
+
+CTxDestination DecodeReceiveRequestDestination(const QString& address)
+{
+    const std::string address_str{address.toStdString()};
+    if (CDigiDollarAddress::IsValidDigiDollarAddress(address_str)) {
+        return DecodeDigiDollarAddress(address_str);
+    }
+    return DecodeDestination(address_str);
+}
+} // namespace
 
 RecentRequestsTableModel::RecentRequestsTableModel(WalletModel *parent) :
     QAbstractTableModel(parent), walletModel(parent)
@@ -149,7 +166,7 @@ bool RecentRequestsTableModel::removeRows(int row, int count, const QModelIndex 
         for (int i = 0; i < count; ++i)
         {
             const RecentRequestEntry* rec = &list[row+i];
-            if (!walletModel->wallet().setAddressReceiveRequest(DecodeDestination(rec->recipient.address.toStdString()), ToString(rec->id), ""))
+            if (!walletModel->wallet().setAddressReceiveRequest(DecodeReceiveRequestDestination(rec->recipient.address), ToString(rec->id), ""))
                 return false;
         }
 
@@ -179,13 +196,11 @@ void RecentRequestsTableModel::addNewRequest(const SendCoinsRecipient &recipient
     ss << newEntry;
 
     // Save to wallet for persistence
-    if (!walletModel->wallet().setAddressReceiveRequest(DecodeDestination(recipient.address.toStdString()), ToString(newEntry.id), ss.str()))
+    if (!walletModel->wallet().setAddressReceiveRequest(DecodeReceiveRequestDestination(recipient.address), ToString(newEntry.id), ss.str()))
         return;
 
     // Filter out DigiDollar addresses - they are saved to wallet but NOT added to DGB model
-    // DD = mainnet, TD = testnet, RD = regtest DigiDollar addresses
-    QString address = recipient.address;
-    if (address.startsWith("DD") || address.startsWith("TD") || address.startsWith("RD")) {
+    if (IsDigiDollarReceiveRequestAddress(recipient.address)) {
         return;  // Saved to wallet, but not added to DGB model - handled by DigiDollarReceiveWidget
     }
 
@@ -208,9 +223,7 @@ void RecentRequestsTableModel::addNewRequest(const std::string &recipient)
         nReceiveRequestsMaxId = entry.id;
 
     // Filter out DigiDollar addresses - they should NOT appear in DGB Receive tab
-    // DD = mainnet, TD = testnet, RD = regtest DigiDollar addresses
-    QString address = entry.recipient.address;
-    if (address.startsWith("DD") || address.startsWith("TD") || address.startsWith("RD")) {
+    if (IsDigiDollarReceiveRequestAddress(entry.recipient.address)) {
         return;  // Skip DD addresses - they are handled by DigiDollarReceiveWidget
     }
 

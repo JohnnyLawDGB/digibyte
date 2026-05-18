@@ -6,6 +6,7 @@
 
 #include <base58.h>
 #include <interfaces/wallet.h>
+#include <key_io.h>
 #include <qt/walletmodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -16,6 +17,8 @@
 #include <consensus/amount.h>
 #include <logging.h>
 #include <streams.h>
+#include <util/string.h>
+#include <wallet/types.h>
 
 #include <QLabel>
 #include <QLineEdit>
@@ -39,6 +42,9 @@
 #include <QMenu>
 #include <QAction>
 #include <QCursor>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 
 DigiDollarReceiveWidget::DigiDollarReceiveWidget(QWidget *parent) :
     QWidget(parent),
@@ -70,6 +76,7 @@ DigiDollarReceiveWidget::DigiDollarReceiveWidget(QWidget *parent) :
     m_requestsTable(nullptr),
     m_requestsButtonLayout(nullptr),
     m_showRequestButton(nullptr),
+    m_editRequestButton(nullptr),
     m_removeRequestButton(nullptr),
     m_noRequestsLabel(nullptr),
     m_walletModel(nullptr),
@@ -315,12 +322,18 @@ void DigiDollarReceiveWidget::setupRecentRequestsSection()
     m_showRequestButton->setToolTip(tr("Show the selected request"));
     m_showRequestButton->setEnabled(false);
 
+    m_editRequestButton = new QPushButton(tr("&Edit"), this);
+    m_editRequestButton->setObjectName("editRequestButton");
+    m_editRequestButton->setToolTip(tr("Edit the selected request"));
+    m_editRequestButton->setEnabled(false);
+
     m_removeRequestButton = new QPushButton(tr("&Remove"), this);
     m_removeRequestButton->setObjectName("removeRequestButton");
     m_removeRequestButton->setToolTip(tr("Remove the selected request from history"));
     m_removeRequestButton->setEnabled(false);
 
     m_requestsButtonLayout->addWidget(m_showRequestButton);
+    m_requestsButtonLayout->addWidget(m_editRequestButton);
     m_requestsButtonLayout->addWidget(m_removeRequestButton);
     m_requestsButtonLayout->addStretch();
 
@@ -365,6 +378,8 @@ void DigiDollarReceiveWidget::connectSignals()
             this, &DigiDollarReceiveWidget::onRecentRequestSelected);
     connect(m_showRequestButton, &QPushButton::clicked,
             this, &DigiDollarReceiveWidget::onShowRequestClicked);
+    connect(m_editRequestButton, &QPushButton::clicked,
+            this, &DigiDollarReceiveWidget::onEditRequestClicked);
     connect(m_removeRequestButton, &QPushButton::clicked,
             this, &DigiDollarReceiveWidget::onRemoveRequestClicked);
     connect(m_requestsTable, &QTableWidget::cellDoubleClicked,
@@ -374,6 +389,8 @@ void DigiDollarReceiveWidget::connectSignals()
 
     // Create context menu
     m_contextMenu = new QMenu(this);
+    m_contextMenu->addAction(tr("&Edit request"), this, &DigiDollarReceiveWidget::editRequest);
+    m_contextMenu->addSeparator();
     m_contextMenu->addAction(tr("Copy &URI"), this, &DigiDollarReceiveWidget::copyURI);
     m_contextMenu->addAction(tr("&Copy address"), this, &DigiDollarReceiveWidget::copyAddress);
     m_contextMenu->addAction(tr("Copy &label"), this, &DigiDollarReceiveWidget::copyLabel);
@@ -603,6 +620,7 @@ void DigiDollarReceiveWidget::onRecentRequestSelected()
 {
     bool hasSelection = !m_requestsTable->selectedItems().isEmpty();
     m_showRequestButton->setEnabled(hasSelection);
+    m_editRequestButton->setEnabled(hasSelection);
     m_removeRequestButton->setEnabled(hasSelection);
 
     // Keep the "Your DigiDollar Address" panel in sync with the highlighted
@@ -645,20 +663,7 @@ void DigiDollarReceiveWidget::onShowRequestClicked()
         return;
     }
 
-    // Get data directly from table (don't rely on model lookup which can fail)
-    QTableWidgetItem* addressItem = m_requestsTable->item(row, 3);  // Address column
-    QTableWidgetItem* labelItem = m_requestsTable->item(row, 1);    // Label column
-    QTableWidgetItem* amountItem = m_requestsTable->item(row, 2);   // Amount column
-
-    if (!addressItem) {
-        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: No address item at row %d\n", row);
-        return;
-    }
-
-    QString address = addressItem->data(Qt::UserRole).toString();
-    if (address.isEmpty()) {
-        address = addressItem->text();  // Fallback to display text
-    }
+    QString address = addressFromRow(row);
 
     // Verify this is a DD address before showing dialog
     if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
@@ -670,27 +675,7 @@ void DigiDollarReceiveWidget::onShowRequestClicked()
         return;
     }
 
-    // Construct recipient directly from table data (avoids model lookup issues)
-    SendCoinsRecipient recipient;
-    recipient.address = address;
-    recipient.label = labelItem ? labelItem->text() : QString();
-    if (recipient.label == tr("-")) {
-        recipient.label.clear();  // Clear placeholder label
-    }
-
-    // Parse amount if present (format: "X.XX DD" or "Any")
-    if (amountItem) {
-        QString amountStr = amountItem->text();
-        if (amountStr != tr("Any") && !amountStr.isEmpty()) {
-            // Remove " DD" suffix and parse
-            amountStr = amountStr.remove(" DD");
-            bool ok = false;
-            double ddAmount = amountStr.toDouble(&ok);
-            if (ok && ddAmount > 0) {
-                recipient.amount = static_cast<CAmount>(ddAmount * 100);  // Convert to cents
-            }
-        }
-    }
+    SendCoinsRecipient recipient = recipientFromRow(row);
 
     // Show detailed request dialog
     DigiDollarReceiveRequestDialog* dialog = new DigiDollarReceiveRequestDialog(this);
@@ -707,12 +692,10 @@ void DigiDollarReceiveWidget::onRemoveRequestClicked()
         return;
     }
 
-    // Also remove from the underlying model for persistence
-    if (m_walletModel && m_walletModel->getRecentRequestsTableModel()) {
-        RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
-        if (row < model->rowCount(QModelIndex())) {
-            model->removeRows(row, 1, QModelIndex());
-        }
+    const QString address = addressFromRow(row);
+    if (!address.isEmpty() && !removeDigiDollarRequest(address)) {
+        Q_EMIT message(tr("Error"), tr("Failed to remove DigiDollar payment request"), QMessageBox::Critical);
+        return;
     }
 
     m_requestsTable->removeRow(row);
@@ -722,6 +705,15 @@ void DigiDollarReceiveWidget::onRemoveRequestClicked()
         m_requestsTable->setVisible(false);
         m_noRequestsLabel->setVisible(true);
     }
+}
+
+void DigiDollarReceiveWidget::onEditRequestClicked()
+{
+    const int row = selectedRow();
+    if (row < 0 || row >= m_requestsTable->rowCount()) {
+        return;
+    }
+    editDigiDollarRequest(row);
 }
 
 void DigiDollarReceiveWidget::populateRecentRequests()
@@ -782,7 +774,7 @@ void DigiDollarReceiveWidget::populateRecentRequests()
         }
 
         // Add to table
-        addRequestToTable(dateStr, label, amountStr, address);
+        addRequestToTable(dateStr, label, amountStr, address, entry.id);
     }
 
     // Update visibility based on row count
@@ -796,7 +788,7 @@ void DigiDollarReceiveWidget::populateRecentRequests()
 }
 
 void DigiDollarReceiveWidget::addRequestToTable(const QString& date, const QString& label,
-                                                const QString& amount, const QString& address)
+                                                const QString& amount, const QString& address, qint64 id)
 {
     // Insert at row 0 so newest entries appear at top
     m_requestsTable->insertRow(0);
@@ -819,6 +811,7 @@ void DigiDollarReceiveWidget::addRequestToTable(const QString& date, const QStri
     // Address column - store full address in UserRole for retrieval, show with tooltip
     QTableWidgetItem* addressItem = new QTableWidgetItem(address);
     addressItem->setData(Qt::UserRole, address);  // Store full address
+    addressItem->setData(Qt::UserRole + 1, id);
     addressItem->setToolTip(address.isEmpty() ? tr("No address available") : address);  // Show full address on hover
     addressItem->setFont(GUIUtil::fixedPitchFont());
     m_requestsTable->setItem(0, 3, addressItem);
@@ -873,7 +866,7 @@ void DigiDollarReceiveWidget::onRecentRequestDoubleClicked(int row, int column)
     onShowRequestClicked();
 }
 
-int DigiDollarReceiveWidget::selectedRow()
+int DigiDollarReceiveWidget::selectedRow() const
 {
     if (!m_requestsTable) {
         return -1;
@@ -881,47 +874,171 @@ int DigiDollarReceiveWidget::selectedRow()
     return m_requestsTable->currentRow();
 }
 
-const RecentRequestEntry* DigiDollarReceiveWidget::getSelectedRequest()
+QString DigiDollarReceiveWidget::addressFromRow(int row) const
 {
-    int row = selectedRow();
     if (row < 0 || row >= m_requestsTable->rowCount()) {
-        return nullptr;
+        return {};
     }
 
-    if (!m_walletModel || !m_walletModel->getRecentRequestsTableModel()) {
-        return nullptr;
-    }
-
-    // Get address directly from the table (which only contains DD addresses)
     QTableWidgetItem* addressItem = m_requestsTable->item(row, 3); // Address column
     if (!addressItem) {
-        return nullptr;
+        return {};
     }
-
     QString address = addressItem->data(Qt::UserRole).toString();
     if (address.isEmpty()) {
-        return nullptr;
+        address = addressItem->text();
+    }
+    return address;
+}
+
+SendCoinsRecipient DigiDollarReceiveWidget::recipientFromRow(int row) const
+{
+    RecentRequestEntry entry;
+    if (findDigiDollarRequest(addressFromRow(row), entry)) {
+        return entry.recipient;
     }
 
-    // Verify this is a valid DD address
-    if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
-        LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Address at row %d is not a valid DD address: %s\n",
-                row, address.toStdString());
-        return nullptr;
-    }
-
-    // Find this address in the underlying model to get full recipient data
-    RecentRequestsTableModel* model = m_walletModel->getRecentRequestsTableModel();
-
-    for (int i = 0; i < model->rowCount(QModelIndex()); ++i) {
-        const RecentRequestEntry& entry = model->entry(i);
-        if (entry.recipient.address == address) {
-            return &entry;
+    SendCoinsRecipient recipient;
+    recipient.address = addressFromRow(row);
+    QTableWidgetItem* labelItem = m_requestsTable->item(row, 1);
+    QTableWidgetItem* amountItem = m_requestsTable->item(row, 2);
+    recipient.label = labelItem ? labelItem->text() : QString();
+    if (recipient.label == tr("-")) recipient.label.clear();
+    if (amountItem) {
+        QString amountStr = amountItem->text();
+        if (amountStr != tr("Any") && !amountStr.isEmpty()) {
+            amountStr.remove(" DD");
+            bool ok = false;
+            const double ddAmount = amountStr.toDouble(&ok);
+            if (ok && ddAmount > 0) {
+                recipient.amount = static_cast<CAmount>(ddAmount * 100);
+            }
         }
     }
+    return recipient;
+}
 
-    // Address not found in model
-    return nullptr;
+bool DigiDollarReceiveWidget::getSelectedRequest(RecentRequestEntry& entry) const
+{
+    return findDigiDollarRequest(addressFromRow(selectedRow()), entry);
+}
+
+bool DigiDollarReceiveWidget::findDigiDollarRequest(const QString& address, RecentRequestEntry& entry) const
+{
+    if (!m_walletModel || address.isEmpty() || !CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+        return false;
+    }
+
+    for (const std::string& requestStr : m_walletModel->wallet().getAddressReceiveRequests()) {
+        std::vector<uint8_t> data(requestStr.begin(), requestStr.end());
+        DataStream ss{data};
+        RecentRequestEntry candidate;
+        try {
+            ss >> candidate;
+        } catch (const std::exception&) {
+            continue;
+        }
+        if (candidate.recipient.address == address &&
+            CDigiDollarAddress::IsValidDigiDollarAddress(candidate.recipient.address.toStdString())) {
+            entry = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool DigiDollarReceiveWidget::updateDigiDollarRequest(const RecentRequestEntry& entry)
+{
+    if (!m_walletModel || entry.id == 0 ||
+        !CDigiDollarAddress::IsValidDigiDollarAddress(entry.recipient.address.toStdString())) {
+        return false;
+    }
+
+    DataStream ss{};
+    ss << entry;
+    const CTxDestination request_dest = DecodeDigiDollarAddress(entry.recipient.address.toStdString());
+    if (!m_walletModel->wallet().setAddressReceiveRequest(request_dest, ToString(entry.id), ss.str())) {
+        return false;
+    }
+    const CTxDestination address_book_dest = DecodeDigiDollarAddress(entry.recipient.address.toStdString());
+    return m_walletModel->wallet().setAddressBook(address_book_dest, entry.recipient.label.toStdString(),
+                                                  wallet::AddressPurpose::DIGIDOLLAR);
+}
+
+bool DigiDollarReceiveWidget::removeDigiDollarRequest(const QString& address)
+{
+    RecentRequestEntry entry;
+    if (!findDigiDollarRequest(address, entry)) {
+        return false;
+    }
+    const CTxDestination dest = DecodeDigiDollarAddress(entry.recipient.address.toStdString());
+    return m_walletModel->wallet().setAddressReceiveRequest(dest, ToString(entry.id), "");
+}
+
+bool DigiDollarReceiveWidget::editDigiDollarRequest(int row)
+{
+    RecentRequestEntry entry;
+    if (!findDigiDollarRequest(addressFromRow(row), entry)) {
+        Q_EMIT message(tr("Error"), tr("Selected DigiDollar request was not found"), QMessageBox::Critical);
+        return false;
+    }
+
+    QDialog dialog(this, GUIUtil::dialog_flags);
+    dialog.setWindowTitle(tr("Edit DigiDollar Payment Request"));
+
+    QGridLayout* layout = new QGridLayout(&dialog);
+    QLabel* labelLabel = new QLabel(tr("&Label:"), &dialog);
+    QLineEdit* labelEdit = new QLineEdit(entry.recipient.label, &dialog);
+    labelEdit->setObjectName("ddRequestLabelEdit");
+    labelLabel->setBuddy(labelEdit);
+
+    QLabel* amountLabel = new QLabel(tr("&Amount:"), &dialog);
+    QDoubleSpinBox* amountEdit = new QDoubleSpinBox(&dialog);
+    amountEdit->setObjectName("ddRequestAmountEdit");
+    amountEdit->setDecimals(2);
+    amountEdit->setRange(0.00, 100000000.00);
+    amountEdit->setSuffix(QStringLiteral(" DD"));
+    amountEdit->setValue(entry.recipient.amount > 0 ? entry.recipient.amount / 100.0 : 0.0);
+    amountLabel->setBuddy(amountEdit);
+
+    QLabel* messageLabel = new QLabel(tr("&Message:"), &dialog);
+    QLineEdit* messageEdit = new QLineEdit(entry.recipient.message, &dialog);
+    messageEdit->setObjectName("ddRequestMessageEdit");
+    messageLabel->setBuddy(messageEdit);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    layout->addWidget(labelLabel, 0, 0);
+    layout->addWidget(labelEdit, 0, 1);
+    layout->addWidget(amountLabel, 1, 0);
+    layout->addWidget(amountEdit, 1, 1);
+    layout->addWidget(messageLabel, 2, 0);
+    layout->addWidget(messageEdit, 2, 1);
+    layout->addWidget(buttons, 3, 0, 1, 2);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return false;
+    }
+
+    entry.recipient.label = labelEdit->text();
+    entry.recipient.message = messageEdit->text();
+    entry.recipient.amount = amountEdit->value() > 0.0 ? static_cast<CAmount>(amountEdit->value() * 100) : 0;
+
+    if (!updateDigiDollarRequest(entry)) {
+        Q_EMIT message(tr("Error"), tr("Failed to update DigiDollar payment request"), QMessageBox::Critical);
+        return false;
+    }
+
+    updateRecentRequests();
+    for (int i = 0; i < m_requestsTable->rowCount(); ++i) {
+        if (addressFromRow(i) == entry.recipient.address) {
+            m_requestsTable->selectRow(i);
+            break;
+        }
+    }
+    return true;
 }
 
 void DigiDollarReceiveWidget::showContextMenu(const QPoint &point)
@@ -930,20 +1047,20 @@ void DigiDollarReceiveWidget::showContextMenu(const QPoint &point)
         return;
     }
 
-    const RecentRequestEntry* entry = getSelectedRequest();
-    if (!entry) {
+    RecentRequestEntry entry;
+    if (!getSelectedRequest(entry)) {
         return;
     }
 
     // Enable/disable menu items based on data availability
     QList<QAction*> actions = m_contextMenu->actions();
-    if (actions.size() >= 5) {
+    if (actions.size() >= 7) {
         // Copy label - disable if empty
-        actions[2]->setEnabled(!entry->recipient.label.isEmpty());
+        actions[4]->setEnabled(!entry.recipient.label.isEmpty());
         // Copy message - disable if empty
-        actions[3]->setEnabled(!entry->recipient.message.isEmpty());
+        actions[5]->setEnabled(!entry.recipient.message.isEmpty());
         // Copy amount - disable if zero
-        actions[4]->setEnabled(entry->recipient.amount > 0);
+        actions[6]->setEnabled(entry.recipient.amount > 0);
     }
 
     m_contextMenu->exec(QCursor::pos());
@@ -951,57 +1068,62 @@ void DigiDollarReceiveWidget::showContextMenu(const QPoint &point)
 
 void DigiDollarReceiveWidget::copyURI()
 {
-    const RecentRequestEntry* entry = getSelectedRequest();
-    if (!entry) {
+    RecentRequestEntry entry;
+    if (!getSelectedRequest(entry)) {
         return;
     }
 
-    QString uri = formatDDURI(entry->recipient.address,
-                              entry->recipient.label,
-                              entry->recipient.amount > 0 ? QString::number(entry->recipient.amount / 100.0, 'f', 8) : QString(),
-                              entry->recipient.message);
+    QString uri = formatDDURI(entry.recipient.address,
+                              entry.recipient.label,
+                              entry.recipient.amount > 0 ? QString::number(entry.recipient.amount / 100.0, 'f', 8) : QString(),
+                              entry.recipient.message);
     GUIUtil::setClipboard(uri);
 }
 
 void DigiDollarReceiveWidget::copyAddress()
 {
-    const RecentRequestEntry* entry = getSelectedRequest();
-    if (!entry) {
+    RecentRequestEntry entry;
+    if (!getSelectedRequest(entry)) {
         return;
     }
 
-    GUIUtil::setClipboard(entry->recipient.address);
+    GUIUtil::setClipboard(entry.recipient.address);
 }
 
 void DigiDollarReceiveWidget::copyLabel()
 {
-    const RecentRequestEntry* entry = getSelectedRequest();
-    if (!entry) {
+    RecentRequestEntry entry;
+    if (!getSelectedRequest(entry)) {
         return;
     }
 
-    GUIUtil::setClipboard(entry->recipient.label);
+    GUIUtil::setClipboard(entry.recipient.label);
 }
 
 void DigiDollarReceiveWidget::copyMessage()
 {
-    const RecentRequestEntry* entry = getSelectedRequest();
-    if (!entry) {
+    RecentRequestEntry entry;
+    if (!getSelectedRequest(entry)) {
         return;
     }
 
-    GUIUtil::setClipboard(entry->recipient.message);
+    GUIUtil::setClipboard(entry.recipient.message);
 }
 
 void DigiDollarReceiveWidget::copyAmount()
 {
-    const RecentRequestEntry* entry = getSelectedRequest();
-    if (!entry) {
+    RecentRequestEntry entry;
+    if (!getSelectedRequest(entry)) {
         return;
     }
 
-    if (entry->recipient.amount > 0) {
-        double ddAmount = entry->recipient.amount / 100.0;
+    if (entry.recipient.amount > 0) {
+        double ddAmount = entry.recipient.amount / 100.0;
         GUIUtil::setClipboard(QString::number(ddAmount, 'f', 8));
     }
+}
+
+void DigiDollarReceiveWidget::editRequest()
+{
+    onEditRequestClicked();
 }

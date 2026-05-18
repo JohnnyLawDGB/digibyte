@@ -2522,9 +2522,6 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
     // Full redemption: ddBurned >= requiredDDBurn
     CAmount allowedRelease = lockedCollateral;
 
-    // Small fee tolerance (0.1% or 1000 satoshis, whichever is larger)
-    CAmount feeTolerance = std::max((CAmount)1000, allowedRelease / 1000);
-
     // Sum total DGB outputs in the transaction
     CAmount totalDGBOutputs = 0;
     for (const auto& output : tx.vout) {
@@ -2575,17 +2572,16 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
     // Regular DGB fee inputs are additive funding for fees/change. They must not
     // reduce the amount of locked collateral the redemption is required to return.
     const __int128 maxAllowedDGBOutputs = static_cast<__int128>(allowedRelease) +
-                                         static_cast<__int128>(totalFeeInputs) +
-                                         static_cast<__int128>(feeTolerance);
+                                         static_cast<__int128>(totalFeeInputs);
 
-    LogPrintf("DigiDollar: Collateral release check - totalOutputs: %lld, feeInputs: %lld, allowedCollateral: %lld, tolerance: %lld\n",
+    LogPrintf("DigiDollar: Collateral release check - totalOutputs: %lld, feeInputs: %lld, allowedCollateral: %lld\n",
               (long long)totalDGBOutputs, (long long)totalFeeInputs,
-              (long long)allowedRelease, (long long)feeTolerance);
+              (long long)allowedRelease);
 
     if (static_cast<__int128>(totalDGBOutputs) > maxAllowedDGBOutputs) {
-        LogPrintf("DigiDollar: Collateral release too large - outputs: %lld, allowed collateral: %lld, fee inputs: %lld (+ %lld tolerance), locked: %lld, ddBurned: %lld, originalDD: %lld\n",
+        LogPrintf("DigiDollar: Collateral release too large - outputs: %lld, allowed collateral: %lld, fee inputs: %lld, locked: %lld, ddBurned: %lld, originalDD: %lld\n",
                   (long long)totalDGBOutputs, (long long)allowedRelease,
-                  (long long)totalFeeInputs, (long long)feeTolerance,
+                  (long long)totalFeeInputs,
                   (long long)lockedCollateral, (long long)ddBurned, (long long)originalDDMinted);
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-excessive",
                            strprintf("DGB outputs %lld exceed allowed collateral %lld plus regular fee inputs %lld",
@@ -2594,9 +2590,9 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
                                      (long long)totalFeeInputs));
     }
 
-    if (totalDGBOutputs < allowedRelease && allowedRelease - totalDGBOutputs > feeTolerance) {
-        LogPrintf("DigiDollar: Collateral release too small - outputs: %lld, required full collateral: %lld (- %lld tolerance), locked: %lld, ddBurned: %lld, requiredDD: %lld\n",
-                  (long long)totalDGBOutputs, (long long)allowedRelease, (long long)feeTolerance,
+    if (totalDGBOutputs < allowedRelease) {
+        LogPrintf("DigiDollar: Collateral release too small - outputs: %lld, required full collateral: %lld, locked: %lld, ddBurned: %lld, requiredDD: %lld\n",
+                  (long long)totalDGBOutputs, (long long)allowedRelease,
                   (long long)lockedCollateral, (long long)ddBurned, (long long)requiredDDBurn);
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-incomplete",
                            strprintf("DGB outputs %lld below required full collateral %lld",

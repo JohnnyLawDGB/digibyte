@@ -542,6 +542,26 @@ BOOST_AUTO_TEST_CASE(normal_redemption_succeeds_when_full_original_dd_is_burned)
         "Full-burn redemption should release the full collateral. Reject reason: " + state.GetRejectReason());
 }
 
+BOOST_AUTO_TEST_CASE(redemption_rejects_collateral_under_return_inside_tolerance)
+{
+    const MintData mint = CreateMint();
+    CCoinsView base_view;
+    CCoinsViewCache coins(&base_view);
+    AddMintCoins(coins, mint);
+
+    TxValidationState state;
+    const DigiDollar::ValidationContext ctx = MakeContext(coins, TxLookupFor(mint));
+    const CAmount under_return = LOCKED_COLLATERAL / 1000;
+    const CTransaction redeem = MakeRedeemTx(mint,
+                                             /*include_dd_input=*/true,
+                                             LOCKED_COLLATERAL - under_return);
+
+    BOOST_CHECK_MESSAGE(!DigiDollar::ValidateRedemptionTransaction(redeem, ctx, state),
+        "A redemption that burns the full DD amount must still return the full "
+        "locked collateral; the shortfall must not be accepted as miner fee.");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-collateral-release-incomplete");
+}
+
 BOOST_AUTO_TEST_CASE(redemption_fee_input_change_does_not_reduce_collateral_release)
 {
     const MintData mint = CreateMint();

@@ -260,6 +260,50 @@ BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_accepts_first_nonce)
                 session->GetState() == MuSig2SessionState::NONCES_COMPLETE);
 }
 
+BOOST_AUTO_TEST_CASE(remote_future_attempt_messages_do_not_preempt_lazy_session)
+{
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 45;
+    const uint8_t oracle_id = 1;
+    const uint8_t future_attempt = 7;
+
+    OracleMusigNonceMsg nonce_msg = MakeSignedMusigNonceMsg(epoch, oracle_id);
+    nonce_msg.attempt_id = future_attempt;
+    BOOST_REQUIRE(nonce_msg.Sign(GetRegtestMusigOracleKey(oracle_id)));
+    orch.IngestRemoteNonce(nonce_msg);
+    BOOST_CHECK_MESSAGE(!orch.HasSession(epoch),
+        "a signed remote nonce must not choose a future attempt before the local epoch starts");
+
+    OracleMusigPartialSigMsg partial_msg =
+        MakeSignedGarbagePartialSigMsg(epoch, oracle_id, 0xA11CE);
+    partial_msg.attempt_id = future_attempt;
+    partial_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    partial_msg.session_context_id = uint256S("0x123");
+    BOOST_REQUIRE(partial_msg.Sign(GetRegtestMusigOracleKey(oracle_id)));
+    orch.IngestRemotePartialSig(partial_msg);
+    BOOST_CHECK_MESSAGE(!orch.HasSession(epoch),
+        "a signed remote partial sig must not choose a future attempt before the local epoch starts");
+
+    OracleMusigContextMsg context_msg;
+    context_msg.epoch = epoch;
+    context_msg.attempt_id = future_attempt;
+    context_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    context_msg.epoch_selection_seed = Params().GetConsensus().hashGenesisBlock;
+    context_msg.proposer_id = oracle_id;
+    context_msg.participant_ids = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    context_msg.nonce_set_hash = uint256S("0x456");
+    context_msg.quote_set_hash = uint256S("0x789");
+    context_msg.consensus_price = 123456789;
+    context_msg.consensus_timestamp = 1710000000;
+    context_msg.session_context_id = uint256S("0xabc");
+    BOOST_REQUIRE(context_msg.Sign(GetRegtestMusigOracleKey(oracle_id)));
+    BOOST_REQUIRE(context_msg.IsValid());
+
+    orch.IngestRemoteContext(context_msg);
+    BOOST_CHECK_MESSAGE(!orch.HasSession(epoch),
+        "a signed remote context must not choose a future attempt before the local epoch starts");
+}
+
 BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_timeout_uses_chain_epoch_length)
 {
     const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;

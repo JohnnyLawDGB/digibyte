@@ -248,6 +248,11 @@ void OracleSigningOrchestrator::IngestRemoteNonce(const OracleMusigNonceMsg& msg
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
     auto it = m_signing_sessions.find(msg.epoch);
     if (it == m_signing_sessions.end() || !it->second) {
+        const auto attempt_it = m_epoch_attempts.find(msg.epoch);
+        const uint8_t expected_attempt =
+            attempt_it == m_epoch_attempts.end() ? 0 : attempt_it->second;
+        if (msg.attempt_id != expected_attempt) return;
+
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
         auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers, msg.attempt_id);
@@ -330,6 +335,11 @@ void OracleSigningOrchestrator::IngestRemoteContext(const OracleMusigContextMsg&
 
     auto it = m_signing_sessions.find(msg.epoch);
     if (it == m_signing_sessions.end() || !it->second) {
+        const auto attempt_it = m_epoch_attempts.find(msg.epoch);
+        const uint8_t expected_attempt =
+            attempt_it == m_epoch_attempts.end() ? 0 : attempt_it->second;
+        if (msg.attempt_id != expected_attempt) return;
+
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
         auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers, msg.attempt_id);
@@ -384,6 +394,11 @@ void OracleSigningOrchestrator::IngestRemotePartialSig(const OracleMusigPartialS
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
     auto it = m_signing_sessions.find(msg.epoch);
     if (it == m_signing_sessions.end() || !it->second) {
+        const auto attempt_it = m_epoch_attempts.find(msg.epoch);
+        const uint8_t expected_attempt =
+            attempt_it == m_epoch_attempts.end() ? 0 : attempt_it->second;
+        if (msg.attempt_id != expected_attempt) return;
+
         const Consensus::Params& consensus = Params().GetConsensus();
         const uint8_t min_signers = static_cast<uint8_t>(std::max(1, consensus.nOracleConsensusRequired));
         auto session = std::make_unique<MuSig2SigningSession>(msg.epoch, min_signers, msg.attempt_id);

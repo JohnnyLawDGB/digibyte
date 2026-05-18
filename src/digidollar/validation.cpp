@@ -1274,15 +1274,30 @@ bool ValidateMintTransaction(const CTransaction& tx,
                                        "Mint transaction OP_RETURN type must match nVersion type");
                 }
 
-                // Extract DD amount in cents
-                if (output.scriptPubKey.GetOp(pc, opcode, data)) {
-                    try {
-                        // Allow up to 8 bytes for DD amounts (int64_t range)
-                        CScriptNum ddAmountNum(data, true, 8);
-                        totalDD = ddAmountNum.GetInt64();
-                        LogPrintf("DigiDollar: Extracted DD amount from OP_RETURN: %lld cents ($%.2f)\n",
-                                  static_cast<long long>(totalDD), totalDD / 100.0);
-                    } catch (const std::exception&) {}
+                // Extract DD amount in cents. The OP_RETURN amount is the
+                // consensus-readable source for mint accounting and must not
+                // be bypassed by local script metadata.
+                if (!output.scriptPubKey.GetOp(pc, opcode, data) || data.empty()) {
+                    LogPrintf("DigiDollar: Missing DD amount in mint OP_RETURN\n");
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-opreturn-amount",
+                                       "Mint OP_RETURN must include a DD amount");
+                }
+                try {
+                    // Allow up to 8 bytes for DD amounts (int64_t range)
+                    CScriptNum ddAmountNum(data, true, 8);
+                    totalDD = ddAmountNum.GetInt64();
+                    LogPrintf("DigiDollar: Extracted DD amount from OP_RETURN: %lld cents ($%.2f)\n",
+                              static_cast<long long>(totalDD), totalDD / 100.0);
+                } catch (const scriptnum_error&) {
+                    LogPrintf("DigiDollar: Malformed DD amount in mint OP_RETURN\n");
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-opreturn-amount",
+                                       "Mint OP_RETURN DD amount must be minimally encoded");
+                }
+                if (totalDD <= 0 || totalDD > MAX_DIGIDOLLAR) {
+                    LogPrintf("DigiDollar: Invalid DD amount in mint OP_RETURN: %lld\n",
+                              static_cast<long long>(totalDD));
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-opreturn-amount",
+                                       "Mint OP_RETURN DD amount is outside serialization bounds");
                 }
 
                 // Extract lock height

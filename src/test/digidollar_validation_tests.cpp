@@ -457,6 +457,54 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_rejects_opreturn_type_mismat
     BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-mint-opreturn-type");
 }
 
+BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_rejects_malformed_opreturn_amount, DigiDollarValidationTestSetup)
+{
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770; // DD_TX_MINT
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
+
+    const CAmount ddAmount = 10000;
+    const int64_t lockBlocks = DigiDollar::LockDaysToBlocks(3650);
+
+    DigiDollar::MintParams params;
+    params.ddAmount = ddAmount;
+    params.lockHeight = mockHeight + lockBlocks;
+    params.ownerKey = testXOnlyKey;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    const CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+    const CAmount requiredCollateral = DigiDollar::CalculateRequiredCollateral(ddAmount, lockBlocks, validationContext);
+    BOOST_REQUIRE(requiredCollateral > 0);
+
+    CScript opReturn = CScript() << OP_RETURN
+                                 << std::vector<unsigned char>{'D', 'D'}
+                                 << CScriptNum(1)
+                                 << std::vector<unsigned char>{0x10, 0x27, 0x00} // non-minimal encoding of 10000
+                                 << CScriptNum(params.lockHeight)
+                                 << CScriptNum(9)
+                                 << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
+
+    // Local wallet/miner paths can have DD output metadata registered before
+    // validation. The OP_RETURN amount must still be authoritative and parseable.
+    const CScript digiDollarOutput = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+
+    mtx.vout.resize(3);
+    mtx.vout[0] = CTxOut(0, opReturn);
+    mtx.vout[1] = CTxOut(requiredCollateral, collateralScript);
+    mtx.vout[2] = CTxOut(0, digiDollarOutput);
+
+    CTransaction tx(mtx);
+    CAmount extractedDD = 0;
+    CAmount extractedCollateral = 0;
+    BOOST_CHECK(!DigiDollar::ExtractMintAccountingAmounts(tx, extractedDD, extractedCollateral));
+
+    TxValidationState state;
+    BOOST_CHECK(!DigiDollar::ValidateDigiDollarTransaction(tx, validationContext, state));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-mint-opreturn-amount");
+}
+
 BOOST_FIXTURE_TEST_CASE(transaction_validation_invalid_mint_does_not_mutate_volatility_state, DigiDollarValidationTestSetup)
 {
     DigiDollar::Volatility::VolatilityMonitor::ClearHistory();

@@ -20,6 +20,17 @@ from test_framework.util import (
 from decimal import Decimal
 
 
+class multidict(dict):
+    """Dictionary that serializes duplicate keys into JSON objects."""
+
+    def __init__(self, items):
+        dict.__init__(self, items)
+        self.items_list = items
+
+    def items(self):
+        return self.items_list
+
+
 class DigiDollarTransferTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
@@ -166,6 +177,15 @@ class DigiDollarTransferTest(DigiByteTestFramework):
             addr1: 200,
             addr2: 300,
         }
+
+        assert_raises_rpc_error(
+            -8,
+            "duplicated address",
+            self.nodes[0].sendmanydigidollar,
+            "",
+            multidict([(addr1, 100), (addr1, 200)]),
+            "duplicate recipient regression",
+        )
 
         result = self.nodes[0].sendmanydigidollar("", amounts, "sendmany functional test")
         assert 'txid' in result

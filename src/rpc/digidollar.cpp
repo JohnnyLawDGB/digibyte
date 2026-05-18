@@ -58,6 +58,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 
 using namespace DigiDollar;
 using namespace DigiDollar::DCA;
@@ -1786,6 +1787,7 @@ RPCHelpMan sendmanydigidollar()
             std::vector<std::pair<CDigiDollarAddress, CAmount>> recipients;
             UniValue result_amounts(UniValue::VOBJ);
             CAmount total_amount = 0;
+            std::set<std::string> seen_addresses;
 
             const std::vector<std::string>& keys = amounts.getKeys();
             const std::vector<UniValue>& values = amounts.getValues();
@@ -1793,6 +1795,9 @@ RPCHelpMan sendmanydigidollar()
                 std::string address_error;
                 if (!ValidateDigiDollarAddressForCurrentNetwork(keys[i], address_error)) {
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, address_error + ": " + keys[i]);
+                }
+                if (!seen_addresses.insert(keys[i]).second) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, duplicated address: " + keys[i]);
                 }
                 CDigiDollarAddress dd_address(keys[i]);
 

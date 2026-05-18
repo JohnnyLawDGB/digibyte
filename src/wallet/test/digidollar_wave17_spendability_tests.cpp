@@ -80,13 +80,37 @@ static uint256 RandHash()
 // -----------------------------------------------------------------------------
 static CTransactionRef MakeMintLikeTx()
 {
+    CKey dd_key;
+    dd_key.MakeNewKey(true);
+    XOnlyPubKey dd_xonly(dd_key.GetPubKey());
+    auto tweaked = dd_xonly.CreateTapTweak(nullptr);
+    BOOST_REQUIRE(tweaked.has_value());
+
     CMutableTransaction mtx;
     mtx.vin.resize(1);
     mtx.vin[0].prevout = COutPoint(RandHash(), 0);
     mtx.vout.resize(2);
     mtx.vout[0].nValue = 1 * COIN;          // collateral placeholder
     mtx.vout[1].nValue = 0;                 // DD token output
+    mtx.vout[1].scriptPubKey << OP_1 << ToByteVector(tweaked->first);
     return MakeTransactionRef(std::move(mtx));
+}
+
+static CDigiDollarAddress MakeValidDDAddress()
+{
+    CKey key;
+    key.MakeNewKey(true);
+    XOnlyPubKey xonly(key.GetPubKey());
+    return CDigiDollarAddress(EncodeDigiDollarAddress(CTxDestination{WitnessV1Taproot(xonly)}));
+}
+
+static void AddConfirmedWalletTx(WalletTestingSetup& setup, CWallet& wallet, const CTransactionRef& tx)
+{
+    LOCK(wallet.cs_wallet);
+    const CBlockIndex* tip = WITH_LOCK(::cs_main, return setup.m_node.chainman->ActiveChain().Tip());
+    BOOST_REQUIRE(tip != nullptr);
+    wallet.SetLastBlockProcessed(tip->nHeight, tip->GetBlockHash());
+    wallet.AddToWallet(tx, TxStateConfirmed{tip->GetBlockHash(), tip->nHeight, /*index=*/0});
 }
 
 // =============================================================================
@@ -174,6 +198,253 @@ BOOST_AUTO_TEST_CASE(w17_01b_select_ddcoins_picks_extra_utxo_to_avoid_dust_chang
     BOOST_CHECK_EQUAL(selected_total, small + large);
     BOOST_CHECK_GE(selected_total - target, min_change);
     BOOST_CHECK_EQUAL(selected.size(), 2u);
+}
+
+BOOST_AUTO_TEST_CASE(w17_07_selected_dd_input_planner_accepts_owned_input_and_reports_change)
+{
+    DigiDollarWallet dd_wallet(/*wallet=*/nullptr);
+
+    const COutPoint selected_input(RandHash(), 1);
+    dd_wallet.AddDDUTXO(selected_input, 50000);
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input};
+
+    BOOST_REQUIRE(dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 30000}}, plan, error, &preset));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(plan.total_amount, 30000);
+    BOOST_CHECK_EQUAL(plan.selected_dd_total, 50000);
+    BOOST_CHECK_EQUAL(plan.dd_change, 20000);
+    BOOST_REQUIRE_EQUAL(plan.dd_utxos.size(), 1u);
+    BOOST_CHECK(plan.dd_utxos[0] == selected_input);
+    BOOST_REQUIRE_EQUAL(plan.dd_amounts.size(), 1u);
+    BOOST_CHECK_EQUAL(plan.dd_amounts[0], 50000);
+    BOOST_CHECK_GT(plan.projected_vsize, 0u);
+    BOOST_CHECK_GE(plan.estimated_fee, 10000000);
+}
+
+BOOST_AUTO_TEST_CASE(w17_08_selected_dd_input_planner_rejects_insufficient_selection)
+{
+    DigiDollarWallet dd_wallet(/*wallet=*/nullptr);
+
+    const COutPoint selected_input(RandHash(), 1);
+    dd_wallet.AddDDUTXO(selected_input, 25000);
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input};
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 30000}}, plan, error, &preset));
+    BOOST_CHECK(error.find("Insufficient selected DD input amount") != std::string::npos);
+    BOOST_CHECK(plan.dd_utxos.empty());
+}
+
+BOOST_AUTO_TEST_CASE(w17_09_selected_dd_input_rejects_unknown_and_wrong_wallet_inputs)
+{
+    DigiDollarWallet dd_wallet(&m_wallet);
+
+    DDTransferPlan plan;
+    std::string error;
+    const COutPoint unknown(RandHash(), 1);
+    std::vector<COutPoint> preset{unknown};
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 10000}}, plan, error, &preset));
+    BOOST_CHECK(error.find("unknown or not owned") != std::string::npos);
+
+    const COutPoint wrong_wallet(RandHash(), 1);
+    dd_wallet.AddDDUTXO(wrong_wallet, 10000);
+    error.clear();
+    preset = {wrong_wallet};
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 10000}}, plan, error, &preset));
+    BOOST_CHECK(error.find("not owned by this wallet") != std::string::npos);
+}
+
+BOOST_AUTO_TEST_CASE(w17_10_selected_dd_input_rejects_unconfirmed_and_spent_inputs)
+{
+    DigiDollarWallet dd_wallet(&m_wallet);
+
+    CTransactionRef unconfirmed_tx = MakeMintLikeTx();
+    const COutPoint unconfirmed_outpoint(unconfirmed_tx->GetHash(), 1);
+    {
+        LOCK(m_wallet.cs_wallet);
+        m_wallet.AddToWallet(unconfirmed_tx, TxStateInMempool{});
+    }
+    dd_wallet.AddDDUTXO(unconfirmed_outpoint, 10000);
+
+    DDTransferPlan plan;
+    std::string error;
+    std::vector<COutPoint> preset{unconfirmed_outpoint};
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 10000}}, plan, error, &preset));
+    BOOST_CHECK(error.find("unconfirmed") != std::string::npos);
+
+    CTransactionRef confirmed_tx = MakeMintLikeTx();
+    const COutPoint spent_outpoint(confirmed_tx->GetHash(), 1);
+    AddConfirmedWalletTx(*this, m_wallet, confirmed_tx);
+    dd_wallet.AddDDUTXO(spent_outpoint, 10000);
+
+    CMutableTransaction spend_mtx;
+    spend_mtx.vin.push_back(CTxIn(spent_outpoint));
+    spend_mtx.vout.push_back(CTxOut(1, CScript() << OP_TRUE));
+    {
+        LOCK(m_wallet.cs_wallet);
+        m_wallet.AddToWallet(MakeTransactionRef(std::move(spend_mtx)), TxStateInMempool{});
+    }
+
+    error.clear();
+    preset = {spent_outpoint};
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 10000}}, plan, error, &preset));
+    BOOST_CHECK(error.find("already spent") != std::string::npos);
+}
+
+BOOST_AUTO_TEST_CASE(w17_11_selected_dd_input_rejects_non_dd_wallet_outputs)
+{
+    DigiDollarWallet dd_wallet(&m_wallet);
+
+    CMutableTransaction mtx;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(RandHash(), 0);
+    mtx.vout.resize(2);
+    mtx.vout[0].nValue = 1 * COIN;
+    mtx.vout[1].nValue = 1 * COIN;
+    mtx.vout[1].scriptPubKey << OP_TRUE;
+    CTransactionRef tx = MakeTransactionRef(std::move(mtx));
+
+    const COutPoint selected_input(tx->GetHash(), 1);
+    AddConfirmedWalletTx(*this, m_wallet, tx);
+    dd_wallet.AddDDUTXO(selected_input, 10000);
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input};
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 10000}}, plan, error, &preset));
+    BOOST_CHECK(error.find("not a standard DigiDollar token output") != std::string::npos);
+    BOOST_CHECK(plan.dd_utxos.empty());
+}
+
+BOOST_AUTO_TEST_CASE(w17_12_selected_dd_input_rejects_duplicates)
+{
+    DigiDollarWallet dd_wallet(/*wallet=*/nullptr);
+
+    const COutPoint selected_input(RandHash(), 1);
+    dd_wallet.AddDDUTXO(selected_input, 50000);
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input, selected_input};
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 60000}}, plan, error, &preset));
+    BOOST_CHECK(error.find("Duplicate selected DD input") != std::string::npos);
+    BOOST_CHECK(plan.dd_utxos.empty());
+}
+
+BOOST_AUTO_TEST_CASE(w17_13_selected_dd_input_rejects_below_min_change)
+{
+    DigiDollarWallet dd_wallet(/*wallet=*/nullptr);
+
+    const CAmount min_change = Params().GetDigiDollarParams().minOutputAmount;
+    BOOST_REQUIRE_GT(min_change, 1);
+
+    const COutPoint selected_input(RandHash(), 1);
+    dd_wallet.AddDDUTXO(selected_input, 50000);
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input};
+    const CAmount target = 50000 - (min_change - 1);
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), target}}, plan, error, &preset));
+    BOOST_CHECK(error.find("Selected DD input change") != std::string::npos);
+    BOOST_CHECK(plan.dd_utxos.empty());
+}
+
+BOOST_AUTO_TEST_CASE(w17_14_planner_rejects_below_min_recipient_output)
+{
+    DigiDollarWallet dd_wallet(/*wallet=*/nullptr);
+
+    const CAmount min_output = Params().GetDigiDollarParams().minOutputAmount;
+    BOOST_REQUIRE_GT(min_output, 1);
+
+    const COutPoint selected_input(RandHash(), 1);
+    dd_wallet.AddDDUTXO(selected_input, min_output);
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input};
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), min_output - 1}}, plan, error, &preset));
+    BOOST_CHECK(error.find("below minimum DigiDollar output") != std::string::npos);
+    BOOST_CHECK(plan.dd_utxos.empty());
+}
+
+BOOST_AUTO_TEST_CASE(w17_15_selected_dd_planner_is_non_mutating)
+{
+    DigiDollarWallet dd_wallet(&m_wallet);
+
+    CTransactionRef tx = MakeMintLikeTx();
+    const COutPoint selected_input(tx->GetHash(), 1);
+    AddConfirmedWalletTx(*this, m_wallet, tx);
+    dd_wallet.AddDDUTXO(selected_input, 50000);
+
+    BOOST_REQUIRE(dd_wallet.HasDDUTXO(selected_input));
+    BOOST_REQUIRE_EQUAL(dd_wallet.GetTotalDDBalance(), 50000);
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input};
+
+    BOOST_REQUIRE(dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), 30000}}, plan, error, &preset));
+    BOOST_CHECK(error.empty());
+
+    BOOST_CHECK(dd_wallet.HasDDUTXO(selected_input));
+    BOOST_CHECK_EQUAL(dd_wallet.GetTotalDDBalance(), 50000);
+    auto utxos = dd_wallet.GetDDUTXOs();
+    BOOST_REQUIRE_EQUAL(utxos.size(), 1u);
+    BOOST_CHECK(utxos[0].outpoint == selected_input);
+}
+
+BOOST_AUTO_TEST_CASE(w17_16_planner_rejects_opreturn_capacity_overflow)
+{
+    DigiDollarWallet dd_wallet(/*wallet=*/nullptr);
+
+    const CAmount min_output = Params().GetDigiDollarParams().minOutputAmount;
+    std::vector<std::pair<CDigiDollarAddress, CAmount>> recipients;
+    recipients.reserve(50);
+    for (int i = 0; i < 50; ++i) {
+        recipients.push_back({MakeValidDDAddress(), min_output});
+    }
+
+    const COutPoint selected_input(RandHash(), 1);
+    dd_wallet.AddDDUTXO(selected_input, min_output * recipients.size());
+
+    DDTransferPlan plan;
+    std::string error;
+    const std::vector<COutPoint> preset{selected_input};
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer(recipients, plan, error, &preset));
+    BOOST_CHECK(error.find("Too many DigiDollar outputs") != std::string::npos);
+    BOOST_CHECK(plan.dd_utxos.size() == 1u || plan.dd_utxos.empty());
+}
+
+BOOST_AUTO_TEST_CASE(w17_17_planner_rejects_standard_weight_overflow)
+{
+    DigiDollarWallet dd_wallet(/*wallet=*/nullptr);
+
+    const CAmount min_output = Params().GetDigiDollarParams().minOutputAmount;
+    std::vector<COutPoint> preset;
+    preset.reserve(1200);
+    for (int i = 0; i < 1200; ++i) {
+        const COutPoint selected_input(RandHash(), 1);
+        dd_wallet.AddDDUTXO(selected_input, min_output);
+        preset.push_back(selected_input);
+    }
+
+    DDTransferPlan plan;
+    std::string error;
+
+    BOOST_CHECK(!dd_wallet.PlanDigiDollarTransfer({{MakeValidDDAddress(), min_output}}, plan, error, &preset));
+    BOOST_CHECK(error.find("too large") != std::string::npos);
 }
 
 // =============================================================================

@@ -123,6 +123,17 @@ struct DDUtxo {
         : outpoint(out), dd_amount(amt), is_spendable(true) {}
 };
 
+struct DDTransferPlan {
+    std::vector<std::pair<std::string, CAmount>> recipients;
+    std::vector<COutPoint> dd_utxos;
+    std::vector<CAmount> dd_amounts;
+    CAmount total_amount{0};
+    CAmount selected_dd_total{0};
+    CAmount dd_change{0};
+    size_t projected_vsize{0};
+    CAmount estimated_fee{0};
+};
+
 /**
  * DigiDollar wallet functionality
  * Provides high-level interface for DD operations
@@ -504,11 +515,13 @@ public:
      */
     bool TransferDigiDollarMany(const std::vector<std::pair<CDigiDollarAddress, CAmount>>& recipients,
                                 std::string& txid, std::string& error,
-                                CAmount* dd_change_out = nullptr);
+                                CAmount* dd_change_out = nullptr,
+                                const std::vector<COutPoint>* preset_dd_inputs = nullptr);
 
     bool TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
                             std::string& txid, std::string& error,
-                            CAmount* dd_change_out = nullptr);
+                            CAmount* dd_change_out = nullptr,
+                            const std::vector<COutPoint>* preset_dd_inputs = nullptr);
 
     /**
      * Get current DD balance (legacy method)
@@ -755,6 +768,8 @@ public:
 
     // Coin selection and fee calculation helpers (public for testing and integration)
     bool SelectDDCoins(const CAmount& target_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* amounts = nullptr) const;
+    bool SelectDDCoins(const CAmount& target_amount, const std::vector<COutPoint>& preset_inputs, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* amounts = nullptr, std::string* error = nullptr) const;
+    bool PlanDigiDollarTransfer(const std::vector<std::pair<CDigiDollarAddress, CAmount>>& recipients, DDTransferPlan& plan, std::string& error, const std::vector<COutPoint>* preset_dd_inputs = nullptr) const;
     bool SelectFeeCoins(const CAmount& fee_amount, std::vector<COutPoint>& selected_utxos, CAmount& selected_total, std::vector<CAmount>* selected_amounts = nullptr, const std::vector<COutPoint>* exclude_utxos = nullptr) const;
     CAmount CalculateTransactionFee(const CMutableTransaction& tx) const;
 

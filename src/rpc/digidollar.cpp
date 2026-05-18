@@ -214,6 +214,31 @@ namespace {
         return totals;
     }
 
+    std::vector<COutPoint> ParseDigiDollarSelectedInputs(const UniValue& inputs)
+    {
+        std::vector<COutPoint> outpoints;
+        for (const UniValue& input : inputs.get_array().getValues()) {
+            const UniValue& obj = input.get_obj();
+            const UniValue& txid_value = obj.find_value("txid");
+            const UniValue& vout_value = obj.find_value("vout");
+            if (txid_value.isNull() || vout_value.isNull()) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Each selected DigiDollar input must include txid and vout");
+            }
+            uint256 hash;
+            const std::string txid = txid_value.get_str();
+            if (!IsHex(txid) || txid.size() != 64) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid selected DigiDollar input txid");
+            }
+            hash.SetHex(txid);
+            const int vout = vout_value.getInt<int>();
+            if (vout < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Selected DigiDollar input vout must be non-negative");
+            }
+            outpoints.emplace_back(hash, static_cast<uint32_t>(vout));
+        }
+        return outpoints;
+    }
+
     int GetDigiDollarRpcSystemHealth(const JSONRPCRequest& request,
                                      CAmount oracle_price_micro_usd,
                                      int empty_supply_health)
@@ -1499,7 +1524,17 @@ RPCHelpMan senddigidollar()
                     {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to send to (DD/TD/RD prefix)"},
                     {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount to send (in USD cents, e.g., 10000 = $100.00)", RPCArgOptions{.skip_type_check = true}},
                     {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional comment for the transaction"},
-                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Deprecated compatibility argument; ignored because DigiDollar sends use the fixed DD fee policy", RPCArgOptions{.skip_type_check = true}}
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Deprecated compatibility argument; ignored because DigiDollar sends use the fixed DD fee policy", RPCArgOptions{.skip_type_check = true}},
+                    {"selected_inputs", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "Optional DigiDollar inputs to spend, matching listdigidollarunspent output",
+                        {
+                            {"input", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                                {
+                                    {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id"},
+                                    {"vout", RPCArg::Type::NUM, RPCArg::Optional::NO, "The output number"},
+                                },
+                            },
+                        },
+                    },
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -1570,6 +1605,12 @@ RPCHelpMan senddigidollar()
             // String values are also handled gracefully.
             CAmount amount = ParseDigiDollarRpcAmount(request.params[1]);
             std::string comment = OptionalParamIsSet(request, 2) ? request.params[2].get_str() : "";
+            std::vector<COutPoint> selected_inputs;
+            const std::vector<COutPoint>* preset_dd_inputs = nullptr;
+            if (OptionalParamIsSet(request, 4)) {
+                selected_inputs = ParseDigiDollarSelectedInputs(request.params[4]);
+                preset_dd_inputs = &selected_inputs;
+            }
             LogPrintf("DigiDollar RPC: Parsed params - address=%s, amount=%d\n", addressStr, amount);
 
             // Validate amount
@@ -1602,7 +1643,7 @@ RPCHelpMan senddigidollar()
             std::string error;
             CAmount dd_change = 0;
             LogPrintf("DigiDollar RPC: Calling TransferDigiDollar()...\n");
-            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error, &dd_change);
+            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error, &dd_change, preset_dd_inputs);
             LogPrintf("DigiDollar RPC: TransferDigiDollar() returned success=%d\n", success);
 
             if (!success) {
@@ -1665,6 +1706,16 @@ RPCHelpMan sendmanydigidollar()
                         },
                     },
                     {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional comment for the transaction"},
+                    {"selected_inputs", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "Optional DigiDollar inputs to spend, matching listdigidollarunspent output",
+                        {
+                            {"input", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                                {
+                                    {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id"},
+                                    {"vout", RPCArg::Type::NUM, RPCArg::Optional::NO, "The output number"},
+                                },
+                            },
+                        },
+                    },
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -1783,12 +1834,18 @@ RPCHelpMan sendmanydigidollar()
                     strprintf("Insufficient DD balance (have %d cents, need %d cents)",
                              balance, total_amount));
             }
+            std::vector<COutPoint> selected_inputs;
+            const std::vector<COutPoint>* preset_dd_inputs = nullptr;
+            if (OptionalParamIsSet(request, 3)) {
+                selected_inputs = ParseDigiDollarSelectedInputs(request.params[3]);
+                preset_dd_inputs = &selected_inputs;
+            }
 
             RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
 
             std::string txid;
             std::string error;
-            bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error);
+            bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error, nullptr, preset_dd_inputs);
             if (!success) {
                 if (error.find("dd-input-amounts-unknown") != std::string::npos) {
                     throw JSONRPCError(RPC_WALLET_ERROR,

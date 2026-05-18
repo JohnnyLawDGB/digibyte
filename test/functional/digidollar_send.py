@@ -76,9 +76,14 @@ class DigiDollarBug11Bug18Test(DigiByteTestFramework):
 
         # ---- Bug #11/25: Test response format ----
         self.log.info("Testing Bug #11/25: senddigidollar response format...")
-        send_result = self.nodes[0].senddigidollar(recv_addr, 100)  # $1.00 = 100 cents
+        selectable = sorted(self.nodes[0].listdigidollarunspent(), key=lambda u: u["amount"], reverse=True)
+        selected = [{"txid": selectable[0]["txid"], "vout": selectable[0]["vout"]}]
+        assert_equal(selectable[0]["amount"], 5000)
+        send_result = self.nodes[0].senddigidollar(recv_addr, 100, "", 0, selected)  # $1.00 = 100 cents
 
         self.log.info(f"senddigidollar result: {send_result}")
+        raw_selected_send = self.nodes[0].getrawtransaction(send_result["txid"], True)
+        assert selected[0] in [{"txid": vin["txid"], "vout": vin["vout"]} for vin in raw_selected_send["vin"]]
 
         # amount must be integer 100, not 0.00000100
         assert_equal(send_result['amount'], 100)
@@ -97,7 +102,7 @@ class DigiDollarBug11Bug18Test(DigiByteTestFramework):
 
         # change_amount should be present and be an integer (cents)
         assert 'change_amount' in send_result
-        assert_equal(send_result['change_amount'], 900)
+        assert_equal(send_result['change_amount'], 4900)
 
         self.log.info("Bug #11/25: Response format is correct!")
 

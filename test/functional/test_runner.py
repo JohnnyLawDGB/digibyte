@@ -95,6 +95,7 @@ EXTENDED_SCRIPTS = [
 BASE_SCRIPTS = [
     # Scripts that are run by default.
     # Longest test should go first, to favor running tests in parallel
+    'digidollar_listunspent.py --descriptors',
     
     # DigiByte: DISABLED TESTS
     # The following tests are disabled because they require MultiAlgo PoW adaptation:

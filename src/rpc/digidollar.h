@@ -35,6 +35,8 @@ RPCHelpMan getdigidollarbalance();
 RPCHelpMan estimatecollateral();
 RPCHelpMan getredemptioninfo();
 RPCHelpMan listdigidollartxs();
+RPCHelpMan listdigidollarunspent();
+RPCHelpMan listdigidollarutxos();
 RPCHelpMan getoracleprice();
 RPCHelpMan getprotectionstatus();
 

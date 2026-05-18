@@ -3109,6 +3109,141 @@ RPCHelpMan getdigidollarbalance()
     };
 }
 
+static RPCHelpMan ListDigiDollarUnspentRpc(const std::string& rpc_name)
+{
+    return RPCHelpMan{rpc_name,
+                "\nReturns array of unspent DigiDollar transaction outputs\n"
+                "with between minconf and maxconf (inclusive) confirmations.\n"
+                "Optionally filter to only include txouts paid to specified DigiDollar addresses.\n",
+                {
+                    {"minconf", RPCArg::Type::NUM, RPCArg::Default{1}, "The minimum confirmations to filter"},
+                    {"maxconf", RPCArg::Type::NUM, RPCArg::Default{9999999}, "The maximum confirmations to filter"},
+                    {"addresses", RPCArg::Type::ARR, RPCArg::Default{UniValue::VARR}, "The DigiDollar addresses to filter",
+                        {
+                            {"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "DigiDollar address"},
+                        },
+                    },
+                    {"include_unsafe", RPCArg::Type::BOOL, RPCArg::Default{true}, "Include outputs that are not safe to spend"},
+                },
+                RPCResult{
+                    RPCResult::Type::ARR, "", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "the transaction id"},
+                            {RPCResult::Type::NUM, "vout", "the vout value"},
+                            {RPCResult::Type::STR, "address", "the DigiDollar address"},
+                            {RPCResult::Type::STR, "scriptPubKey", "the script key"},
+                            {RPCResult::Type::NUM, "amount", "the DigiDollar amount in cents"},
+                            {RPCResult::Type::NUM, "confirmations", "The number of confirmations"},
+                            {RPCResult::Type::BOOL, "spendable", "Whether the wallet can spend this output"},
+                            {RPCResult::Type::BOOL, "safe", "Whether this output is considered safe to spend"},
+                        }},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli(rpc_name, "") +
+                    HelpExampleCli(rpc_name, "0 9999999 '[\"RD...\"]'") +
+                    HelpExampleRpc(rpc_name, "0, 9999999, [\"RD...\"]")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<wallet::CWallet> const pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
+            }
+
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");
+            }
+
+            const int min_depth = OptionalParamIsSet(request, 0) ? request.params[0].getInt<int>() : 1;
+            const int max_depth = OptionalParamIsSet(request, 1) ? request.params[1].getInt<int>() : 9999999;
+            if (min_depth < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Minimum confirmations must be non-negative");
+            }
+            if (max_depth < min_depth) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Maximum confirmations must be greater or equal to minimum confirmations");
+            }
+
+            std::set<std::string> destinations;
+            if (OptionalParamIsSet(request, 2)) {
+                UniValue inputs = request.params[2].get_array();
+                for (unsigned int idx = 0; idx < inputs.size(); ++idx) {
+                    const std::string address = inputs[idx].get_str();
+                    std::string address_error;
+                    if (!ValidateDigiDollarAddressForCurrentNetwork(address, address_error)) {
+                        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, address_error + ": " + address);
+                    }
+                    if (!destinations.insert(address).second) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, duplicated address: " + address);
+                    }
+                }
+            }
+
+            const bool include_unsafe = OptionalParamIsSet(request, 3) ? request.params[3].get_bool() : true;
+
+            pwallet->BlockUntilSyncedToCurrentChain();
+
+            UniValue results(UniValue::VARR);
+            std::set<uint256> trusted_parents;
+            for (const DDUtxo& dd_utxo : dd_wallet->GetDDUTXOs(/*include_unconfirmed=*/true)) {
+                CTxOut txout;
+                int depth = 0;
+                bool safe = false;
+                {
+                    LOCK(pwallet->cs_wallet);
+                    const wallet::CWalletTx* wtx = pwallet->GetWalletTx(dd_utxo.outpoint.hash);
+                    if (!wtx || dd_utxo.outpoint.n >= wtx->tx->vout.size()) continue;
+                    if (pwallet->IsSpent(dd_utxo.outpoint)) continue;
+                    depth = pwallet->GetTxDepthInMainChain(*wtx);
+                    if (depth < 0) continue;
+                    if (depth == 0 && !wtx->InMempool()) continue;
+                    safe = wallet::CachedTxIsTrusted(*pwallet, *wtx, trusted_parents);
+                    if (depth == 0 && (wtx->mapValue.count("replaces_txid") || wtx->mapValue.count("replaced_by_txid"))) {
+                        safe = false;
+                    }
+                    txout = wtx->tx->vout[dd_utxo.outpoint.n];
+                }
+
+                if (depth < min_depth || depth > max_depth) continue;
+
+                CTxDestination dest;
+                if (!ExtractDestination(txout.scriptPubKey, dest)) continue;
+                const std::string address = EncodeDigiDollarAddress(dest);
+                if (address.empty()) continue;
+                if (!destinations.empty() && !destinations.count(address)) continue;
+
+                if (!include_unsafe && !safe) continue;
+
+                UniValue entry(UniValue::VOBJ);
+                entry.pushKV("txid", dd_utxo.outpoint.hash.GetHex());
+                entry.pushKV("vout", static_cast<int>(dd_utxo.outpoint.n));
+                entry.pushKV("address", address);
+                entry.pushKV("scriptPubKey", HexStr(txout.scriptPubKey));
+                entry.pushKV("amount", int64_t{dd_utxo.dd_amount});
+                entry.pushKV("confirmations", depth);
+                entry.pushKV("spendable", dd_utxo.is_spendable);
+                entry.pushKV("safe", safe);
+                results.push_back(entry);
+            }
+
+            return results;
+        },
+    };
+}
+
+RPCHelpMan listdigidollarunspent()
+{
+    return ListDigiDollarUnspentRpc("listdigidollarunspent");
+}
+
+RPCHelpMan listdigidollarutxos()
+{
+    return ListDigiDollarUnspentRpc("listdigidollarutxos");
+}
+
 static RPCHelpMan estimatecollateral()
 {
     return RPCHelpMan{"estimatecollateral",

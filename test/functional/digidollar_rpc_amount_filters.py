@@ -48,6 +48,21 @@ class DigiDollarRPCAmountFiltersTest(DigiByteTestFramework):
         self.sync_all()
         assert_equal(node0.getdigidollarbalance("", 2)["total"], 25000)
 
+        self.log.info("listdigidollarunspent reports DD amounts in cents and respects confirmation filters")
+        unspent = node0.listdigidollarunspent()
+        assert_equal(sum(entry["amount"] for entry in unspent), 25000)
+        assert_equal({entry["amount"] for entry in unspent}, {5000, 20000})
+        for entry in unspent:
+            assert "txid" in entry
+            assert "vout" in entry
+            assert "address" in entry
+            assert "confirmations" in entry
+            assert "spendable" in entry
+            assert entry["spendable"]
+            assert entry["confirmations"] >= 2
+
+        assert_equal(node0.listdigidollarunspent(3), [])
+
         self.log.info("DD-RH-023: position tier 0 and min_amount filters use DD units")
         tier0_positions = node0.listdigidollarpositions(False, 0)
         assert_equal(len(tier0_positions), 1)

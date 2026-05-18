@@ -179,3 +179,4 @@ reports/**/*.md
 .audit_proposals/agent3.md
 .audit_proposals/agent2.md
 .audit_proposals/agent1.md
+RED_HORNET_FINAL_PROMPT.md

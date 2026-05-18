@@ -22,6 +22,7 @@
 #include <qt/digidollaroverviewwidget.h>
 #include <qt/digidollarmintwidget.h>
 #include <qt/digidollarsendwidget.h>
+#include <qt/digidollarcoincontroldialog.h>
 #include <qt/digidollarreceivewidget.h>
 #include <qt/digidollarreceiverequest.h>
 #include <qt/digidollarredeemwidget.h>
@@ -33,6 +34,7 @@
 #include <support/allocators/secure.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
+#include <wallet/ddcoincontrol.h>
 #include <wallet/digidollarwallet.h>
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
@@ -50,6 +52,8 @@
 #include <QProgressBar>
 #include <QListWidget>
 #include <QTableWidget>
+#include <QTreeWidget>
+#include <QDialogButtonBox>
 
 using wallet::AddWallet;
 using wallet::CreateMockableWalletDatabase;
@@ -275,6 +279,70 @@ void AddMockDigiDollarPosition(const std::shared_ptr<wallet::CWallet>& wallet, c
     DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
     QVERIFY(dd_wallet != nullptr);
     dd_wallet->AddCollateralPosition(WalletCollateralPosition(id, dd_amount, collateral, tier, unlock_height));
+}
+
+QDialog* FindVisibleDialogByTitle(const QString& title)
+{
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        QDialog* dialog = qobject_cast<QDialog*>(widget);
+        if (dialog && dialog->isVisible() && dialog->windowTitle() == title) return dialog;
+    }
+    return nullptr;
+}
+
+bool SelectCoinControlDialogInput(const COutPoint& outpoint, QString& error)
+{
+    QDialog* dialog{nullptr};
+    for (int attempt = 0; attempt < 20 && !dialog; ++attempt) {
+        dialog = FindVisibleDialogByTitle(QStringLiteral("DigiDollar Coin Selection"));
+        if (!dialog) QTest::qWait(25);
+    }
+    if (!dialog) {
+        error = QStringLiteral("DigiDollar coin-control dialog did not open");
+        return false;
+    }
+
+    auto fail = [&](const QString& message) {
+        error = message;
+        dialog->reject();
+        return false;
+    };
+
+    QTreeWidget* tree = dialog->findChild<QTreeWidget*>(QStringLiteral("treeWidget"));
+    if (!tree) {
+        return fail(QStringLiteral("DigiDollar coin-control dialog has no treeWidget"));
+    }
+
+    const QString selectedTxid = QString::fromStdString(outpoint.hash.GetHex());
+    QList<QTreeWidgetItem*> items;
+    QStringList renderedOutpoints;
+    auto collect = [&](QTreeWidgetItem* root, auto&& self) -> void {
+        for (int i = 0; i < root->childCount(); ++i) {
+            QTreeWidgetItem* child = root->child(i);
+            const QString outpointText = child->text(6 /* COLUMN_TXID_VOUT */);
+            if (!outpointText.isEmpty()) {
+                renderedOutpoints << outpointText;
+                if (outpointText.contains(selectedTxid)) items << child;
+            }
+            self(child, self);
+        }
+    };
+    collect(tree->invisibleRootItem(), collect);
+    if (items.size() != 1) {
+        return fail(QStringLiteral("expected exactly one selectable DD input row for %1, found %2; rendered: %3")
+                        .arg(selectedTxid)
+                        .arg(items.size())
+                        .arg(renderedOutpoints.join(QStringLiteral(", "))));
+    }
+    items.front()->setCheckState(0 /* COLUMN_CHECKBOX */, Qt::Checked);
+    QCoreApplication::processEvents();
+
+    QDialogButtonBox* buttons = dialog->findChild<QDialogButtonBox*>();
+    if (!buttons || !buttons->button(QDialogButtonBox::Ok)) {
+        return fail(QStringLiteral("DigiDollar coin-control dialog has no OK button"));
+    }
+    buttons->button(QDialogButtonBox::Ok)->click();
+    return true;
 }
 
 } // namespace
@@ -532,6 +600,130 @@ void DigiDollarWidgetTests::sendWidgetTests()
 
     const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
     TestSendWidget(m_node, wallet);
+}
+
+void DigiDollarWidgetTests::sendWidgetCoinControlLabelsMirrorDgb()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    const COutPoint selected_a(uint256::ONE, 1);
+    const COutPoint selected_b(uint256S("02"), 2);
+    dd_wallet->AddDDUTXO(selected_a, 2500);
+    dd_wallet->AddDDUTXO(selected_b, 7500);
+    dd_wallet->AddDDUTXO(COutPoint(uint256S("03"), 3), 5000);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarSendWidget sendWidget(mini_gui.platformStyle.get());
+    sendWidget.setWalletModel(mini_gui.walletModel.get());
+    sendWidget.setClientModel(mini_gui.clientModel.get());
+
+    sendWidget.setSelectedDigiDollarInputsForTesting({selected_a, selected_b});
+    QCoreApplication::processEvents();
+
+    QLabel* quantityLabel = sendWidget.findChild<QLabel*>("coinControlQuantityLabel");
+    QVERIFY(quantityLabel != nullptr);
+    QCOMPARE(quantityLabel->text(), QString("Quantity: 2"));
+
+    QLabel* amountLabel = sendWidget.findChild<QLabel*>("coinControlAmountLabel");
+    QVERIFY(amountLabel != nullptr);
+    QCOMPARE(amountLabel->text(), QString("Amount: 100.00 DD"));
+
+    sendWidget.setSelectedDigiDollarInputsForTesting({});
+    QCoreApplication::processEvents();
+    QCOMPARE(quantityLabel->text(), QString("automatically selected"));
+    QVERIFY(amountLabel->text().isEmpty());
+    QVERIFY(sendWidget.findChild<QLabel*>("preflightLabel") == nullptr);
+}
+
+void DigiDollarWidgetTests::sendWidgetCoinControlDialogSelectionFeedsSend()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    const COutPoint selected_input(Hash("qt-dd-send-selected-input"), 1);
+    const COutPoint automatic_input(Hash("qt-dd-send-automatic-input"), 2);
+    dd_wallet->AddDDUTXO(selected_input, 2500);
+    dd_wallet->AddDDUTXO(automatic_input, 10000);
+    QCOMPARE(static_cast<int>(dd_wallet->GetDDUTXOs().size()), 2);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    DigiDollarWallet* model_dd_wallet = mini_gui.walletModel->getDigiDollarWallet();
+    QVERIFY(model_dd_wallet != nullptr);
+    QCOMPARE(static_cast<int>(model_dd_wallet->GetDDUTXOs().size()), 2);
+
+    DigiDollarSendWidget sendWidget(mini_gui.platformStyle.get());
+    sendWidget.setWalletModel(mini_gui.walletModel.get());
+    sendWidget.setClientModel(mini_gui.clientModel.get());
+
+    QPushButton* coinControlButton = sendWidget.findChild<QPushButton*>("coinControlButton");
+    QVERIFY(coinControlButton != nullptr);
+    QCOMPARE(coinControlButton->text(), QString("Inputs..."));
+
+    wallet::DDCoinControl coin_control;
+    DigiDollarCoinControlDialog dialog(coin_control, mini_gui.walletModel.get(), mini_gui.platformStyle.get());
+    dialog.show();
+    QCoreApplication::processEvents();
+
+    QString dialogError;
+    QVERIFY2(SelectCoinControlDialogInput(selected_input, dialogError), qPrintable(dialogError));
+    QCOMPARE(dialog.result(), static_cast<int>(QDialog::Accepted));
+    QVERIFY(coin_control.IsSelected(selected_input));
+
+    sendWidget.setSelectedDigiDollarInputsForTesting(coin_control.ListSelected());
+    QCoreApplication::processEvents();
+
+    QLabel* quantityLabel = sendWidget.findChild<QLabel*>("coinControlQuantityLabel");
+    QVERIFY(quantityLabel != nullptr);
+    QCOMPARE(quantityLabel->text(), QString("Quantity: 1"));
+
+    QLabel* amountLabel = sendWidget.findChild<QLabel*>("coinControlAmountLabel");
+    QVERIFY(amountLabel != nullptr);
+    QCOMPARE(amountLabel->text(), QString("Amount: 25.00 DD"));
+
+    const QString recipient = mini_gui.walletModel->getNewDigiDollarAddress(QStringLiteral("qt-selected-input-send"));
+    QVERIFY(!recipient.isEmpty());
+
+    const WalletModel::DigiDollarSendResult result =
+        sendWidget.sendDigiDollarForTesting(recipient, 2000);
+    QCOMPARE(result.status, WalletModel::TransactionCreationFailed);
+    QVERIFY2(result.reasonFailed.contains(QStringLiteral("Selected DD input is unknown or not owned"), Qt::CaseInsensitive),
+             qPrintable(result.reasonFailed));
 }
 
 void DigiDollarWidgetTests::receiveWidgetTests()

@@ -190,7 +190,8 @@ public:
     };
 
     // Send DigiDollar to an address
-    DigiDollarSendResult sendDigiDollar(const QString& address, CAmount amount, const QString& comment = "");
+    DigiDollarSendResult sendDigiDollar(const QString& address, CAmount amount, const QString& comment = "",
+                                        const std::vector<COutPoint>* preset_dd_inputs = nullptr);
 
     // Mint DigiDollar with collateral
     DigiDollarMintResult mintDigiDollar(CAmount ddAmount, int lockTier);

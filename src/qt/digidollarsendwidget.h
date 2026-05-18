@@ -10,7 +10,11 @@
 #include <QMessageBox>
 #include <QTimer>
 
-class WalletModel;
+#include <qt/walletmodel.h>
+#include <primitives/transaction.h>
+
+#include <vector>
+
 class ClientModel;
 class DigiDollarAddressValidator;
 class AmountValidator;
@@ -54,6 +58,11 @@ public:
     void setWalletModel(WalletModel* model);
     void setClientModel(ClientModel* model);
     void updateView();
+
+    /** Test hook for exercising coin-control summary/preflight state without opening the modal dialog. */
+    void setSelectedDigiDollarInputsForTesting(const std::vector<COutPoint>& inputs);
+    /** Test hook for verifying the widget forwards selected DD inputs to WalletModel without opening modal UI. */
+    WalletModel::DigiDollarSendResult sendDigiDollarForTesting(const QString& address, CAmount amount, const QString& comment = "");
 
 Q_SIGNALS:
     /** Fired when a message should be reported to the user */
@@ -100,6 +109,7 @@ private:
     void updateSendButton();
     void updateUSDEquivalent();
     void updateFeeDisplay();
+    CAmount selectedDigiDollarAmount() const;
 
     bool validateAddress() const;
     bool validateAmount() const;

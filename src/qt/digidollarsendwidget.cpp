@@ -12,6 +12,7 @@
 #include <qt/digidollarcoincontroldialog.h>
 #include <qt/platformstyle.h>
 #include <wallet/ddcoincontrol.h>
+#include <wallet/digidollarwallet.h>
 #include <consensus/amount.h>
 #include <base58.h>
 #include <logging.h>
@@ -66,6 +67,10 @@ DigiDollarSendWidget::DigiDollarSendWidget(const PlatformStyle *platformStyle, Q
     m_usdEquivalentValue(nullptr),
     m_availableBalanceLabel(nullptr),
     m_availableBalanceValue(nullptr),
+    m_noteFrame(nullptr),
+    m_noteLayout(nullptr),
+    m_noteLabel(nullptr),
+    m_noteEdit(nullptr),
     m_feeFrame(nullptr),
     m_feeLayout(nullptr),
     m_feeLabel(nullptr),
@@ -81,10 +86,6 @@ DigiDollarSendWidget::DigiDollarSendWidget(const PlatformStyle *platformStyle, Q
     m_coinControlButton(nullptr),
     m_coinControlQuantityLabel(nullptr),
     m_coinControlAmountLabel(nullptr),
-    m_noteFrame(nullptr),
-    m_noteLayout(nullptr),
-    m_noteLabel(nullptr),
-    m_noteEdit(nullptr),
     m_addressValidator(nullptr),
     m_amountValidator(nullptr),
     m_walletModel(nullptr),
@@ -153,7 +154,7 @@ void DigiDollarSendWidget::setupCoinControlSection()
     // Quantity label (number of selected inputs)
     m_coinControlQuantityLabel = new QLabel(this);
     m_coinControlQuantityLabel->setObjectName("coinControlQuantityLabel");
-    m_coinControlQuantityLabel->setText(tr("Inputs: (auto)"));
+    m_coinControlQuantityLabel->setText(tr("automatically selected"));
     m_coinControlLayout->addWidget(m_coinControlQuantityLabel);
 
     // Amount label (total selected DD amount)
@@ -621,6 +622,19 @@ void DigiDollarSendWidget::onSendClicked()
         return;
     }
 
+    if (m_coinControl && m_coinControl->HasSelected()) {
+        const CAmount amount_cents = static_cast<CAmount>(std::llround(amount * 100));
+        const CAmount selected_amount = selectedDigiDollarAmount();
+        if (selected_amount < amount_cents) {
+            showError(tr("Insufficient Selected DigiDollar Inputs"),
+                      tr("The selected DigiDollar inputs total %1, but this send requires %2.\n\n"
+                         "Select more inputs or clear manual input selection.")
+                          .arg(formatDDAmount(selected_amount / 100.0))
+                          .arg(formatDDAmount(amount)));
+            return;
+        }
+    }
+
     // PHASE 7.3: Wallet state validation
     if (!checkWalletState()) {
         return; // Error already displayed by checkWalletState()
@@ -723,6 +737,7 @@ void DigiDollarSendWidget::updateFeeDisplay()
     } else {
         m_totalValue->setText(formatDDAmount(0));
     }
+
 }
 
 bool DigiDollarSendWidget::validateAddress() const
@@ -840,6 +855,17 @@ bool DigiDollarSendWidget::showConfirmationDialog(const QString& address, double
     question_string.append(tr("Please, review your transaction."));
     question_string.append("</span>%1");
 
+    if (m_coinControl && m_coinControl->HasSelected()) {
+        const int selected_count = static_cast<int>(m_coinControl->ListSelected().size());
+        const CAmount selected_amount = selectedDigiDollarAmount();
+        question_string.append("<hr /><b>");
+        question_string.append(tr("Selected DD inputs"));
+        question_string.append("</b>: ");
+        question_string.append(tr("%1 input(s), %2 selected")
+            .arg(selected_count)
+            .arg(formatDDAmount(selected_amount / 100.0)));
+    }
+
     // Transaction fee section - matches DGB format exactly
     question_string.append("<hr /><b>");
     question_string.append(tr("Transaction fee"));
@@ -916,7 +942,13 @@ void DigiDollarSendWidget::executeTransfer(const QString& address, double amount
     CAmount amountCents = static_cast<CAmount>(std::llround(amount * 100));
     QString note = m_noteEdit ? m_noteEdit->text().trimmed() : QString();
 
-    WalletModel::DigiDollarSendResult result = m_walletModel->sendDigiDollar(address, amountCents, note);
+    std::vector<COutPoint> selectedInputs;
+    const std::vector<COutPoint>* presetInputs = nullptr;
+    if (m_coinControl && m_coinControl->HasSelected()) {
+        selectedInputs = m_coinControl->ListSelected();
+        presetInputs = &selectedInputs;
+    }
+    WalletModel::DigiDollarSendResult result = m_walletModel->sendDigiDollar(address, amountCents, note, presetInputs);
 
     // Close progress dialog
     progress.close();
@@ -1240,43 +1272,87 @@ void DigiDollarSendWidget::onCoinControlButtonClicked()
 void DigiDollarSendWidget::updateCoinControlLabels()
 {
     if (!m_coinControl || !m_walletModel) {
-        // No coin control active, hide labels
+        // No coin control active, show automatic selection state.
         if (m_coinControlQuantityLabel) {
-            m_coinControlQuantityLabel->setVisible(false);
+            m_coinControlQuantityLabel->setText(tr("automatically selected"));
+            m_coinControlQuantityLabel->setVisible(true);
         }
         if (m_coinControlAmountLabel) {
-            m_coinControlAmountLabel->setVisible(false);
+            m_coinControlAmountLabel->clear();
+            m_coinControlAmountLabel->setVisible(true);
         }
+        updateFeeDisplay();
         return;
     }
 
     if (!m_coinControl->HasSelected()) {
-        // No inputs selected, hide labels
         if (m_coinControlQuantityLabel) {
-            m_coinControlQuantityLabel->setVisible(false);
+            m_coinControlQuantityLabel->setText(tr("automatically selected"));
+            m_coinControlQuantityLabel->setVisible(true);
         }
         if (m_coinControlAmountLabel) {
-            m_coinControlAmountLabel->setVisible(false);
+            m_coinControlAmountLabel->clear();
+            m_coinControlAmountLabel->setVisible(true);
         }
+        updateFeeDisplay();
         return;
     }
 
     // Count selected inputs and calculate total amount
     std::vector<COutPoint> selectedInputs = m_coinControl->ListSelected();
     int nQuantity = selectedInputs.size();
+    const CAmount selectedAmount = selectedDigiDollarAmount();
 
     // Show quantity label
     if (m_coinControlQuantityLabel) {
-        m_coinControlQuantityLabel->setText(tr("Inputs: %1").arg(nQuantity));
+        m_coinControlQuantityLabel->setText(tr("Quantity: %1").arg(nQuantity));
         m_coinControlQuantityLabel->setVisible(true);
     }
 
-    // Note: To show the actual DD amount, we would need to query the wallet
-    // for the DD value of each selected UTXO. For now, just show the count.
     if (m_coinControlAmountLabel) {
-        m_coinControlAmountLabel->setText(tr("(manual selection active)"));
+        m_coinControlAmountLabel->setText(tr("Amount: %1").arg(formatDDAmount(selectedAmount / 100.0)));
         m_coinControlAmountLabel->setVisible(true);
     }
+
+    updateFeeDisplay();
+}
+
+CAmount DigiDollarSendWidget::selectedDigiDollarAmount() const
+{
+    if (!m_coinControl || !m_walletModel) return 0;
+
+    DigiDollarWallet* ddWallet = m_walletModel->getDigiDollarWallet();
+    if (!ddWallet) return 0;
+
+    CAmount amount = 0;
+    for (const COutPoint& outpoint : m_coinControl->ListSelected()) {
+        const CAmount dd_amount = ddWallet->GetDDFromUTXO(outpoint);
+        if (dd_amount > 0) amount += dd_amount;
+    }
+    return amount;
+}
+
+void DigiDollarSendWidget::setSelectedDigiDollarInputsForTesting(const std::vector<COutPoint>& inputs)
+{
+    if (!m_coinControl) {
+        m_coinControl = std::make_unique<wallet::DDCoinControl>();
+    }
+    m_coinControl->UnSelectAll();
+    for (const COutPoint& input : inputs) {
+        m_coinControl->Select(input);
+    }
+    updateCoinControlLabels();
+}
+
+WalletModel::DigiDollarSendResult DigiDollarSendWidget::sendDigiDollarForTesting(const QString& address, CAmount amount, const QString& comment)
+{
+    std::vector<COutPoint> selectedInputs;
+    const std::vector<COutPoint>* presetInputs = nullptr;
+    if (m_coinControl && m_coinControl->HasSelected()) {
+        selectedInputs = m_coinControl->ListSelected();
+        presetInputs = &selectedInputs;
+    }
+    return m_walletModel->sendDigiDollar(address, amount, comment, presetInputs);
 }
 
 void DigiDollarSendWidget::setPrivacy(bool privacy)

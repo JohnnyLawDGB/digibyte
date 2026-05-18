@@ -649,7 +649,8 @@ CAmount WalletModel::getAvailableBalance(const CCoinControl* control)
 }
 
 // DigiDollar method implementations
-WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& address, CAmount amount, const QString& comment)
+WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& address, CAmount amount, const QString& comment,
+                                                              const std::vector<COutPoint>* preset_dd_inputs)
 {
     // Validate address format first
     if (!validateDigiDollarAddress(address)) {
@@ -693,7 +694,7 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
         // Call backend to create and send transaction
         std::string txid;
         std::string error;
-        bool success = ddWallet->TransferDigiDollar(recipientAddr, amount, txid, error);
+        bool success = ddWallet->TransferDigiDollar(recipientAddr, amount, txid, error, nullptr, preset_dd_inputs);
 
         if (!success) {
             // Transaction creation or sending failed

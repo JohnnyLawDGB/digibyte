@@ -3,10 +3,10 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
-Test DigiDollar RPC gating — all 28 gated RPCs must be blocked before activation.
+Test DigiDollar RPC gating — all 29 gated RPCs must be blocked before activation.
 
 Verifies that:
-  - All 28 gated DD/Oracle RPCs return "DigiDollar is not yet active" pre-activation
+  - All 29 gated DD/Oracle RPCs return "DigiDollar is not yet active" pre-activation
   - getdigidollardeploymentinfo (ungated) works at any time
   - After BIP9 activation, key RPCs become functional
 
@@ -49,6 +49,8 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             # DD wallet/address RPCs
             ("getdigidollaraddress", lambda: node.getdigidollaraddress()),
             ("getdigidollarbalance", lambda: node.getdigidollarbalance()),
+            ("listdigidollarunspent", lambda: node.listdigidollarunspent()),
+            ("listdigidollarutxos", lambda: node.listdigidollarutxos()),
             ("listdigidollarpositions", lambda: node.listdigidollarpositions()),
             ("listdigidollartxs", lambda: node.listdigidollartxs()),
             ("listdigidollaraddresses", lambda: node.listdigidollaraddresses()),
@@ -119,19 +121,19 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
         node = self.nodes[0]
 
         # ── Phase 1: Verify all gated RPCs are blocked at DEFINED state ──
-        self.log.info("Phase 1: Testing all 27 gated RPCs at DEFINED state (height 0)...")
+        self.log.info("Phase 1: Testing all 29 gated RPCs at DEFINED state (height 0)...")
         info = node.getdeploymentinfo()
         assert_equal(info["deployments"]["digidollar"]["bip9"]["status"], "defined")
 
         gated_rpcs = self.get_gated_rpc_calls(node)
-        assert_equal(len(gated_rpcs), 27)
+        assert_equal(len(gated_rpcs), 29)
 
         blocked_count = 0
         for name, call in gated_rpcs:
             self.test_rpc_gated(node, name, call)
             blocked_count += 1
 
-        self.log.info(f"  All {blocked_count}/27 gated RPCs correctly blocked")
+        self.log.info(f"  All {blocked_count}/29 gated RPCs correctly blocked")
 
         # ── Phase 2: Verify ungated RPC works pre-activation ──
         self.log.info("Phase 2: Verifying getdigidollardeploymentinfo works without activation...")
@@ -183,6 +185,12 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
         positions = node.listdigidollarpositions()
         assert len(positions) > 0, "Should have at least 1 position after mint"
         self.log.info(f"  ✓ listdigidollarpositions — {len(positions)} position(s)")
+
+        unspent = node.listdigidollarunspent()
+        utxos = node.listdigidollarutxos()
+        assert len(unspent) > 0, "Should have at least 1 DD UTXO after mint"
+        assert_equal(unspent, utxos)
+        self.log.info(f"  ✓ listdigidollarunspent/listdigidollarutxos — {len(unspent)} UTXO(s)")
 
         self.log.info("All DigiDollar RPC gating tests PASSED ✓")
 

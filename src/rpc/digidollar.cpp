@@ -3210,6 +3210,17 @@ static RPCHelpMan ListDigiDollarUnspentRpc(const std::string& rpc_name)
                 throw JSONRPCError(RPC_WALLET_ERROR, "Wallet not found");
             }
 
+            {
+                node::NodeContext* node_ctx = pwallet->chain().context();
+                if (node_ctx) {
+                    ChainstateManager& chainman = *node_ctx->chainman;
+                    const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+                    if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+                        throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
+                    }
+                }
+            }
+
             DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
             if (!dd_wallet) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not initialized");

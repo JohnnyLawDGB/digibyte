@@ -41,6 +41,15 @@ static std::vector<uint8_t> GetActiveOracleIdsForMusigTest()
     return ids;
 }
 
+static uint256 UniqueMusigTestHash(uint64_t value)
+{
+    uint256 hash;
+    for (size_t i = 0; i < sizeof(value); ++i) {
+        hash.begin()[i] = static_cast<unsigned char>((value >> (8 * i)) & 0xff);
+    }
+    return hash;
+}
+
 static OracleMusigNonceMsg MakeSignedMusigNonceMsg(int32_t epoch, uint8_t oracle_id)
 {
     CKey key = GetRegtestMusigOracleKey(oracle_id);
@@ -302,6 +311,36 @@ BOOST_AUTO_TEST_CASE(remote_future_attempt_messages_do_not_preempt_lazy_session)
     orch.IngestRemoteContext(context_msg);
     BOOST_CHECK_MESSAGE(!orch.HasSession(epoch),
         "a signed remote context must not choose a future attempt before the local epoch starts");
+}
+
+BOOST_AUTO_TEST_CASE(remote_context_proposals_are_bounded_per_epoch)
+{
+    OracleSigningOrchestrator orch;
+    const int32_t epoch = 46;
+    const uint8_t oracle_id = 1;
+    const CKey oracle_key = GetRegtestMusigOracleKey(oracle_id);
+    const XOnlyPubKey oracle_pubkey(oracle_key.GetPubKey());
+
+    for (size_t i = 0; i < 200; ++i) {
+        OracleMusigContextMsg context_msg;
+        context_msg.epoch = epoch;
+        context_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+        context_msg.epoch_selection_seed = Params().GetConsensus().hashGenesisBlock;
+        context_msg.proposer_id = oracle_id;
+        context_msg.participant_ids = {oracle_id};
+        context_msg.nonce_set_hash = UniqueMusigTestHash(i + 1);
+        context_msg.quote_set_hash = UniqueMusigTestHash(i + 1000);
+        context_msg.consensus_price = 100000000 + i;
+        context_msg.consensus_timestamp = 1710000000 + i;
+        context_msg.session_context_id = UniqueMusigTestHash(i + 2000);
+        BOOST_REQUIRE(context_msg.Sign(oracle_key));
+        BOOST_REQUIRE(context_msg.VerifySignature(oracle_pubkey));
+        BOOST_REQUIRE(context_msg.IsValid());
+
+        orch.IngestRemoteContext(context_msg);
+    }
+
+    BOOST_CHECK_LE(orch.GetPendingContextProposalCountForTesting(epoch), 1U);
 }
 
 BOOST_AUTO_TEST_CASE(remote_nonce_lazy_session_timeout_uses_chain_epoch_length)

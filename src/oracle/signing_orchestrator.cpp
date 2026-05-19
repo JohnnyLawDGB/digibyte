@@ -30,6 +30,7 @@ constexpr size_t MAX_PENDING_PARTIALSIGS_PER_CONTEXT = 32;   // > any honest ora
 constexpr size_t MAX_PENDING_PARTIALSIG_CONTEXTS_PER_EPOCH = 8;
 constexpr size_t MAX_PENDING_PARTIALSIGS_PER_EPOCH = 128;
 constexpr size_t MAX_PENDING_PARTIALSIG_EPOCHS = 8;           // +/- 4 epochs around current
+constexpr size_t MAX_PENDING_CONTEXT_PROPOSALS_PER_EPOCH = 32;
 constexpr int32_t CONTEXT_PROPOSAL_ROUND_BLOCKS = 2;
 constexpr int32_t CONTEXT_NONCE_GRACE_BLOCKS = 2;
 
@@ -231,6 +232,13 @@ void OracleSigningOrchestrator::InjectSession(int32_t epoch, std::unique_ptr<MuS
     m_signing_sessions[epoch] = std::move(session);
 }
 
+size_t OracleSigningOrchestrator::GetPendingContextProposalCountForTesting(int32_t epoch) const
+{
+    std::lock_guard<std::mutex> lock(m_sessions_mutex);
+    const auto it = m_pending_contexts.find(epoch);
+    return it == m_pending_contexts.end() ? 0 : it->second.size();
+}
+
 uint8_t OracleSigningOrchestrator::GetActiveAttemptId(int32_t epoch) const
 {
     std::lock_guard<std::mutex> lock(m_sessions_mutex);
@@ -367,7 +375,22 @@ void OracleSigningOrchestrator::IngestRemoteContext(const OracleMusigContextMsg&
         m_nonce_evidence[msg.epoch][nonce_msg.oracle_id] = nonce_msg;
     }
 
-    m_pending_contexts[msg.epoch][msg.session_context_id] = msg;
+    auto& epoch_contexts = m_pending_contexts[msg.epoch];
+    for (auto context_it = epoch_contexts.begin(); context_it != epoch_contexts.end(); ) {
+        if (context_it->second.proposer_id == msg.proposer_id) {
+            context_it = epoch_contexts.erase(context_it);
+        } else {
+            ++context_it;
+        }
+    }
+    if (epoch_contexts.size() >= MAX_PENDING_CONTEXT_PROPOSALS_PER_EPOCH) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: Dropping MuSig2 context proposal epoch=%d proposer=%u context=%s: pending context cap reached (%zu)\n",
+                 msg.epoch, msg.proposer_id, msg.session_context_id.ToString(),
+                 epoch_contexts.size());
+        return;
+    }
+    epoch_contexts[msg.session_context_id] = msg;
     if (m_pending_contexts.size() > MAX_PENDING_PARTIALSIG_EPOCHS) {
         m_pending_contexts.erase(m_pending_contexts.begin());
     }

@@ -98,6 +98,8 @@ public:
 
     /** Inject a pre-built session (test use only). Takes ownership. */
     void InjectSession(int32_t epoch, std::unique_ptr<MuSig2SigningSession> session);
+    /** Test/diagnostic visibility for bounded pending context proposals. */
+    size_t GetPendingContextProposalCountForTesting(int32_t epoch) const;
 
     /** Ingest remote nonce from P2P (called from net_processing). */
     void IngestRemoteNonce(const OracleMusigNonceMsg& msg);

@@ -43,7 +43,11 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDialog>
+#include <QEvent>
 #include <QFile>
+#include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -260,11 +264,54 @@ void TestReceiveWidget(interfaces::Node& node, const std::shared_ptr<wallet::CWa
     DigiDollarReceiveWidget receiveWidget;
     receiveWidget.setWalletModel(mini_gui.walletModel.get());
     receiveWidget.setClientModel(mini_gui.clientModel.get());
+    receiveWidget.show();
 
     QVERIFY(&receiveWidget != nullptr);
 
     receiveWidget.updateView();
     receiveWidget.updateRecentRequests();
+
+    QLabel* emptyLabel = receiveWidget.findChild<QLabel*>("emptyStateLabel");
+    QVERIFY(emptyLabel != nullptr);
+    QVERIFY(emptyLabel->isVisibleTo(&receiveWidget));
+    QVERIFY(emptyLabel->text().contains(QStringLiteral("Generate")));
+    QVERIFY(emptyLabel->text().contains(QStringLiteral("DigiDollar")));
+
+    QFrame* qrFrame = receiveWidget.findChild<QFrame*>("qrFrame");
+    QVERIFY(qrFrame != nullptr);
+    QVERIFY(!qrFrame->isVisibleTo(&receiveWidget));
+
+    QLineEdit* addressEdit = receiveWidget.findChild<QLineEdit*>("addressEdit");
+    QVERIFY(addressEdit != nullptr);
+    QVERIFY(addressEdit->text().isEmpty());
+
+    QPushButton* generateButton = receiveWidget.findChild<QPushButton*>("generateButton");
+    QVERIFY(generateButton != nullptr);
+    QVERIFY(generateButton->isEnabled());
+    QCOMPARE(generateButton->property("ddState").toString(), QStringLiteral("primaryEnabled"));
+    QVERIFY2(generateButton->styleSheet().contains(QStringLiteral("QPushButton#generateButton:enabled")),
+             "Generate button should have an explicit enabled style so it does not look disabled until hover");
+
+    QMetaObject::invokeMethod(generateButton, "click", Qt::DirectConnection);
+    QCoreApplication::processEvents();
+
+    QVERIFY(qrFrame->isVisibleTo(&receiveWidget));
+    QVERIFY(!emptyLabel->isVisibleTo(&receiveWidget));
+    QVERIFY(!addressEdit->text().isEmpty());
+
+    const QList<QDialog*> requestDialogs = receiveWidget.findChildren<QDialog*>();
+    for (QDialog* dialog : requestDialogs) {
+        dialog->close();
+    }
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+
+    QMetaObject::invokeMethod(&receiveWidget, "onClearClicked", Qt::DirectConnection);
+    QCoreApplication::processEvents();
+
+    QVERIFY(!qrFrame->isVisibleTo(&receiveWidget));
+    QVERIFY(emptyLabel->isVisibleTo(&receiveWidget));
+    QVERIFY(addressEdit->text().isEmpty());
 }
 
 void TestRedeemWidget(interfaces::Node& node, const std::shared_ptr<wallet::CWallet>& wallet)

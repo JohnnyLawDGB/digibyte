@@ -75,7 +75,7 @@ void DigiDollarTab::setupUI()
     m_overviewWidget = new DigiDollarOverviewWidget(this);
     m_overviewWidget->setObjectName("overviewWidget");
 
-    m_receiveWidget = new DigiDollarReceiveWidget(this);
+    m_receiveWidget = new DigiDollarReceiveWidget();
     m_receiveWidget->setObjectName("receiveWidget");
 
     m_sendWidget = new DigiDollarSendWidget(m_platformStyle, this);

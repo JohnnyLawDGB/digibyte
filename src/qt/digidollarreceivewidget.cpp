@@ -62,6 +62,7 @@ DigiDollarReceiveWidget::DigiDollarReceiveWidget(QWidget *parent) :
     m_clearButton(nullptr),
     m_qrFrame(nullptr),
     m_qrLayout(nullptr),
+    m_emptyStateLabel(nullptr),
     m_qrTitle(nullptr),
     m_qrImage(nullptr),
     m_addressLabel(nullptr),
@@ -158,7 +159,31 @@ void DigiDollarReceiveWidget::setupGenerateSection()
     // Buttons
     m_generateButton = new QPushButton(tr("&Generate New Address"), this);
     m_generateButton->setObjectName("generateButton");
+    m_generateButton->setProperty("ddState", "primaryEnabled");
     m_generateButton->setToolTip(tr("Generate a new DigiDollar receiving address"));
+    m_generateButton->setMinimumWidth(175);
+    m_generateButton->setStyleSheet(
+        "QPushButton#generateButton:enabled {"
+        "  background-color: #0b6ecb;"
+        "  color: #ffffff;"
+        "  border: 1px solid #075aa8;"
+        "  border-radius: 4px;"
+        "  padding: 6px 12px;"
+        "  font-weight: 600;"
+        "}"
+        "QPushButton#generateButton:enabled:hover {"
+        "  background-color: #167fdc;"
+        "}"
+        "QPushButton#generateButton:enabled:pressed {"
+        "  background-color: #075aa8;"
+        "}"
+        "QPushButton#generateButton:disabled {"
+        "  background-color: #d0d0d0;"
+        "  color: #777777;"
+        "  border: 1px solid #b8b8b8;"
+        "  border-radius: 4px;"
+        "  padding: 6px 12px;"
+        "}");
 
     m_clearButton = new QPushButton(tr("C&lear"), this);
     m_clearButton->setObjectName("clearButton");
@@ -259,8 +284,15 @@ void DigiDollarReceiveWidget::setupQRSection()
 
     m_mainLayout->addWidget(m_qrFrame);
 
-    // Frame starts hidden, shown when address is generated
-    m_qrFrame->setVisible(true);
+    m_emptyStateLabel = new QLabel(tr("Generate a new DigiDollar address to receive DD."), this);
+    m_emptyStateLabel->setObjectName("emptyStateLabel");
+    m_emptyStateLabel->setAlignment(Qt::AlignCenter);
+    m_emptyStateLabel->setWordWrap(true);
+    m_emptyStateLabel->setMinimumHeight(42);
+    m_emptyStateLabel->setToolTip(tr("No receive address is shown until you generate or select a DigiDollar payment request."));
+    m_mainLayout->addWidget(m_emptyStateLabel);
+
+    // Frame starts hidden, shown when address is generated or selected.
 }
 
 void DigiDollarReceiveWidget::setupRecentRequestsSection()
@@ -486,6 +518,7 @@ void DigiDollarReceiveWidget::generateNewAddress()
 
     // Show address section (QR image hidden to save space)
     m_qrFrame->setVisible(true);
+    m_emptyStateLabel->setVisible(false);
 
     // Create payment request and save to wallet
     SendCoinsRecipient recipient;
@@ -590,6 +623,7 @@ void DigiDollarReceiveWidget::clearFields()
     m_currentAmount.clear();
     m_currentMessage.clear();
     m_qrFrame->setVisible(false);
+    m_emptyStateLabel->setVisible(true);
 }
 
 void DigiDollarReceiveWidget::onLabelChanged()
@@ -649,6 +683,8 @@ void DigiDollarReceiveWidget::onRecentRequestSelected()
         m_addressEdit->setText(address);
     }
     updateQRCode();
+    m_qrFrame->setVisible(true);
+    m_emptyStateLabel->setVisible(false);
 }
 
 void DigiDollarReceiveWidget::onShowRequestClicked()

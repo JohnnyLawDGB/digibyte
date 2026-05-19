@@ -143,6 +143,7 @@ private:
     // QR code section
     QFrame* m_qrFrame;
     QVBoxLayout* m_qrLayout;
+    QLabel* m_emptyStateLabel;
     QLabel* m_qrTitle;
     QRImageWidget* m_qrImage;
     QLabel* m_addressLabel;

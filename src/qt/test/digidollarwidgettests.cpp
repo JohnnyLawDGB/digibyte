@@ -890,7 +890,16 @@ void DigiDollarWidgetTests::redeemWidgetKeepsTimelockedPositionDisabled()
     DigiDollarRedeemWidget redeemWidget;
     redeemWidget.setWalletModel(mini_gui.walletModel.get());
     redeemWidget.setClientModel(mini_gui.clientModel.get());
-    redeemWidget.setPosition(QString::fromStdString(uint256::ONE.GetHex()));
+    redeemWidget.m_positionFound = true;
+    redeemWidget.m_positionDDMinted = 100.0;
+    redeemWidget.m_positionDGBCollateral = 300.0;
+    redeemWidget.m_positionLockTier = 1;
+    redeemWidget.m_positionBlocksRemaining = 95;
+    redeemWidget.m_positionHealth = 150.0;
+    redeemWidget.m_redeemableAmount = 0.0;
+    redeemWidget.m_amountEdit->clear();
+    redeemWidget.updatePositionInfo();
+    redeemWidget.updateRedeemButtons();
     QCoreApplication::processEvents();
 
     RemoveWallet(context, wallet, std::nullopt);
@@ -1136,6 +1145,331 @@ void DigiDollarWidgetTests::positionsWidgetDisablesRedeemForLockedEncryptedWalle
     QCOMPARE(redeemButton->text(), QString("Wallet Locked"));
     QVERIFY(!redeemButton->isEnabled());
     QVERIFY(redeemButton->toolTip().contains("Unlock"));
+}
+
+void DigiDollarWidgetTests::redeemWidgetButtonStateNoSelection()
+{
+    DigiDollarRedeemWidget redeemWidget;
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+    QCOMPARE(redeemButton->text(), QString("Cannot Redeem"));
+    QVERIFY(redeemButton->toolTip().contains("Select"));
+}
+
+void DigiDollarWidgetTests::redeemWidgetButtonStateTimelockActive()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-redeem-timelock-state");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 200);
+    wallet->GetDDWallet()->AddDDUTXO(COutPoint(uint256::ONE, 1), 100000000);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.m_positionFound = true;
+    redeemWidget.m_positionDDMinted = 100.0;
+    redeemWidget.m_positionDGBCollateral = 300.0;
+    redeemWidget.m_positionLockTier = 1;
+    redeemWidget.m_positionBlocksRemaining = 95;
+    redeemWidget.m_positionHealth = 150.0;
+    redeemWidget.m_redeemableAmount = 0.0;
+    redeemWidget.m_amountEdit->clear();
+    redeemWidget.updatePositionInfo();
+    redeemWidget.updateRedeemButtons();
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+    QCOMPARE(redeemButton->text(), QString("Cannot Redeem"));
+    QVERIFY(redeemButton->toolTip().contains("Time remaining"));
+    QVERIFY(redeemButton->toolTip().contains("Blocks remaining: 95"));
+    QLabel* validationLabel = redeemWidget.findChild<QLabel*>("positionValidationLabel");
+    QVERIFY(validationLabel != nullptr);
+    QVERIFY(validationLabel->toolTip().contains("Blocks remaining: 95"));
+}
+
+void DigiDollarWidgetTests::redeemWidgetButtonStateInvalidAmount()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-redeem-invalid-amount");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+    wallet->GetDDWallet()->AddDDUTXO(COutPoint(uint256::ONE, 1), 10000);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.setPosition(QString::fromStdString(uint256::ONE.GetHex()));
+    QLineEdit* amountEdit = redeemWidget.findChild<QLineEdit*>("amountEdit");
+    QVERIFY(amountEdit != nullptr);
+    amountEdit->setText(QStringLiteral("99.99"));
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("full redeemable"));
+    QLabel* validationLabel = redeemWidget.findChild<QLabel*>("positionValidationLabel");
+    QVERIFY(validationLabel != nullptr);
+    QVERIFY(validationLabel->toolTip().contains("full redeemable"));
+}
+
+void DigiDollarWidgetTests::redeemWidgetButtonStateInsufficientDDBalance()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-redeem-insufficient");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.m_positionFound = true;
+    redeemWidget.m_positionDDMinted = 100.0;
+    redeemWidget.m_positionDGBCollateral = 300.0;
+    redeemWidget.m_positionLockTier = 1;
+    redeemWidget.m_positionBlocksRemaining = 0;
+    redeemWidget.m_positionHealth = 150.0;
+    redeemWidget.m_redeemableAmount = 100.0;
+    redeemWidget.m_amountEdit->setText(QStringLiteral("100.00"));
+    redeemWidget.updatePositionInfo();
+    redeemWidget.updateRedeemButtons();
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("Insufficient DigiDollar balance"));
+    QLabel* validationLabel = redeemWidget.findChild<QLabel*>("positionValidationLabel");
+    QVERIFY(validationLabel != nullptr);
+    QVERIFY(validationLabel->toolTip().contains("Insufficient DigiDollar balance"));
+}
+
+void DigiDollarWidgetTests::redeemWidgetButtonStatePrivateKeyDisabledWallet()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-redeem-watchonly");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+    wallet->GetDDWallet()->AddDDUTXO(COutPoint(uint256::ONE, 1), 10000);
+    wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.setPosition(QString::fromStdString(uint256::ONE.GetHex()));
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("Watch-only"));
+    QLabel* validationLabel = redeemWidget.findChild<QLabel*>("positionValidationLabel");
+    QVERIFY(validationLabel != nullptr);
+    QVERIFY(validationLabel->toolTip().contains("Watch-only"));
+}
+
+void DigiDollarWidgetTests::redeemWidgetButtonStateLockedWallet()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-redeem-wallet-locked");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+    wallet->GetDDWallet()->AddDDUTXO(COutPoint(uint256::ONE, 1), 10000);
+    SecureString passphrase{"qt-dd-redeem-wallet-locked"};
+    QVERIFY(wallet->EncryptWallet(passphrase));
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.setPosition(QString::fromStdString(uint256::ONE.GetHex()));
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("Unlock"));
+    QLabel* validationLabel = redeemWidget.findChild<QLabel*>("positionValidationLabel");
+    QVERIFY(validationLabel != nullptr);
+    QVERIFY(validationLabel->toolTip().contains("Unlock"));
+}
+
+void DigiDollarWidgetTests::redeemWidgetButtonStateReady()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-redeem-ready");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 100);
+    wallet->GetDDWallet()->AddDDUTXO(COutPoint(uint256::ONE, 1), 100000000);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.m_positionFound = true;
+    redeemWidget.m_positionDDMinted = 100.0;
+    redeemWidget.m_positionDGBCollateral = 300.0;
+    redeemWidget.m_positionLockTier = 1;
+    redeemWidget.m_positionBlocksRemaining = 0;
+    redeemWidget.m_positionHealth = 150.0;
+    redeemWidget.m_redeemableAmount = 100.0;
+    redeemWidget.m_amountEdit->setText(QStringLiteral("100.00"));
+    redeemWidget.updatePositionInfo();
+    redeemWidget.updateRedeemButtons();
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY2(redeemWidget.validateAmount(), "ready state amount should validate");
+    QVERIFY2(redeemWidget.validateRedeemable(), "ready state redeemable amount should validate");
+    QVERIFY2(redeemWidget.validateDDBalance(), "ready state DD balance should validate");
+    QVERIFY2(redeemWidget.canWalletSignRedemption(), "ready state wallet should be able to sign");
+    QVERIFY(redeemButton->isEnabled());
+    QCOMPARE(redeemButton->text(), QString("Redeem && Unlock DGB"));
+    QVERIFY(redeemButton->toolTip().contains("Ready to redeem"));
+    QLabel* validationLabel = redeemWidget.findChild<QLabel*>("positionValidationLabel");
+    QVERIFY(validationLabel != nullptr);
+    QVERIFY(validationLabel->text().contains("ready", Qt::CaseInsensitive));
+    QVERIFY(validationLabel->toolTip().contains("Ready to redeem"));
+}
+
+void DigiDollarWidgetTests::positionsWidgetLockedTooltipShowsRemainingBlocksAndTime()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    DigiDollarPositionsWidget positionsWidget;
+    QPushButton* redeemButton = positionsWidget.createRedeemButton(
+        QString::fromStdString(uint256::ONE.GetHex()),
+        false,
+        false,
+        false,
+        false,
+        95);
+    QVERIFY(redeemButton != nullptr);
+    QCOMPARE(redeemButton->text(), QString("Locked"));
+    QVERIFY(redeemButton->toolTip().contains("Time remaining: 23m"));
+    QVERIFY(redeemButton->toolTip().contains("Blocks remaining: 95"));
 }
 
 // DD-FA-FUNC-031 (Wave 19 Agent A): WalletModel::mintDigiDollar must

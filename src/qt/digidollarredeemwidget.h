@@ -36,6 +36,7 @@ QT_END_NAMESPACE
 class DigiDollarRedeemWidget : public QWidget
 {
     Q_OBJECT
+    friend class DigiDollarWidgetTests;
 
 public:
     explicit DigiDollarRedeemWidget(QWidget *parent = nullptr);
@@ -98,6 +99,8 @@ private:
     bool validateAmount() const;
     bool validateRedeemable() const;
     bool validateDDBalance() const;
+    bool canWalletSignRedemption() const;
+    QString redeemDisabledReason() const;
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;

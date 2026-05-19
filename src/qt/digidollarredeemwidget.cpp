@@ -378,9 +378,10 @@ void DigiDollarRedeemWidget::setupButtonSection()
     // m_buttonLayout->addWidget(m_redeemAllButton);
 
     // Redeem button
-    m_redeemButton = new QPushButton(tr("Redeem && Unlock DGB"), this);
+    m_redeemButton = new QPushButton(tr("Cannot Redeem"), this);
     m_redeemButton->setObjectName("redeemButton");
     m_redeemButton->setEnabled(false);
+    m_redeemButton->setToolTip(redeemDisabledReason());
     // Theme will be applied in applyTheme()
     m_buttonLayout->addWidget(m_redeemButton);
 
@@ -741,14 +742,30 @@ void DigiDollarRedeemWidget::onClearClicked()
 
 void DigiDollarRedeemWidget::updateRedeemButtons()
 {
-    bool positionValid = m_positionFound;
-    bool amountValid = validateAmount();
-    bool redeemableValid = validateRedeemable();
-    bool balanceValid = validateDDBalance();
-    bool timelockExpired = m_positionFound && m_positionBlocksRemaining <= 0;
+    const bool canRedeem =
+        m_positionFound &&
+        m_positionBlocksRemaining <= 0 &&
+        validateAmount() &&
+        validateRedeemable() &&
+        validateDDBalance() &&
+        canWalletSignRedemption();
 
-    // Only enable button if ALL validations pass, including timelock and DD balance checks.
-    m_redeemButton->setEnabled(positionValid && timelockExpired && amountValid && redeemableValid && balanceValid);
+    m_redeemButton->setEnabled(canRedeem);
+    if (canRedeem) {
+        m_redeemButton->setText(tr("Redeem && Unlock DGB"));
+        const QString readyText = tr("Ready to redeem this DigiDollar vault and release the locked DGB collateral.");
+        m_redeemButton->setToolTip(readyText);
+        m_positionValidationLabel->setText(tr("Vault ready to redeem."));
+        m_positionValidationLabel->setToolTip(readyText);
+    } else {
+        const QString reason = redeemDisabledReason();
+        m_redeemButton->setText(tr("Cannot Redeem"));
+        m_redeemButton->setToolTip(reason);
+        if (m_positionFound || !m_positionIdEdit->text().trimmed().isEmpty()) {
+            m_positionValidationLabel->setText(reason.section('\n', 0, 0));
+            m_positionValidationLabel->setToolTip(reason);
+        }
+    }
     // m_redeemAllButton removed - exact-amount redemption only
 }
 
@@ -987,6 +1004,51 @@ bool DigiDollarRedeemWidget::validateDDBalance() const
 
     // Check if user has enough DD balance
     return ddBalance >= requiredDDBurn;
+}
+
+bool DigiDollarRedeemWidget::canWalletSignRedemption() const
+{
+    if (!m_walletModel) {
+        return false;
+    }
+    if (m_walletModel->wallet().privateKeysDisabled()) {
+        return false;
+    }
+    if (m_walletModel->getEncryptionStatus() == WalletModel::Locked) {
+        return false;
+    }
+    return true;
+}
+
+QString DigiDollarRedeemWidget::redeemDisabledReason() const
+{
+    if (!m_positionFound) {
+        return tr("Select a DigiDollar vault to redeem.");
+    }
+    if (m_positionBlocksRemaining > 0) {
+        return tr("Vault is still locked.\nTime remaining: %1\nBlocks remaining: %2")
+            .arg(formatBlockTime(m_positionBlocksRemaining))
+            .arg(m_positionBlocksRemaining);
+    }
+    if (!m_walletModel) {
+        return tr("Wallet is not available.");
+    }
+    if (m_walletModel->wallet().privateKeysDisabled()) {
+        return tr("Watch-only wallet.\nThis wallet cannot sign DigiDollar redemptions because private keys are disabled.");
+    }
+    if (m_walletModel->getEncryptionStatus() == WalletModel::Locked) {
+        return tr("Wallet is locked.\nUnlock the wallet to redeem this DigiDollar vault.");
+    }
+    if (!validateAmount()) {
+        return tr("Invalid redeem amount.\nDigiDollar redemptions must use the exact vault amount.");
+    }
+    if (!validateRedeemable()) {
+        return tr("Amount must match the full redeemable DigiDollar amount for this vault.");
+    }
+    if (!validateDDBalance()) {
+        return tr("Insufficient DigiDollar balance to burn the required DD for this redemption.");
+    }
+    return tr("This DigiDollar vault cannot be redeemed yet.");
 }
 
 QString DigiDollarRedeemWidget::formatDDAmount(double amount) const

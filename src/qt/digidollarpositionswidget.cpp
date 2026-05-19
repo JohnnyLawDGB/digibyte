@@ -784,28 +784,28 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     const bool isWalletLocked =
         m_walletModel ? m_walletModel->getEncryptionStatus() == WalletModel::Locked : false;
     QPushButton* redeemButton = createRedeemButton(
-        position.positionId, position.isRedeemed, position.canRedeem, isWatchOnly, isWalletLocked);
+        position.positionId, position.isRedeemed, position.canRedeem, isWatchOnly, isWalletLocked, position.blocksRemaining);
     m_positionsTable->setCellWidget(row, COL_ACTIONS, redeemButton);
 }
 
-QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked)
+QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining)
 {
     // Set button text based on status (priority order):
     // - "Redeemed" if already redeemed (with strikethrough)
-    // - "Redeem" if can redeem now (green, clickable)
     // - "Watch-Only" if the wallet has private keys disabled and so cannot
     //   ever construct a redemption witness
     // - "Wallet Locked" if private keys exist but are currently unavailable
+    // - "Redeem" if can redeem now (green, clickable)
     // - "Locked" if vault hasn't matured yet (grayed out)
     QString buttonText;
     if (isRedeemed) {
         buttonText = tr("Redeemed");
-    } else if (canRedeem) {
-        buttonText = tr("Redeem");
     } else if (isWatchOnly) {
         buttonText = tr("Watch-Only");
     } else if (isWalletLocked) {
         buttonText = tr("Wallet Locked");
+    } else if (canRedeem) {
+        buttonText = tr("Redeem");
     } else {
         buttonText = tr("Locked");
     }
@@ -842,36 +842,6 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
             .arg(redeemedText);
         tooltip = tr("This vault has already been redeemed");
         button->setEnabled(false);
-    } else if (canRedeem) {
-        // Can redeem - green button
-        QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
-        QString successHover = isDarkTheme ? "#5cbf60" : "#34ce57";
-        QString successPressed = isDarkTheme ? "#449d48" : "#1e7e34";
-
-        buttonStyle = QString(
-            "QPushButton { "
-            "  background-color: %1; "
-            "  color: white; "
-            "  border: none; "
-            "  border-radius: 5px; "
-            "  padding: 6px 12px; "
-            "  font-weight: 600; "
-            "  font-size: 11px; "
-            "  min-width: 60px; "
-            "} "
-            "QPushButton:hover { "
-            "  background-color: %2; "
-            "  transform: translateY(-1px); "
-            "} "
-            "QPushButton:pressed { "
-            "  background-color: %3; "
-            "  transform: translateY(0px); "
-            "}")
-            .arg(successColor)
-            .arg(successHover)
-            .arg(successPressed);
-        tooltip = tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the DD tokens");
-        button->setEnabled(true);
     } else if (isWatchOnly) {
         // Watch-Only - wallet has private keys disabled; redemption is
         // physically impossible from this wallet. Use a distinct grey-blue
@@ -914,6 +884,36 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
             .arg(lockedWalletText);
         tooltip = tr("Wallet is locked\nUnlock the wallet to redeem this DigiDollar vault.");
         button->setEnabled(false);
+    } else if (canRedeem) {
+        // Can redeem - green button
+        QString successColor = isDarkTheme ? "#4caf50" : "#28a745";
+        QString successHover = isDarkTheme ? "#5cbf60" : "#34ce57";
+        QString successPressed = isDarkTheme ? "#449d48" : "#1e7e34";
+
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: white; "
+            "  border: none; "
+            "  border-radius: 5px; "
+            "  padding: 6px 12px; "
+            "  font-weight: 600; "
+            "  font-size: 11px; "
+            "  min-width: 60px; "
+            "} "
+            "QPushButton:hover { "
+            "  background-color: %2; "
+            "  transform: translateY(-1px); "
+            "} "
+            "QPushButton:pressed { "
+            "  background-color: %3; "
+            "  transform: translateY(0px); "
+            "}")
+            .arg(successColor)
+            .arg(successHover)
+            .arg(successPressed);
+        tooltip = tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the DD tokens");
+        button->setEnabled(true);
     } else {
         // Locked - vault hasn't matured yet - grayed out button with dark text
         QString lockedBg = isDarkTheme ? "#555555" : "#cccccc";
@@ -932,7 +932,9 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
             "}")
             .arg(lockedBg)
             .arg(lockedText);
-        tooltip = tr("Vault is locked\nWait until the time lock expires to redeem");
+        tooltip = tr("Vault is locked\nTime remaining: %1\nBlocks remaining: %2")
+            .arg(formatBlockTime(blocksRemaining))
+            .arg(blocksRemaining);
         button->setEnabled(false);
     }
 

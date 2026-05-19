@@ -44,6 +44,7 @@ struct DigiDollarPosition {
 class DigiDollarPositionsWidget : public QWidget
 {
     Q_OBJECT
+    friend class DigiDollarWidgetTests;
 
 public:
     explicit DigiDollarPositionsWidget(QWidget *parent = nullptr);
@@ -85,7 +86,7 @@ private:
     void addPositionToTable(const DigiDollarPosition& position, int row);
     // Wallet-state badges keep matured vaults from looking redeemable when
     // this wallet cannot currently sign.
-    QPushButton* createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked);
+    QPushButton* createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining);
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;

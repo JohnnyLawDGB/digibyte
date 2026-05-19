@@ -68,6 +68,14 @@ private Q_SLOTS:
     void positionsWidgetHealthUsesMicroUsdOraclePrice();
     void positionsWidgetDisablesRedeemForPrivateKeyDisabledWallet();
     void positionsWidgetDisablesRedeemForLockedEncryptedWallet();
+    void redeemWidgetButtonStateNoSelection();
+    void redeemWidgetButtonStateTimelockActive();
+    void redeemWidgetButtonStateInvalidAmount();
+    void redeemWidgetButtonStateInsufficientDDBalance();
+    void redeemWidgetButtonStatePrivateKeyDisabledWallet();
+    void redeemWidgetButtonStateLockedWallet();
+    void redeemWidgetButtonStateReady();
+    void positionsWidgetLockedTooltipShowsRemainingBlocksAndTime();
     void redeemWidgetKeepsTimelockedPositionDisabled();
     void mintDigiDollarRejectsPrivateKeyDisabledWallet();
 };

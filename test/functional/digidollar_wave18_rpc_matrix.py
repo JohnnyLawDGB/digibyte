@@ -243,7 +243,7 @@ class DigiDollarWave18RpcMatrixTest(DigiByteTestFramework):
 
     def _pin_pre_activation_deployment_info_works(self):
         """getdigidollardeploymentinfo must remain queryable in any
-        deployment state. The full pre-activation gate matrix for the 27
+        deployment state. The full pre-activation gate matrix for the 31
         gated DD/oracle RPCs is owned by digidollar_rpc_gating.py; this
         pin only anchors the ungated read RPC contract from the Wave 18
         matrix's perspective."""

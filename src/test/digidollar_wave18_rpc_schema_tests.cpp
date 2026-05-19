@@ -30,7 +30,7 @@
 //      we add a unit-level pin against the listdigidollarpositions /
 //      getredemptioninfo result schemas (cents-as-int, never floated).
 //   6. Deployment-gated commands: pre-activation rejection with clear
-//      error. The functional digidollar_rpc_gating.py drives all 27 gated
+//      error. The functional digidollar_rpc_gating.py drives all 31 gated
 //      commands at DEFINED state; this file adds a unit-level pin at the
 //      regtest-active boundary that the cents/dgb units do not silently
 //      shift between defined-and-active states.

@@ -212,7 +212,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     // USD Value (Total — confirmed only)
     m_usdValueLabel = new QLabel(tr("Total:"), this);
     m_usdValueLabel->setObjectName("usdValueLabel");
-    m_usdValueValue = new QLabel("$0.00", this);
+    m_usdValueValue = new QLabel(formatUSDAmount(0), this);
     m_usdValueValue->setObjectName("usdValueValue");
     m_usdValueValue->setCursor(QCursor(Qt::IBeamCursor));
     m_usdValueValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
@@ -274,6 +274,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     QFrame* leftStatsFrame = new QFrame(this);
     leftStatsFrame->setObjectName("leftStatsFrame");
     leftStatsFrame->setFrameShape(QFrame::NoFrame);
+    leftStatsFrame->setMinimumWidth(170);
 
     m_systemHealthLayout = new QGridLayout(leftStatsFrame);
     m_systemHealthLayout->setSpacing(8);
@@ -327,6 +328,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     rightTotalsFrame->setObjectName("networkTotalsFrame");
     rightTotalsFrame->setFrameShape(QFrame::StyledPanel);
     rightTotalsFrame->setFrameShadow(QFrame::Raised);
+    rightTotalsFrame->setMinimumWidth(250);
 
     QVBoxLayout* totalsLayout = new QVBoxLayout(rightTotalsFrame);
     totalsLayout->setSpacing(12);
@@ -336,7 +338,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_networkTotalDDLabel = new QLabel(tr("Network DD Supply"), this);
     m_networkTotalDDLabel->setObjectName("networkTotalDDLabel");
     m_networkTotalDDLabel->setAlignment(Qt::AlignCenter);
-    m_networkTotalDDLabel->setWordWrap(true);
+    m_networkTotalDDLabel->setWordWrap(false);
     totalsLayout->addWidget(m_networkTotalDDLabel);
 
     m_networkTotalDDValue = new QLabel("Loading...", this);
@@ -358,7 +360,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_networkTotalCollateralLabel = new QLabel(tr("Network DGB Locked"), this);
     m_networkTotalCollateralLabel->setObjectName("networkTotalCollateralLabel");
     m_networkTotalCollateralLabel->setAlignment(Qt::AlignCenter);
-    m_networkTotalCollateralLabel->setWordWrap(true);
+    m_networkTotalCollateralLabel->setWordWrap(false);
     totalsLayout->addWidget(m_networkTotalCollateralLabel);
 
     m_networkTotalCollateralValue = new QLabel("Loading...", this);
@@ -370,8 +372,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     totalsLayout->addWidget(m_networkTotalCollateralValue);
 
     // Add left and right to horizontal content layout
-    contentLayout->addWidget(leftStatsFrame, 1); // stretch factor 1
-    contentLayout->addWidget(rightTotalsFrame, 1); // stretch factor 1 (equal width)
+    contentLayout->addWidget(leftStatsFrame, 2);
+    contentLayout->addWidget(rightTotalsFrame, 3);
 
     frameVLayout->addLayout(contentLayout);
 
@@ -892,7 +894,8 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         QLabel* amountLabel = new QLabel(amountPrefix + QString("$%1").arg(absAmount / 100.0, 0, 'f', 2));
         QFont monospaceFont = GUIUtil::fixedPitchFont();
         amountLabel->setFont(monospaceFont);
-        amountLabel->setFixedWidth(100);
+        amountLabel->setMinimumWidth(112);
+        amountLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         amountLabel->setAlignment(Qt::AlignRight);
         if (tx.amount < 0 || tx.category == "send" || tx.category == "redeem") {
             amountLabel->setStyleSheet("color: #ff4646;");
@@ -950,7 +953,7 @@ QString DigiDollarOverviewWidget::formatDGBAmount(double amount) const
 
 QString DigiDollarOverviewWidget::formatUSDAmount(double amount) const
 {
-    return "$" + QString::number(amount, 'f', 2);
+    return "$" + QString::number(amount, 'f', 2) + " USD";
 }
 
 void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)
@@ -1012,13 +1015,8 @@ void DigiDollarOverviewWidget::setPrivacy(bool privacy)
 
 QString DigiDollarOverviewWidget::maskValue(const QString& value) const
 {
-    QString masked = value;
-    for (int i = 0; i < masked.size(); ++i) {
-        if (masked[i].isDigit()) {
-            masked[i] = '#';
-        }
-    }
-    return masked;
+    Q_UNUSED(value);
+    return QStringLiteral("########");
 }
 
 void DigiDollarOverviewWidget::addDemoTransactions()

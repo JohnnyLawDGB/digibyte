@@ -41,6 +41,10 @@ private Q_SLOTS:
     void transactionsWidgetExportTests();
     void privacyTabSetPrivacySlotTests();
     void privacyOverviewMaskTests();
+    void overviewUsdValueShowsUsdSuffixWhenPrivacyOff();
+    void overviewPrivacyMaskHidesAmountUnits();
+    void overviewLayoutStretchFavorsNetworkTotals();
+    void overviewRecentTransactionAmountIsRightAligned();
     void privacySendMaskTests();
     void privacyMintMaskTests();
     void privacyRedeemMaskTests();

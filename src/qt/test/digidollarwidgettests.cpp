@@ -1558,6 +1558,63 @@ void DigiDollarWidgetTests::privacyOverviewMaskTests()
     QVERIFY2(!usdValueValue->text().contains('#'), "USD value should NOT be masked when privacy is disabled");
 }
 
+void DigiDollarWidgetTests::overviewUsdValueShowsUsdSuffixWhenPrivacyOff()
+{
+    DigiDollarOverviewWidget overviewWidget;
+    QLabel* usdValueValue = overviewWidget.findChild<QLabel*>("usdValueValue");
+    QVERIFY(usdValueValue != nullptr);
+
+    overviewWidget.setPrivacy(false);
+    QVERIFY2(usdValueValue->text().endsWith(QStringLiteral(" USD")),
+             qPrintable(QString("Overview USD value must include explicit USD suffix, got: %1")
+                            .arg(usdValueValue->text())));
+}
+
+void DigiDollarWidgetTests::overviewPrivacyMaskHidesAmountUnits()
+{
+    DigiDollarOverviewWidget overviewWidget;
+    overviewWidget.setPrivacy(true);
+
+    const QStringList sensitiveLabels{
+        QStringLiteral("ddBalanceValue"),
+        QStringLiteral("dgbCollateralValue"),
+        QStringLiteral("usdValueValue"),
+        QStringLiteral("networkTotalDDValue"),
+        QStringLiteral("networkTotalCollateralValue"),
+    };
+    const QRegularExpression digitRe(QStringLiteral("\\d"));
+
+    for (const QString& objectName : sensitiveLabels) {
+        QLabel* label = overviewWidget.findChild<QLabel*>(objectName);
+        QVERIFY2(label != nullptr, qPrintable(QString("Missing label %1").arg(objectName)));
+        const QString text = label->text();
+        QVERIFY2(text.contains('#'), qPrintable(QString("%1 should be visibly masked, got: %2").arg(objectName, text)));
+        QVERIFY2(!text.contains(digitRe), qPrintable(QString("%1 leaked digits while masked: %2").arg(objectName, text)));
+        QVERIFY2(!text.contains(QStringLiteral("USD")), qPrintable(QString("%1 leaked USD suffix while masked: %2").arg(objectName, text)));
+        QVERIFY2(!text.contains(QStringLiteral("DGB")), qPrintable(QString("%1 leaked DGB suffix while masked: %2").arg(objectName, text)));
+        QVERIFY2(!text.contains(QStringLiteral("DD")), qPrintable(QString("%1 leaked DD suffix while masked: %2").arg(objectName, text)));
+    }
+}
+
+void DigiDollarWidgetTests::overviewLayoutStretchFavorsNetworkTotals()
+{
+    DigiDollarOverviewWidget overviewWidget;
+    QHBoxLayout* healthContentLayout = overviewWidget.findChild<QHBoxLayout*>(QStringLiteral("healthContentLayout"));
+    QVERIFY(healthContentLayout != nullptr);
+
+    QWidget* leftStatsFrame = overviewWidget.findChild<QWidget*>(QStringLiteral("leftStatsFrame"));
+    QWidget* networkTotalsFrame = overviewWidget.findChild<QWidget*>(QStringLiteral("networkTotalsFrame"));
+    QVERIFY(leftStatsFrame != nullptr);
+    QVERIFY(networkTotalsFrame != nullptr);
+
+    const int leftIndex = healthContentLayout->indexOf(leftStatsFrame);
+    const int totalsIndex = healthContentLayout->indexOf(networkTotalsFrame);
+    QVERIFY(leftIndex >= 0);
+    QVERIFY(totalsIndex >= 0);
+    QVERIFY2(healthContentLayout->stretch(totalsIndex) > healthContentLayout->stretch(leftIndex),
+             "Network totals should get more horizontal stretch than the smaller left stats column");
+}
+
 void DigiDollarWidgetTests::privacySendMaskTests()
 {
 #ifdef Q_OS_MACOS
@@ -2411,6 +2468,67 @@ void DigiDollarWidgetTests::overviewRecentTransactionsSendShowsNegativeSign()
     QVERIFY2(receives >= 1, "expected at least one Receive row in mock data");
     QVERIFY2(redeems >= 1, "expected at least one Redeem row in mock data");
     QVERIFY2(mints >= 1, "expected at least one Mint row in mock data");
+}
+
+void DigiDollarWidgetTests::overviewRecentTransactionAmountIsRightAligned()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    DDTransaction tx;
+    tx.txid = "b000000000000000000000000000000000000000000000000000000000000001";
+    tx.amount = 123456;
+    tx.timestamp = GetTime();
+    tx.confirmations = 1;
+    tx.incoming = false;
+    tx.address = "TDtestlocaladdress";
+    tx.category = "send";
+    tx.lock_tier = -1;
+    tx.fee = 0;
+    tx.abandoned = false;
+    dd_wallet->AddMockTransaction(tx);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarOverviewWidget overviewWidget;
+    overviewWidget.setWalletModel(mini_gui.walletModel.get());
+    overviewWidget.setClientModel(mini_gui.clientModel.get());
+    overviewWidget.show();
+    overviewWidget.updateView();
+    QCoreApplication::processEvents();
+
+    QListWidget* transactionsList = overviewWidget.findChild<QListWidget*>("transactionsList");
+    QVERIFY(transactionsList != nullptr);
+    QVERIFY(transactionsList->count() >= 1);
+
+    QWidget* itemWidget = transactionsList->itemWidget(transactionsList->item(0));
+    QVERIFY(itemWidget != nullptr);
+    const QList<QLabel*> labels = itemWidget->findChildren<QLabel*>();
+    QVERIFY2(labels.size() >= 5, "expected icon/category/amount/confirmations/date labels per row");
+
+    QLabel* amountLabel = labels.at(2);
+    QCOMPARE(amountLabel->text(), QStringLiteral("-$1234.56"));
+    QVERIFY2(amountLabel->alignment() & Qt::AlignRight,
+             "Recent transaction amount label should be right-aligned for decimal-place alignment");
+    QVERIFY2(amountLabel->minimumWidth() >= amountLabel->fontMetrics().horizontalAdvance(QStringLiteral("-$1234.56")),
+             "Recent transaction amount label should reserve enough width for the exact formatted amount");
 }
 
 // Regression coverage for the DD Transactions tab's RPC-backed history table:

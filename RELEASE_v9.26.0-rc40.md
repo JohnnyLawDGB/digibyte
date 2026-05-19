@@ -2,7 +2,7 @@
 
 RC40 is the DigiDollar final hardening and launch-readiness release candidate on top of RC39.
 
-This release focuses on real security findings from the final Red Hornet review: activation guards, mint validation, sendmany safety, redemption collateral release, MuSig2 attempt isolation, wallet locked-state behavior, Qt display safety, and RPC coverage.
+This release focuses on real security findings from the final Red Hornet review: activation guards, mint validation, sendmany safety, redemption collateral release, MuSig2 attempt isolation, wallet locked-state behavior, Qt display safety, RPC coverage, and the final DigiDollar Qt launch-readiness pass.
 
 Development branch: `feature/digidollar-v1`
 
@@ -84,6 +84,22 @@ RC40 fixes the Qt mint unlock-height display.
 
 The UI now reports the intended unlock height consistently with the actual lock tier behavior, reducing the risk of users misunderstanding when collateral can be redeemed.
 
+### Final DigiDollar Qt UI/UX readiness pass
+
+RC40 includes the final DigiDollar Qt UI pass after RC39.
+
+The wallet UI now makes the first-use DigiDollar flows clearer:
+
+- Overview USD values show an explicit `USD` suffix.
+- Overview privacy masking hides digits and amount units.
+- Overview network totals have more room and avoid awkward label wrapping.
+- Recent DigiDollar transaction amounts are right-aligned with enough width for clean decimal alignment.
+- Receive DD starts with a clear empty state and hides QR/address details until an address is generated or selected.
+- The Receive DD `Generate New Address` button has an explicit enabled style before hover.
+- Redeem DD and DD Vault buttons explain no vault selected, timelock active, insufficient DD, wallet locked, watch-only/private-key-disabled wallets, invalid amount, and ready-to-redeem states.
+
+These are UI and test changes only. They do not change DigiDollar consensus, oracle behavior, wallet accounting, mining, RPC schemas, or P2P formats.
+
 ### Test isolation fixes
 
 RC40 includes two test-only fixes for ERR state isolation.
@@ -150,6 +166,8 @@ Final Red Hornet validation completed on May 19, 2026 from `feature/digidollar-v
 | Fuzz target enumeration | PASS, 247 targets |
 | Fuzz corpus replay | PASS, 247/247 targets |
 | Post-final RPC guard recheck: `test/functional/digidollar_rpc_gating.py` | PASS, all 31/31 gated RPCs blocked before activation |
+| Final Qt UI focused recheck: `DigiDollarWidgetTests` | PASS, 59 DigiDollar widget tests and 13 Wave 19 widget tests |
+| Final Qt wallet manual QA | PASS, live regtest wallet launched and inspected on `DISPLAY=:1` |
 
 Validation logs:
 
@@ -161,6 +179,8 @@ Validation logs:
 - Fuzz target list: `/tmp/red_hornet_final_fuzz_targets.txt`
 - Fuzz run: `/tmp/red_hornet_final_fuzz.log`
 - RPC guard recheck: `/tmp/rc40_rpc_gating_recheck.log`
+- Final Qt UI focused recheck: `/tmp/rc39_qt_digidollar_widget_rerun.log`
+- Final Qt wallet manual QA screenshots: `/tmp/rc39_qt_rebuilt_digidollar_overview.png`, `/tmp/rc39_qt_receive_empty.png`, `/tmp/rc39_qt_receive_generated.png`, `/tmp/rc39_qt_redeem_tooltip.png`, `/tmp/rc39_qt_dd_transactions_empty.png`
 
 Fuzz mode used:
 
@@ -185,6 +205,10 @@ Fuzz mode used:
 - `05d9305edd` digidollar tests: fix W12-TG-002 RH44 ERR isolation
 - `38a15698a8` digidollar musig2: fix DD-RHF-008 context proposal bounds
 - `6c19156e9c` digidollar rpc: cover all BIP9-gated commands
+- `9f987cc616` doc: add RC40 release notes
+- `cb7b1a8899` digidollar qt receive: clarify address generation state
+- `21f753efb9` digidollar qt overview: normalize USD and amount display
+- `e14664aec9` digidollar qt redeem: explain vault unlock states
 
 ---
 
@@ -198,6 +222,7 @@ Please focus RC40 testing on the hardened paths:
 - Redemption collateral release and required DigiDollar burn.
 - Locked and encrypted wallet DigiDollar spendability reporting.
 - Qt mint lock tier and unlock-height display.
+- DigiDollar Overview, Receive DD, Redeem DD, DD Vault, and DD Transactions UI clarity.
 - Oracle MuSig2 attempt behavior after restart or reconnect.
 - Oracle context proposal handling under malformed or oversized input.
 

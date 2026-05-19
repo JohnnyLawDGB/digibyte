@@ -40,7 +40,26 @@
 
 using namespace DigiDollar;
 
-BOOST_FIXTURE_TEST_SUITE(digidollar_rh34_multiblock_state_tests, BasicTestingSetup)
+struct RH34MultiblockStateTestSetup : BasicTestingSetup {
+    RH34MultiblockStateTestSetup()
+    {
+        ResetSharedState();
+    }
+
+    ~RH34MultiblockStateTestSetup()
+    {
+        ResetSharedState();
+    }
+
+    static void ResetSharedState()
+    {
+        ERR::EmergencyRedemptionRatio::ResetForTesting();
+        SystemHealthMonitor::ResetMetrics();
+        Volatility::VolatilityMonitor::ClearHistory();
+    }
+};
+
+BOOST_FIXTURE_TEST_SUITE(digidollar_rh34_multiblock_state_tests, RH34MultiblockStateTestSetup)
 
 // =============================================================================
 // RH-34-01: ERR→Recovery Race Condition

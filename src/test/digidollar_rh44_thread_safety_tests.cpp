@@ -23,7 +23,25 @@
 #include <thread>
 #include <vector>
 
-BOOST_AUTO_TEST_SUITE(digidollar_rh44_thread_safety_tests)
+struct RH44ThreadSafetyTestSetup {
+    RH44ThreadSafetyTestSetup()
+    {
+        ResetSharedState();
+    }
+
+    ~RH44ThreadSafetyTestSetup()
+    {
+        ResetSharedState();
+    }
+
+    static void ResetSharedState()
+    {
+        DigiDollar::ERR::EmergencyRedemptionRatio::ResetForTesting();
+        DigiDollar::SystemHealthMonitor::ResetMetrics();
+    }
+};
+
+BOOST_FIXTURE_TEST_SUITE(digidollar_rh44_thread_safety_tests, RH44ThreadSafetyTestSetup)
 
 // ---------------------------------------------------------------------------
 // Test 1: SystemHealthMonitor concurrent OnMintConnected / OnRedeemConnected

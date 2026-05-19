@@ -723,7 +723,7 @@ void DigiDollarMintWidget::onMintClicked()
     // Calculate unlock details for user warning
     int lockBlocks = getLockTierBlocks(m_selectedTier);
     int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
-    int unlockHeight = currentHeight + lockBlocks;
+    int unlockHeight = currentHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
     QString lockPeriodStr = getLockTierDisplayName(m_selectedTier);
 
     QMessageBox msgBox(this);
@@ -762,7 +762,7 @@ void DigiDollarMintWidget::onMintClicked()
         // Refresh unlock details too; height may have advanced while the dialog was open.
         lockBlocks = getLockTierBlocks(m_selectedTier);
         currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
-        unlockHeight = currentHeight + lockBlocks;
+        unlockHeight = currentHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
         lockPeriodStr = getLockTierDisplayName(m_selectedTier);
 
         // SECOND WARNING - Final "Are you ABSOLUTELY sure?" confirmation

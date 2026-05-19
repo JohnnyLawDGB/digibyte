@@ -1184,7 +1184,7 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
         if (ddWallet) {
             // DigiByte has 15-second blocks: 4 blocks/min * 60 min/hr * 24 hr/day = 5760 blocks/day
             int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
-            int unlockHeight = mintHeight + lockBlocks;
+            int64_t unlockHeight = mintHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
             WalletCollateralPosition position(positionId, ddAmount, result.collateralRequired, lockTier, unlockHeight);
             position.owner_keyid = ownerKeyID;  // Store the owner key ID for later transfer signing
             ddWallet->AddCollateralPosition(position);

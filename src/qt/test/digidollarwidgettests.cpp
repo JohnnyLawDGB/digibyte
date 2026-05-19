@@ -601,17 +601,27 @@ void DigiDollarWidgetTests::qtMintStoresDescriptorRecoverableOwnerKey()
     uint256 position_id;
     position_id.SetHex(result.positionId.toStdString());
 
+    CTransactionRef mint_tx;
     CTxOut dd_txout;
     {
         LOCK(wallet->cs_wallet);
         const wallet::CWalletTx* wtx = wallet->GetWalletTx(position_id);
         QVERIFY(wtx != nullptr);
         QVERIFY(wtx->tx->vout.size() > 1);
-        dd_txout = wtx->tx->vout[1];
+        mint_tx = wtx->tx;
+        dd_txout = mint_tx->vout[1];
     }
 
     DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
     QVERIFY(dd_wallet != nullptr);
+
+    int64_t op_return_unlock_height{0};
+    QVERIFY(DigiDollarWallet::ExtractUnlockHeightFromOpReturn(*mint_tx, op_return_unlock_height));
+    const std::vector<WalletCollateralPosition> positions = dd_wallet->GetDDTimeLocks(/*active_only=*/false);
+    QCOMPARE(positions.size(), static_cast<size_t>(1));
+    QVERIFY(positions[0].dd_timelock_id == position_id);
+    QCOMPARE(positions[0].unlock_height, op_return_unlock_height);
+
     CKey recovered_key;
     QVERIFY(dd_wallet->GetDDOutputSpendingKey(dd_txout, recovered_key));
 

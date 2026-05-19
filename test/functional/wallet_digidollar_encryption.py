@@ -175,6 +175,14 @@ class DigiDollarEncryptionTest(DigiByteTestFramework):
         except Exception as e:
             self.log.info(f"listdigidollarpositions behavior: {e}")
 
+        self.log.info("Testing listdigidollarunspent spendability on locked wallet...")
+        locked_utxos = self.nodes[0].listdigidollarunspent()
+        assert locked_utxos, "encrypted wallet should still list confirmed DD UTXOs while locked"
+        for utxo in locked_utxos:
+            assert_equal(utxo["spendable"], False)
+            assert_equal(utxo["safe"], True)
+        assert_equal(self.nodes[0].listdigidollarutxos(), locked_utxos)
+
         self.log.info("Testing getdigidollarstats...")
         try:
             stats = self.nodes[0].getdigidollarstats()

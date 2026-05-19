@@ -3256,6 +3256,9 @@ static RPCHelpMan ListDigiDollarUnspentRpc(const std::string& rpc_name)
             }
 
             const bool include_unsafe = OptionalParamIsSet(request, 3) ? request.params[3].get_bool() : true;
+            const bool wallet_can_sign_dd =
+                !pwallet->IsLocked() &&
+                !pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
 
             pwallet->BlockUntilSyncedToCurrentChain();
 
@@ -3297,7 +3300,7 @@ static RPCHelpMan ListDigiDollarUnspentRpc(const std::string& rpc_name)
                 entry.pushKV("scriptPubKey", HexStr(txout.scriptPubKey));
                 entry.pushKV("amount", int64_t{dd_utxo.dd_amount});
                 entry.pushKV("confirmations", depth);
-                entry.pushKV("spendable", dd_utxo.is_spendable);
+                entry.pushKV("spendable", dd_utxo.is_spendable && wallet_can_sign_dd);
                 entry.pushKV("safe", safe);
                 results.push_back(entry);
             }

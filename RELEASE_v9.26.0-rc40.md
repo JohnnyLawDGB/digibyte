@@ -2,7 +2,7 @@
 
 RC40 is the DigiDollar final hardening and launch-readiness release candidate on top of RC39.
 
-This release focuses on real security findings from the final Red Hornet review: activation guards, mint validation, sendmany safety, redemption collateral release, MuSig2 attempt isolation, wallet locked-state behavior, Qt display safety, RPC coverage, and the final DigiDollar Qt launch-readiness pass.
+This release focuses on real security findings from the final Red Hornet review: activation guards, mint validation, sendmany safety, redemption collateral release, MuSig2 attempt isolation, wallet locked-state behavior, Qt display safety, RPC coverage, the final DigiDollar Qt launch-readiness pass, and a post-RC40 redemption cache repair for existing wallets.
 
 Development branch: `feature/digidollar-v1`
 
@@ -84,6 +84,18 @@ RC40 fixes the Qt mint unlock-height display.
 
 The UI now reports the intended unlock height consistently with the actual lock tier behavior, reducing the risk of users misunderstanding when collateral can be redeemed.
 
+### Redemption unlock-height cache repair
+
+RC40 repairs stale DigiDollar wallet metadata before redemption.
+
+Some wallets created by an earlier Qt mint path could store a local unlock height that was 100 blocks lower than the mint transaction's OP_RETURN unlock height. The 100-block difference is the DigiDollar mint confirmation buffer. Consensus and mempool validation were correct and rejected those early redemption attempts, but the wallet UI could show the vault as expired while the transaction was still built with the stale local height.
+
+The wallet now treats the original mint transaction as authoritative for the DigiDollar amount, collateral amount, lock tier, and unlock height. Wallet rescan, position reconciliation, wallet redeem, RPC redeem, and redemption signing now repair the cached row from the mint transaction before building or signing a redemption. If the mint metadata cannot be verified, redemption fails closed and tells the user to rescan or restore the wallet.
+
+The redeem RPC also no longer falls back to collateral-only data. Collateral alone is not enough to safely choose the redemption locktime, burn amount, or signing path.
+
+This does not change DigiDollar consensus rules, oracle rules, wallet database format, or valid mint transactions. It fixes stale local wallet metadata so existing positions use the same unlock height that validation already enforces.
+
 ### Final DigiDollar Qt UI/UX readiness pass
 
 RC40 includes the final DigiDollar Qt UI pass after RC39.
@@ -156,17 +168,20 @@ Older operator notes that mention `testnet23` or P2P port `12030` are stale for 
 
 Final Red Hornet validation completed on May 19, 2026 from `feature/digidollar-v1`.
 
+Post-fix RC40 redemption-cache validation completed on May 20, 2026 from commit `852be68e4f78eaa520f9c7b0da2d788b12ed2f1f`.
+
 | Gate | Status |
 | --- | --- |
 | Build: `make -j"$(nproc)"` | PASS |
 | Unit tests: `./src/test/test_digibyte --show_progress` | PASS, 3,376 test cases |
 | Qt tests: `./src/qt/test/test_digibyte-qt -platform offscreen` | PASS |
-| Functional tests: `test/functional/test_runner.py --jobs=4` | PASS, 354 passed and 17 expected skips |
-| Extended functional tests: `test/functional/test_runner.py --jobs=4 --extended` | PASS, 358 passed and 17 expected skips |
+| Functional tests: `test/functional/test_runner.py --jobs=4` | PASS, 371 selected tests completed |
+| Extended functional tests: `test/functional/test_runner.py --jobs=4 --extended` | PASS, 375 selected tests completed |
 | Fuzz target enumeration | PASS, 247 targets |
-| Fuzz corpus replay | PASS, 247/247 targets |
+| Fuzz corpus replay | PASS, all selected targets completed against the available corpus |
 | Post-final RPC guard recheck: `test/functional/digidollar_rpc_gating.py` | PASS, all 31/31 gated RPCs blocked before activation |
-| Final Qt UI focused recheck: `DigiDollarWidgetTests` | PASS, 59 DigiDollar widget tests and 13 Wave 19 widget tests |
+| Redemption stale-cache regression | PASS, a cache 100 blocks below OP_RETURN is repaired before reconciliation and redemption paths |
+| Final Qt UI focused recheck: `DigiDollarWidgetTests` | PASS, 60 DigiDollar widget tests and 13 Wave 19 widget tests |
 | Final Qt wallet manual QA | PASS, live regtest wallet launched and inspected on `DISPLAY=:1` |
 
 Validation logs:
@@ -181,12 +196,20 @@ Validation logs:
 - RPC guard recheck: `/tmp/rc40_rpc_gating_recheck.log`
 - Final Qt UI focused recheck: `/tmp/rc39_qt_digidollar_widget_rerun.log`
 - Final Qt wallet manual QA screenshots: `/tmp/rc39_qt_rebuilt_digidollar_overview.png`, `/tmp/rc39_qt_receive_empty.png`, `/tmp/rc39_qt_receive_generated.png`, `/tmp/rc39_qt_redeem_tooltip.png`, `/tmp/rc39_qt_dd_transactions_empty.png`
+- Post-fix Qt test: `/tmp/rc40_stale_cache_green_qt.log`
+- Post-fix unit tests: `/tmp/rc40_stale_cache_unit.log`
+- Post-fix functional tests: `/tmp/rc40_stale_cache_functional.log`
+- Post-fix extended functional tests: `/tmp/rc40_stale_cache_functional_extended.log`
+- Post-fix fuzz target list: `/tmp/rc40_stale_cache_fuzz_targets.txt`
+- Post-fix fuzz existing-corpus replay: `/tmp/rc40_stale_cache_fuzz_existing_corpus.log`
+- Post-fix libFuzzer availability proof: `/tmp/rc40_fuzz_probe.log`
 
 Fuzz mode used:
 
-- Corpus replay using `/tmp/rc38_qa_assets/fuzz_corpora`.
-- The local build was not a libFuzzer build, so the timed empty-corpus libFuzzer path was not used for the final gate.
-- All registered targets selected by the local fuzz binary passed.
+- Final Red Hornet corpus replay used `/tmp/rc38_qa_assets/fuzz_corpora`.
+- The post-fix replay used the available local corpus at `/tmp/rc37_fuzz_corpus`.
+- The local build was not a libFuzzer build, so timed empty-corpus fuzzing could not run. The probe reported `Must be built with libFuzzer`.
+- All registered targets selected by the local fuzz binary completed against the available corpus.
 
 ---
 
@@ -209,6 +232,7 @@ Fuzz mode used:
 - `cb7b1a8899` digidollar qt receive: clarify address generation state
 - `21f753efb9` digidollar qt overview: normalize USD and amount display
 - `e14664aec9` digidollar qt redeem: explain vault unlock states
+- `852be68e4f` digidollar wallet: repair stale mint metadata before redemption
 
 ---
 
@@ -220,6 +244,7 @@ Please focus RC40 testing on the hardened paths:
 - Mint amount validation and rejected malformed amounts.
 - `sendmanydigidollar` duplicate-recipient rejection.
 - Redemption collateral release and required DigiDollar burn.
+- Existing DigiDollar positions minted before the final cache repair; redemption should use the unlock height recorded in the mint transaction.
 - Locked and encrypted wallet DigiDollar spendability reporting.
 - Qt mint lock tier and unlock-height display.
 - DigiDollar Overview, Receive DD, Redeem DD, DD Vault, and DD Transactions UI clarity.

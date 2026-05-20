@@ -600,6 +600,15 @@ public:
      */
     void ProcessDDTxForRescan(const CTransactionRef& ptx, int block_height);
 
+    /**
+     * Refresh cached position metadata from the authoritative mint transaction.
+     * Existing wallet DB rows can predate current mint metadata rules; callers
+     * use this before showing or signing redemptions.
+     * @param position_id Mint transaction hash / position ID
+     * @return true if authoritative metadata was available and cache now matches it
+     */
+    bool RefreshPositionMetadataFromMintTx(const uint256& position_id);
+
     // ====================================================================
     // Redemption Functions (Task 3.9)
     // ====================================================================

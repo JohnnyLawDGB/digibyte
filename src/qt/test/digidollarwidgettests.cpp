@@ -675,6 +675,89 @@ void DigiDollarWidgetTests::qtMintStoresDescriptorRecoverableOwnerKey()
     MockOracleManager::GetInstance().Reset();
 }
 
+void DigiDollarWidgetTests::staleMintUnlockHeightCacheRepairsFromOpReturn()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    MockOracleManager::GetInstance().SetEnabled(true);
+    MockOracleManager::GetInstance().SetMockPrice(500000);
+
+    CreateAndProcessOracleQuoteBlock(test, 500000);
+    std::shared_ptr<wallet::CWallet> wallet = wallet::CreateSyncedWallet(
+        *test.m_node.chain,
+        WITH_LOCK(Assert(test.m_node.chainman)->GetMutex(), return test.m_node.chainman->ActiveChain()),
+        test.coinbaseKey);
+    wallet->SetBroadcastTransactions(true);
+    wallet->EnsureDDWallet();
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    mini_gui.walletModel->pollBalanceChanged();
+
+    WalletModel::DigiDollarMintResult result = mini_gui.walletModel->mintDigiDollar(10000, 0);
+    QVERIFY2(result.status == WalletModel::OK, result.reasonFailed.toUtf8().constData());
+
+    uint256 position_id;
+    position_id.SetHex(result.positionId.toStdString());
+
+    CTransactionRef mint_tx;
+    {
+        LOCK(wallet->cs_wallet);
+        const wallet::CWalletTx* wtx = wallet->GetWalletTx(position_id);
+        QVERIFY(wtx != nullptr);
+        mint_tx = wtx->tx;
+    }
+
+    int64_t op_return_unlock_height{0};
+    QVERIFY(DigiDollarWallet::ExtractUnlockHeightFromOpReturn(*mint_tx, op_return_unlock_height));
+
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+    std::vector<WalletCollateralPosition> positions = dd_wallet->GetDDTimeLocks(/*active_only=*/false);
+    QCOMPARE(positions.size(), static_cast<size_t>(1));
+
+    WalletCollateralPosition stale = positions[0];
+    stale.unlock_height = op_return_unlock_height - DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
+    QVERIFY(stale.unlock_height != op_return_unlock_height);
+    QVERIFY(dd_wallet->WriteDDTimeLock(stale));
+
+    positions = dd_wallet->GetDDTimeLocks(/*active_only=*/false);
+    QCOMPARE(positions.size(), static_cast<size_t>(1));
+    QCOMPARE(positions[0].unlock_height, stale.unlock_height);
+
+    QVERIFY(dd_wallet->RefreshPositionMetadataFromMintTx(position_id));
+
+    positions = dd_wallet->GetDDTimeLocks(/*active_only=*/false);
+    QCOMPARE(positions.size(), static_cast<size_t>(1));
+    QCOMPARE(positions[0].unlock_height, op_return_unlock_height);
+
+    stale = positions[0];
+    stale.unlock_height = op_return_unlock_height - DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
+    QVERIFY(dd_wallet->WriteDDTimeLock(stale));
+
+    dd_wallet->ReconcilePositionStates();
+
+    positions = dd_wallet->GetDDTimeLocks(/*active_only=*/false);
+    QCOMPARE(positions.size(), static_cast<size_t>(1));
+    QCOMPARE(positions[0].dd_timelock_id, position_id);
+    QCOMPARE(positions[0].unlock_height, op_return_unlock_height);
+    QCOMPARE(positions[0].dd_minted, CAmount(10000));
+
+    MockOracleManager::GetInstance().Reset();
+}
+
 void DigiDollarWidgetTests::sendWidgetTests()
 {
 #ifdef Q_OS_MACOS

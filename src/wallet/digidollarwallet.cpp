@@ -2233,6 +2233,26 @@ bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int blo
     // NOTE: lock_tier is REQUIRED in OP_RETURN. Old format transactions without
     // explicit tier are not supported (clean testnet restart).
 
+    if (DigiDollar::GetDigiDollarTxType(tx) != DD_TX_MINT) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Transaction is not a DD mint\n");
+        return false;
+    }
+
+    if (tx.vout.size() < 3) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Mint transaction has too few outputs\n");
+        return false;
+    }
+
+    if (tx.vout[0].nValue <= 0) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Mint collateral output has no value\n");
+        return false;
+    }
+
+    if (tx.vout[1].nValue != 0 || tx.vout[1].scriptPubKey.size() != 34 || tx.vout[1].scriptPubKey[0] != OP_1) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Mint DD token output is not canonical P2TR\n");
+        return false;
+    }
+
     // 1. Extract DD amount from OP_RETURN
     CAmount dd_amount = 0;
     if (!ExtractDDAmountFromOpReturn(tx, dd_amount)) {
@@ -2281,6 +2301,68 @@ bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int blo
     pos_out.is_active = true;  // Will be updated if spent later
 
     return true;
+}
+
+bool DigiDollarWallet::RefreshPositionMetadataFromMintTx(const uint256& position_id)
+{
+    auto locks = LockDDWallet();
+    if (!m_wallet) {
+        LogPrintf("DigiDollar: RefreshPositionMetadataFromMintTx - no wallet pointer\n");
+        return false;
+    }
+
+    auto cached_it = collateral_positions.find(position_id);
+    if (cached_it == collateral_positions.end()) {
+        LogPrintf("DigiDollar: RefreshPositionMetadataFromMintTx - position not found: %s\n",
+                  position_id.ToString());
+        return false;
+    }
+
+    auto tx_it = m_wallet->mapWallet.find(position_id);
+    if (tx_it == m_wallet->mapWallet.end() || !tx_it->second.tx) {
+        LogPrintf("DigiDollar: RefreshPositionMetadataFromMintTx - mint tx not found in wallet: %s\n",
+                  position_id.ToString());
+        return false;
+    }
+
+    const wallet::CWalletTx& wtx = tx_it->second;
+    const int block_height = wtx.state<wallet::TxStateConfirmed>()
+        ? wtx.state<wallet::TxStateConfirmed>()->confirmed_block_height
+        : -1;
+
+    WalletCollateralPosition authoritative;
+    if (!ExtractPositionFromMintTx(*wtx.tx, block_height, authoritative)) {
+        LogPrintf("DigiDollar: RefreshPositionMetadataFromMintTx - failed to parse mint metadata for %s\n",
+                  position_id.ToString());
+        return false;
+    }
+
+    WalletCollateralPosition repaired = authoritative;
+    repaired.is_active = cached_it->second.is_active;
+    repaired.owner_keyid = cached_it->second.owner_keyid;
+
+    const bool changed =
+        cached_it->second.dd_minted != repaired.dd_minted ||
+        cached_it->second.dgb_collateral != repaired.dgb_collateral ||
+        cached_it->second.lock_tier != repaired.lock_tier ||
+        cached_it->second.unlock_height != repaired.unlock_height;
+    if (!changed) {
+        return true;
+    }
+
+    LogPrintf("DigiDollar: RefreshPositionMetadataFromMintTx repaired position %s metadata "
+              "(DD %lld -> %lld, collateral %lld -> %lld, tier %u -> %u, unlock %lld -> %lld)\n",
+              position_id.ToString(),
+              static_cast<long long>(cached_it->second.dd_minted),
+              static_cast<long long>(repaired.dd_minted),
+              static_cast<long long>(cached_it->second.dgb_collateral),
+              static_cast<long long>(repaired.dgb_collateral),
+              cached_it->second.lock_tier,
+              repaired.lock_tier,
+              static_cast<long long>(cached_it->second.unlock_height),
+              static_cast<long long>(repaired.unlock_height));
+
+    return WriteDDTimeLock(repaired);
 }
 
 void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int block_height) {
@@ -2439,9 +2521,22 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                     LogPrintf("DigiDollar: Restored MINT transaction %s from rescan (amount: %lld)\n",
                               txid_str, static_cast<long long>(pos.dd_minted));
 	                }
-            } else if (!pos.owner_keyid.IsNull() && it->second.owner_keyid != pos.owner_keyid) {
-                it->second.owner_keyid = pos.owner_keyid;
-                WriteDDTimeLock(it->second);
+            } else {
+                WalletCollateralPosition repaired = pos;
+                repaired.is_active = it->second.is_active;
+                repaired.owner_keyid = !pos.owner_keyid.IsNull() ? pos.owner_keyid : it->second.owner_keyid;
+
+                const bool changed =
+                    it->second.dd_minted != repaired.dd_minted ||
+                    it->second.dgb_collateral != repaired.dgb_collateral ||
+                    it->second.lock_tier != repaired.lock_tier ||
+                    it->second.unlock_height != repaired.unlock_height ||
+                    it->second.owner_keyid != repaired.owner_keyid;
+                if (changed) {
+                    WriteDDTimeLock(repaired);
+                    LogPrintf("DigiDollar: Repaired existing position %s from rescan mint metadata\n",
+                              repaired.dd_timelock_id.GetHex());
+                }
             }
 
             // CRITICAL FIX: Also restore the DD UTXO (vout[1] contains the DD tokens)
@@ -4066,7 +4161,8 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
 size_t DigiDollarWallet::ValidatePositionStates()
 {
     // NOTE: caller (ScanForDDUTXOs) already holds LockDDWallet and cs_wallet.
-    // Do NOT re-acquire those locks here — that would deadlock.
+    // Helpers below may re-enter those recursive locks but must keep the same
+    // cs_wallet -> cs_dd_wallet order.
     if (!m_wallet) {
         LogPrintf("DigiDollar: ValidatePositionStates - no wallet pointer\n");
         return 0;
@@ -4106,6 +4202,16 @@ size_t DigiDollarWallet::ValidatePositionStates()
         auto it = collateral_positions.find(id);
         if (it == collateral_positions.end()) {
             continue;
+        }
+
+        if (RefreshPositionMetadataFromMintTx(id)) {
+            it = collateral_positions.find(id);
+            if (it == collateral_positions.end()) {
+                continue;
+            }
+        } else {
+            LogPrintf("DigiDollar: ValidatePositionStates - could not verify mint metadata for %s\n",
+                      id.ToString());
         }
 
         const bool wallet_spent = m_wallet->IsSpent(collateral_outpoint);
@@ -4182,6 +4288,16 @@ size_t DigiDollarWallet::ReconcilePositionStates()
             auto it = collateral_positions.find(id);
             if (it == collateral_positions.end()) {
                 continue;
+            }
+
+            if (RefreshPositionMetadataFromMintTx(id)) {
+                it = collateral_positions.find(id);
+                if (it == collateral_positions.end()) {
+                    continue;
+                }
+            } else {
+                LogPrintf("DigiDollar: ReconcilePositionStates - could not verify mint metadata for %s\n",
+                          id.ToString());
             }
 
             const COutPoint collateral_outpoint(it->second.dd_timelock_id, 0);
@@ -4861,6 +4977,11 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         }
 
         ValidatePositionStates();
+        if (!RefreshPositionMetadataFromMintTx(dd_timelock_id)) {
+            LogPrintf("DigiDollar: RedeemDigiDollar blocked because mint metadata could not be verified for %s\n",
+                      dd_timelock_id.ToString());
+            return false;
+        }
 
         // Validation
         if (!ValidateRedeemParams(dd_timelock_id, amount)) {
@@ -6508,6 +6629,11 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
     }
     if (m_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
         LogPrintf("DigiDollar: SignRedemptionTransaction - Private keys are disabled for this wallet\n");
+        return false;
+    }
+    if (!RefreshPositionMetadataFromMintTx(collateral_outpoint.hash)) {
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Mint metadata verification failed for %s\n",
+                  collateral_outpoint.hash.ToString());
         return false;
     }
 

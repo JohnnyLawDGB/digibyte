@@ -1987,6 +1987,23 @@ RPCHelpMan redeemdigidollar()
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Position not found");
             }
 
+            if (!dd_wallet->RefreshPositionMetadataFromMintTx(positionId)) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    "Cannot verify DigiDollar mint metadata for this position. "
+                    "Rescan or restore the wallet before redeeming.");
+            }
+            found = false;
+            for (const auto& pos : dd_wallet->GetDDTimeLocks(false)) {
+                if (pos.dd_timelock_id == positionId) {
+                    foundPosition = pos;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Position not found after metadata repair");
+            }
+
             // Check if redeemable
             int currentHeight = pwallet->GetLastBlockHeight();
             if (foundPosition.unlock_height > currentHeight) {
@@ -2114,48 +2131,17 @@ RPCHelpMan redeemdigidollar()
                 }
             }
 
-            // CRITICAL FIX: Query wallet's position cache which has correct unlock heights
-            // The wallet already tracks positions correctly via GetDDTimeLocks
-            {
-                LOCK(pwallet->cs_wallet);
+            // Use verified mint metadata only. The wallet cache may have been
+            // repaired above, but fallback collateral-only metadata is not
+            // enough to safely choose nLockTime, burn amount, or signing leaf.
+            redeemParams.collateralAmount = foundPosition.dgb_collateral;
+            redeemParams.ddMinted = foundPosition.dd_minted;
+            redeemParams.unlockHeight = static_cast<uint32_t>(foundPosition.unlock_height);
 
-                // Get DigiDollar wallet instance
-                DigiDollarWallet* ddWallet = pwallet->GetDDWallet();
-                if (!ddWallet) {
-                    throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet not available");
-                }
-
-                // Get position data from wallet's time-lock cache
-                std::vector<WalletCollateralPosition> positions = ddWallet->GetDDTimeLocks(false);
-
-                bool found = false;
-                for (const auto& pos : positions) {
-                    if (pos.dd_timelock_id == positionId) {
-                        // Found the position in wallet's cache!
-                        redeemParams.collateralAmount = pos.dgb_collateral;
-                        redeemParams.ddMinted = pos.dd_minted;
-                        redeemParams.unlockHeight = pos.unlock_height;
-
-                        LogPrintf("DigiDollar: Found position in wallet cache:\n");
-                        LogPrintf("  - Collateral: %d sats (%.8f DGB)\n", pos.dgb_collateral, pos.dgb_collateral / 100000000.0);
-                        LogPrintf("  - DD Minted: %d cents\n", pos.dd_minted);
-                        LogPrintf("  - Unlock Height: %d\n", pos.unlock_height);
-
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    LogPrintf("DigiDollar: WARNING - Position not found in wallet cache, using fallback\n");
-                    // Fallback to direct UTXO query
-                    auto it = pwallet->mapWallet.find(positionId);
-                    if (it != pwallet->mapWallet.end()) {
-                        redeemParams.collateralAmount = it->second.tx->vout[0].nValue;
-                        LogPrintf("DigiDollar: Fallback - using collateral amount: %d sats\n", redeemParams.collateralAmount);
-                    }
-                }
-            }
+            LogPrintf("DigiDollar: Using verified position metadata:\n");
+            LogPrintf("  - Collateral: %d sats (%.8f DGB)\n", foundPosition.dgb_collateral, foundPosition.dgb_collateral / 100000000.0);
+            LogPrintf("  - DD Minted: %d cents\n", foundPosition.dd_minted);
+            LogPrintf("  - Unlock Height: %d\n", foundPosition.unlock_height);
 
             // Select fee UTXOs from wallet
             // CRITICAL: Build exclude list to prevent selecting collateral or DD UTXOs as fee inputs

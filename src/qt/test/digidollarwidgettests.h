@@ -28,6 +28,7 @@ private Q_SLOTS:
     void mintWidgetUsesChainParamMintLimits();
     void mintWidgetCollateralMatchesBuilderSafetyMargin();
     void qtMintStoresDescriptorRecoverableOwnerKey();
+    void staleMintUnlockHeightCacheRepairsFromOpReturn();
     void sendWidgetTests();
     void sendWidgetCoinControlLabelsMirrorDgb();
     void sendWidgetCoinControlDialogSelectionFeedsSend();

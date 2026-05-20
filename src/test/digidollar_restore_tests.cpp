@@ -28,7 +28,7 @@ static CKey CreateTestKey() {
 // Helper function to create a mock mint transaction with OP_RETURN (v2 format with tier)
 static CMutableTransaction CreateMockMintTx(CAmount dd_amount, int64_t unlock_height, uint32_t lock_tier) {
     CMutableTransaction mtx;
-    mtx.nVersion = 2;
+    mtx.SetDigiDollarType(::DD_TX_MINT);
 
     // Add a dummy input
     mtx.vin.resize(1);

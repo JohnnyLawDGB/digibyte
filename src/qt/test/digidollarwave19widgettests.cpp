@@ -72,6 +72,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QProgressBar>
@@ -704,6 +705,75 @@ void DigiDollarWave19WidgetTests::transactionsWidgetSearchFilterMatchesByTxid()
     searchEdit->clear();
     QCoreApplication::processEvents();
     QCOMPARE(table->rowCount(), 3);
+
+    RemoveWallet(context, wallet, std::nullopt);
+}
+
+void DigiDollarWave19WidgetTests::transactionsWidgetPreservesUserSortAcrossRefresh()
+{
+    if (MaybeSkipMacMinimal()) return;
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet =
+        Wave19SetupDescriptorsWallet(m_node, test, "qt-dd-tx-sort");
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    const int64_t now = GetTime();
+    auto pushTx = [&](const std::string& txid, CAmount amount, bool incoming,
+                      const std::string& category, int64_t offset) {
+        DDTransaction tx;
+        tx.txid = txid;
+        tx.amount = amount;
+        tx.timestamp = now + offset;
+        tx.confirmations = 1;
+        tx.incoming = incoming;
+        tx.address = "TDsortaddress";
+        tx.category = category;
+        tx.lock_tier = -1;
+        tx.fee = 0;
+        tx.abandoned = false;
+        dd_wallet->AddMockTransaction(tx);
+    };
+    pushTx("e111111111111111111111111111111111111111111111111111111111111111", 300, true, "mint", 1);
+    pushTx("e222222222222222222222222222222222222222222222222222222222222222", 100, false, "send", 2);
+    pushTx("e333333333333333333333333333333333333333333333333333333333333333", 200, true, "receive", 3);
+
+    Wave19MiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
+    transactionsWidget.setClientModel(mini_gui.clientModel.get());
+    transactionsWidget.show();
+    transactionsWidget.updateView();
+    QCoreApplication::processEvents();
+
+    QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 3);
+    QCOMPARE(table->horizontalHeader()->sortIndicatorSection(), 0);
+    QCOMPARE(table->horizontalHeader()->sortIndicatorOrder(), Qt::DescendingOrder);
+
+    table->sortByColumn(2, Qt::AscendingOrder);
+    QCoreApplication::processEvents();
+    QCOMPARE(table->horizontalHeader()->sortIndicatorSection(), 2);
+    QCOMPARE(table->horizontalHeader()->sortIndicatorOrder(), Qt::AscendingOrder);
+
+    transactionsWidget.updateView();
+    QCoreApplication::processEvents();
+    QCOMPARE(table->rowCount(), 3);
+    QCOMPARE(table->horizontalHeader()->sortIndicatorSection(), 2);
+    QCOMPARE(table->horizontalHeader()->sortIndicatorOrder(), Qt::AscendingOrder);
 
     RemoveWallet(context, wallet, std::nullopt);
 }

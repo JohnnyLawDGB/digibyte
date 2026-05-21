@@ -214,6 +214,19 @@ void DigiDollarTransactionsWidget::updateTransactions()
 
 void DigiDollarTransactionsWidget::populateTable()
 {
+    const bool restoreUserSort = m_hasAppliedDefaultSort;
+    const int sortColumn = m_table->horizontalHeader()->sortIndicatorSection();
+    const Qt::SortOrder sortOrder = m_table->horizontalHeader()->sortIndicatorOrder();
+    const auto applySort = [&] {
+        m_table->setSortingEnabled(true);
+        if (restoreUserSort && sortColumn >= 0 && sortColumn < Column::ColumnCount) {
+            m_table->sortByColumn(sortColumn, sortOrder);
+        } else {
+            m_table->sortByColumn(Column::Date, Qt::DescendingOrder);
+            m_hasAppliedDefaultSort = true;
+        }
+    };
+
     m_table->setRowCount(0);
     m_table->setSortingEnabled(false);
 
@@ -255,7 +268,7 @@ void DigiDollarTransactionsWidget::populateTable()
         if (!result.isArray()) {
             m_statusLabel->setText(tr("No DigiDollar transactions found"));
             m_statusLabel->setVisible(true);
-            m_table->setSortingEnabled(true);
+            applySort();
             return;
         }
 
@@ -363,8 +376,7 @@ void DigiDollarTransactionsWidget::populateTable()
         m_statusLabel->setVisible(true);
     }
 
-    m_table->setSortingEnabled(true);
-    m_table->sortByColumn(Column::Date, Qt::DescendingOrder);
+    applySort();
 }
 
 void DigiDollarTransactionsWidget::onTypeFilterChanged(int /*index*/)

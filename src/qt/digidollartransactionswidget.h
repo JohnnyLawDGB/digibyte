@@ -83,6 +83,7 @@ private:
 
     // Privacy
     bool m_privacy{false};
+    bool m_hasAppliedDefaultSort{false};
 
     // Models
     WalletModel* m_walletModel;

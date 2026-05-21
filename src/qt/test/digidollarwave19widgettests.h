@@ -40,6 +40,7 @@ private Q_SLOTS:
     // DD-FA-TEST-028: transactions widget filter coverage
     void transactionsWidgetTypeFilterFiltersRows();
     void transactionsWidgetSearchFilterMatchesByTxid();
+    void transactionsWidgetPreservesUserSortAcrossRefresh();
     // DD-FA-TEST-029: coin control DD-locked filter
     void coinControlDialogShowsOnlySpendableDDUtxos();
 };

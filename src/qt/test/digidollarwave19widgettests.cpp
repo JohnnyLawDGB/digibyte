@@ -351,6 +351,10 @@ void DigiDollarWave19WidgetTests::mintWidgetTierChangeRefreshesCollateralRatio()
     QVERIFY(combo != nullptr);
     QLabel* ratioValue = mintWidget.findChild<QLabel*>("lockTierInfoValue");
     QVERIFY(ratioValue != nullptr);
+    QLabel* currentRatioValue = mintWidget.findChild<QLabel*>("ratioValue");
+    QVERIFY(currentRatioValue != nullptr);
+    QProgressBar* ratioBar = mintWidget.findChild<QProgressBar*>("ratioBar");
+    QVERIFY(ratioBar != nullptr);
 
     struct TierRatio { int tier; const char* ratio; };
     const TierRatio tier_ratios[] = {
@@ -366,6 +370,21 @@ void DigiDollarWave19WidgetTests::mintWidgetTierChangeRefreshesCollateralRatio()
                                 .arg(tr.ratio)
                                 .arg(ratioValue->text())));
     }
+
+    QCOMPARE(ratioBar->minimum(), 200);
+    QCOMPARE(ratioBar->maximum(), 500);
+    QVERIFY2(!ratioBar->isTextVisible(),
+             "The collateral ratio bar must not print the clamped visual value as if it were the exact ratio");
+
+    combo->setCurrentIndex(1);
+    QCoreApplication::processEvents();
+    QCOMPARE(currentRatioValue->text(), QStringLiteral("500%"));
+    QCOMPARE(ratioBar->value(), 500);
+
+    combo->setCurrentIndex(0);
+    QCoreApplication::processEvents();
+    QCOMPARE(currentRatioValue->text(), QStringLiteral("1000%"));
+    QCOMPARE(ratioBar->value(), 500);
 
     MockOracleManager::GetInstance().Reset();
 }

@@ -20,6 +20,7 @@
 #include <interfaces/node.h>
 #include <univalue.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include <QLabel>
@@ -343,9 +344,10 @@ void DigiDollarMintWidget::setupCollateralSection()
     // Ratio progress bar
     m_ratioBar = new QProgressBar(this);
     m_ratioBar->setObjectName("ratioBar");
-    m_ratioBar->setRange(200, 1000); // 200% (10 year) to 1000% (1 hour)
+    m_ratioBar->setRange(200, 500);
     m_ratioBar->setValue(500);
-    m_ratioBar->setFormat("%v%");
+    m_ratioBar->setTextVisible(false);
+    m_ratioBar->setToolTip(tr("Visualizes the 200%-500% collateral safety band. The exact ratio is shown above."));
     m_collateralLayout->addWidget(m_ratioBar, 4, 0, 1, 2);
 
     // Available DGB
@@ -919,16 +921,17 @@ void DigiDollarMintWidget::updateMintButton()
 void DigiDollarMintWidget::updateCollateralCalculation()
 {
     calculateRequiredCollateral();
+    const int visualRatio = std::clamp(static_cast<int>(m_collateralRatio), 200, 500);
 
     // Update displays
     if (m_privacy) {
         m_collateralValue->setText(maskValue(formatDGBAmount(0)));
         m_ratioValue->setText(formatRatio(m_collateralRatio)); // Ratio is not sensitive
-        m_ratioBar->setValue(static_cast<int>(m_collateralRatio));
+        m_ratioBar->setValue(visualRatio);
     } else {
         m_collateralValue->setText(formatDGBAmount(m_requiredCollateral));
         m_ratioValue->setText(formatRatio(m_collateralRatio));
-        m_ratioBar->setValue(static_cast<int>(m_collateralRatio));
+        m_ratioBar->setValue(visualRatio);
     }
 
     // Track what the user is currently seeing so we can detect drift at mint time

@@ -2,7 +2,7 @@
 
 RC41 is a DigiDollar follow-up hardening and usability release candidate on top of RC40.
 
-This release keeps the public DigiDollar testnet unchanged and focuses on the last RC40 feedback items: mainnet mint-floor enforcement, stricter mint metadata validation, no-wallet build safety, receive-request amount validation, Dandelion final-reject wallet cleanup, and small Qt usability fixes.
+This release keeps the public DigiDollar testnet unchanged and focuses on the last RC40 feedback items: mainnet mint-floor enforcement, mainnet BIP9 activation-window timing, stricter mint metadata validation, no-wallet build safety, receive-request amount validation, Dandelion final-reject wallet cleanup, and small Qt usability fixes.
 
 Development branch: `feature/digidollar-v1`
 
@@ -28,6 +28,12 @@ RC41 is not a protocol redesign. It is a focused correctness, wallet-state, docu
 ---
 
 ## What Changed
+
+### Mainnet BIP9 activation window
+
+RC41 sets the mainnet DigiDollar BIP9 signaling window to June 1, 2026 through June 1, 2027.
+
+The threshold remains 70% over a 40,320-block mainnet signaling window. Mainnet activation status does not change in this release; activation still requires miner signaling and the BIP9 state machine.
 
 ### Mainnet minimum mint enforcement
 
@@ -103,6 +109,7 @@ RC41 does not change:
 - Testnet network identity.
 - Testnet genesis.
 - Default testnet ports.
+- Mainnet signaling threshold.
 - Oracle roster.
 - Oracle quorum.
 - Oracle epoch length.
@@ -151,6 +158,10 @@ Focused RC41 validation completed on May 21, 2026 from `feature/digidollar-v1`.
 | DigiDollar dropped-pending-mint wallet regression | PASS |
 | DigiDollar pending-redeem cleanup regression | PASS |
 | Qt tests: `./src/qt/test/test_digibyte-qt -platform offscreen` | PASS |
+| Mainnet activation parameter regression: `./src/test/test_digibyte --run_test=digidollar_redteam_tests/redteam_t7_04b_bip9_mainnet_parameters_safety --log_level=error --report_level=short` | PASS |
+| Mainnet min-height alignment regression: `./src/test/test_digibyte --run_test=digidollar_activation_wave12_tests/wave12_mainnet_bip9_minheight_matches_nDDActivationHeight --log_level=error --report_level=short` | PASS |
+| DigiDollar chainparams integration regression: `./src/test/test_digibyte --run_test=digidollar_consensus_tests/chainparams_digidollar_integration_test --log_level=error --report_level=short` | PASS |
+| DigiDollar activation unit suite: `./src/test/test_digibyte --run_test=digidollar_activation_tests --log_level=error --report_level=short` | PASS |
 | Whitespace check: `git diff --check` | PASS |
 
 Validation logs:
@@ -179,6 +190,8 @@ Validation logs:
 - `0a3a6b8434` digidollar qt: preserve transaction sort order
 - `c8a62bc036` digidollar qt: clamp mint ratio bar scale
 - `d473616a55` digidollar qt: style pending balance row
+- `2261b40c54` digidollar mainnet: set BIP9 window for June 2026
+- `d9cd85461e` docs: align DigiDollar activation window with RC41
 
 ---
 

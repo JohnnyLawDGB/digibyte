@@ -56,6 +56,15 @@ std::string XOnlyHexFromCompressed(const CPubKey& cpk)
 constexpr const char* kSecp256k1GeneratorCompressed =
     "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
+std::string UniqueXOnlyHex(uint8_t slot)
+{
+    static constexpr char hexmap[] = "0123456789abcdef";
+    std::string hex(64, '0');
+    hex[62] = hexmap[(slot >> 4) & 0x0f];
+    hex[63] = hexmap[slot & 0x0f];
+    return hex;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -209,6 +218,59 @@ BOOST_AUTO_TEST_CASE(all_networks_validate_oracle_node_alignment)
             << params.GetChainTypeString()
             << ". Failure means digibyted refuses to start on this network.");
     }
+}
+
+// ---------------------------------------------------------------------------
+// RH50.6 — Mainnet/testnet expose a 35-slot oracle roster, while only slots
+// 0-16 are active consensus signers until operator keys are added in a
+// coordinated release.
+// ---------------------------------------------------------------------------
+BOOST_AUTO_TEST_CASE(mainnet_testnet_have_35_slots_with_inactive_reserves)
+{
+    for (ChainType ct : {ChainType::MAIN, ChainType::TESTNET}) {
+        SelectParams(ct);
+        const CChainParams& params = Params();
+        const Consensus::Params& consensus = params.GetConsensus();
+        const auto& nodes = params.GetOracleNodes();
+
+        BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, 35);
+        BOOST_CHECK_EQUAL(consensus.nOracleConsensusRequired, 9);
+        BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 17);
+        BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), 17U);
+        BOOST_CHECK_EQUAL(nodes.size(), 35U);
+
+        for (size_t slot = 0; slot < nodes.size(); ++slot) {
+            BOOST_CHECK_EQUAL(nodes[slot].id, slot);
+            if (slot < static_cast<size_t>(consensus.nOraclePubkeyCount)) {
+                BOOST_CHECK_MESSAGE(nodes[slot].is_active,
+                    "slot " << slot << " must be active on " << params.GetChainTypeString());
+            } else {
+                BOOST_CHECK_MESSAGE(!nodes[slot].is_active,
+                    "reserve slot " << slot << " must remain inactive until its operator key is added");
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// RH50.7 — The config validator must permit the intended future 9-of-35
+// keyset. Adding operators should require chainparams keys plus a coordinated
+// release, not a validator rewrite.
+// ---------------------------------------------------------------------------
+BOOST_AUTO_TEST_CASE(validate_oracle_configuration_accepts_future_9_of_35)
+{
+    Consensus::Params params = Params().GetConsensus();
+    params.nOracleTotalOracles = 35;
+    params.nOraclePubkeyCount = 35;
+    params.nOracleConsensusRequired = 9;
+    params.vOraclePublicKeys.clear();
+    for (uint8_t slot = 0; slot < 35; ++slot) {
+        params.vOraclePublicKeys.push_back(UniqueXOnlyHex(slot));
+    }
+
+    BOOST_CHECK_MESSAGE(
+        Consensus::ValidateOracleConfiguration(params),
+        "9-of-35 must be a valid MuSig2 oracle configuration for future roster expansion");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

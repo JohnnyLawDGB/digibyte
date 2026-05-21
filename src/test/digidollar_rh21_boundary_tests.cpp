@@ -505,15 +505,15 @@ BOOST_AUTO_TEST_CASE(rh21_int128_collateral_calc_max_values)
 // 9. Consensus parameter validation edge cases
 // =============================================================================
 
-BOOST_AUTO_TEST_CASE(rh21_consensus_params_oracle_threshold_half)
+BOOST_AUTO_TEST_CASE(rh21_consensus_params_oracle_threshold_zero)
 {
-    // Threshold must be MORE than half of active oracles (not equal)
+    // Threshold must be non-zero and cannot exceed active oracles.
     DigiDollar::ConsensusParams params;
-    params.oracleThreshold = params.activeOracles / 2; // Exactly half
+    params.oracleThreshold = 0;
 
     std::string error;
     BOOST_CHECK(!DigiDollar::ValidateConsensusParams(params, error));
-    BOOST_CHECK(error.find("half") != std::string::npos);
+    BOOST_CHECK(error.find("zero") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_CASE(rh21_consensus_params_zero_price_valid_blocks)

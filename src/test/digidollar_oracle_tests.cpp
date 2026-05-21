@@ -169,8 +169,8 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_consensus_requirement)
     // No messages - no consensus
     BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // RC30: 9-of-17 consensus
-    // Add 8 messages - still no consensus (need 9 of 17)
+    // RC41: 9-of-35 reserved slots, with 9 messages required for consensus.
+    // Add 8 messages - still no consensus (need 9)
     for (int i = 0; i < 8; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
@@ -182,15 +182,20 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_consensus_requirement)
     bundle.AddMessage(msg9);
     BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // Test with more messages (up to 17)
+    // Test with more messages up to the reserved active-capacity limit.
     for (int i = 9; i < 17; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
     BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // Test with too many messages (should reject)
-    COraclePriceMessage extra_msg(17, 6000, GetTime());  // $0.006 (realistic price)
+    for (int i = 17; i < ORACLE_ACTIVE_COUNT; i++) {
+        COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
+        BOOST_CHECK(bundle.AddMessage(msg));
+    }
+
+    // Test with too many messages (should reject once all 35 slots are filled).
+    COraclePriceMessage extra_msg(ORACLE_ACTIVE_COUNT, 6000, GetTime());  // $0.006 (realistic price)
     BOOST_CHECK(!bundle.AddMessage(extra_msg));
 }
 
@@ -407,9 +412,9 @@ BOOST_AUTO_TEST_CASE(oracle_node_serialization)
  */
 BOOST_AUTO_TEST_CASE(oracle_selection_deterministic)
 {
-    // Create 30 oracle nodes
+    // Create one node per reserved oracle slot.
     std::vector<OracleNodeInfo> all_oracles;
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < ORACLE_TOTAL_COUNT; i++) {
         CKey key;
         key.MakeNewKey(true);
         CPubKey pubkey = key.GetPubKey();
@@ -423,7 +428,7 @@ BOOST_AUTO_TEST_CASE(oracle_selection_deterministic)
     std::vector<OracleNodeInfo> selected1 = SelectOraclesForEpoch(all_oracles, epoch);
     std::vector<OracleNodeInfo> selected2 = SelectOraclesForEpoch(all_oracles, epoch);
 
-    // Should select exactly ORACLE_ACTIVE_COUNT oracles (RC30: 17)
+    // Should select exactly the current reserved active-capacity limit.
     BOOST_CHECK_EQUAL(selected1.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
     BOOST_CHECK_EQUAL(selected2.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
 
@@ -531,22 +536,22 @@ BOOST_AUTO_TEST_CASE(oracle_selection_inactive_oracles)
  */
 BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
 {
-    // Test that mainnet has exactly 30 oracle nodes
+    // Test that mainnet has exactly 35 reserved oracle slots.
     auto chainparams = CChainParams::Main();
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
-    BOOST_CHECK_EQUAL(oracles.size(), 30);
-    BOOST_CHECK_GE(chainparams->GetActiveOracleCount(), 15);
+    BOOST_CHECK_EQUAL(oracles.size(), 35);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 17);
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
 {
-    // Test that testnet has at least 17 oracle nodes (RC30: 9-of-17 consensus)
+    // Test that testnet has the same 35 reserved oracle slots.
     auto chainparams = CChainParams::TestNet();
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
-    BOOST_CHECK_GE(oracles.size(), 17);  // 17+ oracle nodes (RC30)
-    BOOST_CHECK_GE(chainparams->GetActiveOracleCount(), 17);  // RC30: 9-of-17 MuSig2 consensus
+    BOOST_CHECK_EQUAL(oracles.size(), 35);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 17);
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
@@ -556,7 +561,7 @@ BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_GE(oracles.size(), 5);  // At least 5 for testing
-    BOOST_CHECK_LE(oracles.size(), 30); // No more than full set
+    BOOST_CHECK_LE(oracles.size(), 35); // No more than full set
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_oracle_data_validity)
@@ -570,9 +575,9 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_data_validity)
     for (size_t i = 0; i < oracles.size(); i++) {
         const OracleNodeInfo& oracle = oracles[i];
 
-        // Test unique ID (0-29)
+        // Test unique ID (0-34)
         BOOST_CHECK_GE(oracle.id, 0);
-        BOOST_CHECK_LT(oracle.id, 30);
+        BOOST_CHECK_LT(oracle.id, 35);
         BOOST_CHECK(oracle_ids.find(oracle.id) == oracle_ids.end()); // No duplicates
         oracle_ids.insert(oracle.id);
 
@@ -586,16 +591,16 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_data_validity)
         BOOST_CHECK(!oracle.endpoint.empty());
         BOOST_CHECK(oracle.endpoint.find(":") != std::string::npos); // Should have port
 
-        // Test oracle is marked as active initially
-        BOOST_CHECK(oracle.is_active);
+        // First 17 slots are active; remaining reserved slots are inactive.
+        BOOST_CHECK_EQUAL(oracle.is_active, oracle.id < 17);
 
         // Test oracle passes validation
         BOOST_CHECK(oracle.IsValid());
     }
 
     // Verify we have exactly the expected number of unique IDs and keys
-    BOOST_CHECK_EQUAL(oracle_ids.size(), 30);
-    BOOST_CHECK_EQUAL(oracle_pubkeys.size(), 30);
+    BOOST_CHECK_EQUAL(oracle_ids.size(), 35);
+    BOOST_CHECK_EQUAL(oracle_pubkeys.size(), 35);
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_oracle_getter_functions)
@@ -603,7 +608,7 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_getter_functions)
     auto chainparams = CChainParams::Main();
 
     // Test GetOracleNode function
-    for (uint32_t id = 0; id < 30; id++) {
+    for (uint32_t id = 0; id < 35; id++) {
         const OracleNodeInfo* oracle = chainparams->GetOracleNode(id);
         BOOST_CHECK(oracle != nullptr);
         BOOST_CHECK_EQUAL(oracle->id, id);
@@ -629,7 +634,7 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
 
         // Check endpoint format - must contain "oracle" and have a valid host:port format
         // Phase One uses oracle1.digibyte.io:12028 for testing
-        // Production will use oracle1.digidollar.org:9001-9030
+        // Production will use oracle1.digidollar.org:9001-9035
         BOOST_CHECK(oracle.endpoint.find("oracle") != std::string::npos);
 
         // Check for valid domain (either digidollar.org or digibyte.io for Phase One)
@@ -644,8 +649,8 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
         std::string port_str = oracle.endpoint.substr(colon_pos + 1);
         int port = std::stoi(port_str);
 
-        // Valid port ranges: 9001-9030 for digidollar.org, or 12024-12031 for digibyte.io (testnet P2P ports)
-        bool valid_port = (port >= 9001 && port <= 9030) || (port >= 12024 && port <= 12031);
+        // Valid port ranges: 9001-9035 for digidollar.org, or 12024-12032 for digibyte.io (testnet P2P ports)
+        bool valid_port = (port >= 9001 && port <= 9035) || (port >= 12024 && port <= 12032);
         BOOST_CHECK(valid_port);
     }
 }

@@ -93,8 +93,8 @@ BOOST_AUTO_TEST_CASE(rh26b_v02_bundle_rejects_zero_messages)
     }
 
     // Deserialize should fail - OracleBundleManager::DeserializeBundle is private,
-    // but we can verify the constant is correct
-    BOOST_CHECK_EQUAL(ORACLE_ACTIVE_COUNT, 17);  // RC30: 17 active oracles
+    // but we can verify the capacity constant is bounded.
+    BOOST_CHECK_EQUAL(ORACLE_ACTIVE_COUNT, 35);
 
     // Verify num_messages=0 would be caught by our bounds check
     uint8_t num_messages = data[1];
@@ -104,14 +104,14 @@ BOOST_AUTO_TEST_CASE(rh26b_v02_bundle_rejects_zero_messages)
 
 BOOST_AUTO_TEST_CASE(rh26b_v02_bundle_rejects_excessive_messages)
 {
-    // num_messages > ORACLE_ACTIVE_COUNT (RC30: 17) should be rejected
-    uint8_t num_messages = 18;
+    // num_messages > ORACLE_ACTIVE_COUNT should be rejected
+    uint8_t num_messages = ORACLE_ACTIVE_COUNT + 1;
     BOOST_CHECK(num_messages > ORACLE_ACTIVE_COUNT);
 
     num_messages = 255;
     BOOST_CHECK(num_messages > ORACLE_ACTIVE_COUNT);
 
-    // Valid range: 1..17 (RC30)
+    // Valid range: 1..ORACLE_ACTIVE_COUNT
     for (uint8_t i = 1; i <= ORACLE_ACTIVE_COUNT; ++i) {
         BOOST_CHECK(i > 0 && i <= ORACLE_ACTIVE_COUNT);
     }

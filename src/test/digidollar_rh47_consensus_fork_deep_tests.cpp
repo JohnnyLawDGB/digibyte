@@ -356,12 +356,12 @@ BOOST_AUTO_TEST_CASE(rh47_04a_bip9_state_machine_irreversibility)
     BOOST_TEST_MESSAGE("  LOCKED_IN → ACTIVE is irreversible (no hysteresis)");
     BOOST_TEST_MESSAGE("  Threshold attack (signal then drop) is ineffective");
     BOOST_TEST_MESSAGE("  Once locked in, activation occurs at min_activation_height");
-    BOOST_TEST_MESSAGE("  Mainnet min_activation_height=22014720 (aligned to window)");
+    BOOST_TEST_MESSAGE("  Mainnet min_activation_height=23627520 (aligned to window)");
 }
 
 BOOST_AUTO_TEST_CASE(rh47_04b_activation_window_alignment)
 {
-    // Mainnet: min_activation_height = 22014720 = 546 * 40320
+    // Mainnet: min_activation_height = 23627520 = 586 * 40320
     // nMinerConfirmationWindow = 40320 on DGB mainnet
     //
     // If min_activation_height is NOT aligned to the window, a node
@@ -371,7 +371,7 @@ BOOST_AUTO_TEST_CASE(rh47_04b_activation_window_alignment)
 
     // Verify alignment for all network types
     // Mainnet values (hardcoded check)
-    int mainnet_min_height = 22014720;
+    int mainnet_min_height = 23627520;
     int mainnet_window = 40320;
     BOOST_CHECK_EQUAL(mainnet_min_height % mainnet_window, 0);
 
@@ -534,7 +534,7 @@ BOOST_AUTO_TEST_CASE(rh47_07b_legacy_activation_vs_bip9_at_boundary)
     // Meanwhile, BIP9 IsDigiDollarEnabled:
     // - Regtest: ALWAYS_ACTIVE → true at all heights
     // - Testnet: min_activation_height=600 → false before 600
-    // - Mainnet: min_activation_height=22014720 → false before that
+    // - Mainnet: min_activation_height=23627520 → false before that
     //
     // DISCREPANCY on testnet: IsDigiDollarActive(h=0) = true
     //                          IsDigiDollarEnabled(h=0) = false (before activation)

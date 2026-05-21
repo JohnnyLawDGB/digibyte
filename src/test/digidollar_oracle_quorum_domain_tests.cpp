@@ -10,7 +10,7 @@
  * MuSig2 oracle roster:
  *
  * 1) Quorum boundaries: 9-of-N success, 8-of-N failure, 17-of-17 success,
- *    0-of-17 failure, and >17 (out-of-roster) failure.
+ *    0-of-17 failure, and out-of-active-roster failure.
  *
  * 2) Domain separation:
  *    - Wrong epoch / wrong height (epoch-derived) — bundle hash binds the
@@ -23,8 +23,8 @@
  *      timestamp, and epoch are identical.
  *
  * 3) Roster integrity: bitmap with duplicate participant ID, bitmap with
- *    reserve ID 17–29 (mainnet/testnet), bitmap shorter / longer than
- *    ceil(active_count/8), all-zero bitmap, single-participant (1-of-17).
+ *    reserve ID 17–34 (mainnet/testnet), bitmap shorter / longer than
+ *    ceil(total_count/8), all-zero bitmap, single-participant (1-of-17).
  *
  * 4) Aggregate-key drift: rotating a single key in chainparams MUST change
  *    the aggregate pubkey, and the same input must always produce the same
@@ -373,22 +373,48 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_duplicate_id_rejected_by_encode)
         "EncodeBitmap must reject duplicate participant IDs");
 }
 
+static void CheckReserveIdRejectedByBundleValidation(const Consensus::Params& params,
+                                                     int32_t height,
+                                                     uint8_t reserve_id,
+                                                     const std::string& chain_name)
+{
+    const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6, 7, reserve_id};
+    auto encoded = MuSig2OracleAggregator::EncodeBitmap(
+        signers, static_cast<uint16_t>(params.nOracleTotalOracles));
+    BOOST_REQUIRE_MESSAGE(!encoded.empty(),
+        chain_name + " bitmap must encode reserve slot " + std::to_string(reserve_id) +
+        " inside the configured 35-slot reserve");
+
+    auto decoded = MuSig2OracleAggregator::DecodeBitmap(
+        encoded, static_cast<uint16_t>(params.nOracleTotalOracles));
+    BOOST_REQUIRE(decoded == signers);
+
+    COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(height));
+    bundle.participation_bitmap = encoded;
+    bundle.aggregate_sig.assign(64, 0);
+
+    std::string error;
+    BOOST_CHECK_MESSAGE(!OracleBundleManager::ValidateMuSig2Bundle(bundle, height, params, error),
+        chain_name + " validation must reject inactive reserve signer " +
+        std::to_string(reserve_id));
+    BOOST_CHECK_MESSAGE(error.find("outside active oracle roster") != std::string::npos,
+        chain_name + " reserve signer should be rejected as outside active roster, got: " + error);
+}
+
 BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
 {
     SelectParams(ChainType::MAIN);
     {
         const Consensus::Params& params = Params().GetConsensus();
         BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 17);
+        BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
-        // Reserve slots 17..29 on mainnet are not in vOraclePublicKeys; HasMuSig2Quorum
-        // and ValidateMuSig2Bundle must reject any bitmap that selects them.
-        for (uint8_t reserve_id = 17; reserve_id <= 29; ++reserve_id) {
-            const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6, 7, reserve_id};
-            // EncodeBitmap rejects ids >= total_oracles=17
-            auto encoded = MuSig2OracleAggregator::EncodeBitmap(
-                signers, static_cast<uint16_t>(params.nOracleTotalOracles));
-            BOOST_CHECK_MESSAGE(encoded.empty(),
-                "Mainnet EncodeBitmap must reject reserve id " + std::to_string(reserve_id));
+        // Reserve slots are valid bitmap positions in the 35-slot reserve,
+        // but cannot satisfy consensus until a future release adds pubkeys
+        // and raises nOraclePubkeyCount.
+        for (uint8_t reserve_id = 17; reserve_id <= 34; ++reserve_id) {
+            CheckReserveIdRejectedByBundleValidation(
+                params, params.nDDActivationHeight, reserve_id, "Mainnet");
         }
     }
 
@@ -396,13 +422,11 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
     {
         const Consensus::Params& params = Params().GetConsensus();
         BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 17);
+        BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
-        for (uint8_t reserve_id = 17; reserve_id <= 29; ++reserve_id) {
-            const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6, 7, reserve_id};
-            auto encoded = MuSig2OracleAggregator::EncodeBitmap(
-                signers, static_cast<uint16_t>(params.nOracleTotalOracles));
-            BOOST_CHECK_MESSAGE(encoded.empty(),
-                "Testnet EncodeBitmap must reject reserve id " + std::to_string(reserve_id));
+        for (uint8_t reserve_id = 17; reserve_id <= 34; ++reserve_id) {
+            CheckReserveIdRejectedByBundleValidation(
+                params, params.nDDActivationHeight, reserve_id, "Testnet");
         }
     }
 

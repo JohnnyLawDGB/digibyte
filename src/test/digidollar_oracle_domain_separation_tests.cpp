@@ -57,7 +57,7 @@ namespace {
 constexpr int32_t DOMAIN_TEST_HEIGHT = 650;
 constexpr uint64_t DOMAIN_TEST_PRICE = 51000;
 constexpr int64_t DOMAIN_TEST_TIMESTAMP = 1735689600;
-constexpr uint16_t DOMAIN_TEST_TOTAL_SLOTS = 17;
+constexpr uint16_t DOMAIN_TEST_TOTAL_SLOTS = 35;
 constexpr int DOMAIN_TEST_QUORUM = 9;
 
 struct LocalMiniTestnetSetup : public BasicTestingSetup {

@@ -4638,8 +4638,8 @@ static RPCHelpMan getoracles()
                 // consensus. The MuSig2 aggregator (`ValidateMuSig2Bundle`)
                 // rejects signers whose id >= nOraclePubkeyCount, so a
                 // slot is in the active quorum iff its id is below that
-                // count. Reserve slots (mainnet 17–29) display as
-                // is_active=true (configured) but in_consensus=false
+                // count. Reserve slots (mainnet/testnet 17-34) display as
+                // is_active=false and in_consensus=false
                 // (cannot sign a v0x03 bundle that consensus accepts).
                 const int pubkey_count = params.GetConsensus().nOraclePubkeyCount;
                 info.pushKV("in_consensus", static_cast<int>(oc.id) < pubkey_count);
@@ -4853,7 +4853,7 @@ RPCHelpMan createoraclekey()
                 "  - consensus.vOraclePublicKeys: uses the 32-byte x-only version (02/03 prefix stripped)\n"
                 "\nAs an operator, you only need to share your pubkey. Never share your private key.\n",
                 {
-                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID slot (0-29) to generate key for"},
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID slot (0-34) to generate key for"},
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -4923,7 +4923,7 @@ RPCHelpMan createoraclekey()
             // Reject oracle_ids that have no slot in the active chain
             // params roster. Without this, regtest (which only publishes
             // 7 slots) would let createoraclekey persist an unusable key
-            // for slots 7..29 that startoracle later refuses with
+            // for unconfigured slots that startoracle later refuses with
             // "Oracle ID N not found in chain parameters". Doing the
             // check up front keeps wallet state consistent with what the
             // rest of the oracle CRUD surface accepts.
@@ -4984,7 +4984,7 @@ RPCHelpMan startoracle()
                 "\nStart a local oracle node if configured.\n"
                 "Requires oracle private key to be configured for this node.\n",
                 {
-                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to start (0-29)"},
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to start (0-34)"},
                     {"private_key", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Oracle private key (if not already configured)"}
                 },
                 RPCResult{
@@ -5143,7 +5143,7 @@ static RPCHelpMan stoporacle()
                 "\nStop a running oracle node.\n"
                 "Stops the oracle daemon and price fetching for the specified oracle.\n",
                 {
-                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to stop (0-29)"}
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to stop (0-34)"}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -5238,7 +5238,7 @@ static RPCHelpMan getoraclepubkey()
                 "\nGet the oracle node's public key for verification.\n"
                 "Returns the XOnlyPubKey (32-byte Schnorr public key) used for signing oracle price messages.\n",
                 {
-                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to query (0-29)"}
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to query (0-34)"}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",

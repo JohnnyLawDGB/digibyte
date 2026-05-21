@@ -375,19 +375,20 @@ BOOST_AUTO_TEST_CASE(rh13_06_utxo_bloat_griefing)
 }
 
 // ============================================================================
-// ATTACK VECTOR 7: Oracle Quorum Manipulation (RC30: 9-of-17)
-// With the RC30 chainparams (9-of-17), can colluding oracles manipulate the system?
+// ATTACK VECTOR 7: Oracle Quorum Manipulation
+// With the RC41 chainparams (9 signatures from 17 active keys in a 35-slot roster),
+// can colluding oracles manipulate the system?
 // This test exercises the DEFAULT ConsensusParams struct values
-// (src/consensus/digidollar.h): 30 total pool, 17 active, 9 threshold.
-// Consensus::Params tracks the same 9-of-17 quorum per chain.
+// (src/consensus/digidollar.h): 35 reserved slots, 17 active keys, 9 threshold.
+// Consensus::Params tracks the same 9-signature threshold per chain.
 // ============================================================================
 
 BOOST_AUTO_TEST_CASE(rh13_07_oracle_quorum_manipulation)
 {
     ConsensusParams params;
 
-    // Oracle struct defaults in src/consensus/digidollar.h (RC30): 30 total pool, 17 active, 9 threshold.
-    BOOST_CHECK_EQUAL(params.oracleCount, 30);
+    // Oracle struct defaults in src/consensus/digidollar.h.
+    BOOST_CHECK_EQUAL(params.oracleCount, 35);
     BOOST_CHECK_EQUAL(params.activeOracles, 17);
     BOOST_CHECK_EQUAL(params.oracleThreshold, 9);
 
@@ -395,20 +396,19 @@ BOOST_AUTO_TEST_CASE(rh13_07_oracle_quorum_manipulation)
     // YES — the threshold (here: struct default 8) is the bar. Colluders meeting it
     // control the price. RC30 per-chain threshold is 9-of-17 (stricter).
     //
-    // But: Oracle selection per epoch is from a pool of 30.
-    // Getting the threshold of YOUR oracles into the active set requires:
-    // - If random selection: low probability
-    // - If deterministic (e.g., sorted by pubkey): predictable but hard to Sybil
+    // But: Oracle activation is gated by hardcoded public keys and inactive slots
+    // cannot sign until a coordinated release adds their x-only keys.
     //
-    // FINDING: The ValidateConsensusParams check ensures threshold > activeOracles/2
-    // RC30 lifts the effective per-chain threshold to 9-of-17 for stronger safety margin.
+    // FINDING: ValidateConsensusParams ensures the threshold is non-zero and does
+    // not exceed the active key roster. Chainparams set the launch threshold to
+    // 9 signatures from the 17 currently active keys.
 
-    // Verify the threshold validation
-    BOOST_CHECK(params.oracleThreshold > params.activeOracles / 2);  // 8 > 7 ✓
+    // Verify the configured launch threshold.
+    BOOST_CHECK(params.oracleThreshold > params.activeOracles / 2);  // 9 > 8
 
-    // Default struct is the bare-minimum strict majority:
+    // Default struct is a strict majority of the current active roster:
     BOOST_CHECK_EQUAL(params.oracleThreshold, params.activeOracles / 2 + 1);
-    // 8 == 15/2 + 1 == 7 + 1. Minimum possible threshold for struct default.
+    // Future 35-active-key releases may keep the same 9-signature threshold.
 }
 
 // ============================================================================

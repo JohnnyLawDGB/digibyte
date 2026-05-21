@@ -113,12 +113,12 @@ bool ValidateConsensusParams(const ConsensusParams& params, std::string& strErro
         strError = "Active oracles cannot exceed total oracle count";
         return false;
     }
-    if (params.oracleThreshold > params.activeOracles) {
-        strError = "Oracle threshold cannot exceed active oracles";
+    if (params.oracleThreshold == 0) {
+        strError = "Oracle threshold cannot be zero";
         return false;
     }
-    if (params.oracleThreshold <= params.activeOracles / 2) {
-        strError = "Oracle threshold must be more than half of active oracles";
+    if (params.oracleThreshold > params.activeOracles) {
+        strError = "Oracle threshold cannot exceed active oracles";
         return false;
     }
     if (params.priceValidBlocks == 0) {

@@ -9,7 +9,7 @@
  * - State transitions: CREATED→NONCES_COLLECTING→NONCES_COMPLETE→SIGNING→COMPLETE
  * - Nonce generation, collection, aggregation
  * - Partial signature creation and aggregation
- * - 9-of-17 oracle quorum threshold (RC30)
+ * - 9-of-17 active signer quorum inside the 35-slot oracle reserve (RC41)
  * - Security: nonce zeroing, reuse prevention
  * - Timeout/failure transitions
  * - Concurrent epoch isolation
@@ -126,6 +126,14 @@ static uint256 FilledSeed(unsigned char value)
     uint256 seed;
     std::fill(seed.begin(), seed.end(), value);
     return seed;
+}
+
+static uint8_t ActiveMuSig2OracleCount()
+{
+    const int active_count = Params().GetConsensus().nOraclePubkeyCount;
+    BOOST_REQUIRE(active_count > 0);
+    BOOST_REQUIRE(active_count < 256);
+    return static_cast<uint8_t>(active_count);
 }
 
 // ============================================================================
@@ -344,7 +352,8 @@ BOOST_AUTO_TEST_CASE(required_participants_use_epoch_hash_not_sequential_ids)
     BOOST_REQUIRE(session.InitializePassive(MakeSingleKeyAggCache(ctx)));
 
     std::vector<uint8_t> submitted;
-    for (uint8_t id = 0; id < ORACLE_ACTIVE_COUNT; ++id) {
+    const uint8_t active_count = ActiveMuSig2OracleCount();
+    for (uint8_t id = 0; id < active_count; ++id) {
         submitted.push_back(id);
         secp256k1_musig_pubnonce pubnonce = MakeValidPubnonceForOracle(ctx, id, epoch);
         BOOST_REQUIRE(session.AddPubnonce(id, pubnonce));
@@ -382,7 +391,8 @@ BOOST_AUTO_TEST_CASE(required_participants_use_chain_seeded_epoch_hash)
     BOOST_REQUIRE(session_b.InitializePassive(MakeSingleKeyAggCache(ctx)));
 
     std::vector<uint8_t> submitted;
-    for (uint8_t id = 0; id < ORACLE_ACTIVE_COUNT; ++id) {
+    const uint8_t active_count = ActiveMuSig2OracleCount();
+    for (uint8_t id = 0; id < active_count; ++id) {
         submitted.push_back(id);
         secp256k1_musig_pubnonce pubnonce = MakeValidPubnonceForOracle(ctx, id, epoch);
         BOOST_REQUIRE(session_a.AddPubnonce(id, pubnonce));
@@ -409,10 +419,11 @@ BOOST_AUTO_TEST_CASE(required_participants_and_context_converge_across_nonce_arr
     constexpr uint8_t threshold = 9;
     const uint256 seed = FilledSeed(0x37);
 
-    std::vector<uint8_t> all_ids(ORACLE_ACTIVE_COUNT);
+    const uint8_t active_count = ActiveMuSig2OracleCount();
+    std::vector<uint8_t> all_ids(active_count);
     std::iota(all_ids.begin(), all_ids.end(), 0);
 
-    std::vector<secp256k1_musig_pubnonce> pubnonces(ORACLE_ACTIVE_COUNT);
+    std::vector<secp256k1_musig_pubnonce> pubnonces(active_count);
     for (uint8_t id : all_ids) {
         pubnonces[id] = MakeValidPubnonceForOracle(ctx, id, epoch);
     }
@@ -479,7 +490,8 @@ BOOST_AUTO_TEST_CASE(required_participants_reject_committee_that_omits_known_bet
     constexpr uint8_t threshold = 9;
     const uint256 seed = FilledSeed(0x63);
 
-    std::vector<uint8_t> all_ids(ORACLE_ACTIVE_COUNT);
+    const uint8_t active_count = ActiveMuSig2OracleCount();
+    std::vector<uint8_t> all_ids(active_count);
     std::iota(all_ids.begin(), all_ids.end(), 0);
 
     MuSig2SigningSession session(epoch, threshold);
@@ -1455,8 +1467,8 @@ BOOST_AUTO_TEST_CASE(test_session_manager_seen_sets_cleanup)
 
 BOOST_AUTO_TEST_CASE(test_participation_bitmap_sized_for_total_oracles)
 {
-    // RC30: nOracleTotalOracles = 17 in testnet chainparams
-    // expected bitmap size = (17 + 7) / 8 = 3 bytes
+    // RC41: nOracleTotalOracles = 35 in chainparams
+    // expected bitmap size = (35 + 7) / 8 = 5 bytes
     const uint16_t total_oracles = static_cast<uint16_t>(
         Params().GetConsensus().nOracleTotalOracles);
     size_t expected_bytes = (total_oracles + 7) / 8;

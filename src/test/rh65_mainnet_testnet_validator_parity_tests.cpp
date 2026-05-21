@@ -203,7 +203,7 @@ BOOST_AUTO_TEST_CASE(rh65_mainnet_preactivation_still_accepts)
     ScopedChainParams chain(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
 
-    // Pre-activation height (well below nDDActivationHeight = 22014720).
+    // Pre-activation height (well below nDDActivationHeight = 23627520).
     const int32_t height = 100;
     BOOST_REQUIRE_LT(height, params.nDDActivationHeight);
 

@@ -3472,7 +3472,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_01a_lockheight_absolute_vs_relative_mainnet)
     const auto& ddParams = regTestParams->GetDigiDollarParams();
 
     // Simulate mainnet activation height
-    const int MAINNET_HEIGHT = 22014720;
+    const int MAINNET_HEIGHT = 23627520;
 
     // 1-hour lock tier: should require 1000% collateral
     const int64_t ONE_HOUR_BLOCKS = 240;
@@ -3517,7 +3517,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_01b_lockheight_30day_at_mainnet_height)
     auto regTestParams = CChainParams::RegTest({});
     const auto& ddParams = regTestParams->GetDigiDollarParams();
 
-    const int MAINNET_HEIGHT = 22014720;
+    const int MAINNET_HEIGHT = 23627520;
     const int64_t THIRTY_DAY_BLOCKS = 30 * DigiDollar::BLOCKS_PER_DAY;  // 172800
 
     int64_t absoluteLockHeight = MAINNET_HEIGHT + THIRTY_DAY_BLOCKS;
@@ -3540,7 +3540,7 @@ BOOST_AUTO_TEST_CASE(redteam_t2_01c_all_tiers_broken_at_mainnet_height)
     auto regTestParams = CChainParams::RegTest({});
     const auto& ddParams = regTestParams->GetDigiDollarParams();
 
-    const int MAINNET_HEIGHT = 22014720;
+    const int MAINNET_HEIGHT = 23627520;
 
     struct TierTest {
         const char* name;
@@ -6076,9 +6076,9 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02c_oracle_id_range_check)
     // DEFENSE [T3-02c]: Verify oracle_id range checks are present at P2P layer.
     // oracle_id >= ORACLE_TOTAL_COUNT should be rejected.
 
-    // Valid range: 0 to ORACLE_TOTAL_COUNT-1 (29)
-    BOOST_CHECK(ORACLE_TOTAL_COUNT == 30);
-    BOOST_CHECK(ORACLE_ACTIVE_COUNT == 17);  // RC30: 17 active oracles
+    // Valid range: 0 to ORACLE_TOTAL_COUNT-1 (34)
+    BOOST_CHECK(ORACLE_TOTAL_COUNT == 35);
+    BOOST_CHECK(ORACLE_ACTIVE_COUNT == 35);
 
     // Verify chainparams has nodes for valid IDs (using regtest)
     auto regTestParams = CChainParams::RegTest({});
@@ -6091,19 +6091,19 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02c_oracle_id_range_check)
     }
 
     // Invalid IDs should NOT have configs
-    for (uint32_t id : {30u, 31u, 100u, 255u, 0xFFFFu}) {
+    for (uint32_t id : {35u, 36u, 100u, 255u, 0xFFFFu}) {
         const OracleNodeInfo* config = regTestParams->GetOracleNode(id);
         BOOST_CHECK_MESSAGE(config == nullptr,
             "DEFENSE [T3-02c]: Oracle ID " + std::to_string(id) + " correctly has no config");
     }
 
     // P2P handler checks: oracle_id >= ORACLE_TOTAL_COUNT
-    // An attacker trying oracle_id=30 or higher would be caught
-    BOOST_CHECK(30 >= ORACLE_TOTAL_COUNT); // 30 >= 30 → true → rejected
-    BOOST_CHECK(29 < ORACLE_TOTAL_COUNT);  // 29 < 30 → false → not rejected by range check
+    // An attacker trying oracle_id=35 or higher would be caught
+    BOOST_CHECK(35 >= ORACLE_TOTAL_COUNT);
+    BOOST_CHECK(34 < ORACLE_TOTAL_COUNT);
 
     BOOST_TEST_MESSAGE("DEFENSE HOLDS [T3-02c]: Oracle ID range validation at P2P layer "
-        "rejects oracle_id >= ORACLE_TOTAL_COUNT (30). Valid range is 0-29.");
+        "rejects oracle_id >= ORACLE_TOTAL_COUNT (35). Valid range is 0-34.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t3_02d_oracle_id_byte_truncation_coinbase)
@@ -6113,7 +6113,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02d_oracle_id_byte_truncation_coinbase)
     // Phase 2: p2_data.push_back(static_cast<unsigned char>(msg.oracle_id & 0xFF))
     //
     // This means oracle_id is truncated to 0-255 range on-chain.
-    // Currently ORACLE_TOTAL_COUNT is 30, so all IDs fit in 1 byte.
+    // Currently ORACLE_TOTAL_COUNT is 35, so all IDs fit in 1 byte.
     // If ORACLE_TOTAL_COUNT ever exceeds 255, coinbase format breaks silently.
 
     BOOST_CHECK_MESSAGE(ORACLE_TOTAL_COUNT <= 255,
@@ -6129,7 +6129,7 @@ BOOST_AUTO_TEST_CASE(redteam_t3_02d_oracle_id_byte_truncation_coinbase)
 
     BOOST_TEST_MESSAGE("INFO [T3-02d]: Oracle ID stored as uint8_t in coinbase OP_RETURN. "
         "oracle_id=256 would silently map to oracle_id=0 on-chain. Not currently "
-        "exploitable (ORACLE_TOTAL_COUNT=30), but a latent truncation hazard if "
+        "exploitable (ORACLE_TOTAL_COUNT=35), but a latent truncation hazard if "
         "oracle count is ever increased above 255.");
 }
 
@@ -13431,8 +13431,8 @@ BOOST_AUTO_TEST_CASE(redteam_t7_02e_p2p_oracle_relay_censorship_resilience)
     //   - DigiByte default 125 connections → attacker must control ALL to eclipse
 
     // Verify oracle message validation constants
-    BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, 30);
-    BOOST_CHECK_EQUAL(ORACLE_ACTIVE_COUNT, 17);  // RC30: 17 active oracles
+    BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, 35);
+    BOOST_CHECK_EQUAL(ORACLE_ACTIVE_COUNT, 35);
     BOOST_CHECK_EQUAL(ORACLE_MAX_AGE_SECONDS, 3600);
     BOOST_CHECK_GT(ORACLE_MIN_PRICE_MICRO_USD, 0);
     BOOST_CHECK_GT(ORACLE_MAX_PRICE_MICRO_USD, ORACLE_MIN_PRICE_MICRO_USD);
@@ -13926,6 +13926,7 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
 
     BOOST_CHECK_EQUAL(mainnet_start, 1780272000);   // June 1, 2026
     BOOST_CHECK_EQUAL(mainnet_timeout, 1811808000); // June 1, 2027
+    BOOST_CHECK_EQUAL(mainnet_min_activation, 23627520);
     BOOST_CHECK_EQUAL(mainnet_min_activation, mainnet.nDDActivationHeight);
     BOOST_CHECK_EQUAL(mainnet.nOracleActivationHeight, mainnet.nDDActivationHeight);
 
@@ -13945,8 +13946,9 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     BOOST_CHECK_EQUAL(mainnet_min_activation % mainnet_window, 0);
 
     // Verify min_activation_height gives adequate lead time
-    // Current height ~19M, min_activation ~22M → ~3M blocks ≈ 520 days
-    BOOST_CHECK(mainnet_min_activation > 20000000); // Well above current chain height
+    // Mainnet start is pinned to the first BIP9 period boundary after the
+    // June 1, 2026 deployment start estimate.
+    BOOST_CHECK(mainnet_min_activation >= 23627520);
 
     // Multi-algo hashrate analysis:
     // 5 algorithms → each algo gets ~20% of blocks (8064 per window)
@@ -13962,7 +13964,7 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     BOOST_TEST_MESSAGE("T7-04b: Mainnet BIP9 parameters are safely configured ✅ — "
         "70% threshold in 40320-block (1-week) windows. "
         "1-year timeout (June 2026 → June 2027) gives adequate adoption time. "
-        "min_activation_height 22,014,720 properly aligned to window boundary. "
+        "min_activation_height 23,627,520 properly aligned to window boundary. "
         "Multi-algo defense: controlling 100% of 1 algorithm (20% of blocks) is "
         "insufficient to prevent activation — need >30% combined hashrate across "
         "multiple algorithms.");
@@ -14369,12 +14371,12 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01f_eclipse_mainnet_oracle_gap)
     const auto& mainnet_params = CreateChainParams(*m_node.args, ChainType::MAIN);
     const auto& mainnet_consensus = mainnet_params->GetConsensus();
 
-    // RC30: mainnet oracle activation is set (9-of-17 across all networks)
+    // RC41: mainnet oracle activation is set.
     BOOST_CHECK_NE(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
 
-    // RC30: 9-of-17 oracle consensus
+    // RC41: 9 signatures from 35 reserved slots.
     BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 9);
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 17);
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 35);
 
     BOOST_TEST_MESSAGE("T8-01f: Eclipse mainnet oracle gap ⚠️ — "
         "Mainnet ConnectBlock does NOT update oracle price cache "
@@ -17087,20 +17089,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04a_oracle_id_8_in_configured_range)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
 {
-    // KEY FINDING: Three independent oracle count values that SHOULD agree but DON'T:
-    //   1. ORACLE_TOTAL_COUNT (static constant = 30)
-    //   2. nOracleTotalOracles (consensus param: RC30 mainnet=17, testnet=17, regtest=7)
-    //   3. vOracleNodes.size() (per-chain: mainnet=30, testnet=17, regtest=7)
-    //
-    // On mainnet: ORACLE_TOTAL_COUNT(30) == vOracleNodes(30) != nOracleTotalOracles(17)
-    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(17) == nOracleTotalOracles(17)
-    //
-    // The P2P handler uses ORACLE_TOTAL_COUNT for bounds. This means:
-    // - On mainnet: ORACLE_TOTAL_COUNT matches vOracleNodes, but nOracleTotalOracles is lower
-    // - On testnet: IDs 17-29 pass P2P bounds check but are handled by GetOracleNode second check
-    //
-    // DESIGN GAP: nOracleTotalOracles doesn't match vOracleNodes.size() on mainnet (17 vs 30).
-    // This means the "total oracles" consensus parameter doesn't reflect reality.
+    // RC41 resolves the older count mismatch: the static P2P bound, consensus
+    // total, and configured node roster all describe the same 35 reserved slots.
+    // Only the first 17 slots are active today and present in vOraclePublicKeys.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
     const Consensus::Params& consensus = params.GetConsensus();
@@ -17110,30 +17101,21 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
     BOOST_TEST_MESSAGE("  vOracleNodes.size(): " + std::to_string(all_oracles.size()));
     BOOST_TEST_MESSAGE("  nOracleTotalOracles (consensus): " + std::to_string(consensus.nOracleTotalOracles));
 
-    // On mainnet (our test context): ORACLE_TOTAL_COUNT == vOracleNodes.size() == 30
     BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, static_cast<int>(all_oracles.size()));
     BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
 
-    // BUT: nOracleTotalOracles (RC30: 17) != vOracleNodes.size() (30 on mainnet) — MISMATCH!
-    BOOST_CHECK_NE(consensus.nOracleTotalOracles, all_oracles.size());
-    BOOST_TEST_MESSAGE("  ⚠️ nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
-                      + ") != vOracleNodes.size() (" + std::to_string(all_oracles.size()) + ") — MISMATCH");
+    BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, static_cast<int>(all_oracles.size()));
+    BOOST_TEST_MESSAGE("  nOracleTotalOracles == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
 
-    // Document the semantic difference:
-    // nOracleTotalOracles = "how many oracles participate in Phase Two consensus" (RC30: 17)
-    // vOracleNodes = "all known oracle configurations including future/inactive" (30)
-    // ORACLE_TOTAL_COUNT = "hard upper bound for oracle IDs" (30)
-    BOOST_TEST_MESSAGE("  📝 nOracleTotalOracles = oracles in Phase Two consensus (RC30: 17)");
-    BOOST_TEST_MESSAGE("  📝 vOracleNodes = all known oracle configs (30, includes inactive/future)");
-    BOOST_TEST_MESSAGE("  📝 ORACLE_TOTAL_COUNT = hard upper bound for IDs (30)");
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 17);
+    BOOST_CHECK_EQUAL(static_cast<int>(consensus.vOraclePublicKeys.size()), 17);
 
     // Verify nOracleRequiredMessages < nOracleTotalOracles
     BOOST_CHECK_LT(consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
     BOOST_TEST_MESSAGE("  Required " + std::to_string(consensus.nOracleRequiredMessages)
                       + "-of-" + std::to_string(consensus.nOracleTotalOracles) + " consensus ✅");
 
-    // The P2P bounds check (oracle_id >= ORACLE_TOTAL_COUNT) matches vOracleNodes on mainnet
-    // All IDs 0-29 have oracle configs. ID 30+ are rejected at first check.
+    // The P2P bounds check (oracle_id >= ORACLE_TOTAL_COUNT) matches vOracleNodes on mainnet.
     BOOST_TEST_MESSAGE("  P2P accepts IDs 0-" + std::to_string(ORACLE_TOTAL_COUNT - 1)
                       + ", matches mainnet config range ✅");
 }
@@ -17341,80 +17323,34 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04e_pending_messages_map_key_boundary)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
 {
-    // Mainnet has 30 oracle nodes but ORACLE_ACTIVE_COUNT=17 (RC30). SelectOraclesForEpoch
-    // uses deterministic selection to pick 17 of 30 per epoch.
-    // Oracle ID 8 should be included in SOME epochs but not necessarily all.
-    // Key check: selection is deterministic and rotates fairly across epochs.
+    // Mainnet has 35 reserved oracle nodes with 17 currently active. SelectOraclesForEpoch
+    // must return only active nodes and must be deterministic for the same epoch.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
 
-    BOOST_TEST_MESSAGE("=== T9-04f: SelectOraclesForEpoch with 30 oracles (mainnet context) ===");
+    BOOST_TEST_MESSAGE("=== T9-04f: SelectOraclesForEpoch with 35 reserved slots (mainnet context) ===");
     BOOST_TEST_MESSAGE("  Total oracles: " + std::to_string(all_oracles.size()));
     BOOST_TEST_MESSAGE("  ORACLE_ACTIVE_COUNT: " + std::to_string(ORACLE_ACTIVE_COUNT));
 
-    // Mainnet has 30 > ORACLE_ACTIVE_COUNT (17, RC30), so selection logic activates
-    if (all_oracles.size() > static_cast<size_t>(ORACLE_ACTIVE_COUNT)) {
-        BOOST_TEST_MESSAGE("  30 > 17 → deterministic selection active (RC30)");
-
-        int id_8_count = 0;
-        int id_29_count = 0;
-        int total_epochs = 100;
-
-        for (int32_t epoch = 0; epoch < total_epochs; ++epoch) {
-            std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(all_oracles, epoch);
-            BOOST_CHECK_EQUAL(selected.size(), static_cast<size_t>(ORACLE_ACTIVE_COUNT));
-
-            bool has_8 = false, has_29 = false;
-            for (const auto& oracle : selected) {
-                if (oracle.id == 8) has_8 = true;
-                if (oracle.id == 29) has_29 = true;
-            }
-            if (has_8) id_8_count++;
-            if (has_29) id_29_count++;
-        }
-
-        // With 17-of-30 selection (RC30), each oracle should be selected ~57% of epochs
-        // Allow a broader 30-80% window for statistical variation over 100 epochs.
-        BOOST_CHECK_GT(id_8_count, 30);
-        BOOST_CHECK_LT(id_8_count, 80);
-        BOOST_CHECK_GT(id_29_count, 30);
-        BOOST_CHECK_LT(id_29_count, 80);
-        BOOST_TEST_MESSAGE("  Oracle ID 8 selected in " + std::to_string(id_8_count) + "/100 epochs (~57% expected) ✅");
-        BOOST_TEST_MESSAGE("  Oracle ID 29 selected in " + std::to_string(id_29_count) + "/100 epochs (~57% expected) ✅");
-
-        // Verify determinism — same epoch gives same result
-        std::vector<OracleNodeInfo> sel1 = SelectOraclesForEpoch(all_oracles, 42);
-        std::vector<OracleNodeInfo> sel2 = SelectOraclesForEpoch(all_oracles, 42);
-        BOOST_CHECK_EQUAL(sel1.size(), sel2.size());
-        for (size_t i = 0; i < sel1.size(); ++i) {
-            BOOST_CHECK_EQUAL(sel1[i].id, sel2[i].id);
-        }
-        BOOST_TEST_MESSAGE("  Deterministic: same epoch → same selection ✅");
-    } else {
-        // Fewer oracles, all returned
-        std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(all_oracles, 0);
-        BOOST_CHECK_EQUAL(selected.size(), all_oracles.size());
-        BOOST_TEST_MESSAGE("  " + std::to_string(all_oracles.size()) + " ≤ 17 → all returned ✅");
+    std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(all_oracles, 42);
+    BOOST_CHECK_EQUAL(selected.size(), 17U);
+    for (const auto& oracle : selected) {
+        BOOST_CHECK_LT(oracle.id, 17U);
+        BOOST_CHECK(oracle.is_active);
     }
+
+    std::vector<OracleNodeInfo> selected_again = SelectOraclesForEpoch(all_oracles, 42);
+    BOOST_CHECK_EQUAL(selected.size(), selected_again.size());
+    for (size_t i = 0; i < selected.size(); ++i) {
+        BOOST_CHECK_EQUAL(selected[i].id, selected_again[i].id);
+    }
+    BOOST_TEST_MESSAGE("  Active-only deterministic selection over 35 reserved slots ✅");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
 {
-    // DESIGN GAP: Three independent oracle count values disagree.
-    //
-    // On mainnet (test context, RC30):
-    //   ORACLE_TOTAL_COUNT = 30 (static constant, matches vOracleNodes)
-    //   vOracleNodes.size() = 30 (all configured oracle nodes)
-    //   nOracleTotalOracles = 17 (consensus: "active in Phase Two")
-    //   vOraclePublicKeys.size() = 17 (mainnet Phase 3 MuSig2 keys, RC30)
-    //
-    // The P2P bounds check uses ORACLE_TOTAL_COUNT (30), which matches vOracleNodes on mainnet.
-    // But nOracleTotalOracles (17) is lower — meaning 17 oracles are "for Phase Two consensus"
-    // while 30 are "known/configured". This is architecturally intentional (30 configured,
-    // 17 selected per epoch via SelectOraclesForEpoch), but the naming is confusing.
-    //
-    // On testnet: ORACLE_TOTAL_COUNT(30) != vOracleNodes(17) — IDs 17-29 pass P2P bounds
-    // but fail GetOracleNode (defense-in-depth catches it).
+    // RC41 keeps static, consensus, and chainparams total slot counts aligned.
+    // The active signing keyset remains a smaller prefix of the reserved roster.
     const CChainParams& params = Params();
     const Consensus::Params& consensus = params.GetConsensus();
 
@@ -17431,35 +17367,23 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
     BOOST_CHECK_EQUAL(ORACLE_TOTAL_COUNT, static_cast<int>(params.GetOracleNodes().size()));
     BOOST_TEST_MESSAGE("  ORACLE_TOTAL_COUNT == vOracleNodes ✅");
 
-    // But nOracleTotalOracles is lower (RC30: 17 = active per epoch, not total configured)
-    BOOST_CHECK_NE(consensus.nOracleTotalOracles, params.GetOracleNodes().size());
-    BOOST_TEST_MESSAGE("  ⚠️ nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
-                      + ") != vOracleNodes (" + std::to_string(params.GetOracleNodes().size()) + ")");
+    BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, static_cast<int>(params.GetOracleNodes().size()));
+    BOOST_TEST_MESSAGE("  nOracleTotalOracles == vOracleNodes ✅");
 
-    // nOracleTotalOracles is the per-chain consensus quorum size (RC30: 17)
-    // ORACLE_ACTIVE_COUNT is the static upper bound for validation (RC30: 17)
-    // nOracleTotalOracles <= ORACLE_ACTIVE_COUNT always holds
     BOOST_CHECK_LE(consensus.nOracleTotalOracles, ORACLE_ACTIVE_COUNT);
     BOOST_TEST_MESSAGE("  nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles) +
                       ") <= ORACLE_ACTIVE_COUNT (" + std::to_string(ORACLE_ACTIVE_COUNT) +
                       ") ✅ (consensus quorum within static bound)");
 
-    // vOraclePublicKeys populated on mainnet for Phase 3 (MuSig2) — matches nOracleTotalOracles
-    BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(consensus.nOracleTotalOracles));
+    // vOraclePublicKeys contains the active signing roster, not inactive reserve slots.
+    BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(consensus.nOraclePubkeyCount));
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 17);
     BOOST_TEST_MESSAGE("  vOraclePublicKeys has " + std::to_string(consensus.vOraclePublicKeys.size()) +
                       " keys on mainnet ✅ (Phase 3 MuSig2)");
 
-    // DESIGN GAP: P2P bounds check and ValidateBlockOracleData both use ORACLE_TOTAL_COUNT.
-    // This is correct for mainnet (matches vOracleNodes), but on testnet creates a gap where
-    // IDs between vOracleNodes.size() and ORACLE_TOTAL_COUNT pass the first check.
-    // Defense-in-depth: GetOracleNode() linear scan provides the real check.
-    //
-    // Better approach: Use vOracleNodes.size() or nOracleTotalOracles in P2P handler
-    // instead of a static constant that may drift from per-chain configs.
-    BOOST_TEST_MESSAGE("  📝 P2P uses ORACLE_TOTAL_COUNT — matches mainnet but not testnet");
-    BOOST_TEST_MESSAGE("  📝 nOracleTotalOracles (" + std::to_string(consensus.nOracleTotalOracles)
-                      + ") = per-epoch active count, not total configured");
-    BOOST_TEST_MESSAGE("  📝 Recommend: rename nOracleTotalOracles to nOracleActivePerEpoch for clarity");
+    BOOST_TEST_MESSAGE("  📝 P2P uses ORACLE_TOTAL_COUNT — matches chainparams total slots");
+    BOOST_TEST_MESSAGE("  📝 nOraclePubkeyCount (" + std::to_string(consensus.nOraclePubkeyCount)
+                      + ") = active signing keyset for RC41");
 }
 
 // =============================================================================

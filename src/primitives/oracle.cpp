@@ -319,7 +319,7 @@ bool COracleBundle::IsValid(int min_required, int64_t reference_time) const
 
 bool COracleBundle::AddMessage(const COraclePriceMessage& message)
 {
-    // Don't allow more than ORACLE_ACTIVE_COUNT messages (RC30: 17 max active oracles)
+    // Don't allow more messages than the reserved oracle slot capacity.
     if (messages.size() >= ORACLE_ACTIVE_COUNT) return false;
 
     // Check if oracle already submitted a message

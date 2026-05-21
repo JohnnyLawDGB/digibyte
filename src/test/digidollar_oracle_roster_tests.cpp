@@ -239,7 +239,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_accepts_valid_9_sig_bundle_after_activation
 {
     const Consensus::Params params = ExpandedRosterParams(ROSTER_ACTIVE_HEIGHT);
     BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, ROSTER_ACTIVE_OPERATORS);
-    BOOST_REQUIRE_GT(params.nOraclePubkeyCount, ORACLE_ACTIVE_COUNT);
+    BOOST_REQUIRE_GT(params.nOraclePubkeyCount, 17);
 
     COracleBundle bundle = MakeRosterBundle();
     const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6, 7, 18};

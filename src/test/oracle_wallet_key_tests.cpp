@@ -123,11 +123,11 @@ BOOST_FIXTURE_TEST_CASE(oracle_key_id_validation, BasicTestingSetup)
         BOOST_CHECK(msg.IsValid());
     }
 
-    // oracle_id 30 — IsValid() doesn't check oracle_id bounds (that's chainparams),
+    // oracle_id 35 — IsValid() doesn't check oracle_id bounds (that's chainparams),
     // but the message itself is structurally valid. The RPC createoraclekey rejects it.
     {
         COraclePriceMessage msg;
-        msg.oracle_id = 30;
+        msg.oracle_id = 35;
         msg.price_micro_usd = 6500;
         msg.timestamp = GetTime();
         msg.block_height = 1000;
@@ -137,7 +137,7 @@ BOOST_FIXTURE_TEST_CASE(oracle_key_id_validation, BasicTestingSetup)
         // IsValid() checks price/timestamp, not oracle_id — that's a higher-level check
         BOOST_CHECK(msg.IsValid());
         // But oracle_id >= ORACLE_TOTAL_COUNT should be rejected by RPC/chainparams
-        BOOST_CHECK(msg.oracle_id >= 30);
+        BOOST_CHECK(msg.oracle_id >= ORACLE_TOTAL_COUNT);
     }
 
     // Verify that invalid price makes IsValid() fail (oracle_id is not the gate)

@@ -258,7 +258,7 @@ BOOST_AUTO_TEST_CASE(rh31_02b_bip9_activation_race_window)
 
 BOOST_AUTO_TEST_CASE(rh31_02c_min_activation_height_enforcement)
 {
-    // ATTACK: BIP9 specifies min_activation_height. On mainnet it's 22014720.
+    // ATTACK: BIP9 specifies min_activation_height. On mainnet it's 23627520.
     // What if a node has a different min_activation_height due to a bug or
     // configuration? They'd activate at different heights.
 
@@ -271,7 +271,7 @@ BOOST_AUTO_TEST_CASE(rh31_02c_min_activation_height_enforcement)
     BOOST_CHECK_EQUAL(dd_deploy.min_activation_height, 0);
 
     // Verify min_activation_height is aligned to confirmation window
-    // On mainnet: 22014720 = 546 * 40320 — aligned to nMinerConfirmationWindow
+    // On mainnet: 23627520 = 586 * 40320 — aligned to nMinerConfirmationWindow
     // This prevents activation mid-window which could cause disagreement
     if (dd_deploy.min_activation_height > 0 && consensus.nMinerConfirmationWindow > 0) {
         BOOST_CHECK_EQUAL(dd_deploy.min_activation_height % consensus.nMinerConfirmationWindow, 0);
@@ -555,7 +555,7 @@ BOOST_AUTO_TEST_CASE(rh31_07a_network_separation)
     // ATTACK: Could testnet DD parameters accidentally be used on mainnet?
     //
     // Key differences between networks:
-    // - Mainnet: min_activation_height = 22014720, nStartTime = May 2026
+    // - Mainnet: min_activation_height = 23627520, nStartTime = June 1, 2026
     // - Testnet: min_activation_height = 600, nStartTime = genesis
     // - Regtest: ALWAYS_ACTIVE
     //
@@ -588,7 +588,7 @@ BOOST_AUTO_TEST_CASE(rh31_07b_testnet_activation_height_is_low)
     // transition happens quickly. But this is intentional for testing.
     //
     // nDDActivationHeight varies by network:
-    //   mainnet: 22014720, testnet: 600, regtest: 650
+    //   mainnet: 23627520, testnet: 600, regtest: 650
     // The legacy height check is @deprecated — prefer IsDigiDollarEnabled (BIP9).
 
     const auto& consensus = Params().GetConsensus();

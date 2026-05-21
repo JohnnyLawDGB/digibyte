@@ -21,8 +21,8 @@ from decimal import Decimal
 import time
 
 # Oracle constants (should match src/primitives/oracle.h)
-# RC30: 9-of-17 (was 8-of-15)
-ORACLE_TOTAL_COUNT = 30
+# RC41: 35 reserved slots, 17 active launch keys, 9 signatures required.
+ORACLE_TOTAL_COUNT = 35
 ORACLE_ACTIVE_COUNT = 17
 ORACLE_CONSENSUS_REQUIRED = 9
 
@@ -110,8 +110,8 @@ class DigiDollarOracleTest(DigiByteTestFramework):
                 assert param in oracle_config, f"Missing oracle config parameter: {param}"
 
             # Verify configuration values match consensus parameters
-            # RC30: 9-of-17 (was 8-of-15)
-            assert_equal(oracle_config['total_oracles'], 30)
+            # RC41: 35 reserved slots, 17 active launch keys, 9 signatures required.
+            assert_equal(oracle_config['total_oracles'], 35)
             assert_equal(oracle_config['active_oracles_per_epoch'], 17)
             assert_equal(oracle_config['consensus_threshold'], 9)
             assert_equal(oracle_config['price_valid_blocks'], 20)

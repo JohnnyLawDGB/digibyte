@@ -740,8 +740,8 @@ BOOST_FIXTURE_TEST_CASE(w18_14_estimatecollateral_cents_to_dgb_unit_boundary,
 // W18-15: getoraclepubkey rejects out-of-range oracle_id
 // =============================================================================
 //
-// Pins src/rpc/digidollar.cpp:4720-4724 (oracle_id must be 0..29 on
-// regtest where ORACLE_TOTAL_COUNT=30 from primitives/oracle.h).
+// Pins src/rpc/digidollar.cpp:4720-4724 (oracle_id must be 0..34 where
+// ORACLE_TOTAL_COUNT=35 from primitives/oracle.h).
 // Functional gating is covered by digidollar_rpc_gating.py; this case
 // pins the schema-side numeric range so a future regtest-roster
 // shrink (e.g. setting nOraclePubkeyCount=7) cannot accidentally drop
@@ -749,7 +749,7 @@ BOOST_FIXTURE_TEST_CASE(w18_14_estimatecollateral_cents_to_dgb_unit_boundary,
 BOOST_FIXTURE_TEST_CASE(w18_15_getoraclepubkey_rejects_out_of_range_oracle_id,
                         DigiDollarRPCSchemaSetup)
 {
-    for (const std::string& bad_id : {std::string{"-1"}, std::string{"30"}, std::string{"99"}}) {
+    for (const std::string& bad_id : {std::string{"-1"}, std::string{"35"}, std::string{"99"}}) {
         std::string err;
         bool threw = RpcThrows(
             [&] { CallNodeRPC("getoraclepubkey " + bad_id); }, err);

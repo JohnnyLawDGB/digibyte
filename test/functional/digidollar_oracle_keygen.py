@@ -84,9 +84,9 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         assert_equal(result1["stored_in_wallet"], True)
         assert result1["pubkey"] != pubkey, "oracle 1 should have different pubkey than oracle 0"
 
-        # --- Test 7: createoraclekey 30 should fail (max oracle_id is 29) ---
-        self.log.info("Test: createoraclekey 30 should fail (invalid oracle_id)")
-        assert_raises_rpc_error(None, None, wallet.createoraclekey, 30)
+        # --- Test 7: createoraclekey 35 should fail (max oracle_id is 34) ---
+        self.log.info("Test: createoraclekey 35 should fail (invalid oracle_id)")
+        assert_raises_rpc_error(None, None, wallet.createoraclekey, 35)
 
         # --- DD-FA-FUNC-029: createoraclekey parameter validation parity ---
         # createoraclekey must reject negative IDs with a signed-int error

@@ -255,10 +255,13 @@ inline bool IsMuSig2Active(const Params& params, int nHeight) {
  * Validate MuSig2 oracle configuration.
  */
 inline bool ValidateOracleConfiguration(const Params& params) {
+    if (params.nOracleTotalOracles < 0) return false;
+    if (params.nOraclePubkeyCount < 0) return false;
+    if (params.nOracleConsensusRequired < 0) return false;
     if (static_cast<int>(params.vOraclePublicKeys.size()) != params.nOraclePubkeyCount) return false;
+    if (params.nOraclePubkeyCount > params.nOracleTotalOracles) return false;
+    if (params.nOraclePubkeyCount > 0 && params.nOracleConsensusRequired == 0) return false;
     if (params.nOracleConsensusRequired > params.nOraclePubkeyCount) return false;
-    if (params.nOraclePubkeyCount > 0 &&
-        params.nOracleConsensusRequired < (params.nOraclePubkeyCount / 2 + 1)) return false;
     std::set<std::string> pubkey_set;
     for (const auto& pk : params.vOraclePublicKeys) {
         if (!pubkey_set.insert(pk).second) return false;

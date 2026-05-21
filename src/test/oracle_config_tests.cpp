@@ -100,11 +100,12 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Verify Phase Two: 9-of-17 consensus for testnet (RC30)
+    // Verify RC41: 35 reserved slots, 17 active launch keys, 9 signatures required.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 9);   // 9 signatures required
     BOOST_CHECK_EQUAL(ddParams.activeOracles, 17);    // 17 active oracles
+    BOOST_CHECK_EQUAL(ddParams.oracleCount, 35);      // 35 reserved slots
 
-    // Verify ratio is >50% (9-of-17, strict majority)
+    // The launch 9-of-17 keyset remains a strict majority of active keys.
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
                             ddParams.activeOracles;
     BOOST_CHECK(consensus_ratio > 0.5);  // Must be strict majority
@@ -271,7 +272,7 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 17 active oracles (9-of-17 consensus) — RC30
+    // RC41: 17 active launch keys inside the 35-slot roster.
     BOOST_CHECK_EQUAL(ddParams.activeOracles, 17);
 
     // Verify oracle nodes match configuration
@@ -285,9 +286,9 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
         }
     }
 
-    // 17 active oracles in the oracle nodes list (RC30: 9-of-17)
+    // 17 active oracles in the oracle nodes list.
     BOOST_CHECK_EQUAL(active_count, 17);
-    BOOST_CHECK_GE((int)oracle_nodes.size(), 17);
+    BOOST_CHECK_EQUAL((int)oracle_nodes.size(), 35);
 
     LogPrintf("Phase Two oracle count: %d active, %d total\n",
               active_count, oracle_nodes.size());
@@ -309,14 +310,14 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Phase Two: 9-of-17 consensus (strict supermajority) — RC30
+    // RC41 launch: 9 signatures from 17 active keys.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 9);
     BOOST_CHECK_EQUAL(ddParams.activeOracles, 17);
 
-    // Verify strict majority (threshold > activeOracles / 2)
+    // Verify launch active set is still strict majority.
     BOOST_CHECK(ddParams.oracleThreshold > ddParams.activeOracles / 2);
 
-    // Calculate consensus percentage (RC30: ~52.9% for 9-of-17)
+    // Calculate consensus percentage for the active launch roster.
     double consensus_pct = 100.0 * ddParams.oracleThreshold / ddParams.activeOracles;
     BOOST_CHECK(consensus_pct > 50.0);
 
@@ -344,14 +345,13 @@ BOOST_AUTO_TEST_CASE(phase_one_no_mainnet_activation)
     // Activation height should be very far in the future
     BOOST_CHECK(consensus.nDDActivationHeight > 20000000);  // Beyond current chain height
 
-    // Verify mainnet has 30 oracle nodes configured (for future use)
-    // but they are not active yet
+    // Verify mainnet has 35 oracle slots configured for future use.
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
 
-    // Mainnet should have full oracle set configured (30 nodes) for future phases
-    BOOST_CHECK(oracle_nodes.size() >= 30);
+    // Mainnet should have full reserved oracle set configured.
+    BOOST_CHECK_EQUAL(oracle_nodes.size(), 35U);
 
-    // All oracles should be marked as active (ready for future activation)
+    // Only the first 17 launch slots are active; reserve slots are inactive.
     int active_count = 0;
     for (const auto& oracle : oracle_nodes) {
         if (oracle.is_active) {
@@ -359,7 +359,7 @@ BOOST_AUTO_TEST_CASE(phase_one_no_mainnet_activation)
         }
     }
 
-    BOOST_CHECK_EQUAL(active_count, oracle_nodes.size());  // All configured but not activated
+    BOOST_CHECK_EQUAL(active_count, 17);
 
     LogPrintf("Mainnet oracle configuration: %d nodes configured, activation at height %d\n",
               oracle_nodes.size(), consensus.nDDActivationHeight);

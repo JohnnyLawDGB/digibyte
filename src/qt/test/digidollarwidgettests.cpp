@@ -59,6 +59,7 @@
 #include <QTreeWidget>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QSignalSpy>
 #include <QTimer>
 
 using wallet::AddWallet;
@@ -2774,6 +2775,52 @@ void DigiDollarWidgetTests::ddReceiveRequestDialogFormatsURIAndAmount()
     QVERIFY2(uri_text.contains(QStringLiteral("message=DGB-equivalent%20DD%20request")),
              "DD receive request dialog must percent-encode messages");
     QCOMPARE(amount_text, QStringLiteral("123.45 DD"));
+}
+
+void DigiDollarWidgetTests::ddReceiveRejectsMalformedRequestAmount()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-receive-invalid-amount");
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletModel* wallet_model = mini_gui.walletModel.get();
+    QVERIFY(wallet_model != nullptr);
+
+    DigiDollarReceiveWidget receive;
+    receive.setWalletModel(wallet_model);
+    receive.setClientModel(mini_gui.clientModel.get());
+    receive.show();
+
+    QLineEdit* amountEdit = receive.findChild<QLineEdit*>("amountEdit");
+    QLineEdit* addressEdit = receive.findChild<QLineEdit*>("addressEdit");
+    QTableWidget* table = receive.findChild<QTableWidget*>("requestsTable");
+    QVERIFY(amountEdit != nullptr);
+    QVERIFY(addressEdit != nullptr);
+    QVERIFY(table != nullptr);
+
+    QSignalSpy messageSpy(&receive, &DigiDollarReceiveWidget::message);
+    amountEdit->setText(QStringLiteral("12.bad"));
+    QVERIFY(QMetaObject::invokeMethod(&receive, "onGenerateAddressClicked", Qt::DirectConnection));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(addressEdit->text(), QString());
+    QCOMPARE(table->rowCount(), 0);
+    QCOMPARE(wallet_model->wallet().getAddressReceiveRequests().size(), size_t{0});
+    QVERIFY(!messageSpy.empty());
+    QCOMPARE(messageSpy.first().at(0).toString(), QStringLiteral("Invalid Amount"));
 }
 
 // Regression test for shenger's Apr 20 RC30 UX report: on Windows dark

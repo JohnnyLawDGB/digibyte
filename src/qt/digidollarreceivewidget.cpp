@@ -17,6 +17,7 @@
 #include <consensus/amount.h>
 #include <logging.h>
 #include <streams.h>
+#include <util/strencodings.h>
 #include <util/string.h>
 #include <wallet/types.h>
 
@@ -45,6 +46,39 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+
+namespace {
+constexpr CAmount MAX_DD_REQUEST_AMOUNT_CENTS = 100000000LL * 100;
+
+bool ParseDigiDollarRequestAmount(const QString& amount_text, CAmount& amount_out)
+{
+    amount_out = 0;
+    if (amount_text.isEmpty()) {
+        return true;
+    }
+
+    const QString trimmed = amount_text.trimmed();
+    if (trimmed != amount_text || trimmed.isEmpty()) {
+        return false;
+    }
+
+    int64_t parsed = 0;
+    if (!ParseFixedPoint(trimmed.toStdString(), 2, &parsed)) {
+        return false;
+    }
+    if (parsed < 0 || parsed > MAX_DD_REQUEST_AMOUNT_CENTS) {
+        return false;
+    }
+
+    amount_out = static_cast<CAmount>(parsed);
+    return true;
+}
+
+QString FormatDigiDollarRequestAmount(CAmount amount)
+{
+    return QString::number(static_cast<double>(amount) / 100.0, 'f', 2);
+}
+} // namespace
 
 DigiDollarReceiveWidget::DigiDollarReceiveWidget(QWidget *parent) :
     QWidget(parent),
@@ -491,6 +525,15 @@ void DigiDollarReceiveWidget::generateNewAddress()
         return;
     }
 
+    CAmount requestedAmount = 0;
+    if (!ParseDigiDollarRequestAmount(m_amountEdit->text(), requestedAmount)) {
+        Q_EMIT message(tr("Invalid Amount"),
+                       tr("Enter a DigiDollar request amount with no more than two decimal places, or leave the amount blank."),
+                       QMessageBox::Warning);
+        m_amountEdit->setFocus();
+        return;
+    }
+
     // Get label from input field
     QString label = m_labelEdit->text();
     if (label.isEmpty()) {
@@ -507,7 +550,7 @@ void DigiDollarReceiveWidget::generateNewAddress()
 
     m_currentAddress = newAddress;
     m_currentLabel = m_labelEdit->text();
-    m_currentAmount = m_amountEdit->text();
+    m_currentAmount = requestedAmount > 0 ? FormatDigiDollarRequestAmount(requestedAmount) : QString();
     m_currentMessage = m_messageEdit->text();
 
     // Update address display
@@ -525,15 +568,7 @@ void DigiDollarReceiveWidget::generateNewAddress()
     recipient.address = m_currentAddress;
     recipient.label = m_currentLabel;
 
-    // Parse amount if provided
-    bool ok = false;
-    double amountValue = m_currentAmount.toDouble(&ok);
-    if (ok && amountValue > 0) {
-        // Store DD payment-request amount in cents.
-        recipient.amount = static_cast<CAmount>(amountValue * 100);
-    } else {
-        recipient.amount = 0; // No specific amount requested
-    }
+    recipient.amount = requestedAmount;
 
     recipient.message = m_currentMessage;
 
@@ -544,7 +579,7 @@ void DigiDollarReceiveWidget::generateNewAddress()
 
     // Add to UI table for immediate display
     QString dateStr = QDateTime::currentDateTime().toString("MMM dd");
-    QString amountStr = m_currentAmount.isEmpty() ? tr("Any") : formatDDAmount(m_currentAmount.toDouble());
+    QString amountStr = requestedAmount > 0 ? formatDDAmount(requestedAmount / 100.0) : tr("Any");
     addRequestToTable(dateStr, m_currentLabel, amountStr, m_currentAddress);
 
     // Show the QR code popup dialog (same as DGB receive behavior)
@@ -636,7 +671,9 @@ void DigiDollarReceiveWidget::onLabelChanged()
 
 void DigiDollarReceiveWidget::onAmountChanged()
 {
-    m_currentAmount = m_amountEdit->text();
+    CAmount requestedAmount = 0;
+    m_currentAmount = ParseDigiDollarRequestAmount(m_amountEdit->text(), requestedAmount) && requestedAmount > 0 ?
+        FormatDigiDollarRequestAmount(requestedAmount) : QString();
     if (!m_currentAddress.isEmpty()) {
         updateQRCode();
     }
@@ -871,8 +908,9 @@ QString DigiDollarReceiveWidget::formatDDURI(const QString& address, const QStri
     if (!label.isEmpty()) {
         params << "label=" + QString(QUrl::toPercentEncoding(label));
     }
-    if (!amount.isEmpty()) {
-        params << "amount=" + amount;
+    CAmount parsedAmount = 0;
+    if (ParseDigiDollarRequestAmount(amount, parsedAmount) && parsedAmount > 0) {
+        params << "amount=" + FormatDigiDollarRequestAmount(parsedAmount);
     }
     if (!message.isEmpty()) {
         params << "message=" + QString(QUrl::toPercentEncoding(message));

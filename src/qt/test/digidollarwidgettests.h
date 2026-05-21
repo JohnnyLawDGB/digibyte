@@ -61,6 +61,7 @@ private Q_SLOTS:
     void ddReceiveEditCancelLeavesRequestUnchanged();
     void ddReceiveRemovePersistsAndKeepsDgbSeparated();
     void ddReceiveRequestDialogFormatsURIAndAmount();
+    void ddReceiveRejectsMalformedRequestAmount();
     void darkThemePeerDetailWidgetHasExplicitRule();
     void overviewRecentTransactionsSendShowsNegativeSign();
     void transactionsWidgetShowsRpcHistorySignsAndFields();

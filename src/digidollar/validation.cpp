@@ -1300,14 +1300,29 @@ bool ValidateMintTransaction(const CTransaction& tx,
                                        "Mint OP_RETURN DD amount is outside serialization bounds");
                 }
 
-                // Extract lock height
-                if (output.scriptPubKey.GetOp(pc, opcode, data)) {
-                    try {
-                        // Allow up to 8 bytes for lock heights (int64_t range)
-                        CScriptNum lockHeightNum(data, true, 8);
-                        lockTime = lockHeightNum.GetInt64();
-                        LogPrintf("DigiDollar: Extracted lock height from OP_RETURN: %lld blocks\n", static_cast<long long>(lockTime));
-                    } catch (const std::exception&) {}
+                // Extract lock height. This field is consensus-critical:
+                // validators must not synthesize a default lock height for
+                // malformed or attacker-controlled mint metadata.
+                if (!output.scriptPubKey.GetOp(pc, opcode, data) || data.empty()) {
+                    LogPrintf("DigiDollar: Missing lock height in mint OP_RETURN\n");
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-height",
+                                       "Mint OP_RETURN must include a positive lock height");
+                }
+                try {
+                    // Allow up to 8 bytes for lock heights (int64_t range)
+                    CScriptNum lockHeightNum(data, true, 8);
+                    lockTime = lockHeightNum.GetInt64();
+                    LogPrintf("DigiDollar: Extracted lock height from OP_RETURN: %lld blocks\n", static_cast<long long>(lockTime));
+                } catch (const scriptnum_error&) {
+                    LogPrintf("DigiDollar: Malformed lock height in mint OP_RETURN\n");
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-height",
+                                       "Mint OP_RETURN lock height must be minimally encoded");
+                }
+                if (lockTime <= 0) {
+                    LogPrintf("DigiDollar: Invalid non-positive lock height in mint OP_RETURN: %lld\n",
+                              static_cast<long long>(lockTime));
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-height",
+                                       "Mint OP_RETURN lock height must be positive");
                 }
 
                 // Extract lock tier and VERIFY consistency with lockHeight
@@ -1481,11 +1496,11 @@ bool ValidateMintTransaction(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "missing-dd-output");
     }
 
-    // 5. Ensure valid lock time was found (Phase 1: allow default for testing)
+    // 5. Ensure valid lock time was found.
     if (lockTime <= 0) {
-        // Phase 1 workaround: Use default 30-day lock for testing if no OP_RETURN
-        lockTime = 30 * 24 * 60 * 4; // 30 days default
-        LogPrintf("DigiDollar: No lock time in OP_RETURN, using default 30 days for testing\n");
+        LogPrintf("DigiDollar: Mint transaction missing valid OP_RETURN lock height\n");
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-mint-lock-height",
+                           "Mint transaction must include a positive OP_RETURN lock height");
     }
 
     // 5b. SECURITY [T1-04b]: Require DD OP_RETURN with owner pubkey for ALL mint transactions.

@@ -505,6 +505,48 @@ BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_rejects_malformed_opreturn_a
     BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-mint-opreturn-amount");
 }
 
+BOOST_FIXTURE_TEST_CASE(transaction_validation_mint_rejects_zero_opreturn_lock_height, DigiDollarValidationTestSetup)
+{
+    CMutableTransaction mtx;
+    mtx.nVersion = 0x01000770; // DD_TX_MINT
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256S("0x1234"), 0);
+
+    const CAmount ddAmount = 10000;
+    const int64_t fallbackLockHeight = 30 * 24 * 60 * 4;
+    const int64_t claimedTierBlocks = DigiDollar::LockDaysToBlocks(3650);
+
+    DigiDollar::MintParams params;
+    params.ddAmount = ddAmount;
+    params.lockHeight = fallbackLockHeight;
+    params.ownerKey = testXOnlyKey;
+    params.internalKey = DigiDollar::GetCollateralNUMSKey();
+    params.oracleKeys = DigiDollar::GetOracleKeys(15);
+
+    const CScript collateralScript = DigiDollar::CreateCollateralP2TR(params);
+    const CAmount requiredCollateral = DigiDollar::CalculateRequiredCollateral(ddAmount, claimedTierBlocks, validationContext);
+    BOOST_REQUIRE(requiredCollateral > 0);
+
+    const CScript opReturn = CScript() << OP_RETURN
+                                      << std::vector<unsigned char>{'D', 'D'}
+                                      << CScriptNum(1)
+                                      << CScriptNum(ddAmount)
+                                      << CScriptNum(0) // malformed mint: no positive lock height
+                                      << CScriptNum(9)
+                                      << std::vector<unsigned char>(testXOnlyKey.begin(), testXOnlyKey.end());
+    const CScript ddScript = DigiDollar::CreateDigiDollarP2TR(testXOnlyKey, ddAmount);
+
+    mtx.vout.resize(3);
+    mtx.vout[0] = CTxOut(0, opReturn);
+    mtx.vout[1] = CTxOut(requiredCollateral, collateralScript);
+    mtx.vout[2] = CTxOut(0, ddScript);
+
+    TxValidationState state;
+    BOOST_CHECK_MESSAGE(!DigiDollar::ValidateDigiDollarTransaction(CTransaction(mtx), validationContext, state),
+                        "DD-RHF-011: mint validation must not normalize zero lockHeight into a default lock");
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-mint-lock-height");
+}
+
 BOOST_FIXTURE_TEST_CASE(transaction_validation_invalid_mint_does_not_mutate_volatility_state, DigiDollarValidationTestSetup)
 {
     DigiDollar::Volatility::VolatilityMonitor::ClearHistory();

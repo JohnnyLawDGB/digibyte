@@ -719,7 +719,7 @@ print_status "ok" "Clean environment ready (all stale data removed, 8 fresh data
 
 # Step 2: Start Bob's Qt node
 print_header "Step 2: Starting Bob's Qt node"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -777,7 +777,7 @@ print_status "ok" "Oracle startup deferred to Step 8B"
 
 # Step 5: Start Alice's Qt node
 print_header "Step 5: Starting Alice's Qt node"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -815,7 +815,7 @@ echo "Alice's address: $ALICE_ADDR"
 
 # Step 6: Start Charlie's Qt node
 print_header "Step 6: Starting Charlie's Qt node"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -853,7 +853,7 @@ echo "Charlie's address: $CHARLIE_ADDR"
 
 # Step 6B: Start Dave's Qt node (hosts oracles 6, 7)
 print_header "Step 6B: Starting Dave's Qt node (hosts oracles 6, 7)"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -891,7 +891,7 @@ echo "Dave's address: $DAVE_ADDR"
 
 # Step 6C: Start Eve's Qt node (hosts oracles 8, 9)
 print_header "Step 6C: Starting Eve's Qt node (hosts oracles 8, 9)"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -929,7 +929,7 @@ echo "Eve's address: $EVE_ADDR"
 
 # Step 6D: Start Frank's Qt node (hosts oracles 10, 11)
 print_header "Step 6D: Starting Frank's Qt node (hosts oracles 10, 11)"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -967,7 +967,7 @@ echo "Frank's address: $FRANK_ADDR"
 
 # Step 6E: Start Grace's Qt node (hosts oracles 12, 13)
 print_header "Step 6E: Starting Grace's Qt node (hosts oracles 12, 13)"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -1005,7 +1005,7 @@ echo "Grace's address: $GRACE_ADDR"
 
 # Step 6F: Start Heidi's Qt node (hosts oracles 14, 15)
 print_header "Step 6F: Starting Heidi's Qt node (hosts oracles 14, 15)"
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -2254,7 +2254,7 @@ print_subheader "Restarting Bob's Qt wallet..."
 echo "Starting Bob's Qt with SAME data directory (no wipe)..."
 
 # Restart Bob's Qt with the same datadir
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -2431,7 +2431,7 @@ fi
 
 print_subheader "Restarting Bob's Qt with restored wallet..."
 
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -2538,7 +2538,7 @@ echo "This will rescan the entire blockchain and rebuild all indexes..."
 echo "You should see the Qt window show 'Reindexing blocks on disk...' progress"
 echo ""
 
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
@@ -2784,7 +2784,7 @@ stop_qt_node "Alice" "$ALICE_PID" "$ALICE_CLI" "reindex"
 print_subheader "Starting Alice's Qt with -reindex flag..."
 echo "This will rescan the entire blockchain and rebuild all indexes..."
 
-env -i \
+setsid env -i \
     DISPLAY="${DISPLAY}" \
     XAUTHORITY="${XAUTHORITY}" \
     WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \

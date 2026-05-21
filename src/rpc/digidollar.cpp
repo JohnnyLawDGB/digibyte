@@ -2,6 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#if defined(HAVE_CONFIG_H)
+#include <config/digibyte-config.h>
+#endif
+
 #include <rpc/server.h>
 #include <rpc/util.h>
 #include <rpc/server_util.h>
@@ -23,14 +27,16 @@
 #include <chainparams.h>
 #include <clientversion.h>
 #include <kernel/chainparams.h>
+#include <logging.h>
 #include <node/context.h>
 #include <core_io.h>
 #include <util/strencodings.h>
 #include <validation.h>
 #include <versionbits.h>
+#include <cmath>
+#ifdef ENABLE_WALLET
 #include <wallet/wallet.h>
 #include <wallet/receive.h>
-#include <cmath>
 #include <wallet/context.h>
 #include <wallet/rpc/util.h>
 #include <wallet/spend.h>
@@ -40,6 +46,7 @@
 #include <wallet/walletdb.h>
 #include <wallet/scriptpubkeyman.h>
 #include <interfaces/wallet.h>
+#endif
 #include <digidollar/txbuilder.h>
 #include <node/transaction.h>
 #include <base58.h>
@@ -89,6 +96,7 @@ namespace {
         return ratio > 0 ? ratio : 0;
     }
 
+#ifdef ENABLE_WALLET
     bool TryStartOracleFromPrivateKey(OracleManager& oracle_manager, uint32_t oracle_id, const std::string& private_key_hex, const std::string& key_source, bool allow_initialized_without_running, std::string& status_message, bool* initialized_out = nullptr)
     {
         bool initialized = false;
@@ -126,6 +134,7 @@ namespace {
         status_message = strprintf("Oracle initialized with %s but failed to start price thread", key_source);
         return false;
     }
+#endif
 
     void PublishRegtestMockMuSig2Quote(int32_t quote_height)
     {
@@ -141,6 +150,7 @@ namespace {
         }
     }
 
+#ifdef ENABLE_WALLET
     void RefreshRegtestMockMuSig2QuoteForMempool(const wallet::CWallet& wallet)
     {
         if (Params().GetChainType() != ChainType::REGTEST) return;
@@ -158,6 +168,7 @@ namespace {
         });
         PublishRegtestMockMuSig2Quote(current_height + 1);
     }
+#endif
 
     struct DigiDollarRpcTotals {
         CAmount total_collateral{0};
@@ -215,6 +226,7 @@ namespace {
         return totals;
     }
 
+#ifdef ENABLE_WALLET
     std::vector<COutPoint> ParseDigiDollarSelectedInputs(const UniValue& inputs)
     {
         std::vector<COutPoint> outpoints;
@@ -239,6 +251,7 @@ namespace {
         }
         return outpoints;
     }
+#endif
 
     int GetDigiDollarRpcSystemHealth(const JSONRPCRequest& request,
                                      CAmount oracle_price_micro_usd,
@@ -254,6 +267,7 @@ namespace {
             totals.total_collateral, totals.total_dd, oracle_price_millicents);
     }
 
+#ifdef ENABLE_WALLET
     CAmount ParseDigiDollarRpcAmount(const UniValue& amount_param)
     {
         if (!amount_param.isStr() && !amount_param.isNum()) {
@@ -268,6 +282,7 @@ namespace {
         }
         return static_cast<CAmount>(amount);
     }
+#endif
 
     bool OptionalParamIsSet(const JSONRPCRequest& request, size_t index)
     {
@@ -1004,6 +1019,7 @@ static RPCHelpMan getdigidollardeploymentinfo()
 // CORE RPC COMMANDS (Task 5.7)
 // =============================================================================
 
+#ifdef ENABLE_WALLET
 RPCHelpMan mintdigidollar()
 {
     return RPCHelpMan{"mintdigidollar",
@@ -2923,6 +2939,7 @@ RPCHelpMan listdigidollaraddresses()
         },
     };
 }
+#endif
 
 static RPCHelpMan importdigidollaraddress()
 {
@@ -3003,6 +3020,7 @@ static RPCHelpMan importdigidollaraddress()
 // UTILITY RPC COMMANDS (Task 5.8)
 // =============================================================================
 
+#ifdef ENABLE_WALLET
 RPCHelpMan getdigidollarbalance()
 {
     return RPCHelpMan{"getdigidollarbalance",
@@ -3305,6 +3323,7 @@ RPCHelpMan listdigidollarutxos()
 {
     return ListDigiDollarUnspentRpc("listdigidollarutxos");
 }
+#endif
 
 static RPCHelpMan estimatecollateral()
 {
@@ -3463,6 +3482,7 @@ static RPCHelpMan estimatecollateral()
     };
 }
 
+#ifdef ENABLE_WALLET
 RPCHelpMan getredemptioninfo()
 {
     return RPCHelpMan{"getredemptioninfo",
@@ -3773,6 +3793,7 @@ RPCHelpMan listdigidollartxs()
         },
     };
 }
+#endif
 
 static RPCHelpMan getoracleprice()
 {
@@ -4818,6 +4839,7 @@ static RPCHelpMan listoracle()
     };
 }
 
+#ifdef ENABLE_WALLET
 RPCHelpMan createoraclekey()
 {
     return RPCHelpMan{"createoraclekey",
@@ -5113,6 +5135,7 @@ RPCHelpMan startoracle()
         },
     };
 }
+#endif
 
 static RPCHelpMan stoporacle()
 {

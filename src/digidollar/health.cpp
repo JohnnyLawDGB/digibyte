@@ -2,6 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#if defined(HAVE_CONFIG_H)
+#include <config/digibyte-config.h>
+#endif
+
 #include <digidollar/health.h>
 #include <digidollar/digidollar.h>
 #include <digidollar/validation.h>
@@ -24,8 +28,10 @@
 #include <validation.h>
 #include <node/blockstorage.h>
 #include <txdb.h>
+#ifdef ENABLE_WALLET
 #include <wallet/wallet.h>
 #include <wallet/digidollarwallet.h>
+#endif
 
 #include <algorithm>
 #include <memory>
@@ -506,6 +512,7 @@ void SystemHealthMonitor::OnRedeemDisconnected(CAmount ddAmount, CAmount dgbColl
              FormatMoney(s_currentMetrics.totalDDSupply), FormatMoney(s_currentMetrics.totalCollateral));
 }
 
+#ifdef ENABLE_WALLET
 void SystemHealthMonitor::AggregateWalletStats(
     const std::vector<std::shared_ptr<wallet::CWallet>>& wallets,
     CAmount& totalDDSupply,
@@ -538,6 +545,18 @@ void SystemHealthMonitor::AggregateWalletStats(
              FormatMoney(totalDDSupply),
              FormatMoney(totalCollateral));
 }
+#else
+void SystemHealthMonitor::AggregateWalletStats(
+    const std::vector<std::shared_ptr<wallet::CWallet>>& wallets,
+    CAmount& totalDDSupply,
+    CAmount& totalCollateral)
+{
+    totalDDSupply = 0;
+    totalCollateral = 0;
+    LogPrint(BCLog::DIGIDOLLAR, "AggregateWalletStats: wallet support disabled, skipped %zu wallets\n",
+             wallets.size());
+}
+#endif
 
 void SystemHealthMonitor::UpdateTierMetrics()
 {

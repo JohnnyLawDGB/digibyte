@@ -1297,7 +1297,10 @@ BOOST_AUTO_TEST_CASE(redteam_nums_bypass_no_opreturn)
             reason.find("opreturn") != std::string::npos ||
             reason.find("owner-pubkey") != std::string::npos ||
             reason.find("nums") != std::string::npos ||
-            reason.find("dd-opreturn") != std::string::npos;
+            reason.find("dd-opreturn") != std::string::npos ||
+            // Missing OP_RETURN now fails closed on required mint lock metadata
+            // before the NUMS-specific owner-key reconstruction path runs.
+            reason == "bad-mint-lock-height";
         BOOST_CHECK_MESSAGE(correctRejection,
             "Rejection '" + reason + "' is incidental — defense is fragile");
     }

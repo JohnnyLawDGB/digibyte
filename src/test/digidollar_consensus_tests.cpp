@@ -270,6 +270,8 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK_EQUAL(mainDD.minMintAmount, 10000);   // Mainnet: 10000 cents = $100.00 min
     BOOST_CHECK_EQUAL(testDD.minMintAmount, 10000);   // Testnet: 10000 cents = $100.00 min
     BOOST_CHECK_EQUAL(regTestDD.minMintAmount, 1);    // Regtest: 1 cent = $0.01 min
+    BOOST_CHECK_GT(mainDD.minMintAmountActivationHeight, 0);
+    BOOST_CHECK_GT(testDD.minMintAmountActivationHeight, 0);
 
     // RC30: mainnet and testnet both use 9-of-17 via DigiDollar::ConsensusParams
     // (kept in sync with Consensus::Params nOracleRequiredMessages/nOracleTotalOracles).
@@ -281,6 +283,13 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK_EQUAL(mainParams->GetConsensus().nDDActivationHeight, 22014720); // Aligned with BIP9 min_activation_height
     BOOST_CHECK_EQUAL(testParams->GetConsensus().nDDActivationHeight, 600);      // Testnet: active from block 600 (BIP9 DEFINED→STARTED→LOCKED_IN→ACTIVE)
     BOOST_CHECK_EQUAL(regTestParams->GetConsensus().nDDActivationHeight, 650);   // After Odocrypt at 600
+
+    // DD-RHF-009: raw mainnet mints must enforce the same $100 floor as RPC,
+    // wallet, and testnet once DigiDollar is active.
+    BOOST_CHECK(!DigiDollar::ValidateMintAmount(mainDD.minMintAmount - 1, *mainParams,
+                                                mainParams->GetConsensus().nDDActivationHeight));
+    BOOST_CHECK(DigiDollar::ValidateMintAmount(mainDD.minMintAmount, *mainParams,
+                                               mainParams->GetConsensus().nDDActivationHeight));
 }
 
 BOOST_AUTO_TEST_CASE(edge_cases_test)

@@ -305,6 +305,8 @@ public:
         consensus.nDDOracleEpochBlocks = 40;       // Rotate oracle signing epochs every 40 blocks (~10 minutes)
         consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)
         consensus.nDDActivationHeight = 22014720;   // DigiDollar activation height — aligned with BIP9 min_activation_height
+        // Enforce the $100 minimum on mainnet as soon as DigiDollar activates.
+        digidollarParams.minMintAmountActivationHeight = consensus.nDDActivationHeight;
 
         // Oracle system — DigiDollar V1 launches with MuSig2 bundles only.
         consensus.nOracleActivationHeight = consensus.nDDActivationHeight;

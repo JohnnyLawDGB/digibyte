@@ -544,7 +544,7 @@ The current public testnet in this source tree is **testnet24**. DigiDollar acti
 
 ### Mainnet Timeline
 
-- **BIP9 signaling window:** May 1, 2026 → May 1, 2028
+- **BIP9 signaling window:** June 1, 2026 -> June 1, 2027
 - **Minimum activation height:** 22,014,720
 - **Threshold:** 70% over a 40,320-block window
 - Miners will vote to activate by signaling bit 23

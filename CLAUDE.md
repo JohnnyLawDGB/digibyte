@@ -68,7 +68,7 @@ These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VER
 
 | Network | Start | Min activation height | Window | Threshold | Status |
 |---------|-------|----------------------|--------|-----------|--------|
-| Mainnet | 2026-05-01 (epoch 1777593600) | 22,014,720 | 40,320 blocks (~1 week) | 70% (28,224 of 40,320) | Pending |
+| Mainnet | 2026-06-01 (epoch 1780272000) | 22,014,720 | 40,320 blocks (~1 week) | 70% (28,224 of 40,320) | Pending |
 | Testnet (testnet24) | BIP9 start 1763932527; reset genesis 1778507580 | 600 | 200 blocks | 70% (140 of 200) | Check `getdigidollardeploymentinfo` |
 | Regtest | ALWAYS_ACTIVE | 0 | 144 blocks (BIP9 default) | 75% (108 of 144) | Active |
 

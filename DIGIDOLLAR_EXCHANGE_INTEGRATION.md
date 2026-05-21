@@ -391,8 +391,8 @@ The current public testnet in this source tree is **testnet24**. DigiDollar acti
 | Milestone | Date |
 |-----------|------|
 | Testnet | Current source tree uses testnet24; activation is BIP9-gated at/after block 600 |
-| BIP9 signaling window opened | May 1, 2026 |
-| BIP9 signaling window closes | May 1, 2028 |
+| BIP9 signaling window opens | June 1, 2026 |
+| BIP9 signaling window closes | June 1, 2027 |
 | Minimum activation height | 22,014,720 |
 | Activation requirement | 70% of miners signal over 40,320 blocks (~1 week) |
 

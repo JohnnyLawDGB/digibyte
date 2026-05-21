@@ -14,8 +14,8 @@ DigiDollar activates on the DigiByte blockchain through **BIP9 version bit signa
 | Parameter | Value |
 |-----------|-------|
 | Bit | 23 |
-| Start Time | May 1, 2026 (epoch 1777593600) |
-| Timeout | May 1, 2028 (epoch 1840752000) |
+| Start Time | June 1, 2026 (epoch 1780272000) |
+| Timeout | June 1, 2027 (epoch 1811808000) |
 | Min Activation Height | 22,014,720 |
 | Confirmation Window | 40,320 blocks (~1 week) |
 | Threshold | 70% (28,224 of 40,320) |
@@ -209,14 +209,14 @@ After activation (block 600+):
 On mainnet, the process is:
 
 1. **Release:** Publish binaries with DigiDollar code and BIP9 deployment
-2. **Upgrade period:** Miners and nodes upgrade (BIP9 start time: May 1, 2026)
-3. **Signaling begins:** After start time (May 1, 2026), miners signal bit 23 in blocks
+2. **Upgrade period:** Miners and nodes upgrade (BIP9 start time: June 1, 2026)
+3. **Signaling begins:** After start time (June 1, 2026), miners signal bit 23 in blocks
 4. **Threshold reached:** 70% of blocks in a 40,320-block window (~1 week) signal support
 5. **Lock-in period:** One more 40,320-block window for remaining nodes to upgrade
 6. **Activation:** Block height reaches `min_activation_height` (22,014,720) and BIP9 is ACTIVE
 7. **DigiDollar live:** All DD functionality enabled across the network
 
-**Timeout:** If 70% signaling is not reached by May 1, 2028, the deployment transitions to FAILED. A new deployment with different parameters would be needed.
+**Timeout:** If 70% signaling is not reached by June 1, 2027, the deployment transitions to FAILED. A new deployment with different parameters would be needed.
 
 ---
 
@@ -228,7 +228,7 @@ On mainnet, the process is:
 
 3. **Oracle P2P safety:** Price, consensus, MuSig2, and `getoracles` messages received before the oracle height gate are silently dropped (not banned). Signed `oraclehb` heartbeats are the current telemetry exception called out in the audit note above.
 
-4. **Consensus safety:** Block validation explicitly rejects blocks containing DD transactions before activation. A miner who includes DD TXs in a pre-activation block will have that block rejected by the network.
+4. **Consensus safety:** Mempool policy rejects DD-marker transactions before activation, but block consensus preserves base-chain compatibility: pre-activation DD-looking markers are treated as ordinary DGB data and DigiDollar semantics are not applied until BIP9 is ACTIVE.
 
 5. **BIP9 guarantees:** The activation mechanism is the same one Bitcoin used for SegWit. It's battle-tested across multiple blockchains and provides clear upgrade coordination.
 

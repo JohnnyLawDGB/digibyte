@@ -45,6 +45,7 @@ private Q_SLOTS:
     void overviewUsdValueShowsUsdSuffixWhenPrivacyOff();
     void overviewPrivacyMaskHidesAmountUnits();
     void overviewLayoutStretchFavorsNetworkTotals();
+    void overviewPendingBalanceHasThemeRules();
     void overviewRecentTransactionAmountIsRightAligned();
     void privacySendMaskTests();
     void privacyMintMaskTests();

@@ -2033,6 +2033,51 @@ void DigiDollarWidgetTests::overviewLayoutStretchFavorsNetworkTotals()
              "Network totals should get more horizontal stretch than the smaller left stats column");
 }
 
+void DigiDollarWidgetTests::overviewPendingBalanceHasThemeRules()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+
+    const auto findTheme = [&](const QString& name) -> QString {
+        const QStringList candidates = {
+            QStringLiteral("src/qt/res/css/%1").arg(name),
+            QStringLiteral("../src/qt/res/css/%1").arg(name),
+            QStringLiteral("../../src/qt/res/css/%1").arg(name),
+            QStringLiteral("qt/res/css/%1").arg(name),
+        };
+        for (const auto& p : candidates) {
+            const QString css = readFile(p.toUtf8().constData());
+            if (!css.isEmpty()) return css;
+        }
+        return {};
+    };
+
+    const auto requirePendingRule = [](const QString& css, const QString& theme) {
+        const QRegularExpression pendingLabel(
+            QStringLiteral(R"re(DigiDollarOverviewWidget\s+\.QFrame#balanceFrame\s+\.QLabel#ddPendingLabel[^\{]*\{[^\}]*qproperty-alignment\s*:[^\;]*AlignRight[^\}]*min-width\s*:\s*160px\s*;[^\}]*font-size\s*:\s*11pt\s*;)re"),
+            QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+        QVERIFY2(pendingLabel.match(css).hasMatch(),
+                 qPrintable(QString("%1 must style #ddPendingLabel like the other DigiDollar balance labels").arg(theme)));
+
+        const QRegularExpression pendingValue(
+            QStringLiteral(R"re(DigiDollarOverviewWidget\s+\.QFrame#balanceFrame\s+\.QLabel#ddPendingValue[^\{]*\{[^\}]*qproperty-alignment\s*:[^\;]*AlignLeft[^\}]*font-size\s*:\s*13pt\s*;)re"),
+            QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+        QVERIFY2(pendingValue.match(css).hasMatch(),
+                 qPrintable(QString("%1 must style #ddPendingValue like the adjacent DigiDollar value rows").arg(theme)));
+    };
+
+    const QString light = findTheme(QStringLiteral("light.css"));
+    QVERIFY2(!light.isEmpty(), "could not locate light.css from current working directory");
+    requirePendingRule(light, QStringLiteral("light.css"));
+
+    const QString dark = findTheme(QStringLiteral("dark.css"));
+    QVERIFY2(!dark.isEmpty(), "could not locate dark.css from current working directory");
+    requirePendingRule(dark, QStringLiteral("dark.css"));
+}
+
 void DigiDollarWidgetTests::privacySendMaskTests()
 {
 #ifdef Q_OS_MACOS

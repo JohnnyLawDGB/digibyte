@@ -4633,6 +4633,24 @@ DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceValue {
     font-weight: bold;
 }
 
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddPendingLabel {
+    qproperty-alignment: 'AlignVCenter | AlignRight';
+    min-width: 160px;
+    font-size: 11pt;
+    background-color: #ffffff;
+    color: #003366;
+    margin-right: 5px;
+    padding-right: 5px;
+    border-radius: 6px;
+}
+
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddPendingValue {
+    qproperty-alignment: 'AlignVCenter | AlignLeft';
+    font-size: 13pt;
+    color: #003366;
+    margin-left: 0px;
+}
+
 DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralLabel {
     qproperty-alignment: 'AlignVCenter | AlignRight';
     min-width: 160px;

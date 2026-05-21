@@ -175,8 +175,8 @@ public:
 
         // Deployment of DigiDollar stablecoin features
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1777593600; // May 1, 2026
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1840752000; // May 1, 2028
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1780272000; // June 1, 2026
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1811808000; // June 1, 2027
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 22014720; // Aligned to confirmation window (546 * 40320)
 
         // The best chain should have at least this much work.

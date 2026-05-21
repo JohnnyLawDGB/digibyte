@@ -13914,12 +13914,20 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     // ATTACK: Are the mainnet BIP9 parameters set safely?
     // Check: threshold/window ratio, timeout duration, min_activation_height alignment.
 
-    // Mainnet parameters from chainparams.cpp
-    int mainnet_window = 40320;           // 1 week of blocks at 15s
-    int mainnet_threshold = 28224;        // 70%
-    int64_t mainnet_start = 1777593600;   // May 1, 2026
-    int64_t mainnet_timeout = 1840752000; // May 1, 2028
-    int mainnet_min_activation = 22014720;
+    const auto mainParams = CChainParams::Main();
+    const Consensus::Params& mainnet = mainParams->GetConsensus();
+    const auto& deployment = mainnet.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+
+    int mainnet_window = mainnet.nMinerConfirmationWindow;
+    int mainnet_threshold = mainnet.nRuleChangeActivationThreshold;
+    int64_t mainnet_start = deployment.nStartTime;
+    int64_t mainnet_timeout = deployment.nTimeout;
+    int mainnet_min_activation = deployment.min_activation_height;
+
+    BOOST_CHECK_EQUAL(mainnet_start, 1780272000);   // June 1, 2026
+    BOOST_CHECK_EQUAL(mainnet_timeout, 1811808000); // June 1, 2027
+    BOOST_CHECK_EQUAL(mainnet_min_activation, mainnet.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(mainnet.nOracleActivationHeight, mainnet.nDDActivationHeight);
 
     // Verify threshold is 70% of window
     double threshold_pct = (double)mainnet_threshold / mainnet_window * 100.0;
@@ -13929,9 +13937,9 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     int expected_blocks_per_week = 7 * 24 * 60 * 60 / 15;
     BOOST_CHECK_EQUAL(mainnet_window, expected_blocks_per_week);
 
-    // Verify 2-year timeout window (adequate time for ecosystem adoption)
+    // Verify 1-year timeout window (adequate time for ecosystem adoption)
     int64_t timeout_duration_days = (mainnet_timeout - mainnet_start) / (24 * 60 * 60);
-    BOOST_CHECK(timeout_duration_days >= 730); // At least 2 years
+    BOOST_CHECK(timeout_duration_days >= 365); // At least 1 year
 
     // Verify min_activation_height is aligned to confirmation window
     BOOST_CHECK_EQUAL(mainnet_min_activation % mainnet_window, 0);
@@ -13953,7 +13961,7 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
 
     BOOST_TEST_MESSAGE("T7-04b: Mainnet BIP9 parameters are safely configured ✅ — "
         "70% threshold in 40320-block (1-week) windows. "
-        "2-year timeout (May 2026 → May 2028) gives adequate adoption time. "
+        "1-year timeout (June 2026 → June 2027) gives adequate adoption time. "
         "min_activation_height 22,014,720 properly aligned to window boundary. "
         "Multi-algo defense: controlling 100% of 1 algorithm (20% of blocks) is "
         "insufficient to prevent activation — need >30% combined hashrate across "

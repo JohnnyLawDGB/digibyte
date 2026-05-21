@@ -1547,17 +1547,28 @@ void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {
 }
 
 void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) {
+    bool abandon_removed_dd_tx = false;
     bool reconcile_removed_dd_redeem = false;
     {
         LOCK(cs_wallet);
         auto it = mapWallet.find(tx->GetHash());
         if (it != mapWallet.end()) {
             RefreshMempoolStatus(it->second, chain());
+            const bool removed_by_policy =
+                reason == MemPoolRemovalReason::EXPIRY ||
+                reason == MemPoolRemovalReason::SIZELIMIT;
+            const auto dd_tx_type = GetDigiDollarTxType(*it->second.tx);
+            abandon_removed_dd_tx =
+                m_dd_wallet &&
+                removed_by_policy &&
+                dd_tx_type != DD_TX_NONE &&
+                !it->second.isAbandoned() &&
+                !it->second.isConfirmed() &&
+                !it->second.InMempool();
             reconcile_removed_dd_redeem =
                 m_dd_wallet &&
-                (reason == MemPoolRemovalReason::EXPIRY ||
-                 reason == MemPoolRemovalReason::SIZELIMIT) &&
-                GetDigiDollarTxType(*it->second.tx) == DD_TX_REDEEM;
+                removed_by_policy &&
+                dd_tx_type == DD_TX_REDEEM;
         }
         // Handle transactions that were removed from the mempool because they
         // conflict with transactions in a newly connected block.
@@ -1588,6 +1599,11 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
             // https://github.com/digibyte-core/digibyte-devwiki/wiki/Wallet-Transaction-Conflict-Tracking
             SyncTransaction(tx, TxStateInactive{});
         }
+    }
+
+    if (abandon_removed_dd_tx && AbandonTransaction(tx->GetHash())) {
+        WalletLogPrintf("DigiDollar: abandoned non-mempool transaction %s after removal reason %s\n",
+                        tx->GetHash().ToString(), RemovalReasonToString(reason));
     }
 
     if (reconcile_removed_dd_redeem) {

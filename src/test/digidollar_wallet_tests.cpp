@@ -3844,6 +3844,67 @@ BOOST_FIXTURE_TEST_CASE(test_pending_redeem_removed_from_mempool_reactivates_pos
         "Mempool removal must reactivate a position whose collateral is still in the UTXO set");
 }
 
+BOOST_FIXTURE_TEST_CASE(test_removed_pending_digidollar_mint_is_abandoned_and_notified, TestChain100Setup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    wallet->LoadWallet();
+    wallet->EnsureDDWallet();
+
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    BOOST_REQUIRE(dd_wallet != nullptr);
+
+    CMutableTransaction mint_mtx;
+    mint_mtx.SetDigiDollarType(::DD_TX_MINT);
+    mint_mtx.vin.emplace_back(COutPoint(m_coinbase_txns.front()->GetHash(), 0));
+    mint_mtx.vout.emplace_back(0, CScript() << OP_RETURN);
+    CTransactionRef mint_tx = MakeTransactionRef(std::move(mint_mtx));
+    const uint256 txid = mint_tx->GetHash();
+
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddToWallet(mint_tx, wallet::TxStateInMempool{}) != nullptr);
+    }
+
+    DDTransaction hist;
+    hist.txid = txid.ToString();
+    hist.amount = 10000;
+    hist.timestamp = GetTime();
+    hist.confirmations = 0;
+    hist.incoming = true;
+    hist.category = "mint";
+    hist.abandoned = false;
+    dd_wallet->AddMockTransaction(hist);
+
+    int notifications = 0;
+    boost::signals2::scoped_connection tx_changed =
+        wallet->NotifyTransactionChanged.connect([&](const uint256& changed_txid, ChangeType status) {
+            if (changed_txid == txid && status == CT_UPDATED) {
+                ++notifications;
+            }
+        });
+
+    wallet->transactionRemovedFromMempool(mint_tx, MemPoolRemovalReason::EXPIRY);
+
+    {
+        LOCK(wallet->cs_wallet);
+        const wallet::CWalletTx* wtx = wallet->GetWalletTx(txid);
+        BOOST_REQUIRE(wtx != nullptr);
+        BOOST_CHECK_MESSAGE(wtx->isAbandoned(),
+            "A rejected or expired pending DD mint must not keep looking pending");
+        BOOST_CHECK(!wtx->InMempool());
+    }
+    BOOST_CHECK_EQUAL(notifications, 1);
+
+    const auto history = dd_wallet->GetDDTransactionHistory();
+    const auto found = std::find_if(history.begin(), history.end(), [&](const DDTransaction& tx) {
+        return tx.txid == txid.ToString();
+    });
+    BOOST_REQUIRE(found != history.end());
+    BOOST_CHECK(found->abandoned);
+    BOOST_CHECK_EQUAL(found->confirmations, -1);
+}
+
 /**
  * Test: mempool-imported pending redeem deactivates the live position
  *

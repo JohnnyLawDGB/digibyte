@@ -19,8 +19,11 @@
 #include <uint256.h>
 #include <util/time.h>
 #include <validation.h>
+#include <validationinterface.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <atomic>
 
 static CService ip(uint32_t i)
 {
@@ -28,6 +31,20 @@ static CService ip(uint32_t i)
     s.s_addr = i;
     return CService(CNetAddr(s), Params().GetDefaultPort());
 }
+
+struct RemovedFromMempoolTracker final : public CValidationInterface {
+    explicit RemovedFromMempoolTracker(uint256 txid) : m_txid{txid} {}
+
+    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t /*mempool_sequence*/) override
+    {
+        if (tx->GetHash() == m_txid && reason == MemPoolRemovalReason::EXPIRY) {
+            ++m_removed;
+        }
+    }
+
+    uint256 m_txid;
+    std::atomic<int> m_removed{0};
+};
 
 BOOST_FIXTURE_TEST_SUITE(dandelion_tests, TestingSetup)
 
@@ -190,6 +207,54 @@ BOOST_AUTO_TEST_CASE(new_peer_gets_mempool_txs)
     BOOST_CHECK(mempool.exists(txid));
 
     connman.ClearTestNodes();
+}
+
+BOOST_AUTO_TEST_CASE(expired_rejected_stem_tx_is_removed_and_notified)
+{
+    ConnmanTestMsg& connman = static_cast<ConnmanTestMsg&>(*m_node.connman);
+    PeerManager& peerman = *m_node.peerman;
+    CTxMemPool& stempool = *m_node.stempool;
+
+    CMutableTransaction mtx;
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout = COutPoint(uint256(InsecureRand256()), 0);
+    mtx.vin[0].scriptSig = CScript() << OP_TRUE;
+    mtx.vout.resize(1);
+    mtx.vout[0].nValue = 1 * COIN;
+    mtx.vout[0].scriptPubKey = CScript() << OP_TRUE;
+
+    CTransactionRef tx = MakeTransactionRef(mtx);
+    const uint256 txid = tx->GetHash();
+
+    TestMemPoolEntryHelper entry;
+    {
+        LOCK2(cs_main, stempool.cs);
+        stempool.addUnchecked(entry.FromTx(tx));
+    }
+    BOOST_REQUIRE(stempool.exists(txid));
+
+    auto tracker = std::make_shared<RemovedFromMempoolTracker>(txid);
+    RegisterSharedValidationInterface(tracker);
+
+    {
+        LOCK(connman.m_dandelion_embargo_mutex);
+        connman.mDandelionEmbargo[txid] = GetTime<std::chrono::microseconds>() - std::chrono::seconds{1};
+        connman.m_dandelion_stem_routed.insert(txid);
+    }
+
+    peerman.CheckDandelionEmbargoes();
+    SyncWithValidationInterfaceQueue();
+
+    BOOST_CHECK(!stempool.exists(txid));
+    BOOST_CHECK_EQUAL(tracker->m_removed.load(), 1);
+    {
+        LOCK(connman.m_dandelion_embargo_mutex);
+        BOOST_CHECK_EQUAL(connman.mDandelionEmbargo.count(txid), 0u);
+        BOOST_CHECK_EQUAL(connman.m_dandelion_stem_routed.count(txid), 0u);
+    }
+
+    UnregisterSharedValidationInterface(tracker);
+    SyncWithValidationInterfaceQueue();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

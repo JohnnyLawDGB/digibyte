@@ -1694,10 +1694,12 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
                 CTransactionRef ptx = m_stempool.get(iter->first);
                 if (ptx) {
                     LogPrintf("CheckDandelionEmbargoes: Moving transaction %s from stempool to mempool for broadcast\n", iter->first.ToString());
+                    bool accepted_to_mempool{false};
                     {
                         LOCK(cs_main);
                         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false);
                         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+                            accepted_to_mempool = true;
                             LogPrintf("CheckDandelionEmbargoes: Successfully moved tx %s to mempool\n", iter->first.ToString());
                             LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB)\n",
                                                      iter->first.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
@@ -1707,6 +1709,7 @@ void PeerManagerImpl::CheckDandelionEmbargoes()
                                      iter->first.ToString(), result.m_state.ToString());
                         }
                     }
+                    WITH_LOCK(m_stempool.cs, m_stempool.removeRecursive(*ptx, accepted_to_mempool ? MemPoolRemovalReason::REORG : MemPoolRemovalReason::EXPIRY));
                 } else {
                     LogPrintf("CheckDandelionEmbargoes: Transaction %s not found in stempool!\n", iter->first.ToString());
                 }

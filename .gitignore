@@ -181,3 +181,5 @@ reports/**/*.md
 .audit_proposals/agent1.md
 RED_HORNET_FINAL_PROMPT.md
 RC39_ISSUES.md
+RC40_ISSUES.md
+RC40_FIXES.md

@@ -894,7 +894,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         QLabel* amountLabel = new QLabel(amountPrefix + QString("$%1").arg(absAmount / 100.0, 0, 'f', 2));
         QFont monospaceFont = GUIUtil::fixedPitchFont();
         amountLabel->setFont(monospaceFont);
-        amountLabel->setMinimumWidth(112);
+        amountLabel->setMinimumWidth(std::max(112, amountLabel->fontMetrics().horizontalAdvance(amountLabel->text())));
         amountLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         amountLabel->setAlignment(Qt::AlignRight);
         if (tx.amount < 0 || tx.category == "send" || tx.category == "redeem") {

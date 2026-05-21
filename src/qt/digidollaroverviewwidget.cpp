@@ -44,6 +44,14 @@
 #include <QPalette>
 #include <QLocale>
 #include <QStatusTipEvent>
+#include <QFontMetrics>
+
+namespace {
+static const QString MAX_EXPECTED_BLOCKCHAIN_DD_SUPPLY = QStringLiteral("$11,000,000,000.00 DD");
+static const QString MAX_EXPECTED_BLOCKCHAIN_DGB_LOCKED = QStringLiteral("21,000,000,000.00 DGB");
+static constexpr int TOTALS_VALUE_HORIZONTAL_PADDING = 36;
+static constexpr int TOTALS_FRAME_HORIZONTAL_PADDING = 72;
+} // namespace
 
 DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
     QWidget(parent),
@@ -250,7 +258,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     QHBoxLayout* titleLayout = new QHBoxLayout();
     titleLayout->setObjectName("healthTitleLayout");
 
-    QLabel* healthTitle = new QLabel(tr("Network DigiDollar Status"), this);
+    QLabel* healthTitle = new QLabel(tr("Blockchain DigiDollar Status"), this);
+    healthTitle->setObjectName("healthTitle");
     QFont titleFont = healthTitle->font();
     titleFont.setBold(true);
     titleFont.setWeight(75); // Match main wallet weight
@@ -296,10 +305,10 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     // System Health Status
     m_systemHealthLabel = new QLabel(tr("System Health:"), this);
     m_systemHealthLabel->setObjectName("systemHealthLabel");
-    m_systemHealthValue = new QLabel("Healthy", this);
+    m_systemHealthValue = new QLabel("Loading...", this);
     m_systemHealthValue->setObjectName("systemHealthValue");
     m_systemHealthValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_systemHealthValue->setToolTip(tr("Overall DigiDollar network-wide health status"));
+    m_systemHealthValue->setToolTip(tr("Overall DigiDollar blockchain health status"));
     m_systemHealthLayout->addWidget(m_systemHealthLabel, 1, 0);
     m_systemHealthLayout->addWidget(m_systemHealthValue, 1, 1);
 
@@ -323,19 +332,19 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthLayout->addWidget(m_errLevelLabel, 3, 0);
     m_systemHealthLayout->addWidget(m_errLevelValue, 3, 1);
 
-    // --- RIGHT SIDE: Prominent Network Totals (DD Supply + Collateral) ---
+    // --- RIGHT SIDE: Prominent Blockchain Totals (DD Supply + Collateral) ---
     QFrame* rightTotalsFrame = new QFrame(this);
     rightTotalsFrame->setObjectName("networkTotalsFrame");
     rightTotalsFrame->setFrameShape(QFrame::StyledPanel);
     rightTotalsFrame->setFrameShadow(QFrame::Raised);
-    rightTotalsFrame->setMinimumWidth(250);
+    rightTotalsFrame->setMinimumWidth(300);
 
     QVBoxLayout* totalsLayout = new QVBoxLayout(rightTotalsFrame);
     totalsLayout->setSpacing(12);
     totalsLayout->setContentsMargins(15, 15, 15, 15);
 
-    // Network Total DD Supply (prominent)
-    m_networkTotalDDLabel = new QLabel(tr("Network DD Supply"), this);
+    // Blockchain Total DD Supply (prominent)
+    m_networkTotalDDLabel = new QLabel(tr("Blockchain DD Supply"), this);
     m_networkTotalDDLabel->setObjectName("networkTotalDDLabel");
     m_networkTotalDDLabel->setAlignment(Qt::AlignCenter);
     m_networkTotalDDLabel->setWordWrap(false);
@@ -345,8 +354,9 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_networkTotalDDValue->setObjectName("networkTotalDDValue");
     m_networkTotalDDValue->setCursor(QCursor(Qt::IBeamCursor));
     m_networkTotalDDValue->setAlignment(Qt::AlignCenter);
+    m_networkTotalDDValue->setWordWrap(false);
     m_networkTotalDDValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
-    m_networkTotalDDValue->setToolTip(tr("Total DigiDollar supply across the entire network"));
+    m_networkTotalDDValue->setToolTip(tr("Total DigiDollar supply recorded on the blockchain"));
     totalsLayout->addWidget(m_networkTotalDDValue);
 
     // Separator between totals
@@ -356,8 +366,8 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     separator->setFrameShadow(QFrame::Sunken);
     totalsLayout->addWidget(separator);
 
-    // Network Total Collateral (prominent)
-    m_networkTotalCollateralLabel = new QLabel(tr("Network DGB Locked"), this);
+    // Blockchain Total Collateral (prominent)
+    m_networkTotalCollateralLabel = new QLabel(tr("Blockchain DGB Locked"), this);
     m_networkTotalCollateralLabel->setObjectName("networkTotalCollateralLabel");
     m_networkTotalCollateralLabel->setAlignment(Qt::AlignCenter);
     m_networkTotalCollateralLabel->setWordWrap(false);
@@ -367,9 +377,12 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_networkTotalCollateralValue->setObjectName("networkTotalCollateralValue");
     m_networkTotalCollateralValue->setCursor(QCursor(Qt::IBeamCursor));
     m_networkTotalCollateralValue->setAlignment(Qt::AlignCenter);
+    m_networkTotalCollateralValue->setWordWrap(false);
     m_networkTotalCollateralValue->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextSelectableByMouse);
-    m_networkTotalCollateralValue->setToolTip(tr("Total DGB locked as collateral across the entire network"));
+    m_networkTotalCollateralValue->setToolTip(tr("Total DGB locked as collateral on the blockchain"));
     totalsLayout->addWidget(m_networkTotalCollateralValue);
+
+    updateBlockchainTotalsMinimumWidth();
 
     // Add left and right to horizontal content layout
     contentLayout->addWidget(leftStatsFrame, 2);
@@ -381,11 +394,11 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthBar = new QProgressBar(this);
     m_systemHealthBar->setObjectName("systemHealthBar");
     m_systemHealthBar->setRange(0, 100);
-    m_systemHealthBar->setValue(100); // Start at 100% healthy
+    m_systemHealthBar->setValue(0);
     m_systemHealthBar->setTextVisible(true);
-    m_systemHealthBar->setFormat("%p% Healthy");
+    m_systemHealthBar->setFormat("0% Collateralization");
     m_systemHealthBar->setMinimumHeight(20);
-    m_systemHealthBar->setToolTip(tr("Visual indicator of overall network health"));
+    m_systemHealthBar->setToolTip(tr("Visual indicator of overall blockchain health"));
     frameVLayout->addWidget(m_systemHealthBar);
 
     // REMOVED: m_mainLayout->addWidget(m_systemHealthFrame);
@@ -673,8 +686,8 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         return;
     }
 
-    // NETWORK-WIDE TRACKING: Call RPC to get network-wide system health
-    // This ensures Bob and Alice both see identical stats across the entire network
+    // BLOCKCHAIN-WIDE TRACKING: Call RPC to get blockchain-wide system health
+    // This ensures Bob and Alice both see identical stats across the chain.
 
     if (!m_clientModel) {
         m_systemHealthValue->setText("No Connection");
@@ -687,7 +700,7 @@ void DigiDollarOverviewWidget::updateSystemHealth()
     }
 
     try {
-        // Execute RPC call to get network-wide system health
+        // Execute RPC call to get blockchain-wide system health
         UniValue params(UniValue::VARR); // No parameters needed
         UniValue result = m_clientModel->node().executeRpc("getdigidollarstats", params, "");
 
@@ -709,7 +722,7 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         double errRatio = errTier.find_value("ratio").get_real();
         double errBurnMultiplier = errTier.find_value("burn_multiplier").get_real();
 
-        // Update network-wide stats
+        // Update blockchain-wide stats
         double totalDD = totalDDCents / 100.0; // Convert cents to DD
         double totalCollateralDGB = totalCollateralSats / 100000000.0; // Convert satoshis to DGB
 
@@ -738,18 +751,7 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         // RPC returns health_percentage as actual percentage (e.g., 151 = 151%)
         double healthPercent = static_cast<double>(healthPercentage);
 
-        QString statusText;
-        if (healthPercentage >= 150) {
-            statusText = QString("%1% Healthy").arg(QString::number(healthPercent, 'f', 1));
-        } else if (healthPercentage >= 120) {
-            statusText = QString("%1% Warning").arg(QString::number(healthPercent, 'f', 1));
-        } else if (healthPercentage >= 100) {
-            statusText = QString("%1% Stressed").arg(QString::number(healthPercent, 'f', 1));
-        } else {
-            statusText = QString("%1% CRITICAL").arg(QString::number(healthPercent, 'f', 1));
-        }
-
-        m_systemHealthValue->setText(statusText);
+        m_systemHealthValue->setText(QString("%1% Collateralized").arg(healthPercentage));
 
         // Update DCA and ERR levels
         m_dcaLevelValue->setText(QString("%1x").arg(QString::number(dcaMultiplier, 'f', 1)));
@@ -768,7 +770,7 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         // Update progress bar (scale 0-500% to 0-100%)
         int barValue = std::min(100, static_cast<int>((healthPercent * 100) / 500));
         m_systemHealthBar->setValue(barValue);
-        m_systemHealthBar->setFormat(QString("%1% Network Collateralization").arg(QString::number(healthPercent, 'f', 1)));
+        m_systemHealthBar->setFormat(QString("%1% Collateralization").arg(QString::number(healthPercent, 'f', 1)));
 
     } catch (const UniValue& e) {
         LogPrintf("DigiDollar: updateSystemHealth RPC error - %s\n", e.write());
@@ -969,6 +971,23 @@ void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)
     m_oraclePriceValue->setFont(f);
     m_networkTotalDDValue->setFont(f);
     m_networkTotalCollateralValue->setFont(f);
+    updateBlockchainTotalsMinimumWidth();
+}
+
+void DigiDollarOverviewWidget::updateBlockchainTotalsMinimumWidth()
+{
+    if (!m_networkTotalDDValue || !m_networkTotalCollateralValue) return;
+
+    const int ddWidth = QFontMetrics(m_networkTotalDDValue->font()).horizontalAdvance(MAX_EXPECTED_BLOCKCHAIN_DD_SUPPLY);
+    const int dgbWidth = QFontMetrics(m_networkTotalCollateralValue->font()).horizontalAdvance(MAX_EXPECTED_BLOCKCHAIN_DGB_LOCKED);
+    const int valueWidth = std::max(ddWidth, dgbWidth) + TOTALS_VALUE_HORIZONTAL_PADDING;
+
+    m_networkTotalDDValue->setMinimumWidth(valueWidth);
+    m_networkTotalCollateralValue->setMinimumWidth(valueWidth);
+
+    if (QWidget* totalsFrame = m_networkTotalDDValue->parentWidget()) {
+        totalsFrame->setMinimumWidth(valueWidth + TOTALS_FRAME_HORIZONTAL_PADDING);
+    }
 }
 
 // REMOVED: updateTheme() and applyTheme() methods
@@ -988,7 +1007,7 @@ void DigiDollarOverviewWidget::setPrivacy(bool privacy)
         m_dgbCollateralValue->setText(maskValue(formatDGBAmount(0)));
         m_usdValueValue->setText(maskValue(formatUSDAmount(0)));
 
-        // Mask network status values
+        // Mask blockchain status values
         m_networkTotalDDValue->setTextFormat(Qt::PlainText);
         m_networkTotalDDValue->setText(maskValue(formatDDAmount(0)));
         m_networkTotalCollateralValue->setTextFormat(Qt::PlainText);
@@ -999,7 +1018,7 @@ void DigiDollarOverviewWidget::setPrivacy(bool privacy)
         m_dgbCollateralValue->setText(formatDGBAmount(m_dgbCollateral));
         double usdValue = m_ddBalance * 1.0;
         m_usdValueValue->setText(formatUSDAmount(usdValue));
-        // Refresh network stats
+        // Refresh blockchain stats
         updateSystemHealth();
     }
 

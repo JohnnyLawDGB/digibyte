@@ -76,6 +76,8 @@ private:
     QString formatUSDAmount(double amount) const;
     /** Mask a formatted string by replacing digits with '#' */
     QString maskValue(const QString& value) const;
+    /** Keep blockchain total labels wide enough for launch-scale values. */
+    void updateBlockchainTotalsMinimumWidth();
 
     // UI components
     QVBoxLayout* m_mainLayout;

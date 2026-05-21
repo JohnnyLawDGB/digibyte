@@ -4475,18 +4475,18 @@ DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelValue {
 }
 
 /* ========================================= */
-/* Network Totals Frame - Compact */
+/* Blockchain Totals Frame - Compact */
 /* ========================================= */
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame {
     background-color: #0a1525;
     border: 2px solid #0088FF;
     border-radius: 6px;
-    min-width: 120px;
-    max-width: 200px;
+    min-width: 260px;
+    max-width: 360px;
     padding: 5px;
 }
 
-/* Network Totals Labels - light blue text on dark blue */
+/* Blockchain Totals Labels - light blue text on dark blue */
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDLabel,
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralLabel {
     color: #88BBFF;
@@ -4498,10 +4498,10 @@ DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollater
     qproperty-wordWrap: true;
 }
 
-/* Network Totals Values - prominent but compact */
+/* Blockchain Totals Values - prominent but compact */
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDValue {
     color: #00FF88;
-    font-size: 12pt;
+    font-size: 10pt;
     font-weight: bold;
     background-color: transparent;
     padding: 2px;
@@ -4510,7 +4510,7 @@ DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDValue 
 
 DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralValue {
     color: #FFD700;
-    font-size: 12pt;
+    font-size: 10pt;
     font-weight: bold;
     background-color: transparent;
     padding: 2px;
@@ -5751,4 +5751,3 @@ QDialog#DDAddressBookPage QLineEdit:focus {
 QDialog#DDAddressBookPage * {
     color: #ffffff !important;
 }
-

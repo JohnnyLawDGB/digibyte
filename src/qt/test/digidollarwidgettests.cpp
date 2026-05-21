@@ -46,6 +46,7 @@
 #include <QDialog>
 #include <QEvent>
 #include <QFile>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -2014,11 +2015,23 @@ void DigiDollarWidgetTests::overviewPrivacyMaskHidesAmountUnits()
     }
 }
 
-void DigiDollarWidgetTests::overviewLayoutStretchFavorsNetworkTotals()
+void DigiDollarWidgetTests::overviewLayoutStretchFavorsBlockchainTotals()
 {
     DigiDollarOverviewWidget overviewWidget;
     QHBoxLayout* healthContentLayout = overviewWidget.findChild<QHBoxLayout*>(QStringLiteral("healthContentLayout"));
     QVERIFY(healthContentLayout != nullptr);
+
+    QLabel* healthTitle = overviewWidget.findChild<QLabel*>(QStringLiteral("healthTitle"));
+    QVERIFY(healthTitle != nullptr);
+    QCOMPARE(healthTitle->text(), QStringLiteral("Blockchain DigiDollar Status"));
+
+    QLabel* ddSupplyLabel = overviewWidget.findChild<QLabel*>(QStringLiteral("networkTotalDDLabel"));
+    QVERIFY(ddSupplyLabel != nullptr);
+    QCOMPARE(ddSupplyLabel->text(), QStringLiteral("Blockchain DD Supply"));
+
+    QLabel* dgbLockedLabel = overviewWidget.findChild<QLabel*>(QStringLiteral("networkTotalCollateralLabel"));
+    QVERIFY(dgbLockedLabel != nullptr);
+    QCOMPARE(dgbLockedLabel->text(), QStringLiteral("Blockchain DGB Locked"));
 
     QWidget* leftStatsFrame = overviewWidget.findChild<QWidget*>(QStringLiteral("leftStatsFrame"));
     QWidget* networkTotalsFrame = overviewWidget.findChild<QWidget*>(QStringLiteral("networkTotalsFrame"));
@@ -2030,7 +2043,51 @@ void DigiDollarWidgetTests::overviewLayoutStretchFavorsNetworkTotals()
     QVERIFY(leftIndex >= 0);
     QVERIFY(totalsIndex >= 0);
     QVERIFY2(healthContentLayout->stretch(totalsIndex) > healthContentLayout->stretch(leftIndex),
-             "Network totals should get more horizontal stretch than the smaller left stats column");
+             "Blockchain totals should get more horizontal stretch than the smaller left stats column");
+}
+
+void DigiDollarWidgetTests::overviewBlockchainTotalsFitLaunchScaleValues()
+{
+    DigiDollarOverviewWidget overviewWidget;
+    QLabel* ddValue = overviewWidget.findChild<QLabel*>(QStringLiteral("networkTotalDDValue"));
+    QLabel* dgbValue = overviewWidget.findChild<QLabel*>(QStringLiteral("networkTotalCollateralValue"));
+    QWidget* totalsFrame = overviewWidget.findChild<QWidget*>(QStringLiteral("networkTotalsFrame"));
+    QVERIFY(ddValue != nullptr);
+    QVERIFY(dgbValue != nullptr);
+    QVERIFY(totalsFrame != nullptr);
+
+    overviewWidget.setMonospacedFont(false);
+
+    const QString launchScaleDD = QStringLiteral("$999,000,000.00 DD");
+    const QString stressScaleDD = QStringLiteral("$11,000,000,000.00 DD");
+    const QString maxDgbLocked = QStringLiteral("21,000,000,000.00 DGB");
+
+    const int launchScaleDDWidth = QFontMetrics(ddValue->font()).horizontalAdvance(launchScaleDD);
+    const int stressScaleDDWidth = QFontMetrics(ddValue->font()).horizontalAdvance(stressScaleDD);
+    const int maxDgbLockedWidth = QFontMetrics(dgbValue->font()).horizontalAdvance(maxDgbLocked);
+
+    QVERIFY2(ddValue->minimumWidth() >= launchScaleDDWidth,
+             qPrintable(QString("Blockchain DD supply label is too narrow for %1").arg(launchScaleDD)));
+    QVERIFY2(ddValue->minimumWidth() >= stressScaleDDWidth,
+             qPrintable(QString("Blockchain DD supply label is too narrow for %1").arg(stressScaleDD)));
+    QVERIFY2(dgbValue->minimumWidth() >= maxDgbLockedWidth,
+             qPrintable(QString("Blockchain DGB locked label is too narrow for %1").arg(maxDgbLocked)));
+    QVERIFY2(totalsFrame->minimumWidth() > ddValue->minimumWidth(),
+             "Blockchain totals frame must include room around the value labels");
+}
+
+void DigiDollarWidgetTests::overviewHealthUsesCollateralizedLanguage()
+{
+    DigiDollarOverviewWidget overviewWidget;
+    QLabel* systemHealthValue = overviewWidget.findChild<QLabel*>(QStringLiteral("systemHealthValue"));
+    QProgressBar* systemHealthBar = overviewWidget.findChild<QProgressBar*>(QStringLiteral("systemHealthBar"));
+    QVERIFY(systemHealthValue != nullptr);
+    QVERIFY(systemHealthBar != nullptr);
+
+    QCOMPARE(systemHealthValue->text(), QStringLiteral("Loading..."));
+    QVERIFY2(!systemHealthValue->text().contains(QStringLiteral("Healthy")),
+             "System health value should not describe collateralization as healthy state text");
+    QCOMPARE(systemHealthBar->format(), QStringLiteral("0% Collateralization"));
 }
 
 void DigiDollarWidgetTests::overviewPendingBalanceHasThemeRules()

@@ -10,6 +10,47 @@ Release: https://github.com/DigiByte-Core/digibyte/releases/tag/v9.26.0-rc41
 
 ---
 
+## Read This First
+
+RC41 starts a fresh DigiDollar testnet: `testnet25`.
+
+RC40 used `testnet24`. RC41 does not. Old `testnet24` blocks, chainstate, peer addresses, oracle messages, and DigiDollar positions are not RC41 proof. Back up wallet and oracle key material before wiping old data, then start clean on `testnet25`.
+
+Why the reset matters:
+
+- A new genesis makes it obvious which nodes are actually testing RC41.
+- New network magic bytes prevent accidental peer mixing with `testnet24`.
+- The P2P port moves from `12031` to `12032`, so firewalls, seeders, addnodes, and operator configs need to be updated.
+- Oracle signatures and MuSig2 context are chain-bound, so old testnet24 oracle messages cannot satisfy testnet25.
+- The 35-slot oracle reserve needs a fresh public proving network before mainnet launch decisions.
+
+What changed from RC40 for testnet operators:
+
+- Data directory: `testnet24` -> `testnet25`
+- P2P port: `12031` -> `12032`
+- Network magic: `fe c4 b7 e5` -> `fe c5 b8 e6`
+- Genesis block: new RC41 genesis
+- Oracle roster shape: 17 active slots inside a 35-slot reserved roster
+- Oracle quorum: 9 signatures from the active configured MuSig2 keyset
+
+What did not change:
+
+- The default testnet RPC port remains `14026`.
+- DigiDollar activation height remains `600` on testnet.
+- Oracle activation height remains `600` on testnet.
+- The on-chain oracle bundle format remains `v0x03`.
+- RC41 does not activate DigiDollar on mainnet by itself.
+
+Oracle operator note:
+
+Private key format did not change, but the network did. Operators must run RC41, use the `testnet25` datadir, open P2P port `12032`, and make sure their oracle slot/key matches the RC41 chainparams roster. Any old signed oracle messages, cached nonces, peer state, or bundle attempts from `testnet24` are intentionally invalid on `testnet25` because the signing context is bound to the new chain.
+
+Mainnet oracle note:
+
+The mainnet roster keeps placeholder/reserve slots for launch planning. Mainnet oracle operators still need to provide their own mainnet oracle keys before those slots can be made active in a later release.
+
+---
+
 ## Summary
 
 RC41 resets the public DigiDollar testnet.
@@ -48,6 +89,16 @@ This aligns the direct height gate with the planned June 2026 release window whi
 RC41 resets public DigiDollar testnet to `testnet25`.
 
 The new public testnet uses P2P port `12032`, data directory `~/.digibyte/testnet25/`, network magic `fe c5 b8 e6`, and a fresh genesis block. RPC remains on `14026`.
+
+This is a deliberate network reset like the RC34 move to `testnet24`. Nodes on RC40/`testnet24` will not follow RC41/`testnet25`, and RC41 nodes should not be pointed at old testnet24 chainstate.
+
+Operators must update:
+
+- Data directory references from `testnet24` to `testnet25`.
+- Firewall and hosting rules from P2P port `12031` to `12032`.
+- Static `addnode` entries to use RC41 peers on port `12032`.
+- DNS seeders to the new genesis, magic bytes, and port.
+- Oracle service configs so `startoracle` runs against the RC41 chainparams roster and not stale testnet24 peer/key state.
 
 ### 35-slot oracle reserve
 
@@ -164,6 +215,17 @@ RC41 keeps the DigiDollar economic model intact.
 
 Older operator notes that mention `testnet24` or P2P port `12031` are stale for RC41. Use the values above.
 
+Minimum migration checklist:
+
+1. Back up wallets and any oracle key material.
+2. Install/run RC41.
+3. Start with `-testnet` and the new `testnet25` datadir.
+4. Open and advertise P2P port `12032`.
+5. Replace old `testnet24` addnodes and seed data.
+6. Confirm `getblockchaininfo` reports the RC41 genesis chain.
+7. Confirm `getoracles` shows the expected 35-slot roster, with active configured operators online and reserve slots inactive.
+8. Start the assigned oracle slot only after confirming the slot/key matches RC41 chainparams.
+
 ---
 
 ## Validation Status
@@ -189,7 +251,8 @@ Validation logs:
 - Functional tests: `/tmp/rc41_final_functional_after_gui_text.log`
 - Fuzz target list: `/tmp/rc41_fuzz_libfuzzer_targets.txt`
 - Fuzz smoke: `/tmp/rc41_libfuzzer.log`
-- Multi-oracle testnet25: `/tmp/rc41_multi_oracle_testnet_final.log`
+- Multi-oracle testnet25 keep-open run: `/tmp/rc41_multi_oracle_testnet_keepopen_final.log`
+- Multi-oracle internal test log: `/tmp/digidollar_debug_logs/test_run_20260521_172144.log`
 
 ---
 
@@ -216,6 +279,8 @@ Validation logs:
 - `9fc0d22947` doc: update RC41 notes for mainnet activation window
 - `9555ecd4a7` digidollar launch: configure testnet25 oracle reserve
 - `99bc282f1a` digidollar qt: update blockchain collateralization display
+- `d25cb18c5d` docs: update RC41 launch and oracle reserve notes
+- `b36b1e411b` test: keep multi-oracle Qt wallets open after run
 
 ---
 
@@ -224,6 +289,9 @@ Validation logs:
 Please focus RC41 testing on:
 
 - Fresh `testnet25` startup, peer discovery, and block production on P2P port `12032`.
+- Clean migration from old `testnet24` local data to fresh `testnet25` data.
+- Firewall, addnode, and DNS seed behavior after the P2P port change from `12031` to `12032`.
+- Oracle operator startup with RC41 slot/key configuration and no stale testnet24 oracle messages.
 - Oracle slots 0-16 active and slots 17-34 inactive/reserve on mainnet and testnet.
 - Mainnet activation parameters: BIP9 June 1, 2026 to June 1, 2027 with min height `23,627,520`.
 - Mainnet/testnet mint amount limits after activation.

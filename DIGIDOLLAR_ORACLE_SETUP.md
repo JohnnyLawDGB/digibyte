@@ -28,7 +28,7 @@
 
 ## Overview
 
-DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are hardcoded in `src/kernel/chainparams.cpp`. The current source tree builds RC34+ binaries, which run on `testnet23` (P2P port 12030); a small "Historical RC29 / testnet21" footnote at the end of this guide lists the legacy port/data-dir for operators who still need to wind down a pre-RC30 install. New operators should ignore RC29/testnet21 entirely. The workflow:
+DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are hardcoded in `src/kernel/chainparams.cpp`. The current source tree uses `testnet24` (P2P port 12031, RPC port 14026, data dir `~/.digibyte/testnet24/`); historical testnet23/testnet21 details are preserved only for operators decommissioning an old install. The workflow:
 
 1. Generate an oracle keypair via `createoraclekey` (stored in your wallet)
 2. Send your **public key only** to the maintainer
@@ -63,6 +63,7 @@ testnet=1
 
 [test]
 digidollar=1
+txindex=1
 server=1
 listen=1
 addnode=oracle1.digibyte.io
@@ -72,18 +73,17 @@ debug=net
 
 > **`testnet=1` goes at the top** (not under any section). Everything else under `[test]`.
 
-`addnode=oracle1.digibyte.io` resolves onto the active `testnet23` chain on port **12030** for RC30+. If you want to pin the port explicitly:
+`addnode=oracle1.digibyte.io` resolves onto the current `testnet24` chain on port **12031**. If you want to pin the port explicitly:
 
 ```ini
-addnode=oracle1.digibyte.io:12030
+addnode=oracle1.digibyte.io:12031
 ```
 
-(The legacy `testnet21` chain on port `12035` was retired with the RC30 cutover; see the "Historical RC29 / testnet21" footnote at the end of this guide if you are decommissioning a pre-RC30 install.)
+(The retired `testnet23` chain used port `12030`; the older `testnet21` chain used port `12035`. See the historical footnote at the end if you are decommissioning an old install.)
 
 Optional:
 ```ini
 [test]
-txindex=1
 digidollarstatsindex=1
 algo=sha256d
 ```
@@ -92,7 +92,7 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned oracle ID (slot **0–16**) from the maintainer; mainnet and testnet23 both use 17 consensus-active MuSig2 public keys with a 9-of-17 quorum. Mainnet also carries reserve metadata in `vOracleNodes` slots 17–29, but those reserve entries are not in `consensus.vOraclePublicKeys` and cannot satisfy V1 quorum. Testnet23 has only the 17 active slots configured.
+For first-time oracle operators. You need an assigned active oracle ID (slot **0–16**) from the maintainer; mainnet and testnet24 both use 17 consensus-active MuSig2 public keys with a 9-of-17 quorum. Mainnet also carries reserve metadata in `vOracleNodes` slots 17–29, but those reserve entries are not in `consensus.vOraclePublicKeys` and cannot satisfy V1 quorum. Testnet24 has only the 17 active slots configured.
 
 ```bash
 # 1. Start your node
@@ -116,7 +116,7 @@ digibyte-cli -testnet getoracles true
 
 **Qt wallet users:** Create wallet via **File → Create Wallet**, name it `oracle`. Then **Help → Debug Window → Console** to run `createoraclekey` and `startoracle`.
 
-> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet23/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
+> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet24/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
 
 ---
 
@@ -124,7 +124,7 @@ digibyte-cli -testnet getoracles true
 
 Your oracle key persists in your wallet across upgrades. You do **not** need to generate a new key.
 
-### RC30+ in-place restart / upgrade (testnet23)
+### Current testnet24 in-place restart / upgrade
 
 ```bash
 # 1. Stop your node
@@ -147,11 +147,11 @@ digibyte-cli -testnet getoracles true
 
 **Qt wallet users:** Start Qt → **File → Open Wallet → oracle**. If the oracle does not come up automatically, open **Console** and run `startoracle <your_oracle_id>`.
 
-> **Auto-start behavior:** since RC25, unencrypted oracle wallets auto-start when the wallet loads (`CWallet::TryAutoStartOracles` in `src/wallet/wallet.cpp:4797`), and encrypted wallets auto-start after `walletpassphrase` unlock. Keep the manual `startoracle` command handy anyway, because it remains the safest fallback if the oracle is not already running.
+> **Auto-start behavior:** since RC25, unencrypted oracle wallets auto-start when the wallet loads (`CWallet::TryAutoStartOracles` in `src/wallet/wallet.cpp:4814`), and encrypted wallets auto-start after `walletpassphrase` unlock. Keep the manual `startoracle` command handy anyway, because it remains the safest fallback if the oracle is not already running.
 
-### Decommissioning RC29 / testnet21
+### Decommissioning retired testnets
 
-If you are still running RC29 on the legacy `testnet21` chain (port **12035**, data dir `~/.digibyte/testnet21/`), the migration to RC30+ on `testnet23` (port **12030**, data dir `~/.digibyte/testnet23/`) is a **fresh chain**: do **not** copy old `blocks/` or `chainstate/`. Migrate only the wallet that holds your oracle key, then follow the New Oracle Setup steps above against the fresh testnet23 directory.
+If you are still running the retired `testnet23` chain (port **12030**, data dir `~/.digibyte/testnet23/`) or the older `testnet21` chain (port **12035**, data dir `~/.digibyte/testnet21/`), migration to current `testnet24` (port **12031**, data dir `~/.digibyte/testnet24/`) is a **fresh chain**: do **not** copy old `blocks/` or `chainstate/`. Migrate only the wallet that holds your oracle key, then follow the New Oracle Setup steps above against the fresh testnet24 directory.
 
 ---
 
@@ -173,13 +173,13 @@ If the oracle auto-started when the wallet loaded, the explicit `startoracle` ma
 
 Once running, the oracle automatically:
 - Fetches DGB/USD prices from multiple exchanges every 60 seconds
-- Calculates median price with median-distance outlier filtering. The `MultiExchangeAggregator` default `min_required_sources` is **2** (`src/oracle/exchange.h:231`), but the live oracle daemon (`OracleNode::FetchMedianPrice`, `src/oracle/node.cpp:386`) overrides this to **3** valid exchange responses before publishing
+- Calculates median price with median-distance outlier filtering. The `MultiExchangeAggregator` default `min_required_sources` is **2** (`src/oracle/exchange.h:235`), but the live oracle daemon (`OracleNode::FetchMedianPrice`, `src/oracle/node.cpp:445-450`) overrides this to **3** valid exchange responses before publishing
 - Signs the price with BIP-340 Schnorr using your wallet-stored private key
 - Broadcasts the signed message to the P2P network
 
 ### Exchange Sources (no API keys required)
 
-Active feeders, registered in `src/oracle/exchange.cpp:1013-1018`:
+Active feeders, registered in `src/oracle/exchange.cpp:1042-1071`:
 
 - Binance (DGB/USDT plus DGB/BTC × BTC/USDT cross)
 - CoinGecko
@@ -190,7 +190,7 @@ Active feeders, registered in `src/oracle/exchange.cpp:1013-1018`:
 
 The fetcher classes for Coinbase, Kraken, Bittrex, Poloniex, and Messari still
 exist in `src/oracle/exchange.h` but are **not enabled** — the in-source comment
-at `src/oracle/exchange.cpp:1020-1024` documents the reasons (DGB unlisted /
+at `src/oracle/exchange.cpp:1053-1057` documents the reasons (DGB unlisted /
 removed / paid API key required).
 
 ### Price Format
@@ -211,8 +211,9 @@ removed / paid API key required).
 
 | Release | Chain | Testnet P2P Port | Active Oracles | Consensus Required |
 |---------|-------|------------------|----------------|--------------------|
-| RC30+ (current) | `testnet23` | **12030** | 17 | 9-of-17 MuSig2 |
-| RC29 (retired) | `testnet21` | 12035 | n/a (chain offline) | n/a |
+| Current source tree | `testnet24` | **12031** | 17 | 9-of-17 MuSig2 |
+| Retired | `testnet23` | 12030 | n/a (chain retired) | n/a |
+| Retired | `testnet21` | 12035 | n/a (chain retired) | n/a |
 
 ### Current source tree consensus values
 
@@ -221,16 +222,16 @@ removed / paid API key required).
 | Active Oracles (`nOraclePubkeyCount`) | 17 | 7 | 17 |
 | Consensus Required (`nOracleConsensusRequired`) | 9-of-17 | 4-of-7 | 9-of-17 |
 | Activation Height (`nDDActivationHeight`) | 600 | 650 | BIP9 (22,014,720) |
-| Rotation Interval (`nDDOracleEpochBlocks`) | 50 blocks | 10 blocks | 100 blocks |
+| Rotation Interval (`nDDOracleEpochBlocks`) | 40 blocks | 40 blocks | 40 blocks |
 | Price Update Interval (`nDDOracleUpdateInterval`) | 2 blocks | 1 block | 4 blocks |
-| Bundle/MuSig2 Epoch (`nOracleEpochLength`) | 1440 blocks | 144 blocks | 1440 blocks |
+| Bundle/MuSig2 Epoch (`nOracleEpochLength`) | 40 blocks | 40 blocks | 40 blocks |
 | Oracle Broadcast Interval | 60 seconds | 60 seconds | 60 seconds |
 | MuSig2 Always-On (`nDigiDollarMuSig2Height`) | 0 | 0 | 0 |
 
 Values verified against `src/kernel/chainparams.cpp:305-314` (mainnet),
 `:570-642` (testnet), `:1110-1116` (regtest). Mainnet has 30
 `vOracleNodes` metadata entries, but only slots 0-16 are in
-`consensus.vOraclePublicKeys` and can participate in V1 quorum. Testnet23 has
+`consensus.vOraclePublicKeys` and can participate in V1 quorum. Testnet24 has
 17 `vOracleNodes` entries and no reserve metadata slots; regtest has 7. Active
 oracle pubkey count (`nOraclePubkeyCount`) and consensus threshold
 (`nOracleConsensusRequired`) are configured per-network in
@@ -242,8 +243,8 @@ oracle pubkey count (`nOraclePubkeyCount`) and consensus threshold
 ## Monitoring
 
 ```bash
-# RC30+ (testnet23) log path
-tail -f ~/.digibyte/testnet23/debug.log | grep -i "oracle\|digidollar"
+# Current testnet24 log path
+tail -f ~/.digibyte/testnet24/debug.log | grep -i "oracle\|digidollar"
 
 # Check current oracle price
 digibyte-cli -testnet getoracleprice
@@ -358,6 +359,13 @@ Send DigiDollars to an address.
 digibyte-cli -testnet -rpcwallet=<wallet> senddigidollar <address> <amount>
 ```
 
+#### `sendmanydigidollar` *(wallet RPC)*
+Send DigiDollars to multiple addresses. The first argument is the required `sendmany` compatibility dummy string; use integer cents in operator scripts.
+
+```
+digibyte-cli -testnet -rpcwallet=<wallet> sendmanydigidollar "" '{"TDaddr1...":1500,"TDaddr2...":2500}'
+```
+
 #### `redeemdigidollar` *(wallet RPC)*
 Redeem DigiDollars to unlock collateral (after lock period expires).
 
@@ -366,10 +374,18 @@ digibyte-cli -testnet -rpcwallet=<wallet> redeemdigidollar <position_txid> <dd_a
 ```
 
 #### `getdigidollarbalance` *(wallet RPC)*
-Get your DigiDollar balance (confirmed + pending).
+Get your DigiDollar balance (`confirmed`, `unconfirmed`, and `total`; amounts are cents).
 
 ```
 digibyte-cli -testnet -rpcwallet=<wallet> getdigidollarbalance
+```
+
+#### `listdigidollarunspent` / `listdigidollarutxos` *(wallet RPC)*
+List spendable DigiDollar UTXOs for coin control or selected-input sends.
+
+```
+digibyte-cli -testnet -rpcwallet=<wallet> listdigidollarunspent
+digibyte-cli -testnet -rpcwallet=<wallet> listdigidollarutxos
 ```
 
 #### `listdigidollarpositions` *(wallet RPC)*
@@ -484,9 +500,9 @@ digibyte-cli -testnet getprotectionstatus
 
 When an operator sends their `pubkey` (33-byte compressed, e.g. `0398720f...eb7b57`), add it to **two locations** in `src/kernel/chainparams.cpp`:
 
-**1. `vOracleNodes`** — use the full 33-byte compressed key. The testnet23 P2P port is `12030` (mainnet `12024`):
+**1. `vOracleNodes`** — use the full 33-byte compressed key. The testnet24 P2P port is `12031` (mainnet `12024`):
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12030", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12031", true},
 ```
 
 **2. `consensus.vOraclePublicKeys`** — strip the `02`/`03` prefix to get the 32-byte x-only key:
@@ -506,21 +522,21 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12030 (testnet23 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
+| Ports | 12031 (testnet24 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
 
 ---
 
 ## File Locations
 
-| Component | RC30+ (testnet23) | Mainnet |
+| Component | Current testnet24 | Mainnet |
 |-----------|-------------------|---------|
 | Config | `~/.digibyte/digibyte.conf` | `~/.digibyte/digibyte.conf` |
-| Data dir | `~/.digibyte/testnet23/` | `~/.digibyte/` |
-| Debug log | `~/.digibyte/testnet23/debug.log` | `~/.digibyte/debug.log` |
-| Wallets | `~/.digibyte/testnet23/wallets/` | `~/.digibyte/wallets/` |
-| RPC cookie | `~/.digibyte/testnet23/.cookie` | `~/.digibyte/.cookie` |
+| Data dir | `~/.digibyte/testnet24/` | `~/.digibyte/` |
+| Debug log | `~/.digibyte/testnet24/debug.log` | `~/.digibyte/debug.log` |
+| Wallets | `~/.digibyte/testnet24/wallets/` | `~/.digibyte/wallets/` |
+| RPC cookie | `~/.digibyte/testnet24/.cookie` | `~/.digibyte/.cookie` |
 
-> **Historical RC29 / testnet21:** the legacy testnet used `~/.digibyte/testnet21/` with port 12035. That chain is offline; preserved here only so operators decommissioning a pre-RC30 install know which directory to archive or delete.
+> **Historical retired testnets:** `testnet23` used `~/.digibyte/testnet23/` with port 12030; older `testnet21` used `~/.digibyte/testnet21/` with port 12035. Those chains are offline/retired; preserved here only so operators know which directories to archive or delete.
 
 ---
 
@@ -529,8 +545,8 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 If `getwalletinfo` shows the full path as wallet name:
 
 ```bash
-# RC30+ (testnet23) example
-digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet23/wallets/oracle/"
+# Current testnet24 example
+digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet24/wallets/oracle/"
 
 # Reload with just the name
 digibyte-cli -testnet loadwallet "oracle"
@@ -541,4 +557,4 @@ digibyte-cli -testnet -rpcwallet=oracle getwalletinfo
 
 ---
 
-*Verified against the current `feature/digidollar-v1` source tree (RC34). New operators should target RC30+ on `testnet23` (port 12030) or mainnet (port 12024). The retired RC29/`testnet21`/port 12035 chain is documented only as a decommissioning footnote.*
+*Verified against the current `feature/digidollar-v1` source tree. New operators should target `testnet24` (port 12031) or mainnet (port 12024). Retired `testnet23`/port 12030 and `testnet21`/port 12035 details are documented only as decommissioning footnotes.*

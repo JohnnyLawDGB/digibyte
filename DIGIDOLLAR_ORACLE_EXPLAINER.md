@@ -25,14 +25,14 @@ mined, relayed as fallback, or used to update the price cache in V1.
 | Network | Oracle metadata slots | Consensus-active slots | Quorum |
 |---------|-----------------------|------------------------|--------|
 | Mainnet | 30 | 17, slots 0-16 | 9-of-17 |
-| Testnet23 | 17 | 17, slots 0-16 | 9-of-17 |
+| Testnet24 | 17 | 17, slots 0-16 | 9-of-17 |
 | Regtest | 7 | 7, slots 0-6 | 4-of-7 |
 
 Mainnet slots 17-29 are reserve metadata entries. They are not part of
 `consensus.vOraclePublicKeys`, do not count toward pending-message quorum, do
 not appear in the MuSig2 bitmap, and cannot contribute to the V1 aggregate
 signature unless a future deterministic activation rule expands the consensus
-roster. Testnet23 has no reserve metadata slots configured.
+roster. Testnet24 has no reserve metadata slots configured.
 
 ## Operator Flow
 
@@ -40,18 +40,25 @@ roster. Testnet23 has no reserve metadata slots configured.
    `src/oracle/exchange.cpp`.
 2. `OracleNode::FetchMedianPrice()` requires at least three responsive exchange
    sources before publishing a price.
-3. The node signs an `oracleprice` message and relays it over P2P.
+3. The node signs an `oracleprice` message and relays it over P2P. It also
+   emits signed `oraclehb` version heartbeats every five minutes while enabled;
+   heartbeats are operator/protocol telemetry, not price inputs.
 4. Nodes exchange `oracleconsns` and `oracleattest` messages to agree on the
    price/timestamp tuple.
-5. Operators run the MuSig2 nonce and partial-signature rounds using
-   `oramusnonce` and `oramusigpsig`.
+5. Operators run the MuSig2 nonce/context/partial-signature flow using
+   `oramusnonce`, `oramusigctx`, and `oramusigpsig`. The context proposal
+   freezes the participant set, nonce set, quote set, consensus price, and
+   timestamp before partial signatures are relayed.
 6. A completed session yields a 64-byte aggregate BIP-340 signature and a
    participation bitmap.
 7. The miner embeds the v0x03 bundle in the coinbase only when the block
-   contains DigiDollar activity and a valid bundle is available.
+   contains a DigiDollar mint/redeem and a valid bundle is available. Transfer-only
+   DD blocks do not require a block oracle bundle.
 
 Off-chain messages are signing inputs only. They are not accepted as on-chain
-oracle bundles.
+oracle bundles. `getoracles` is a pull-on-demand recovery message: peers answer
+with matching fresh `oracleprice` messages and recent signed `oraclehb`
+heartbeats, not with on-chain bundles or MuSig2 round traffic.
 
 ## On-Chain v0x03 Data
 
@@ -85,7 +92,10 @@ returns an empty script unless the bundle has:
 sessions, then the cached current-epoch bundle. If no valid v0x03 bundle is
 ready:
 
-- DD-touching block templates cannot keep the DD transactions.
+- price-dependent DD mint/redeem transactions are skipped or removed from the
+  template.
+- price-independent DD transfers can remain valid without a block oracle
+  bundle.
 - ordinary non-DD block templates may omit the oracle bundle and remain valid.
 
 ## Block Validation
@@ -139,11 +149,12 @@ DigiDollar and the oracle validator activate together:
 | Network | DigiDollar activation | Oracle activation | MuSig2 height |
 |---------|-----------------------|-------------------|---------------|
 | Mainnet | BIP9 bit 23, min height 22,014,720 | same trigger | 0 |
-| Testnet23 | height 600 / BIP9 active | same trigger | 0 |
+| Testnet24 | height 600 / BIP9 active | same trigger | 0 |
 | Regtest | BIP9 `ALWAYS_ACTIVE`; DD/oracle P2P height gates 650 by default, or the direct `-digidollaractivationheight=N` override | same height trigger | 0 |
 
 Before activation, DD-looking data does not trigger V1 consensus rules. After
-activation, DD-touching blocks must satisfy the V1 oracle rules above.
+activation, DD mint/redeem blocks must satisfy the V1 oracle rules above;
+DD transfer-only and ordinary DGB blocks may omit the coinbase oracle bundle.
 
 ## Regtest Mocking
 
@@ -165,7 +176,8 @@ mainnet/testnet use after activation.
 | DD mint/redeem block, raw v0x01/v0x02 oracle output | `bad-oracle-malformed` |
 | DD mint/redeem block, malformed v0x03 output | `bad-oracle-malformed` |
 | DD mint/redeem block, v0x03 below quorum or wrong signature | `bad-oracle-musig2` |
-| DD-touching block, valid v0x03 output | accepted |
+| DD mint/redeem block, valid v0x03 output | accepted |
+| DD transfer-only block, valid v0x03 output | accepted |
 
 ## Code References
 
@@ -176,8 +188,10 @@ mainnet/testnet use after activation.
   price-cache update and rollback.
 - `src/node/miner.cpp` - miner template DD filtering and oracle-bundle
   insertion.
-- `src/net_processing.cpp` - oracle P2P message handlers and legacy
-  `oraclebundle` drop behavior.
+- `src/net_processing.cpp` - oracle P2P handlers for `oracleprice`,
+  `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`,
+  `oramusigpsig`, `oraclehb`, `getoracles`, and legacy `oraclebundle` drop
+  behavior.
 - `src/kernel/chainparams.cpp` - active oracle keys, reserve metadata, quorum,
   and activation parameters.
 
@@ -187,11 +201,16 @@ The V1 format and block rules are pinned by:
 
 - `src/test/digidollar_oracle_musig2_tests.cpp`
 - `src/test/digidollar_oracle_bundle_matrix_tests.cpp`
+- `src/test/musig2_p2p_message_tests.cpp`
 - `src/test/fuzz/oracle_bundle_version_reject.cpp`
 - `src/test/fuzz/oracle_validate_block_data.cpp`
 - `test/functional/digidollar_oracle_block_rules_relay.py`
 - `test/functional/digidollar_oracle_bundle_reject_matrix.py`
+- `test/functional/digidollar_getoracles_consensus_field.py`
+- `test/functional/digidollar_wave20_oracle_p2p.py`
+- `test/functional/digidollar_wave21_musig2_p2p_dos.py`
 
-These tests prove that legacy bundles are rejected, DD-touching blocks require a
-valid v0x03 bundle, non-DD blocks can omit oracle data, and malformed oracle
-payloads cannot update consensus price state.
+These tests prove that legacy bundles are rejected, price-dependent DD blocks
+require a valid v0x03 bundle, transfer-only and non-DD blocks can omit oracle
+data, stale relay messages are bounded, and malformed oracle payloads cannot
+update consensus price state.

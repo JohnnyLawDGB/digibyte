@@ -1,8 +1,8 @@
 # DigiByte Blockchain Architecture
 **DigiByte v9.26 (Based on Bitcoin Core v26.2)**
 *Comprehensive Technical Documentation*
-*Last Updated: 2026-04-30*
-*Validation Status: 100% Validated Against Codebase*
+*Last Updated: 2026-05-20*
+*Validation Status: Spot-validated against live `feature/digidollar-v1` code surfaces listed in Appendix D*
 
 ---
 
@@ -137,7 +137,7 @@ digibyte/
 │   │   └── hashodo.h        # Odo hash wrapper
 │   │
 │   ├── script/              # Script system
-│   │   ├── interpreter.cpp  # Script execution (2274 lines)
+│   │   ├── interpreter.cpp  # Script execution (2308 lines)
 │   │   ├── script.h         # Opcodes, CScript class
 │   │   └── sigcache.cpp     # Signature caching
 │   │
@@ -148,9 +148,9 @@ digibyte/
 │   │   └── digidollarwallet.cpp # DD wallet integration
 │   │
 │   ├── net.cpp              # P2P networking (~3900 lines, V1+V2 BIP324 transport)
-│   ├── net_processing.cpp   # Message handling (~7300 lines, includes oracle msg handlers)
+│   ├── net_processing.cpp   # Message handling (~7500 lines, includes oracle msg handlers)
 │   ├── dandelion.cpp        # Dandelion++ privacy (~500 lines)
-│   ├── validation.cpp       # Block validation (~6900 lines; DD-aware ConnectBlock)
+│   ├── validation.cpp       # Block validation (~7050 lines; DD-aware ConnectBlock)
 │   ├── pow.cpp              # Difficulty adjustment
 │   │
 │   ├── digidollar/          # DigiDollar stablecoin
@@ -180,9 +180,11 @@ digibyte/
 │       ├── digidollartab.cpp # DD main tab
 │       └── digidollar*.cpp  # DD widgets
 │
+├── src/test/                # C++ unit tests and fuzz targets
+├── src/wallet/test/         # Wallet C++ tests (linked into test_digibyte)
+├── src/qt/test/             # Qt C++ tests
 ├── test/
-│   ├── functional/          # Python integration tests
-│   └── unit/                # C++ unit tests
+│   └── functional/          # Python integration tests
 │
 └── doc/                     # Documentation
 ```
@@ -251,7 +253,7 @@ struct Params {
 };
 ```
 
-`Consensus::DEPLOYMENT_DIGIDOLLAR` (bit 23) is the BIP9 deployment that gates `SCRIPT_VERIFY_DIGIDOLLAR`; production `min_activation_height` and `nDDActivationHeight` are aligned in `src/kernel/chainparams.cpp` (mainnet 22014720, testnet 600). Default regtest uses BIP9 `ALWAYS_ACTIVE` / `min_activation_height=0` with DD/oracle P2P height gates at 650; the direct `-digidollaractivationheight=N` knob retargets both BIP9 and those height gates. Startup oracle-price cache reconstruction follows the BIP9 predicate used by block connection so regtest BIP9-active oracle bundles below 650 are not skipped on restart/reindex. `nDigiDollarMuSig2Height = 0` on every chain, so MuSig2 v0x03 oracle bundles are required as soon as DigiDollar is active.
+`Consensus::DEPLOYMENT_DIGIDOLLAR` (bit 23) is the BIP9 deployment that gates `SCRIPT_VERIFY_DIGIDOLLAR`; production `min_activation_height` and `nDDActivationHeight` are aligned in `src/kernel/chainparams.cpp` (mainnet 22014720, testnet24 600). Testnet24 uses default port 12031 and reset genesis timestamp 1778507580; its BIP9 start time remains 1763932527. Default regtest uses BIP9 `ALWAYS_ACTIVE` / `min_activation_height=0` with DD/oracle P2P height gates at 650; the direct `-digidollaractivationheight=N` knob retargets both BIP9 and those height gates. Startup oracle-price cache reconstruction follows the BIP9 predicate used by block connection so regtest BIP9-active oracle bundles below 650 are not skipped on restart/reindex. `nDigiDollarMuSig2Height = 0` on every chain, so MuSig2 v0x03 oracle bundles are required as soon as DigiDollar is active.
 
 ### 3.3 Block Validation Results
 
@@ -684,7 +686,7 @@ enum class SigVersion {
 | `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` | BIP112 CSV |
 | `SCRIPT_VERIFY_WITNESS` | BIP141 SegWit |
 | `SCRIPT_VERIFY_TAPROOT` | BIP341/342 Taproot |
-| `SCRIPT_VERIFY_DIGIDOLLAR` | DigiDollar opcodes (`OP_DIGIDOLLAR`/`OP_DDVERIFY`/`OP_CHECKPRICE`/`OP_CHECKCOLLATERAL`/`OP_ORACLE`); set in `validation.cpp:2706-2707` only when BIP9 `DEPLOYMENT_DIGIDOLLAR` is active. |
+| `SCRIPT_VERIFY_DIGIDOLLAR` | DigiDollar opcodes (`OP_DIGIDOLLAR`/`OP_DDVERIFY`/`OP_CHECKPRICE`/`OP_CHECKCOLLATERAL`/`OP_ORACLE`); set in `GetBlockScriptFlags()` (`validation.cpp:2747, 2787-2789`) only when BIP9 `DEPLOYMENT_DIGIDOLLAR` is active. |
 
 ### 8.4 DigiDollar Opcodes
 
@@ -806,7 +808,12 @@ DANDELION_FLUFF = 10  // 10% immediate fluff probability
 | ADDR/ADDRV2 | Address gossip |
 | CMPCTBLOCK | Compact blocks (BIP152) |
 | **DANDELIONTX** | Stem phase transaction |
-| **ORACLEPRICE** | Oracle price message |
+| **ORACLEPRICE** | Individual oracle price message |
+| **ORACLEBUNDLE** | Legacy oracle bundle wrapper; V1 block data uses MuSig2 coinbase bundles |
+| **GETORACLES** | Oracle data request |
+| **ORACLECONSENSUS** / **ORACLEATTESTATION** | MuSig2 oracle consensus/attestation coordination |
+| **ORACLEMUSIGNONCE** / **ORACLEMUSIGCONTEXT** / **ORACLEMUSIGPARTIALSIG** | MuSig2 nonce/context/partial-signature exchange |
+| **ORACLEHEARTBEAT** | Oracle liveness heartbeat |
 
 ---
 
@@ -1175,7 +1182,7 @@ Aggregate Schnorr signature + participation bitmap → Coinbase OP_RETURN
 | Network | DD activation (`nDDActivationHeight`) | Oracle activation (`nOracleActivationHeight`) | MuSig2 (`nDigiDollarMuSig2Height`) | On-chain quorum |
 |---------|--------------------------------------|----------------------------------------------|-----------------------------------|-----------------|
 | Mainnet | 22,014,720 | 22,014,720 (= DD) | 0 | 9-of-17 (`nOracleConsensusRequired = 9`, `nOraclePubkeyCount = 17`) |
-| Testnet23 | 600 | 600 (= DD) | 0 | 9-of-17 |
+| Testnet24 | 600 | 600 (= DD) | 0 | 9-of-17 |
 | Regtest | 650 | 650 (= DD) | 0 | 4-of-7 |
 
 `nDigiDollarMuSig2Height = 0` on all networks (`src/kernel/chainparams.cpp:314,576,1119`), so once DigiDollar is active the only accepted on-chain bundle format is MuSig2 v0x03. The legacy `nDigiDollarPhase2Height` / `nDigiDollarPhase3Height` fields no longer exist.
@@ -1299,13 +1306,13 @@ Mock prices are only available on regtest under the `OracleManagerInterface` shi
 ### Consensus & Validation
 | File | Function/Class | Approx. Lines |
 |------|---------------|---------------|
-| validation.cpp | CheckBlock() | 4520+ |
-| validation.cpp | ContextualCheckBlock() | 4738+ |
-| validation.cpp | ContextualCheckBlockHeader() | 4680+ |
-| validation.cpp | Chainstate::ConnectBlock() | 2726+ |
-| validation.cpp | GetBlockSubsidy() | 2044-2120 |
-| validation.cpp | IsAlgoActive() | 2122+ |
-| validation.cpp | GetOraclePriceForTransaction() | 1999+ |
+| validation.cpp | CheckBlock() | 4624+ |
+| validation.cpp | ContextualCheckBlock() | 4842+ |
+| validation.cpp | ContextualCheckBlockHeader() | 4784+ |
+| validation.cpp | Chainstate::ConnectBlock() | 2808+ |
+| validation.cpp | GetBlockSubsidy() | 2119-2194 |
+| validation.cpp | IsAlgoActive() | 2196+ |
+| validation.cpp | GetOraclePriceForTransaction() | 2073+ |
 | pow.cpp | GetNextWorkRequiredV4() | 192-254 |
 | pow.cpp | GetNextWorkRequired() (dispatcher) | 256-285 |
 | pow.cpp | CheckProofOfWork() | 376+ |
@@ -1315,7 +1322,7 @@ Mock prices are only available on regtest under the `OracleManagerInterface` shi
 |------|---------------|-------|
 | chain.h | CBlockIndex | 146-384 |
 | chain.h | BlockStatus enum | 85-139 |
-| chain.cpp | GetAlgo() | 122-145 |
+| chain.cpp | GetAlgoForBlockIndex() | 152-174 |
 | primitives/block.h | CBlockHeader | 85-139 |
 | primitives/block.cpp | GetPoWAlgoHash() | 56-106 |
 
@@ -1325,7 +1332,7 @@ Mock prices are only available on regtest under the `OracleManagerInterface` shi
 | interpreter.cpp | EvalScript() | 439-1380 |
 | interpreter.cpp | CheckSchnorrSignature() | 1819-1847 |
 | interpreter.cpp | Taproot verification | 2055-2098 |
-| interpreter.cpp | DigiDollar opcodes | 636-746 |
+| interpreter.cpp | DigiDollar opcodes | 651-754 |
 | script.h | Opcodes enum | 70-217 |
 
 ### Networking
@@ -1392,7 +1399,7 @@ debug=validation
 ### Unit Tests
 - `src/test/` - C++ unit tests (Boost.Test); see `REPO_MAP_DIGIDOLLAR.md` for the granular DigiDollar/Oracle/MuSig2/Red-Hornet test inventory (~150 unit suites at last count).
 - `src/wallet/test/` - DigiDollar wallet suites cover persistence, security, Wave 16/17 spendability, helper asymmetry, and rh59 lock-bypass, plus base wallet tests.
-- `src/qt/test/` - DigiDollar Qt widget tests (`digidollarwidgettests.cpp`).
+- `src/qt/test/` - DigiDollar Qt widget tests (`digidollarwidgettests.cpp`, `digidollarwave19widgettests.cpp`); generated `moc_*.cpp` files are build products.
 
 ### Functional Tests
 - `test/functional/` - Python integration tests; current DD/oracle coverage is registered through `digidollar_*`, `wallet_digidollar_*`, and `feature_oracle_p2p.py` entries in `test_runner.py`.
@@ -1417,9 +1424,9 @@ make check
 
 ## Appendix D: Codebase Validation Report
 
-### Validation Date: 2026-04-30
+### Validation Date: 2026-05-20
 
-This architecture document has been validated against the active DigiByte v9.26 codebase on `feature/digidollar-v1` across the major subsystems.
+This architecture document has been spot-validated against the active DigiByte v9.26 codebase on `feature/digidollar-v1` across the major subsystems. Generated/build trees (`.deps`, `.libs`, `*.o`, `*.lo`, Qt `moc_*.cpp`, Qt `forms/ui_*.h`) were ignored.
 
 ### Validation Summary
 
@@ -1487,7 +1494,7 @@ This architecture document has been validated against the active DigiByte v9.26 
 | COracleBundle v0x03 (MuSig2 only on V1) | primitives/oracle.h, oracle/bundle_manager.cpp (commits f2bb0a19a4, bbb85cf363) |
 | MuSig2 Aggregator/Session/Orchestrator | oracle/musig2_*.{cpp,h} |
 | IQR Outlier Filtering | oracle/bundle_manager.cpp:CalculateConsensusPrice |
-| Block-Extracted Oracle Price | validation.cpp:ConnectBlock (around line 3010) |
+| Block-Extracted Oracle Price | validation.cpp:ConnectBlock (around lines 3084-3098) |
 | Incremental DD Supply Tracking | digidollar/health.cpp:OnMintConnected/OnRedeemConnected |
 | Mining graceful degradation for DD txs | node/miner.cpp (commit 6b5ff516c3) |
 
@@ -1503,4 +1510,4 @@ This document is consistent with:
 
 *Document Version: 2.1*
 *Generated from DigiByte v9.26 codebase analysis (`feature/digidollar-v1`)*
-*Updated: 2026-04-30*
+*Updated: 2026-05-20*

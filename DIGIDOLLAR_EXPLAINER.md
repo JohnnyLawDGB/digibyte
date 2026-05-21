@@ -1,10 +1,10 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2026-04-30*
-*Document Version: 3.8 — V1 alignment*
+*Updated: 2026-05-20*
+*Document Version: 3.9 — V1 protocol alignment*
 
 ## Overview
 
-DigiDollar is the world's first truly decentralized stablecoin native on a UTXO blockchain, enabling stable value transactions without centralized control.
+DigiDollar is a decentralized USD-denominated token design native to DigiByte's UTXO model, enabling stable-value transactions without custodial bank reserves or a smart-contract VM.
 
 ### Key Points
 - **DGB becomes the strategic reserve asset** (21B max supply, ~1.94 per person on Earth at 8.1B population)
@@ -21,9 +21,9 @@ With a maximum supply of 21 billion DGB, there are only **1.94 DGB per person** 
 
 ### Simple Explanation
 
-DigiDollar is a stable digital currency that equals $1 USD, created by locking up DigiByte (DGB) as collateral. DGB becomes a strategic reserve asset - with only 21 billion max supply (just 1.94 DGB per person on Earth), it's a truly finite asset backing the stability of DigiDollars.
+DigiDollar is designed to track $1 USD by locking up DigiByte (DGB) as over-collateralized backing. DGB becomes a strategic reserve asset - with only 21 billion max supply (just 1.94 DGB per person on Earth), it's a finite asset backing the stability mechanism.
 
-Unlike traditional stablecoins backed by bank accounts, DigiDollar is the world's first truly decentralized stablecoin on a UTXO blockchain. No company or bank controls it.
+Unlike traditional stablecoins backed by bank accounts, DigiDollar is designed to operate as a decentralized UTXO-native system. No company or bank controls user collateral.
 
 **Most importantly**: Everything happens directly in your DigiByte Core wallet - you never give up control of your private keys or trust a third party.
 
@@ -31,11 +31,11 @@ Unlike traditional stablecoins backed by bank accounts, DigiDollar is the world'
 
 ### Key Benefits
 
-- ✅ World's first truly decentralized stablecoin on UTXO blockchain
-- ✅ Always worth $1 USD - stable and predictable
+- ✅ UTXO-native stablecoin design with no custodial bank reserve
+- ✅ Designed to track $1 USD through over-collateralization, oracle pricing, DCA, ERR, and volatility controls
 - ✅ You keep full control of private keys in Core wallet
 - ✅ DGB becomes strategic reserve asset
-- ✅ 15-second blocks (40x faster than BTC), $0.01 fees
+- ✅ 15-second blocks (40x faster than BTC); fees depend on current fee policy and network conditions
 
 ---
 
@@ -59,7 +59,7 @@ The safe gives you $500 cash to spend today. **The silver NEVER leaves your poss
 
 ### The Tax Advantage: Liquidity Without Selling
 
-In most jurisdictions, **borrowing against assets is NOT a taxable event**. This is exactly what billionaires do - they never sell their stocks, they borrow against them.
+In some jurisdictions, borrowing against assets may be treated differently from selling them. Tax treatment depends on local law and individual facts.
 
 **Traditional Crypto Sale:**
 - ❌ Sell DGB → Pay 20-40% capital gains tax
@@ -68,11 +68,11 @@ In most jurisdictions, **borrowing against assets is NOT a taxable event**. This
 
 **DigiDollar Method:**
 - ✅ Lock DGB → Get DigiDollars
-- ✅ No taxable event (in most jurisdictions)
+- ✅ May avoid a sale event in some jurisdictions
 - ✅ Keep ALL future DGB gains
 - ✅ Theoretically never need to sell DGB
 
-_* Tax laws vary by jurisdiction. Consult a tax professional for your specific situation._
+_* This document is not tax advice. Tax laws vary by jurisdiction; consult a tax professional for your specific situation._
 
 ### Economic Incentives: Why This Benefits Everyone
 
@@ -88,7 +88,7 @@ With only 21 billion DGB ever to exist, locking DGB for DigiDollars makes an alr
 
 #### 💰 Personal Financial Benefits
 
-DigiDollar provides unprecedented financial flexibility for DGB holders, enabling sophisticated wealth management strategies.
+DigiDollar can provide additional financial flexibility for DGB holders by separating liquidity access from an immediate DGB sale.
 
 - **Tax-efficient liquidity**: Access funds without triggering capital gains
 - **Keep upside potential**: Maintain full exposure to DGB price appreciation
@@ -105,7 +105,7 @@ Users lock DigiByte as collateral in a P2TR (Pay-to-Taproot) time-locked vault. 
 DigiDollars are automatically minted based on the locked DGB value and current USD exchange rate from decentralized oracles.
 
 #### 3. Use & Redeem
-Use DigiDollars for stable transactions. Redeem them anytime to unlock your DGB collateral after the lock period expires.
+Use DigiDollars for stable-value transactions. After the lock period expires, redemption requires burning the required DigiDollars to unlock the full DGB collateral; during ERR the required DD burn increases.
 
 ---
 
@@ -128,37 +128,41 @@ DigiDollar uses a sliding collateral scale to prevent attacks while rewarding lo
 
 **Note**: The updated collateral schedule (1000% → 200%) provides enhanced stability. The 1-hour tier is canonical on all networks and locks real collateral until expiry. The "Undercollateralized After" column shows how much DGB price can drop before position becomes undercollateralized.
 
+Mint validation uses the canonical tier declared in the mint OP_RETURN. The lock height must leave at least the tier's canonical block count and no more than that count plus the 100-block confirmation buffer; under-locked or custom durations are rejected.
+
 ---
 
-## Revolutionary Use Cases
+## Potential Use Cases
+
+These examples describe directions the protocol could support. V1 ships the core mint, transfer, redeem, collateral, oracle, DCA, ERR, and volatility machinery; it does not ship vertical-specific applications.
 
 ### Corporate Bonds
-**$140.7 Trillion market** - Instant settlement vs 2-3 day traditional clearing
+Faster settlement workflows for USD-denominated instruments
 
 ### Real Estate
-**$79.7 Trillion market** - Fractional ownership democratizes property investment
+Collateralized liquidity and settlement workflows around property-related assets
 
 ### Autonomous Vehicles
-**$13.7 Trillion by 2030** - Self-driving cars manage their own finances
+Machine-to-machine payments where a UTXO-native dollar unit is useful
 
 ### Global Remittances
-**$685 Billion market** - Reduce costs from 6.3% average to $0.01 flat fee
+Cross-border payments where users want non-custodial wallet control
 
 ### Healthcare Payments
-**$550 Billion market** - Real-time claim adjudication and transparent pricing
+Transparent payment and settlement records
 
-### And 45+ More Use Cases
-From supply chain to gaming, DigiDollar enables countless innovations
+### Additional Applications
+Supply chain, gaming, and other wallet-native payment flows can be explored on top of the same protocol primitives.
 
 ---
 
 ## Technical Implementation
 
-### Revolutionary Architecture
+### Protocol Architecture
 
-DigiDollar is the world's first truly decentralized stablecoin built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet — users maintain complete control of their private keys throughout the entire process.
+DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet — users maintain complete control of their private keys throughout the entire process.
 
-**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The May 1, 2026 BIP9 start time has passed; mainnet remains gated by the configured minimum height/threshold, testnet-only RC34 status, the green Wave 26 backward-compatibility/activation proof, and Jared's architecture-review decisions. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
+**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The May 1, 2026 BIP9 start time has passed; mainnet remains gated by the configured minimum height/threshold, the current testnet24/RC40 validation, the green Wave 26 backward-compatibility/activation proof, and architecture-review decisions. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
 
 ### Core Technologies
 
@@ -166,7 +170,7 @@ DigiDollar is the world's first truly decentralized stablecoin built natively on
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-Mainnet/testnet: 17 consensus-active oracle slots (9-of-17 MuSig2 BIP-327 threshold consensus producing a single BIP-340 Schnorr aggregate signature). Mainnet also carries reserve metadata in `vOracleNodes` slots 17-29, but those reserve entries are not in `consensus.vOraclePublicKeys` and do not participate in V1 quorum; testnet23 has only the 17 active slots configured. Regtest: 4-of-7 (chainparams overrides the header defaults). Oracle prices are reported in micro-USD format (1,000,000 = $1.00). The legacy constants in `primitives/oracle.h` (30/15/8) are header defaults; `consensus.nOracleTotalOracles`, `consensus.nOracleRequiredMessages`, and `consensus.nOracleConsensusRequired` from chainparams are authoritative.
+Mainnet/testnet: 17 consensus-active oracle slots (9-of-17 MuSig2 BIP-327 threshold consensus producing a single BIP-340 Schnorr aggregate signature). Mainnet also carries reserve metadata in `vOracleNodes` slots 17-29, but those reserve entries are not in `consensus.vOraclePublicKeys` and do not participate in V1 quorum; testnet24 has only the 17 active slots configured. Regtest: 4-of-7 (chainparams overrides the header defaults). Oracle prices are reported in micro-USD format (1,000,000 = $1.00). `primitives/oracle.h` now declares header defaults `ORACLE_TOTAL_COUNT=30`, `ORACLE_ACTIVE_COUNT=17`, and `ORACLE_CONSENSUS_REQUIRED=9`; per-network chainparams values such as `nOraclePubkeyCount` and `nOracleConsensusRequired` remain authoritative for validation.
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees. The collateral vault uses **2 redemption paths**:
@@ -175,7 +179,7 @@ Efficient script execution with Merkleized Alternative Script Trees. The collate
 
 Both paths **require the timelock to expire first** - there is no early redemption, no forced liquidation, and no exceptions.
 
-**Implementation Note**: Partial redemption is rejected at consensus. `ValidateCollateralReleaseAmount` (`src/digidollar/validation.cpp:1888+`) requires the redeemer to burn at least `requiredDDBurn` (= `originalDDMinted` for healthy systems, or the ERR-adjusted amount when health < 100%) AND release the full locked collateral; otherwise the transaction is rejected with `bad-collateral-release-partial-burn`. Non-DD transactions cannot spend a registered collateral vault at all (`bad-collateral-spend-missing-dd-burn`).
+**Implementation Note**: Partial redemption is rejected at consensus. `ValidateCollateralReleaseAmount` (`src/digidollar/validation.cpp:2299+`) requires the redeemer to burn at least `requiredDDBurn` (= `originalDDMinted` for healthy systems, or the ERR-adjusted amount when health < 100%) AND release the full locked collateral; otherwise the transaction is rejected with `bad-collateral-release-partial-burn`. Non-DD transactions cannot spend a registered collateral vault at all (`bad-collateral-spend-missing-dd-burn`).
 
 ### Key Features
 
@@ -218,12 +222,12 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-Mainnet/testnet expose 17 active oracle slots in `consensus.vOraclePublicKeys`. Mainnet additionally carries reserve metadata in `vOracleNodes` slots 17-29, while testnet23 has no reserve metadata slots configured. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 9-of-17 oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
+Mainnet/testnet expose 17 active oracle slots in `consensus.vOraclePublicKeys`. Mainnet additionally carries reserve metadata in `vOracleNodes` slots 17-29, while testnet24 has no reserve metadata slots configured. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 9-of-17 oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.
 
-**Key Innovation**: Unlike Ethereum-based stablecoins that require smart contracts and gas fees, DigiDollar uses native UTXO script capabilities for superior security, lower costs, and true decentralization. The entire system operates without intermediaries, smart contract risks, or custody requirements.
+**Key Design Difference**: DigiDollar uses native UTXO script capabilities instead of an account-style smart-contract VM. The protocol avoids custodial collateral and contract-admin controls; actual transaction cost and user experience depend on wallet, fee policy, and network conditions.
 
 ---
 
@@ -369,24 +373,24 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ## Implementation Status & Code Alignment
 
-**Last Verified**: 2026-04-30
+**Last Verified**: 2026-05-20
 
 | Feature | Document Spec | Code Reference |
 |---------|---------------|----------------|
 | 2 MAST Paths | Normal + ERR only | `src/digidollar/scripts.cpp:117-177` |
 | Emergency oracle override | Removed | Comment at `src/digidollar/scripts.cpp:85-86` records removal |
-| Partial redemption | Rejected at consensus | `src/digidollar/validation.cpp:2047-2055` (`bad-collateral-release-partial-burn`) |
-| Non-DD spend of collateral vault | Rejected at consensus | `src/digidollar/validation.cpp:2212-2219` (`bad-collateral-spend-missing-dd-burn`) |
+| Partial redemption | Rejected at consensus | `src/digidollar/validation.cpp:2512-2519` (`bad-collateral-release-partial-burn`) |
+| Non-DD spend of collateral vault | Rejected at consensus | `src/digidollar/validation.cpp:2631-2655` (`bad-collateral-spend-missing-dd-burn`) |
 | ERR semantics | 100% collateral, MORE DD burned | `src/consensus/err.cpp:100-149` (`__int128` ceiling math) |
 | Minting blocked during ERR | Yes; also blocked when oracle absent | `src/consensus/err.cpp:417-469` |
 | Both MAST paths require CLTV | Both leaves prefix-match `<lockHeight> OP_CLTV OP_DROP` | `src/digidollar/scripts.cpp:73-99` |
-| Lock tiers | 10 tiers (1h, 30d, 90d, 180d, 1y, 2y, 3y, 5y, 7y, 10y) | `src/consensus/digidollar.h:50-61` |
-| Custom durations rejected | Mint validation enforces canonical tier and exact lock-block math | `src/digidollar/validation.cpp:980-1008, 1221-1227` |
+| Lock tiers | 10 tiers (1h, 30d, 90d, 180d, 1y, 2y, 3y, 5y, 7y, 10y) | `src/consensus/digidollar.h:57-68` |
+| Custom durations rejected | Mint validation enforces canonical tier windows: `[tier_blocks, tier_blocks + 100]` | `src/digidollar/validation.cpp:1325-1366, 1574-1593` |
 | DCA tiers | 1.00 / 1.25 / 1.50 / 2.00 (≥150 / 120-149 / 110-119 / <110) | `src/consensus/dca.cpp:51-57` (HEALTH_TIERS) and `src/consensus/digidollar.h:87-92` (dcaLevels) |
 | ERR ratios | 0.95 / 0.90 / 0.85 / 0.80 | `src/consensus/err.cpp:53-58` (ERR_TIERS) |
 | Oracle config | 9-of-17 (mainnet/testnet) and 4-of-7 (regtest) | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
 | Cooldown period | 8640 blocks (~36h) | `src/consensus/volatility.h:63` (`COOLDOWN_BLOCKS`) |
-| DD amount unit | Cents (100 = $1.00) | `src/consensus/digidollar.h:64-66`, `src/digidollar/digidollar.h` |
+| DD amount unit | Cents (100 = $1.00) | `src/consensus/digidollar.h:70-73`, `src/digidollar/digidollar.h` |
 | Oracle price unit | Micro-USD (1,000,000 = $1.00) | `src/oracle/bundle_manager.*`, `src/script/interpreter.cpp` |
 | DD supply alert | Monitoring only — no hard cap | `src/digidollar/health.h:83` (`ALERT_DD_SUPPLY`) |
 
@@ -401,7 +405,7 @@ The V1 branch closes the consensus and policy gaps that the previous draft of th
 | Subsystem | Source | Status |
 |-----------|--------|--------|
 | OP_CHECKPRICE production wiring | `src/script/interpreter.cpp:436-746` | Live `g_get_oracle_consensus_price`; fails closed on missing price |
-| MuSig2-only oracle bundles | `src/validation.cpp:115-217` | Pre-V1 (legacy) bundles rejected; mempool requires recent valid MuSig2 quote |
+| MuSig2-only oracle bundles | `src/validation.cpp:185-283` | Pre-V1 (legacy) bundles rejected; mempool requires recent valid MuSig2 quote |
 | Mainnet/testnet validator parity | `src/validation.cpp` | Mainnet short-circuit removed (commit `f0d9a7b2c7`) |
 | DCA/ERR integer math | `src/consensus/dca.cpp`, `src/consensus/err.cpp` | `__int128` ceiling arithmetic; `ApplyDCA` fails closed on stale health |
 | Confirmed-only DD chaining | `src/digidollar/validation.cpp:1425, 1564` | `MEMPOOL_HEIGHT` DD inputs rejected (commit `0b4959f563`) |
@@ -409,7 +413,7 @@ The V1 branch closes the consensus and policy gaps that the previous draft of th
 | DD supply alert (not a cap) | `src/digidollar/health.h:83` | Monitoring threshold only |
 
 **Where this leaves operators**:
-- **Regtest / testnet**: Fully exercisable today (testnet23 is past its `min_activation_height`).
+- **Regtest / testnet**: Fully exercisable today; testnet24 is configured with `min_activation_height = 600`.
 - **Mainnet**: Configuration is in place (BIP9 bit 23, start time 2026-05-01, `min_activation_height = 22014720`). Outstanding work is operational — mainnet oracle operator deployment and continued testnet validation.
 
 ---

@@ -25,7 +25,7 @@ If you already run a DigiByte node, you're most of the way there.
 | Fee unit | DGB/kB (DigiByte uses kB, not vB) |
 | Block time | 15 seconds (same as DGB) |
 | Confirmations | Same security model as DGB |
-| Backend required | DigiByte Core v9.26.0+ with `digidollar=1` |
+| Backend required | DigiByte Core v9.26.0+ with DigiDollar built in; features remain BIP9-gated until activation |
 | Wallet | Descriptor wallet recommended; private keys must be enabled to spend received DD |
 
 ---
@@ -38,7 +38,7 @@ Upgrade your existing DigiByte node to v9.26.0+ and enable DigiDollar:
 # digibyte.conf
 server=1
 digidollar=1
-txindex=1
+txindex=1  # required for DigiDollar transaction lookups
 rpcuser=youruser
 rpcpassword=yourpassword
 
@@ -46,7 +46,8 @@ rpcpassword=yourpassword
 # testnet=1
 # [test]
 # digidollar=1
-# addnode=oracle1.digibyte.io:12030
+# txindex=1
+# addnode=oracle1.digibyte.io:12031
 ```
 
 That's it. Your existing DGB infrastructure stays the same — DD runs alongside it.
@@ -166,8 +167,8 @@ digibyte-cli getbalance
 
 ### Withdrawal Limits
 
-- Per-output dust floor: $1 (100 cents) — see `src/consensus/digidollar.h:66`
-- Maximum single transfer: **$100,000** (10,000,000 cents) per `maxMintAmount`-aligned policy in `src/consensus/digidollar.h:65`
+- Per-output dust floor: $1 (100 cents) — see `src/consensus/digidollar.h:73`
+- Maximum single transfer: **$100,000** (10,000,000 cents) per `maxMintAmount`-aligned policy in `src/consensus/digidollar.h:72`
 - DD inputs must be **confirmed** (≥1 confirmation) before they can be re-spent. As of RC32 the wallet does not chain unconfirmed DigiDollar UTXOs, and consensus rejects DD transfer/redeem inputs that resolve from `MEMPOOL_HEIGHT` (commit `0b4959f563`). Plan withdrawal cadence around the 15-second block time, or batch with `sendmanydigidollar`.
 
 ### Batch withdrawals
@@ -175,8 +176,10 @@ digibyte-cli getbalance
 `sendmanydigidollar` sends DD to multiple addresses in a single transaction (one fee, one set of inputs):
 
 ```bash
-digibyte-cli sendmanydigidollar '{"DDcust1...":12500,"DDcust2...":7500}'
+digibyte-cli sendmanydigidollar "" '{"DDcust1...":12500,"DDcust2...":7500}'
 ```
+
+The first argument is the required `sendmany` compatibility dummy string. Use integer cents in integration code to avoid decimal display/rounding ambiguity.
 
 ---
 
@@ -185,9 +188,9 @@ digibyte-cli sendmanydigidollar '{"DDcust1...":12500,"DDcust2...":7500}'
 ### Hot Wallet Balances
 
 ```bash
-# DD balance (confirmed + pending)
+# DD balance (confirmed + unconfirmed)
 digibyte-cli getdigidollarbalance
-# Returns: { "confirmed": 500000, "pending": 25000, "total": 525000 }
+# Returns: { "confirmed": 500000, "unconfirmed": 25000, "total": 525000 }
 # (amounts in cents — 500000 = $5,000.00)
 
 # DGB balance (for fees)
@@ -213,10 +216,10 @@ digibyte-cli getoracleprice
 ```
 
 **Oracle details:**
-- 9-of-17 MuSig2 Schnorr threshold consensus on testnet23 and mainnet (RC30+)
+- 9-of-17 MuSig2 Schnorr threshold consensus on testnet24 and mainnet
 - 4-of-7 MuSig2 on regtest
-- Active price sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 feeders, registered in `src/oracle/exchange.cpp:1013-1018`)
-- Median-based aggregation with median-distance outlier rejection (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1137`); the live oracle daemon (`OracleNode::FetchMedianPrice` in `src/oracle/node.cpp:386`) requires **3** valid exchange responses before publishing, even though the aggregator's library default is 2 (`src/oracle/exchange.h:231`)
+- Active price sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 feeders, registered in `src/oracle/exchange.cpp:1042-1071`)
+- Median-based aggregation with median-distance outlier rejection (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`); the live oracle daemon (`OracleNode::FetchMedianPrice` in `src/oracle/node.cpp:445-450`) requires **3** valid exchange responses before publishing, even though the aggregator's library default is 2 (`src/oracle/exchange.h:235`)
 - Coinbase/Kraken/Messari are *not* used: DGB is unlisted on those venues and Messari now requires a paid API key (see the in-source comment at `src/oracle/exchange.cpp:1009-1012`)
 - Oracle prices are derived **only** from live exchange aggregation; the `sendoracleprice` RPC was intentionally removed as a fake-price-injection vector
 
@@ -272,6 +275,8 @@ If your backend processes raw transactions:
 | **Check deposit balance** | `getdigidollarbalance "addr" 6` | Use minconf |
 | **Detect deposits** | `listdigidollartxs 100 0 "" "receive"` | Poll regularly |
 | **Process withdrawal** | `senddigidollar "addr" <cents>` | Need DGB for fees |
+| **Batch withdrawals** | `sendmanydigidollar "" {"addr":<cents>,...}` | One DD transaction, one DGB fee input set |
+| **Inspect DD UTXOs** | `listdigidollarunspent` / `listdigidollarutxos` | Hot-wallet inventory and selected-input withdrawals |
 | **Check DGB fee balance** | `getbalance` | Keep funded! |
 | **Transaction history** | `listdigidollartxs` | Filter by category/address |
 | **System status** | `getdigidollardeploymentinfo` | Verify DD is active |
@@ -347,17 +352,18 @@ Exchanges typically handle deposits and withdrawals — not minting or redeeming
 
 ## 13. Test on Testnet Now!
 
-DigiDollar is **live and activated on testnet23**. Start building your integration today.
+The current public testnet in this source tree is **testnet24**. DigiDollar activation is BIP9-gated at/after block 600 once 140 of 200 blocks signal; verify status with `getdigidollardeploymentinfo`.
 
 ### Testnet Quick Start
 
-1. **Download** the latest DigiByte Core v9.26.0 RC build (RC30 or later)
+1. **Download** the latest DigiByte Core v9.26.0 RC build from this branch
 2. **Configure:**
    ```ini
    testnet=1
    [test]
    digidollar=1
-   addnode=oracle1.digibyte.io:12030
+   txindex=1
+   addnode=oracle1.digibyte.io:12031
    server=1
    rpcuser=youruser
    rpcpassword=yourpassword
@@ -372,11 +378,11 @@ DigiDollar is **live and activated on testnet23**. Start building your integrati
 
 | Parameter | Value |
 |-----------|-------|
-| Testnet name | testnet23 |
-| P2P Port | 12030 |
+| Testnet name | testnet24 |
+| P2P Port | 12031 |
 | DD Address Prefix | `TD` |
-| Status | **Active** (BIP9 ACTIVE at block 600) |
-| Oracle | 9-of-17 MuSig2 Schnorr consensus, 6 exchange sources (RC30+) |
+| Status | BIP9 bit 23, min activation height 600; check `getdigidollardeploymentinfo` for current status |
+| Oracle | 9-of-17 MuSig2 Schnorr consensus, 6 exchange sources |
 
 ---
 
@@ -384,10 +390,10 @@ DigiDollar is **live and activated on testnet23**. Start building your integrati
 
 | Milestone | Date |
 |-----------|------|
-| Testnet activated | February 12, 2026 ✅ |
-| Target wallet release | May 1, 2026 |
-| BIP9 signaling window opens | May 1, 2026 |
+| Testnet | Current source tree uses testnet24; activation is BIP9-gated at/after block 600 |
+| BIP9 signaling window opened | May 1, 2026 |
 | BIP9 signaling window closes | May 1, 2028 |
+| Minimum activation height | 22,014,720 |
 | Activation requirement | 70% of miners signal over 40,320 blocks (~1 week) |
 
 ---

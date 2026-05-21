@@ -1,10 +1,12 @@
 # REPO_MAP.md — DigiByte Core v9.26
 
-*Last validated: 2026-04-30 against `feature/digidollar-v1`*
+*Last validated: 2026-05-20 against `feature/digidollar-v1`*
 
 > This map covers **core DigiByte C++ code only**. DigiDollar subsystem (`src/digidollar/`, `src/oracle/`, `src/rpc/digidollar*`, `src/consensus/{dca,err,volatility,digidollar*}.{cpp,h}`, `src/index/digidollarstatsindex.{cpp,h}`, DD wallet code, DD Qt widgets) is documented in `REPO_MAP_DIGIDOLLAR.md`. Third-party libs (leveldb, secp256k1, crc32c, minisketch, univalue) and the `depends/` directory are excluded.
 >
 > Legend: ⚠️ = contains DigiDollar-specific additions on top of base DGB code
+>
+> Discovery note (2026-05-20): live repo discovery can include generated/build products. Exclude `.deps/`, `.libs/`, `*.o`, `*.lo`, Qt `moc_*.cpp`, Qt `forms/ui_*.h`, built binaries, `depends/`, `guix-build-*`, and historical reference trees before treating a path as source.
 
 ---
 
@@ -604,7 +606,7 @@
 - `CBlockUndo` (class) → undo data for an entire block: all CTxUndo entries (excluding coinbase)
 
 ### src/validation.cpp / .h
-- ⚠️ ~6900 lines. DigiDollar/oracle-aware: activation gating via `DigiDollar::IsDigiDollarEnabled`, `Consensus::IsOracleActive`, MuSig2 v0x03 bundle extraction in `ConnectBlock` (~line 3010), `SCRIPT_VERIFY_DIGIDOLLAR` flag set when `DEPLOYMENT_DIGIDOLLAR` is active (lines ~2706-2707), and incremental DD supply tracking via `DigiDollar::SystemHealthMonitor::OnMint{Connected,Disconnected}` / `OnRedeem{Connected,Disconnected}`.
+- ⚠️ ~7050 lines. DigiDollar/oracle-aware: activation gating via `DigiDollar::IsDigiDollarEnabled`, `Consensus::IsOracleActive`, MuSig2 v0x03 bundle extraction in `ConnectBlock` (~lines 3084-3098), `SCRIPT_VERIFY_DIGIDOLLAR` flag set when `DEPLOYMENT_DIGIDOLLAR` is active (`GetBlockScriptFlags`, lines 2747 and 2787-2789), and incremental DD supply tracking via `DigiDollar::SystemHealthMonitor::OnMint{Connected,Disconnected}` / `OnRedeem{Connected,Disconnected}`.
 - `Chainstate` (class) → manages a single validated chain state (UTXO set + block index)
   - `ActivateBestChain()` → selects and activates the best valid chain tip, connecting new blocks
   - `ConnectTip()` → connects a single new block to the chain tip, executing all transactions
@@ -905,12 +907,12 @@
 - `HashSkein()` → computes Skein-512-256 hash (SHA-3 finalist, one of 5 DigiByte mining algorithms)
 - `sph_skein512_init/update/close()` → low-level Skein-512 functions
 
-#### src/crypto/hashqubit.h + related — **Qubit** (Algorithm 4, replaced by Odocrypt at block 9,112,320)
+#### src/crypto/hashqubit.h + related — **Qubit** (Algorithm 4, remains active after Odocrypt)
 - `HashQubit()` → computes Qubit hash (chained Luffa→CubeHash→SHAvite→SIMD→ECHO, one of 5 DigiByte mining algorithms)
 - Component hash functions: `luffa.cpp`, `cubehash.cpp`, `shavite.cpp`, `simd.cpp`, `echo.cpp`
 - Additional Qubit components: `blake.cpp`, `bmw.cpp`, `jh.cpp`, `keccak.cpp`
 
-#### src/crypto/odocrypt.cpp / .h + hashodo.h — **Odocrypt** (replaces Qubit after block 9,112,320)
+#### src/crypto/odocrypt.cpp / .h + hashodo.h — **Odocrypt** (replaces Groestl after block 9,112,320)
 - `OdoCrypt` (class) → FPGA/ASIC-resistant cipher that changes its algorithm every 10 days based on a time-derived key
   - `Encrypt()` → encrypts data using the current Odocrypt configuration
 - `HashOdo()` → computes Odocrypt hash with time-rotating key (DigiByte's 5th mining algorithm post-Odo activation)
@@ -1141,7 +1143,7 @@
 ### src/kernel/chainparams.cpp / .h
 - `CChainParams` (class) → full chain parameters: network magic bytes, default port, genesis block, seeds, checkpoints, consensus params, address prefixes
   - `Main()` → creates mainnet parameters (port 12024, genesis Jan 10 2014, 5-algo PoW, DigiShield/MultiShield activation heights)
-  - `TestNet()` → creates testnet parameters (port 12030, relaxed difficulty)
+  - `TestNet()` → creates testnet24 parameters (port 12031, reset genesis timestamp 1778507580, relaxed difficulty)
   - `SigNet()` → creates signet parameters (signed block test network)
   - `RegTest()` → creates regtest parameters (instant mining, no real PoW)
   - ⚠️ `GetOracleNode()` → looks up oracle node info by ID from hardcoded oracle configuration
@@ -1398,7 +1400,7 @@
 ### src/primitives/block.cpp / .h
 - `CBlockHeader` (class) → block header: version, prev hash, merkle root, timestamp, nBits (difficulty), nNonce
   - `GetHash()` → double-SHA256 hash of the header (block hash)
-  - `GetAlgo()` → extracts mining algorithm from version field (bits 8-10 encode algo 0-4)
+  - `GetAlgo()` → extracts mining algorithm from version field (bits 8-11 encode algo values including Odocrypt's 14 << 8 version pattern)
 - `CBlock` (class extends CBlockHeader) → full block: header + vector of transactions
   - `ToString()` → human-readable block summary
 - `GetAlgoName()` → maps algo number (0-7) to name string ("sha256d", "scrypt", "groestl", "skein", "qubit", "odo")
@@ -1452,7 +1454,7 @@ The Qt GUI provides the graphical interface for DigiByte Core. Key non-DigiDolla
 - `guiutil.cpp` → shared GUI utility functions (clipboard, file dialogs, formatting)
 - `coincontroldialog.cpp`, `coincontroltreewidget.cpp`, `addressbookpage.cpp`, `addresstablemodel.cpp`, `bantablemodel.cpp`, `peertablemodel.cpp`, `createwalletdialog.cpp`, `csvmodelwriter.cpp`, `askpassphrasedialog.cpp` → standard wallet UI building blocks
 
-> ⚠️ DigiDollar Qt widgets — `digidollartab.{cpp,h}`, `digidollarmintwidget.{cpp,h}`, `digidollarsendwidget.{cpp,h}`, `digidollarreceivewidget.{cpp,h}`, `digidollarreceiverequest.{cpp,h}`, `digidollarredeemwidget.{cpp,h}`, `digidollaroverviewwidget.{cpp,h}`, `digidollarpositionswidget.{cpp,h}`, `digidollartransactionswidget.{cpp,h}`, `digidollarcoincontroldialog.{cpp,h}`, `ddaddressbookpage.{cpp,h}` and the `qt/test/digidollarwidgettests.{cpp,h}` suite — are documented in `REPO_MAP_DIGIDOLLAR.md`.
+> ⚠️ DigiDollar Qt widgets — `digidollartab.{cpp,h}`, `digidollarmintwidget.{cpp,h}`, `digidollarsendwidget.{cpp,h}`, `digidollarreceivewidget.{cpp,h}`, `digidollarreceiverequest.{cpp,h}`, `digidollarredeemwidget.{cpp,h}`, `digidollaroverviewwidget.{cpp,h}`, `digidollarpositionswidget.{cpp,h}`, `digidollartransactionswidget.{cpp,h}`, `digidollarcoincontroldialog.{cpp,h}`, `ddaddressbookpage.{cpp,h}`, `digidollar_qt_translate.h`, and the `qt/test/digidollarwidgettests.{cpp,h}` / `qt/test/digidollarwave19widgettests.{cpp,h}` suites — are documented in `REPO_MAP_DIGIDOLLAR.md`. Generated Qt `moc_*.cpp` and `forms/ui_*.h` files are not source map entries.
 
 ---
 
@@ -1483,6 +1485,7 @@ The Qt GUI provides the graphical interface for DigiByte Core. Key non-DigiDolla
 ### src/rpc/mining.cpp / .h
 - RPC commands: `getmininginfo`, `getnetworkhashps`, `generatetoaddress`, `generatetodescriptor`, `generateblock`, `getblocktemplate`, `submitblock`, `submitheader`, `prioritisetransaction`, `getprioritisedtransactions`
 - `getblocktemplate` → returns block template for external miners with algo selection support
+- ⚠️ `getblocktemplate` includes DigiDollar oracle touchpoints: when the coinbase contains an `OP_RETURN OP_ORACLE` MuSig2 bundle, it exposes `coinbasetxn` and `default_oracle_commitment` so miners keep the oracle output intact.
 - `getmininginfo` → returns current mining state including active algorithm info
 
 ### src/rpc/misc.cpp

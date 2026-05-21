@@ -39,12 +39,12 @@ Index all C++ source code in `src/` and its subdirectories, plus tests.
 
 | Directory | Contents |
 |-----------|----------|
-| `src/` (root files) | ~145 top-level .cpp/.h — `validation.cpp`, `net.cpp`, `net_processing.cpp`, `txmempool.cpp`, `chainparams.cpp`, `chainparamsbase.cpp`, `pow.cpp`, `dandelion.cpp`, `bip324.cpp`, etc. |
+| `src/` (root files) | ~167 top-level .cpp/.h/.hpp — `validation.cpp`, `net.cpp`, `net_processing.cpp`, `txmempool.cpp`, `chainparams.cpp`, `chainparamsbase.cpp`, `pow.cpp`, `dandelion.cpp`, `bip324.cpp`, etc. |
 | `src/bench/` | Benchmarks |
 | `src/common/` | Common utilities (args, settings, init, system, bloom, run_command) |
 | `src/compat/` | Platform compatibility (assumptions, endian, glibc shims, stdin) |
 | `src/consensus/` | Consensus rules — flag functions with DigiDollar additions using ⚠️. EXCLUDE the DD-only files (`dca`, `err`, `volatility`, `digidollar`, `digidollar_tx`, `digidollar_transaction_validation`) — those go in `REPO_MAP_DIGIDOLLAR.md`. |
-| `src/crypto/` | Crypto primitives — **all 5 mining algorithms** (SHA-256d, Scrypt, Groestl, Skein, Qubit) plus Odocrypt (replaces Groestl post-9.1M) |
+| `src/crypto/` | Crypto primitives — **all 5 active mining algorithms** (SHA-256d, Scrypt, Skein, Qubit, and either Groestl pre-Odo or Odocrypt post-Odo). Odocrypt replaces Groestl; Qubit remains active. |
 | `src/index/` | Block/transaction indexes — EXCLUDE `digidollarstatsindex.{cpp,h}` (DD map) |
 | `src/init/` | Node initialization (digibyted, digibyte-gui, digibyte-node, digibyte-qt, digibyte-wallet entry points) |
 | `src/interfaces/` | Interface abstractions (chain, node, wallet, ipc, init, handler, echo) |
@@ -54,7 +54,7 @@ Index all C++ source code in `src/` and its subdirectories, plus tests.
 | `src/node/` | Node management (miner, blockstorage, chainstate, transaction, mini_miner, eviction, txreconciliation, kernel_notifications, ui_interface) |
 | `src/policy/` | Mempool/relay policy (policy, packages, fees, rbf, settings) |
 | `src/primitives/` | Block, transaction. NOTE: `oracle.{cpp,h}` is documented in `REPO_MAP_DIGIDOLLAR.md`. |
-| `src/qt/` | Qt GUI (lighter coverage is fine) — EXCLUDE `digidollar*` and `ddaddressbookpage*` widgets (DD map) |
+| `src/qt/` | Qt GUI (lighter coverage is fine) — EXCLUDE `digidollar*`, `digidollar_qt_translate.h`, and `ddaddressbookpage*` widgets (DD map); exclude generated `moc_*.cpp` and `forms/ui_*.h`. |
 | `src/rpc/` | RPC interface — EXCLUDE `digidollar*.cpp/h` (those go in DigiDollar map) |
 | `src/script/` | Script interpreter (`script.h` includes DigiDollar opcodes 0xbb..0xbf) |
 | `src/support/` | Memory allocators, utility (`lockedpool`, `cleanse`, `events`) |
@@ -73,6 +73,7 @@ Index all C++ source code in `src/` and its subdirectories, plus tests.
 - `src/crc32c/`, `src/leveldb/`, `src/secp256k1/`, `src/minisketch/`, `src/univalue/` — third-party libraries
 - `src/digidollar/`, `src/oracle/` — covered by the DigiDollar map
 - `src/.deps/`, `src/.libs/`, `src/obj/`, `src/config/` — build artifacts
+- `*.o`, `*.lo`, built binaries, Qt `moc_*.cpp`, `src/qt/test/moc_*.cpp`, and `src/qt/forms/ui_*.h` — generated/build products
 - `depends/`, `digibyte-v8.22.2/`, `bitcoin-v26.2-for-digibyte/`, `guix-build-*` — historical/external trees and build outputs (not the active codebase)
 - `doc/`, `reports/`, `prompts/`, `presentation/`, `digidollar/` (top-level docs subdirectory) — documentation, not source code
 
@@ -110,13 +111,17 @@ Index ALL DigiDollar and Oracle source files, wherever they live in the repo.
 | `src/oracle/exchange.cpp/h` | Exchange-rate fetchers (11 classes deriving from `BaseExchangeFetcher`; 6 are initialized in production via `MultiExchangeAggregator::InitializeFetchers`) |
 | `src/oracle/mock_oracle.cpp/h` | Mock oracle for regtest |
 | `src/oracle/node.cpp/h` | Oracle node implementation |
-| `src/oracle/signing_orchestrator.cpp/h` | Signing-side orchestration shared by Phase 1/MuSig2 paths |
+| `src/oracle/signing_orchestrator.cpp/h` | Signing-side orchestration for MuSig2 v0x03 nonce/context/partial-sig rounds |
 | `src/oracle/musig2_aggregator.{cpp,h}`, `musig2_session.{cpp,h}`, `musig2_session_manager.{cpp,h}`, `musig2_orchestrator.{cpp,h}`, `musig2_oracle_participation.{cpp,h}`, `musig2_messages.h`, `musig2_session_mining.h` | MuSig2 v0x03 nonce/partial-sig session lifecycle |
 | `src/primitives/oracle.cpp/h` | Oracle data structures (`COraclePriceMessage`, `COracleBundle`, `OracleNodeInfo`, `SelectOraclesForEpoch`, MuSig2 v0x03 fields) |
 
 **Also find scattered references:**
 ```bash
-grep -rl "digidollar\|DigiDollar" src/ --include="*.cpp" --include="*.h" | sort
+rg -l "digidollar|DigiDollar" src \
+  -g "*.cpp" -g "*.h" -g "*.hpp" \
+  -g "!**/.deps/**" -g "!**/.libs/**" -g "!*.o" -g "!*.lo" \
+  -g "!src/qt/moc_*.cpp" -g "!src/qt/test/moc_*.cpp" -g "!src/qt/forms/ui_*.h" \
+  | sort
 ```
 This catches files like `src/kernel/chainparams.cpp`, `src/primitives/transaction.cpp`, `src/base58.cpp`, etc. that contain DigiDollar integration points. List these with a note about what DigiDollar code they contain.
 
@@ -126,8 +131,8 @@ This catches files like `src/kernel/chainparams.cpp`, `src/primitives/transactio
 |----------|--------------|----------------|
 | `src/test/digidollar_*.cpp`, `src/test/oracle_*.cpp`, `src/test/musig2_*.cpp`, `src/test/redteam_*.cpp`, `src/test/rh*.cpp` | ~150 files | activation, address, DCA, ERR, MuSig2 nonce/partial-sig sessions, bundle creation/validation/format/mining, redteam audit (RH series), wallet integration, consensus replay, GUI/widget |
 | `src/wallet/test/digidollar_*.cpp`, `src/wallet/test/rh59_*.cpp` | 6 registered files | persistence, wallet security, Wave 16/17 load-rescan/spendability/helper-asymmetry coverage, lock-bypass |
-| `src/qt/test/digidollarwidgettests.cpp` | 1 file | Qt widget behaviour |
-| `test/functional/digidollar_*.py`, `wallet_digidollar_*.py`, `feature_oracle_*.py`, `rpc_getoracles_*.py` | 80 registered entries | activation, mint, transfer, redeem, oracle P2P, wallet restore, MuSig2 integration, mempool ordering |
+| `src/qt/test/digidollarwidgettests.cpp`, `src/qt/test/digidollarwave19widgettests.cpp` | 2 files | Qt widget behaviour and Wave 19 address/widget coverage |
+| `test/functional/digidollar_*.py`, `wallet_digidollar_*.py`, `feature_oracle_*.py`, `rpc_getoracles_*.py` | 82 registered entries | activation, mint, transfer, redeem, oracle P2P, wallet restore, MuSig2 integration, mempool ordering |
 
 ## REPO_MAP.md Format
 
@@ -169,17 +174,29 @@ This catches files like `src/kernel/chainparams.cpp`, `src/primitives/transactio
 ### Step 1: List source files in scope
 ```bash
 # Core DigiByte source surface (excluding third-party libs and DigiDollar/oracle modules)
-find src -type f \( -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \) \
-  | grep -vE 'src/(crc32c|leveldb|secp256k1|minisketch|univalue|\.deps|\.libs|obj|config|digidollar|oracle)/' \
+rg --files src \
+  -g '*.h' -g '*.cpp' -g '*.hpp' \
+  -g '!crc32c/**' -g '!leveldb/**' -g '!secp256k1/**' -g '!minisketch/**' -g '!univalue/**' \
+  -g '!digidollar/**' -g '!oracle/**' \
+  -g '!**/.deps/**' -g '!**/.libs/**' -g '!*.o' -g '!*.lo' \
+  -g '!src/qt/moc_*.cpp' -g '!src/qt/test/moc_*.cpp' -g '!src/qt/forms/ui_*.h' \
   | sort
 
 # DigiDollar + Oracle source surface
-find src/digidollar src/oracle \( -name "*.cpp" -o -name "*.h" \) | sort
-find src/rpc -name "digidollar*" | sort
-grep -rl "digidollar\|DigiDollar\|oracle\|MuSig\|musig" src/ --include="*.cpp" --include="*.h" | sort
+rg --files src/digidollar src/oracle -g '*.cpp' -g '*.h' | sort
+rg --files src/rpc -g 'digidollar*' | sort
+rg -l "digidollar|DigiDollar|oracle|MuSig|musig" src \
+  -g '*.cpp' -g '*.h' -g '*.hpp' \
+  -g '!**/.deps/**' -g '!**/.libs/**' -g '!*.o' -g '!*.lo' \
+  -g '!src/qt/moc_*.cpp' -g '!src/qt/test/moc_*.cpp' -g '!src/qt/forms/ui_*.h' \
+  | sort
 
 # Avoid the historical / external trees:
 #   depends/ digibyte-v8.22.2/ bitcoin-v26.2-for-digibyte/ guix-build-*
+
+# Generation note: raw `find ... | grep` and `grep -R` commands can pick up generated
+# files in an already-built tree. Prefer the pruned `rg --files` forms above
+# when refreshing either repo map.
 ```
 
 ### Step 2: Read each file, extract public classes and function signatures
@@ -239,8 +256,8 @@ If you add, remove, or rename files or functions, update the affected REPO_MAP.m
 
 ## DigiByte-Specific Tips
 
-- **5 Mining Algorithms:** SHA-256d, Scrypt, Groestl, Skein, Qubit — each has crypto functions in `src/crypto/`, difficulty adjustment via MultiShield/DigiSpeed, and parameters in `src/kernel/chainparams.cpp`. Odocrypt (algo 7) replaces Groestl after `OdoHeight = 9,112,320`.
-- **DigiDollar activation:** Gated by BIP9 bit 23 (`Consensus::DEPLOYMENT_DIGIDOLLAR`). Per-network heights in `src/kernel/chainparams.cpp`: mainnet `nDDActivationHeight = 22014720`, testnet `= 600`, regtest `ALWAYS_ACTIVE`. `nDigiDollarMuSig2Height = 0` on every chain — MuSig2 v0x03 oracle bundles are required as soon as DigiDollar activates.
+- **5 Mining Algorithms:** SHA-256d, Scrypt, Skein, Qubit, and either Groestl before Odo activation or Odocrypt after `OdoHeight = 9,112,320`. Difficulty adjustment is via MultiShield/DigiSpeed and parameters in `src/kernel/chainparams.cpp`.
+- **DigiDollar activation:** Gated by BIP9 bit 23 (`Consensus::DEPLOYMENT_DIGIDOLLAR`). Per-network heights in `src/kernel/chainparams.cpp`: mainnet `nDDActivationHeight = 22014720`, testnet24 `= 600` (port 12031; reset genesis timestamp 1778507580), regtest BIP9 `ALWAYS_ACTIVE` with DD/oracle height gates defaulting to 650. `nDigiDollarMuSig2Height = 0` on every chain — MuSig2 v0x03 oracle bundles are required as soon as DigiDollar activates.
 - **Oracle integration:** `src/primitives/oracle.h` defines structures, `src/oracle/` has the network/MuSig2 layer, and `src/consensus/{dca,err,volatility}.cpp` contain protection rules. Live consensus price reaches the script interpreter via the `g_get_oracle_consensus_price` hook (`src/script/interpreter.cpp`).
 - **BIP324 V2 P2P transport:** Implemented in `src/bip324.cpp`/`src/net.cpp`; opt in with `-v2transport=1`.
 - **Bitcoin lineage:** Most of `src/` is inherited from Bitcoin Core v26.2. When writing descriptions, note DigiByte-specific modifications vs inherited Bitcoin code; the historical reference trees are in `digibyte-v8.22.2/` and `bitcoin-v26.2-for-digibyte/` (do **not** index those).

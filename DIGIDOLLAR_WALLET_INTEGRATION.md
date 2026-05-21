@@ -24,7 +24,7 @@ There are only 4 operations: **Mint**, **Transfer**, **Redeem**, and regular DGB
 | Signing | Schnorr (BIP-340) for DD inputs, ECDSA/Schnorr for DGB fee inputs |
 | Wallet type | Descriptor/bech32m HD wallet required for DigiDollar V1 mint/address creation; legacy wallets are unsupported |
 | Confirmations | Same as DGB — 15-second blocks |
-| Backend | Requires DigiByte Core v9.26.0+ with `digidollar=1` |
+| Backend | Requires DigiByte Core v9.26.0+ with DigiDollar built in; features remain BIP9-gated until activation |
 
 ---
 
@@ -33,6 +33,7 @@ There are only 4 operations: **Mint**, **Transfer**, **Redeem**, and regular DGB
 Your wallet must:
 - Run DigiByte Core v9.26.0 or later (with DigiDollar consensus rules)
 - Set `digidollar=1` in `digibyte.conf`
+- Set `txindex=1`; startup enforces this on mainnet/testnet DigiDollar chains and on regtest when DD testing is enabled
 - Wait for BIP9 activation (DigiDollar features are disabled until activation; status is exposed via `getdigidollardeploymentinfo`)
 - Use a descriptor/bech32m HD wallet with private keys enabled. DD mint
   requires deriving an HD owner key for the time-lock; encryption is
@@ -45,7 +46,7 @@ Your wallet must:
 # digibyte.conf
 server=1
 digidollar=1
-txindex=1  # recommended for full transaction lookups
+txindex=1  # required for DigiDollar transaction lookups
 ```
 
 ---
@@ -82,7 +83,7 @@ DigiDollar balances are tracked **separately** from DGB balances. The wallet mai
 **Get total DD balance:**
 ```bash
 digibyte-cli getdigidollarbalance
-# Returns: { "confirmed": 50000, "pending": 10000, "total": 60000 }
+# Returns: { "confirmed": 50000, "unconfirmed": 10000, "total": 60000 }
 # (amounts in cents — 50000 = $500.00)
 ```
 
@@ -93,7 +94,8 @@ digibyte-cli getdigidollarbalance "DDaddress..."
 
 **Key points:**
 - `confirmed` — DD in confirmed transactions
-- `pending` — DD in unconfirmed but trusted transactions
+- `unconfirmed` — DD in unconfirmed but trusted transactions when queried with `minconf=0`
+- Default `minconf` is 1, so confirmed-only accounting is the default
 - Users need BOTH a DD balance (to send DD) AND a DGB balance (to pay fees)
 
 ---
@@ -104,7 +106,7 @@ Minting locks DGB as collateral and creates new DD tokens.
 
 ### Lock Tiers
 
-The 10 canonical lock tiers (defined in `src/consensus/digidollar.h:50-61`):
+The 10 canonical lock tiers (defined in `src/consensus/digidollar.h:57-68`):
 
 | Tier | Lock Period | Collateral Ratio |
 |------|-----------|-----------------|
@@ -220,11 +222,11 @@ digibyte-cli senddigidollar "DDrecipientAddress..." 5000 "Payment for services"
 Use `sendmanydigidollar` to fan out DD to many addresses with a single fee:
 
 ```bash
-digibyte-cli -rpcwallet=hot sendmanydigidollar '{"DDaddr1...":1500,"DDaddr2...":2500}'
+digibyte-cli -rpcwallet=hot sendmanydigidollar "" '{"DDaddr1...":1500,"DDaddr2...":2500}'
 # amounts in cents
 ```
 
-This is the DigiDollar analogue of `sendmany`. Like `senddigidollar`, it requires confirmed DD inputs and pays the fee in DGB.
+This is the DigiDollar analogue of `sendmany`; the first argument must be the compatibility dummy string `""`. Like `senddigidollar`, it requires confirmed DD inputs and pays the fee in DGB.
 
 ---
 
@@ -448,25 +450,29 @@ Non-DD-aware wallets can safely ignore these — they behave as Tapscript OP_SUC
 
 ### Wallet RPCs (require loaded wallet)
 
-Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DD block at lines 962–974):
+Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DD block at lines 962–976):
 
 | Command | Description |
 |---------|-------------|
 | `getdigidollaraddress` | Generate new DD deposit address |
 | `listdigidollaraddresses` | List all DD addresses in wallet |
-| `getdigidollarbalance [addr] [minconf]` | Get DD balance (confirmed + pending) |
+| `getdigidollarbalance [addr] [minconf] [include_watchonly]` | Get DD balance (`confirmed`, `unconfirmed`, `total`) |
 | `mintdigidollar <cents> <tier>` | Mint DD by locking DGB collateral |
 | `senddigidollar <addr> <cents>` | Send DD to a DD address |
-| `sendmanydigidollar <amounts_obj>` | Send DD to multiple DD addresses in one tx |
+| `sendmanydigidollar "" <amounts_obj> [comment] [selected_inputs]` | Send DD to multiple DD addresses in one tx |
 | `listdigidollartxs [count] [skip] [addr] [category]` | List DD transaction history |
+| `listdigidollarunspent [minconf] [maxconf] [addresses] [include_unsafe] [query_options]` | List spendable DD UTXOs for coin control |
+| `listdigidollarutxos [minconf] [maxconf] [addresses] [include_unsafe] [query_options]` | Alias for DD UTXO listing |
 | `listdigidollarpositions` | List all collateral positions |
 | `getredemptioninfo <position_id>` | Check redemption status of a position |
 | `redeemdigidollar <position_id> <cents>` | Redeem DD → unlock DGB collateral |
 | `validateddaddress <address>` | Validate a DD address |
+| `createoraclekey <oracle_id>` | Wallet-scoped oracle key generation |
+| `startoracle <oracle_id> [private_key_hex]` | Start local oracle from a wallet-stored or supplied key |
 
 ### Information RPCs (no wallet needed)
 
-Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp:5222`:
+Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp:5570`:
 
 | Command | Description |
 |---------|-------------|
@@ -476,13 +482,21 @@ Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp:5222`
 | `getoracleprice` | Current DGB/USD oracle price (from MuSig2 consensus) |
 | `getalloracleprices` | Per-oracle price view (debug/status) |
 | `getprotectionstatus` | DCA / ERR / volatility protection state |
+| `getoracles [active_only] [blocks]` | Oracle roster and local/remote status |
+| `listoracle` | Local oracle status |
+| `stoporacle <oracle_id>` | Stop a local oracle |
+| `getoraclepubkey <oracle_id>` | Local oracle public key/status after `startoracle` |
 | `calculatecollateralrequirement <cents> <lock_days> [oracle_price_micro_usd]` | Calculate needed collateral by lock days (NOT tier) |
 | `estimatecollateral <cents> <tier> [oracle_price_micro_usd]` | Estimate collateral; both `cents` and `tier` are required |
 | `importdigidollaraddress <address> [label]` | Validate a DD address and return the V1 unsupported/no-op warning; it does not import, mutate wallet state, or rescan |
+| `setmockoracleprice <micro_usd>` | Regtest-only mock oracle price setter |
+| `getmockoracleprice` | Regtest-only mock oracle price reader |
+| `simulatepricevolatility <mode>` | Regtest-only volatility simulation |
+| `enablemockoracle <enabled>` | Regtest-only mock oracle toggle |
 
 ### Qt GUI integration
 
-DigiByte Core ships 10 Qt widgets covering the DD lifecycle: `digidollartab`, `digidollarmintwidget`, `digidollarsendwidget`, `digidollarreceivewidget`, `digidollarredeemwidget`, `digidollaroverviewwidget`, `digidollarpositionswidget`, `digidollartransactionswidget`, `digidollarcoincontroldialog`, and `digidollarreceiverequest`. The DigiDollar tab shows an activation overlay until BIP9 activates (gated through `DigiDollarTab` in `src/qt/digidollartab.cpp`); pre-activation, all DD widgets are inert. The Qt mint flow derives an HD owner key and persists it before broadcasting (commit `1e95478b7e`), so an HD wallet with private keys enabled is required. See `REPO_MAP_DIGIDOLLAR.md` (Qt GUI section) for individual widget responsibilities.
+DigiByte Core ships a DD lifecycle tab plus Qt widgets/dialogs/helpers: `digidollartab`, `digidollaroverviewwidget`, `digidollarsendwidget`, `digidollarreceivewidget`, `digidollarmintwidget`, `digidollarredeemwidget`, `digidollarpositionswidget`, `digidollartransactionswidget`, `digidollarcoincontroldialog`, `digidollarreceiverequest`, `ddaddressbookpage`, and `digidollar_qt_translate`. `DigiDollarTab` exposes the tabs `DD Overview`, `Send DD`, `Receive DD`, `Mint DD`, `Redeem DD`, `DD Vault`, and `DD Transactions`, with an activation overlay until BIP9 activates. The Qt mint flow derives an HD owner key and persists it before broadcasting (commit `1e95478b7e`), so an HD wallet with private keys enabled is required. See `REPO_MAP_DIGIDOLLAR.md` (Qt GUI section) for individual widget responsibilities.
 
 #### Qt mint reject-reason translation (`DD-FA-DOC-010`)
 
@@ -496,17 +510,18 @@ For wallet integrators that bypass the Qt widget and submit raw mint transaction
 
 ## 13. Test on Testnet Now!
 
-DigiDollar is **live and activated on testnet23**. You can start integrating today.
+The current public testnet in this source tree is **testnet24**. DigiDollar activation is BIP9-gated at/after block 600 once 140 of 200 blocks signal; verify live status with `getdigidollardeploymentinfo`.
 
 ### Quick Setup
 
-1. Download the latest DigiByte Core v9.26.0 RC build (RC30 or later)
+1. Download the latest DigiByte Core v9.26.0 RC build from this branch
 2. Configure for testnet:
    ```ini
    testnet=1
    [test]
    digidollar=1
-   addnode=oracle1.digibyte.io:12030
+   txindex=1
+   addnode=oracle1.digibyte.io:12031
    server=1
    rpcuser=yourusername
    rpcpassword=yourpassword
@@ -519,18 +534,19 @@ DigiDollar is **live and activated on testnet23**. You can start integrating tod
 
 | Parameter | Value |
 |-----------|-------|
-| Testnet name | testnet23 |
-| P2P Port | 12030 (set in `src/kernel/chainparams.cpp:504`) |
+| Testnet name | testnet24 |
+| P2P Port | 12031 (set in `src/kernel/chainparams.cpp:504`) |
 | DD Address Prefix | `TD` |
-| Oracle Consensus | 9-of-17 MuSig2 Schnorr threshold (RC30+) |
-| Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders, see `src/oracle/exchange.cpp:1013-1018`) |
-| Outlier filter | Median-distance: prices ≥ `outlier_threshold × median` are dropped (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1150`) |
-| Activation | Active (BIP9 ACTIVE at block 600) |
+| Oracle Consensus | 9-of-17 MuSig2 Schnorr threshold |
+| Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders, see `src/oracle/exchange.cpp:1042-1071`) |
+| Outlier filter | Median-distance: prices ≥ `outlier_threshold × median` are dropped (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`) |
+| Activation | BIP9 bit 23, min activation height 600; check `getdigidollardeploymentinfo` for current status |
 
 ### Mainnet Timeline
 
 - **BIP9 signaling window:** May 1, 2026 → May 1, 2028
-- **Target release date:** May 1, 2026
+- **Minimum activation height:** 22,014,720
+- **Threshold:** 70% over a 40,320-block window
 - Miners will vote to activate by signaling bit 23
 
 ---

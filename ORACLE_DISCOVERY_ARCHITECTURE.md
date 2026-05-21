@@ -1,14 +1,14 @@
 # Oracle Discovery Architecture
 
-> **Status:** Design proposal. The features described in Layers 1–3 (on-chain registry, DNS seeds, gossip) are NOT implemented. Today's discovery is the pre-Layer-1 baseline described under "Current Implementation" below. Pull-on-demand of missing oracle messages from peers via `getoracles` is the only oracle-aware peer interaction in production code.
+> **Status:** Design proposal. The features described in Layers 1-3 (on-chain registry, DNS seeds, endpoint gossip) are NOT implemented. Today's discovery is the pre-Layer-1 baseline described under "Current Implementation" below: static chainparams metadata plus ordinary oracle P2P relay. Pull-on-demand of missing oracle price telemetry from peers via `getoracles` exists, but there is no decentralized endpoint discovery message.
 
 ## Current Implementation (V1, code as shipped)
 
-`src/kernel/chainparams.cpp` populates `vOracleNodes` for each network. Each entry contains a compressed pubkey, an `endpoint` string, and an `is_active` flag. Mainnet declares 30 metadata slots, but only slots 0–16 are in `consensus.vOraclePublicKeys` and participate in V1 quorum; slots 17–29 are reserve metadata that require a future coordinated software update before they can sign consensus bundles. Testnet23 declares only the 17 active slots, and regtest declares 7.
+`src/kernel/chainparams.cpp` populates `vOracleNodes` for each network. Each entry contains a compressed pubkey, an `endpoint` string, and an `is_active` flag. Mainnet declares 30 metadata slots, but only slots 0-16 are in `consensus.vOraclePublicKeys` and participate in V1 quorum; slots 17-29 are reserve metadata that require a future coordinated software update before they can sign consensus bundles. Testnet24 declares only the 17 consensus-active metadata slots, and regtest declares 7.
 
 The `endpoint` field is informational metadata for operator coordination (it shows up in `getoracles` and `listoracle` RPC output). DigiByte Core does **not** make outbound connections to those endpoints — oracle data flows over the standard P2P graph. Wallet/light nodes therefore do not need to discover oracle endpoints to use DigiDollar; they only need a working P2P link to any peer that has the latest MuSig2 bundle.
 
-The `getoracles` P2P message (`src/protocol.cpp:55`, handler in `src/net_processing.cpp` ~line 6062) lets a node pull missing oracle attestations from a peer rather than waiting for them to be re-gossiped. It carries a request descriptor; the peer responds by re-pushing matching `oracleprice` messages. There is no Layer-3 `oracleaddr` style endpoint announcement on the wire today.
+The `getoracles` P2P message (`src/protocol.cpp:56`, handler in `src/net_processing.cpp:6249`) lets a node pull missing oracle price telemetry from a peer rather than waiting for it to be re-gossiped. It carries a request descriptor; the peer responds by re-pushing matching fresh `oracleprice` messages and recent signed `oraclehb` version heartbeats. It does not return on-chain bundles, MuSig2 nonces, context proposals, partial signatures, or endpoint records. There is no Layer-3 `oracleaddr` style endpoint announcement on the wire today.
 
 Everything below this section is design intent for adding decentralized endpoint discovery on top of that baseline.
 
@@ -147,13 +147,13 @@ Requires 5-of-7 (or similar threshold) existing oracle signatures to add a new o
 
 ### Option C: Hybrid Approach (Recommended for DigiDollar)
 
-- **Phase 1 (Now):** Oracle keys hardcoded in chainparams. Discovery via DNS seeds + P2P gossip.
+- **Phase 1 (Now):** Oracle keys and informational endpoint strings hardcoded in chainparams. Oracle data relays over normal P2P; endpoint discovery is not implemented.
 - **Phase 2 (Post-launch):** Add on-chain oracle registry for endpoint discovery.
 - **Phase 3 (Mature):** Add on-chain governance for oracle membership changes. Soft fork for major changes only.
 
 ## Implementation Priority
 
-1. **P2P Gossip (Layer 3)** — Implement first. Oracles announce via signed `oracleaddr` messages. No infrastructure needed. Works immediately.
+1. **P2P Gossip (Layer 3)** — Implement first. Oracles would announce via signed `oracleaddr` messages. No infrastructure needed once the new message and relay policy exist.
 
 2. **On-Chain Registry (Layer 1)** — Implement second. Permanent, decentralized, trustless endpoint discovery.
 
@@ -163,7 +163,7 @@ Requires 5-of-7 (or similar threshold) existing oracle signatures to add a new o
 
 ## P2P Oracle Message Relay
 
-**Current state (V1):** Oracle nodes started via `startoracle` fetch live exchange prices through `MultiExchangeAggregator` (`src/oracle/exchange.cpp`), sign attestations as `COraclePriceMessage`, and broadcast `oracleprice` (`NetMsgType::ORACLEPRICE`) over P2P. Peers validate and relay them. MuSig2 coordination then exchanges `oracleconsns` proposals, `oracleattest` per-oracle attestations, `oramusnonce` round-1 nonces, and `oramusigpsig` round-2 partial signatures (`src/oracle/musig2_*.{cpp,h}` and `src/oracle/signing_orchestrator.cpp`). The aggregator emits a single 64-byte BIP-340 Schnorr signature plus a participation bitmap, which the miner embeds in the coinbase as a v0x03 OP_ORACLE bundle. The legacy `sendoracleprice` RPC was removed as a fake-price-injection vulnerability; no operator-facing manual price entry RPC remains in any network (`submitoracleprice` does not exist in the source tree). The legacy `oraclebundle` gossip message is dropped on receipt — the bundle lives on-chain only (commit `bbb85cf363`).
+**Current state (V1):** Oracle nodes started via `startoracle` fetch live exchange prices through `MultiExchangeAggregator` (`src/oracle/exchange.cpp`), sign attestations as `COraclePriceMessage`, and broadcast `oracleprice` (`NetMsgType::ORACLEPRICE`) over P2P. They also broadcast signed `oraclehb` version heartbeats for operator/protocol telemetry. Peers validate and relay them. MuSig2 coordination then exchanges `oracleconsns` proposals, `oracleattest` per-oracle attestations, `oramusnonce` round-1 nonces, `oramusigctx` session-context proposals, and `oramusigpsig` round-2 partial signatures (`src/oracle/musig2_*.{cpp,h}` and `src/oracle/signing_orchestrator.cpp`). The aggregator emits a single 64-byte BIP-340 Schnorr signature plus a participation bitmap, which the miner embeds in the coinbase as a v0x03 OP_ORACLE bundle. The legacy `sendoracleprice` RPC was removed as a fake-price-injection vulnerability; no operator-facing manual price entry RPC remains in any network (`submitoracleprice` does not exist in the source tree). The legacy `oraclebundle` gossip message is dropped on receipt — the bundle lives on-chain only (commit `bbb85cf363`).
 
 **Still needed:** Endpoint discovery so wallet/light nodes can choose which oracle nodes to peer with, especially as new oracles are added without a software update. The rest of this document is the design proposal for that piece.
 
@@ -174,10 +174,12 @@ Oracle Node                    Regular Node                  Miner Node
     |                              |                             |
     |-- oracleprice -------------->|                             |
     |                              |-- oracleprice ------------->|
+    |-- oraclehb ----------------->|                             |
     |                              |                             |
     |-- oracleconsns ----------->  |                             |
     |-- oracleattest ----------->  |                             |
     |-- oramusnonce ------------>  |                             |
+    |-- oramusigctx ------------>  |                             |
     |-- oramusigpsig ----------->  |                             |
     |                              |       [aggregator finishes MuSig2]
     |                              |       [embeds v0x03 bundle in coinbase]
@@ -192,7 +194,10 @@ The encoding below is design-only. The repository does not declare an `oracleadd
 Payload:
   version (1 byte)
   oracle_id (4 bytes)
-  price_micro_usd (8 bytes)
+  services (8 bytes)
+  endpoint_type (1 byte: IPv4, IPv6, Tor, DNS)
+  endpoint_data (variable, bounded)
+  port (2 bytes)
   timestamp (8 bytes)
   oracle_pubkey (32 bytes, x-only)
   schnorr_sig (64 bytes)
@@ -204,17 +209,18 @@ Payload:
 3. Schnorr signature is valid
 4. Timestamp is within acceptable range
 5. No duplicate from same oracle_id in last epoch
+6. Endpoint type and length are valid; no automatic outbound connection is made during validation
 
-**Rate limiting (proposed):** Max 1 message per oracle per epoch. Reject duplicates. (For comparison, the *implemented* `oracleprice` rate limiter is 3,600 novel messages per peer per hour — silent-drop, no misbehavior penalty — see `src/net_processing.cpp` around line 5511.)
+**Rate limiting (proposed):** Max 1 message per oracle per epoch. Reject duplicates. (For comparison, the *implemented* `oracleprice` rate limiter is 3,600 novel messages per peer per hour — silent-drop, no misbehavior penalty — see `src/net_processing.cpp:5494-5511`.)
 
 ## Summary
 
 The oracle discovery problem is solvable with the same patterns Bitcoin uses for node discovery:
 - **P2P gossip** for real-time endpoint announcements
-- **On-chain registry** for permanent endpoint records  
+- **On-chain registry** for permanent endpoint records
 - **DNS seeds** for bootstrap
 - **Hardcoded fallbacks** as last resort
 
 The key insight: **oracle public keys are the trust anchor**. Any announcement signed by a valid oracle key is trustworthy. No domains or central coordination needed.
 
-The P2P oracle message relay is equally important — oracle price messages need to propagate through the network to reach miners, not just stay on the oracle's local node.
+The P2P oracle message relay is equally important — oracle price messages, heartbeats, and MuSig2 coordination messages need to propagate through the network to reach miners and aggregating peers, not just stay on the oracle's local node.

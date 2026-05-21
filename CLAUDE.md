@@ -4,21 +4,26 @@
 
 DigiByte Core v9.26 (Bitcoin Core v26.2 lineage) on the `feature/digidollar-v1` branch, augmented with the **DigiDollar** native USD-pegged stablecoin and a multi-oracle DGB/USD price feed network with MuSig2 Schnorr threshold consensus.
 
-Working directory: `/home/jared/Code/digibyte`. Main branch: `develop`.
+Working directory: `/home/jared/Code/digibyte`. Current DigiDollar v1 campaign branch: `feature/digidollar-v1`. Upstream main branch: `develop`.
 
 ## Required reading order before any DigiDollar / oracle work
 
-1. `ARCHITECTURE.md` — Core DigiByte system design
-2. `REPO_MAP.md` — Core DigiByte file index (excludes DigiDollar/oracle subsystem)
-3. `DIGIDOLLAR_ARCHITECTURE.md` — DigiDollar mint/transfer/redeem/collateral/health/state
-4. `DIGIDOLLAR_ORACLE_ARCHITECTURE.md` — Exchange aggregation, bundle lifecycle, MuSig2, P2P
-5. `REPO_MAP_DIGIDOLLAR.md` — DigiDollar/oracle file index (production, wallet, RPC, Qt, tests, fuzz)
-6. `DIGIDOLLAR_ACTIVATION_EXPLAINER.md` — BIP9 gating of DD/oracle surface
-7. `ORACLE_DISCOVERY_ARCHITECTURE.md` — Oracle endpoint discovery design
+1. `CLAUDE.md` — This guide, branch rules, and current code-surface warnings
+2. `ARCHITECTURE.md` — Core DigiByte system design
+3. `REPO_MAP.md` — Core DigiByte file index (excludes DigiDollar/oracle subsystem)
+4. `REPO_MAP_GUIDE.md` — How to maintain and interpret the repo maps
+5. `DIGIDOLLAR_ARCHITECTURE.md` — DigiDollar mint/transfer/redeem/collateral/health/state
+6. `DIGIDOLLAR_ORACLE_ARCHITECTURE.md` — Exchange aggregation, bundle lifecycle, MuSig2, P2P
+7. `REPO_MAP_DIGIDOLLAR.md` — DigiDollar/oracle file index (production, wallet, RPC, Qt, tests, fuzz)
+8. `DIGIDOLLAR_EXPLAINER.md` — User-facing DigiDollar V1 protocol summary
+9. `DIGIDOLLAR_ORACLE_EXPLAINER.md` — User-facing oracle/MuSig2 summary
+10. `DIGIDOLLAR_ACTIVATION_EXPLAINER.md` — BIP9 gating of DD/oracle surface
+11. `DIGIDOLLAR_WALLET_INTEGRATION.md` — Wallet/RPC integration guide
+12. `DIGIDOLLAR_EXCHANGE_INTEGRATION.md` — Exchange/custody integration guide
+13. `ORACLE_DISCOVERY_ARCHITECTURE.md` — Oracle endpoint discovery design
+14. `DIGIDOLLAR_ORACLE_SETUP.md` — Oracle setup and migration runbook
 
-For protocol questions: `DIGIDOLLAR_EXPLAINER.md`, `DIGIDOLLAR_ORACLE_EXPLAINER.md`.
-For setup/operator: `DIGIDOLLAR_ORACLE_SETUP.md`, `docs/ORACLE_OPERATOR_GUIDE.md`.
-For integrators: `DIGIDOLLAR_WALLET_INTEGRATION.md`, `DIGIDOLLAR_EXCHANGE_INTEGRATION.md`.
+Also check `docs/ORACLE_OPERATOR_GUIDE.md` for operator-facing steps and the newest relevant `RELEASE_v9.26.0-rc*.md` before public instructions or release claims.
 
 ## Repo layout (DigiDollar / oracle surface)
 
@@ -35,15 +40,17 @@ src/primitives/      # oracle.h (price message + bundle types)
 src/rpc/             # digidollar.cpp (17 base RPCs); digidollar_transactions.cpp is
                      # legacy / unregistered
 src/wallet/          # digidollarwallet.{cpp,h}, ddcoincontrol.h; wallet/rpc/wallet.cpp
-                     # registers 13 wallet-context DD/oracle RPCs
-src/qt/              # 10 widgets: digidollar{tab,mintwidget,sendwidget,receivewidget,
-                     # redeemwidget,overviewwidget,positionswidget,transactionswidget,
-                     # coincontroldialog,receiverequest}
+                     # registers 15 wallet-context DD/oracle RPCs
+src/qt/              # DD tab + widgets/dialogs: digidollar{tab,mintwidget,sendwidget,
+                     # receivewidget,redeemwidget,overviewwidget,positionswidget,
+                     # transactionswidget,coincontroldialog,receiverequest},
+                     # ddaddressbookpage, digidollar_qt_translate
 src/test/            # ~150 DigiDollar/oracle/MuSig2/Red-Hornet unit tests + fuzz/
-src/wallet/test/     # 3 DD wallet test sources (persistence, security, rh59 lock-bypass)
+src/wallet/test/     # 6 DD wallet test sources (persistence, security, Wave 16/17,
+                     # rh59 lock-bypass)
                      # — linked into src/test/test_digibyte, not a separate binary
-src/qt/test/         # digidollarwidgettests
-test/functional/     # ~50 DD/oracle Python tests
+src/qt/test/         # digidollarwidgettests, digidollarwave19widgettests
+test/functional/     # ~80 DD/oracle Python tests registered in test_runner.py
 ```
 
 ## DigiDollar opcode soft-fork additions
@@ -62,7 +69,7 @@ These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VER
 | Network | Start | Min activation height | Window | Threshold | Status |
 |---------|-------|----------------------|--------|-----------|--------|
 | Mainnet | 2026-05-01 (epoch 1777593600) | 22,014,720 | 40,320 blocks (~1 week) | 70% (28,224 of 40,320) | Pending |
-| Testnet (testnet23) | Genesis 1763932527 (already past) | 600 | 200 blocks | 70% (140 of 200) | Active |
+| Testnet (testnet24) | BIP9 start 1763932527; reset genesis 1778507580 | 600 | 200 blocks | 70% (140 of 200) | Check `getdigidollardeploymentinfo` |
 | Regtest | ALWAYS_ACTIVE | 0 | 144 blocks (BIP9 default) | 75% (108 of 144) | Active |
 
 `nDDActivationHeight`, `nOracleActivationHeight`, and `nDigiDollarMuSig2Height` collapse to the same height trigger on mainnet (22,014,720 / 22,014,720 / 0) and testnet (600 / 600 / 0). Default regtest keeps DD/oracle P2P height gates at 650 / 650 / 0 while the BIP9 deployment is `ALWAYS_ACTIVE` with `min_activation_height=0`; the direct `-digidollaractivationheight=N` regtest knob now retargets both the BIP9 minimum and the static DD/oracle height gates. Generic `-vbparams=digidollar:...` remains a BIP9-only override. Startup oracle-price reconstruction follows the same BIP9 predicate as block connection, so default-regtest BIP9-active blocks below 650 are not dropped during restart/reindex cache rebuilds. The variable in code is `nDigiDollarMuSig2Height`, not the older `nDigiDollarPhase3Height` (`src/consensus/params.h:195`). Once DigiDollar is active, v0x03 MuSig2 is the only on-chain bundle format ever accepted.
@@ -72,10 +79,10 @@ These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VER
 | Network | Total slots | Active | Consensus |
 |---------|-------------|--------|-----------|
 | Mainnet | 30 (`vOracleNodes`) | 17 (`consensus.vOraclePublicKeys` slots 0–16) | 9-of-17 MuSig2 |
-| Testnet | 30 | 17 (slots 0–16) | 9-of-17 MuSig2 |
+| Testnet | 17 | 17 (slots 0–16) | 9-of-17 MuSig2 |
 | Regtest | 7 | 7 | 4-of-7 |
 
-Slots 17–29 on mainnet/testnet are reserve `vOracleNodes` entries; they are *not* in `consensus.vOraclePublicKeys` and do *not* participate in consensus or appear in MuSig2 bitmaps.
+Slots 17–29 on mainnet are reserve `vOracleNodes` entries; they are *not* in `consensus.vOraclePublicKeys` and do *not* participate in consensus or appear in MuSig2 bitmaps. Testnet24 currently has only the 17 active entries configured.
 
 `src/primitives/oracle.h:19-21` declares header defaults `ORACLE_CONSENSUS_REQUIRED=9`, `ORACLE_ACTIVE_COUNT=17`, `ORACLE_TOTAL_COUNT=30` (RC30). Chainparams overrides `nOracleConsensusRequired` and `nOraclePubkeyCount` per network at startup, so the chainparams values are what the validator and MuSig2 aggregator use.
 
@@ -94,7 +101,7 @@ DEFAULT_TRANSACTION_FEE = 0.1         # DGB/kB
 
 # Network
 P2P_PORT_MAINNET      = 12024
-P2P_PORT_TESTNET      = 12030  # testnet23 (legacy 12025 retired) per src/kernel/chainparams.cpp:504
+P2P_PORT_TESTNET      = 12031  # testnet24 per src/kernel/chainparams.cpp:504
 
 # Address formats
 REGTEST_BECH32        = 'dgbrt'
@@ -109,11 +116,14 @@ MINT_MIN              = 10_000   cents
 MINT_MAX              = 10_000_000 cents
 LOCK_TIERS            = 0..9 (1h, 30d, 90d, 180d, 1y, 2y, 3y, 5y, 7y, 10y)
                         # canonical durations enforced at consensus —
-                        # custom durations rejected with bad-mint-lock-period
+                        # mint lock height must be in the claimed tier window
+                        # [canonical_blocks, canonical_blocks + 100]
+                        # under-locked/custom durations rejected
                         # (src/digidollar/validation.cpp)
 LOCK_TIER_OPRETURN    = stored explicitly in mint OP_RETURN; consensus rejects
                         bad-mint-lock-tier-duration when remaining lock blocks
-                        do not match the canonical duration for the claimed tier
+                        fall outside the canonical confirmation window for the
+                        claimed tier
 ```
 
 ## Where DigiDollar/oracle is gated at runtime
@@ -121,20 +131,20 @@ LOCK_TIER_OPRETURN    = stored explicitly in mint OP_RETURN; consensus rejects
 | Layer | Gate | Reference |
 |-------|------|-----------|
 | RPC | `DigiDollar::IsDigiDollarEnabled(tip, chainman)` at the top of each DD/oracle RPC | `src/rpc/digidollar.cpp` (10+ callsites) |
-| Mempool | `IsDigiDollarEnabled` + `HasDigiDollarMarker`; DD txs additionally require a recent valid MuSig2 oracle quote via `HasRecentValidMuSig2OracleQuote` | `src/validation.cpp:154-217, 905-916` |
-| Block | `IsDigiDollarEnabled` + `HasDigiDollarMarker` during `ConnectBlock`; coinbase oracle bundles require V1 MuSig2 version via `CheckMuSig2OracleBundleVersion` | `src/validation.cpp:115-152, 2547-2766, 3007-3068` |
+| Mempool | `IsDigiDollarEnabled` + `HasDigiDollarMarker`; DD txs additionally require a recent valid MuSig2 oracle quote via `HasRecentValidMuSig2OracleQuote` | `src/validation.cpp:224-286, 976-989` |
+| Block | `IsDigiDollarEnabled` + `HasDigiDollarMarker` during `ConnectBlock`; coinbase oracle bundles require V1 MuSig2 version via `CheckMuSig2OracleBundleVersion` | `src/validation.cpp:185, 2808-3214` |
 | Script | `SCRIPT_VERIFY_DIGIDOLLAR` flag | `src/validation.cpp` |
-| P2P | `Consensus::IsOracleActive(params, height)` at the top of each oracle handler: `oracleprice`, `oraclebundle` (accepted-and-dropped — V1 puts the bundle on-chain), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigpsig`, `getoracles`. Wire names defined in `src/protocol.cpp:53-59`. | `src/net_processing.cpp` |
+| P2P | `Consensus::IsOracleActive(params, height)` at the top of the price/consensus/MuSig2/getoracles handlers: `oracleprice`, `oraclebundle` (accepted-and-dropped — V1 puts the bundle on-chain), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `getoracles`. `oraclehb` is authenticated, roster-limited, and rate-limited; current code does not put the same height gate at the top of that handler. Wire names defined in `src/protocol.cpp:53-62`. | `src/net_processing.cpp` |
 | Qt | `DigiDollarTab` activation overlay; widgets check `isVisible()` before polling | `src/qt/digidollartab.cpp` |
 | Price cache | `UpdatePriceCache` gated on `DEPLOYMENT_DIGIDOLLAR` | `src/validation.cpp` (rh61 fix) |
 
-## RPC surface (30 commands)
+## RPC surface (32 commands)
 
-17 commands registered via `RegisterDigiDollarRPCCommands()` in `src/rpc/digidollar.cpp:5222`:
+17 commands registered via `RegisterDigiDollarRPCCommands()` in `src/rpc/digidollar.cpp:5570`:
 `getdigidollarstats`, `getdcamultiplier`, `calculatecollateralrequirement`, `getdigidollardeploymentinfo`, `importdigidollaraddress`, `estimatecollateral`, `getoracleprice`, `getalloracleprices`, `getprotectionstatus`, `getoracles`, `listoracle`, `stoporacle`, `getoraclepubkey`, `setmockoracleprice` (regtest), `getmockoracleprice` (regtest), `simulatepricevolatility` (regtest), `enablemockoracle` (regtest).
 
-13 wallet-context commands registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DigiDollar block at lines 962–974):
-`mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `validateddaddress`, `createoraclekey`, `startoracle`.
+15 wallet-context commands registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DigiDollar block at lines 962–976):
+`mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `listdigidollarunspent`, `listdigidollarutxos`, `validateddaddress`, `createoraclekey`, `startoracle`.
 
 `sendoracleprice` and `submitoracleprice` are intentionally **absent** from the registration tables: `sendoracleprice` was removed as a fake-price-injection vulnerability, and `submitoracleprice` does not exist anywhere in the source tree. Oracle prices come exclusively from live exchange aggregation.
 
@@ -160,22 +170,25 @@ LOCK_TIER_OPRETURN    = stored explicitly in mint OP_RETURN; consensus rejects
 # Run a functional test
 ./test/functional/digidollar_basic.py
 
-# Find DigiDollar/oracle code
-rg -n 'digidollar|DigiDollar|oracle|MuSig|musig' src/ test/
+# Find DigiDollar/oracle source without generated/build products
+rg -n 'digidollar|DigiDollar|oracle|MuSig|musig' src/ test/ \
+  -g '*.cpp' -g '*.h' -g '*.hpp' -g '*.py' \
+  -g '!**/.deps/**' -g '!**/.libs/**' -g '!*.o' -g '!*.lo' \
+  -g '!src/qt/moc_*.cpp' -g '!src/qt/test/moc_*.cpp' -g '!src/qt/forms/ui_*.h'
 ```
 
 ## Important notes
 
 - **Confirmed-only DigiDollar transfers.** Unconfirmed DD chaining was removed (commit `0b4959f563`). Consensus refuses to resolve DD amounts from `MEMPOOL_HEIGHT` inputs for transfer/redeem; wallets must wait for confirmation between sends.
 - **OP_CHECKPRICE has no mock fallback in production.** It consults the live oracle consensus price via `g_get_oracle_consensus_price` (`src/script/interpreter.cpp:725`, registered in node init at `src/init.cpp:2196`; commit `f77678cd0f`). Zero or unavailable returns `vchFalse` regardless of the witness operand — fails closed.
-- **Mainnet/testnet validator parity.** The mainnet oracle-validation short-circuit was removed (commit `f0d9a7b2c7`). `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:1888`) now runs identically on mainnet and testnet, and only v0x03 MuSig2 bundles are accepted (commits `bbb85cf363`, `fa29405adc`, `f2bb0a19a4`). Raw v0x01/v0x02 OP_RETURN payloads short-circuit inside `ExtractOracleBundle` (`src/oracle/bundle_manager.cpp:915-919` returns false), so the validator emits `bad-oracle-malformed` (`src/oracle/bundle_manager.cpp:1979-1983`). The `bad-oracle-legacy` branch (`src/oracle/bundle_manager.cpp:1989-1995`) only fires when extraction succeeds with a non-MuSig2 version, which v0x03 short-circuit at line 913 makes structurally unreachable for current wire payloads — it remains as a defense-in-depth gate.
-- **DD-touching blocks must include exactly one v0x03 MuSig2 bundle.** Commit `1e08bd811f`: `ValidateBlockOracleData` returns `bad-oracle-missing` if a DD-touching block has no oracle output, `bad-oracle-multiple-outputs` if it has more than one, and `bad-oracle-malformed` if extraction fails (which is the canonical reason raw v0x01/v0x02 produce). Non-DD blocks may omit the bundle entirely.
-- **Mempool requires an oracle quote for DD txs.** Commit `81bf974f40`: DD txs are not accepted into the mempool unless `HasRecentValidMuSig2OracleQuote` finds a recent valid v0x03 quote (`src/validation.cpp:154-217, 905-916`).
-- **Custom lock durations rejected.** Consensus enforces exact canonical lock tiers: `bad-mint-lock-period` for non-canonical periods, `bad-mint-lock-tier` for tier outside 0–9, and `bad-mint-lock-tier-duration` when the remaining lock blocks don't match the canonical duration for the claimed tier (commits `e1dd69f99b`, `11728a6980`).
+- **Mainnet/testnet validator parity.** The mainnet oracle-validation short-circuit was removed (commit `f0d9a7b2c7`). `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2139`) now runs identically on mainnet and testnet, and only v0x03 MuSig2 bundles are accepted (commits `bbb85cf363`, `fa29405adc`, `f2bb0a19a4`). Raw v0x01/v0x02 OP_RETURN payloads short-circuit inside `ExtractOracleBundle`, so the validator emits `bad-oracle-malformed`. The `bad-oracle-legacy` branch only fires when extraction succeeds with a non-MuSig2 version, which is structurally unreachable for current v0x03 wire payloads — it remains as a defense-in-depth gate.
+- **Price-dependent DD blocks must include exactly one v0x03 MuSig2 bundle.** Commit `1e08bd811f`: `ValidateBlockOracleData` returns `bad-oracle-missing` if a DD mint/redeem block has no oracle output, `bad-oracle-multiple-outputs` if it has more than one, and `bad-oracle-malformed` if extraction fails (which is the canonical reason raw v0x01/v0x02 produce). DD transfer-only and non-DD blocks may omit the bundle entirely.
+- **Mempool requires an oracle quote for DD txs.** Commit `81bf974f40`: DD txs are not accepted into the mempool unless `HasRecentValidMuSig2OracleQuote` finds a recent valid v0x03 quote (`src/validation.cpp:224-286, 976-989`).
+- **Custom lock durations rejected.** Consensus enforces canonical lock tiers with a 100-block confirmation buffer: `bad-mint-lock-period` for non-canonical periods, `bad-mint-lock-tier` for tier outside 0–9, and `bad-mint-lock-tier-duration` when remaining lock blocks fall outside `[canonical_blocks, canonical_blocks + 100]` for the claimed tier (commits `e1dd69f99b`, `11728a6980`).
 - **DD supply alert, not a cap.** `AlertThresholds::ALERT_DD_SUPPLY` (`src/digidollar/health.h:83`, 10000000000 = 100M DD) is a monitoring threshold, not a consensus cap. `MAX_DIGIDOLLAR` is a per-output serialization bound. There is no global circulating-supply cap; total DD is constrained only by available collateral and the per-block minting rate.
 - **Collateral vault spends require DD burn.** Non-DD transactions that try to spend a registered DigiDollar collateral vault are rejected with `bad-collateral-spend-missing-dd-burn`. Inside DD redemptions, `ValidateCollateralReleaseAmount` rejects partial burns with `bad-collateral-release-partial-burn` (`src/digidollar/validation.cpp`).
 - **Qt mint derives HD owner keys.** Commit `1e95478b7e` made the Qt mint flow derive DD owner keys from the wallet's HD chain and persist them via `DigiDollarWallet::StoreOwnerKey` *before* broadcasting the mint tx, instead of generating an ephemeral random key after broadcast. Mint now requires an HD wallet with private keys enabled. RPC mint already used the same path.
-- **Mining graceful degradation.** `CreateNewBlock` strips DD txs that fail validation in `mapModifiedTx` (rather than hanging) and continues with the rest of the block (commit `6b5ff516c3`).
+- **Mining graceful degradation.** `CreateNewBlock` strips price-dependent DD mint/redeem txs when no valid oracle bundle is available, keeps ordinary DGB and price-independent DD transfer candidates flowing when valid, and continues block assembly instead of hanging (commit `6b5ff516c3`).
 - **BIP324 V2 P2P transport** is supported and enabled with `-v2transport=1` (off by default).
 - **Three-way comparison still applies for non-DigiDollar work.** Compare v9.26 ↔ v8.22.2 ↔ Bitcoin v26.2 in `digibyte-v8.22.2/` and `bitcoin-v26.2-for-digibyte/` when making changes to inherited code.
 - **Avoid widening doc claims beyond what code shows.** All material claims in the approved docs (16 listed in `Z_PROMPTS.md`) must match `src/`. Treat code as truth.

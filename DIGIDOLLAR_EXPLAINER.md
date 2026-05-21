@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2026-05-20*
-*Document Version: 3.9 — V1 protocol alignment*
+*Updated: 2026-05-21*
+*Document Version: 4.0 — RC41 launch-parameter alignment*
 
 ## Overview
 
@@ -9,7 +9,7 @@ DigiDollar is a decentralized USD-denominated token design native to DigiByte's 
 ### Key Points
 - **DGB becomes the strategic reserve asset** (21B max supply, ~1.94 per person on Earth at 8.1B population)
 - **Everything happens inside DigiByte Core wallet** — you never give up control of your private keys
-- **Status (V1, `feature/digidollar-v1`)**: Testnet active (BIP9 bit 23 already past `min_activation_height`); mainnet activation gate is configured for height 22,014,720 (start time 2026-06-01) — see `DIGIDOLLAR_ARCHITECTURE.md` for details
+- **Status (V1, `feature/digidollar-v1`)**: Testnet25 activates at height 600 after BIP9 signaling; mainnet activation gate is configured for height 23,627,520 (start time 2026-06-01) — see `DIGIDOLLAR_ARCHITECTURE.md` for details
 
 ---
 
@@ -162,7 +162,7 @@ Supply chain, gaming, and other wallet-native payment flows can be explored on t
 
 DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet — users maintain complete control of their private keys throughout the entire process.
 
-**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time is pending; mainnet remains gated by the configured start time, minimum height, threshold, current testnet24/RC40 validation, the green Wave 26 backward-compatibility/activation proof, and architecture-review decisions. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
+**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time is pending; mainnet remains gated by the configured start time, minimum height, threshold, current testnet25/RC41 validation, and mainnet oracle-operator deployment. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
 
 ### Core Technologies
 
@@ -170,7 +170,7 @@ DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. 
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-Mainnet/testnet: 17 consensus-active oracle slots (9-of-17 MuSig2 BIP-327 threshold consensus producing a single BIP-340 Schnorr aggregate signature). Mainnet also carries reserve metadata in `vOracleNodes` slots 17-29, but those reserve entries are not in `consensus.vOraclePublicKeys` and do not participate in V1 quorum; testnet24 has only the 17 active slots configured. Regtest: 4-of-7 (chainparams overrides the header defaults). Oracle prices are reported in micro-USD format (1,000,000 = $1.00). `primitives/oracle.h` now declares header defaults `ORACLE_TOTAL_COUNT=30`, `ORACLE_ACTIVE_COUNT=17`, and `ORACLE_CONSENSUS_REQUIRED=9`; per-network chainparams values such as `nOraclePubkeyCount` and `nOracleConsensusRequired` remain authoritative for validation.
+Mainnet/testnet: 35 reserved oracle slots with slots 0-16 consensus-active at RC41 launch. The active keyset uses MuSig2 BIP-327 threshold consensus and requires 9 BIP-340 Schnorr signatures. Slots 17-34 are inactive reserve metadata until a later release adds operator x-only keys to `consensus.vOraclePublicKeys` and marks the slots active. Regtest: 4-of-7 (chainparams overrides the header defaults). Oracle prices are reported in micro-USD format (1,000,000 = $1.00). `primitives/oracle.h` now declares header defaults `ORACLE_TOTAL_COUNT=35`, `ORACLE_ACTIVE_COUNT=35`, and `ORACLE_CONSENSUS_REQUIRED=9`; per-network chainparams values such as `nOraclePubkeyCount` and `nOracleConsensusRequired` remain authoritative for validation.
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees. The collateral vault uses **2 redemption paths**:
@@ -208,7 +208,7 @@ Prevents transactions from being mined until specified block height
 ### Core Script Functions
 
 #### Multi-Sig Oracle Validation
-9-of-17 BIP-327 MuSig2 Schnorr threshold (single 64-byte BIP-340 aggregate signature) for price consensus on mainnet/testnet; regtest uses 4-of-7. `OP_CHECKPRICE` consults the live consensus price via `g_get_oracle_consensus_price` and fails closed when no price is available — there is no production fallback to a mock value.
+Mainnet/testnet require 9 MuSig2 Schnorr signatures from the configured active oracle keyset; regtest uses 4-of-7. `OP_CHECKPRICE` consults the live consensus price via `g_get_oracle_consensus_price` and fails closed when no price is available — there is no production fallback to a mock value.
 
 #### Taproot Script Paths
 Multiple redemption conditions in a single P2TR output
@@ -222,7 +222,7 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-Mainnet/testnet expose 17 active oracle slots in `consensus.vOraclePublicKeys`. Mainnet additionally carries reserve metadata in `vOracleNodes` slots 17-29, while testnet24 has no reserve metadata slots configured. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 9-of-17 oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
+Mainnet/testnet expose 17 active oracle slots in `consensus.vOraclePublicKeys` at RC41 launch and 35 total reserved slots in `vOracleNodes`. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 9 configured active oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.
@@ -388,7 +388,7 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 | Custom durations rejected | Mint validation enforces canonical tier windows: `[tier_blocks, tier_blocks + 100]` | `src/digidollar/validation.cpp:1325-1366, 1574-1593` |
 | DCA tiers | 1.00 / 1.25 / 1.50 / 2.00 (≥150 / 120-149 / 110-119 / <110) | `src/consensus/dca.cpp:51-57` (HEALTH_TIERS) and `src/consensus/digidollar.h:87-92` (dcaLevels) |
 | ERR ratios | 0.95 / 0.90 / 0.85 / 0.80 | `src/consensus/err.cpp:53-58` (ERR_TIERS) |
-| Oracle config | 9-of-17 (mainnet/testnet) and 4-of-7 (regtest) | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
+| Oracle config | 35 reserved slots, 17 active at launch, 9 signatures required (mainnet/testnet); 4-of-7 regtest | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
 | Cooldown period | 8640 blocks (~36h) | `src/consensus/volatility.h:63` (`COOLDOWN_BLOCKS`) |
 | DD amount unit | Cents (100 = $1.00) | `src/consensus/digidollar.h:70-73`, `src/digidollar/digidollar.h` |
 | Oracle price unit | Micro-USD (1,000,000 = $1.00) | `src/oracle/bundle_manager.*`, `src/script/interpreter.cpp` |
@@ -413,8 +413,8 @@ The V1 branch closes the consensus and policy gaps that the previous draft of th
 | DD supply alert (not a cap) | `src/digidollar/health.h:83` | Monitoring threshold only |
 
 **Where this leaves operators**:
-- **Regtest / testnet**: Fully exercisable today; testnet24 is configured with `min_activation_height = 600`.
-- **Mainnet**: Configuration is in place (BIP9 bit 23, start time 2026-06-01, timeout 2027-06-01, `min_activation_height = 22014720`). Outstanding work is operational — mainnet oracle operator deployment and continued testnet validation.
+- **Regtest / testnet**: Fully exercisable today; testnet25 is configured with `min_activation_height = 600`.
+- **Mainnet**: Configuration is in place (BIP9 bit 23, start time 2026-06-01, timeout 2027-06-01, `min_activation_height = 23627520`). Outstanding work is operational — mainnet oracle operator deployment and continued testnet validation.
 
 ---
 

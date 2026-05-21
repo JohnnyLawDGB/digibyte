@@ -245,15 +245,15 @@ struct Params {
     int nOracleActivationHeight{std::numeric_limits<int>::max()};          // Live-feed activation height
     int nOracleEpochLength{40};                                            // Blocks per oracle epoch (~10 minutes)
     int nOracleRequiredMessages{1};                                        // Off-chain quorum threshold
-    int nOracleTotalOracles{1};                                            // Total active oracle operators
+    int nOracleTotalOracles{1};                                            // Total reserved oracle slots
     std::vector<std::string> vOraclePublicKeys;                            // Hardcoded XOnlyPubKeys (hex)
     int nDigiDollarMuSig2Height{std::numeric_limits<int>::max()};          // MuSig2 v0x03 bundle activation
     int nOraclePubkeyCount{0};                                             // MuSig2 pubkey count
-    int nOracleConsensusRequired{0};                                       // MuSig2 quorum (e.g. 9-of-17)
+    int nOracleConsensusRequired{0};                                       // MuSig2 quorum threshold
 };
 ```
 
-`Consensus::DEPLOYMENT_DIGIDOLLAR` (bit 23) is the BIP9 deployment that gates `SCRIPT_VERIFY_DIGIDOLLAR`; production `min_activation_height` and `nDDActivationHeight` are aligned in `src/kernel/chainparams.cpp` (mainnet 22014720, testnet24 600). Testnet24 uses default port 12031 and reset genesis timestamp 1778507580; its BIP9 start time remains 1763932527. Default regtest uses BIP9 `ALWAYS_ACTIVE` / `min_activation_height=0` with DD/oracle P2P height gates at 650; the direct `-digidollaractivationheight=N` knob retargets both BIP9 and those height gates. Startup oracle-price cache reconstruction follows the BIP9 predicate used by block connection so regtest BIP9-active oracle bundles below 650 are not skipped on restart/reindex. `nDigiDollarMuSig2Height = 0` on every chain, so MuSig2 v0x03 oracle bundles are required as soon as DigiDollar is active.
+`Consensus::DEPLOYMENT_DIGIDOLLAR` (bit 23) is the BIP9 deployment that gates `SCRIPT_VERIFY_DIGIDOLLAR`; production `min_activation_height` and `nDDActivationHeight` are aligned in `src/kernel/chainparams.cpp` (mainnet 23627520, testnet25 600). Testnet25 uses default P2P port 12032, data directory `testnet25`, reset genesis timestamp 1779393600, and the same timestamp as its BIP9 start. Default regtest uses BIP9 `ALWAYS_ACTIVE` / `min_activation_height=0` with DD/oracle P2P height gates at 650; the direct `-digidollaractivationheight=N` knob retargets both BIP9 and those height gates. Startup oracle-price cache reconstruction follows the BIP9 predicate used by block connection so regtest BIP9-active oracle bundles below 650 are not skipped on restart/reindex. `nDigiDollarMuSig2Height = 0` on every chain, so MuSig2 v0x03 oracle bundles are required as soon as DigiDollar is active.
 
 ### 3.3 Block Validation Results
 
@@ -1181,8 +1181,8 @@ Aggregate Schnorr signature + participation bitmap → Coinbase OP_RETURN
 
 | Network | DD activation (`nDDActivationHeight`) | Oracle activation (`nOracleActivationHeight`) | MuSig2 (`nDigiDollarMuSig2Height`) | On-chain quorum |
 |---------|--------------------------------------|----------------------------------------------|-----------------------------------|-----------------|
-| Mainnet | 22,014,720 | 22,014,720 (= DD) | 0 | 9-of-17 (`nOracleConsensusRequired = 9`, `nOraclePubkeyCount = 17`) |
-| Testnet24 | 600 | 600 (= DD) | 0 | 9-of-17 |
+| Mainnet | 23,627,520 | 23,627,520 (= DD) | 0 | 9 signatures from 17 configured active keys in a 35-slot roster |
+| Testnet25 | 600 | 600 (= DD) | 0 | 9 signatures from 17 configured active keys in a 35-slot roster |
 | Regtest | 650 | 650 (= DD) | 0 | 4-of-7 |
 
 `nDigiDollarMuSig2Height = 0` on all networks (`src/kernel/chainparams.cpp:314,576,1119`), so once DigiDollar is active the only accepted on-chain bundle format is MuSig2 v0x03. The legacy `nDigiDollarPhase2Height` / `nDigiDollarPhase3Height` fields no longer exist.

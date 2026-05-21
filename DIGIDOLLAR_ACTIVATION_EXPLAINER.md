@@ -16,11 +16,11 @@ DigiDollar activates on the DigiByte blockchain through **BIP9 version bit signa
 | Bit | 23 |
 | Start Time | June 1, 2026 (epoch 1780272000) |
 | Timeout | June 1, 2027 (epoch 1811808000) |
-| Min Activation Height | 22,014,720 |
+| Min Activation Height | 23,627,520 |
 | Confirmation Window | 40,320 blocks (~1 week) |
 | Threshold | 70% (28,224 of 40,320) |
 
-### Testnet (testnet24)
+### Testnet (testnet25)
 | Parameter | Value |
 |-----------|-------|
 | Bit | 23 |
@@ -213,7 +213,7 @@ On mainnet, the process is:
 3. **Signaling begins:** After start time (June 1, 2026), miners signal bit 23 in blocks
 4. **Threshold reached:** 70% of blocks in a 40,320-block window (~1 week) signal support
 5. **Lock-in period:** One more 40,320-block window for remaining nodes to upgrade
-6. **Activation:** Block height reaches `min_activation_height` (22,014,720) and BIP9 is ACTIVE
+6. **Activation:** Block height reaches `min_activation_height` (23,627,520) and BIP9 is ACTIVE
 7. **DigiDollar live:** All DD functionality enabled across the network
 
 **Timeout:** If 70% signaling is not reached by June 1, 2027, the deployment transitions to FAILED. A new deployment with different parameters would be needed.
@@ -240,8 +240,8 @@ Both heights are intentionally aligned in `src/kernel/chainparams.cpp`:
 
 | Network | `nDDActivationHeight` | `nOracleActivationHeight` | `nDigiDollarMuSig2Height` |
 |---------|-----------------------|---------------------------|---------------------------|
-| Mainnet | `22014720` (line 307) | `consensus.nDDActivationHeight` (line 310 — i.e. `22014720`) | `0` (line 314 — MuSig2 active immediately when DD is BIP9-active) |
-| Testnet | `600` (line 642) | `600` (line 571) | `0` (line 576) |
+| Mainnet | `23627520` | `consensus.nDDActivationHeight` (i.e. `23627520`) | `0` (MuSig2 active immediately when DD is BIP9-active) |
+| Testnet25 | `600` | `600` | `0` |
 | Regtest | `650` (line 1112) | `650` (line 1115) | `0` (line 1119) |
 
 A practical implication: there is no period in which the oracle P2P surface is live but DD itself is not, and there is no period in which DD is active but MuSig2 v0x03 is not yet the on-chain bundle format — the three heights collapse to one event per network. Documents that say "mainnet `nOracleActivationHeight = 3000000`" are stale; that earlier staging configuration was removed before V1 launch.

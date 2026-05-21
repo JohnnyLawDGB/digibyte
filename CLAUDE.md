@@ -68,23 +68,23 @@ These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VER
 
 | Network | Start | Min activation height | Window | Threshold | Status |
 |---------|-------|----------------------|--------|-----------|--------|
-| Mainnet | 2026-06-01 (epoch 1780272000) | 22,014,720 | 40,320 blocks (~1 week) | 70% (28,224 of 40,320) | Pending |
-| Testnet (testnet24) | BIP9 start 1763932527; reset genesis 1778507580 | 600 | 200 blocks | 70% (140 of 200) | Check `getdigidollardeploymentinfo` |
+| Mainnet | 2026-06-01 (epoch 1780272000) | 23,627,520 | 40,320 blocks (~1 week) | 70% (28,224 of 40,320) | Pending |
+| Testnet (testnet25) | BIP9 start/reset genesis 1779393600 | 600 | 200 blocks | 70% (140 of 200) | Check `getdigidollardeploymentinfo` |
 | Regtest | ALWAYS_ACTIVE | 0 | 144 blocks (BIP9 default) | 75% (108 of 144) | Active |
 
-`nDDActivationHeight`, `nOracleActivationHeight`, and `nDigiDollarMuSig2Height` collapse to the same height trigger on mainnet (22,014,720 / 22,014,720 / 0) and testnet (600 / 600 / 0). Default regtest keeps DD/oracle P2P height gates at 650 / 650 / 0 while the BIP9 deployment is `ALWAYS_ACTIVE` with `min_activation_height=0`; the direct `-digidollaractivationheight=N` regtest knob now retargets both the BIP9 minimum and the static DD/oracle height gates. Generic `-vbparams=digidollar:...` remains a BIP9-only override. Startup oracle-price reconstruction follows the same BIP9 predicate as block connection, so default-regtest BIP9-active blocks below 650 are not dropped during restart/reindex cache rebuilds. The variable in code is `nDigiDollarMuSig2Height`, not the older `nDigiDollarPhase3Height` (`src/consensus/params.h:195`). Once DigiDollar is active, v0x03 MuSig2 is the only on-chain bundle format ever accepted.
+`nDDActivationHeight`, `nOracleActivationHeight`, and `nDigiDollarMuSig2Height` collapse to the same height trigger on mainnet (23,627,520 / 23,627,520 / 0) and testnet (600 / 600 / 0). Default regtest keeps DD/oracle P2P height gates at 650 / 650 / 0 while the BIP9 deployment is `ALWAYS_ACTIVE` with `min_activation_height=0`; the direct `-digidollaractivationheight=N` regtest knob now retargets both the BIP9 minimum and the static DD/oracle height gates. Generic `-vbparams=digidollar:...` remains a BIP9-only override. Startup oracle-price reconstruction follows the same BIP9 predicate as block connection, so default-regtest BIP9-active blocks below 650 are not dropped during restart/reindex cache rebuilds. The variable in code is `nDigiDollarMuSig2Height`, not the older `nDigiDollarPhase3Height` (`src/consensus/params.h:195`). Once DigiDollar is active, v0x03 MuSig2 is the only on-chain bundle format ever accepted.
 
 ## Oracle roster
 
 | Network | Total slots | Active | Consensus |
 |---------|-------------|--------|-----------|
-| Mainnet | 30 (`vOracleNodes`) | 17 (`consensus.vOraclePublicKeys` slots 0–16) | 9-of-17 MuSig2 |
-| Testnet | 17 | 17 (slots 0–16) | 9-of-17 MuSig2 |
+| Mainnet | 35 (`vOracleNodes`) | 17 (`consensus.vOraclePublicKeys` slots 0–16) | 9 signatures from active keyset |
+| Testnet | 35 | 17 (slots 0–16) | 9 signatures from active keyset |
 | Regtest | 7 | 7 | 4-of-7 |
 
-Slots 17–29 on mainnet are reserve `vOracleNodes` entries; they are *not* in `consensus.vOraclePublicKeys` and do *not* participate in consensus or appear in MuSig2 bitmaps. Testnet24 currently has only the 17 active entries configured.
+Slots 17–34 on mainnet and testnet are reserve `vOracleNodes` entries; they are inactive and do not participate in consensus until a later release adds their x-only keys to `consensus.vOraclePublicKeys` and marks the slot active. The 35-slot range is still valid for operator identity and RPC/P2P bounds checks.
 
-`src/primitives/oracle.h:19-21` declares header defaults `ORACLE_CONSENSUS_REQUIRED=9`, `ORACLE_ACTIVE_COUNT=17`, `ORACLE_TOTAL_COUNT=30` (RC30). Chainparams overrides `nOracleConsensusRequired` and `nOraclePubkeyCount` per network at startup, so the chainparams values are what the validator and MuSig2 aggregator use.
+`src/primitives/oracle.h:19-21` declares header defaults `ORACLE_CONSENSUS_REQUIRED=9`, `ORACLE_ACTIVE_COUNT=35`, `ORACLE_TOTAL_COUNT=35`. Chainparams sets `nOracleConsensusRequired`, `nOraclePubkeyCount`, and `nOracleTotalOracles` per network at startup, so those chainparams values are what the validator and MuSig2 aggregator use.
 
 ## DigiDollar critical constants
 
@@ -101,7 +101,7 @@ DEFAULT_TRANSACTION_FEE = 0.1         # DGB/kB
 
 # Network
 P2P_PORT_MAINNET      = 12024
-P2P_PORT_TESTNET      = 12031  # testnet24 per src/kernel/chainparams.cpp:504
+P2P_PORT_TESTNET      = 12032  # testnet25 per src/kernel/chainparams.cpp
 
 # Address formats
 REGTEST_BECH32        = 'dgbrt'

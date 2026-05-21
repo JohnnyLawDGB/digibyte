@@ -155,7 +155,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetDigiDollarTxType(tx)` → extracts type from version field (delegates to consensus)
 - **Path Validation:**
   - `ValidateNormalRedemption(script, currentHeight)` → checks timelock expiry via metadata
-  - `ValidateEmergencyRedemption(script, sigs)` → validates 9-of-17 oracle signature threshold
+  - `ValidateEmergencyRedemption(script, sigs)` → validates the configured oracle signature threshold
   - `ValidateERRRedemption(script, systemCollateral)` → checks system < 100% collateralized
 - **Amount/Collateral Validation:**
   - `ValidateMintAmount(amount, params, nHeight)` → validates against min/max with activation height awareness
@@ -198,7 +198,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `DigiDollar::BLOCKS_PER_DAY` → 5760 blocks (15-second block time)
 - `DigiDollarTxType` (enum) → DD_TX_NONE(0), DD_TX_MINT(1), DD_TX_TRANSFER(2), DD_TX_REDEEM(3), DD_TX_MAX(4)
 - `DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS` → 100-block consensus buffer used by mint validation; remaining lock blocks must be in `[canonical_blocks, canonical_blocks + 100]` for the claimed tier.
-- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%); mint limits (`minMintAmount=10000`, `maxMintAmount=10000000` in cents = $100–$100k); `minOutputAmount=100` ($1); oracle config defaults `oracleCount=30`, `activeOracles=17`, `oracleThreshold=9` (RC30); DCA levels `dcaLevels = [{150,100},{120,125},{110,150},{100,200}]` (system collateral % → multiplier %, e.g. 110-119% triggers 150%) — these match `src/consensus/dca.cpp:51-57` HEALTH_TIERS (1.00/1.25/1.50/2.00x).
+- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%); mint limits (`minMintAmount=10000`, `maxMintAmount=10000000` in cents = $100–$100k); `minOutputAmount=100` ($1); oracle config defaults `oracleCount=35`, `activeOracles=17`, `oracleThreshold=9` (RC41 35-slot reserve); DCA levels `dcaLevels = [{150,100},{120,125},{110,150},{100,200}]` (system collateral % → multiplier %, e.g. 110-119% triggers 150%) — these match `src/consensus/dca.cpp:51-57` HEALTH_TIERS (1.00/1.25/1.50/2.00x).
 - `GetCollateralRatioForLockTime(lockBlocks, params)` → returns collateral ratio % only for exact canonical lock periods; returns 0 for custom/in-between periods. Mint validation applies the 100-block buffer separately against the declared tier.
 - `GetDCAMultiplier(systemCollateral, params)` → returns collateral requirement multiplier from DCA levels
 - `IsValidMintAmount(amount, params)` → validates against min/max mint amounts
@@ -245,7 +245,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `CalculateERRAdjustment(systemHealth)` → 95–100%: 0.95, 90–95%: 0.90, 85–90%: 0.85, <85%: 0.80
   - `GetRequiredDDBurn(originalDDMinted, systemHealth)` → returns `ceil(originalDDMinted * 10000 / ratioBps)` using `__int128` (no double-precision): e.g. at 80% health (ratioBps=8000), 100 DD requires 125 DD burn. Saturates at `numeric_limits<CAmount>::max()` for extreme values (`src/consensus/err.cpp:120-128`, commits `55926c372a` / `9cca6970ae`).
   - `GetAdjustedRedemption(normalRedemption, systemHealth)` → DEPRECATED identity passthrough; returns `normalRedemption` unchanged. Kept for ABI compatibility; new code MUST use `GetRequiredDDBurn` (collateral return is always 100% under V1 ERR semantics, commit `55926c372a`).
-  - `HasOracleConsensus(bundle)` → validates 9-of-17 oracle signatures for ERR activation
+  - `HasOracleConsensus(bundle)` → validates the configured oracle signature threshold for ERR activation
   - `GetCurrentState()` → returns current ERRState
   - `GetERRQueue()` → returns pending ERR redemption outpoints
   - `QueueERRRedemption(outpoint, ddAmount, requestHeight)` → adds to FIFO ERR queue
@@ -541,9 +541,9 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 
 ### src/primitives/oracle.h
 - **Constants** (`src/primitives/oracle.h:19-24`):
-  - `ORACLE_CONSENSUS_REQUIRED` = 9 (RC30 — header default; chainparams `nOracleConsensusRequired` is the authoritative value the validator uses)
-  - `ORACLE_ACTIVE_COUNT` = 17 (RC30 — header default; chainparams `nOraclePubkeyCount` is authoritative)
-  - `ORACLE_TOTAL_COUNT` = 30
+  - `ORACLE_CONSENSUS_REQUIRED` = 9
+  - `ORACLE_ACTIVE_COUNT` = 35 (reserved slot capacity; chainparams `nOraclePubkeyCount` is authoritative for active MuSig2 keys)
+  - `ORACLE_TOTAL_COUNT` = 35
   - `ORACLE_MAX_AGE_SECONDS` = 3600 (1 hour)
   - `ORACLE_MIN_PRICE_MICRO_USD` = 100 ($0.0001)
   - `ORACLE_MAX_PRICE_MICRO_USD` = 100000000 ($100.00)
@@ -564,7 +564,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetConsensusPrice(min_required)` → calculates median price from valid messages
   - `ValidateEpoch(current_epoch)` → checks epoch consistency
 - `OracleNodeInfo` (struct) → oracle node definition: id, pubkey, endpoint, is_active
-- `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of 17 active oracles for epoch (RC30)
+- `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of active `OracleNodeInfo` entries up to the 35-slot capacity; inactive reserve slots are filtered out
 - `GetCurrentEpoch(block_height)` → calculates epoch from block height
 - `OracleP2P` (namespace) → unit-testable P2P validation helpers; production relay admission, per-peer rate limiting, stale-epoch rejection, and dedup live in `src/net_processing.cpp`
   - `ValidateIncomingMessage(message)` → comprehensive P2P message validation

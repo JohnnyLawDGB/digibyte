@@ -1,13 +1,13 @@
 # DigiDollar Oracle Testing Guide
 
-This guide describes the current DigiDollar V1 oracle system used by RC38.
+This guide describes the current DigiDollar V1 oracle system used by RC41.
 
 It is no longer a single-oracle Phase One setup. Production-style testnet uses a MuSig2 quorum:
 
-- Public testnet: `testnet24`
+- Public testnet: `testnet25`
 - DigiDollar/oracle activation height: `600`
 - Oracle epoch length: `40` blocks
-- Oracle quorum: `9-of-17`
+- Oracle quorum: 9 signatures from the active keyset inside a 35-slot reserve roster
 - On-chain bundle format: v0x03 MuSig2 aggregate bundle
 - Local developer harness: `./test_multi_oracle_testnet.sh`
 
@@ -133,7 +133,7 @@ test/fuzz/test_runner.py -l INFO --par=4 --empty_min_time=30 /tmp/rc38_fuzz_corp
 Useful filters:
 
 ```bash
-tail -n 500 ~/.digibyte/testnet24/debug.log | rg -i 'oracle|musig|heartbeat|bundle|context|partial'
+tail -n 500 ~/.digibyte/testnet25/debug.log | rg -i 'oracle|musig|heartbeat|bundle|context|partial'
 ```
 
 Healthy logs should show:

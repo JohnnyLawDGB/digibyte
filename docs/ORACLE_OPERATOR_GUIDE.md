@@ -7,13 +7,13 @@
 
 DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `src/kernel/chainparams.cpp`** — every oracle operator must:
 
-1. Run a current DigiByte Core release (RC40 is the current launch-readiness release candidate at the time of writing) and create a descriptor wallet
+1. Run a current DigiByte Core release (RC41 is the current launch-readiness release candidate at the time of writing) and create a descriptor wallet
 2. Run `createoraclekey` to generate their oracle keypair inside the wallet
 3. Send their **public key only** to the DigiByte Core maintainer
 4. The maintainer adds their key to `chainparams.cpp` and ships a new release
 5. The operator runs `startoracle` — the wallet provides the private key automatically
 
-For current testnet release/migration mechanics (testnet24, P2P port 12031, RPC port 14026) and retired testnet decommissioning notes, follow `DIGIDOLLAR_ORACLE_SETUP.md`.
+For current testnet release/migration mechanics (testnet25, P2P port 12032, RPC port 14026) and retired testnet decommissioning notes, follow `DIGIDOLLAR_ORACLE_SETUP.md`.
 
 ---
 
@@ -49,7 +49,7 @@ Current releases create descriptor wallets by default. No special flags needed.
 
 Replace `0` with the oracle ID slot assigned to you by the maintainer.
 
-The mainnet chainparams `vOracleNodes` table allocates 30 metadata slots (IDs 0–29), but only slots **0–16** are part of the consensus-active MuSig2 roster (`consensus.vOraclePublicKeys`) participating in 9-of-17 consensus. Slots 17–29 are reserve placeholders and are rejected from pending-message quorum and final MuSig2 validation. Testnet24 has only the 17 active slots configured. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
+Mainnet and testnet chainparams allocate 35 oracle slots (IDs 0–34), but only slots **0–16** are part of the consensus-active MuSig2 roster (`consensus.vOraclePublicKeys`) at RC41 launch. Slots 17–34 are inactive reserve placeholders and cannot satisfy quorum until a future release adds the operator's x-only key to `consensus.vOraclePublicKeys` and marks the slot active. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
 
 **Output:**
 ```json
@@ -72,7 +72,7 @@ The mainnet chainparams `vOracleNodes` table allocates 30 metadata slots (IDs 0�
 
 Send **only these two things**:
 1. Your **pubkey** from the output above (66-char hex starting with `02` or `03`)
-2. Your **server endpoint** (e.g., `myserver.com:12031` for testnet24, or `myserver.com:12024` for mainnet)
+2. Your **server endpoint** (e.g., `myserver.com:12032` for testnet25, or `myserver.com:12024` for mainnet)
 
 **⚠️ NEVER share your private key. It stays in your wallet.**
 
@@ -121,7 +121,7 @@ You can also provide the key explicitly if needed:
 ### Step 8: Monitor
 
 ```bash
-tail -f ~/.digibyte/testnet24/debug.log | grep -i oracle
+tail -f ~/.digibyte/testnet25/debug.log | grep -i oracle
 ```
 
 ---
@@ -184,7 +184,7 @@ digibyte-cli -testnet -rpcwallet=oracle startoracle <id>
 The live oracle requires **3 of 6 exchange responses** to publish (see "What Your Oracle Does" above). Search the debug log for fetcher errors:
 
 ```bash
-tail -n 2000 ~/.digibyte/testnet24/debug.log | grep -E "Oracle: (Insufficient|Exception|Failed to fetch|Initialized)"
+tail -n 2000 ~/.digibyte/testnet25/debug.log | grep -E "Oracle: (Insufficient|Exception|Failed to fetch|Initialized)"
 ```
 
 Specifically:
@@ -210,9 +210,9 @@ When an operator sends you their 33-byte compressed public key, add it to **two 
 
 ### 1. vOracleNodes (33-byte compressed CPubKey)
 
-In `InitializeOracleNodes()` — match the network's P2P port (mainnet 12024, testnet24 12031):
+In `InitializeOracleNodes()` — match the network's P2P port (mainnet 12024, testnet25 12032):
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12031", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12032", true},
 ```
 
 ### 2. consensus.vOraclePublicKeys (32-byte x-only key — strip the 02/03 prefix)
@@ -231,8 +231,8 @@ Then recompile and distribute the updated binary.
 
 | Network | Total Slots | Active (in MuSig2 quorum) | Consensus | Notes |
 |---------|------------|---------------------------|-----------|-------|
-| Mainnet | 30 (IDs 0–29) | 17 (slots 0–16) | 9-of-17 MuSig2 (RC30) | DigiDollar/MuSig2 activates at BIP9 min height 22,014,720. Slots 17–29 stay reserve placeholders after activation: they are *not* in `consensus.vOraclePublicKeys` and `ValidateMuSig2Bundle` rejects any signer with `id ≥ 17`. Promoting a reserve to active requires a chainparams change in a future release (see `DD-FA-ARCH-001`). |
-| Testnet (testnet24) | 17 (IDs 0–16) | 17 (slots 0–16) | 9-of-17 MuSig2 | Active from height 600. Testnet has no reserve slots configured. |
+| Mainnet | 35 (IDs 0–34) | 17 (slots 0–16) | 9 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Slots 17–34 stay reserve placeholders after activation until promoted by a future chainparams release. |
+| Testnet (testnet25) | 35 (IDs 0–34) | 17 (slots 0–16) | 9 signatures from active keyset | Active from height 600. Slots 17–34 are inactive reserve placeholders. |
 | Regtest | 7 (IDs 0–6) | 7 | 4-of-7 MuSig2 | Always active. |
 
 To confirm a slot is in the active quorum at runtime, call
@@ -251,7 +251,7 @@ To confirm a slot is in the active quorum at runtime, call
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12031 (testnet24 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
+| Ports | 12032 (testnet25 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
 
 ---
 
@@ -287,4 +287,4 @@ To confirm a slot is in the active quorum at runtime, call
 
 ---
 
-*Verified against the DigiByte Core RC40 codebase on `feature/digidollar-v1`. Current public testnet instructions target testnet24 / P2P 12031 / RPC 14026. All RPC commands tested in regtest.*
+*Verified against the DigiByte Core RC41 codebase on `feature/digidollar-v1`. Current public testnet instructions target testnet25 / P2P 12032 / RPC 14026. All RPC commands tested in regtest.*

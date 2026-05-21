@@ -1,12 +1,12 @@
 # DigiByte Testnet Reset Guide - v9.26 DigiDollar Edition
 
-> **Archived historical guide - do not use for RC34 operator setup.**
+> **Archived historical guide - do not use for RC41 operator setup.**
 > This document records a November 2025 reset procedure and contains stale
 > values such as old ports, old data-directory names, and height-650 testnet
-> activation assumptions. The current RC34 release remains on `testnet23`;
-> it requires no reset, uses P2P port `12030`, RPC port `14026`, and activates
+> activation assumptions. The current RC41 reset uses `testnet25`, P2P port
+> `12032`, RPC port `14026`, magic `fe c5 b8 e6`, and activates
 > DigiDollar/oracle rules on testnet at height `600`. Use
-> `RELEASE_v9.26.0-rc34.md` and `src/kernel/chainparams.cpp` as the current
+> `RELEASE_v9.26.0-rc41.md` and `src/kernel/chainparams.cpp` as the current
 > source of truth.
 
 **Document Version:** 2.0 - COMPLETE WITH SCRYPT GENESIS MINING

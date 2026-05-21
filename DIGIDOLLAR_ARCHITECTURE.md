@@ -206,9 +206,10 @@ Phase 1 (data structures, P2TR scripts, DD addresses, transaction versioning) an
 │   can poison the history (03f4af47a7).      │
 ├─────────────────────────────────────────────┤
 │ Oracle System Integration:                  │
-│ • V1 mainnet/testnet: 9-of-17 MuSig2        │
-│   threshold consensus (BIP-340 Schnorr      │
-│   aggregate, BIP-327 MuSig2)                │
+│ • V1 mainnet/testnet: 35 reserved oracle    │
+│   slots, 17 active at launch, 9 MuSig2      │
+│   signatures required (BIP-340 aggregate,   │
+│   BIP-327 MuSig2)                           │
 │ • Regtest: 4-of-7 (chainparams override)    │
 │ • Median price in micro-USD format          │
 │ • 6 active exchange APIs via libcurl        │

@@ -1,7 +1,7 @@
 # DigiDollar Oracle System - V1 Explainer
 
-*Updated: 2026-05-05*
-*Document Version: 6.0 - Codex Wave 8 refresh against `feature/digidollar-v1`*
+*Updated: 2026-05-21*
+*Document Version: 6.1 - RC41 launch-parameter refresh*
 
 ## V1 Summary
 
@@ -24,15 +24,15 @@ mined, relayed as fallback, or used to update the price cache in V1.
 
 | Network | Oracle metadata slots | Consensus-active slots | Quorum |
 |---------|-----------------------|------------------------|--------|
-| Mainnet | 30 | 17, slots 0-16 | 9-of-17 |
-| Testnet24 | 17 | 17, slots 0-16 | 9-of-17 |
+| Mainnet | 35 | 17, slots 0-16 | 9 signatures from active keyset |
+| Testnet25 | 35 | 17, slots 0-16 | 9 signatures from active keyset |
 | Regtest | 7 | 7, slots 0-6 | 4-of-7 |
 
-Mainnet slots 17-29 are reserve metadata entries. They are not part of
+Mainnet and testnet slots 17-34 are reserve metadata entries. They are not part of
 `consensus.vOraclePublicKeys`, do not count toward pending-message quorum, do
 not appear in the MuSig2 bitmap, and cannot contribute to the V1 aggregate
-signature unless a future deterministic activation rule expands the consensus
-roster. Testnet24 has no reserve metadata slots configured.
+signature until a later release adds their x-only keys to the consensus roster
+and marks the slot active in chainparams.
 
 ## Operator Flow
 
@@ -148,8 +148,8 @@ DigiDollar and the oracle validator activate together:
 
 | Network | DigiDollar activation | Oracle activation | MuSig2 height |
 |---------|-----------------------|-------------------|---------------|
-| Mainnet | BIP9 bit 23, min height 22,014,720 | same trigger | 0 |
-| Testnet24 | height 600 / BIP9 active | same trigger | 0 |
+| Mainnet | BIP9 bit 23, min height 23,627,520 | same trigger | 0 |
+| Testnet25 | height 600 / BIP9 active | same trigger | 0 |
 | Regtest | BIP9 `ALWAYS_ACTIVE`; DD/oracle P2P height gates 650 by default, or the direct `-digidollaractivationheight=N` override | same height trigger | 0 |
 
 Before activation, DD-looking data does not trigger V1 consensus rules. After

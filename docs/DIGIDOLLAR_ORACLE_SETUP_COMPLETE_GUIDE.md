@@ -1,6 +1,6 @@
 # DigiDollar Oracle Setup Guide - V1
 
-*Updated: 2026-05-05*
+*Updated: 2026-05-21*
 
 This is the current V1 oracle setup guide. Earlier notes about a single-slot
 testnet oracle, `sendoracleprice`, or compact v0x01 block data are
@@ -13,7 +13,7 @@ historical and no longer apply.
 - MuSig2 nonce and partial-signature rounds.
 - One on-chain v0x03 MuSig2 bundle in the coinbase when a block contains
   DigiDollar activity.
-- 9-of-17 quorum on mainnet/testnet and 4-of-7 quorum on regtest.
+- 9 signatures from the active mainnet/testnet keyset inside a 35-slot reserve roster, and 4-of-7 quorum on regtest.
 
 ## Operator Prerequisites
 

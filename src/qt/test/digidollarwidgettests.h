@@ -48,6 +48,7 @@ private Q_SLOTS:
     void overviewBlockchainTotalsFitLaunchScaleValues();
     void overviewHealthUsesCollateralizedLanguage();
     void overviewPendingBalanceHasThemeRules();
+    void digiDollarSectionUsesGreenThemeRules();
     void overviewRecentTransactionAmountIsRightAligned();
     void privacySendMaskTests();
     void privacyMintMaskTests();

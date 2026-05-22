@@ -61,12 +61,15 @@ DigiDollarTab::~DigiDollarTab()
 
 void DigiDollarTab::setupUI()
 {
+    setObjectName("digiDollarTab");
+
     // Create main layout
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // Create tab widget
     m_tabWidget = new QTabWidget(this);
+    m_tabWidget->setObjectName("digiDollarSubTabs");
     m_tabWidget->tabBar()->setElideMode(Qt::ElideNone);      // Don't truncate tab text
     m_tabWidget->tabBar()->setExpanding(true);               // Expand tabs to fill width
     m_tabWidget->tabBar()->setUsesScrollButtons(true);       // Use scroll if needed
@@ -114,6 +117,7 @@ void DigiDollarTab::setupUI()
 
     // Use stacked widget to switch between activation message and DD tabs
     m_stackedWidget = new QStackedWidget(this);
+    m_stackedWidget->setObjectName("digiDollarStack");
     m_stackedWidget->addWidget(m_activationLabel);  // index 0: activation message
     m_stackedWidget->addWidget(m_tabWidget);         // index 1: DD functionality
 

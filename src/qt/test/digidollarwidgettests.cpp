@@ -2135,6 +2135,69 @@ void DigiDollarWidgetTests::overviewPendingBalanceHasThemeRules()
     requirePendingRule(dark, QStringLiteral("dark.css"));
 }
 
+void DigiDollarWidgetTests::digiDollarSectionUsesGreenThemeRules()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+
+    const auto findTheme = [&](const QString& name) -> QString {
+        const QStringList candidates = {
+            QStringLiteral("src/qt/res/css/%1").arg(name),
+            QStringLiteral("../src/qt/res/css/%1").arg(name),
+            QStringLiteral("../../src/qt/res/css/%1").arg(name),
+            QStringLiteral("qt/res/css/%1").arg(name),
+        };
+        for (const auto& p : candidates) {
+            const QString css = readFile(p.toUtf8().constData());
+            if (!css.isEmpty()) return css;
+        }
+        return {};
+    };
+
+    const auto requireGreenSection = [](const QString& css, const QString& theme) {
+        const QStringList requiredSelectors = {
+            QStringLiteral("QToolBar > QToolButton#digiDollarToolButton"),
+            QStringLiteral("QWidget#digiDollarTab"),
+            QStringLiteral("QStackedWidget#digiDollarStack"),
+            QStringLiteral("QTabWidget#digiDollarSubTabs"),
+            QStringLiteral("QTabWidget#digiDollarSubTabs QTabBar::tab:selected"),
+            QStringLiteral("DigiDollarOverviewWidget .QFrame#balanceFrame"),
+            QStringLiteral("DigiDollarReceiveWidget QFrame#generateFrame"),
+            QStringLiteral("DigiDollarReceiveWidget QPushButton#editRequestButton"),
+            QStringLiteral("DigiDollarSendWidget QFrame#addressFrame"),
+            QStringLiteral("DigiDollarSendWidget QPushButton#coinControlButton"),
+            QStringLiteral("DigiDollarMintWidget QFrame#amountFrame"),
+            QStringLiteral("DigiDollarRedeemWidget QFrame#positionFrame"),
+            QStringLiteral("DigiDollarRedeemWidget QPushButton#coinControlButton"),
+            QStringLiteral("DigiDollarPositionsWidget QTableWidget"),
+            QStringLiteral("DigiDollarTransactionsWidget QTableWidget"),
+        };
+
+        for (const QString& selector : requiredSelectors) {
+            QVERIFY2(css.contains(selector),
+                     qPrintable(QString("%1 missing DigiDollar green-theme selector: %2").arg(theme, selector)));
+        }
+
+        QVERIFY2(css.contains(QStringLiteral("DIGIDOLLAR GREEN SECTION THEME")),
+                 qPrintable(QString("%1 must label the scoped DigiDollar green theme block").arg(theme)));
+        QVERIFY2(css.contains(QStringLiteral("#1f9d57")) || css.contains(QStringLiteral("#16804f")),
+                 qPrintable(QString("%1 must include the green primary DigiDollar accent").arg(theme)));
+        QVERIFY2(!css.contains(QStringLiteral("QToolBar > QToolButton#digiDollarToolButton:checked {\n    background-color:#0066CC")),
+                 qPrintable(QString("%1 must not style the checked DigiDollar top-nav button with the DGB blue accent").arg(theme)));
+    };
+
+    const QString light = findTheme(QStringLiteral("light.css"));
+    QVERIFY2(!light.isEmpty(), "could not locate light.css from current working directory");
+    requireGreenSection(light, QStringLiteral("light.css"));
+
+    const QString dark = findTheme(QStringLiteral("dark.css"));
+    QVERIFY2(!dark.isEmpty(), "could not locate dark.css from current working directory");
+    requireGreenSection(dark, QStringLiteral("dark.css"));
+}
+
 void DigiDollarWidgetTests::privacySendMaskTests()
 {
 #ifdef Q_OS_MACOS

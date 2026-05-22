@@ -282,6 +282,7 @@ void DigiByteGUI::createActions()
     tabGroup->addAction(historyAction);
 
     digiDollarAction = new QAction(tr("DigiDollar"), this);
+    digiDollarAction->setObjectName("digiDollarAction");
     digiDollarAction->setStatusTip(tr("Browse and manage DigiDollar positions"));
     digiDollarAction->setToolTip(digiDollarAction->statusTip());
     digiDollarAction->setCheckable(true);
@@ -636,6 +637,9 @@ void DigiByteGUI::createToolBars()
         if (digiDollarAction->isVisible()) {
             toolbar->addSeparator();
             toolbar->addAction(digiDollarAction);
+            if (QWidget* button = toolbar->widgetForAction(digiDollarAction)) {
+                button->setObjectName("digiDollarToolButton");
+            }
         }
         // Commenting out Mint and Redeem tabs from toolbar
         // toolbar->addAction(mintAction);

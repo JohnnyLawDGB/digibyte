@@ -5751,3 +5751,234 @@ QDialog#DDAddressBookPage QLineEdit:focus {
 QDialog#DDAddressBookPage * {
     color: #ffffff !important;
 }
+
+/* ============================================================
+   DIGIDOLLAR GREEN SECTION THEME - DARK
+   ============================================================ */
+
+QToolBar > QToolButton#digiDollarToolButton {
+    background-color: #0f5a3a;
+    color: #ffffff;
+    border-right: 1px solid #002352;
+}
+
+QToolBar > QToolButton#digiDollarToolButton:hover {
+    background-color: #16784f;
+    color: #ffffff;
+}
+
+QToolBar > QToolButton#digiDollarToolButton:checked {
+    background-color: #0b3f2a;
+    color: #ffffff;
+    border-bottom: 3px solid #42d884;
+}
+
+QWidget#digiDollarTab,
+QStackedWidget#digiDollarStack,
+QTabWidget#digiDollarSubTabs {
+    background-color: #0b2419;
+    color: #ffffff;
+}
+
+QTabWidget#digiDollarSubTabs::pane {
+    background-color: #0b2419;
+    border: 1px solid #1f6846;
+    border-radius: 4px;
+}
+
+QTabWidget#digiDollarSubTabs QTabBar::tab {
+    background-color: #123827;
+    color: #c8ead8;
+    border: 1px solid #1f6846;
+    padding: 6px 20px;
+    margin-right: 2px;
+}
+
+QTabWidget#digiDollarSubTabs QTabBar::tab:selected {
+    background-color: #16804f;
+    color: #ffffff;
+    border-color: #42d884;
+}
+
+QTabWidget#digiDollarSubTabs QTabBar::tab:hover:!selected {
+    background-color: #1d5f3f;
+    color: #ffffff;
+}
+
+DigiDollarOverviewWidget,
+DigiDollarReceiveWidget,
+DigiDollarSendWidget,
+DigiDollarMintWidget,
+DigiDollarRedeemWidget,
+DigiDollarPositionsWidget,
+DigiDollarTransactionsWidget {
+    background-color: #0b2419;
+    color: #ffffff;
+}
+
+DigiDollarOverviewWidget QLabel,
+DigiDollarReceiveWidget QLabel,
+DigiDollarSendWidget QLabel,
+DigiDollarMintWidget QLabel,
+DigiDollarRedeemWidget QLabel,
+DigiDollarPositionsWidget QLabel,
+DigiDollarTransactionsWidget QLabel {
+    background-color: transparent;
+}
+
+DigiDollarOverviewWidget .QFrame#balanceFrame,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame,
+DigiDollarOverviewWidget .QFrame#transactionsFrame,
+DigiDollarReceiveWidget QFrame#generateFrame,
+DigiDollarReceiveWidget QFrame#qrFrame,
+DigiDollarReceiveWidget QFrame#requestsFrame,
+DigiDollarSendWidget QFrame#addressFrame,
+DigiDollarSendWidget QFrame#amountFrame,
+DigiDollarSendWidget QFrame#feeFrame,
+DigiDollarMintWidget QFrame#amountFrame,
+DigiDollarMintWidget QFrame#lockTierFrame,
+DigiDollarMintWidget QFrame#collateralFrame,
+DigiDollarRedeemWidget QFrame#positionFrame,
+DigiDollarRedeemWidget QFrame#amountFrame,
+DigiDollarRedeemWidget QFrame#positionInfoFrame {
+    background-color: #123827;
+    border: 1px solid #1f6846;
+    border-radius: 8px;
+}
+
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddPendingLabel,
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralLabel,
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueLabel,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceLabel,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthLabel,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelLabel,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelLabel {
+    background-color: #16804f;
+    color: #ffffff !important;
+}
+
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddBalanceValue,
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#ddPendingValue,
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#dgbCollateralValue,
+DigiDollarOverviewWidget .QFrame#balanceFrame .QLabel#usdValueValue,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#oraclePriceValue,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#systemHealthValue,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#dcaLevelValue,
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QLabel#errLevelValue,
+DigiDollarOverviewWidget .QFrame#transactionsFrame .QLabel {
+    background-color: transparent;
+    color: #ffffff !important;
+}
+
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame {
+    background-color: #061b13;
+    border: 2px solid #2fbf73;
+}
+
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalDDLabel,
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QLabel#networkTotalCollateralLabel {
+    color: #9be7bd !important;
+}
+
+DigiDollarOverviewWidget .QFrame#networkTotalsFrame .QFrame#totalsSeparator {
+    background-color: #2fbf73;
+}
+
+DigiDollarOverviewWidget .QFrame#transactionsFrame .QListWidget#transactionsList,
+DigiDollarReceiveWidget QTableWidget,
+DigiDollarPositionsWidget QTableWidget,
+DigiDollarTransactionsWidget QTableWidget {
+    background-color: #113a29;
+    alternate-background-color: #123827;
+    border: 1px solid #1f6846;
+    gridline-color: #1f6846;
+    selection-background-color: #16804f;
+    selection-color: #ffffff;
+}
+
+DigiDollarOverviewWidget .QFrame#transactionsFrame .QListWidget#transactionsList QWidget {
+    background-color: transparent;
+}
+
+DigiDollarReceiveWidget QHeaderView::section,
+DigiDollarPositionsWidget QHeaderView::section,
+DigiDollarTransactionsWidget QHeaderView::section {
+    background-color: #16804f;
+    color: #ffffff;
+    border-right: 1px solid #1f6846;
+    border-bottom: 1px solid #1f6846;
+}
+
+DigiDollarReceiveWidget QPushButton#generateButton,
+DigiDollarReceiveWidget QPushButton#clearButton,
+DigiDollarReceiveWidget QPushButton#copyAddressButton,
+DigiDollarReceiveWidget QPushButton#copyQRButton,
+DigiDollarReceiveWidget QPushButton#saveQRButton,
+DigiDollarReceiveWidget QPushButton#showRequestButton,
+DigiDollarReceiveWidget QPushButton#editRequestButton,
+DigiDollarReceiveWidget QPushButton#removeRequestButton,
+DigiDollarSendWidget QPushButton#coinControlButton,
+DigiDollarSendWidget QPushButton#sendButton,
+DigiDollarSendWidget QPushButton#clearButton,
+DigiDollarMintWidget QPushButton#mintButton,
+DigiDollarMintWidget QPushButton#clearButton,
+DigiDollarRedeemWidget QPushButton#coinControlButton,
+DigiDollarRedeemWidget QPushButton#redeemButton,
+DigiDollarRedeemWidget QPushButton#clearButton,
+DigiDollarPositionsWidget QPushButton#refreshButton,
+DigiDollarTransactionsWidget QPushButton {
+    background-color: #16804f;
+    border-color: #16804f;
+    color: #ffffff !important;
+}
+
+DigiDollarReceiveWidget QPushButton#generateButton:hover,
+DigiDollarReceiveWidget QPushButton#clearButton:hover,
+DigiDollarReceiveWidget QPushButton#copyAddressButton:hover,
+DigiDollarReceiveWidget QPushButton#copyQRButton:hover,
+DigiDollarReceiveWidget QPushButton#saveQRButton:hover,
+DigiDollarReceiveWidget QPushButton#showRequestButton:hover,
+DigiDollarReceiveWidget QPushButton#editRequestButton:hover,
+DigiDollarReceiveWidget QPushButton#removeRequestButton:hover,
+DigiDollarSendWidget QPushButton#coinControlButton:hover,
+DigiDollarSendWidget QPushButton#sendButton:hover,
+DigiDollarSendWidget QPushButton#clearButton:hover,
+DigiDollarMintWidget QPushButton#mintButton:hover,
+DigiDollarMintWidget QPushButton#clearButton:hover,
+DigiDollarRedeemWidget QPushButton#coinControlButton:hover,
+DigiDollarRedeemWidget QPushButton#redeemButton:hover,
+DigiDollarRedeemWidget QPushButton#clearButton:hover,
+DigiDollarPositionsWidget QPushButton#refreshButton:hover,
+DigiDollarTransactionsWidget QPushButton:hover {
+    background-color: #21a866;
+    border-color: #21a866;
+    color: #ffffff !important;
+}
+
+DigiDollarSendWidget QPushButton#useAvailableBalanceButton {
+    background-color: transparent;
+    border: 2px solid #42d884;
+    color: #9be7bd !important;
+}
+
+DigiDollarSendWidget QPushButton#useAvailableBalanceButton:hover {
+    background-color: #123827;
+    color: #ffffff !important;
+}
+
+DigiDollarMintWidget QLineEdit#amountEdit:focus,
+DigiDollarMintWidget QComboBox#lockTierCombo:focus,
+DigiDollarMintWidget QComboBox#lockTierCombo:hover,
+DigiDollarRedeemWidget QLineEdit#positionIdEdit:focus,
+DigiDollarRedeemWidget QLineEdit#amountEdit:focus,
+DigiDollarSendWidget QLineEdit#addressEdit:focus,
+DigiDollarSendWidget QLineEdit#amountEdit:focus,
+DigiDollarReceiveWidget QLineEdit:focus,
+DigiDollarTransactionsWidget QLineEdit:focus {
+    border-color: #42d884;
+}
+
+DigiDollarOverviewWidget .QFrame#systemHealthFrame .QProgressBar#systemHealthBar::chunk,
+DigiDollarMintWidget QProgressBar#ratioBar::chunk {
+    background-color: #42b86f;
+}

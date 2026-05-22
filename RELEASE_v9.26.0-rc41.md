@@ -2,7 +2,7 @@
 
 RC41 is a DigiDollar launch-parameter, testnet-reset, hardening, and usability release candidate on top of RC40.
 
-This release resets public DigiDollar testnet to `testnet25`, moves the testnet P2P port to `12032`, reserves 35 oracle slots for mainnet/testnet, sets the mainnet DigiDollar activation floor to block `23,627,520`, and keeps the RC40 hardening fixes for mint validation, wallet state, no-wallet builds, Dandelion cleanup, and Qt usability.
+This release resets public DigiDollar testnet to `testnet25`, moves the testnet P2P port to `12032`, reserves 35 oracle slots for mainnet/testnet, sets the mainnet DigiDollar activation floor to block `23,627,520`, and keeps the RC40 hardening fixes for mint validation, wallet state, no-wallet builds, Dandelion cleanup, and Qt usability/theme cleanup.
 
 Development branch: `feature/digidollar-v1`
 
@@ -66,7 +66,7 @@ It sets:
 - Mainnet DigiDollar activation floor: block `23,627,520`
 - Existing DigiDollar economic rules
 
-RC41 is not an economic redesign. It is a focused launch-configuration, correctness, wallet-state, documentation, and Qt cleanup release.
+RC41 is not an economic redesign. It is a focused launch-configuration, correctness, wallet-state, documentation, and Qt display/theme cleanup release.
 
 ---
 
@@ -166,6 +166,14 @@ RC41 adds explicit light and dark theme rules for the Pending DD row on the Over
 
 The pending balance calculation did not change. The row now uses the same spacing, alignment, font sizing, and theme colors as the adjacent balance rows.
 
+### DigiDollar green section theme
+
+RC41 gives the DigiDollar area of the Qt wallet a distinct green theme so users can visually tell when they are inside the DigiDollar section instead of the regular DigiByte wallet pages.
+
+The top DigiDollar navigation button, DigiDollar subtabs, DigiDollar page backgrounds, card borders, table surfaces, progress bars, and DigiDollar action buttons now use scoped green theme rules. The regular DigiByte pages keep the existing blue wallet theme.
+
+The theme work is scoped to DigiDollar Qt widgets and stylesheets. It does not change wallet accounting, consensus, oracle rules, RPC schemas, or P2P behavior.
+
 ### Documentation audit
 
 RC41 includes a full documentation audit against current code.
@@ -241,6 +249,7 @@ Focused RC41 validation completed on May 21, 2026 from `feature/digidollar-v1`.
 | Fuzz target inventory: `PRINT_ALL_FUZZ_TARGETS_AND_ABORT=1 ./src/test/fuzz/fuzz` | PASS, 247 targets |
 | Fuzz smoke: `test/fuzz/test_runner.py -l INFO --par=4 --empty_min_time=30 ...` | PASS |
 | Multi-oracle testnet25 script: `KEEP_QT_OPEN=1 ./test_multi_oracle_testnet.sh` | PASS, 223/223 |
+| DigiDollar green-theme Qt QA | PASS, Bob wallet inspected across all DigiDollar tabs; Qt tests cover the required light/dark theme selectors |
 | Whitespace check: `git diff --check` | PASS |
 
 Validation logs:
@@ -253,34 +262,37 @@ Validation logs:
 - Fuzz smoke: `/tmp/rc41_libfuzzer.log`
 - Multi-oracle testnet25 keep-open run: `/tmp/rc41_multi_oracle_testnet_keepopen_final.log`
 - Multi-oracle internal test log: `/tmp/digidollar_debug_logs/test_run_20260521_172144.log`
+- Final green-theme multi-oracle internal test log: `/tmp/digidollar_debug_logs/test_run_20260521_183859.log`
+- Final green-theme Qt screenshots: `/tmp/digidollar_green_qa/bob_tabs_final2/contact.png`, `/tmp/digidollar_green_qa/bob_tabs_final2/root_tooltip_receive_generate2.png`
 
 ---
 
 ## Commit Summary Since RC40
 
-- `852be68e4f` digidollar wallet: repair stale mint metadata before redemption
-- `d5f1e6c575` doc: update RC40 notes for redemption cache fix
-- `16f6b77c8e` Update .gitignore
-- `f466b7413b` docs: audit DigiByte and DigiDollar docs against current code
-- `0607f081da` digidollar mainnet: fix DD-RHF-009 minimum mint enforcement
-- `68fe7a2836` digidollar qt: fix DD-RHF-010 amount label width
-- `3c28172cae` digidollar mint: fix DD-RHF-011 lock height validation
-- `3b6f61d4bb` digidollar tests: accept DD-RHF-011 metadata rejection
-- `98563f1940` digidollar wallet: fix DD-RHF-012 no-wallet build boundary
-- `af69648808` digidollar qt: fix DD-RHF-013 receive amount validation
-- `eaa79030e6` release: bump version to v9.26.0-rc41
-- `7ae38b0c93` doc: add RC41 release notes
-- `645125c040` dandelion: drop rejected stem transactions
-- `0a3a6b8434` digidollar qt: preserve transaction sort order
-- `c8a62bc036` digidollar qt: clamp mint ratio bar scale
-- `d473616a55` digidollar qt: style pending balance row
-- `2261b40c54` digidollar mainnet: set BIP9 window for June 2026
-- `d9cd85461e` docs: align DigiDollar activation window with RC41
-- `9fc0d22947` doc: update RC41 notes for mainnet activation window
-- `9555ecd4a7` digidollar launch: configure testnet25 oracle reserve
-- `99bc282f1a` digidollar qt: update blockchain collateralization display
-- `d25cb18c5d` docs: update RC41 launch and oracle reserve notes
+- `703a8d9b46` qt: add green DigiDollar section theme
+- `378017b37b` chore: ignore local RC40 audit notes
+- `742cd0af69` docs: clarify RC41 testnet25 migration notes
 - `b36b1e411b` test: keep multi-oracle Qt wallets open after run
+- `d25cb18c5d` docs: update RC41 launch and oracle reserve notes
+- `99bc282f1a` digidollar qt: update blockchain collateralization display
+- `9555ecd4a7` digidollar launch: configure testnet25 oracle reserve
+- `9fc0d22947` doc: update RC41 notes for mainnet activation window
+- `d9cd85461e` docs: align DigiDollar activation window with RC41
+- `2261b40c54` digidollar mainnet: set BIP9 window for June 2026
+- `7ae38b0c93` doc: add RC41 release notes
+- `d473616a55` digidollar qt: style pending balance row
+- `c8a62bc036` digidollar qt: clamp mint ratio bar scale
+- `0a3a6b8434` digidollar qt: preserve transaction sort order
+- `645125c040` dandelion: drop rejected stem transactions
+- `eaa79030e6` release: bump version to v9.26.0-rc41
+- `af69648808` digidollar qt: fix DD-RHF-013 receive amount validation
+- `98563f1940` digidollar wallet: fix DD-RHF-012 no-wallet build boundary
+- `3b6f61d4bb` digidollar tests: accept DD-RHF-011 metadata rejection
+- `3c28172cae` digidollar mint: fix DD-RHF-011 lock height validation
+- `68fe7a2836` digidollar qt: fix DD-RHF-010 amount label width
+- `0607f081da` digidollar mainnet: fix DD-RHF-009 minimum mint enforcement
+- `f466b7413b` docs: audit DigiByte and DigiDollar docs against current code
+- `16f6b77c8e` Update .gitignore
 
 ---
 
@@ -304,6 +316,7 @@ Please focus RC41 testing on:
 - Mint collateral-ratio display for 200%, 500%, and 1000% tiers.
 - Pending DD row appearance in light and dark themes.
 - DigiDollar Overview blockchain totals display at large DD/DGB values.
+- DigiDollar green section theme across all DigiDollar tabs, with regular DigiByte pages still using the existing blue theme.
 
 Oracle operators should migrate to `testnet25`, open P2P port `12032`, and keep assigned active oracle slots online.
 
@@ -316,7 +329,6 @@ Oracle operators should migrate to `testnet25`, open P2P port `12032`, and keep 
 - Public testnet25 DNS seeders must be reset to the new genesis, magic bytes, and P2P port before seed-based peer discovery is considered ready.
 - If fewer than 9 valid oracle operators are online and fresh, new oracle bundles should fail closed.
 - Mixed older RC oracle nodes may not reliably complete the current MuSig2 signing flow.
-- Windows tooltip reports still need exact affected controls or screenshots before a safe theme fix can be made.
 
 ---
 
@@ -324,4 +336,4 @@ Oracle operators should migrate to `testnet25`, open P2P port `12032`, and keep 
 
 RC41 is the testnet25 and mainnet-launch-parameter release candidate after RC40.
 
-It resets public testnet, reserves the 35-slot oracle roster, sets the mainnet activation floor to block `23,627,520`, keeps the DigiDollar economic model unchanged, and carries forward the validated RC40 hardening fixes.
+It resets public testnet, reserves the 35-slot oracle roster, sets the mainnet activation floor to block `23,627,520`, keeps the DigiDollar economic model unchanged, carries forward the validated RC40 hardening fixes, and adds the scoped green DigiDollar Qt section theme.

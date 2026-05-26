@@ -22,15 +22,15 @@ This document treats the reported issues as triage leads, not proof. Each item b
 | 4 | Fixed | Confirmed DD send/status refresh could block or stale out on UI-thread RPC/backend work. DD send and status refresh now use async/queued refresh paths and explicit DD update signals. | Qt refresh/responsiveness tests in `src/qt/test/digidollarwidgettests.cpp`. | `2d8b0808deb47ad62f8b63114db3b1f7f016e1c1` |
 | 5 | Hardened, not a startup bug | The startup message is expected before chainstate readiness, but stale position validation now retries after readiness. | Wallet security unit coverage in `src/wallet/test/digidollar_wallet_security_tests.cpp`. | `402c9cdd4504b68a958fe0543ce3c4be83c40258` |
 | 6 | Fixed | Confirmed redeem UI could show redeemable vault state while wallet signing state was locked/stale. Redeem state now refreshes on wallet lock/unlock and explains locked-wallet signing. | Qt tests for locked wallet redeem state and unlock refresh. | `515ca6d8f42cc32a2e2f7abb95dad51734b495f0` |
-| 7 | Fixed | Confirmed custom/native tooltip paths could bypass readable dark-mode styling. Tooltip rendering was normalized globally, including rich-text envelope handling. | Qt tooltip guard tests plus full offscreen Qt suite. | `872126c66a16782c7711a8fabb49970261ed5eac` |
+| 7 | Fixed | Confirmed custom/native tooltip paths could bypass readable dark-mode styling. Tooltip rendering was normalized globally, including native `QEvent::ToolTip` handling, item-view tooltip handling, and rich-text envelope stripping. | Qt tooltip guard tests, normal Qt suite, and X11 visual screenshot `/tmp/digibyte_tooltip_qa.png` showing readable black-on-yellow tooltip text. | `64c72f2a4eb73cdce220e1059d7efffd2630b262` |
 | 8 | Fixed | Confirmed shutdown window was not covered by dark dialog rules. Added explicit shutdown object/style coverage for dark mode. | `darkThemeShutdownWindowHasReadableSurface` Qt test. | `f1257101d017d40e1117d543ffcc0d4ae9bfa5a5` |
 | 9 | Fixed | Confirmed `Total DD` used white-on-white styling in dark mode. Updated dark CSS contrast. | `darkThemeDigiDollarSendTotalLabelHasReadableContrast` Qt test. | `cb44ecde3dae084de97c6f6129bda98a2eeeb71c` |
-| 10 | Fixed | Confirmed escaped custom overview tooltips could show literal `<qt>` tags. Normalized custom tooltip rendering and rich-text wrappers. | `customTooltipRenderersNormalizeQtRichTextEnvelope` Qt test. | `872126c66a16782c7711a8fabb49970261ed5eac` |
+| 10 | Fixed | Confirmed escaped custom overview tooltips could show literal `<qt>` tags. Normalized custom tooltip rendering and stripped Qt rich-text wrappers before escaping. | `customTooltipRenderersNormalizeQtRichTextEnvelope` Qt test plus X11 tooltip visual QA. | `64c72f2a4eb73cdce220e1059d7efffd2630b262` |
 | 11 | Fixed | Confirmed below-minimum mint feedback needed to report the actual chain minimum. Mint validation copy now reports the configured minimum. | Qt mint minimum-copy guard test. | `b4152410f33d60a14abbe54c9417134885d2308e` |
 | 12 | Fixed | Confirmed tier 0 was inconsistently validated and explained. Wallet validation accepts tier 0 and UI copy separates lock duration from effective redeem availability. | Unit tier-0 validation plus Qt mint confirmation-copy tests. | `8c82100b231b5a95085dda91f0cd6efc9ca469fb` |
 | 13 | Fixed in DGBstats | Confirmed HomePage truncated fractional testnet algo difficulties with `parseInt`, and DifficultiesPage needed Core algo-name normalization. | DGBstats unit tests for fractional values below 1 and `odocrypt`/Core aliases. | `/home/jared/Code/dgbstats` `931984f3f48a473d1b15095d35858e150e56512e` |
 | 14 | Fixed in DGBstats; server inspected | Confirmed stale oracle/testnet25 copy: generic GitHub onboarding, 7 exchanges/CoinMarketCap, v0x02 fallback, and 15-second price updates. Updated DGBstats pages to RC41/testnet25, six active exchanges, v0x03-only, 60-second exchange fetch/broadcast, and assigned-slot coordination. DGBstats Server was inspected and did not require a code change. | DGBstats page tests and `OracleCopyGuards.test.js`; DGBstats Server `npm test`. | `/home/jared/Code/dgbstats` `8e68bcebc1437c0a21677dcb0c145dee194315b3` |
-| 15 | Enhancement implemented | DD Overview recent transactions now carry tx metadata and open transaction details on double-click/activation. | `overviewRecentTransactionDoubleClickShowsDetails` Qt test. | `95a3a1da594f98c5f41e56623a9ac85ca04ee98e` |
+| 15 | Fixed / enhancement implemented | DD Overview recent transactions now switch to the DD Transactions tab and focus the matching row on double-click/activation. DD Transactions rows now open a non-modal `TransactionDescDialog`-styled details window on double-click/activation, matching the normal DGB transaction details workflow. During X11 QA this also exposed an RPC warmup `-28` table-load stall; the DD Transactions widget now falls back to direct wallet history while RPC is warming up. | `overviewRecentTransactionDoubleClickOpensTransactionsTab`, `transactionsWidgetDoubleClickShowsDetailsDialog`, normal Qt suite, and X11 dark/light screenshots `/tmp/digibyte_dd_transaction_details_dark_qa.png` and `/tmp/digibyte_dd_transaction_details_light_qa.png`. | `d0605a19ef92410d506a7bcafeb26fd9f2ae4083` |
 | 16 | Fixed | Confirmed DD Send field was labeled `Label` while only storing local note metadata. Renamed UI and tooltip to local `Note`. | `sendWidgetNoteFieldTests` Qt test. | `ead2b2e3f79a1fc31081079aee5818107ac0e8e2` |
 | 17 | Fixed / clarified | New issue. Confirmed rapid batch mint state could be confusing and lock-tier rejects lacked enough context. DD history now distinguishes local/stempool/mempool/rejected/confirmed state more clearly and logs lock-tier validation windows with tx context. | Lock-tier unit guard and Qt transaction/overview state tests. | `65f15d4775dcff7b0d633919f6981bbe75571b16` |
 | 18 | Fixed | New issue. Confirmed RPC redeem had the same broadcast-before-wallet-commit shape as the mint assertion. Redeem now commits through the wallet relay path once and rapid duplicate redeems fail cleanly. | Rapid redeem functional regression in `wallet_digidollar_rc33_regressions.py`. | `d7097b05f627255c5f7fed6635adaa040c0d2a8a` |
@@ -43,15 +43,16 @@ This document treats the reported issues as triage leads, not proof. Each item b
 
 Automated offscreen Qt QA was used because this run was headless. The full Qt binary passed with `QT_QPA_PLATFORM=offscreen`, including explicit dark-mode and visual-surface guard tests for:
 
-- Global/custom tooltip normalization and dark-mode tooltip readability.
+- Global/custom/native tooltip normalization and dark-mode tooltip readability, visually captured in `/tmp/digibyte_tooltip_qa.png`.
 - Transaction overview custom tooltip path, including rich-text `<qt>` envelope stripping.
 - Shutdown window dark-mode surface contrast.
 - DigiDollar Send `Total DD` label contrast.
 - Redeem widget with redeemable vault but encrypted/locked wallet.
 - DigiDollar Send `Note` label/copy.
-- DigiDollar Overview recent transaction double-click details.
+- DigiDollar Overview recent transaction double-click navigation to DD Transactions.
+- DigiDollar Transactions double-click details dialog in dark and light mode, visually captured in `/tmp/digibyte_dd_transaction_details_dark_qa.png` and `/tmp/digibyte_dd_transaction_details_light_qa.png`.
 
-No manual GUI screenshots were captured in this headless session. The closest practical guard evidence is the deterministic Qt stylesheet/widget tests above.
+Manual/X11 visual QA screenshots were captured after the headless guard tests so the affected tooltip and transaction-detail surfaces were inspected as rendered windows.
 
 ## Verification Matrix
 
@@ -66,6 +67,7 @@ Focused checks run during TDD:
 Full checks:
 
 - DigiByte Core build: `make` - passed.
+- DigiByte Core RC41 multi-oracle/DD end-to-end: `./test_multi_oracle_testnet.sh` - passed end to end; 223 tracked checks, 222 OK, 0 failed, with warning-only live-market observations. Live oracle consensus price during the run was about `$0.003555`/DGB, all DD mint/redeem/transfer/persistence checks passed, and the script log is `/tmp/digidollar_debug_logs/test_run_20260526_152328.log`.
 - DigiByte Core unit suite: `src/test/test_digibyte` - passed, 3384 test cases.
 - DigiByte Core Qt suite: `env QT_QPA_PLATFORM=offscreen src/qt/test/test_digibyte-qt` - passed.
 - DigiByte Core fuzz: `python3 test/fuzz/test_runner.py --par 8 /tmp/digibyte-fuzz-seed` - passed all 247 targets with one seed input per target. `--empty_min_time` was attempted first but is unsupported by this non-libFuzzer build.

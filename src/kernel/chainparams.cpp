@@ -714,6 +714,9 @@ private:
             {34, ParsePubKey("03b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a"), "localhost:9035", false},
         };
 
+        m_assumed_blockchain_size = 1;
+        m_assumed_chain_state_size = 0;
+
         LogPrintf("Testnet local mini-testnet mode enabled via -easypow: easy PoW + local oracle set\n");
     }
 

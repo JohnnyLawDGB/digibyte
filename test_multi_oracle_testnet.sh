@@ -219,14 +219,33 @@ print_subheader() {
 wait_for_rpc() {
     local cli=$1
     local name=$2
-    local max=30
+    local max=${3:-180}
+    local last_error=""
     for i in $(seq 1 $max); do
-        if $cli getblockchaininfo > /dev/null 2>&1; then
+        if last_error=$($cli getblockchaininfo 2>&1 >/dev/null); then
             return 0
+        fi
+        if [ $((i % 15)) -eq 0 ]; then
+            echo "  Waiting for $name RPC warmup ($i/$max): $(echo "$last_error" | head -c 120)"
         fi
         sleep 2
     done
+    echo "  $name RPC did not become ready. Last response: $(echo "$last_error" | head -c 200)"
     return 1
+}
+
+require_rpc_ready() {
+    local cli=$1
+    local name=$2
+    local ready_message=$3
+    local fail_message=${4:-"$name Qt failed to start"}
+
+    if wait_for_rpc "$cli" "$name"; then
+        print_status "ok" "$ready_message"
+    else
+        print_status "fail" "$fail_message"
+        exit 1
+    fi
 }
 
 # Get balances safely
@@ -746,12 +765,7 @@ setsid env -i \
 BOB_PID=$!
 echo "Bob's Qt started (PID: $BOB_PID)"
 
-if wait_for_rpc "$BOB_CLI" "Bob"; then
-    print_status "ok" "Bob's Qt RPC is ready"
-else
-    print_status "fail" "Bob's Qt failed to start"
-    exit 1
-fi
+require_rpc_ready "$BOB_CLI" "Bob" "Bob's Qt RPC is ready" "Bob's Qt failed to start"
 
 # Step 3: Setup Bob's wallet and generate lots of DGB for 12+ mints
 print_header "Step 3: Setting up Bob's wallet with sufficient DGB"
@@ -805,9 +819,7 @@ setsid env -i \
 ALICE_PID=$!
 echo "Alice's Qt started (PID: $ALICE_PID)"
 
-if wait_for_rpc "$ALICE_CLI" "Alice"; then
-    print_status "ok" "Alice's Qt RPC is ready"
-fi
+require_rpc_ready "$ALICE_CLI" "Alice" "Alice's Qt RPC is ready" "Alice's Qt failed to start"
 
 $ALICE_CLI createwallet "alice" 2>/dev/null || true
 ALICE_ADDR=$($ALICE_CLI -rpcwallet=alice getnewaddress "receive" "bech32")
@@ -843,9 +855,7 @@ setsid env -i \
 CHARLIE_PID=$!
 echo "Charlie's Qt started (PID: $CHARLIE_PID)"
 
-if wait_for_rpc "$CHARLIE_CLI" "Charlie"; then
-    print_status "ok" "Charlie's Qt RPC is ready"
-fi
+require_rpc_ready "$CHARLIE_CLI" "Charlie" "Charlie's Qt RPC is ready" "Charlie's Qt failed to start"
 
 $CHARLIE_CLI createwallet "charlie" 2>/dev/null || true
 CHARLIE_ADDR=$($CHARLIE_CLI -rpcwallet=charlie getnewaddress "receive" "bech32")
@@ -881,9 +891,7 @@ setsid env -i \
 DAVE_PID=$!
 echo "Dave's Qt started (PID: $DAVE_PID)"
 
-if wait_for_rpc "$DAVE_CLI" "Dave"; then
-    print_status "ok" "Dave's Qt RPC is ready"
-fi
+require_rpc_ready "$DAVE_CLI" "Dave" "Dave's Qt RPC is ready" "Dave's Qt failed to start"
 
 $DAVE_CLI createwallet "dave" 2>/dev/null || true
 DAVE_ADDR=$($DAVE_CLI -rpcwallet=dave getnewaddress "receive" "bech32")
@@ -919,9 +927,7 @@ setsid env -i \
 EVE_PID=$!
 echo "Eve's Qt started (PID: $EVE_PID)"
 
-if wait_for_rpc "$EVE_CLI" "Eve"; then
-    print_status "ok" "Eve's Qt RPC is ready"
-fi
+require_rpc_ready "$EVE_CLI" "Eve" "Eve's Qt RPC is ready" "Eve's Qt failed to start"
 
 $EVE_CLI createwallet "eve" 2>/dev/null || true
 EVE_ADDR=$($EVE_CLI -rpcwallet=eve getnewaddress "receive" "bech32")
@@ -957,9 +963,7 @@ setsid env -i \
 FRANK_PID=$!
 echo "Frank's Qt started (PID: $FRANK_PID)"
 
-if wait_for_rpc "$FRANK_CLI" "Frank"; then
-    print_status "ok" "Frank's Qt RPC is ready"
-fi
+require_rpc_ready "$FRANK_CLI" "Frank" "Frank's Qt RPC is ready" "Frank's Qt failed to start"
 
 $FRANK_CLI createwallet "frank" 2>/dev/null || true
 FRANK_ADDR=$($FRANK_CLI -rpcwallet=frank getnewaddress "receive" "bech32")
@@ -995,9 +999,7 @@ setsid env -i \
 GRACE_PID=$!
 echo "Grace's Qt started (PID: $GRACE_PID)"
 
-if wait_for_rpc "$GRACE_CLI" "Grace"; then
-    print_status "ok" "Grace's Qt RPC is ready"
-fi
+require_rpc_ready "$GRACE_CLI" "Grace" "Grace's Qt RPC is ready" "Grace's Qt failed to start"
 
 $GRACE_CLI createwallet "grace" 2>/dev/null || true
 GRACE_ADDR=$($GRACE_CLI -rpcwallet=grace getnewaddress "receive" "bech32")
@@ -1033,9 +1035,7 @@ setsid env -i \
 HEIDI_PID=$!
 echo "Heidi's Qt started (PID: $HEIDI_PID)"
 
-if wait_for_rpc "$HEIDI_CLI" "Heidi"; then
-    print_status "ok" "Heidi's Qt RPC is ready"
-fi
+require_rpc_ready "$HEIDI_CLI" "Heidi" "Heidi's Qt RPC is ready" "Heidi's Qt failed to start"
 
 $HEIDI_CLI createwallet "heidi" 2>/dev/null || true
 HEIDI_ADDR=$($HEIDI_CLI -rpcwallet=heidi getnewaddress "receive" "bech32")
@@ -2283,11 +2283,7 @@ BOB_PID=$!
 echo "Bob's Qt restarted (New PID: $BOB_PID)"
 
 # Wait for RPC to be ready
-if wait_for_rpc "$BOB_CLI" "Bob (restarted)"; then
-    print_status "ok" "Bob's Qt RPC is ready after restart"
-else
-    print_status "fail" "Bob's Qt failed to restart"
-fi
+require_rpc_ready "$BOB_CLI" "Bob (restarted)" "Bob's Qt RPC is ready after restart" "Bob's Qt failed to restart"
 
 # Small delay to ensure node is fully initialized
 sleep 5
@@ -2459,11 +2455,7 @@ setsid env -i \
 BOB_PID=$!
 echo "Bob's Qt restarted with restored wallet (New PID: $BOB_PID)"
 
-if wait_for_rpc "$BOB_CLI" "Bob (restored)"; then
-    print_status "ok" "Bob's Qt RPC is ready after restore"
-else
-    print_status "fail" "Bob's Qt failed to start after restore"
-fi
+require_rpc_ready "$BOB_CLI" "Bob (restored)" "Bob's Qt RPC is ready after restore" "Bob's Qt failed to start after restore"
 
 sleep 5
 

@@ -235,6 +235,12 @@ PhaseThreeResult ValidatePhaseThree(const COracleBundle& bundle,
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_oracle_roster_tests, LocalMiniTestnetSetup)
 
+BOOST_AUTO_TEST_CASE(local_mini_testnet_uses_small_assumed_storage_size)
+{
+    BOOST_CHECK_LE(Params().AssumedBlockchainSize(), 1U);
+    BOOST_CHECK_EQUAL(Params().AssumedChainStateSize(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(expanded_roster_accepts_valid_9_sig_bundle_after_activation)
 {
     const Consensus::Params params = ExpandedRosterParams(ROSTER_ACTIVE_HEIGHT);

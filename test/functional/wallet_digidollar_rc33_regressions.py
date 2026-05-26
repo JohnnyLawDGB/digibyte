@@ -42,6 +42,7 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
         self.default_wallet_name = node.listwallets()[0]
 
+        self.test_mint_dgb_change_confirms_and_spends()
         self.test_fragmented_large_mint_consolidates_and_confirms()
         self.test_rapid_mints_confirm_after_restart()
         self.test_rapid_redeems_confirm_after_restart()
@@ -95,6 +96,30 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         assert_equal(len(matching), 1)
         assert_equal(matching[0]["confirmations"] > 0, True)
         assert_equal(position_active(matching[0]), True)
+
+    def test_mint_dgb_change_confirms_and_spends(self):
+        self.log.info("Testing mint DGB change remains visible and spendable")
+        node = self.nodes[0]
+        change_wallet = self.create_descriptor_wallet("rc41_mint_change")
+
+        funding_txid = self.funder_wallet().sendtoaddress(change_wallet.getnewaddress(), Decimal("25.00"))
+        self.generate(node, 1)
+        assert_equal(self.funder_wallet().gettransaction(funding_txid)["confirmations"], 1)
+        assert_equal(len(change_wallet.listunspent(1)), 1)
+
+        mint = change_wallet.mintdigidollar(10000, 0)
+        self.generate(node, 1)
+
+        change_outputs = [
+            utxo for utxo in change_wallet.listunspent(1)
+            if utxo["txid"] == mint["txid"] and utxo["vout"] >= 3 and utxo["amount"] > 0
+        ]
+        assert_equal(len(change_outputs), 1)
+
+        spend_txid = change_wallet.sendtoaddress(self.funder_wallet().getnewaddress(), Decimal("1.00"))
+        assert spend_txid in node.getrawmempool()
+        self.generate(node, 1)
+        assert change_wallet.gettransaction(spend_txid)["confirmations"] > 0
 
     def test_rapid_mints_confirm_after_restart(self):
         self.log.info("Testing 22 rapid mints do not remain permanently pending")

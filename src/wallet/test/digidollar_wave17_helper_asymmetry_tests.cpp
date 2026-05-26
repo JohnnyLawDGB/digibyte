@@ -157,6 +157,26 @@ BOOST_AUTO_TEST_CASE(w17a_02_wallet_helper_matches_rpc_helper_in_blocks)
     }
 }
 
+class ExposedDigiDollarWallet : public DigiDollarWallet
+{
+public:
+    using DigiDollarWallet::ValidateMintParams;
+};
+
+BOOST_AUTO_TEST_CASE(w17a_03_wallet_mint_param_validation_accepts_tier_zero)
+{
+    ExposedDigiDollarWallet wallet;
+    const CAmount amount = Params().GetDigiDollarParams().minMintAmount;
+
+    BOOST_CHECK_MESSAGE(
+        wallet.ValidateMintParams(amount, 0),
+        "DD-FA-FUNC-026: wallet mint parameter validation must accept tier 0; "
+        "consensus and the UI define tier 0 as the 1-hour testing lock.");
+    BOOST_CHECK(wallet.ValidateMintParams(amount, 1));
+    BOOST_CHECK(wallet.ValidateMintParams(amount, 9));
+    BOOST_CHECK(!wallet.ValidateMintParams(amount, 10));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 } // namespace wallet

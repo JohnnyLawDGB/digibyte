@@ -580,6 +580,36 @@ void DigiDollarWidgetTests::mintWidgetUsesChainParamMintLimits()
     QCOMPARE(amountEdit->validator()->validate(aboveMax, pos), QValidator::Invalid);
 }
 
+void DigiDollarWidgetTests::mintConfirmationCopyExplainsConfirmationBuffer()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+
+    const QStringList candidates = {
+        QStringLiteral("src/qt/digidollarmintwidget.cpp"),
+        QStringLiteral("../src/qt/digidollarmintwidget.cpp"),
+        QStringLiteral("../../src/qt/digidollarmintwidget.cpp"),
+        QStringLiteral("qt/digidollarmintwidget.cpp"),
+    };
+
+    QString source;
+    for (const auto& path : candidates) {
+        source = readFile(path.toUtf8().constData());
+        if (!source.isEmpty()) break;
+    }
+
+    QVERIFY2(!source.isEmpty(), "could not locate digidollarmintwidget.cpp from current working directory");
+    QVERIFY2(source.contains(QStringLiteral("Network Confirmation Buffer")),
+             "mint confirmation copy must explicitly call out the 100-block confirmation buffer");
+    QVERIFY2(source.contains(QStringLiteral("Redeem Available Block")),
+             "mint confirmation copy must label the effective block as redeem availability, not only lock duration");
+    QVERIFY2(!source.contains(QStringLiteral("\"Unlock Block: %7")),
+             "mint confirmation copy must not show a buffer-adjusted height as a plain lock-period unlock block");
+}
+
 void DigiDollarWidgetTests::mintWidgetCollateralMatchesBuilderSafetyMargin()
 {
 #ifdef Q_OS_MACOS

@@ -26,6 +26,7 @@ private Q_SLOTS:
     void privateKeyDisabledWalletCannotGenerateDigiDollarAddress();
     void mintWidgetTests();
     void mintWidgetUsesChainParamMintLimits();
+    void mintConfirmationCopyExplainsConfirmationBuffer();
     void mintWidgetCollateralMatchesBuilderSafetyMargin();
     void qtMintStoresDescriptorRecoverableOwnerKey();
     void staleMintUnlockHeightCacheRepairsFromOpReturn();

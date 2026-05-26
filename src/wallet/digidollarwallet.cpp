@@ -5410,7 +5410,7 @@ bool DigiDollarWallet::ValidateMintParams(const CAmount& dd_amount, uint32_t loc
         return false;
     }
 
-    if (lock_tier < 1 || lock_tier > 9) {
+    if (lock_tier > 9) {
         LogPrintf("DigiDollar: Invalid lock tier: %d\n", lock_tier);
         return false;
     }

@@ -724,8 +724,10 @@ void DigiDollarMintWidget::onMintClicked()
 
     // Calculate unlock details for user warning
     int lockBlocks = getLockTierBlocks(m_selectedTier);
+    const int bufferBlocks = DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
+    const int bufferMinutes = (bufferBlocks * 15 + 59) / 60;
     int currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
-    int unlockHeight = currentHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
+    int unlockHeight = currentHeight + lockBlocks + bufferBlocks;
     QString lockPeriodStr = getLockTierDisplayName(m_selectedTier);
 
     QMessageBox msgBox(this);
@@ -740,14 +742,17 @@ void DigiDollarMintWidget::onMintClicked()
         "Your DGB will be LOCKED for %1\n"
         "You will NOT be able to access this DGB until block %2\n\n"
         "Lock Period: %3 (%4 blocks)\n"
-        "Collateral Ratio: %5\n"
-        "Current Block: %6\n"
-        "Unlock Block: %7\n\n"
+        "Network Confirmation Buffer: %5 blocks (~%6 minutes)\n"
+        "Collateral Ratio: %7\n"
+        "Current Block: %8\n"
+        "Redeem Available Block: %9\n\n"
         "Make sure you understand this commitment before proceeding!")
         .arg(lockPeriodStr)
         .arg(unlockHeight)
         .arg(lockPeriodStr)
         .arg(lockBlocks)
+        .arg(bufferBlocks)
+        .arg(bufferMinutes)
         .arg(formatRatio(m_collateralRatio))
         .arg(currentHeight)
         .arg(unlockHeight);
@@ -764,7 +769,7 @@ void DigiDollarMintWidget::onMintClicked()
         // Refresh unlock details too; height may have advanced while the dialog was open.
         lockBlocks = getLockTierBlocks(m_selectedTier);
         currentHeight = m_clientModel ? m_clientModel->getNumBlocks() : 0;
-        unlockHeight = currentHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
+        unlockHeight = currentHeight + lockBlocks + bufferBlocks;
         lockPeriodStr = getLockTierDisplayName(m_selectedTier);
 
         // SECOND WARNING - Final "Are you ABSOLUTELY sure?" confirmation
@@ -794,12 +799,13 @@ void DigiDollarMintWidget::onMintClicked()
             "<p style='font-size:12pt;'><b>DD to Receive:</b> <span style='color:#00aa00;'>%3</span></p>"
             "<hr>"
             "<p style='font-size:11pt;'>Once confirmed, this action <b>CANNOT BE UNDONE</b>.</p>"
-            "<p style='font-size:11pt;'>Your DGB collateral will remain locked until block <b>%4</b>.</p>"
+            "<p style='font-size:11pt;'>Your DGB collateral becomes redeemable at block <b>%4</b>, after the lock period plus the %5-block network confirmation buffer.</p>"
             "<p style='font-size:13pt; font-weight:bold; color:#ff0000;'>Click 'No' if you have ANY doubts!</p>")
             .arg(periodName)
             .arg(formatDGBAmount(m_requiredCollateral))
             .arg(formatDDAmount(m_mintAmount))
-            .arg(unlockHeight));
+            .arg(unlockHeight)
+            .arg(bufferBlocks));
         finalWarning.setTextFormat(Qt::RichText);
         finalWarning.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
         finalWarning.setDefaultButton(QMessageBox::No);

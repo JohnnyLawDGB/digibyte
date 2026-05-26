@@ -498,6 +498,8 @@ void DigiDollarOverviewWidget::setWalletModel(WalletModel* model)
         // Update transaction history when balance changes (indicates new transaction)
         connect(m_walletModel, &WalletModel::balanceChanged,
                 this, &DigiDollarOverviewWidget::updateRecentTransactions);
+        connect(m_walletModel, &WalletModel::digiDollarChanged,
+                this, &DigiDollarOverviewWidget::refreshDigiDollarState);
 
         // Initial updates
         updateBalance();
@@ -646,6 +648,14 @@ void DigiDollarOverviewWidget::updateBalance()
         double usdValue = m_ddBalance * 1.0;
         m_usdValueValue->setText(formatUSDAmount(usdValue));
     }
+}
+
+void DigiDollarOverviewWidget::refreshDigiDollarState()
+{
+    m_lastBalanceUpdateTime = 0;
+    m_lastTxUpdateTime = 0;
+    updateBalance();
+    updateRecentTransactions();
 }
 
 void DigiDollarOverviewWidget::updateOraclePrice()

@@ -174,6 +174,8 @@ void DigiDollarTransactionsWidget::setWalletModel(WalletModel* model)
 {
     m_walletModel = model;
     if (m_walletModel) {
+        connect(m_walletModel, &WalletModel::digiDollarChanged,
+                this, &DigiDollarTransactionsWidget::updateTransactions);
         updateTransactions();
     }
 }

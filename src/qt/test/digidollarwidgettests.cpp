@@ -1912,6 +1912,87 @@ void DigiDollarWidgetTests::ddTabRefreshesBalancesOnWalletSignal()
     QCOMPARE(availableDGBValue->text(), expected);
 }
 
+void DigiDollarWidgetTests::transactionsWidgetRefreshesOnDigiDollarSignal()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    DDTransaction initialTx;
+    initialTx.txid = "d000000000000000000000000000000000000000000000000000000000000001";
+    initialTx.amount = 100;
+    initialTx.timestamp = GetTime();
+    initialTx.confirmations = 0;
+    initialTx.incoming = true;
+    initialTx.address = "TDinitial";
+    initialTx.category = "receive";
+    initialTx.lock_tier = -1;
+    dd_wallet->AddMockTransaction(initialTx);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
+    transactionsWidget.setClientModel(mini_gui.clientModel.get());
+    transactionsWidget.show();
+    transactionsWidget.updateView();
+    QCoreApplication::processEvents();
+
+    QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+
+    DDTransaction sendTx;
+    sendTx.txid = "d000000000000000000000000000000000000000000000000000000000000002";
+    sendTx.amount = 250;
+    sendTx.timestamp = GetTime() + 1;
+    sendTx.confirmations = 0;
+    sendTx.incoming = false;
+    sendTx.address = "TDsend";
+    sendTx.category = "send";
+    sendTx.comment = "fresh send";
+    sendTx.lock_tier = -1;
+    dd_wallet->AddMockTransaction(sendTx);
+
+    const bool invoked = QMetaObject::invokeMethod(mini_gui.walletModel.get(), "digiDollarChanged", Qt::DirectConnection);
+    QVERIFY2(invoked, "WalletModel must expose a DigiDollar-specific refresh signal");
+    QCoreApplication::processEvents();
+
+    QCOMPARE(table->rowCount(), 2);
+    bool foundSend = false;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        QTableWidgetItem* txidItem = table->item(row, 5);
+        QTableWidgetItem* typeItem = table->item(row, 1);
+        QTableWidgetItem* amountItem = table->item(row, 2);
+        QTableWidgetItem* statusItem = table->item(row, 6);
+        QTableWidgetItem* noteItem = table->item(row, 4);
+        if (txidItem && txidItem->data(Qt::UserRole).toString() == QString::fromStdString(sendTx.txid)) {
+            foundSend = true;
+            QCOMPARE(typeItem ? typeItem->text() : QString(), QStringLiteral("Send"));
+            QCOMPARE(amountItem ? amountItem->text() : QString(), QStringLiteral("-$2.50 DD"));
+            QCOMPARE(statusItem ? statusItem->text() : QString(), QStringLiteral("Pending"));
+            QCOMPARE(noteItem ? noteItem->text() : QString(), QStringLiteral("fresh send"));
+        }
+    }
+    QVERIFY2(foundSend, "DD Transactions must refresh immediately when DigiDollar wallet state changes");
+}
+
 // Regression test for au_epic's report: reopening the main DigiDollar page
 // after a redeem/unlock must refresh the Mint tab's Available DGB label instead
 // of leaving a stale cached value until full wallet restart.

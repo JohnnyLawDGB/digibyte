@@ -265,6 +265,9 @@ Q_SIGNALS:
     // Signal that balance in wallet changed
     void balanceChanged(const interfaces::WalletBalances& balances);
 
+    // Signal that DigiDollar wallet state changed and DD widgets should refresh.
+    void digiDollarChanged();
+
     // Encryption status of wallet changed
     void encryptionStatusChanged();
 

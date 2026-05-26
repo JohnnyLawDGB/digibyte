@@ -61,6 +61,8 @@ public Q_SLOTS:
     // REMOVED: updateTheme() and applyTheme() - CSS handles all theming now
 
 private Q_SLOTS:
+    /** Refresh immediately after wallet DigiDollar state changes. */
+    void refreshDigiDollarState();
     /** Update recent transactions display */
     void updateRecentTransactions();
     /** Show details for a recent transaction row. */

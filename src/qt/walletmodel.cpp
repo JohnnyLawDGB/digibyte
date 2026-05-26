@@ -712,6 +712,7 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
 
         // Emit pollBalanceChanged to trigger UI refresh across all widgets
         Q_EMIT pollBalanceChanged();
+        Q_EMIT digiDollarChanged();
 
         return DigiDollarSendResult(OK, QString::fromStdString(txid), "");
 
@@ -1167,6 +1168,8 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
                   result.totalFees, result.totalFees / 100000000.0);
         LogPrintf("DigiDollar Qt: - Lock tier: %d (%d days)\n", lockTier, lockDays);
 
+        Q_EMIT digiDollarChanged();
+
         return DigiDollarMintResult(OK,
                                   QString::fromStdString(txId.GetHex()),
                                   QString::fromStdString(positionId.GetHex()),
@@ -1241,6 +1244,8 @@ WalletModel::DigiDollarRedeemResult WalletModel::redeemDigiDollar(const QString&
         // Extract transaction ID from result
         std::string txid = result.find_value("txid").get_str();
         LogPrintf("DigiDollar Qt: Redemption successful - TxID: %s\n", txid);
+
+        Q_EMIT digiDollarChanged();
 
         return DigiDollarRedeemResult(OK, QString::fromStdString(txid), "");
 

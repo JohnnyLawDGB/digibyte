@@ -59,6 +59,7 @@ private Q_SLOTS:
     void privacySignalPropagationTests();
     void mintValidationUpdatesOnBalanceChange();
     void ddTabRefreshesBalancesOnWalletSignal();
+    void transactionsWidgetRefreshesOnDigiDollarSignal();
     void walletViewRefreshesDigiDollarPageOnOpen();
     void ddReceivePanelFollowsSelectedRow();
     void ddReceiveDoubleClickShowsRequestDialog();

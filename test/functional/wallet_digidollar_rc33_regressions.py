@@ -44,6 +44,7 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
 
         self.test_mint_dgb_change_confirms_and_spends()
         self.test_fragmented_large_mint_consolidates_and_confirms()
+        self.test_repeated_mints_spend_unconfirmed_change()
         self.test_rapid_mints_confirm_after_restart()
         self.test_rapid_redeems_confirm_after_restart()
 
@@ -120,6 +121,37 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         assert spend_txid in node.getrawmempool()
         self.generate(node, 1)
         assert change_wallet.gettransaction(spend_txid)["confirmations"] > 0
+
+    def test_repeated_mints_spend_unconfirmed_change(self):
+        self.log.info("Testing repeated mints from one large UTXO do not corrupt wallet mempool state")
+        node = self.nodes[0]
+        rapid = self.create_descriptor_wallet("rc41_repeated_mint")
+
+        funding_txid = self.funder_wallet().sendtoaddress(rapid.getnewaddress(), Decimal("80.00"))
+        self.generate(node, 1)
+        assert_equal(self.funder_wallet().gettransaction(funding_txid)["confirmations"], 1)
+        assert_equal(len(rapid.listunspent(1)), 1)
+
+        mints = []
+        for _ in range(5):
+            mint = rapid.mintdigidollar(10000, 0)
+            mints.append(mint)
+            assert mint["txid"] in node.getrawmempool()
+
+        self.generate(node, 1)
+        self.restart_node(0, extra_args=["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"])
+        node = self.nodes[0]
+        rapid = self.get_loaded_wallet("rc41_repeated_mint")
+        node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+
+        positions = rapid.listdigidollarpositions(False)
+        position_ids = {p["position_id"]: p for p in positions}
+        for mint in mints:
+            tx = rapid.gettransaction(mint["txid"])
+            assert tx["confirmations"] > 0
+            assert mint["position_id"] in position_ids
+            assert position_ids[mint["position_id"]]["confirmations"] > 0
+            assert_equal(position_active(position_ids[mint["position_id"]]), True)
 
     def test_rapid_mints_confirm_after_restart(self):
         self.log.info("Testing 22 rapid mints do not remain permanently pending")

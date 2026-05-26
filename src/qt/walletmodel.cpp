@@ -1159,22 +1159,21 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
             LogPrintf("DigiDollar Qt: WARNING - DD wallet not available before broadcast, owner key not stored\n");
         }
 
-        // Step 10: Broadcast transaction to mempool
-        LogPrintf("DigiDollar Qt: Step 10 - Broadcasting transaction to mempool...\n");
+        // Step 10: Commit through the wallet relay path, which broadcasts once
+        // and updates wallet/mempool state from the same code path.
+        LogPrintf("DigiDollar Qt: Step 10 - Committing transaction through wallet relay...\n");
 
-        std::string broadcast_error;
-        const TransactionError broadcast_result =
-            m_node.broadcastTransaction(txRef, wallet::DEFAULT_TRANSACTION_MAXFEE, broadcast_error);
-        if (broadcast_result != TransactionError::OK) {
-            const std::string reason = !broadcast_error.empty()
-                ? broadcast_error
-                : TransactionErrorString(broadcast_result).original;
-            LogPrintf("DigiDollar Qt: ERROR - Failed to broadcast transaction: %s\n", reason);
-            return DigiDollarMintResult(TransactionCreationFailed, "", "",
-                QString("Failed to broadcast transaction: %1").arg(QString::fromStdString(reason)));
+        std::string commit_error;
+        bool commit_success = false;
+        {
+            LOCK(pWallet->cs_wallet);
+            commit_success = pWallet->CommitTransaction(txRef, {}, {}, &commit_error);
         }
-
-        wallet().commitTransaction(txRef, /*value_map=*/{}, /*order_form=*/{});
+        if (!commit_success) {
+            LogPrintf("DigiDollar Qt: ERROR - Failed to commit transaction: %s\n", commit_error);
+            return DigiDollarMintResult(TransactionCreationFailed, "", "",
+                QString("Failed to broadcast transaction: %1").arg(QString::fromStdString(commit_error)));
+        }
         LogPrintf("DigiDollar Qt: Transaction broadcast successful!\n");
 
         // Step 11: Store position in wallet database for tracking

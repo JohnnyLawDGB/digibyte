@@ -1426,25 +1426,21 @@ RPCHelpMan mintdigidollar()
             const bool should_broadcast = pwallet->GetBroadcastTransactions();
             if (should_broadcast) {
                 RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
-
-                std::string broadcast_error;
-                const bool broadcast_success = pwallet->chain().broadcastTransaction(
-                    tx,
-                    wallet::DEFAULT_TRANSACTION_MAXFEE,
-                    true,
-                    broadcast_error);
-                if (!broadcast_success) {
-                    throw JSONRPCError(RPC_TRANSACTION_REJECTED,
-                        strprintf("Mint transaction rejected by mempool: %s", broadcast_error));
-                }
             }
 
-            // Commit to wallet only after mempool acceptance succeeds. When
-            // wallet broadcasting is disabled, this creates a local template
-            // without marking a live DD position.
+            // Commit through the wallet-owned relay path exactly once so the
+            // wallet state transition and mempool submission stay in sync.
+            // When wallet broadcasting is disabled, this creates a local
+            // template without marking a live DD position.
+            std::string commit_error;
+            bool commit_success = false;
             {
                 LOCK(pwallet->cs_wallet);
-                pwallet->CommitTransaction(tx, {}, {});
+                commit_success = pwallet->CommitTransaction(tx, {}, {}, &commit_error);
+            }
+            if (should_broadcast && !commit_success) {
+                throw JSONRPCError(RPC_TRANSACTION_REJECTED,
+                    strprintf("Mint transaction rejected by mempool: %s", commit_error));
             }
 
             // Calculate unlock height using consensus function (handles tier 0 special case)

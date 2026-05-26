@@ -3461,3 +3461,49 @@ void DigiDollarWidgetTests::darkThemeDigiDollarSendTotalLabelHasReadableContrast
              qPrintable(QString("DigiDollar Send Total DD label is unreadable in dark mode: color %1 on %2")
                         .arg(color, background)));
 }
+
+void DigiDollarWidgetTests::darkThemeShutdownWindowHasReadableSurface()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+    const auto findFile = [&](const QStringList& candidates) -> QString {
+        for (const auto& p : candidates) {
+            const QString text = readFile(p.toUtf8().constData());
+            if (!text.isEmpty()) return text;
+        }
+        return {};
+    };
+
+    const QString dark = findFile({
+        QStringLiteral("src/qt/res/css/dark.css"),
+        QStringLiteral("../src/qt/res/css/dark.css"),
+        QStringLiteral("../../src/qt/res/css/dark.css"),
+        QStringLiteral("qt/res/css/dark.css"),
+    });
+    QVERIFY2(!dark.isEmpty(), "could not locate dark.css from current working directory");
+
+    const QString utilityDialog = findFile({
+        QStringLiteral("src/qt/utilitydialog.cpp"),
+        QStringLiteral("../src/qt/utilitydialog.cpp"),
+        QStringLiteral("../../src/qt/utilitydialog.cpp"),
+        QStringLiteral("qt/utilitydialog.cpp"),
+    });
+    QVERIFY2(!utilityDialog.isEmpty(), "could not locate utilitydialog.cpp from current working directory");
+    QVERIFY2(utilityDialog.contains(QStringLiteral("setObjectName(\"shutdownWindow\")")),
+             "ShutdownWindow must expose a stable object name for dark-theme styling");
+
+    const QRegularExpression shutdownRule(
+        QStringLiteral(R"re(QWidget#shutdownWindow[^\{]*\{[^\}]*background-color\s*:\s*#002352\s*;[^\}]*color\s*:\s*#ffffff\s*;)re"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    QVERIFY2(shutdownRule.match(dark).hasMatch(),
+             "dark.css must give ShutdownWindow an explicit dark background with white text");
+
+    const QRegularExpression labelRule(
+        QStringLiteral(R"re(QWidget#shutdownWindow\s+QLabel[^\{]*\{[^\}]*color\s*:\s*#ffffff\s*;)re"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    QVERIFY2(labelRule.match(dark).hasMatch(),
+             "dark.css must explicitly style ShutdownWindow labels for readable shutdown text");
+}

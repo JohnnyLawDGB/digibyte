@@ -16,6 +16,16 @@ QWidget#centralWidget {
     background-color:#002352;
 }
 
+QWidget#shutdownWindow {
+    background-color: #002352;
+    color: #ffffff;
+}
+
+QWidget#shutdownWindow QLabel {
+    color: #ffffff;
+    background-color: transparent;
+}
+
     QStatusBar {
     background-color:#002352;
     color:#ffffff;

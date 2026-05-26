@@ -53,6 +53,7 @@ private Q_SLOTS:
     void onSearchTextChanged(const QString& text);
 
 private:
+    void applyTheme();
     void setupUI();
     void refreshAddressList();
     QString getSelectedAddress() const;

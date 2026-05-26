@@ -3800,7 +3800,7 @@ QDialog#ReceiveRequestDialog QRImageWidget {
 /* DigiDollar Receive Request Dialog - Dark Mode */
 #DigiDollarReceiveRequestDialog,
 QDialog#DigiDollarReceiveRequestDialog {
-    background-color: #002352 !important;
+    background-color: #0b2419 !important;
     color: #ffffff !important;
 }
 
@@ -3818,9 +3818,9 @@ QDialog#DigiDollarReceiveRequestDialog QLabel {
 
 #DigiDollarReceiveRequestDialog QTextEdit,
 QDialog#DigiDollarReceiveRequestDialog QTextEdit {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #0066CC;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    background-color: #113a29;
+    color: #ffffff;
+    border: 2px solid #42d884;
     border-radius: 4px;
     padding: 5px;
     font-size: 10pt;
@@ -3828,9 +3828,9 @@ QDialog#DigiDollarReceiveRequestDialog QTextEdit {
 
 #DigiDollarReceiveRequestDialog QLineEdit,
 QDialog#DigiDollarReceiveRequestDialog QLineEdit {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: #113a29;
     color: #ffffff !important;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid #42d884;
     border-radius: 4px;
     padding: 5px;
     font-size: 10pt;
@@ -3840,16 +3840,16 @@ QDialog#DigiDollarReceiveRequestDialog QLineEdit {
 #DigiDollarReceiveRequestDialog QRImageWidget,
 QDialog#DigiDollarReceiveRequestDialog QRImageWidget {
     background-color: #ffffff;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid #42d884;
     border-radius: 4px;
     padding: 10px;
 }
 
 #DigiDollarReceiveRequestDialog QPushButton,
 QDialog#DigiDollarReceiveRequestDialog QPushButton {
-    background-color: #0066CC;
+    background-color: #16804f;
     color: #ffffff !important;
-    border: none;
+    border: 2px solid #16804f;
     padding: 8px 16px;
     border-radius: 4px;
     font-weight: bold;
@@ -3857,12 +3857,14 @@ QDialog#DigiDollarReceiveRequestDialog QPushButton {
 
 #DigiDollarReceiveRequestDialog QPushButton:hover,
 QDialog#DigiDollarReceiveRequestDialog QPushButton:hover {
-    background-color: #0088ff;
+    background-color: #21a866;
+    border-color: #21a866;
 }
 
 #DigiDollarReceiveRequestDialog QPushButton:pressed,
 QDialog#DigiDollarReceiveRequestDialog QPushButton:pressed {
-    background-color: #0044aa;
+    background-color: #0f633c;
+    border-color: #0f633c;
 }
 
 /* Coin Control Dialog */
@@ -3967,56 +3969,65 @@ QDialog#CoinControlDialog QLabel#labelCoinControlChange {
 
 /******************************************************
   DARK THEME - DIGIDOLLAR COIN CONTROL DIALOG
-  (Same styling as DGB Coin Control but for DD)
 *******************************************************/
 
 /* DigiDollar Coin Control Dialog */
 QDialog#DigiDollarCoinControlDialog {
-    background-color: #002352;
-}
-
-QDialog#DigiDollarCoinControlDialog QLabel {
+    background-color: #0b2419;
     color: #ffffff;
 }
 
-/* Style DigiDollar Coin Control Tree Widget like DGB Coin Control */
+QDialog#DigiDollarCoinControlDialog QLabel,
+QDialog#DigiDollarCoinControlDialog QCheckBox,
+QDialog#DigiDollarCoinControlDialog QRadioButton {
+    color: #ffffff;
+    background-color: transparent;
+}
+
+QDialog#DigiDollarCoinControlDialog QFrame#frame {
+    background-color: #113a29;
+    border: 1px solid #42d884;
+    border-radius: 4px;
+}
+
+/* Style DigiDollar Coin Control Tree Widget with DD green surfaces */
 QDialog#DigiDollarCoinControlDialog CoinControlTreeWidget,
 QDialog#DigiDollarCoinControlDialog QTreeWidget {
-    background-color: rgba(255, 255, 255, 0.05);
-    alternate-background-color: rgba(255, 255, 255, 0.08);
+    background-color: #113a29;
+    alternate-background-color: #164532;
     color: #ffffff;
-    selection-background-color: #0066CC;
+    selection-background-color: #16804f;
     selection-color: #ffffff;
-    border: none;
+    border: 1px solid #42d884;
     font-size: 11pt;
-    gridline-color: rgba(255, 255, 255, 0.2);
+    gridline-color: #42d884;
 }
 
 QDialog#DigiDollarCoinControlDialog QTreeWidget::item {
     background-color: transparent;
     color: #ffffff;
-    padding: 10px;
+    padding: 8px;
     font-size: 11pt;
 }
 
 QDialog#DigiDollarCoinControlDialog QTreeWidget::item:selected {
-    background-color: #0066CC;
+    background-color: #16804f;
     color: #ffffff;
 }
 
 QDialog#DigiDollarCoinControlDialog QTreeWidget::item:hover {
-    background-color: rgba(0, 102, 204, 0.3);
+    background-color: #1b5b3f;
     color: #ffffff;
 }
 
 /* Ensure alternating row colors are visible */
 QDialog#DigiDollarCoinControlDialog QTreeWidget::item:alternate {
-    background-color: rgba(255, 255, 255, 0.03);
+    background-color: #164532;
 }
 
-/* Tree Widget Headers - Match DGB Coin Control style */
+/* Tree Widget Headers */
 QDialog#DigiDollarCoinControlDialog QHeaderView::section {
-    background-color: #0066CC;
+    background-color: #16804f;
     color: #ffffff;
     padding: 8px;
     border: none;
@@ -4025,43 +4036,41 @@ QDialog#DigiDollarCoinControlDialog QHeaderView::section {
 }
 
 /* Checkboxes in DigiDollar Coin Control */
-QDialog#DigiDollarCoinControlDialog QCheckBox {
-    color: #ffffff;
-}
-
-QDialog#DigiDollarCoinControlDialog QCheckBox::indicator {
+QDialog#DigiDollarCoinControlDialog QCheckBox::indicator,
+QDialog#DigiDollarCoinControlDialog QTreeWidget::indicator {
     width: 16px;
     height: 16px;
     background-color: #ffffff;
-    border: 2px solid #0066cc;
+    border: 2px solid #42d884;
     border-radius: 3px;
 }
 
-QDialog#DigiDollarCoinControlDialog QCheckBox::indicator:checked {
-    background-color: #ffffff;
-    border: 2px solid #0066cc;
+QDialog#DigiDollarCoinControlDialog QCheckBox::indicator:checked,
+QDialog#DigiDollarCoinControlDialog QTreeWidget::indicator:checked {
+    background-color: #16804f;
+    border: 2px solid #42d884;
     border-radius: 3px;
 }
 
 /* Buttons */
 QDialog#DigiDollarCoinControlDialog QPushButton#pushButtonSelectAll,
 QDialog#DigiDollarCoinControlDialog QPushButton {
-    background-color: #0066CC;
+    background-color: #16804f;
     color: #ffffff;
-    border: none;
+    border: 2px solid #16804f;
     border-radius: 4px;
     padding: 6px 16px;
     font-weight: bold;
 }
 
 QDialog#DigiDollarCoinControlDialog QPushButton:hover {
-    background-color: #0088ff;
+    background-color: #21a866;
+    border-color: #21a866;
 }
 
-/* Radio buttons for tree/list mode */
-QDialog#DigiDollarCoinControlDialog QRadioButton {
-    color: #ffffff;
-    background-color: transparent;
+QDialog#DigiDollarCoinControlDialog QPushButton:pressed {
+    background-color: #0f633c;
+    border-color: #0f633c;
 }
 
 /* Info labels */
@@ -5682,7 +5691,8 @@ QListView#listTransactions::item:hover {
 *******************************************************/
 
 QDialog#DDAddressBookPage {
-    background-color: #002352;
+    background-color: #0b2419;
+    color: #ffffff;
 }
 
 QDialog#DDAddressBookPage QLabel {
@@ -5691,13 +5701,13 @@ QDialog#DDAddressBookPage QLabel {
 }
 
 QDialog#DDAddressBookPage QTableWidget {
-    background-color: rgba(255, 255, 255, 0.12);
-    alternate-background-color: rgba(255, 255, 255, 0.08);
+    background-color: #113a29;
+    alternate-background-color: #164532;
     color: #ffffff !important;
-    selection-background-color: #0066CC;
+    selection-background-color: #16804f;
     selection-color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    gridline-color: rgba(255, 255, 255, 0.2);
+    border: 1px solid #42d884;
+    gridline-color: #42d884;
 }
 
 QDialog#DDAddressBookPage QTableWidget::item {
@@ -5706,17 +5716,17 @@ QDialog#DDAddressBookPage QTableWidget::item {
 }
 
 QDialog#DDAddressBookPage QTableWidget::item:selected {
-    background-color: #0066CC;
+    background-color: #16804f;
     color: #ffffff;
 }
 
 QDialog#DDAddressBookPage QTableWidget::item:hover {
-    background-color: rgba(0, 102, 204, 0.3);
+    background-color: #1b5b3f;
     color: #ffffff;
 }
 
 QDialog#DDAddressBookPage QHeaderView::section {
-    background-color: #0066CC;
+    background-color: #16804f;
     color: #ffffff;
     padding: 8px;
     border: none;
@@ -5725,8 +5735,8 @@ QDialog#DDAddressBookPage QHeaderView::section {
 }
 
 QDialog#DDAddressBookPage QPushButton {
-    background-color: #0066cc;
-    border: 1px solid #0066cc;
+    background-color: #16804f;
+    border: 2px solid #16804f;
     color: #ffffff;
     padding-left: 10px;
     padding-right: 10px;
@@ -5736,26 +5746,28 @@ QDialog#DDAddressBookPage QPushButton {
 }
 
 QDialog#DDAddressBookPage QPushButton:hover {
-    background-color: #0088ff;
+    background-color: #21a866;
+    border-color: #21a866;
     color: #ffffff;
 }
 
 QDialog#DDAddressBookPage QPushButton:pressed {
-    border: 1px solid #9e9e9e;
+    background-color: #0f633c;
+    border: 2px solid #0f633c;
 }
 
 QDialog#DDAddressBookPage QLineEdit {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: #113a29;
     color: #ffffff;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid #42d884;
     border-radius: 4px;
     padding: 6px;
     font-size: 11pt;
 }
 
 QDialog#DDAddressBookPage QLineEdit:focus {
-    border-color: #0066CC;
-    background-color: rgba(255, 255, 255, 0.15);
+    border-color: #21a866;
+    background-color: #164532;
 }
 
 QDialog#DDAddressBookPage * {

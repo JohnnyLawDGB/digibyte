@@ -40,6 +40,9 @@ private Q_SLOTS:
 
 private:
     void setupUI();
+    void applyTheme();
+    QString linkColor() const;
+    void updateUriContent();
     QString formatDDAmount(CAmount amount) const;
     QString formatDDURI(const SendCoinsRecipient &info) const;
 

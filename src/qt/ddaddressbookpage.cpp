@@ -5,6 +5,7 @@
 #include <qt/ddaddressbookpage.h>
 #include <qt/walletmodel.h>
 #include <qt/guiutil.h>
+#include <qt/optionsmodel.h>
 #include <qt/platformstyle.h>
 #include <base58.h>
 #include <key_io.h>
@@ -24,7 +25,186 @@
 #include <QInputDialog>
 #include <QFile>
 #include <QFileDialog>
+#include <QPalette>
 #include <QTextStream>
+
+namespace {
+
+bool UseDarkDigiDollarAddressBookTheme(const WalletModel* model, const QWidget* widget)
+{
+    if (model && model->getOptionsModel()) {
+        const QString theme = model->getOptionsModel()->data(
+            model->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
+        return theme.isEmpty() || theme == QLatin1String("dark");
+    }
+    const QPalette palette = widget ? widget->palette() : qApp->palette();
+    return palette.color(QPalette::Window).lightness() < 128;
+}
+
+QString DigiDollarAddressBookStyleSheet(bool dark_theme)
+{
+    if (dark_theme) {
+        return QStringLiteral(
+            "QDialog#DDAddressBookPage {"
+            "  background-color: #0b2419;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DDAddressBookPage QLabel {"
+            "  color: #ffffff;"
+            "  font-weight: bold;"
+            "}"
+            "QDialog#DDAddressBookPage QTableWidget {"
+            "  background-color: #113a29;"
+            "  alternate-background-color: #164532;"
+            "  color: #ffffff;"
+            "  selection-background-color: #16804f;"
+            "  selection-color: #ffffff;"
+            "  border: 1px solid #42d884;"
+            "  gridline-color: #42d884;"
+            "  font-size: 11pt;"
+            "}"
+            "QDialog#DDAddressBookPage QTableWidget::item {"
+            "  color: #ffffff;"
+            "  padding: 8px;"
+            "}"
+            "QDialog#DDAddressBookPage QTableWidget::item:alternate {"
+            "  background-color: #164532;"
+            "}"
+            "QDialog#DDAddressBookPage QTableWidget::item:selected {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DDAddressBookPage QTableWidget::item:hover {"
+            "  background-color: #1b5b3f;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DDAddressBookPage QHeaderView::section {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "  border: none;"
+            "  padding: 8px;"
+            "  font-weight: bold;"
+            "}"
+            "QDialog#DDAddressBookPage QLineEdit {"
+            "  background-color: #113a29;"
+            "  color: #ffffff;"
+            "  border: 2px solid #42d884;"
+            "  border-radius: 4px;"
+            "  padding: 6px;"
+            "}"
+            "QDialog#DDAddressBookPage QLineEdit:focus {"
+            "  border-color: #21a866;"
+            "  background-color: #164532;"
+            "}"
+            "QDialog#DDAddressBookPage QPushButton {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "  border: 2px solid #16804f;"
+            "  border-radius: 4px;"
+            "  padding: 8px 16px;"
+            "  font-weight: bold;"
+            "  min-height: 28px;"
+            "}"
+            "QDialog#DDAddressBookPage QPushButton:hover {"
+            "  background-color: #21a866;"
+            "  border-color: #21a866;"
+            "}"
+            "QDialog#DDAddressBookPage QPushButton:pressed {"
+            "  background-color: #0f633c;"
+            "  border-color: #0f633c;"
+            "}"
+            "QDialog#DDAddressBookPage QMenu {"
+            "  background-color: #113a29;"
+            "  color: #ffffff;"
+            "  border: 1px solid #42d884;"
+            "}"
+            "QDialog#DDAddressBookPage QMenu::item:selected {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "}");
+    }
+
+    return QStringLiteral(
+        "QDialog#DDAddressBookPage {"
+        "  background-color: #eef9f2;"
+        "  color: #123f2b;"
+        "}"
+        "QDialog#DDAddressBookPage QLabel {"
+        "  color: #123f2b;"
+        "  font-weight: bold;"
+        "}"
+        "QDialog#DDAddressBookPage QTableWidget {"
+        "  background-color: #ffffff;"
+        "  alternate-background-color: #e6f7ec;"
+        "  color: #123f2b;"
+        "  selection-background-color: #1f9d57;"
+        "  selection-color: #ffffff;"
+        "  border: 1px solid #1f9d57;"
+        "  gridline-color: #c8ead6;"
+        "  font-size: 11pt;"
+        "}"
+        "QDialog#DDAddressBookPage QTableWidget::item {"
+        "  color: #123f2b;"
+        "  padding: 8px;"
+        "}"
+        "QDialog#DDAddressBookPage QTableWidget::item:alternate {"
+        "  background-color: #e6f7ec;"
+        "}"
+        "QDialog#DDAddressBookPage QTableWidget::item:selected {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "}"
+        "QDialog#DDAddressBookPage QTableWidget::item:hover {"
+        "  background-color: #d7f2e1;"
+        "  color: #123f2b;"
+        "}"
+        "QDialog#DDAddressBookPage QHeaderView::section {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "  border: none;"
+        "  padding: 8px;"
+        "  font-weight: bold;"
+        "}"
+        "QDialog#DDAddressBookPage QLineEdit {"
+        "  background-color: #ffffff;"
+        "  color: #123f2b;"
+        "  border: 2px solid #1f9d57;"
+        "  border-radius: 4px;"
+        "  padding: 6px;"
+        "}"
+        "QDialog#DDAddressBookPage QLineEdit:focus {"
+        "  border-color: #26b96a;"
+        "  background-color: #f6fff9;"
+        "}"
+        "QDialog#DDAddressBookPage QPushButton {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "  border: 2px solid #1f9d57;"
+        "  border-radius: 4px;"
+        "  padding: 8px 16px;"
+        "  font-weight: bold;"
+        "  min-height: 28px;"
+        "}"
+        "QDialog#DDAddressBookPage QPushButton:hover {"
+        "  background-color: #26b96a;"
+        "  border-color: #26b96a;"
+        "}"
+        "QDialog#DDAddressBookPage QPushButton:pressed {"
+        "  background-color: #147a42;"
+        "  border-color: #147a42;"
+        "}"
+        "QDialog#DDAddressBookPage QMenu {"
+        "  background-color: #ffffff;"
+        "  color: #123f2b;"
+        "  border: 1px solid #1f9d57;"
+        "}"
+        "QDialog#DDAddressBookPage QMenu::item:selected {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "}");
+}
+
+} // namespace
 
 DDAddressBookPage::DDAddressBookPage(const PlatformStyle *platformStyle, Mode mode, QWidget* parent)
     : QDialog(parent, GUIUtil::dialog_flags)
@@ -52,6 +232,7 @@ DDAddressBookPage::DDAddressBookPage(const PlatformStyle *platformStyle, Mode mo
     }
     setMinimumSize(760, 380);
     setupUI();
+    applyTheme();
     GUIUtil::handleCloseWindowShortcut(this);
 }
 
@@ -161,9 +342,16 @@ void DDAddressBookPage::setupUI()
 void DDAddressBookPage::setWalletModel(WalletModel* model)
 {
     m_walletModel = model;
+    applyTheme();
     if (m_walletModel) {
         refreshAddressList();
     }
+}
+
+void DDAddressBookPage::applyTheme()
+{
+    setStyleSheet(DigiDollarAddressBookStyleSheet(
+        UseDarkDigiDollarAddressBookTheme(m_walletModel, this)));
 }
 
 void DDAddressBookPage::refreshAddressList()

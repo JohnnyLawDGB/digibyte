@@ -2419,6 +2419,285 @@ void DigiDollarWidgetTests::digiDollarSectionUsesGreenThemeRules()
     requireGreenSection(dark, QStringLiteral("dark.css"));
 }
 
+void DigiDollarWidgetTests::digiDollarModalDialogsUseGreenThemeRules()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+    const auto findTheme = [&](const QString& name) -> QString {
+        const QStringList candidates = {
+            QStringLiteral("src/qt/res/css/%1").arg(name),
+            QStringLiteral("../src/qt/res/css/%1").arg(name),
+            QStringLiteral("../../src/qt/res/css/%1").arg(name),
+            QStringLiteral("qt/res/css/%1").arg(name),
+        };
+        for (const auto& p : candidates) {
+            const QString css = readFile(p.toUtf8().constData());
+            if (!css.isEmpty()) return css;
+        }
+        return {};
+    };
+    const auto extractRule = [](const QString& css, const QString& selector) -> QString {
+        const int selectorStart = css.indexOf(selector);
+        if (selectorStart < 0) return {};
+        const int braceStart = css.indexOf(QLatin1Char('{'), selectorStart);
+        if (braceStart < 0) return {};
+        const int braceEnd = css.indexOf(QLatin1Char('}'), braceStart);
+        if (braceEnd < 0) return {};
+        return css.mid(braceStart + 1, braceEnd - braceStart - 1);
+    };
+    const auto requireRule = [&](const QString& css, const QString& theme, const QString& selector,
+                                 const QString& expectedColor) {
+        const QString rule = extractRule(css, selector);
+        QVERIFY2(!rule.isEmpty(),
+                 qPrintable(QStringLiteral("%1 must style %2").arg(theme, selector)));
+        QVERIFY2(rule.contains(expectedColor, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 %2 must use DigiDollar green color %3")
+                                 .arg(theme, selector, expectedColor)));
+
+        const QStringList dgbBlueColors = {
+            QStringLiteral("#002352"),
+            QStringLiteral("#003366"),
+            QStringLiteral("#0066CC"),
+            QStringLiteral("#0066cc"),
+            QStringLiteral("#0088ff"),
+            QStringLiteral("#0044aa"),
+            QStringLiteral("#0055aa"),
+            QStringLiteral("#A7C6ED"),
+            QStringLiteral("#9BB8E8"),
+        };
+        for (const QString& color : dgbBlueColors) {
+            QVERIFY2(!rule.contains(color, Qt::CaseInsensitive),
+                     qPrintable(QStringLiteral("%1 %2 must not reuse DGB blue color %3")
+                                     .arg(theme, selector, color)));
+        }
+    };
+    const auto requireTheme = [&](const QString& css, const QString& theme, const QString& dialogBg,
+                                  const QString& panelBg, const QString& accent) {
+        requireRule(css, theme, QStringLiteral("QDialog#DigiDollarCoinControlDialog"), dialogBg);
+        requireRule(css, theme, QStringLiteral("QDialog#DigiDollarCoinControlDialog QTreeWidget"), panelBg);
+        requireRule(css, theme, QStringLiteral("QDialog#DigiDollarCoinControlDialog QHeaderView::section"), accent);
+        requireRule(css, theme, QStringLiteral("QDialog#DigiDollarCoinControlDialog QPushButton"), accent);
+
+        requireRule(css, theme, QStringLiteral("QDialog#DigiDollarReceiveRequestDialog"), dialogBg);
+        requireRule(css, theme, QStringLiteral("QDialog#DigiDollarReceiveRequestDialog QPushButton"), accent);
+
+        requireRule(css, theme, QStringLiteral("QDialog#DDAddressBookPage"), dialogBg);
+        requireRule(css, theme, QStringLiteral("QDialog#DDAddressBookPage QTableWidget"), panelBg);
+        requireRule(css, theme, QStringLiteral("QDialog#DDAddressBookPage QHeaderView::section"), accent);
+        requireRule(css, theme, QStringLiteral("QDialog#DDAddressBookPage QPushButton"), accent);
+    };
+
+    const QString dark = findTheme(QStringLiteral("dark.css"));
+    QVERIFY2(!dark.isEmpty(), "could not locate dark.css from current working directory");
+    requireTheme(dark, QStringLiteral("dark.css"), QStringLiteral("#0b2419"),
+                 QStringLiteral("#113a29"), QStringLiteral("#16804f"));
+
+    const QString light = findTheme(QStringLiteral("light.css"));
+    QVERIFY2(!light.isEmpty(), "could not locate light.css from current working directory");
+    requireTheme(light, QStringLiteral("light.css"), QStringLiteral("#eef9f2"),
+                 QStringLiteral("#ffffff"), QStringLiteral("#1f9d57"));
+}
+
+void DigiDollarWidgetTests::digiDollarModalDialogsOverrideDgbBlueFallback()
+{
+#ifdef Q_OS_MACOS
+    QSKIP("Skipping DD modal fallback style test on macOS");
+#endif
+
+    const QString originalStyleSheet = qApp->styleSheet();
+    const QPalette originalPalette = qApp->palette();
+    const QString dgbBlueFallback = QStringLiteral(
+        "QDialog { background-color: #002352; color: #ffffff; }"
+        "QDialog QLabel { color: #ffffff; }"
+        "QDialog QTreeWidget, QDialog QTableWidget { background-color: #A7C6ED; color: #003366; selection-background-color: #0066CC; }"
+        "QDialog QHeaderView::section { background-color: #0066CC; color: #ffffff; }"
+        "QDialog QPushButton { background-color: #0066CC; color: #ffffff; border: 2px solid #0066CC; }"
+        "QDialog QLineEdit { background-color: #A7C6ED; color: #003366; border: 2px solid #003366; }");
+
+    const auto setThemePalette = [](const QColor& window, const QColor& text) {
+        QPalette palette = qApp->palette();
+        palette.setColor(QPalette::Window, window);
+        palette.setColor(QPalette::Base, window);
+        palette.setColor(QPalette::Button, window);
+        palette.setColor(QPalette::WindowText, text);
+        palette.setColor(QPalette::Text, text);
+        palette.setColor(QPalette::ButtonText, text);
+        qApp->setPalette(palette);
+    };
+    const auto requireDialogStyle = [](const QDialog& dialog, const QString& theme,
+                                       const QString& dialogBg, const QString& accent) {
+        const QString style = dialog.styleSheet();
+        QVERIFY2(style.contains(dialogBg, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 %2 must force a DigiDollar green dialog surface")
+                                 .arg(theme, dialog.objectName())));
+        QVERIFY2(style.contains(accent, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 %2 must force a DigiDollar green accent")
+                                 .arg(theme, dialog.objectName())));
+
+        const QStringList dgbBlueColors = {
+            QStringLiteral("#002352"),
+            QStringLiteral("#003366"),
+            QStringLiteral("#0066CC"),
+            QStringLiteral("#0066cc"),
+            QStringLiteral("#0088ff"),
+            QStringLiteral("#0044aa"),
+            QStringLiteral("#0055aa"),
+            QStringLiteral("#A7C6ED"),
+            QStringLiteral("#9BB8E8"),
+        };
+        for (const QString& color : dgbBlueColors) {
+            QVERIFY2(!style.contains(color, Qt::CaseInsensitive),
+                     qPrintable(QStringLiteral("%1 %2 local stylesheet must not carry DGB blue color %3")
+                                     .arg(theme, dialog.objectName(), color)));
+        }
+    };
+    const auto exerciseTheme = [&](const QString& theme, const QColor& window, const QColor& text,
+                                   const QString& dialogBg, const QString& accent) {
+        qApp->setStyleSheet(dgbBlueFallback);
+        setThemePalette(window, text);
+        QCoreApplication::processEvents();
+
+        wallet::DDCoinControl coinControl;
+        DigiDollarCoinControlDialog coinDialog(coinControl, nullptr, nullptr);
+        requireDialogStyle(coinDialog, theme, dialogBg, accent);
+
+        SendCoinsRecipient recipient;
+        recipient.address = QStringLiteral("dgbt1qstyle000000000000000000000000000000000");
+        recipient.label = QStringLiteral("visual invoice");
+        recipient.message = QStringLiteral("DD request theme guard");
+        recipient.amount = 12345;
+        DigiDollarReceiveRequestDialog requestDialog;
+        requestDialog.setInfo(recipient);
+        requireDialogStyle(requestDialog, theme, dialogBg, accent);
+
+        DDAddressBookPage addressBook(nullptr, DDAddressBookPage::ForSelection);
+        requireDialogStyle(addressBook, theme, dialogBg, accent);
+    };
+
+    exerciseTheme(QStringLiteral("dark"), QColor(QStringLiteral("#0b2419")), QColor(QStringLiteral("#ffffff")),
+                  QStringLiteral("#0b2419"), QStringLiteral("#16804f"));
+    exerciseTheme(QStringLiteral("light"), QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#123f2b")),
+                  QStringLiteral("#eef9f2"), QStringLiteral("#1f9d57"));
+
+    qApp->setStyleSheet(originalStyleSheet);
+    qApp->setPalette(originalPalette);
+    QCoreApplication::processEvents();
+}
+
+void DigiDollarWidgetTests::digiDollarModalDialogsVisualQaDarkAndLight()
+{
+    const QString platform = QGuiApplication::platformName();
+    if (platform == QStringLiteral("offscreen") || platform == QStringLiteral("minimal")) {
+        QSKIP("Visual DD modal QA requires a platform that can capture rendered dialog windows");
+    }
+
+    const QString originalStyleSheet = qApp->styleSheet();
+    const QPalette originalPalette = qApp->palette();
+    const QString dgbBlueFallback = QStringLiteral(
+        "QDialog { background-color: #002352; color: #ffffff; }"
+        "QDialog QLabel { color: #ffffff; }"
+        "QDialog QTreeWidget, QDialog QTableWidget { background-color: #A7C6ED; color: #003366; selection-background-color: #0066CC; }"
+        "QDialog QHeaderView::section { background-color: #0066CC; color: #ffffff; }"
+        "QDialog QPushButton { background-color: #0066CC; color: #ffffff; border: 2px solid #0066CC; }"
+        "QDialog QLineEdit { background-color: #A7C6ED; color: #003366; border: 2px solid #003366; }");
+
+    const auto setThemePalette = [](const QColor& window, const QColor& text) {
+        QPalette palette = qApp->palette();
+        palette.setColor(QPalette::Window, window);
+        palette.setColor(QPalette::Base, window);
+        palette.setColor(QPalette::Button, window);
+        palette.setColor(QPalette::WindowText, text);
+        palette.setColor(QPalette::Text, text);
+        palette.setColor(QPalette::ButtonText, text);
+        qApp->setPalette(palette);
+    };
+    const auto captureDialog = [](QDialog& dialog, const QString& path) {
+        dialog.show();
+        QCoreApplication::processEvents();
+        QTest::qWait(150);
+        QTRY_VERIFY(dialog.isVisible());
+        const QPixmap pixmap = dialog.grab();
+        QVERIFY2(!pixmap.isNull(), qPrintable(QStringLiteral("failed to grab %1").arg(dialog.objectName())));
+        QVERIFY2(pixmap.save(path), qPrintable(QStringLiteral("failed to save %1").arg(path)));
+        dialog.close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+    };
+    const auto seedCoinControlRows = [](DigiDollarCoinControlDialog& dialog) {
+        QTreeWidget* tree = dialog.findChild<QTreeWidget*>();
+        QVERIFY(tree != nullptr);
+        tree->clear();
+        tree->setAlternatingRowColors(true);
+        for (int row = 0; row < 6; ++row) {
+            QTreeWidgetItem* item = new QTreeWidgetItem(tree);
+            item->setCheckState(0, row == 1 ? Qt::Checked : Qt::Unchecked);
+            item->setText(1, QStringLiteral("$%1.00 DD").arg(110 - row));
+            item->setText(2, QStringLiteral("DD UTXO"));
+            item->setText(3, QStringLiteral("dgbt1qvisual%1...:1").arg(row));
+            item->setText(4, QStringLiteral("May 26, 2026"));
+            item->setText(5, QStringLiteral("Confirmed"));
+            item->setText(6, QStringLiteral("e00000000000000000000000000000000000000000000000000000000000000%1:1").arg(row));
+            tree->addTopLevelItem(item);
+        }
+        tree->setCurrentItem(tree->topLevelItem(1));
+    };
+    const auto seedAddressBookRows = [](DDAddressBookPage& dialog) {
+        QTableWidget* table = dialog.findChild<QTableWidget*>();
+        QVERIFY(table != nullptr);
+        table->setRowCount(3);
+        for (int row = 0; row < 3; ++row) {
+            table->setItem(row, 0, new QTableWidgetItem(QStringLiteral("DD recipient %1").arg(row + 1)));
+            table->setItem(row, 1, new QTableWidgetItem(QStringLiteral("dgbt1qaddressbookvisual%100000000000000000000").arg(row)));
+        }
+        table->selectRow(1);
+    };
+    const auto seedRequest = [](DigiDollarReceiveRequestDialog& dialog) {
+        SendCoinsRecipient recipient;
+        recipient.address = QStringLiteral("dgbt1qrequestvisual00000000000000000000000000");
+        recipient.label = QStringLiteral("Visual invoice");
+        recipient.message = QStringLiteral("DigiDollar request dialog green theme QA");
+        recipient.amount = 12345;
+        dialog.setInfo(recipient);
+    };
+    const auto runTheme = [&](const QString& name, const QColor& window, const QColor& text) {
+        qApp->setStyleSheet(dgbBlueFallback);
+        setThemePalette(window, text);
+        QCoreApplication::processEvents();
+
+        wallet::DDCoinControl coinControl;
+        DigiDollarCoinControlDialog coinDialog(coinControl, nullptr, nullptr);
+        coinDialog.resize(1000, 540);
+        seedCoinControlRows(coinDialog);
+        captureDialog(coinDialog, QStringLiteral("/tmp/digibyte_dd_coin_control_%1_qa.png").arg(name));
+
+        DigiDollarReceiveRequestDialog requestDialog;
+        seedRequest(requestDialog);
+        captureDialog(requestDialog, QStringLiteral("/tmp/digibyte_dd_receive_request_%1_qa.png").arg(name));
+
+        DDAddressBookPage addressBook(nullptr, DDAddressBookPage::ForSelection);
+        addressBook.resize(780, 420);
+        seedAddressBookRows(addressBook);
+        captureDialog(addressBook, QStringLiteral("/tmp/digibyte_dd_address_book_%1_qa.png").arg(name));
+    };
+
+    runTheme(QStringLiteral("dark"), QColor(QStringLiteral("#0b2419")), QColor(QStringLiteral("#ffffff")));
+    runTheme(QStringLiteral("light"), QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#123f2b")));
+
+    qApp->setStyleSheet(originalStyleSheet);
+    qApp->setPalette(originalPalette);
+    QCoreApplication::processEvents();
+
+    qInfo("DD coin control dark QA screenshot: /tmp/digibyte_dd_coin_control_dark_qa.png");
+    qInfo("DD coin control light QA screenshot: /tmp/digibyte_dd_coin_control_light_qa.png");
+    qInfo("DD receive request dark QA screenshot: /tmp/digibyte_dd_receive_request_dark_qa.png");
+    qInfo("DD receive request light QA screenshot: /tmp/digibyte_dd_receive_request_light_qa.png");
+    qInfo("DD address book dark QA screenshot: /tmp/digibyte_dd_address_book_dark_qa.png");
+    qInfo("DD address book light QA screenshot: /tmp/digibyte_dd_address_book_light_qa.png");
+}
+
 void DigiDollarWidgetTests::privacySendMaskTests()
 {
 #ifdef Q_OS_MACOS

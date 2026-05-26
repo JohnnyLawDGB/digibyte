@@ -50,6 +50,9 @@ private Q_SLOTS:
     void overviewHealthUsesCollateralizedLanguage();
     void overviewPendingBalanceHasThemeRules();
     void digiDollarSectionUsesGreenThemeRules();
+    void digiDollarModalDialogsUseGreenThemeRules();
+    void digiDollarModalDialogsOverrideDgbBlueFallback();
+    void digiDollarModalDialogsVisualQaDarkAndLight();
     void overviewRecentTransactionAmountIsRightAligned();
     void overviewRecentTransactionDoubleClickOpensTransactionsTab();
     void transactionsWidgetDoubleClickShowsDetailsDialog();

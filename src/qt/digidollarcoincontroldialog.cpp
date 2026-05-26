@@ -11,6 +11,7 @@
 
 #include <qt/addresstablemodel.h>
 #include <qt/guiutil.h>
+#include <qt/optionsmodel.h>
 #include <qt/platformstyle.h>
 #include <qt/walletmodel.h>
 
@@ -25,10 +26,209 @@
 #include <QDialogButtonBox>
 #include <QFlags>
 #include <QIcon>
+#include <QPalette>
 #include <QSettings>
 #include <QTreeWidget>
 
 using wallet::DDCoinControl;
+
+namespace {
+
+bool UseDarkDigiDollarCoinControlTheme(const WalletModel* model, const QWidget* widget)
+{
+    if (model && model->getOptionsModel()) {
+        const QString theme = model->getOptionsModel()->data(
+            model->getOptionsModel()->index(OptionsModel::Theme), Qt::EditRole).toString();
+        return theme.isEmpty() || theme == QLatin1String("dark");
+    }
+    const QPalette palette = widget ? widget->palette() : qApp->palette();
+    return palette.color(QPalette::Window).lightness() < 128;
+}
+
+QString DigiDollarCoinControlDialogStyleSheet(bool dark_theme)
+{
+    if (dark_theme) {
+        return QStringLiteral(
+            "QDialog#DigiDollarCoinControlDialog {"
+            "  background-color: #0b2419;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QLabel,"
+            "QDialog#DigiDollarCoinControlDialog QCheckBox,"
+            "QDialog#DigiDollarCoinControlDialog QRadioButton {"
+            "  color: #ffffff;"
+            "  background-color: transparent;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QFrame#frame {"
+            "  background-color: #113a29;"
+            "  border: 1px solid #42d884;"
+            "  border-radius: 4px;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog CoinControlTreeWidget,"
+            "QDialog#DigiDollarCoinControlDialog QTreeWidget {"
+            "  background-color: #113a29;"
+            "  alternate-background-color: #164532;"
+            "  color: #ffffff;"
+            "  selection-background-color: #16804f;"
+            "  selection-color: #ffffff;"
+            "  border: 1px solid #42d884;"
+            "  gridline-color: #42d884;"
+            "  font-size: 11pt;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QTreeWidget::item {"
+            "  color: #ffffff;"
+            "  padding: 8px;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QTreeWidget::item:alternate {"
+            "  background-color: #164532;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QTreeWidget::item:selected {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QTreeWidget::item:hover {"
+            "  background-color: #1b5b3f;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QHeaderView::section {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "  border: none;"
+            "  padding: 8px;"
+            "  font-weight: bold;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QCheckBox::indicator,"
+            "QDialog#DigiDollarCoinControlDialog QTreeWidget::indicator {"
+            "  width: 16px;"
+            "  height: 16px;"
+            "  background-color: #ffffff;"
+            "  border: 2px solid #42d884;"
+            "  border-radius: 3px;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QCheckBox::indicator:checked,"
+            "QDialog#DigiDollarCoinControlDialog QTreeWidget::indicator:checked {"
+            "  background-color: #16804f;"
+            "  border: 2px solid #42d884;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QPushButton {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "  border: 2px solid #16804f;"
+            "  border-radius: 4px;"
+            "  padding: 6px 16px;"
+            "  font-weight: bold;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QPushButton:hover {"
+            "  background-color: #21a866;"
+            "  border-color: #21a866;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QPushButton:pressed {"
+            "  background-color: #0f633c;"
+            "  border-color: #0f633c;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QScrollBar:vertical,"
+            "QDialog#DigiDollarCoinControlDialog QScrollBar:horizontal {"
+            "  background-color: #0b2419;"
+            "  border: 1px solid #42d884;"
+            "}"
+            "QDialog#DigiDollarCoinControlDialog QScrollBar::handle:vertical,"
+            "QDialog#DigiDollarCoinControlDialog QScrollBar::handle:horizontal {"
+            "  background-color: #16804f;"
+            "  border-radius: 3px;"
+            "}");
+    }
+
+    return QStringLiteral(
+        "QDialog#DigiDollarCoinControlDialog {"
+        "  background-color: #eef9f2;"
+        "  color: #123f2b;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QLabel,"
+        "QDialog#DigiDollarCoinControlDialog QCheckBox,"
+        "QDialog#DigiDollarCoinControlDialog QRadioButton {"
+        "  color: #123f2b;"
+        "  background-color: transparent;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QFrame#frame {"
+        "  background-color: #ffffff;"
+        "  border: 1px solid #1f9d57;"
+        "  border-radius: 4px;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog CoinControlTreeWidget,"
+        "QDialog#DigiDollarCoinControlDialog QTreeWidget {"
+        "  background-color: #ffffff;"
+        "  alternate-background-color: #e6f7ec;"
+        "  color: #123f2b;"
+        "  selection-background-color: #1f9d57;"
+        "  selection-color: #ffffff;"
+        "  border: 1px solid #1f9d57;"
+        "  gridline-color: #c8ead6;"
+        "  font-size: 11pt;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QTreeWidget::item {"
+        "  color: #123f2b;"
+        "  padding: 8px;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QTreeWidget::item:alternate {"
+        "  background-color: #e6f7ec;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QTreeWidget::item:selected {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QTreeWidget::item:hover {"
+        "  background-color: #d7f2e1;"
+        "  color: #123f2b;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QHeaderView::section {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "  border: none;"
+        "  padding: 8px;"
+        "  font-weight: bold;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QCheckBox::indicator,"
+        "QDialog#DigiDollarCoinControlDialog QTreeWidget::indicator {"
+        "  width: 16px;"
+        "  height: 16px;"
+        "  background-color: #ffffff;"
+        "  border: 2px solid #1f9d57;"
+        "  border-radius: 3px;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QCheckBox::indicator:checked,"
+        "QDialog#DigiDollarCoinControlDialog QTreeWidget::indicator:checked {"
+        "  background-color: #1f9d57;"
+        "  border: 2px solid #1f9d57;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QPushButton {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "  border: 2px solid #1f9d57;"
+        "  border-radius: 4px;"
+        "  padding: 6px 16px;"
+        "  font-weight: bold;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QPushButton:hover {"
+        "  background-color: #26b96a;"
+        "  border-color: #26b96a;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QPushButton:pressed {"
+        "  background-color: #147a42;"
+        "  border-color: #147a42;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QScrollBar:vertical,"
+        "QDialog#DigiDollarCoinControlDialog QScrollBar:horizontal {"
+        "  background-color: #eef9f2;"
+        "  border: 1px solid #1f9d57;"
+        "}"
+        "QDialog#DigiDollarCoinControlDialog QScrollBar::handle:vertical,"
+        "QDialog#DigiDollarCoinControlDialog QScrollBar::handle:horizontal {"
+        "  background-color: #1f9d57;"
+        "  border-radius: 3px;"
+        "}");
+}
+
+} // namespace
 
 QList<CAmount> DigiDollarCoinControlDialog::payAmounts;
 
@@ -49,9 +249,9 @@ DigiDollarCoinControlDialog::DigiDollarCoinControlDialog(DDCoinControl& coin_con
     platformStyle(_platformStyle)
 {
     ui->setupUi(this);
-
-    // Theming is handled by the application CSS (dark.css/light.css)
-    // using QDialog#DigiDollarCoinControlDialog selectors
+    ui->treeWidget->setAlternatingRowColors(true);
+    setStyleSheet(DigiDollarCoinControlDialogStyleSheet(
+        UseDarkDigiDollarCoinControlTheme(model, this)));
 
     // context menu
     contextMenu = new QMenu(this);

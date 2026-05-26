@@ -1074,11 +1074,12 @@ void DigiDollarMintWidget::updateAmountValidation()
     if (!amountText.isEmpty()) {
         int pos = 0;
         QString amountCopy = amountText;
-        bool formatValid = m_amountValidator->validate(amountCopy, pos) == QValidator::Acceptable;
-        double amount = amountText.toDouble();
+        const QValidator::State validationState = m_amountValidator->validate(amountCopy, pos);
+        bool numericAmount = false;
+        double amount = amountText.toDouble(&numericAmount);
         bool hasCollateral = validateCollateral();
 
-        if (!formatValid) {
+        if (!numericAmount || validationState == QValidator::Invalid) {
             // Invalid format - only border color, let system handle background
             m_amountEdit->setStyleSheet(QString("QLineEdit { border: 2px solid %1; }").arg(errorColor));
             m_amountWarningLabel->setText(tr("Invalid amount format"));

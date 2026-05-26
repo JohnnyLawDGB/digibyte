@@ -560,6 +560,13 @@ void DigiDollarWidgetTests::mintWidgetUsesChainParamMintLimits()
     QVERIFY2(amountEdit->toolTip().contains("Maximum: $" + maxText),
              qPrintable(amountEdit->toolTip()));
 
+    QLabel* warningLabel = mintWidget.findChild<QLabel*>("amountWarningLabel");
+    QVERIFY(warningLabel != nullptr);
+    amountEdit->setText(QString::number((ddParams.minMintAmount - 1) / 100.0, 'f', 2));
+    QCoreApplication::processEvents();
+    QVERIFY2(warningLabel->text().contains("Minimum mint amount is $" + minText),
+             qPrintable(warningLabel->text()));
+
     QString belowMin = QString::number((ddParams.minMintAmount - 1) / 100.0, 'f', 2);
     int pos = 0;
     QCOMPARE(amountEdit->validator()->validate(belowMin, pos), QValidator::Intermediate);

@@ -429,6 +429,9 @@ void DigiDollarRedeemWidget::setWalletModel(WalletModel* model)
 
     if (m_walletModel) {
         // Connect wallet model signals
+        connect(m_walletModel, &WalletModel::encryptionStatusChanged, this, [this]() {
+            updateRedeemButtons();
+        });
         updateBalance();
         updatePositions();
         // REMOVED: applyTheme() - Let CSS handle all theming

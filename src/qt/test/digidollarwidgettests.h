@@ -80,6 +80,7 @@ private Q_SLOTS:
     void redeemWidgetButtonStateInsufficientDDBalance();
     void redeemWidgetButtonStatePrivateKeyDisabledWallet();
     void redeemWidgetButtonStateLockedWallet();
+    void redeemWidgetRefreshesWhenWalletUnlocks();
     void redeemWidgetButtonStateReady();
     void positionsWidgetLockedTooltipShowsRemainingBlocksAndTime();
     void redeemWidgetKeepsTimelockedPositionDisabled();

@@ -1478,6 +1478,61 @@ void DigiDollarWidgetTests::redeemWidgetButtonStateLockedWallet()
     QVERIFY(validationLabel->toolTip().contains("Unlock"));
 }
 
+void DigiDollarWidgetTests::redeemWidgetRefreshesWhenWalletUnlocks()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-redeem-wallet-unlock-refresh");
+    AddMockDigiDollarPosition(wallet, uint256::ONE, 10000, 300 * COIN, 1, 0);
+    SecureString passphrase{"qt-dd-redeem-wallet-unlock-refresh"};
+    QVERIFY(wallet->EncryptWallet(passphrase));
+    wallet->GetDDWallet()->AddDDUTXO(COutPoint(uint256::ONE, 1), 100000000);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarRedeemWidget redeemWidget;
+    redeemWidget.setWalletModel(mini_gui.walletModel.get());
+    redeemWidget.setClientModel(mini_gui.clientModel.get());
+    redeemWidget.setPosition(QString::fromStdString(uint256::ONE.GetHex()));
+    QCoreApplication::processEvents();
+
+    QPushButton* redeemButton = redeemWidget.findChild<QPushButton*>("redeemButton");
+    QVERIFY(redeemButton != nullptr);
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("Unlock"));
+
+    QVERIFY(mini_gui.walletModel->setWalletLocked(false, passphrase));
+    mini_gui.walletModel->updateStatus();
+    QCoreApplication::processEvents();
+
+    QCOMPARE(redeemWidget.m_positionBlocksRemaining, int64_t{0});
+    QCOMPARE(mini_gui.walletModel->getDigiDollarBalance(), CAmount{100000000});
+    QVERIFY2(redeemWidget.validateAmount(), "unlock-refresh amount should validate");
+    QVERIFY2(redeemWidget.validateRedeemable(), "unlock-refresh position should be redeemable");
+    QVERIFY2(redeemWidget.validateDDBalance(), "unlock-refresh DD balance should cover redemption");
+    QVERIFY2(redeemWidget.canWalletSignRedemption(), "unlock-refresh wallet should be able to sign");
+    QVERIFY(redeemButton->isEnabled());
+    QCOMPARE(redeemButton->text(), QString("Redeem && Unlock DGB"));
+    QVERIFY(redeemButton->toolTip().contains("Ready to redeem"));
+
+    RemoveWallet(context, wallet, std::nullopt);
+}
+
 void DigiDollarWidgetTests::redeemWidgetButtonStateReady()
 {
 #ifdef Q_OS_MACOS

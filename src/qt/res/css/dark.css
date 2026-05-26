@@ -5976,17 +5976,23 @@ QDialog#DDTransactionDescDialog {
     color: #ffffff;
 }
 
-QDialog#DDTransactionDescDialog QTextEdit {
+QDialog#DDTransactionDescDialog QTextEdit#detailText {
     background-color: #113a29;
     color: #ffffff;
     border: 2px solid #42d884;
     border-radius: 4px;
     padding: 8px;
     font-size: 11pt;
+    selection-background-color: #16804f;
+    selection-color: #ffffff;
 }
 
 QDialog#DDTransactionDescDialog QLabel {
     color: #ffffff;
+}
+
+QDialog#DDTransactionDescDialog QDialogButtonBox {
+    background-color: transparent;
 }
 
 QDialog#DDTransactionDescDialog QPushButton {
@@ -6007,6 +6013,18 @@ QDialog#DDTransactionDescDialog QPushButton:hover {
 QDialog#DDTransactionDescDialog QPushButton:pressed {
     background-color: #0f633c;
     border-color: #0f633c;
+}
+
+QDialog#DDTransactionDescDialog QScrollBar:vertical,
+QDialog#DDTransactionDescDialog QScrollBar:horizontal {
+    background-color: #0b2419;
+    border: 1px solid #42d884;
+}
+
+QDialog#DDTransactionDescDialog QScrollBar::handle:vertical,
+QDialog#DDTransactionDescDialog QScrollBar::handle:horizontal {
+    background-color: #16804f;
+    border-radius: 3px;
 }
 
 DigiDollarSendWidget QPushButton#useAvailableBalanceButton {

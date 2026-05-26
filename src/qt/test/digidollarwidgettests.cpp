@@ -3569,6 +3569,102 @@ void DigiDollarWidgetTests::transactionsWidgetDoubleClickShowsDetailsDialog()
     QVERIFY2(plainDetails.contains(QStringLiteral("detail dialog note")), "details text must include the local note");
 }
 
+void DigiDollarWidgetTests::transactionsWidgetDetailsDialogOverridesDgbBlueDialogFallback()
+{
+#ifdef Q_OS_MACOS
+    QSKIP("Skipping DD transaction dialog fallback style test on macOS");
+#endif
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.show();
+    QCoreApplication::processEvents();
+
+    QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    table->setSortingEnabled(false);
+    table->setRowCount(1);
+
+    const QString txid = QStringLiteral("e000000000000000000000000000000000000000000000000000000000000001");
+    table->setItem(0, 0, new QTableWidgetItem(QStringLiteral("Aug 31, 2020 09:34")));
+    table->setItem(0, 1, new QTableWidgetItem(QStringLiteral("Send")));
+    table->setItem(0, 2, new QTableWidgetItem(QStringLiteral("-$100.00 DD")));
+    table->setItem(0, 3, new QTableWidgetItem(QStringLiteral("-")));
+    table->setItem(0, 4, new QTableWidgetItem(QStringLiteral("theme fallback note")));
+    QTableWidgetItem* txidItem = new QTableWidgetItem(txid);
+    txidItem->setData(Qt::UserRole, txid);
+    table->setItem(0, 5, txidItem);
+    table->setItem(0, 6, new QTableWidgetItem(QStringLiteral("Confirmed")));
+    QCOMPARE(table->rowCount(), 1);
+
+    const QString originalStyleSheet = qApp->styleSheet();
+    qApp->setStyleSheet(QStringLiteral(
+        "QDialog { background-color: #002352; color: #ffffff; }"
+        "QDialog QTextEdit { background-color: #ffffff; color: #000000; border: 2px solid #003366; }"
+        "QDialog QPushButton { background-color: #0066CC; color: #ffffff; border: 2px solid #0066CC; }"
+        "QDialog#TransactionDescDialog { background-color: #002352; color: #ffffff; }"
+        "QDialog#TransactionDescDialog QTextEdit { background-color: #ffffff; color: #000000; }"
+        "QDialog#TransactionDescDialog QPushButton { background-color: #0066CC; color: #ffffff; }"));
+    QCoreApplication::processEvents();
+
+    const auto findDetailsDialog = [&]() -> QDialog* {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            QDialog* dialog = qobject_cast<QDialog*>(widget);
+            if (!dialog || !dialog->isVisible()) continue;
+            if (dialog->windowTitle().startsWith(QStringLiteral("Details for "))) return dialog;
+        }
+        for (QDialog* dialog : transactionsWidget.findChildren<QDialog*>()) {
+            if (dialog && dialog->isVisible() && dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
+                return dialog;
+            }
+        }
+        return nullptr;
+    };
+
+    const auto openAndRequireDigiDollarStyle = [&](const QString& theme, const QString& dialogBg,
+                                                   const QString& textBg, const QString& textColor,
+                                                   const QString& accent) {
+        QPalette palette = transactionsWidget.palette();
+        palette.setColor(QPalette::Window, theme == QStringLiteral("dark") ? QColor(QStringLiteral("#002352"))
+                                                                            : QColor(QStringLiteral("#ffffff")));
+        transactionsWidget.setPalette(palette);
+        table->setCurrentItem(txidItem);
+        QVERIFY(QMetaObject::invokeMethod(table, "itemDoubleClicked",
+                                          Qt::DirectConnection,
+                                          Q_ARG(QTableWidgetItem*, txidItem)));
+        QCoreApplication::processEvents();
+        QTest::qWait(50);
+
+        QDialog* detailsDialog = findDetailsDialog();
+        QVERIFY2(detailsDialog, "DD details dialog did not open while DGB blue fallback stylesheet was active");
+        QCOMPARE(detailsDialog->objectName(), QStringLiteral("DDTransactionDescDialog"));
+
+        const QString dialogStyle = detailsDialog->styleSheet();
+        detailsDialog->close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+
+        QVERIFY2(dialogStyle.contains(dialogBg, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD details dialog must force its own green surface over DGB blue fallback").arg(theme)));
+        QVERIFY2(dialogStyle.contains(textBg, Qt::CaseInsensitive) &&
+                 dialogStyle.contains(textColor, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD details text pane must force readable DD colors over DGB fallback").arg(theme)));
+        QVERIFY2(dialogStyle.contains(accent, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD details close button must force DD green accent over DGB fallback").arg(theme)));
+        QVERIFY2(!dialogStyle.contains(QStringLiteral("#002352"), Qt::CaseInsensitive) &&
+                 !dialogStyle.contains(QStringLiteral("#003366"), Qt::CaseInsensitive) &&
+                 !dialogStyle.contains(QStringLiteral("#0066CC"), Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD details dialog must not carry DGB blue styling").arg(theme)));
+    };
+
+    openAndRequireDigiDollarStyle(QStringLiteral("dark"), QStringLiteral("#0b2419"),
+                                  QStringLiteral("#113a29"), QStringLiteral("#ffffff"), QStringLiteral("#16804f"));
+    openAndRequireDigiDollarStyle(QStringLiteral("light"), QStringLiteral("#eef9f2"),
+                                  QStringLiteral("#ffffff"), QStringLiteral("#123f2b"), QStringLiteral("#1f9d57"));
+
+    qApp->setStyleSheet(originalStyleSheet);
+    QCoreApplication::processEvents();
+}
+
 void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight()
 {
     const QString platform = QGuiApplication::platformName();
@@ -3576,86 +3672,30 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight(
         QSKIP("Visual DD transaction detail QA requires a platform that can capture rendered dialog windows");
     }
 
-    const auto readFile = [](const char* path) -> QString {
-        QFile f(path);
-        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-        return QString::fromUtf8(f.readAll());
-    };
-    const auto findFile = [&](const QStringList& candidates) -> QString {
-        for (const auto& p : candidates) {
-            const QString text = readFile(p.toUtf8().constData());
-            if (!text.isEmpty()) return text;
-        }
-        return {};
-    };
-
-    const QString darkCss = findFile({
-        QStringLiteral("src/qt/res/css/dark.css"),
-        QStringLiteral("../src/qt/res/css/dark.css"),
-        QStringLiteral("../../src/qt/res/css/dark.css"),
-        QStringLiteral("qt/res/css/dark.css"),
-    });
-    const QString lightCss = findFile({
-        QStringLiteral("src/qt/res/css/light.css"),
-        QStringLiteral("../src/qt/res/css/light.css"),
-        QStringLiteral("../../src/qt/res/css/light.css"),
-        QStringLiteral("qt/res/css/light.css"),
-    });
-    QVERIFY2(!darkCss.isEmpty(), "could not locate dark.css for DD transaction detail visual QA");
-    QVERIFY2(!lightCss.isEmpty(), "could not locate light.css for DD transaction detail visual QA");
-
-    TestChain100Setup test;
-    for (int i = 0; i < 5; ++i) {
-        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
-    }
-    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
-    test.m_node.wallet_loader = wallet_loader.get();
-    m_node.setContext(&test.m_node);
-
-    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-details-visual");
-    wallet->EnsureDDWallet();
-    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
-    QVERIFY(dd_wallet != nullptr);
-
-    DDTransaction tx;
-    tx.txid = "e000000000000000000000000000000000000000000000000000000000000001";
-    tx.amount = 9876;
-    tx.timestamp = GetTime();
-    tx.confirmations = 2;
-    tx.incoming = false;
-    tx.address = "TDdetailvisualaddress";
-    tx.category = "send";
-    tx.comment = "visual QA note";
-    tx.lock_tier = -1;
-    tx.fee = 0;
-    tx.abandoned = false;
-    dd_wallet->AddMockTransaction(tx);
-
-    DigiDollarMiniGUI mini_gui(m_node);
-    mini_gui.initModelForWallet(m_node, wallet);
-
-    WalletContext& context = *m_node.walletLoader().context();
-    AddWallet(context, wallet);
-
     DigiDollarTransactionsWidget transactionsWidget;
-    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
-    transactionsWidget.setClientModel(mini_gui.clientModel.get());
     transactionsWidget.resize(900, 420);
     transactionsWidget.show();
     QCoreApplication::processEvents();
     QTRY_VERIFY(transactionsWidget.isVisible());
-    transactionsWidget.updateView();
-    QCoreApplication::processEvents();
 
     QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
     QVERIFY(table != nullptr);
-    QTRY_COMPARE(table->rowCount(), 1);
-    QTableWidgetItem* txidItem = table->item(0, 5);
-    QVERIFY(txidItem != nullptr);
+    table->setSortingEnabled(false);
+    table->setRowCount(1);
 
-    RemoveWallet(context, wallet, std::nullopt);
+    const QString txid = QStringLiteral("e000000000000000000000000000000000000000000000000000000000000001");
+    table->setItem(0, 0, new QTableWidgetItem(QStringLiteral("Aug 31, 2020 09:34")));
+    table->setItem(0, 1, new QTableWidgetItem(QStringLiteral("Send")));
+    table->setItem(0, 2, new QTableWidgetItem(QStringLiteral("-$98.76 DD")));
+    table->setItem(0, 3, new QTableWidgetItem(QStringLiteral("-")));
+    table->setItem(0, 4, new QTableWidgetItem(QStringLiteral("visual QA note")));
+    QTableWidgetItem* txidItem = new QTableWidgetItem(txid);
+    txidItem->setData(Qt::UserRole, txid);
+    table->setItem(0, 5, txidItem);
+    table->setItem(0, 6, new QTableWidgetItem(QStringLiteral("Pending")));
 
     const QString originalStyleSheet = qApp->styleSheet();
+    const QPalette originalPalette = qApp->palette();
     const auto contrastRatio = [](const QColor& a, const QColor& b) {
         const auto channel = [](double c) {
             c /= 255.0;
@@ -3666,8 +3706,13 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight(
         return (std::max(l1, l2) + 0.05) / (std::min(l1, l2) + 0.05);
     };
 
-    auto openAndCapture = [&](const QString& css, const QString& path) {
+    auto openAndCapture = [&](const QString& css, const QColor& windowColor, const QString& path) {
         qApp->setStyleSheet(css);
+        QPalette palette = transactionsWidget.palette();
+        palette.setColor(QPalette::Window, windowColor);
+        palette.setColor(QPalette::Base, windowColor);
+        transactionsWidget.setPalette(palette);
+        qApp->setPalette(palette);
         QCoreApplication::processEvents();
         table->setCurrentItem(txidItem);
         QVERIFY(QMetaObject::invokeMethod(table, "itemDoubleClicked",
@@ -3677,7 +3722,16 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight(
         QTest::qWait(150);
 
         QDialog* detailsDialog = nullptr;
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            QDialog* dialog = qobject_cast<QDialog*>(widget);
+            if (!dialog || !dialog->isVisible()) continue;
+            if (dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
+                detailsDialog = dialog;
+                break;
+            }
+        }
         for (QDialog* dialog : transactionsWidget.findChildren<QDialog*>()) {
+            if (detailsDialog) break;
             if (dialog && dialog->isVisible() && dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
                 detailsDialog = dialog;
                 break;
@@ -3702,9 +3756,23 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight(
         QCoreApplication::processEvents();
     };
 
-    openAndCapture(darkCss, QStringLiteral("/tmp/digibyte_dd_transaction_details_dark_qa.png"));
-    openAndCapture(lightCss, QStringLiteral("/tmp/digibyte_dd_transaction_details_light_qa.png"));
+    const QString darkFallback = QStringLiteral(
+        "QDialog { background-color: #002352; color: #ffffff; }"
+        "QDialog QTextEdit { background-color: #ffffff; color: #000000; border: 2px solid #003366; }"
+        "QDialog QPushButton { background-color: #0066CC; color: #ffffff; border: 2px solid #0066CC; }"
+        "QWidget { color: #ffffff; }");
+    const QString lightFallback = QStringLiteral(
+        "QDialog { background-color: #ffffff; color: #003366; }"
+        "QDialog QTextEdit { background-color: #ffffff; color: #003366; border: 2px solid #003366; }"
+        "QDialog QPushButton { background-color: #0066CC; color: #ffffff; border: 2px solid #0066CC; }"
+        "QWidget { color: #123f2b; }");
+
+    openAndCapture(darkFallback, QColor(QStringLiteral("#002352")),
+                   QStringLiteral("/tmp/digibyte_dd_transaction_details_dark_qa.png"));
+    openAndCapture(lightFallback, QColor(QStringLiteral("#ffffff")),
+                   QStringLiteral("/tmp/digibyte_dd_transaction_details_light_qa.png"));
     qApp->setStyleSheet(originalStyleSheet);
+    qApp->setPalette(originalPalette);
     QCoreApplication::processEvents();
 
     qInfo("DD transaction details dark QA screenshot: /tmp/digibyte_dd_transaction_details_dark_qa.png");

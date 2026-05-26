@@ -20,6 +20,7 @@
 #include <QMessageBox>
 #include <QTableWidget>
 #include <QTextEdit>
+#include <QTextDocument>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QComboBox>
@@ -34,21 +35,134 @@
 
 namespace {
 
+QString DigiDollarTransactionDetailsDialogStyleSheet(bool dark_theme)
+{
+    if (dark_theme) {
+        return QStringLiteral(
+            "QDialog#DDTransactionDescDialog {"
+            "  background-color: #0b2419;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DDTransactionDescDialog QTextEdit#detailText {"
+            "  background-color: #113a29;"
+            "  color: #ffffff;"
+            "  border: 2px solid #42d884;"
+            "  border-radius: 4px;"
+            "  padding: 8px;"
+            "  font-size: 11pt;"
+            "  selection-background-color: #16804f;"
+            "  selection-color: #ffffff;"
+            "}"
+            "QDialog#DDTransactionDescDialog QLabel {"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DDTransactionDescDialog QDialogButtonBox {"
+            "  background-color: transparent;"
+            "}"
+            "QDialog#DDTransactionDescDialog QPushButton {"
+            "  background-color: #16804f;"
+            "  color: #ffffff;"
+            "  border: 2px solid #16804f;"
+            "  border-radius: 4px;"
+            "  padding: 8px 16px;"
+            "  font-weight: bold;"
+            "}"
+            "QDialog#DDTransactionDescDialog QPushButton:hover {"
+            "  background-color: #21a866;"
+            "  border-color: #21a866;"
+            "  color: #ffffff;"
+            "}"
+            "QDialog#DDTransactionDescDialog QPushButton:pressed {"
+            "  background-color: #0f633c;"
+            "  border-color: #0f633c;"
+            "}"
+            "QDialog#DDTransactionDescDialog QScrollBar:vertical,"
+            "QDialog#DDTransactionDescDialog QScrollBar:horizontal {"
+            "  background-color: #0b2419;"
+            "  border: 1px solid #42d884;"
+            "}"
+            "QDialog#DDTransactionDescDialog QScrollBar::handle:vertical,"
+            "QDialog#DDTransactionDescDialog QScrollBar::handle:horizontal {"
+            "  background-color: #16804f;"
+            "  border-radius: 3px;"
+            "}");
+    }
+
+    return QStringLiteral(
+        "QDialog#DDTransactionDescDialog {"
+        "  background-color: #eef9f2;"
+        "  color: #123f2b;"
+        "}"
+        "QDialog#DDTransactionDescDialog QTextEdit#detailText {"
+        "  background-color: #ffffff;"
+        "  color: #123f2b;"
+        "  border: 2px solid #1f9d57;"
+        "  border-radius: 4px;"
+        "  padding: 8px;"
+        "  font-size: 11pt;"
+        "  selection-background-color: #1f9d57;"
+        "  selection-color: #ffffff;"
+        "}"
+        "QDialog#DDTransactionDescDialog QLabel {"
+        "  color: #123f2b;"
+        "  font-weight: bold;"
+        "}"
+        "QDialog#DDTransactionDescDialog QDialogButtonBox {"
+        "  background-color: transparent;"
+        "}"
+        "QDialog#DDTransactionDescDialog QPushButton {"
+        "  background-color: #1f9d57;"
+        "  color: #ffffff;"
+        "  border: 2px solid #1f9d57;"
+        "  border-radius: 4px;"
+        "  padding: 8px 16px;"
+        "  font-weight: bold;"
+        "}"
+        "QDialog#DDTransactionDescDialog QPushButton:hover {"
+        "  background-color: #26b96a;"
+        "  border-color: #26b96a;"
+        "  color: #ffffff;"
+        "}"
+        "QDialog#DDTransactionDescDialog QPushButton:pressed {"
+        "  background-color: #147a42;"
+        "  border-color: #147a42;"
+        "}"
+        "QDialog#DDTransactionDescDialog QScrollBar:vertical,"
+        "QDialog#DDTransactionDescDialog QScrollBar:horizontal {"
+        "  background-color: #eef9f2;"
+        "  border: 1px solid #1f9d57;"
+        "}"
+        "QDialog#DDTransactionDescDialog QScrollBar::handle:vertical,"
+        "QDialog#DDTransactionDescDialog QScrollBar::handle:horizontal {"
+        "  background-color: #1f9d57;"
+        "  border-radius: 3px;"
+        "}");
+}
+
+QString DigiDollarTransactionDetailsDocumentStyleSheet(bool dark_theme)
+{
+    return dark_theme
+        ? QStringLiteral("body { background-color: transparent; color: #ffffff; } b { color: #ffffff; }")
+        : QStringLiteral("body { background-color: transparent; color: #123f2b; } b { color: #123f2b; }");
+}
+
 class DigiDollarTransactionDetailsDialog final : public QDialog
 {
 public:
-    DigiDollarTransactionDetailsDialog(const QString& txid, const QString& details_html, QWidget* parent)
+    DigiDollarTransactionDetailsDialog(const QString& txid, const QString& details_html, bool dark_theme, QWidget* parent)
         : QDialog(parent, GUIUtil::dialog_flags)
     {
         setObjectName(QStringLiteral("DDTransactionDescDialog"));
         setWindowTitle(QObject::tr("Details for %1").arg(txid));
         resize(620, 250);
+        setStyleSheet(DigiDollarTransactionDetailsDialogStyleSheet(dark_theme));
 
         QVBoxLayout* layout = new QVBoxLayout(this);
         QTextEdit* detailText = new QTextEdit(this);
         detailText->setObjectName(QStringLiteral("detailText"));
         detailText->setToolTip(QObject::tr("This pane shows a detailed description of the transaction"));
         detailText->setReadOnly(true);
+        detailText->document()->setDefaultStyleSheet(DigiDollarTransactionDetailsDocumentStyleSheet(dark_theme));
         detailText->setHtml(details_html);
 
         QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, this);
@@ -558,7 +672,7 @@ void DigiDollarTransactionsWidget::showDetails()
         details += DetailRow(tr("Transaction ID"), txid);
         details += QStringLiteral("</body></html>");
 
-        DigiDollarTransactionDetailsDialog* dlg = new DigiDollarTransactionDetailsDialog(txid, details, this);
+        DigiDollarTransactionDetailsDialog* dlg = new DigiDollarTransactionDetailsDialog(txid, details, isDarkTheme(), this);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
         m_openedDialogs.append(dlg);
         connect(dlg, &QObject::destroyed, [this, dlg] {

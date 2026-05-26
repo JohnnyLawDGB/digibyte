@@ -53,6 +53,7 @@ private Q_SLOTS:
     void overviewRecentTransactionAmountIsRightAligned();
     void overviewRecentTransactionDoubleClickOpensTransactionsTab();
     void transactionsWidgetDoubleClickShowsDetailsDialog();
+    void transactionsWidgetDetailsDialogOverridesDgbBlueDialogFallback();
     void transactionsWidgetDetailsDialogVisualQaDarkAndLight();
     void transactionsWidgetDetailsDialogHasDigiDollarThemeRules();
     void privacySendMaskTests();

@@ -5836,6 +5836,12 @@ DigiDollarTransactionsWidget QLabel {
     background-color: transparent;
 }
 
+DigiDollarSendWidget QLabel#totalLabel {
+    background-color: #123827;
+    color: #ffffff;
+    border: 1px solid #1f6846;
+}
+
 DigiDollarOverviewWidget .QFrame#balanceFrame,
 DigiDollarOverviewWidget .QFrame#systemHealthFrame,
 DigiDollarOverviewWidget .QFrame#transactionsFrame,

@@ -3682,6 +3682,15 @@ void DigiDollarWidgetTests::darkThemeDigiDollarSendTotalLabelHasReadableContrast
     QVERIFY2(background != color,
              qPrintable(QString("DigiDollar Send Total DD label is unreadable in dark mode: color %1 on %2")
                         .arg(color, background)));
+
+    const int totalLabelRuleEnd = dark.lastIndexOf(QStringLiteral("DigiDollarSendWidget QLabel#totalLabel"));
+    QVERIFY2(totalLabelRuleEnd >= 0, "dark.css must have an explicit final Total DD label override");
+    const int laterGenericLabelRule = dark.indexOf(
+        QRegularExpression(QStringLiteral(R"re(DigiDollarSendWidget\s+QLabel\s*\{[^\}]*background-color\s*:\s*transparent\s*;)re"),
+                           QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption),
+        totalLabelRuleEnd);
+    QVERIFY2(laterGenericLabelRule < 0,
+             "A later generic DigiDollarSendWidget QLabel rule resets the Total DD label background after the explicit rule");
 }
 
 void DigiDollarWidgetTests::darkThemeShutdownWindowHasReadableSurface()

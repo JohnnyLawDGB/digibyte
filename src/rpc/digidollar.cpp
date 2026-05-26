@@ -2183,24 +2183,22 @@ RPCHelpMan redeemdigidollar()
             // Create transaction reference
             CTransactionRef redeemTx = MakeTransactionRef(redeemResult.tx);
 
-            RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
-
-            std::string broadcast_error;
-            const bool broadcast_success = pwallet->chain().broadcastTransaction(
-                redeemTx,
-                wallet::DEFAULT_TRANSACTION_MAXFEE,
-                pwallet->GetBroadcastTransactions(),
-                broadcast_error);
-            if (!broadcast_success) {
-                throw JSONRPCError(RPC_WALLET_ERROR,
-                    strprintf("Redemption transaction rejected by mempool: %s", broadcast_error));
+            const bool should_broadcast = pwallet->GetBroadcastTransactions();
+            if (should_broadcast) {
+                RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
             }
 
-            // Only commit to the wallet after mempool acceptance succeeds. This
-            // keeps failed redemptions from erasing live DD UTXOs or closing positions.
+            // Commit through the wallet-owned relay path exactly once so the
+            // wallet state transition and mempool submission stay in sync.
+            std::string commit_error;
+            bool commit_success = false;
             {
                 LOCK(pwallet->cs_wallet);
-                pwallet->CommitTransaction(redeemTx, {}, {});
+                commit_success = pwallet->CommitTransaction(redeemTx, {}, {}, &commit_error);
+            }
+            if (should_broadcast && !commit_success) {
+                throw JSONRPCError(RPC_TRANSACTION_REJECTED,
+                    strprintf("Redemption transaction rejected by mempool: %s", commit_error));
             }
 
             // Do not mutate persistent DD UTXO accounting while the redeem is

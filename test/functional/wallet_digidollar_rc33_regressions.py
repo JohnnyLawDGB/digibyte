@@ -11,6 +11,7 @@ rapid consecutive redemptions across mining and restart.
 """
 
 from decimal import Decimal
+from pathlib import Path
 
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
@@ -42,6 +43,7 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         assert_equal(result["price_micro_usd"], ORACLE_PRICE_MICRO_USD)
         self.default_wallet_name = node.listwallets()[0]
 
+        self.test_redeem_rpc_uses_wallet_owned_relay()
         self.test_mint_dgb_change_confirms_and_spends()
         self.test_fragmented_large_mint_consolidates_and_confirms()
         self.test_repeated_mints_spend_unconfirmed_change()
@@ -61,6 +63,17 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
 
     def funder_wallet(self):
         return self.get_loaded_wallet(self.default_wallet_name)
+
+    def test_redeem_rpc_uses_wallet_owned_relay(self):
+        self.log.info("Testing redeem RPC uses wallet-owned relay path")
+        source_path = Path(__file__).resolve().parents[2] / "src" / "rpc" / "digidollar.cpp"
+        source = source_path.read_text(encoding="utf8")
+        redeem_start = source.index("RPCHelpMan redeemdigidollar()")
+        redeem_end = source.index("RPCHelpMan listdigidollarpositions()", redeem_start)
+        redeem_body = source[redeem_start:redeem_end]
+
+        assert "broadcastTransaction" not in redeem_body
+        assert "CommitTransaction(redeemTx, {}, {}, &commit_error)" in redeem_body
 
     def test_fragmented_large_mint_consolidates_and_confirms(self):
         self.log.info("Testing fragmented large mint auto-consolidation")

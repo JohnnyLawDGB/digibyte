@@ -4181,11 +4181,13 @@ size_t DigiDollarWallet::ValidatePositionStates()
     }
 
     if (position_ids.empty()) {
+        m_position_state_validation_pending = false;
         return 0;
     }
 
     if (!m_wallet->chain().isReadyToBroadcast()) {
         LogPrintf("DigiDollar: ValidatePositionStates skipped while chainstate is not ready\n");
+        m_position_state_validation_pending = true;
         return 0;
     }
 
@@ -4241,6 +4243,7 @@ size_t DigiDollarWallet::ValidatePositionStates()
         }
     }
 
+    m_position_state_validation_pending = false;
     return corrected;
 }
 
@@ -4265,11 +4268,15 @@ size_t DigiDollarWallet::ReconcilePositionStates()
     }
 
     if (position_ids.empty()) {
+        LOCK(cs_dd_wallet);
+        m_position_state_validation_pending = false;
         return 0;
     }
 
     if (!m_wallet->chain().isReadyToBroadcast()) {
         LogPrintf("DigiDollar: ReconcilePositionStates skipped while chainstate is not ready\n");
+        LOCK(cs_dd_wallet);
+        m_position_state_validation_pending = true;
         return 0;
     }
 
@@ -4322,9 +4329,28 @@ size_t DigiDollarWallet::ReconcilePositionStates()
                 ++corrected;
             }
         }
+        m_position_state_validation_pending = false;
     }
 
     return corrected;
+}
+
+size_t DigiDollarWallet::RetryPendingPositionStateValidation()
+{
+    {
+        LOCK(cs_dd_wallet);
+        if (!m_position_state_validation_pending) {
+            return 0;
+        }
+    }
+
+    return ReconcilePositionStates();
+}
+
+bool DigiDollarWallet::HasPendingPositionStateValidation() const
+{
+    LOCK(cs_dd_wallet);
+    return m_position_state_validation_pending;
 }
 
 // =============================================================================

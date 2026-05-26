@@ -32,6 +32,8 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <fstream>
+#include <iterator>
 
 namespace wallet {
 
@@ -698,6 +700,45 @@ BOOST_AUTO_TEST_CASE(rh08_04_position_marked_inactive_when_collateral_spent)
 
     BOOST_TEST_MESSAGE("RH-08-04: Position state correctly transitions active→inactive. "
                       "ValidatePositionStates provides belt-and-suspenders fix for restore.");
+}
+
+BOOST_AUTO_TEST_CASE(rh08_04_pending_position_validation_retry_is_wired_to_tip_updates)
+{
+    const auto readFile = [](const std::vector<std::string>& candidates) {
+        for (const auto& path : candidates) {
+            std::ifstream file(path);
+            if (!file.is_open()) continue;
+            return std::string(std::istreambuf_iterator<char>(file),
+                               std::istreambuf_iterator<char>());
+        }
+        return std::string();
+    };
+
+    const std::string wallet_cpp = readFile({
+        "src/wallet/wallet.cpp",
+        "../src/wallet/wallet.cpp",
+        "../../src/wallet/wallet.cpp",
+        "wallet/wallet.cpp",
+    });
+    const std::string dd_wallet_cpp = readFile({
+        "src/wallet/digidollarwallet.cpp",
+        "../src/wallet/digidollarwallet.cpp",
+        "../../src/wallet/digidollarwallet.cpp",
+        "wallet/digidollarwallet.cpp",
+    });
+
+    BOOST_REQUIRE_MESSAGE(!wallet_cpp.empty(), "could not locate wallet.cpp from current working directory");
+    BOOST_REQUIRE_MESSAGE(!dd_wallet_cpp.empty(), "could not locate digidollarwallet.cpp from current working directory");
+    BOOST_CHECK_MESSAGE(
+        dd_wallet_cpp.find("m_position_state_validation_pending = true") != std::string::npos,
+        "ValidatePositionStates/ReconcilePositionStates must remember a chainstate-not-ready skip for retry");
+    BOOST_CHECK_MESSAGE(
+        dd_wallet_cpp.find("RetryPendingPositionStateValidation") != std::string::npos,
+        "DigiDollarWallet must expose a retry path for deferred position-state validation");
+    BOOST_CHECK_MESSAGE(
+        wallet_cpp.find("HasPendingPositionStateValidation()") != std::string::npos &&
+        wallet_cpp.find("RetryPendingPositionStateValidation()") != std::string::npos,
+        "wallet tip updates must retry a deferred DigiDollar position-state validation");
 }
 
 // =============================================================================

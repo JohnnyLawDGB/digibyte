@@ -193,6 +193,8 @@ private:
     // Pointer to wallet for UTXO access
     wallet::CWallet* m_wallet{nullptr};
 
+    bool m_position_state_validation_pending GUARDED_BY(cs_dd_wallet){false};
+
     /** Null-safe dual lock: acquires cs_wallet (if m_wallet != nullptr) then cs_dd_wallet. */
     [[nodiscard]] std::pair<std::unique_lock<RecursiveMutex>,
                             std::unique_lock<RecursiveMutex>> LockDDWallet() const
@@ -401,6 +403,15 @@ public:
      * @return Number of positions corrected
      */
     size_t ReconcilePositionStates();
+
+    /**
+     * Retry a position-state validation that was skipped before chainstate was ready.
+     * Returns 0 if no retry is pending or if no positions were corrected.
+     */
+    size_t RetryPendingPositionStateValidation();
+
+    /** Return whether startup/rescan position-state validation still needs a retry. */
+    bool HasPendingPositionStateValidation() const;
 
     /**
      * Process a single transaction for DD UTXOs (incremental update)

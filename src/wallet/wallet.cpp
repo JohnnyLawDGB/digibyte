@@ -1733,6 +1733,14 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
 void CWallet::updatedBlockTip()
 {
     m_best_block_time = GetTime();
+
+    if (m_dd_wallet && m_dd_wallet->HasPendingPositionStateValidation()) {
+        const size_t corrected = m_dd_wallet->RetryPendingPositionStateValidation();
+        if (corrected > 0) {
+            WalletLogPrintf("DigiDollar: Retried pending position validation after chain tip update - corrected %zu position(s)\n",
+                            corrected);
+        }
+    }
 }
 
 void CWallet::BlockUntilSyncedToCurrentChain() const {

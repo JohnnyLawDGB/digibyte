@@ -1705,6 +1705,18 @@ void DigiDollarWidgetTests::sendWidgetNoteFieldTests()
 
     QLineEdit* noteEdit = sendWidget.findChild<QLineEdit*>("noteEdit");
     QVERIFY(noteEdit != nullptr);
+
+    QFrame* noteFrame = sendWidget.findChild<QFrame*>("noteFrame");
+    QVERIFY(noteFrame != nullptr);
+    QList<QLabel*> noteLabels = noteFrame->findChildren<QLabel*>();
+    QCOMPARE(noteLabels.size(), 1);
+    QCOMPARE(noteLabels.first()->text(), QString("Note:"));
+    QVERIFY2(!noteLabels.first()->toolTip().contains(QStringLiteral("address book"), Qt::CaseInsensitive),
+             "DigiDollar Send note label tooltip must not claim the note updates the address book");
+    QVERIFY2(!noteEdit->placeholderText().contains(QStringLiteral("address"), Qt::CaseInsensitive),
+             "DigiDollar Send note placeholder must describe a local note, not an address-book label");
+    QVERIFY2(!noteEdit->toolTip().contains(QStringLiteral("address book"), Qt::CaseInsensitive),
+             "DigiDollar Send note tooltip must not claim the note updates the address book");
     
     noteEdit->setText("Test transaction note");
     QCOMPARE(noteEdit->text(), QString("Test transaction note"));

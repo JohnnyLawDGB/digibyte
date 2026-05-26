@@ -322,14 +322,14 @@ void DigiDollarSendWidget::setupNoteSection()
     m_noteLayout->setHorizontalSpacing(12);
     m_noteLayout->setVerticalSpacing(8);
 
-    m_noteLabel = new QLabel(tr("Label:"), this);
-    m_noteLabel->setToolTip(tr("Enter a label to add this address to your address book"));
+    m_noteLabel = new QLabel(tr("Note:"), this);
+    m_noteLabel->setToolTip(tr("Enter a local note for this DigiDollar transaction"));
 
     m_noteEdit = new QLineEdit(this);
     m_noteEdit->setObjectName("noteEdit");
-    m_noteEdit->setPlaceholderText(tr("Enter a label for this address to add it to the list of used addresses"));
+    m_noteEdit->setPlaceholderText(tr("Enter a local note for this transaction"));
     m_noteEdit->setMaxLength(256);
-    m_noteEdit->setToolTip(tr("Enter a label for this address to add it to your address book"));
+    m_noteEdit->setToolTip(tr("Saved locally with this DigiDollar transaction"));
 
     m_noteLayout->addWidget(m_noteLabel, 0, 0);
     m_noteLayout->addWidget(m_noteEdit, 0, 1);

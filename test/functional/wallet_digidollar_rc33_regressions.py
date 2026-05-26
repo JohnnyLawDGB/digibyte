@@ -45,6 +45,7 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         self.test_mint_dgb_change_confirms_and_spends()
         self.test_fragmented_large_mint_consolidates_and_confirms()
         self.test_repeated_mints_spend_unconfirmed_change()
+        self.test_fragmented_multi_pass_mint_consolidates_and_confirms()
         self.test_rapid_mints_confirm_after_restart()
         self.test_rapid_redeems_confirm_after_restart()
 
@@ -85,6 +86,43 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         self.restart_node(0, extra_args=["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"])
         node = self.nodes[0]
         fragmented = self.get_loaded_wallet("rc33_fragmented")
+        node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+
+        assert_got_mint = fragmented.gettransaction(mint["txid"])
+        assert_got_consolidation = fragmented.gettransaction(mint["consolidation_txid"])
+        assert_got_mint["confirmations"] > 0
+        assert_got_consolidation["confirmations"] > 0
+
+        positions = fragmented.listdigidollarpositions(False)
+        matching = [p for p in positions if p["position_id"] == mint["position_id"]]
+        assert_equal(len(matching), 1)
+        assert_equal(matching[0]["confirmations"] > 0, True)
+        assert_equal(position_active(matching[0]), True)
+
+    def test_fragmented_multi_pass_mint_consolidates_and_confirms(self):
+        self.log.info("Testing multi-pass fragmented mint auto-consolidation")
+        node = self.nodes[0]
+        fragmented = self.create_descriptor_wallet("rc41_fragmented_multi_pass")
+
+        outputs = {
+            fragmented.getnewaddress(): Decimal("0.08")
+            for _ in range(2000)
+        }
+        funding_txid = self.funder_wallet().sendmany("", outputs)
+        self.generate(node, 1)
+        assert_equal(self.funder_wallet().gettransaction(funding_txid)["confirmations"], 1)
+
+        assert_equal(len(fragmented.listunspent(1)), 2000)
+
+        mint = fragmented.mintdigidollar(100000, 0)
+        assert_equal(mint["utxos_consolidated"], True)
+        assert mint["consolidation_txid"] in node.getrawmempool()
+        assert mint["txid"] in node.getrawmempool()
+
+        self.generate(node, 1)
+        self.restart_node(0, extra_args=["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"])
+        node = self.nodes[0]
+        fragmented = self.get_loaded_wallet("rc41_fragmented_multi_pass")
         node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
 
         assert_got_mint = fragmented.gettransaction(mint["txid"])

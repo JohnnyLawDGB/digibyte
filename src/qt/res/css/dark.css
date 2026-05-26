@@ -4770,7 +4770,7 @@ DigiDollarSendWidget QLabel#usdEquivalentLabel {
 /* Total label - emphasized like SendCoinsDialog balance */
 DigiDollarSendWidget QLabel#totalLabel {
     background-color: #ffffff;
-    color: #ffffff;
+    color: #002352;
     padding: 8px 16px;
     border-radius: 4px;
     font-weight: bold;

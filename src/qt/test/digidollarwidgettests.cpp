@@ -3417,3 +3417,47 @@ void DigiDollarWidgetTests::darkThemePeerDetailWidgetHasExplicitRule()
     QVERIFY2(found,
              "RC30 dark-mode peers pane contrast bug: dark.css must carry an explicit rule for the RPC console's #detailWidget so the Windows default grey QWidget palette doesn't leak through. Expected a selector like 'RPCConsole QWidget#detailWidget { ... }'.");
 }
+
+void DigiDollarWidgetTests::darkThemeDigiDollarSendTotalLabelHasReadableContrast()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+
+    const QStringList candidates = {
+        QStringLiteral("src/qt/res/css/dark.css"),
+        QStringLiteral("../src/qt/res/css/dark.css"),
+        QStringLiteral("../../src/qt/res/css/dark.css"),
+        QStringLiteral("qt/res/css/dark.css"),
+    };
+    QString dark;
+    for (const auto& p : candidates) {
+        dark = readFile(p.toUtf8().constData());
+        if (!dark.isEmpty()) break;
+    }
+    QVERIFY2(!dark.isEmpty(), "could not locate dark.css from current working directory");
+
+    const QRegularExpression totalLabelRule(
+        QStringLiteral(R"re(DigiDollarSendWidget\s+QLabel#totalLabel[^\{]*\{([^\}]*)\})re"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    const QRegularExpressionMatch match = totalLabelRule.match(dark);
+    QVERIFY2(match.hasMatch(), "dark.css must style DigiDollarSendWidget QLabel#totalLabel explicitly");
+
+    const QString ruleBody = match.captured(1);
+    const QRegularExpression backgroundRe(
+        QStringLiteral(R"re(background-color\s*:\s*(#[0-9a-fA-F]{6})\s*;)re"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression colorRe(
+        QStringLiteral(R"re((?:^|[;\r\n])\s*color\s*:\s*(#[0-9a-fA-F]{6})\s*;)re"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QString background = backgroundRe.match(ruleBody).captured(1).toLower();
+    const QString color = colorRe.match(ruleBody).captured(1).toLower();
+
+    QVERIFY2(!background.isEmpty(), "totalLabel rule must set a stable dark-theme background");
+    QVERIFY2(!color.isEmpty(), "totalLabel rule must set a stable dark-theme text color");
+    QVERIFY2(background != color,
+             qPrintable(QString("DigiDollar Send Total DD label is unreadable in dark mode: color %1 on %2")
+                        .arg(color, background)));
+}

@@ -67,6 +67,7 @@ private Q_SLOTS:
     void ddReceiveRequestDialogFormatsURIAndAmount();
     void ddReceiveRejectsMalformedRequestAmount();
     void darkThemePeerDetailWidgetHasExplicitRule();
+    void darkThemeDigiDollarSendTotalLabelHasReadableContrast();
     void overviewRecentTransactionsSendShowsNegativeSign();
     void transactionsWidgetShowsRpcHistorySignsAndFields();
     void positionsWidgetLockTierColumnFitsLongestLabel();

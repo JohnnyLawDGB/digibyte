@@ -43,17 +43,23 @@
 #include <memory>
 
 #include <QApplication>
+#include <QColor>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QEvent>
 #include <QFile>
 #include <QFontMetrics>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QHelpEvent>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPixmap>
 #include <QPushButton>
+#include <QScreen>
 #include <QRegularExpression>
 #include <QComboBox>
 #include <QProgressBar>
@@ -64,6 +70,7 @@
 #include <QDoubleSpinBox>
 #include <QSignalSpy>
 #include <QTimer>
+#include <QToolTip>
 
 using wallet::AddWallet;
 using wallet::CreateMockableWalletDatabase;
@@ -3739,12 +3746,134 @@ void DigiDollarWidgetTests::darkThemeShutdownWindowHasReadableSurface()
              "dark.css must explicitly style ShutdownWindow labels for readable shutdown text");
 }
 
+void DigiDollarWidgetTests::globalTooltipFilterHandlesNativeTooltipEvents()
+{
+    class ExposedToolTipFilter : public GUIUtil::ToolTipToRichTextFilter
+    {
+    public:
+        explicit ExposedToolTipFilter(int size_threshold) : GUIUtil::ToolTipToRichTextFilter(size_threshold) {}
+        using GUIUtil::ToolTipToRichTextFilter::eventFilter;
+    };
+
+    QLabel label;
+    label.setToolTip(QStringLiteral("Your DGB locked as collateral for DigiDollars in your wallet"));
+
+    ExposedToolTipFilter filter(80);
+    QHelpEvent event(QEvent::ToolTip, QPoint(2, 2), QPoint(20, 20));
+    QVERIFY2(filter.eventFilter(&label, &event),
+             "Global tooltip filter must intercept native tooltip events and render the visible styled tooltip path");
+
+    QListWidget list;
+    list.resize(260, 80);
+    QListWidgetItem* item = new QListWidgetItem(QStringLiteral("Recent transaction"));
+    item->setToolTip(QStringLiteral("Pending transaction tooltip for a DigiDollar row"));
+    list.addItem(item);
+    list.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&list));
+
+    const QPoint item_pos = list.visualItemRect(item).center();
+    QHelpEvent item_event(QEvent::ToolTip, item_pos, list.viewport()->mapToGlobal(item_pos));
+    QVERIFY2(filter.eventFilter(list.viewport(), &item_event),
+             "Global tooltip filter must intercept item-view tooltip events used by overview and transaction rows");
+    QToolTip::hideText();
+}
+
+void DigiDollarWidgetTests::globalTooltipVisualContrastRendersReadablePixels()
+{
+    const QString platform = QGuiApplication::platformName();
+    if (platform == QStringLiteral("offscreen") || platform == QStringLiteral("minimal")) {
+        QSKIP("Visual tooltip contrast QA requires a platform that can capture rendered tooltip windows");
+    }
+
+    class ExposedToolTipFilter : public GUIUtil::ToolTipToRichTextFilter
+    {
+    public:
+        explicit ExposedToolTipFilter(int size_threshold) : GUIUtil::ToolTipToRichTextFilter(size_threshold) {}
+        using GUIUtil::ToolTipToRichTextFilter::eventFilter;
+    };
+
+    QLabel label(QStringLiteral("Tooltip visual QA target"));
+    label.setToolTip(QStringLiteral("Your DGB locked as collateral for DigiDollars in your wallet"));
+    label.resize(540, 90);
+    label.move(120, 120);
+    label.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&label));
+
+    ExposedToolTipFilter filter(80);
+    const QPoint local_pos(24, 24);
+    const QPoint global_pos = label.mapToGlobal(local_pos);
+    QHelpEvent event(QEvent::ToolTip, local_pos, global_pos);
+    QVERIFY2(filter.eventFilter(&label, &event), "tooltip filter did not show the styled tooltip");
+    QTest::qWait(600);
+
+    QScreen* screen = QGuiApplication::primaryScreen();
+    QVERIFY2(screen, "no primary screen available for tooltip visual QA");
+    const QPixmap pixmap = screen->grabWindow(0);
+    QVERIFY2(!pixmap.isNull(), "screen grab failed for tooltip visual QA");
+    const QString screenshot_path = QStringLiteral("/tmp/digibyte_tooltip_qa.png");
+    QVERIFY2(pixmap.save(screenshot_path),
+             qPrintable(QStringLiteral("failed to save tooltip QA screenshot to %1").arg(screenshot_path)));
+
+    const QImage image = pixmap.toImage().convertToFormat(QImage::Format_RGB32);
+    const QRect search_rect = QRect(global_pos - QPoint(40, 40), QSize(760, 260)).intersected(image.rect());
+    QVERIFY2(!search_rect.isEmpty(), "tooltip visual QA search area is outside the captured screen");
+
+    QRect tooltip_bounds;
+    int yellow_pixels = 0;
+    for (int y = search_rect.top(); y <= search_rect.bottom(); ++y) {
+        for (int x = search_rect.left(); x <= search_rect.right(); ++x) {
+            const QColor color(image.pixel(x, y));
+            const bool tooltip_yellow =
+                color.red() >= 235 && color.green() >= 220 && color.blue() >= 170 &&
+                color.red() >= color.blue() + 35 && color.green() >= color.blue() + 25;
+            if (!tooltip_yellow) continue;
+            ++yellow_pixels;
+            const QRect pixel_rect(x, y, 1, 1);
+            tooltip_bounds = tooltip_bounds.isNull() ? pixel_rect : tooltip_bounds.united(pixel_rect);
+        }
+    }
+
+    QVERIFY2(yellow_pixels > 100,
+             qPrintable(QStringLiteral("tooltip yellow background was not found in %1; yellow pixels=%2")
+                        .arg(screenshot_path).arg(yellow_pixels)));
+
+    const QRect interior = tooltip_bounds.adjusted(4, 4, -4, -4).intersected(image.rect());
+    QVERIFY2(!interior.isEmpty(), "tooltip yellow background bounds are too small for text contrast sampling");
+
+    int black_text_pixels = 0;
+    int white_text_pixels = 0;
+    for (int y = interior.top(); y <= interior.bottom(); ++y) {
+        for (int x = interior.left(); x <= interior.right(); ++x) {
+            const QColor color(image.pixel(x, y));
+            if (color.red() <= 80 && color.green() <= 80 && color.blue() <= 80) {
+                ++black_text_pixels;
+            } else if (color.red() >= 235 && color.green() >= 235 && color.blue() >= 235) {
+                ++white_text_pixels;
+            }
+        }
+    }
+
+    QVERIFY2(black_text_pixels > 25,
+             qPrintable(QStringLiteral("tooltip text did not render as dark pixels in %1; black=%2 white=%3 bounds=%4,%5 %6x%7")
+                        .arg(screenshot_path).arg(black_text_pixels).arg(white_text_pixels)
+                        .arg(tooltip_bounds.x()).arg(tooltip_bounds.y()).arg(tooltip_bounds.width()).arg(tooltip_bounds.height())));
+    QVERIFY2(black_text_pixels >= white_text_pixels,
+             qPrintable(QStringLiteral("tooltip still appears light-on-light in %1; black=%2 white=%3")
+                        .arg(screenshot_path).arg(black_text_pixels).arg(white_text_pixels)));
+
+    QToolTip::hideText();
+    label.close();
+    qInfo("Tooltip visual QA screenshot: %s", qPrintable(screenshot_path));
+}
+
 void DigiDollarWidgetTests::customTooltipRenderersNormalizeQtRichTextEnvelope()
 {
     QCOMPARE(GUIUtil::TooltipToHtml(QStringLiteral("Plain <value>\nsecond")),
              QStringLiteral("Plain &lt;value&gt;<br>\nsecond"));
     QCOMPARE(GUIUtil::TooltipToHtml(QStringLiteral("<qt>Pending &lt;change&gt;<br>line 2</qt>")),
              QStringLiteral("Pending &lt;change&gt;<br>\nline 2"));
+    QCOMPARE(GUIUtil::TooltipToHtml(QStringLiteral("<nobr>Network activity disabled.<br>Click to enable.</nobr>")),
+             QStringLiteral("Network activity disabled.<br>\nClick to enable."));
 
     const auto readFile = [](const char* path) -> QString {
         QFile f(path);

@@ -551,7 +551,7 @@ BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 35);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 17);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 18);
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)

@@ -12,14 +12,14 @@ Release: https://github.com/DigiByte-Core/digibyte/releases/tag/v9.26.0-rc42
 
 RC42 does not reset public DigiDollar testnet.
 
-RC41 moved public testing to `testnet25`. RC42 keeps that same network, same genesis, same ports, same activation heights, same oracle roster shape, and same oracle bundle format. Operators upgrading from RC41 should upgrade binaries and keep using their existing `testnet25` data unless they are intentionally starting a fresh node.
+RC41 moved public testing to `testnet25`. RC42 keeps that same network, same genesis, same ports, same activation heights, same 35-slot oracle roster capacity, and same oracle bundle format. Operators upgrading from RC41 should upgrade binaries and keep using their existing `testnet25` data unless they are intentionally starting a fresh node.
 
 Upgrade target:
 
 - RC41 `testnet25` nodes should upgrade to RC42.
 - Do not wipe `testnet25` just because of RC42.
 - Do not return to `testnet24`; RC42 is still the RC41 public testnet chain.
-- Oracle operators should keep their assigned RC41/testnet25 slot and key material unless separately coordinated.
+- Existing oracle operators should keep their assigned RC41/testnet25 slot and key material unless separately coordinated; RC42 adds `digibyte-maxi` at testnet slot 17.
 
 What changed from RC41:
 
@@ -30,6 +30,7 @@ What changed from RC41:
 - Tier-0/minimum-mint user feedback and validation were clarified.
 - DGBstats oracle/testnet25 copy and fractional difficulty display were fixed.
 - The local multi-oracle testnet harness was kept runnable with live price movement.
+- Testnet oracle slot 17 was assigned to active operator `digibyte-maxi` without changing the 9-signature oracle quorum.
 
 What did not change:
 
@@ -80,6 +81,7 @@ RC42 is not an economic redesign and not a new testnet reset.
 - Redeem wallet relay: fixed RPC redeem to commit through wallet relay once and make rapid duplicate redeems fail cleanly.
 - Owner-key guard test: corrected the source guard that proves DigiDollar owner keys are stored before wallet-owned commit.
 - Multi-oracle harness: kept `test_multi_oracle_testnet.sh` runnable end to end while live DGB price moved.
+- Testnet oracle slot 17: added active operator `digibyte-maxi` with pubkey `03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47`; testnet active roster is now 18 keys and quorum remains 9 signatures.
 - RC41 ledger: documented final validation status, test evidence, visual QA evidence, and commit hashes for all 18 tracked issues.
 
 ---
@@ -100,11 +102,13 @@ RC42 is not an economic redesign and not a new testnet reset.
 | DigiDollar activation height | `600` |
 | Oracle activation height | `600` |
 | Oracle epoch length | `40` blocks |
-| Oracle roster | 35 reserved slots, 17 active slots at launch |
+| Oracle roster | 35 reserved slots, 18 active testnet slots in RC42 |
 | Oracle quorum | 9 signatures from the configured active MuSig2 keyset |
 | Oracle bundle format | `v0x03` MuSig2 aggregate bundle |
 
 Older operator notes that mention `testnet24` or P2P port `12031` are stale for RC42. Use the values above.
+
+RC42 also activates testnet slot 17 for `digibyte-maxi`. This adds the slot-17 x-only key to `consensus.vOraclePublicKeys`, raises the testnet active key count to 18, marks the slot active in `vOracleNodes`, and keeps the oracle quorum at 9 signatures.
 
 Minimum RC42 operator checklist:
 
@@ -114,7 +118,7 @@ Minimum RC42 operator checklist:
 4. Keep P2P port `12032` open and advertised.
 5. Confirm `getblockchaininfo` reports the testnet25 genesis chain.
 6. Confirm `getoracles` shows the expected 35-slot roster, with active configured operators online and reserve slots inactive.
-7. Confirm assigned oracle slot/key material still matches the RC41/testnet25 chainparams roster.
+7. Confirm assigned oracle slot/key material still matches the RC42/testnet25 chainparams roster.
 
 ---
 
@@ -221,7 +225,7 @@ Please focus RC42 testing on:
 - Tier-0 / 1-hour mint confirmation copy and effective unlock expectations.
 - DGBstats testnet difficulty display and oracle/testnet25 operator copy.
 
-Oracle operators should keep using `testnet25`, P2P port `12032`, and their assigned RC41/testnet25 slots.
+Oracle operators should keep using `testnet25`, P2P port `12032`, and their assigned RC42/testnet25 slots.
 
 ---
 

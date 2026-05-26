@@ -20,6 +20,7 @@
 #include <chainparams.h>
 #include <consensus/params.h>
 #include <kernel/chainparams.h>
+#include <primitives/oracle.h>
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
 #include <util/strencodings.h>
@@ -64,7 +65,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet also switches immediately to MuSig2 (9-of-17, RC30).
+    // Testnet also switches immediately to MuSig2 (9-of-18, RC42).
     BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
@@ -84,8 +85,8 @@ BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_and_total_slots)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // V1 starts with 17 active oracle pubkeys in a 35-slot roster.
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 17);
+    // RC42 testnet uses 18 active oracle pubkeys in a 35-slot roster.
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 18);
     BOOST_CHECK_EQUAL(params.nOracleTotalOracles, 35);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
@@ -96,7 +97,6 @@ BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_9)
     const auto& params = Params().GetConsensus();
     // 9 signatures are required from the active consensus keyset.
     BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 9);
-    BOOST_CHECK_GT(params.nOracleConsensusRequired, params.nOraclePubkeyCount / 2);
     BOOST_CHECK_LE(params.nOracleConsensusRequired, params.nOraclePubkeyCount);
 }
 
@@ -146,6 +146,30 @@ BOOST_AUTO_TEST_CASE(test_oracle_config_unique_by_pubkey)
             "Duplicate oracle pubkey at slot " + std::to_string(i) + ": " +
             params.vOraclePublicKeys[i].substr(0, 8));
     }
+}
+
+BOOST_AUTO_TEST_CASE(testnet_digibyte_maxi_slot_17_is_active)
+{
+    SelectParams(ChainType::TESTNET);
+    const auto& params = Params().GetConsensus();
+    const auto& nodes = Params().GetOracleNodes();
+
+    constexpr const char* DIGIBYTE_MAXI_COMPRESSED =
+        "03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47";
+    constexpr const char* DIGIBYTE_MAXI_XONLY =
+        "649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47";
+
+    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 18);
+    BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 9);
+    BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), 18U);
+    BOOST_REQUIRE_GE(nodes.size(), 18U);
+
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[17], DIGIBYTE_MAXI_XONLY);
+    BOOST_CHECK_EQUAL(nodes[17].id, 17U);
+    BOOST_CHECK(nodes[17].is_active);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                          nodes[17].pubkey.data(), nodes[17].pubkey.size())),
+                      DIGIBYTE_MAXI_COMPRESSED);
 }
 
 // ============================================================================

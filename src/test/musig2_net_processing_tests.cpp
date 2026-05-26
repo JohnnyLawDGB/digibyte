@@ -94,9 +94,10 @@ BOOST_AUTO_TEST_CASE(musig2_relay_authorization_rejects_reserve_slots)
     BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), ORACLE_TOTAL_COUNT));
 
     SelectParams(ChainType::TESTNET);
-    BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 17);
+    BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 18);
     BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), 16));
-    BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 17));
+    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), 17));
+    BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 18));
 
     SelectParams(ChainType::REGTEST);
     BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 7);

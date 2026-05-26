@@ -421,10 +421,10 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
     SelectParams(ChainType::TESTNET);
     {
         const Consensus::Params& params = Params().GetConsensus();
-        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 17);
+        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 18);
         BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
-        for (uint8_t reserve_id = 17; reserve_id <= 34; ++reserve_id) {
+        for (uint8_t reserve_id = 18; reserve_id <= 34; ++reserve_id) {
             CheckReserveIdRejectedByBundleValidation(
                 params, params.nDDActivationHeight, reserve_id, "Testnet");
         }

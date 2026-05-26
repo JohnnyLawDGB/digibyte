@@ -46,6 +46,8 @@ public:
 Q_SIGNALS:
     /** Fired when a message should be reported to the user */
     void message(const QString &title, const QString &message, unsigned int style);
+    /** Fired when a recent transaction row should open in the DD Transactions tab. */
+    void recentTransactionActivated(const QString& txid);
 
 public Q_SLOTS:
     /** Update balance displays */
@@ -65,8 +67,8 @@ private Q_SLOTS:
     void refreshDigiDollarState();
     /** Update recent transactions display */
     void updateRecentTransactions();
-    /** Show details for a recent transaction row. */
-    void showRecentTransactionDetails(QListWidgetItem* item);
+    /** Activate a recent transaction row. */
+    void activateRecentTransaction(QListWidgetItem* item);
 
 private:
     void setupUI();

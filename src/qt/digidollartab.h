@@ -68,6 +68,8 @@ private Q_SLOTS:
     void onTabChanged(int index);
     /** Handle redeem request from Vault tab */
     void onRedeemRequested(const QString &positionId);
+    /** Open and focus a transaction in the DD Transactions tab */
+    void showTransaction(const QString& txid);
     /** Check DigiDollar activation status and update UI */
     void checkActivationStatus();
 

@@ -6,6 +6,7 @@
 #define DIGIBYTE_QT_DIGIDOLLARTRANSACTIONSWIDGET_H
 
 #include <QWidget>
+#include <QList>
 #include <consensus/amount.h>
 
 class WalletModel;
@@ -20,6 +21,7 @@ class QLineEdit;
 class QPushButton;
 class QLabel;
 class QMenu;
+class QDialog;
 QT_END_NAMESPACE
 
 /**
@@ -42,6 +44,8 @@ public:
 public Q_SLOTS:
     /** Set privacy mode — hides transactions table */
     void setPrivacy(bool privacy);
+    /** Select and scroll to the transaction row with this txid. */
+    void focusTransaction(const QString& txid);
 
 Q_SIGNALS:
     void message(const QString& title, const QString& message, unsigned int style);
@@ -80,6 +84,7 @@ private:
     QTableWidget* m_table;
     QLabel* m_statusLabel;
     QMenu* m_contextMenu;
+    QList<QDialog*> m_openedDialogs;
 
     // Privacy
     bool m_privacy{false};

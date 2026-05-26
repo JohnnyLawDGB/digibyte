@@ -35,7 +35,6 @@
 #include <QSpacerItem>
 #include <QListWidget>
 #include <QListWidgetItem>
-#include <QMessageBox>
 #include <QCursor>
 #include <QBrush>
 #include <QColor>
@@ -454,9 +453,9 @@ void DigiDollarOverviewWidget::setupRecentTransactionsSection()
     // No minimum height - allow to shrink with window
     m_transactionsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     connect(m_transactionsList, &QListWidget::itemDoubleClicked,
-            this, &DigiDollarOverviewWidget::showRecentTransactionDetails);
+            this, &DigiDollarOverviewWidget::activateRecentTransaction);
     connect(m_transactionsList, &QListWidget::itemActivated,
-            this, &DigiDollarOverviewWidget::showRecentTransactionDetails);
+            this, &DigiDollarOverviewWidget::activateRecentTransaction);
 
     // Info label for when no transactions exist
     m_recentTransactionsInfo = new QLabel(tr("No recent DigiDollar transactions"), this);
@@ -976,28 +975,17 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
     m_transactionsList->setVisible(hasTransactions);
 }
 
-void DigiDollarOverviewWidget::showRecentTransactionDetails(QListWidgetItem* item)
+void DigiDollarOverviewWidget::activateRecentTransaction(QListWidgetItem* item)
 {
     if (!item) {
         return;
     }
 
-    const QString note = item->data(RecentNoteRole).toString();
-    const QString noteSection = note.isEmpty() ? QString() : tr("\nNote: %1").arg(note);
-    const QString details = tr("Transaction Details\n\n"
-                               "TX ID: %1\n"
-                               "Type: %2\n"
-                               "Amount: %3\n"
-                               "Date: %4\n"
-                               "Confirmations: %5%6")
-                                .arg(item->data(RecentTxIdRole).toString())
-                                .arg(item->data(RecentTypeRole).toString())
-                                .arg(item->data(RecentAmountRole).toString())
-                                .arg(item->data(RecentDateRole).toString())
-                                .arg(item->data(RecentConfirmationsRole).toString())
-                                .arg(noteSection);
-
-    Q_EMIT message(tr("DigiDollar Transaction"), details, QMessageBox::Information);
+    const QString txid = item->data(RecentTxIdRole).toString();
+    if (txid.isEmpty()) {
+        return;
+    }
+    Q_EMIT recentTransactionActivated(txid);
 }
 
 QString DigiDollarOverviewWidget::formatDDAmount(double amount) const

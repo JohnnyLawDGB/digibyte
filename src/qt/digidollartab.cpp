@@ -145,6 +145,8 @@ void DigiDollarTab::connectSignals()
     if (m_overviewWidget) {
         connect(m_overviewWidget, &DigiDollarOverviewWidget::message,
                 this, &DigiDollarTab::message);
+        connect(m_overviewWidget, &DigiDollarOverviewWidget::recentTransactionActivated,
+                this, &DigiDollarTab::showTransaction);
     }
 
     if (m_receiveWidget) {
@@ -364,6 +366,21 @@ void DigiDollarTab::onRedeemRequested(const QString &positionId)
         m_tabWidget->setCurrentIndex(4); // Redeem tab
     }
 }
+
+void DigiDollarTab::showTransaction(const QString& txid)
+{
+    if (!m_tabWidget || !m_transactionsWidget || txid.isEmpty()) {
+        return;
+    }
+
+    if (m_stackedWidget) {
+        m_stackedWidget->setCurrentWidget(m_tabWidget);
+    }
+    m_tabWidget->setCurrentWidget(m_transactionsWidget);
+    m_transactionsWidget->updateView();
+    m_transactionsWidget->focusTransaction(txid);
+}
+
 void DigiDollarTab::checkActivationStatus()
 {
     if (m_activated) {

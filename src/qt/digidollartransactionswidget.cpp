@@ -15,8 +15,11 @@
 #include <QDateTime>
 #include <QClipboard>
 #include <QApplication>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QTableWidget>
+#include <QTextEdit>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QComboBox>
@@ -28,6 +31,45 @@
 #include <QFileDialog>
 #include <QTextStream>
 #include <QTimer>
+
+namespace {
+
+class DigiDollarTransactionDetailsDialog final : public QDialog
+{
+public:
+    DigiDollarTransactionDetailsDialog(const QString& txid, const QString& details_html, QWidget* parent)
+        : QDialog(parent, GUIUtil::dialog_flags)
+    {
+        setObjectName(QStringLiteral("TransactionDescDialog"));
+        setWindowTitle(QObject::tr("Details for %1").arg(txid));
+        resize(620, 250);
+
+        QVBoxLayout* layout = new QVBoxLayout(this);
+        QTextEdit* detailText = new QTextEdit(this);
+        detailText->setObjectName(QStringLiteral("detailText"));
+        detailText->setToolTip(QObject::tr("This pane shows a detailed description of the transaction"));
+        detailText->setReadOnly(true);
+        detailText->setHtml(details_html);
+
+        QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, this);
+        connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+        connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+
+        layout->addWidget(detailText);
+        layout->addWidget(buttonBox);
+        setLayout(layout);
+        GUIUtil::handleCloseWindowShortcut(this);
+    }
+};
+
+QString DetailRow(const QString& label, const QString& value)
+{
+    if (value.isEmpty()) return QString();
+    return QStringLiteral("<b>%1:</b> %2<br>")
+        .arg(GUIUtil::HtmlEscape(label), GUIUtil::HtmlEscape(value));
+}
+
+} // namespace
 
 DigiDollarTransactionsWidget::DigiDollarTransactionsWidget(QWidget* parent)
     : QWidget(parent)
@@ -161,6 +203,16 @@ void DigiDollarTransactionsWidget::connectSignals()
             this, &DigiDollarTransactionsWidget::onSearchTextChanged);
     connect(m_table, &QTableWidget::customContextMenuRequested,
             this, &DigiDollarTransactionsWidget::showContextMenu);
+    connect(m_table, &QTableWidget::itemDoubleClicked, this, [this](QTableWidgetItem* item) {
+        if (!item) return;
+        m_table->setCurrentItem(item);
+        showDetails();
+    });
+    connect(m_table, &QTableWidget::itemActivated, this, [this](QTableWidgetItem* item) {
+        if (!item) return;
+        m_table->setCurrentItem(item);
+        showDetails();
+    });
     connect(m_exportButton, &QPushButton::clicked,
             this, &DigiDollarTransactionsWidget::exportClicked);
 
@@ -199,6 +251,32 @@ void DigiDollarTransactionsWidget::setPrivacy(bool privacy)
         m_statusLabel->setVisible(true);
     } else {
         updateTransactions();
+    }
+}
+
+void DigiDollarTransactionsWidget::focusTransaction(const QString& txid)
+{
+    if (!m_table || txid.isEmpty() || m_privacy) {
+        return;
+    }
+
+    updateTransactions();
+
+    if (m_table->selectionModel()) {
+        m_table->selectionModel()->clearSelection();
+    }
+
+    for (int row = 0; row < m_table->rowCount(); ++row) {
+        QTableWidgetItem* txidItem = m_table->item(row, Column::TxId);
+        if (!txidItem || txidItem->data(Qt::UserRole).toString() != txid) {
+            continue;
+        }
+
+        m_table->setCurrentCell(row, Column::TxId);
+        m_table->selectRow(row);
+        m_table->scrollToItem(txidItem, QAbstractItemView::PositionAtCenter);
+        m_table->setFocus();
+        return;
     }
 }
 
@@ -242,10 +320,11 @@ void DigiDollarTransactionsWidget::populateTable()
             result = m_walletModel->executeRpc("listdigidollartxs", params);
         } catch (const UniValue& e) {
             // Qt unit tests and early GUI startup paths may not have the wallet
-            // RPC table registered yet. Fall back to the same wallet history data
-            // that listdigidollartxs exposes so the display path stays available.
+            // RPC table registered yet, or the RPC layer may still be in warmup.
+            // Fall back to the same wallet history data that listdigidollartxs
+            // exposes so the display path stays available.
             const int code = e.find_value("code").isNum() ? e.find_value("code").getInt<int>() : 0;
-            if (code != -32601) throw;
+            if (code != -32601 && code != -28) throw;
 
             DigiDollarWallet* ddWallet = m_walletModel->wallet().getDigiDollarWallet();
             if (!ddWallet) throw;
@@ -455,24 +534,37 @@ void DigiDollarTransactionsWidget::showDetails()
         QTableWidgetItem* dateItem = m_table->item(row, Column::Date);
         QTableWidgetItem* confItem = m_table->item(row, Column::Confirmations);
         QTableWidgetItem* noteItem = m_table->item(row, Column::Note);
+        QTableWidgetItem* lockItem = m_table->item(row, Column::LockPeriod);
 
-        QString noteText = noteItem ? noteItem->text() : "";
-        QString noteSection = noteText.isEmpty() ? "" : tr("\nNote: %1").arg(noteText);
+        const QString txid = txidItem ? txidItem->data(Qt::UserRole).toString() : QString();
+        if (txid.isEmpty()) {
+            return;
+        }
 
-        QString details = tr("Transaction Details\n\n"
-                            "TX ID: %1\n"
-                            "Type: %2\n"
-                            "Amount: %3\n"
-                            "Date: %4\n"
-                            "Confirmations: %5%6")
-                            .arg(txidItem ? txidItem->data(Qt::UserRole).toString() : "N/A")
-                            .arg(typeItem ? typeItem->text() : "N/A")
-                            .arg(amountItem ? amountItem->text() : "N/A")
-                            .arg(dateItem ? dateItem->text() : "N/A")
-                            .arg(confItem ? confItem->text() : "N/A")
-                            .arg(noteSection);
+        const QString noteText = noteItem ? noteItem->text() : QString();
+        const QString lockText = lockItem ? lockItem->text() : QString();
+        QString details;
+        details += QStringLiteral("<html><body>");
+        details += DetailRow(tr("Status"), confItem ? confItem->text() : QString());
+        details += DetailRow(tr("Date"), dateItem ? dateItem->text() : QString());
+        details += DetailRow(tr("Type"), typeItem ? typeItem->text() : QString());
+        details += DetailRow(tr("Amount"), amountItem ? amountItem->text() : QString());
+        if (!lockText.isEmpty() && lockText != QStringLiteral("-")) {
+            details += DetailRow(tr("Lock period"), lockText);
+        }
+        if (!noteText.isEmpty()) {
+            details += DetailRow(tr("Note"), noteText);
+        }
+        details += DetailRow(tr("Transaction ID"), txid);
+        details += QStringLiteral("</body></html>");
 
-        QMessageBox::information(this, tr("DigiDollar Transaction"), details);
+        DigiDollarTransactionDetailsDialog* dlg = new DigiDollarTransactionDetailsDialog(txid, details, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        m_openedDialogs.append(dlg);
+        connect(dlg, &QObject::destroyed, [this, dlg] {
+            m_openedDialogs.removeOne(dlg);
+        });
+        dlg->show();
     }
 }
 

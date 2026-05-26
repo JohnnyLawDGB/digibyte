@@ -40,6 +40,8 @@
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include <QApplication>
@@ -66,9 +68,11 @@
 #include <QListWidget>
 #include <QTableWidget>
 #include <QTreeWidget>
+#include <QTextEdit>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QSignalSpy>
+#include <QTabWidget>
 #include <QTimer>
 #include <QToolTip>
 
@@ -3377,7 +3381,7 @@ void DigiDollarWidgetTests::overviewRecentTransactionAmountIsRightAligned()
              "Recent transaction amount label should reserve enough width for the exact formatted amount");
 }
 
-void DigiDollarWidgetTests::overviewRecentTransactionDoubleClickShowsDetails()
+void DigiDollarWidgetTests::overviewRecentTransactionDoubleClickOpensTransactionsTab()
 {
 #ifdef Q_OS_MACOS
     if (QApplication::platformName() == "minimal") {
@@ -3415,33 +3419,295 @@ void DigiDollarWidgetTests::overviewRecentTransactionDoubleClickShowsDetails()
     DigiDollarMiniGUI mini_gui(m_node);
     mini_gui.initModelForWallet(m_node, wallet);
 
-    DigiDollarOverviewWidget overviewWidget;
-    overviewWidget.setWalletModel(mini_gui.walletModel.get());
-    overviewWidget.setClientModel(mini_gui.clientModel.get());
-    overviewWidget.show();
-    overviewWidget.updateView();
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarTab tab(mini_gui.platformStyle.get());
+    tab.setWalletModel(mini_gui.walletModel.get());
+    tab.setClientModel(mini_gui.clientModel.get());
+    tab.show();
+    QCoreApplication::processEvents();
+    tab.updateView();
     QCoreApplication::processEvents();
 
-    QListWidget* transactionsList = overviewWidget.findChild<QListWidget*>("transactionsList");
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QTabWidget* tabWidget = tab.findChild<QTabWidget*>("digiDollarSubTabs");
+    QVERIFY(tabWidget != nullptr);
+    QCOMPARE(tabWidget->currentIndex(), 0);
+
+    QListWidget* transactionsList = tab.findChild<QListWidget*>("transactionsList");
     QVERIFY(transactionsList != nullptr);
     QVERIFY(transactionsList->count() >= 1);
 
-    QSignalSpy messageSpy(&overviewWidget, SIGNAL(message(QString,QString,unsigned int)));
-    const bool invoked = QMetaObject::invokeMethod(&overviewWidget, "showRecentTransactionDetails",
+    QListWidgetItem* item = transactionsList->item(0);
+    QVERIFY(item != nullptr);
+    const bool invoked = QMetaObject::invokeMethod(transactionsList, "itemDoubleClicked",
                                                    Qt::DirectConnection,
-                                                   Q_ARG(QListWidgetItem*, transactionsList->item(0)));
-    QVERIFY2(invoked, "DD Overview recent transaction rows must expose a details slot for double-click activation");
-    QCOMPARE(messageSpy.count(), 1);
+                                                   Q_ARG(QListWidgetItem*, item));
+    QVERIFY2(invoked, "DD overview recent transaction list must expose the itemDoubleClicked signal");
+    QCoreApplication::processEvents();
 
-    const QList<QVariant> messageArgs = messageSpy.takeFirst();
-    QCOMPARE(messageArgs.at(0).toString(), QStringLiteral("DigiDollar Transaction"));
-    const QString details = messageArgs.at(1).toString();
-    QVERIFY2(details.contains(QString::fromStdString(tx.txid)), "details must include the full transaction id");
-    QVERIFY2(details.contains(QStringLiteral("Send")), "details must include the transaction type");
-    QVERIFY2(details.contains(QStringLiteral("-$12.34")), "details must include the signed amount");
-    QVERIFY2(details.contains(QStringLiteral("Confirmations: ")), "details must include confirmation status");
-    QVERIFY2(details.contains(QStringLiteral("overview detail note")), "details must include the local note");
-    QCOMPARE(messageArgs.at(2).toUInt(), static_cast<uint>(QMessageBox::Information));
+    QCOMPARE(tabWidget->currentIndex(), 6);
+
+    DigiDollarTransactionsWidget* transactionsWidget = tab.findChild<DigiDollarTransactionsWidget*>("transactionsWidget");
+    QVERIFY(transactionsWidget != nullptr);
+    QTableWidget* table = transactionsWidget->findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+
+    bool foundSelectedTx = false;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        QTableWidgetItem* txidItem = table->item(row, 5);
+        if (!txidItem || txidItem->data(Qt::UserRole).toString() != QString::fromStdString(tx.txid)) {
+            continue;
+        }
+        foundSelectedTx = table->currentRow() == row && table->selectionModel()->isRowSelected(row, QModelIndex());
+        break;
+    }
+    QVERIFY2(foundSelectedTx, "DD overview double-click must switch to DD Transactions and focus the matching transaction row");
+}
+
+void DigiDollarWidgetTests::transactionsWidgetDoubleClickShowsDetailsDialog()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-details-dialog");
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    DDTransaction tx;
+    tx.txid = "d000000000000000000000000000000000000000000000000000000000000001";
+    tx.amount = 4321;
+    tx.timestamp = GetTime();
+    tx.confirmations = 8;
+    tx.incoming = true;
+    tx.address = "TDdetaildialogaddress";
+    tx.category = "mint";
+    tx.comment = "detail dialog note";
+    tx.lock_tier = 4;
+    tx.fee = 0;
+    tx.abandoned = false;
+    dd_wallet->AddMockTransaction(tx);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
+    transactionsWidget.setClientModel(mini_gui.clientModel.get());
+    transactionsWidget.show();
+    transactionsWidget.updateView();
+    QCoreApplication::processEvents();
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+
+    QTableWidgetItem* txidItem = table->item(0, 5);
+    QVERIFY(txidItem != nullptr);
+    QCOMPARE(txidItem->data(Qt::UserRole).toString(), QString::fromStdString(tx.txid));
+
+    table->setCurrentItem(txidItem);
+    const bool invoked = QMetaObject::invokeMethod(table, "itemDoubleClicked",
+                                                   Qt::DirectConnection,
+                                                   Q_ARG(QTableWidgetItem*, txidItem));
+    QVERIFY2(invoked, "DD transactions table must expose the itemDoubleClicked signal");
+    QCoreApplication::processEvents();
+
+    QDialog* detailsDialog = nullptr;
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        QDialog* dialog = qobject_cast<QDialog*>(widget);
+        if (!dialog || !dialog->isVisible()) continue;
+        if (dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
+            detailsDialog = dialog;
+            break;
+        }
+    }
+    if (!detailsDialog) {
+        for (QDialog* dialog : transactionsWidget.findChildren<QDialog*>()) {
+            if (dialog && dialog->isVisible() && dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
+                detailsDialog = dialog;
+                break;
+            }
+        }
+    }
+    QVERIFY2(detailsDialog, "double-clicking a DD transaction row must open a non-modal transaction details dialog");
+    QCOMPARE(detailsDialog->objectName(), QStringLiteral("TransactionDescDialog"));
+    QVERIFY2(detailsDialog->windowTitle().contains(QString::fromStdString(tx.txid)),
+             "DD transaction details dialog title must include the full txid");
+
+    QTextEdit* detailText = detailsDialog->findChild<QTextEdit*>(QStringLiteral("detailText"));
+    QVERIFY(detailText != nullptr);
+    QVERIFY(detailText->isReadOnly());
+    const QString plainDetails = detailText->toPlainText();
+
+    detailsDialog->close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    QVERIFY2(plainDetails.contains(QString::fromStdString(tx.txid)), "details text must include the full transaction id");
+    QVERIFY2(plainDetails.contains(QStringLiteral("Mint 1-yr")), "details text must include the transaction type");
+    QVERIFY2(plainDetails.contains(QStringLiteral("+$43.21 DD")), "details text must include the signed DD amount");
+    QVERIFY2(plainDetails.contains(QStringLiteral("Status:")), "details text must include the confirmation status");
+    QVERIFY2(plainDetails.contains(QStringLiteral("detail dialog note")), "details text must include the local note");
+}
+
+void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight()
+{
+    const QString platform = QGuiApplication::platformName();
+    if (platform == QStringLiteral("offscreen") || platform == QStringLiteral("minimal")) {
+        QSKIP("Visual DD transaction detail QA requires a platform that can capture rendered dialog windows");
+    }
+
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+    const auto findFile = [&](const QStringList& candidates) -> QString {
+        for (const auto& p : candidates) {
+            const QString text = readFile(p.toUtf8().constData());
+            if (!text.isEmpty()) return text;
+        }
+        return {};
+    };
+
+    const QString darkCss = findFile({
+        QStringLiteral("src/qt/res/css/dark.css"),
+        QStringLiteral("../src/qt/res/css/dark.css"),
+        QStringLiteral("../../src/qt/res/css/dark.css"),
+        QStringLiteral("qt/res/css/dark.css"),
+    });
+    const QString lightCss = findFile({
+        QStringLiteral("src/qt/res/css/light.css"),
+        QStringLiteral("../src/qt/res/css/light.css"),
+        QStringLiteral("../../src/qt/res/css/light.css"),
+        QStringLiteral("qt/res/css/light.css"),
+    });
+    QVERIFY2(!darkCss.isEmpty(), "could not locate dark.css for DD transaction detail visual QA");
+    QVERIFY2(!lightCss.isEmpty(), "could not locate light.css for DD transaction detail visual QA");
+
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test, "qt-dd-details-visual");
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    DDTransaction tx;
+    tx.txid = "e000000000000000000000000000000000000000000000000000000000000001";
+    tx.amount = 9876;
+    tx.timestamp = GetTime();
+    tx.confirmations = 2;
+    tx.incoming = false;
+    tx.address = "TDdetailvisualaddress";
+    tx.category = "send";
+    tx.comment = "visual QA note";
+    tx.lock_tier = -1;
+    tx.fee = 0;
+    tx.abandoned = false;
+    dd_wallet->AddMockTransaction(tx);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    WalletContext& context = *m_node.walletLoader().context();
+    AddWallet(context, wallet);
+
+    DigiDollarTransactionsWidget transactionsWidget;
+    transactionsWidget.setWalletModel(mini_gui.walletModel.get());
+    transactionsWidget.setClientModel(mini_gui.clientModel.get());
+    transactionsWidget.resize(900, 420);
+    transactionsWidget.show();
+    QCoreApplication::processEvents();
+    QTRY_VERIFY(transactionsWidget.isVisible());
+    transactionsWidget.updateView();
+    QCoreApplication::processEvents();
+
+    QTableWidget* table = transactionsWidget.findChild<QTableWidget*>();
+    QVERIFY(table != nullptr);
+    QTRY_COMPARE(table->rowCount(), 1);
+    QTableWidgetItem* txidItem = table->item(0, 5);
+    QVERIFY(txidItem != nullptr);
+
+    RemoveWallet(context, wallet, std::nullopt);
+
+    const QString originalStyleSheet = qApp->styleSheet();
+    const auto contrastRatio = [](const QColor& a, const QColor& b) {
+        const auto channel = [](double c) {
+            c /= 255.0;
+            return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+        };
+        const double l1 = 0.2126 * channel(a.red()) + 0.7152 * channel(a.green()) + 0.0722 * channel(a.blue());
+        const double l2 = 0.2126 * channel(b.red()) + 0.7152 * channel(b.green()) + 0.0722 * channel(b.blue());
+        return (std::max(l1, l2) + 0.05) / (std::min(l1, l2) + 0.05);
+    };
+
+    auto openAndCapture = [&](const QString& css, const QString& path) {
+        qApp->setStyleSheet(css);
+        QCoreApplication::processEvents();
+        table->setCurrentItem(txidItem);
+        QVERIFY(QMetaObject::invokeMethod(table, "itemDoubleClicked",
+                                          Qt::DirectConnection,
+                                          Q_ARG(QTableWidgetItem*, txidItem)));
+        QCoreApplication::processEvents();
+        QTest::qWait(150);
+
+        QDialog* detailsDialog = nullptr;
+        for (QDialog* dialog : transactionsWidget.findChildren<QDialog*>()) {
+            if (dialog && dialog->isVisible() && dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
+                detailsDialog = dialog;
+                break;
+            }
+        }
+        QVERIFY2(detailsDialog, "DD transaction details dialog did not open for visual QA");
+        QTextEdit* detailText = detailsDialog->findChild<QTextEdit*>(QStringLiteral("detailText"));
+        QVERIFY(detailText != nullptr);
+
+        const QColor textColor = detailText->palette().color(QPalette::Text);
+        const QColor baseColor = detailText->palette().color(QPalette::Base);
+        QVERIFY2(contrastRatio(textColor, baseColor) >= 4.5,
+                 qPrintable(QStringLiteral("DD transaction details text contrast too low for %1").arg(path)));
+
+        const QPixmap pixmap = detailsDialog->grab();
+        QVERIFY2(!pixmap.isNull(), "failed to grab DD transaction details dialog");
+        QVERIFY2(pixmap.save(path), qPrintable(QStringLiteral("failed to save %1").arg(path)));
+
+        detailsDialog->close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+    };
+
+    openAndCapture(darkCss, QStringLiteral("/tmp/digibyte_dd_transaction_details_dark_qa.png"));
+    openAndCapture(lightCss, QStringLiteral("/tmp/digibyte_dd_transaction_details_light_qa.png"));
+    qApp->setStyleSheet(originalStyleSheet);
+    QCoreApplication::processEvents();
+
+    qInfo("DD transaction details dark QA screenshot: /tmp/digibyte_dd_transaction_details_dark_qa.png");
+    qInfo("DD transaction details light QA screenshot: /tmp/digibyte_dd_transaction_details_light_qa.png");
 }
 
 // Regression coverage for the DD Transactions tab's RPC-backed history table:

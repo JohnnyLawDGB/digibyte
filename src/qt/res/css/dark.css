@@ -5971,6 +5971,44 @@ DigiDollarTransactionsWidget QPushButton:hover {
     color: #ffffff !important;
 }
 
+QDialog#DDTransactionDescDialog {
+    background-color: #0b2419;
+    color: #ffffff;
+}
+
+QDialog#DDTransactionDescDialog QTextEdit {
+    background-color: #113a29;
+    color: #ffffff;
+    border: 2px solid #42d884;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11pt;
+}
+
+QDialog#DDTransactionDescDialog QLabel {
+    color: #ffffff;
+}
+
+QDialog#DDTransactionDescDialog QPushButton {
+    background-color: #16804f;
+    color: #ffffff;
+    border: 2px solid #16804f;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+}
+
+QDialog#DDTransactionDescDialog QPushButton:hover {
+    background-color: #21a866;
+    border-color: #21a866;
+    color: #ffffff;
+}
+
+QDialog#DDTransactionDescDialog QPushButton:pressed {
+    background-color: #0f633c;
+    border-color: #0f633c;
+}
+
 DigiDollarSendWidget QPushButton#useAvailableBalanceButton {
     background-color: transparent;
     border: 2px solid #42d884;

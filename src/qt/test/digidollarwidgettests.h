@@ -54,6 +54,7 @@ private Q_SLOTS:
     void overviewRecentTransactionDoubleClickOpensTransactionsTab();
     void transactionsWidgetDoubleClickShowsDetailsDialog();
     void transactionsWidgetDetailsDialogVisualQaDarkAndLight();
+    void transactionsWidgetDetailsDialogHasDigiDollarThemeRules();
     void privacySendMaskTests();
     void privacyMintMaskTests();
     void privacyRedeemMaskTests();

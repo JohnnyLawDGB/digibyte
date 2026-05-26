@@ -3550,7 +3550,7 @@ void DigiDollarWidgetTests::transactionsWidgetDoubleClickShowsDetailsDialog()
         }
     }
     QVERIFY2(detailsDialog, "double-clicking a DD transaction row must open a non-modal transaction details dialog");
-    QCOMPARE(detailsDialog->objectName(), QStringLiteral("TransactionDescDialog"));
+    QCOMPARE(detailsDialog->objectName(), QStringLiteral("DDTransactionDescDialog"));
     QVERIFY2(detailsDialog->windowTitle().contains(QString::fromStdString(tx.txid)),
              "DD transaction details dialog title must include the full txid");
 
@@ -3684,6 +3684,7 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight(
             }
         }
         QVERIFY2(detailsDialog, "DD transaction details dialog did not open for visual QA");
+        QCOMPARE(detailsDialog->objectName(), QStringLiteral("DDTransactionDescDialog"));
         QTextEdit* detailText = detailsDialog->findChild<QTextEdit*>(QStringLiteral("detailText"));
         QVERIFY(detailText != nullptr);
 
@@ -3708,6 +3709,69 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight(
 
     qInfo("DD transaction details dark QA screenshot: /tmp/digibyte_dd_transaction_details_dark_qa.png");
     qInfo("DD transaction details light QA screenshot: /tmp/digibyte_dd_transaction_details_light_qa.png");
+}
+
+void DigiDollarWidgetTests::transactionsWidgetDetailsDialogHasDigiDollarThemeRules()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+    const auto findTheme = [&](const QString& name) -> QString {
+        const QStringList candidates{
+            QStringLiteral("src/qt/res/css/%1").arg(name),
+            QStringLiteral("../src/qt/res/css/%1").arg(name),
+            QStringLiteral("../../src/qt/res/css/%1").arg(name),
+            QStringLiteral("qt/res/css/%1").arg(name),
+        };
+        for (const auto& path : candidates) {
+            const QString css = readFile(path.toUtf8().constData());
+            if (!css.isEmpty()) return css;
+        }
+        return {};
+    };
+    const auto extractRule = [](const QString& css, const QString& selector) -> QString {
+        const int selectorStart = css.indexOf(selector);
+        if (selectorStart < 0) return {};
+        const int braceStart = css.indexOf(QLatin1Char('{'), selectorStart);
+        if (braceStart < 0) return {};
+        const int braceEnd = css.indexOf(QLatin1Char('}'), braceStart);
+        if (braceEnd < 0) return {};
+        return css.mid(braceStart + 1, braceEnd - braceStart - 1);
+    };
+    const auto requireTheme = [&](const QString& css, const QString& theme, const QString& dialogBg,
+                                  const QString& textBg, const QString& textColor, const QString& accent) {
+        const QString dialog = extractRule(css, QStringLiteral("QDialog#DDTransactionDescDialog"));
+        const QString textEdit = extractRule(css, QStringLiteral("QDialog#DDTransactionDescDialog QTextEdit"));
+        const QString button = extractRule(css, QStringLiteral("QDialog#DDTransactionDescDialog QPushButton"));
+
+        QVERIFY2(!dialog.isEmpty(), qPrintable(QStringLiteral("%1 must style QDialog#DDTransactionDescDialog").arg(theme)));
+        QVERIFY2(!textEdit.isEmpty(), qPrintable(QStringLiteral("%1 must style DD transaction detail text").arg(theme)));
+        QVERIFY2(!button.isEmpty(), qPrintable(QStringLiteral("%1 must style DD transaction detail buttons").arg(theme)));
+
+        QVERIFY2(dialog.contains(dialogBg, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD dialog must use the DigiDollar green surface, not DGB blue").arg(theme)));
+        QVERIFY2(textEdit.contains(textBg, Qt::CaseInsensitive) && textEdit.contains(textColor, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD detail text pane must have readable DigiDollar colors").arg(theme)));
+        QVERIFY2(button.contains(accent, Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD detail close button must use DigiDollar green accent").arg(theme)));
+
+        QVERIFY2(!dialog.contains(QStringLiteral("#002352"), Qt::CaseInsensitive) &&
+                 !textEdit.contains(QStringLiteral("#003366"), Qt::CaseInsensitive) &&
+                 !button.contains(QStringLiteral("#0066CC"), Qt::CaseInsensitive),
+                 qPrintable(QStringLiteral("%1 DD detail dialog must not reuse DGB blue transaction detail styling").arg(theme)));
+    };
+
+    const QString dark = findTheme(QStringLiteral("dark.css"));
+    QVERIFY2(!dark.isEmpty(), "could not locate dark.css from current working directory");
+    requireTheme(dark, QStringLiteral("dark.css"), QStringLiteral("#0b2419"),
+                 QStringLiteral("#113a29"), QStringLiteral("#ffffff"), QStringLiteral("#16804f"));
+
+    const QString light = findTheme(QStringLiteral("light.css"));
+    QVERIFY2(!light.isEmpty(), "could not locate light.css from current working directory");
+    requireTheme(light, QStringLiteral("light.css"), QStringLiteral("#eef9f2"),
+                 QStringLiteral("#ffffff"), QStringLiteral("#123f2b"), QStringLiteral("#1f9d57"));
 }
 
 // Regression coverage for the DD Transactions tab's RPC-backed history table:

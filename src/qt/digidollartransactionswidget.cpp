@@ -40,7 +40,7 @@ public:
     DigiDollarTransactionDetailsDialog(const QString& txid, const QString& details_html, QWidget* parent)
         : QDialog(parent, GUIUtil::dialog_flags)
     {
-        setObjectName(QStringLiteral("TransactionDescDialog"));
+        setObjectName(QStringLiteral("DDTransactionDescDialog"));
         setWindowTitle(QObject::tr("Details for %1").arg(txid));
         resize(620, 250);
 

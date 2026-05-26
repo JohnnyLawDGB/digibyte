@@ -1368,8 +1368,9 @@ bool ValidateMintTransaction(const CTransaction& tx,
                             const int64_t remainingLockBlocks = lockTime - ctx.nHeight;
                             const int64_t maxLockBlocks = expectedLockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
                             if (remainingLockBlocks < expectedLockBlocks || remainingLockBlocks > maxLockBlocks) {
-                                LogPrintf("DigiDollar: SECURITY - Non-canonical lock duration for tier %lld: "
+                                LogPrintf("DigiDollar: SECURITY - Non-canonical lock duration for mint txid=%s tier=%lld: "
                                           "remaining=%lld, expected_range=[%lld,%lld] (lockHeight=%lld, currentHeight=%d)\n",
+                                          tx.GetHash().ToString(),
                                           static_cast<long long>(lockTier),
                                           static_cast<long long>(remainingLockBlocks),
                                           static_cast<long long>(expectedLockBlocks),

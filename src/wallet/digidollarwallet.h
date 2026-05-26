@@ -38,6 +38,8 @@ struct DDTransaction {
     std::string comment;    // Transaction comment (empty if none)
     bool abandoned;         // Whether transaction was abandoned
     int lock_tier;          // Lock tier for mints (0-9), -1 for non-mint transactions
+    bool in_mempool;        // Transient display state, not serialized
+    bool is_local;          // Transient display state for unconfirmed, unrelayed wallet txs
 
     DDTransaction();
 

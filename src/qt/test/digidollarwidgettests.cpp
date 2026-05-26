@@ -2007,12 +2007,26 @@ void DigiDollarWidgetTests::transactionsWidgetRefreshesOnDigiDollarSignal()
     sendTx.lock_tier = -1;
     dd_wallet->AddMockTransaction(sendTx);
 
+    DDTransaction localTx;
+    localTx.txid = "d000000000000000000000000000000000000000000000000000000000000003";
+    localTx.amount = 300;
+    localTx.timestamp = GetTime() + 2;
+    localTx.confirmations = 0;
+    localTx.incoming = true;
+    localTx.address = "TDlocal";
+    localTx.category = "mint";
+    localTx.comment = "not relayed";
+    localTx.lock_tier = 0;
+    localTx.is_local = true;
+    dd_wallet->AddMockTransaction(localTx);
+
     const bool invoked = QMetaObject::invokeMethod(mini_gui.walletModel.get(), "digiDollarChanged", Qt::DirectConnection);
     QVERIFY2(invoked, "WalletModel must expose a DigiDollar-specific refresh signal");
     QCoreApplication::processEvents();
 
-    QCOMPARE(table->rowCount(), 2);
+    QCOMPARE(table->rowCount(), 3);
     bool foundSend = false;
+    bool foundLocal = false;
     for (int row = 0; row < table->rowCount(); ++row) {
         QTableWidgetItem* txidItem = table->item(row, 5);
         QTableWidgetItem* typeItem = table->item(row, 1);
@@ -2026,8 +2040,17 @@ void DigiDollarWidgetTests::transactionsWidgetRefreshesOnDigiDollarSignal()
             QCOMPARE(statusItem ? statusItem->text() : QString(), QStringLiteral("Pending"));
             QCOMPARE(noteItem ? noteItem->text() : QString(), QStringLiteral("fresh send"));
         }
+        if (txidItem && txidItem->data(Qt::UserRole).toString() == QString::fromStdString(localTx.txid)) {
+            foundLocal = true;
+            QCOMPARE(typeItem ? typeItem->text() : QString(), QStringLiteral("Mint 1-hr"));
+            QCOMPARE(amountItem ? amountItem->text() : QString(), QStringLiteral("+$3.00 DD"));
+            QCOMPARE(statusItem ? statusItem->text() : QString(), QStringLiteral("Local"));
+            QVERIFY2(statusItem && statusItem->toolTip().contains(QStringLiteral("not currently in mempool")),
+                     qPrintable(statusItem ? statusItem->toolTip() : QString()));
+        }
     }
     QVERIFY2(foundSend, "DD Transactions must refresh immediately when DigiDollar wallet state changes");
+    QVERIFY2(foundLocal, "DD Transactions must show a distinct local/not-relayed bucket");
 }
 
 // Regression test for au_epic's report: reopening the main DigiDollar page

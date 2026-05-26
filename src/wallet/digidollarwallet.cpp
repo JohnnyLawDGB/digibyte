@@ -144,7 +144,8 @@ static bool IsStandardDDTokenOutput(const CTxOut& txout)
 
 DDTransaction::DDTransaction()
     : amount(0), timestamp(0), confirmations(0), incoming(false), category("unknown"),
-      blockheight(-1), blockhash(""), fee(0), comment(""), abandoned(false), lock_tier(-1) {}
+      blockheight(-1), blockhash(""), fee(0), comment(""), abandoned(false), lock_tier(-1),
+      in_mempool(false), is_local(false) {}
 
 // =============================================================================
 // DigiDollarWallet Implementation
@@ -1912,7 +1913,11 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
     for (auto& ddtx : history) {
         uint256 txid;
         txid.SetHex(ddtx.txid);
+        const bool preset_in_mempool = ddtx.in_mempool;
+        const bool preset_is_local = ddtx.is_local;
         ddtx.confirmations = GetDDTransactionConfirmations(txid);
+        ddtx.in_mempool = preset_in_mempool;
+        ddtx.is_local = preset_is_local;
 
         // Check if transaction is abandoned or effectively abandoned
         ddtx.abandoned = false;
@@ -1920,6 +1925,9 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(txid);
             if (wtx) {
+                ddtx.in_mempool = wtx->InMempool();
+                ddtx.is_local = ddtx.confirmations == 0 && wtx->isUnconfirmed() && !ddtx.in_mempool;
+
                 // Set block height from the transaction state
                 if (auto* conf = wtx->state<wallet::TxStateConfirmed>()) {
                     ddtx.blockheight = conf->confirmed_block_height;
@@ -1942,8 +1950,10 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
                 if (wtx->isAbandoned()) {
                     // Directly abandoned
                     ddtx.abandoned = true;
+                    ddtx.is_local = false;
                     ddtx.confirmations = -1;
                 } else if (ddtx.confirmations < 0) {
+                    ddtx.is_local = false;
                     // Transaction is conflicted (negative confirmations)
                     // Check if ALL conflicting transactions are abandoned
                     // If so, this transaction should also be considered abandoned

@@ -3654,7 +3654,9 @@ RPCHelpMan listdigidollartxs()
                                 {RPCResult::Type::STR_AMOUNT, "fee", "Transaction fee paid (if applicable)"},
                                 {RPCResult::Type::STR, "comment", "Transaction comment (if any)"},
                                 {RPCResult::Type::BOOL, "abandoned", "Whether transaction was abandoned"},
-                                {RPCResult::Type::NUM, "lock_tier", "Collateral lock tier for mint transactions (0-9)"}
+                                {RPCResult::Type::NUM, "lock_tier", "Collateral lock tier for mint transactions (0-9)"},
+                                {RPCResult::Type::BOOL, "in_mempool", "Whether the wallet currently sees the transaction in mempool/stempool"},
+                                {RPCResult::Type::STR, "wallet_state", "DD wallet display state: local, pending, confirmed, conflicted, or abandoned"}
                             }
                         }
                     }
@@ -3747,6 +3749,11 @@ RPCHelpMan listdigidollartxs()
                 txInfo.pushKV("comment", tx.comment);
                 txInfo.pushKV("abandoned", tx.abandoned);
                 txInfo.pushKV("lock_tier", tx.lock_tier);
+                txInfo.pushKV("in_mempool", tx.in_mempool);
+                txInfo.pushKV("wallet_state", tx.is_local ? "local" :
+                    (tx.abandoned ? "abandoned" :
+                     (tx.confirmations < 0 ? "conflicted" :
+                      (tx.confirmations > 0 ? "confirmed" : "pending"))));
 
                 result.push_back(txInfo);
                 processed++;

@@ -21,6 +21,8 @@
 #include <util/chaintype.h>
 
 #include <cstdint>
+#include <fstream>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <vector>
@@ -532,6 +534,34 @@ BOOST_AUTO_TEST_CASE(wave7_iscanonical_locktier_table_drives_acceptance)
     BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(-1, params));
     BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(std::numeric_limits<int64_t>::max(), params));
     BOOST_CHECK(!DigiDollar::IsCanonicalLockTier(std::numeric_limits<int64_t>::min(), params));
+}
+
+BOOST_AUTO_TEST_CASE(wave7_locktier_duration_reject_log_includes_txid_and_window)
+{
+    const auto readFile = [](const std::vector<std::string>& candidates) {
+        for (const auto& path : candidates) {
+            std::ifstream file(path);
+            if (!file.is_open()) continue;
+            return std::string(std::istreambuf_iterator<char>(file),
+                               std::istreambuf_iterator<char>());
+        }
+        return std::string();
+    };
+
+    const std::string source = readFile({
+        "src/digidollar/validation.cpp",
+        "../src/digidollar/validation.cpp",
+        "../../src/digidollar/validation.cpp",
+        "digidollar/validation.cpp",
+    });
+
+    BOOST_REQUIRE_MESSAGE(!source.empty(), "could not locate digidollar/validation.cpp from current working directory");
+    BOOST_CHECK_MESSAGE(source.find("Non-canonical lock duration for mint txid=%s") != std::string::npos,
+        "bad-mint-lock-tier-duration logs must identify the exact mint txid");
+    BOOST_CHECK_MESSAGE(source.find("expected_range=[%lld,%lld]") != std::string::npos,
+        "bad-mint-lock-tier-duration logs must retain the accepted canonical window");
+    BOOST_CHECK_MESSAGE(source.find("tx.GetHash().ToString()") != std::string::npos,
+        "bad-mint-lock-tier-duration logs must pass the transaction hash to LogPrintf");
 }
 
 BOOST_AUTO_TEST_CASE(wave7_txbuilder_rejects_non_canonical_lock_days)

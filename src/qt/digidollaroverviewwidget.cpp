@@ -937,13 +937,16 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         } else if (tx.confirmations < 0) {
             confirmText = tr("Conflicted");
         } else if (tx.confirmations == 0) {
-            confirmText = tr("Pending");
+            confirmText = tx.is_local ? tr("Local") : tr("Pending");
         } else if (tx.confirmations < 6) {
             confirmText = QString("%1 conf").arg(tx.confirmations);
         } else {
             confirmText = tr("Confirmed");
         }
         QLabel* confirmLabel = new QLabel(confirmText);
+        if (tx.is_local) {
+            confirmLabel->setToolTip(tr("Created locally but not currently in mempool. It may need rebroadcast or may have been rejected."));
+        }
         confirmLabel->setFixedWidth(100);
         layout->addWidget(confirmLabel);
 

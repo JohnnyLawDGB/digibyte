@@ -263,6 +263,11 @@ void DigiDollarTransactionsWidget::populateTable()
                 txInfo.pushKV("comment", histTx.comment);
                 txInfo.pushKV("abandoned", histTx.abandoned);
                 txInfo.pushKV("lock_tier", histTx.lock_tier);
+                txInfo.pushKV("in_mempool", histTx.in_mempool);
+                txInfo.pushKV("wallet_state", histTx.is_local ? "local" :
+                    (histTx.abandoned ? "abandoned" :
+                     (histTx.confirmations < 0 ? "conflicted" :
+                      (histTx.confirmations > 0 ? "confirmed" : "pending"))));
                 result.push_back(txInfo);
             }
         }
@@ -356,8 +361,16 @@ void DigiDollarTransactionsWidget::populateTable()
             if (abandonedVal.isBool()) {
                 isAbandoned = abandonedVal.get_bool();
             }
-            QTableWidgetItem* confItem = new QTableWidgetItem(formatConfirmations(confirmations, isAbandoned));
+            bool isLocal = false;
+            const UniValue& walletStateVal = tx.find_value("wallet_state");
+            if (walletStateVal.isStr()) {
+                isLocal = walletStateVal.get_str() == "local";
+            }
+            QTableWidgetItem* confItem = new QTableWidgetItem(formatConfirmations(confirmations, isAbandoned, isLocal));
             confItem->setTextAlignment(Qt::AlignCenter);
+            if (isLocal) {
+                confItem->setToolTip(tr("Created locally but not currently in mempool. It may need rebroadcast or may have been rejected."));
+            }
             m_table->setItem(row, Column::Confirmations, confItem);
 
             ++row;
@@ -504,7 +517,7 @@ QString DigiDollarTransactionsWidget::formatTimestamp(uint64_t timestamp) const
     return dt.toString("MMM dd, yyyy hh:mm");
 }
 
-QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations, bool isAbandoned) const
+QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations, bool isAbandoned, bool isLocal) const
 {
     if (isAbandoned) {
         return tr("Abandoned");
@@ -513,6 +526,9 @@ QString DigiDollarTransactionsWidget::formatConfirmations(int confirmations, boo
         return tr("Conflicted");
     }
     if (confirmations == 0) {
+        if (isLocal) {
+            return tr("Local");
+        }
         return tr("Pending");
     } else if (confirmations >= 6) {
         return tr("Confirmed");

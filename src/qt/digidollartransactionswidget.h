@@ -67,7 +67,7 @@ private:
     QColor getAmountColor(bool isPositive) const;
     QString formatDDAmount(CAmount amount) const;
     QString formatTimestamp(uint64_t timestamp) const;
-    QString formatConfirmations(int confirmations, bool isAbandoned = false) const;
+    QString formatConfirmations(int confirmations, bool isAbandoned = false, bool isLocal = false) const;
     QString formatLockPeriod(int lockTier) const;
     QString formatLockPeriodShort(int lockTier) const;
 

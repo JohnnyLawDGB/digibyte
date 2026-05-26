@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qt/transactionoverviewwidget.h>
 
+#include <qt/guiutil.h>
 #include <qt/transactiontablemodel.h>
 
 #include <QEvent>
@@ -43,7 +44,7 @@ bool TransactionOverviewWidget::viewportEvent(QEvent* event)
                     "<div style='color: #000000; background-color: #ffffdc; padding: 4px;'>"
                     "%1"
                     "</div>"
-                ).arg(tooltipText.toHtmlEscaped().replace("\n", "<br>"));
+                ).arg(GUIUtil::TooltipToHtml(tooltipText));
                 QToolTip::showText(helpEvent->globalPos(), styledTooltip, this);
                 return true;
             }

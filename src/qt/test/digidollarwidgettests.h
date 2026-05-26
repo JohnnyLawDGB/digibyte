@@ -69,6 +69,7 @@ private Q_SLOTS:
     void darkThemePeerDetailWidgetHasExplicitRule();
     void darkThemeDigiDollarSendTotalLabelHasReadableContrast();
     void darkThemeShutdownWindowHasReadableSurface();
+    void customTooltipRenderersNormalizeQtRichTextEnvelope();
     void overviewRecentTransactionsSendShowsNegativeSign();
     void transactionsWidgetShowsRpcHistorySignsAndFields();
     void positionsWidgetLockTierColumnFitsLongestLabel();

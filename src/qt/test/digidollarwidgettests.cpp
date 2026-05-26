@@ -30,6 +30,7 @@
 #include <qt/digidollartransactionswidget.h>
 #include <qt/digidollartab.h>
 #include <qt/ddaddressbookpage.h>
+#include <qt/guiutil.h>
 #include <qt/walletview.h>
 #include <support/allocators/secure.h>
 #include <test/util/setup_common.h>
@@ -3506,4 +3507,50 @@ void DigiDollarWidgetTests::darkThemeShutdownWindowHasReadableSurface()
         QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
     QVERIFY2(labelRule.match(dark).hasMatch(),
              "dark.css must explicitly style ShutdownWindow labels for readable shutdown text");
+}
+
+void DigiDollarWidgetTests::customTooltipRenderersNormalizeQtRichTextEnvelope()
+{
+    QCOMPARE(GUIUtil::TooltipToHtml(QStringLiteral("Plain <value>\nsecond")),
+             QStringLiteral("Plain &lt;value&gt;<br>\nsecond"));
+    QCOMPARE(GUIUtil::TooltipToHtml(QStringLiteral("<qt>Pending &lt;change&gt;<br>line 2</qt>")),
+             QStringLiteral("Pending &lt;change&gt;<br>\nline 2"));
+
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+    const auto findFile = [&](const QStringList& candidates) -> QString {
+        for (const auto& p : candidates) {
+            const QString text = readFile(p.toUtf8().constData());
+            if (!text.isEmpty()) return text;
+        }
+        return {};
+    };
+
+    const QString overviewPage = findFile({
+        QStringLiteral("src/qt/overviewpage.cpp"),
+        QStringLiteral("../src/qt/overviewpage.cpp"),
+        QStringLiteral("../../src/qt/overviewpage.cpp"),
+        QStringLiteral("qt/overviewpage.cpp"),
+    });
+    QVERIFY2(!overviewPage.isEmpty(), "could not locate overviewpage.cpp from current working directory");
+
+    const QString transactionOverviewWidget = findFile({
+        QStringLiteral("src/qt/transactionoverviewwidget.cpp"),
+        QStringLiteral("../src/qt/transactionoverviewwidget.cpp"),
+        QStringLiteral("../../src/qt/transactionoverviewwidget.cpp"),
+        QStringLiteral("qt/transactionoverviewwidget.cpp"),
+    });
+    QVERIFY2(!transactionOverviewWidget.isEmpty(), "could not locate transactionoverviewwidget.cpp from current working directory");
+
+    QVERIFY2(!overviewPage.contains(QStringLiteral("tooltipText.toHtmlEscaped()")),
+             "OverviewPage custom tooltips must normalize Qt <qt> rich-text envelopes before escaping");
+    QVERIFY2(!transactionOverviewWidget.contains(QStringLiteral("tooltipText.toHtmlEscaped()")),
+             "TransactionOverviewWidget custom tooltips must normalize Qt <qt> rich-text envelopes before escaping");
+    QVERIFY2(overviewPage.contains(QStringLiteral("GUIUtil::TooltipToHtml")),
+             "OverviewPage should use GUIUtil::TooltipToHtml for custom tooltip rendering");
+    QVERIFY2(transactionOverviewWidget.contains(QStringLiteral("GUIUtil::TooltipToHtml")),
+             "TransactionOverviewWidget should use GUIUtil::TooltipToHtml for custom tooltip rendering");
 }

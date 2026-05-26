@@ -70,6 +70,7 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QTextDocument> // for Qt::mightBeRichText
+#include <QTextDocumentFragment>
 #include <QThread>
 #include <QUrlQuery>
 #include <QtGlobal>
@@ -260,6 +261,18 @@ QString HtmlEscape(const QString& str, bool fMultiLine)
 QString HtmlEscape(const std::string& str, bool fMultiLine)
 {
     return HtmlEscape(QString::fromStdString(str), fMultiLine);
+}
+
+QString TooltipToHtml(const QString& tooltip)
+{
+    static const QRegularExpression qtEnvelope(
+        QStringLiteral(R"(^\s*<qt[^>]*>(.*)</qt>\s*$)"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    const QRegularExpressionMatch match = qtEnvelope.match(tooltip);
+    if (match.hasMatch()) {
+        return HtmlEscape(QTextDocumentFragment::fromHtml(match.captured(1)).toPlainText(), true);
+    }
+    return HtmlEscape(tooltip, true);
 }
 
 void copyEntryData(const QAbstractItemView *view, int column, int role)

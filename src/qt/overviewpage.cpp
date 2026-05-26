@@ -418,7 +418,7 @@ bool OverviewPage::eventFilter(QObject *obj, QEvent *event)
                     "<div style='color: #000000; background-color: #ffffdc; padding: 4px;'>"
                     "%1"
                     "</div>"
-                ).arg(tooltipText.toHtmlEscaped().replace("\n", "<br>"));
+                ).arg(GUIUtil::TooltipToHtml(tooltipText));
                 QToolTip::showText(helpEvent->globalPos(), styledTooltip, widget);
                 return true;
             }

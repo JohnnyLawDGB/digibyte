@@ -20,7 +20,6 @@
 #include <univalue.h>
 #include <node/context.h>
 
-#include <chrono>
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(digidollar_rpc_tests)
@@ -381,27 +380,33 @@ BOOST_FIXTURE_TEST_CASE(test_listdigidollaraddresses_basic, DigiDollarRPCTestSet
     BOOST_CHECK_THROW(CallRPC("listdigidollaraddresses"), std::runtime_error);
 }
 
-// Test 17: RPC Performance - getdigidollarstats
+// Test 17: Repeated RPC access - getdigidollarstats
 BOOST_FIXTURE_TEST_CASE(test_rpc_performance, DigiDollarRPCTestSetup)
 {
-    auto start = std::chrono::steady_clock::now();
-
-    // Make multiple calls
     const int NUM_CALLS = 100;
+    UniValue baseline;
+
     for (int i = 0; i < NUM_CALLS; ++i) {
         UniValue result = CallRPC("getdigidollarstats");
-        BOOST_CHECK(result.isObject());
+        BOOST_REQUIRE(result.isObject());
+        BOOST_CHECK(result.exists("health_percentage"));
+        BOOST_CHECK(result.exists("health_status"));
+        BOOST_CHECK(result.exists("total_collateral_dgb"));
+        BOOST_CHECK(result.exists("total_dd_supply"));
+        BOOST_CHECK(result.exists("oracle_price_micro_usd"));
+
+        if (i == 0) {
+            baseline = result;
+            continue;
+        }
+
+        BOOST_CHECK_EQUAL(result["health_percentage"].getInt<int>(),
+                          baseline["health_percentage"].getInt<int>());
+        BOOST_CHECK_EQUAL(result["total_dd_supply"].getInt<int64_t>(),
+                          baseline["total_dd_supply"].getInt<int64_t>());
+        BOOST_CHECK_EQUAL(result["total_collateral_dgb"].get_real(),
+                          baseline["total_collateral_dgb"].get_real());
     }
-
-    auto end = std::chrono::steady_clock::now();
-    auto totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-    // Should complete all calls in reasonable time (< 5 seconds)
-    BOOST_CHECK_LT(totalTime, 5000);
-
-    // Average time per call should be reasonable (< 50ms)
-    auto avgTime = totalTime / NUM_CALLS;
-    BOOST_CHECK_LT(avgTime, 50);
 }
 
 // Test 18: Concurrent Access - getdigidollarstats

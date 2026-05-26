@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(wave1_qt_persists_owner_key_before_broadcast)
         ? qt_source.substr(mint_pos)
         : qt_source.substr(mint_pos, next_method_pos - mint_pos);
 
-    const size_t commit_pos = mint_source.find("commitTransaction");
+    const size_t commit_pos = mint_source.find("CommitTransaction(txRef");
     const size_t store_pos = mint_source.find("StoreOwnerKey(positionId, ownerKey)");
 
     BOOST_REQUIRE_NE(commit_pos, std::string::npos);

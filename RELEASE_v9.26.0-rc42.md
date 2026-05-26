@@ -128,12 +128,12 @@ Focused RC42 validation completed on May 26, 2026 from `feature/digidollar-v1`.
 
 | Gate | Status |
 | --- | --- |
-| Build: `make` | PASS |
-| Unit tests: `src/test/test_digibyte` | PASS, 3384 test cases |
+| Build: `make -j$(nproc)` | PASS |
+| Unit tests: `./src/test/test_digibyte --show_progress` | PASS, 3386 test cases |
 | Qt tests: `env QT_QPA_PLATFORM=offscreen src/qt/test/test_digibyte-qt` | PASS |
-| Functional tests: `python3 test/functional/test_runner.py` | PASS, 371/371 scheduled jobs |
+| Functional tests: `python3 test/functional/test_runner.py --jobs=$(nproc)` | PASS, all runnable tests passed from 371 listed jobs |
 | Fuzz smoke: `python3 test/fuzz/test_runner.py --par 8 /tmp/digibyte-fuzz-seed` | PASS, 247 targets with one seed input per target |
-| Multi-oracle testnet25 script: `./test_multi_oracle_testnet.sh` | PASS end to end, 223 tracked checks, 222 OK, 0 failed, warning-only live-market observations |
+| Multi-oracle testnet25 script: `./test_multi_oracle_testnet.sh` | PASS end to end, 222 OK, 0 failed, warning-only live-market observations |
 | DGBstats tests: `npm run test:run` | PASS, 23 files / 523 tests |
 | DGBstats build: `npm run build` | PASS with pre-existing ESLint warnings |
 | DGBstats E2E: `npm run test:e2e` | FAIL, broad pre-existing Playwright environment/data failures |
@@ -142,9 +142,10 @@ Focused RC42 validation completed on May 26, 2026 from `feature/digidollar-v1`.
 
 Important validation notes:
 
-- The multi-oracle run used live market data and passed all DigiDollar mint, redeem, transfer, persistence, and oracle checks; live oracle consensus price during the run was about `$0.003555`/DGB.
-- The multi-oracle script log was `/tmp/digidollar_debug_logs/test_run_20260526_152328.log`.
+- The final multi-oracle run used live market data and passed all DigiDollar mint, redeem, transfer, persistence, reindex, restore, and oracle checks with 18 active local oracles and 9-of-35 consensus; live oracle consensus price during the run was about `$0.00356`/DGB.
+- The final multi-oracle script log was `/tmp/digidollar_debug_logs/test_run_20260526_172022.log`.
 - The functional suite reported environment-gated skips only and warned that `feature_assumeutxo.py` and `feature_assumevalid.py` are not in the configured test list.
+- A final tagged-head functional run with explicit `--jobs=$(nproc)` passed in 190 seconds runtime / 4507 seconds accumulated runtime.
 - DGBstats Playwright E2E remained red independently of the RC42 fixes, with broad loading-state, mocked-data, touch-target, browser-matrix, and route-specific expectations failing in this environment.
 
 ---
@@ -201,6 +202,9 @@ Visual QA covered dark-mode global tooltips, DigiDollar tooltips, long wrapped t
 - `5cfea2fea5` docs: record DD detail dialog fallback QA
 - `d57b7875e8` fix: theme DigiDollar modal dialogs green
 - `7319a73947` docs: record DD modal visual QA
+- `14da7a8d9e` doc: finalize RC42 release notes
+- `8e9b4b4c6a` test: remove brittle DigiDollar RPC timing assertion
+- `f7f5e5a1ee` chainparams: add digibyte-maxi testnet oracle
 
 Related DGBstats commits:
 

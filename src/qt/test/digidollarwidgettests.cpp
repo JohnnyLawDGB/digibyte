@@ -52,6 +52,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QComboBox>
@@ -3226,6 +3227,73 @@ void DigiDollarWidgetTests::overviewRecentTransactionAmountIsRightAligned()
              "Recent transaction amount label should be right-aligned for decimal-place alignment");
     QVERIFY2(amountLabel->minimumWidth() >= amountLabel->fontMetrics().horizontalAdvance(QStringLiteral("-$1234.56")),
              "Recent transaction amount label should reserve enough width for the exact formatted amount");
+}
+
+void DigiDollarWidgetTests::overviewRecentTransactionDoubleClickShowsDetails()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    wallet->EnsureDDWallet();
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+
+    DDTransaction tx;
+    tx.txid = "c000000000000000000000000000000000000000000000000000000000000001";
+    tx.amount = 1234;
+    tx.timestamp = GetTime();
+    tx.confirmations = 3;
+    tx.incoming = false;
+    tx.address = "TDoverviewdetailsaddress";
+    tx.category = "send";
+    tx.comment = "overview detail note";
+    tx.lock_tier = -1;
+    tx.fee = 0;
+    tx.abandoned = false;
+    dd_wallet->AddMockTransaction(tx);
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+
+    DigiDollarOverviewWidget overviewWidget;
+    overviewWidget.setWalletModel(mini_gui.walletModel.get());
+    overviewWidget.setClientModel(mini_gui.clientModel.get());
+    overviewWidget.show();
+    overviewWidget.updateView();
+    QCoreApplication::processEvents();
+
+    QListWidget* transactionsList = overviewWidget.findChild<QListWidget*>("transactionsList");
+    QVERIFY(transactionsList != nullptr);
+    QVERIFY(transactionsList->count() >= 1);
+
+    QSignalSpy messageSpy(&overviewWidget, SIGNAL(message(QString,QString,unsigned int)));
+    const bool invoked = QMetaObject::invokeMethod(&overviewWidget, "showRecentTransactionDetails",
+                                                   Qt::DirectConnection,
+                                                   Q_ARG(QListWidgetItem*, transactionsList->item(0)));
+    QVERIFY2(invoked, "DD Overview recent transaction rows must expose a details slot for double-click activation");
+    QCOMPARE(messageSpy.count(), 1);
+
+    const QList<QVariant> messageArgs = messageSpy.takeFirst();
+    QCOMPARE(messageArgs.at(0).toString(), QStringLiteral("DigiDollar Transaction"));
+    const QString details = messageArgs.at(1).toString();
+    QVERIFY2(details.contains(QString::fromStdString(tx.txid)), "details must include the full transaction id");
+    QVERIFY2(details.contains(QStringLiteral("Send")), "details must include the transaction type");
+    QVERIFY2(details.contains(QStringLiteral("-$12.34")), "details must include the signed amount");
+    QVERIFY2(details.contains(QStringLiteral("Confirmations: ")), "details must include confirmation status");
+    QVERIFY2(details.contains(QStringLiteral("overview detail note")), "details must include the local note");
+    QCOMPARE(messageArgs.at(2).toUInt(), static_cast<uint>(QMessageBox::Information));
 }
 
 // Regression coverage for the DD Transactions tab's RPC-backed history table:

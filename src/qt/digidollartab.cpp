@@ -143,7 +143,8 @@ void DigiDollarTab::connectSignals()
 
     // Connect sub-widget signals
     if (m_overviewWidget) {
-        // Connect overview widget signals when they're implemented
+        connect(m_overviewWidget, &DigiDollarOverviewWidget::message,
+                this, &DigiDollarTab::message);
     }
 
     if (m_receiveWidget) {

@@ -18,6 +18,7 @@ class QGridLayout;
 class QFrame;
 class QProgressBar;
 class QListWidget;
+class QListWidgetItem;
 class QSpacerItem;
 QT_END_NAMESPACE
 
@@ -62,6 +63,8 @@ public Q_SLOTS:
 private Q_SLOTS:
     /** Update recent transactions display */
     void updateRecentTransactions();
+    /** Show details for a recent transaction row. */
+    void showRecentTransactionDetails(QListWidgetItem* item);
 
 private:
     void setupUI();

@@ -35,6 +35,7 @@
 #include <QSpacerItem>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMessageBox>
 #include <QCursor>
 #include <QBrush>
 #include <QColor>
@@ -51,6 +52,15 @@ static const QString MAX_EXPECTED_BLOCKCHAIN_DD_SUPPLY = QStringLiteral("$11,000
 static const QString MAX_EXPECTED_BLOCKCHAIN_DGB_LOCKED = QStringLiteral("21,000,000,000.00 DGB");
 static constexpr int TOTALS_VALUE_HORIZONTAL_PADDING = 36;
 static constexpr int TOTALS_FRAME_HORIZONTAL_PADDING = 72;
+
+enum RecentTransactionRole {
+    RecentTxIdRole = Qt::UserRole + 1,
+    RecentTypeRole,
+    RecentAmountRole,
+    RecentDateRole,
+    RecentConfirmationsRole,
+    RecentNoteRole,
+};
 } // namespace
 
 DigiDollarOverviewWidget::DigiDollarOverviewWidget(QWidget *parent) :
@@ -439,10 +449,14 @@ void DigiDollarOverviewWidget::setupRecentTransactionsSection()
     m_transactionsList->setFrameShape(QFrame::NoFrame);
     m_transactionsList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_transactionsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_transactionsList->setSelectionMode(QAbstractItemView::NoSelection);
+    m_transactionsList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_transactionsList->setUniformItemSizes(true);
     // No minimum height - allow to shrink with window
     m_transactionsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    connect(m_transactionsList, &QListWidget::itemDoubleClicked,
+            this, &DigiDollarOverviewWidget::showRecentTransactionDetails);
+    connect(m_transactionsList, &QListWidget::itemActivated,
+            this, &DigiDollarOverviewWidget::showRecentTransactionDetails);
 
     // Info label for when no transactions exist
     m_recentTransactionsInfo = new QLabel(tr("No recent DigiDollar transactions"), this);
@@ -934,6 +948,12 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         // Add to list
         QListWidgetItem* item = new QListWidgetItem(m_transactionsList);
         item->setSizeHint(itemWidget->sizeHint());
+        item->setData(RecentTxIdRole, QString::fromStdString(tx.txid));
+        item->setData(RecentTypeRole, categoryText);
+        item->setData(RecentAmountRole, QStringLiteral("%1 DD").arg(amountLabel->text()));
+        item->setData(RecentDateRole, dateLabel->text());
+        item->setData(RecentConfirmationsRole, confirmText);
+        item->setData(RecentNoteRole, QString::fromStdString(tx.comment));
         m_transactionsList->setItemWidget(item, itemWidget);
     }
 
@@ -941,6 +961,30 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
     bool hasTransactions = (m_transactionsList->count() > 0);
     m_recentTransactionsInfo->setVisible(!hasTransactions);
     m_transactionsList->setVisible(hasTransactions);
+}
+
+void DigiDollarOverviewWidget::showRecentTransactionDetails(QListWidgetItem* item)
+{
+    if (!item) {
+        return;
+    }
+
+    const QString note = item->data(RecentNoteRole).toString();
+    const QString noteSection = note.isEmpty() ? QString() : tr("\nNote: %1").arg(note);
+    const QString details = tr("Transaction Details\n\n"
+                               "TX ID: %1\n"
+                               "Type: %2\n"
+                               "Amount: %3\n"
+                               "Date: %4\n"
+                               "Confirmations: %5%6")
+                                .arg(item->data(RecentTxIdRole).toString())
+                                .arg(item->data(RecentTypeRole).toString())
+                                .arg(item->data(RecentAmountRole).toString())
+                                .arg(item->data(RecentDateRole).toString())
+                                .arg(item->data(RecentConfirmationsRole).toString())
+                                .arg(noteSection);
+
+    Q_EMIT message(tr("DigiDollar Transaction"), details, QMessageBox::Information);
 }
 
 QString DigiDollarOverviewWidget::formatDDAmount(double amount) const

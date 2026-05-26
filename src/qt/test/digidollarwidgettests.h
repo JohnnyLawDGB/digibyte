@@ -50,6 +50,7 @@ private Q_SLOTS:
     void overviewPendingBalanceHasThemeRules();
     void digiDollarSectionUsesGreenThemeRules();
     void overviewRecentTransactionAmountIsRightAligned();
+    void overviewRecentTransactionDoubleClickShowsDetails();
     void privacySendMaskTests();
     void privacyMintMaskTests();
     void privacyRedeemMaskTests();

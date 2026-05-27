@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstdint>
 #include <limits>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -356,4 +357,165 @@ FUZZ_TARGET(dd_volatility, .init = initialize_dd_logic)
     // Clean up for next run
     DigiDollar::Volatility::VolatilityMonitor::ClearHistory();
     DigiDollar::Volatility::VolatilityMonitor::ClearFreeze();
+}
+
+// ============================================================================
+// Target 9: dd_wallet_rapid_state_model
+// Fuzz the wallet-state invariants needed by rapid DD mint/send/redeem bursts.
+// ============================================================================
+
+FUZZ_TARGET(dd_wallet_rapid_state_model, .init = initialize_dd_logic)
+{
+    FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+
+    struct Vault {
+        bool active{true};
+        bool pending_redeem{false};
+    };
+    struct PendingTx {
+        enum class Kind { MINT, SEND, REDEEM } kind;
+        std::vector<int> inputs;
+        size_t vault{0};
+    };
+
+    std::vector<Vault> vaults;
+    std::vector<PendingTx> pending;
+    std::set<int> reserved_inputs;
+    std::set<int> spent_inputs;
+    int wallet_dd_cents = 0;
+
+    auto input_is_available = [&](int input) {
+        return reserved_inputs.count(input) == 0 && spent_inputs.count(input) == 0;
+    };
+
+    auto reserve_inputs = [&](size_t count) {
+        std::vector<int> selected;
+        std::set<int> local_seen;
+        for (int input = 0; input < 128 && selected.size() < count; ++input) {
+            if (!input_is_available(input) || local_seen.count(input) != 0) continue;
+            if (fuzzed_data_provider.ConsumeBool()) {
+                selected.push_back(input);
+                local_seen.insert(input);
+            }
+        }
+        for (int input = 0; input < 128 && selected.size() < count; ++input) {
+            if (!input_is_available(input) || local_seen.count(input) != 0) continue;
+            selected.push_back(input);
+            local_seen.insert(input);
+        }
+        if (selected.size() != count) selected.clear();
+        return selected;
+    };
+
+    auto reserve_selected = [&](const std::vector<int>& inputs) {
+        for (int input : inputs) {
+            assert(input_is_available(input));
+            reserved_inputs.insert(input);
+        }
+    };
+
+    auto release_selected = [&](const std::vector<int>& inputs) {
+        for (int input : inputs) {
+            reserved_inputs.erase(input);
+        }
+    };
+
+    auto confirm_selected = [&](const std::vector<int>& inputs) {
+        for (int input : inputs) {
+            assert(reserved_inputs.count(input) != 0);
+            reserved_inputs.erase(input);
+            spent_inputs.insert(input);
+        }
+    };
+
+    auto assert_invariants = [&]() {
+        std::set<int> pending_inputs;
+        for (const auto& tx : pending) {
+            for (int input : tx.inputs) {
+                assert(pending_inputs.insert(input).second);
+                assert(reserved_inputs.count(input) != 0);
+                assert(spent_inputs.count(input) == 0);
+            }
+            if (tx.kind == PendingTx::Kind::REDEEM) {
+                assert(tx.vault < vaults.size());
+                assert(vaults[tx.vault].pending_redeem);
+            }
+        }
+        assert(pending_inputs.size() == reserved_inputs.size());
+        assert(wallet_dd_cents >= 0);
+    };
+
+    const int rounds = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 200);
+    for (int round = 0; round < rounds; ++round) {
+        const int op = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 5);
+        if (op == 0) { // mint
+            const size_t input_count = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 8);
+            const auto inputs = reserve_inputs(input_count);
+            if (!inputs.empty() && fuzzed_data_provider.ConsumeBool()) {
+                reserve_selected(inputs);
+                vaults.push_back(Vault{});
+                pending.push_back(PendingTx{PendingTx::Kind::MINT, inputs, vaults.size() - 1});
+            }
+        } else if (op == 1) { // send
+            const size_t fee_inputs = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 3);
+            const auto inputs = reserve_inputs(fee_inputs);
+            if (!inputs.empty() && wallet_dd_cents >= 500 && fuzzed_data_provider.ConsumeBool()) {
+                reserve_selected(inputs);
+                wallet_dd_cents -= 500;
+                pending.push_back(PendingTx{PendingTx::Kind::SEND, inputs, 0});
+            }
+        } else if (op == 2) { // redeem
+            if (!vaults.empty() && wallet_dd_cents >= 10000) {
+                const size_t vault_index = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, vaults.size() - 1);
+                auto& vault = vaults[vault_index];
+                const auto inputs = reserve_inputs(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 4));
+                if (vault.active && !vault.pending_redeem && !inputs.empty() && fuzzed_data_provider.ConsumeBool()) {
+                    reserve_selected(inputs);
+                    vault.active = false;
+                    vault.pending_redeem = true;
+                    wallet_dd_cents -= 10000;
+                    pending.push_back(PendingTx{PendingTx::Kind::REDEEM, inputs, vault_index});
+                }
+            }
+        } else if (op == 3) { // confirm one pending tx
+            if (!pending.empty()) {
+                const size_t index = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, pending.size() - 1);
+                PendingTx tx = pending[index];
+                confirm_selected(tx.inputs);
+                if (tx.kind == PendingTx::Kind::MINT) {
+                    wallet_dd_cents += 10000;
+                } else if (tx.kind == PendingTx::Kind::REDEEM) {
+                    vaults[tx.vault].pending_redeem = false;
+                    vaults[tx.vault].active = false;
+                }
+                pending.erase(pending.begin() + index);
+            }
+        } else if (op == 4) { // abandon one pending tx
+            if (!pending.empty()) {
+                const size_t index = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, pending.size() - 1);
+                PendingTx tx = pending[index];
+                release_selected(tx.inputs);
+                if (tx.kind == PendingTx::Kind::MINT) {
+                    assert(tx.vault < vaults.size());
+                    vaults[tx.vault].active = false;
+                } else if (tx.kind == PendingTx::Kind::SEND) {
+                    wallet_dd_cents += 500;
+                } else if (tx.kind == PendingTx::Kind::REDEEM) {
+                    vaults[tx.vault].pending_redeem = false;
+                    vaults[tx.vault].active = true;
+                    wallet_dd_cents += 10000;
+                }
+                pending.erase(pending.begin() + index);
+            }
+        } else { // reject attempt: no durable state should change
+            const int before_dd = wallet_dd_cents;
+            const size_t before_vaults = vaults.size();
+            const size_t before_pending = pending.size();
+            (void)reserve_inputs(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 8));
+            assert(wallet_dd_cents == before_dd);
+            assert(vaults.size() == before_vaults);
+            assert(pending.size() == before_pending);
+        }
+        assert_invariants();
+    }
 }

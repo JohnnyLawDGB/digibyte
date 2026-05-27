@@ -4833,6 +4833,8 @@ RPCHelpMan createoraclekey()
     return RPCHelpMan{"createoraclekey",
                 "\nGenerate an oracle keypair and store it in the loaded descriptor wallet.\n"
                 "The private key is stored securely in the wallet database, mapped to the oracle_id.\n"
+                "This is local wallet key management and is allowed before DigiDollar activation.\n"
+                "It does not start an oracle, sign prices, relay oracle data, or change consensus state.\n"
                 "\nTwo public key formats are returned from the same keypair:\n"
                 "  - pubkey: 33-byte compressed key (02/03 prefix) — SEND THIS to the maintainer\n"
                 "  - pubkey_xonly: 32-byte x-only key (prefix stripped) — used internally for Schnorr signatures\n"
@@ -4859,20 +4861,6 @@ RPCHelpMan createoraclekey()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            // Check DigiDollar activation
-            {
-                std::shared_ptr<wallet::CWallet> pwallet_check = wallet::GetWalletForJSONRPCRequest(request);
-                if (pwallet_check) {
-                    node::NodeContext* node_ctx = pwallet_check->chain().context();
-                    if (node_ctx) {
-                        ChainstateManager& chainman = *node_ctx->chainman;
-                        const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
-                        if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
-                            throw JSONRPCError(RPC_MISC_ERROR, "DigiDollar is not yet active on this blockchain");
-                        }
-                    }
-                }
-            }
             // Get wallet
             std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
             if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded. A descriptor wallet is required.");
@@ -4958,7 +4946,8 @@ RPCHelpMan createoraclekey()
                 "Oracle key generated and stored in wallet. "
                 "Share ONLY the pubkey (33-byte compressed, starting with 02/03) with the DigiByte Core maintainer for chainparams inclusion. "
                 "The pubkey_xonly is derived from it automatically — you do not need to send it separately. "
-                "Run 'startoracle %u' after your key is added to chainparams to begin oracle operation.",
+                "This pre-activation setup does not start oracle operation. "
+                "Run 'startoracle %u' only after DigiDollar is active and your key is added to chainparams.",
                 oracle_id));
 
             return result;

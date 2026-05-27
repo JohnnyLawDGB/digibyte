@@ -30,10 +30,11 @@
 //      we add a unit-level pin against the listdigidollarpositions /
 //      getredemptioninfo result schemas (cents-as-int, never floated).
 //   6. Deployment-gated commands: pre-activation rejection with clear
-//      error. The functional digidollar_rpc_gating.py drives all 31 gated
-//      commands at DEFINED state; this file adds a unit-level pin at the
-//      regtest-active boundary that the cents/dgb units do not silently
-//      shift between defined-and-active states.
+//      error. The functional digidollar_rpc_gating.py drives the 30 gated
+//      protocol/action commands at DEFINED state and separately pins
+//      createoraclekey as pre-activation wallet key management; this file
+//      adds a unit-level pin at the regtest-active boundary that the
+//      cents/dgb units do not silently shift between defined-and-active states.
 //
 // All cases run under the same DigiDollarRPCUnitSetup fixture used by
 // src/test/digidollar_rpc_unit_tests.cpp (regtest, DigiDollar

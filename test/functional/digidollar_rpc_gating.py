@@ -3,10 +3,11 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
-Test DigiDollar RPC gating — all 31 gated RPCs must be blocked before activation.
+Test DigiDollar RPC gating — protocol actions must be blocked before activation.
 
 Verifies that:
-  - All 31 gated DD/Oracle RPCs return "DigiDollar is not yet active" pre-activation
+  - createoraclekey works pre-activation as local wallet key management
+  - The remaining 30 gated DD/Oracle operation RPCs return "DigiDollar is not yet active"
   - getdigidollardeploymentinfo (ungated) works at any time
   - After BIP9 activation, key RPCs become functional
 
@@ -73,7 +74,6 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             ("listoracle", lambda: node.listoracle()),
             ("getoraclepubkey", lambda: node.getoraclepubkey(0)),
             # Oracle management RPCs
-            ("createoraclekey", lambda: node.createoraclekey(0)),
             ("startoracle", lambda: node.startoracle(0)),
             ("stoporacle", lambda: node.stoporacle(0)),
             ("simulatepricevolatility", lambda: node.simulatepricevolatility(10)),
@@ -122,30 +122,42 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
-        # ── Phase 1: Verify all gated RPCs are blocked at DEFINED state ──
-        self.log.info("Phase 1: Testing all 31 gated RPCs at DEFINED state (height 0)...")
+        # ── Phase 1: Verify local oracle identity setup is allowed pre-activation ──
+        self.log.info("Phase 1: createoraclekey works at DEFINED state (height 0)...")
         info = node.getdeploymentinfo()
         assert_equal(info["deployments"]["digidollar"]["bip9"]["status"], "defined")
 
+        key_result = node.createoraclekey(0)
+        assert_equal(key_result["oracle_id"], 0)
+        assert_equal(key_result["stored_in_wallet"], True)
+        assert len(key_result["pubkey"]) == 66
+        assert key_result["pubkey"][:2] in ("02", "03")
+        assert_equal(key_result["pubkey_xonly"], key_result["pubkey"][2:])
+        assert "startoracle" in key_result["message"]
+        self.log.info("  ✓ createoraclekey — allowed before activation")
+
+        # ── Phase 2: Verify all protocol/action RPCs are blocked at DEFINED state ──
+        self.log.info("Phase 2: Testing all 30 gated RPCs at DEFINED state (height 0)...")
+
         gated_rpcs = self.get_gated_rpc_calls(node)
-        assert_equal(len(gated_rpcs), 31)
+        assert_equal(len(gated_rpcs), 30)
 
         blocked_count = 0
         for name, call in gated_rpcs:
             self.test_rpc_gated(node, name, call)
             blocked_count += 1
 
-        self.log.info(f"  All {blocked_count}/31 gated RPCs correctly blocked")
+        self.log.info(f"  All {blocked_count}/30 gated RPCs correctly blocked")
 
-        # ── Phase 2: Verify ungated RPC works pre-activation ──
-        self.log.info("Phase 2: Verifying getdigidollardeploymentinfo works without activation...")
+        # ── Phase 3: Verify ungated RPC works pre-activation ──
+        self.log.info("Phase 3: Verifying getdigidollardeploymentinfo works without activation...")
         dep = node.getdigidollardeploymentinfo()
         self.log.info(f"  ✓ getdigidollardeploymentinfo — status={dep['status']}, enabled={dep['enabled']}")
         assert dep['status'] != 'active'
         assert_equal(dep['enabled'], False)
 
-        # ── Phase 3: Mine through BIP9 to ACTIVE ──
-        self.log.info("Phase 3: Activating DigiDollar via BIP9...")
+        # ── Phase 4: Mine through BIP9 to ACTIVE ──
+        self.log.info("Phase 4: Activating DigiDollar via BIP9...")
         self.activate_digidollar(node)
 
         dep = node.getdigidollardeploymentinfo()
@@ -153,8 +165,8 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
         assert_equal(dep['enabled'], True)
         self.log.info(f"  DigiDollar is now ACTIVE")
 
-        # ── Phase 4: Verify key RPCs work post-activation ──
-        self.log.info("Phase 4: Testing RPCs post-activation...")
+        # ── Phase 5: Verify key RPCs work post-activation ──
+        self.log.info("Phase 5: Testing RPCs post-activation...")
 
         # Mine for coinbase maturity
         node.generate(110)

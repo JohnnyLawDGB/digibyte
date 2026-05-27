@@ -46,6 +46,8 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QAbstractButton>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCursor>
 #include <QDateTime>
@@ -58,6 +60,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QProgressDialog>
+#include <QPushButton>
 #include <QScreen>
 #include <QSettings>
 #include <QShortcut>
@@ -70,6 +73,83 @@
 #include <QUrlQuery>
 #include <QVBoxLayout>
 #include <QWindow>
+
+namespace {
+const QString DIGIDOLLAR_WARNING_SETTINGS_KEY = QStringLiteral("DigiDollar/ExperimentalWarningAccepted");
+
+QString DigiDollarExperimentalWarningStyleSheet(bool dark_theme)
+{
+    if (dark_theme) {
+        return QStringLiteral(
+            "QMessageBox#DigiDollarExperimentalWarningDialog {"
+            "    background-color: #082518;"
+            "    color: #f4fff8;"
+            "}"
+            "QMessageBox#DigiDollarExperimentalWarningDialog QLabel,"
+            "QMessageBox#DigiDollarExperimentalWarningDialog QCheckBox {"
+            "    color: #f4fff8;"
+            "    background: transparent;"
+            "    font-size: 13px;"
+            "}"
+            "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton {"
+            "    min-width: 96px;"
+            "    padding: 7px 14px;"
+            "    border-radius: 4px;"
+            "    font-weight: bold;"
+            "}"
+            "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningAcceptButton {"
+            "    background-color: #16804f;"
+            "    color: #ffffff;"
+            "    border: 1px solid #22b96d;"
+            "}"
+            "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningAcceptButton:hover {"
+            "    background-color: #1b9d60;"
+            "}"
+            "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningCancelButton {"
+            "    background-color: #20382b;"
+            "    color: #f4fff8;"
+            "    border: 1px solid #5d7f69;"
+            "}"
+            "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningCancelButton:hover {"
+            "    background-color: #2a4938;"
+            "}");
+    }
+
+    return QStringLiteral(
+        "QMessageBox#DigiDollarExperimentalWarningDialog {"
+        "    background-color: #f1fbf5;"
+        "    color: #123826;"
+        "}"
+        "QMessageBox#DigiDollarExperimentalWarningDialog QLabel,"
+        "QMessageBox#DigiDollarExperimentalWarningDialog QCheckBox {"
+        "    color: #123826;"
+        "    background: transparent;"
+        "    font-size: 13px;"
+        "}"
+        "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton {"
+        "    min-width: 96px;"
+        "    padding: 7px 14px;"
+        "    border-radius: 4px;"
+        "    font-weight: bold;"
+        "}"
+        "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningAcceptButton {"
+        "    background-color: #16804f;"
+        "    color: #ffffff;"
+        "    border: 1px solid #16804f;"
+        "}"
+        "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningAcceptButton:hover {"
+        "    background-color: #1b9d60;"
+        "}"
+        "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningCancelButton {"
+        "    background-color: #e7f2eb;"
+        "    color: #123826;"
+        "    border: 1px solid #79a98e;"
+        "}"
+        "QMessageBox#DigiDollarExperimentalWarningDialog QPushButton#digiDollarWarningCancelButton:hover {"
+        "    background-color: #d8eadf;"
+        "}");
+}
+} // namespace
 
 
 const std::string DigiByteGUI::DEFAULT_UIPLATFORM =
@@ -646,6 +726,7 @@ void DigiByteGUI::createToolBars()
         // toolbar->addAction(redeemAction);
         
         overviewAction->setChecked(true);
+        m_current_wallet_tab_action = overviewAction;
 
 #ifdef ENABLE_WALLET
         QWidget *spacer = new QWidget();
@@ -1036,31 +1117,91 @@ void DigiByteGUI::openClicked()
 void DigiByteGUI::gotoOverviewPage()
 {
     overviewAction->setChecked(true);
+    m_current_wallet_tab_action = overviewAction;
     if (walletFrame) walletFrame->gotoOverviewPage();
 }
 
 void DigiByteGUI::gotoHistoryPage()
 {
     historyAction->setChecked(true);
+    m_current_wallet_tab_action = historyAction;
     if (walletFrame) walletFrame->gotoHistoryPage();
 }
 
 void DigiByteGUI::gotoReceiveCoinsPage()
 {
     receiveCoinsAction->setChecked(true);
+    m_current_wallet_tab_action = receiveCoinsAction;
     if (walletFrame) walletFrame->gotoReceiveCoinsPage();
 }
 
 void DigiByteGUI::gotoSendCoinsPage(QString addr)
 {
     sendCoinsAction->setChecked(true);
+    m_current_wallet_tab_action = sendCoinsAction;
     if (walletFrame) walletFrame->gotoSendCoinsPage(addr);
 }
 
 void DigiByteGUI::gotoDigiDollarPage()
 {
+    if (!confirmDigiDollarExperimentalWarning()) {
+        restoreCurrentWalletTabAction();
+        return;
+    }
+
     digiDollarAction->setChecked(true);
+    m_current_wallet_tab_action = digiDollarAction;
     if (walletFrame) walletFrame->gotoDigiDollarPage();
+}
+
+bool DigiByteGUI::confirmDigiDollarExperimentalWarning()
+{
+    QSettings settings;
+    if (settings.value(DIGIDOLLAR_WARNING_SETTINGS_KEY, false).toBool()) {
+        return true;
+    }
+
+    QMessageBox msg_box(this);
+    msg_box.setObjectName(QStringLiteral("DigiDollarExperimentalWarningDialog"));
+    msg_box.setWindowTitle(tr("DigiDollar Experimental Feature"));
+    msg_box.setIcon(QMessageBox::Warning);
+    msg_box.setTextFormat(Qt::PlainText);
+    msg_box.setTextInteractionFlags(Qt::TextSelectableByMouse);
+    msg_box.setText(tr("DigiDollar is experimental software.\n\n"
+                       "It is a new decentralized dollar system built into DigiByte. Although it has been extensively tested, "
+                       "the developers cannot guarantee that future issues, risks, or vulnerabilities will not be discovered.\n\n"
+                       "Proceed only if you understand these risks and are willing to use DigiDollar at your own responsibility."));
+    msg_box.setInformativeText(tr("Review the DigiDollar documentation before using it with funds you cannot afford to risk."));
+    QCheckBox* dont_show_again = new QCheckBox(tr("Don't show this warning again"), &msg_box);
+    dont_show_again->setObjectName(QStringLiteral("digiDollarExperimentalWarningDontShowAgain"));
+    msg_box.setCheckBox(dont_show_again);
+
+    QPushButton* understand_button = msg_box.addButton(tr("I Understand"), QMessageBox::AcceptRole);
+    understand_button->setObjectName(QStringLiteral("digiDollarWarningAcceptButton"));
+    QPushButton* cancel_button = msg_box.addButton(QMessageBox::Cancel);
+    cancel_button->setObjectName(QStringLiteral("digiDollarWarningCancelButton"));
+    msg_box.setDefaultButton(cancel_button);
+    msg_box.setEscapeButton(cancel_button);
+    msg_box.setStyleSheet(DigiDollarExperimentalWarningStyleSheet(
+        settings.value(QStringLiteral("theme"), QStringLiteral("dark")).toString() == QStringLiteral("dark")));
+
+    msg_box.exec();
+    const bool accepted = msg_box.clickedButton() == understand_button;
+    if (accepted && dont_show_again->isChecked()) {
+        settings.setValue(DIGIDOLLAR_WARNING_SETTINGS_KEY, true);
+        settings.sync();
+    }
+    return accepted;
+}
+
+void DigiByteGUI::restoreCurrentWalletTabAction()
+{
+    QAction* action_to_restore = m_current_wallet_tab_action && m_current_wallet_tab_action->isEnabled() ?
+        m_current_wallet_tab_action :
+        overviewAction;
+    if (action_to_restore) {
+        action_to_restore->setChecked(true);
+    }
 }
 
 void DigiByteGUI::gotoSignMessageTab(QString addr)

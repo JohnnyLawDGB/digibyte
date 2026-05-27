@@ -137,6 +137,7 @@ private:
     QAction* overviewAction = nullptr;
     QAction* historyAction = nullptr;
     QAction* digiDollarAction = nullptr;
+    QAction* m_current_wallet_tab_action = nullptr;
     // Commenting out Mint and Redeem actions as they are not functional yet
     // QAction* mintAction = nullptr;
     // QAction* redeemAction = nullptr;
@@ -218,6 +219,11 @@ private:
 
     /** Open the OptionsDialog on the specified tab index */
     void openOptionsDialogWithTab(OptionsDialog::Tab tab);
+
+#ifdef ENABLE_WALLET
+    bool confirmDigiDollarExperimentalWarning();
+    void restoreCurrentWalletTabAction();
+#endif
 
 Q_SIGNALS:
     void quitRequested();

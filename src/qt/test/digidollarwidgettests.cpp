@@ -72,6 +72,7 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QSignalSpy>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolTip>
@@ -566,9 +567,9 @@ void DigiDollarWidgetTests::mintWidgetUsesChainParamMintLimits()
     const QString minText = QString::number(ddParams.minMintAmount / 100.0, 'f', 2);
     const QString maxText = QString::number(ddParams.maxMintAmount / 100.0, 'f', 2);
 
-    QVERIFY2(amountEdit->toolTip().contains("Minimum: $" + minText),
+    QVERIFY2(amountEdit->toolTip().contains("Minimum: " + minText + " $DD"),
              qPrintable(amountEdit->toolTip()));
-    QVERIFY2(amountEdit->toolTip().contains("Maximum: $" + maxText),
+    QVERIFY2(amountEdit->toolTip().contains("Maximum: " + maxText + " $DD"),
              qPrintable(amountEdit->toolTip()));
 
     QLabel* warningLabel = mintWidget.findChild<QLabel*>("amountWarningLabel");
@@ -873,7 +874,7 @@ void DigiDollarWidgetTests::sendWidgetCoinControlLabelsMirrorDgb()
 
     QLabel* amountLabel = sendWidget.findChild<QLabel*>("coinControlAmountLabel");
     QVERIFY(amountLabel != nullptr);
-    QCOMPARE(amountLabel->text(), QString("Amount: 100.00 DD"));
+    QCOMPARE(amountLabel->text(), QString("Amount: 100.00 $DD"));
 
     sendWidget.setSelectedDigiDollarInputsForTesting({});
     QCoreApplication::processEvents();
@@ -942,7 +943,7 @@ void DigiDollarWidgetTests::sendWidgetCoinControlDialogSelectionFeedsSend()
 
     QLabel* amountLabel = sendWidget.findChild<QLabel*>("coinControlAmountLabel");
     QVERIFY(amountLabel != nullptr);
-    QCOMPARE(amountLabel->text(), QString("Amount: 25.00 DD"));
+    QCOMPARE(amountLabel->text(), QString("Amount: 25.00 $DD"));
 
     const QString recipient = mini_gui.walletModel->getNewDigiDollarAddress(QStringLiteral("qt-selected-input-send"));
     QVERIFY(!recipient.isEmpty());
@@ -1045,11 +1046,11 @@ void DigiDollarWidgetTests::redeemWidgetKeepsTimelockedPositionDisabled()
 
     QLabel* ddMintedValue = redeemWidget.findChild<QLabel*>("ddMintedValue");
     QVERIFY(ddMintedValue != nullptr);
-    QCOMPARE(ddMintedValue->text(), QString("100.00 DD"));
+    QCOMPARE(ddMintedValue->text(), QString("100.00 $DD"));
 
     QLabel* redeemableValue = redeemWidget.findChild<QLabel*>("redeemableValue");
     QVERIFY(redeemableValue != nullptr);
-    QCOMPARE(redeemableValue->text(), QString("0.00 DD"));
+    QCOMPARE(redeemableValue->text(), QString("0.00 $DD"));
 }
 
 void DigiDollarWidgetTests::positionsWidgetTests()
@@ -2047,14 +2048,14 @@ void DigiDollarWidgetTests::transactionsWidgetRefreshesOnDigiDollarSignal()
         if (txidItem && txidItem->data(Qt::UserRole).toString() == QString::fromStdString(sendTx.txid)) {
             foundSend = true;
             QCOMPARE(typeItem ? typeItem->text() : QString(), QStringLiteral("Send"));
-            QCOMPARE(amountItem ? amountItem->text() : QString(), QStringLiteral("-$2.50 DD"));
+            QCOMPARE(amountItem ? amountItem->text() : QString(), QStringLiteral("-2.50 $DD"));
             QCOMPARE(statusItem ? statusItem->text() : QString(), QStringLiteral("Pending"));
             QCOMPARE(noteItem ? noteItem->text() : QString(), QStringLiteral("fresh send"));
         }
         if (txidItem && txidItem->data(Qt::UserRole).toString() == QString::fromStdString(localTx.txid)) {
             foundLocal = true;
             QCOMPARE(typeItem ? typeItem->text() : QString(), QStringLiteral("Mint 1-hr"));
-            QCOMPARE(amountItem ? amountItem->text() : QString(), QStringLiteral("+$3.00 DD"));
+            QCOMPARE(amountItem ? amountItem->text() : QString(), QStringLiteral("+3.00 $DD"));
             QCOMPARE(statusItem ? statusItem->text() : QString(), QStringLiteral("Local"));
             QVERIFY2(statusItem && statusItem->toolTip().contains(QStringLiteral("not currently in mempool")),
                      qPrintable(statusItem ? statusItem->toolTip() : QString()));
@@ -2205,9 +2206,109 @@ void DigiDollarWidgetTests::overviewUsdValueShowsUsdSuffixWhenPrivacyOff()
     QVERIFY(usdValueValue != nullptr);
 
     overviewWidget.setPrivacy(false);
-    QVERIFY2(usdValueValue->text().endsWith(QStringLiteral(" USD")),
-             qPrintable(QString("Overview USD value must include explicit USD suffix, got: %1")
+    QVERIFY2(usdValueValue->text().endsWith(QStringLiteral(" $USD")),
+             qPrintable(QString("Overview USD value must include explicit $USD suffix, got: %1")
                             .arg(usdValueValue->text())));
+}
+
+void DigiDollarWidgetTests::digiDollarAmountLabelsUseCurrencyPrefix()
+{
+    DigiDollarOverviewWidget overviewWidget;
+    QLabel* overviewBalance = overviewWidget.findChild<QLabel*>("ddBalanceValue");
+    QLabel* overviewUsdLabel = overviewWidget.findChild<QLabel*>("usdValueLabel");
+    QLabel* overviewUsdValue = overviewWidget.findChild<QLabel*>("usdValueValue");
+    QVERIFY(overviewBalance != nullptr);
+    QVERIFY(overviewUsdLabel != nullptr);
+    QVERIFY(overviewUsdValue != nullptr);
+    QCOMPARE(overviewBalance->text(), QStringLiteral("0.00 $DD"));
+    QCOMPARE(overviewUsdLabel->text(), QStringLiteral("Total $USD:"));
+    QCOMPARE(overviewUsdValue->text(), QStringLiteral("0.00 $USD"));
+
+    std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
+    DigiDollarTab tab(platformStyle.get());
+    QTabWidget* tabWidget = tab.findChild<QTabWidget*>("digiDollarSubTabs");
+    QVERIFY(tabWidget != nullptr);
+    const QStringList expectedTabLabels{
+        QStringLiteral("$DD Overview"),
+        QStringLiteral("Send $DD"),
+        QStringLiteral("Receive $DD"),
+        QStringLiteral("Mint $DD"),
+        QStringLiteral("Redeem $DD"),
+        QStringLiteral("$DD Vault"),
+        QStringLiteral("$DD Transactions"),
+    };
+    QCOMPARE(tabWidget->count(), expectedTabLabels.size());
+    for (int i = 0; i < expectedTabLabels.size(); ++i) {
+        QCOMPARE(tabWidget->tabText(i), expectedTabLabels.at(i));
+    }
+
+    if (qEnvironmentVariableIsSet("DIGIBYTE_QT_SAVE_DD_LABEL_QA")) {
+        QStackedWidget* stackedWidget = tab.findChild<QStackedWidget*>("digiDollarStack");
+        QVERIFY(stackedWidget != nullptr);
+        stackedWidget->setCurrentIndex(1);
+        QObject::disconnect(tabWidget, nullptr, &tab, nullptr);
+        tab.resize(1200, 760);
+        tab.show();
+        for (int i = 0; i < tabWidget->count(); ++i) {
+            tabWidget->setCurrentIndex(i);
+            QCoreApplication::processEvents();
+            const QString path = QStringLiteral("/tmp/digibyte_dd_label_qa_tab_%1.png").arg(i);
+            const QPixmap pixmap = tab.grab();
+            QVERIFY2(pixmap.save(path), qPrintable(QStringLiteral("failed to save DigiDollar label QA screenshot to %1").arg(path)));
+            qInfo("DigiDollar label QA screenshot: %s", qPrintable(path));
+        }
+    }
+
+    DigiDollarSendWidget sendWidget(platformStyle.get());
+    QLabel* sendUsdLabel = sendWidget.findChild<QLabel*>("usdEquivalentLabel");
+    QLabel* sendUsdValue = sendWidget.findChild<QLabel*>("usdEquivalentValue");
+    QLabel* sendAvailable = sendWidget.findChild<QLabel*>("availableBalanceValue");
+    QLabel* sendTotal = sendWidget.findChild<QLabel*>("totalValue");
+    QVERIFY(sendUsdLabel != nullptr);
+    QVERIFY(sendUsdValue != nullptr);
+    QVERIFY(sendAvailable != nullptr);
+    QVERIFY(sendTotal != nullptr);
+    QCOMPARE(sendUsdLabel->text(), QStringLiteral("$USD Equivalent:"));
+    QCOMPARE(sendUsdValue->text(), QStringLiteral("0.00 $USD"));
+    QCOMPARE(sendAvailable->text(), QStringLiteral("0.00 $DD"));
+    QCOMPARE(sendTotal->text(), QStringLiteral("0.00 $DD"));
+
+    DigiDollarMintWidget mintWidget;
+    QLabel* mintAmountSuffix = mintWidget.findChild<QLabel*>("amountSuffix");
+    QLabel* mintUsdLabel = mintWidget.findChild<QLabel*>("usdValueLabel");
+    QLabel* mintUsdValue = mintWidget.findChild<QLabel*>("usdValueValue");
+    QVERIFY(mintAmountSuffix != nullptr);
+    QVERIFY(mintUsdLabel != nullptr);
+    QVERIFY(mintUsdValue != nullptr);
+    QCOMPARE(mintAmountSuffix->text(), QStringLiteral("$DD"));
+    QCOMPARE(mintUsdLabel->text(), QStringLiteral("$USD Equivalent:"));
+    QCOMPARE(mintUsdValue->text(), QStringLiteral("0.00 $USD"));
+
+    DigiDollarRedeemWidget redeemWidget;
+    QLabel* redeemAmountSuffix = redeemWidget.findChild<QLabel*>("amountSuffix");
+    QLabel* ddMinted = redeemWidget.findChild<QLabel*>("ddMintedValue");
+    QLabel* redeemable = redeemWidget.findChild<QLabel*>("redeemableValue");
+    QVERIFY(redeemAmountSuffix != nullptr);
+    QVERIFY(ddMinted != nullptr);
+    QVERIFY(redeemable != nullptr);
+    QCOMPARE(redeemAmountSuffix->text(), QStringLiteral("$DD"));
+    QCOMPARE(ddMinted->text(), QStringLiteral("0.00 $DD"));
+    QCOMPARE(redeemable->text(), QStringLiteral("0.00 $DD"));
+
+    SendCoinsRecipient recipient;
+    recipient.address = QStringLiteral("RDrequestTestAddress");
+    recipient.amount = 12345;
+    DigiDollarReceiveRequestDialog requestDialog;
+    requestDialog.setInfo(recipient);
+
+    bool foundFormattedAmount = false;
+    for (QLabel* label : requestDialog.findChildren<QLabel*>()) {
+        if (label->text() == QStringLiteral("123.45 $DD")) {
+            foundFormattedAmount = true;
+            break;
+        }
+    }
+    QVERIFY2(foundFormattedAmount, "DigiDollar receive request dialog should render requested DD as 123.45 $DD");
 }
 
 void DigiDollarWidgetTests::overviewPrivacyMaskHidesAmountUnits()
@@ -2248,7 +2349,7 @@ void DigiDollarWidgetTests::overviewLayoutStretchFavorsBlockchainTotals()
 
     QLabel* ddSupplyLabel = overviewWidget.findChild<QLabel*>(QStringLiteral("networkTotalDDLabel"));
     QVERIFY(ddSupplyLabel != nullptr);
-    QCOMPARE(ddSupplyLabel->text(), QStringLiteral("Blockchain DD Supply"));
+    QCOMPARE(ddSupplyLabel->text(), QStringLiteral("Blockchain $DD Supply"));
 
     QLabel* dgbLockedLabel = overviewWidget.findChild<QLabel*>(QStringLiteral("networkTotalCollateralLabel"));
     QVERIFY(dgbLockedLabel != nullptr);
@@ -2279,8 +2380,8 @@ void DigiDollarWidgetTests::overviewBlockchainTotalsFitLaunchScaleValues()
 
     overviewWidget.setMonospacedFont(false);
 
-    const QString launchScaleDD = QStringLiteral("$999,000,000.00 DD");
-    const QString stressScaleDD = QStringLiteral("$11,000,000,000.00 DD");
+    const QString launchScaleDD = QStringLiteral("999,000,000.00 $DD");
+    const QString stressScaleDD = QStringLiteral("11,000,000,000.00 $DD");
     const QString maxDgbLocked = QStringLiteral("21,000,000,000.00 DGB");
 
     const int launchScaleDDWidth = QFontMetrics(ddValue->font()).horizontalAdvance(launchScaleDD);
@@ -2634,8 +2735,8 @@ void DigiDollarWidgetTests::digiDollarModalDialogsVisualQaDarkAndLight()
         for (int row = 0; row < 6; ++row) {
             QTreeWidgetItem* item = new QTreeWidgetItem(tree);
             item->setCheckState(0, row == 1 ? Qt::Checked : Qt::Unchecked);
-            item->setText(1, QStringLiteral("$%1.00 DD").arg(110 - row));
-            item->setText(2, QStringLiteral("DD UTXO"));
+            item->setText(1, QStringLiteral("%1.00 $DD").arg(110 - row));
+            item->setText(2, QStringLiteral("$DD UTXO"));
             item->setText(3, QStringLiteral("dgbt1qvisual%1...:1").arg(row));
             item->setText(4, QStringLiteral("May 26, 2026"));
             item->setText(5, QStringLiteral("Confirmed"));
@@ -3234,7 +3335,7 @@ void DigiDollarWidgetTests::ddReceiveEditPersistsAndKeepsDgbSeparated()
     QVERIFY(reloadedTable != nullptr);
     QCOMPARE(reloadedTable->rowCount(), 1);
     QCOMPARE(reloadedTable->item(0, 1)->text(), QStringLiteral("edited label"));
-    QCOMPARE(reloadedTable->item(0, 2)->text(), QStringLiteral("45.67 DD"));
+    QCOMPARE(reloadedTable->item(0, 2)->text(), QStringLiteral("45.67 $DD"));
 }
 
 void DigiDollarWidgetTests::ddReceiveEditCancelLeavesRequestUnchanged()
@@ -3315,7 +3416,7 @@ void DigiDollarWidgetTests::ddReceiveEditCancelLeavesRequestUnchanged()
     QCOMPARE(wallet_model->getRecentRequestsTableModel()->rowCount(QModelIndex()), 0);
     QCOMPARE(table->rowCount(), 1);
     QCOMPARE(table->item(0, 1)->text(), QStringLiteral("cancel original label"));
-    QCOMPARE(table->item(0, 2)->text(), QStringLiteral("98.76 DD"));
+    QCOMPARE(table->item(0, 2)->text(), QStringLiteral("98.76 $DD"));
 }
 
 void DigiDollarWidgetTests::ddReceiveRemovePersistsAndKeepsDgbSeparated()
@@ -3426,7 +3527,7 @@ void DigiDollarWidgetTests::ddReceiveRequestDialogFormatsURIAndAmount()
         if (label->text().contains(QStringLiteral("digidollar:RDrequestTestAddress"))) {
             uri_text = label->text();
         }
-        if (label->text() == QStringLiteral("123.45 DD")) {
+        if (label->text() == QStringLiteral("123.45 $DD")) {
             amount_text = label->text();
         }
     }
@@ -3439,7 +3540,7 @@ void DigiDollarWidgetTests::ddReceiveRequestDialogFormatsURIAndAmount()
              "DD receive request dialog must encode cents as decimal DD units");
     QVERIFY2(uri_text.contains(QStringLiteral("message=DGB-equivalent%20DD%20request")),
              "DD receive request dialog must percent-encode messages");
-    QCOMPARE(amount_text, QStringLiteral("123.45 DD"));
+    QCOMPARE(amount_text, QStringLiteral("123.45 $DD"));
 }
 
 void DigiDollarWidgetTests::ddReceiveRejectsMalformedRequestAmount()
@@ -3680,11 +3781,11 @@ void DigiDollarWidgetTests::overviewRecentTransactionAmountIsRightAligned()
                             .arg(amountLabel->geometry().right())
                             .arg(statusLabel->geometry().left())));
 
-        if (amountLabel->text() == QStringLiteral("+$100.00")) {
+        if (amountLabel->text() == QStringLiteral("+100.00 $DD")) {
             foundSmall = true;
             smallAmountLeft = amountLabel->geometry().left();
             smallStatusLeft = statusLabel->geometry().left();
-        } else if (amountLabel->text() == QStringLiteral("+$1234567.89")) {
+        } else if (amountLabel->text() == QStringLiteral("+1234567.89 $DD")) {
             foundLarge = true;
             largeAmountLeft = amountLabel->geometry().left();
             largeStatusLeft = statusLabel->geometry().left();
@@ -3894,7 +3995,7 @@ void DigiDollarWidgetTests::transactionsWidgetDoubleClickShowsDetailsDialog()
 
     QVERIFY2(plainDetails.contains(QString::fromStdString(tx.txid)), "details text must include the full transaction id");
     QVERIFY2(plainDetails.contains(QStringLiteral("Mint 1-yr")), "details text must include the transaction type");
-    QVERIFY2(plainDetails.contains(QStringLiteral("+$43.21 DD")), "details text must include the signed DD amount");
+    QVERIFY2(plainDetails.contains(QStringLiteral("+43.21 $DD")), "details text must include the signed $DD amount");
     QVERIFY2(plainDetails.contains(QStringLiteral("Status:")), "details text must include the confirmation status");
     QVERIFY2(plainDetails.contains(QStringLiteral("detail dialog note")), "details text must include the local note");
 }
@@ -3917,7 +4018,7 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogOverridesDgbBlueDialo
     const QString txid = QStringLiteral("e000000000000000000000000000000000000000000000000000000000000001");
     table->setItem(0, 0, new QTableWidgetItem(QStringLiteral("Aug 31, 2020 09:34")));
     table->setItem(0, 1, new QTableWidgetItem(QStringLiteral("Send")));
-    table->setItem(0, 2, new QTableWidgetItem(QStringLiteral("-$100.00 DD")));
+    table->setItem(0, 2, new QTableWidgetItem(QStringLiteral("-100.00 $DD")));
     table->setItem(0, 3, new QTableWidgetItem(QStringLiteral("-")));
     table->setItem(0, 4, new QTableWidgetItem(QStringLiteral("theme fallback note")));
     QTableWidgetItem* txidItem = new QTableWidgetItem(txid);
@@ -4016,7 +4117,7 @@ void DigiDollarWidgetTests::transactionsWidgetDetailsDialogVisualQaDarkAndLight(
     const QString txid = QStringLiteral("e000000000000000000000000000000000000000000000000000000000000001");
     table->setItem(0, 0, new QTableWidgetItem(QStringLiteral("Aug 31, 2020 09:34")));
     table->setItem(0, 1, new QTableWidgetItem(QStringLiteral("Send")));
-    table->setItem(0, 2, new QTableWidgetItem(QStringLiteral("-$98.76 DD")));
+    table->setItem(0, 2, new QTableWidgetItem(QStringLiteral("-98.76 $DD")));
     table->setItem(0, 3, new QTableWidgetItem(QStringLiteral("-")));
     table->setItem(0, 4, new QTableWidgetItem(QStringLiteral("visual QA note")));
     QTableWidgetItem* txidItem = new QTableWidgetItem(txid);
@@ -4277,11 +4378,11 @@ void DigiDollarWidgetTests::transactionsWidgetShowsRpcHistorySignsAndFields()
         QCOMPARE(table->item(row, 6)->text(), QString("Pending"));
     };
 
-    checkRow(sendTxid, "Send", "-$5.00 DD", "-", "sendmany functional test");
-    checkRow(recvTxid, "Receive", "+$2.00 DD", "-", "local receive row");
-    checkRow(redeemTxid, "Redeem 30-day", "-$12.50 DD", "30 days", "redeem note");
-    checkRow(mintTxid, "Mint 10-yr", "+$7.00 DD", "10 years", "mint note");
-    checkRow(emptyNoteTxid, "Receive", "+$3.00 DD", "-", "", QString("No note"));
+    checkRow(sendTxid, "Send", "-5.00 $DD", "-", "sendmany functional test");
+    checkRow(recvTxid, "Receive", "+2.00 $DD", "-", "local receive row");
+    checkRow(redeemTxid, "Redeem 30-day", "-12.50 $DD", "30 days", "redeem note");
+    checkRow(mintTxid, "Mint 10-yr", "+7.00 $DD", "10 years", "mint note");
+    checkRow(emptyNoteTxid, "Receive", "+3.00 $DD", "-", "", QString("No note"));
 }
 
 // Regression test for the DD Vault "Lock Tier" column truncation: with the

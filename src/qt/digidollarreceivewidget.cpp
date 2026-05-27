@@ -176,7 +176,7 @@ void DigiDollarReceiveWidget::setupGenerateSection()
     m_amountEdit = new QLineEdit(this);
     m_amountEdit->setObjectName("amountEdit");
     m_amountEdit->setPlaceholderText(tr("0.00"));
-    m_amountEdit->setToolTip(tr("An optional amount to request (in DD)"));
+    m_amountEdit->setToolTip(tr("An optional amount to request (in $DD)"));
     m_amountLabel->setBuddy(m_amountEdit);
 
     // Message field (optional)
@@ -318,7 +318,7 @@ void DigiDollarReceiveWidget::setupQRSection()
 
     m_mainLayout->addWidget(m_qrFrame);
 
-    m_emptyStateLabel = new QLabel(tr("Generate a new DigiDollar address to receive DD."), this);
+    m_emptyStateLabel = new QLabel(tr("Generate a new DigiDollar address to receive $DD."), this);
     m_emptyStateLabel->setObjectName("emptyStateLabel");
     m_emptyStateLabel->setAlignment(Qt::AlignCenter);
     m_emptyStateLabel->setWordWrap(true);
@@ -896,7 +896,7 @@ void DigiDollarReceiveWidget::addRequestToTable(const QString& date, const QStri
 
 QString DigiDollarReceiveWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 2) + " DD";
+    return QString::number(amount, 'f', 2) + " $DD";
 }
 
 QString DigiDollarReceiveWidget::formatDDURI(const QString& address, const QString& label,
@@ -981,6 +981,7 @@ SendCoinsRecipient DigiDollarReceiveWidget::recipientFromRow(int row) const
     if (amountItem) {
         QString amountStr = amountItem->text();
         if (amountStr != tr("Any") && !amountStr.isEmpty()) {
+            amountStr.remove(" $DD");
             amountStr.remove(" DD");
             bool ok = false;
             const double ddAmount = amountStr.toDouble(&ok);
@@ -1071,7 +1072,7 @@ bool DigiDollarReceiveWidget::editDigiDollarRequest(int row)
     amountEdit->setObjectName("ddRequestAmountEdit");
     amountEdit->setDecimals(2);
     amountEdit->setRange(0.00, 100000000.00);
-    amountEdit->setSuffix(QStringLiteral(" DD"));
+    amountEdit->setSuffix(QStringLiteral(" $DD"));
     amountEdit->setValue(entry.recipient.amount > 0 ? entry.recipient.amount / 100.0 : 0.0);
     amountLabel->setBuddy(amountEdit);
 

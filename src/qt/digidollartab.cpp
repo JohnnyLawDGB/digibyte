@@ -96,14 +96,14 @@ void DigiDollarTab::setupUI()
     m_transactionsWidget = new DigiDollarTransactionsWidget(this);
     m_transactionsWidget->setObjectName("transactionsWidget");
 
-    // Add tabs in order: DD Overview, Send DD, Receive DD, Mint DD, Redeem DD, DD Vault, DD Transactions
-    m_tabWidget->addTab(m_overviewWidget, tr("DD Overview"));
-    m_tabWidget->addTab(m_sendWidget, tr("Send DD"));
-    m_tabWidget->addTab(m_receiveWidget, tr("Receive DD"));
-    m_tabWidget->addTab(m_mintWidget, tr("Mint DD"));
-    m_tabWidget->addTab(m_redeemWidget, tr("Redeem DD"));
-    m_tabWidget->addTab(m_positionsWidget, tr("DD Vault"));
-    m_tabWidget->addTab(m_transactionsWidget, tr("DD Transactions"));
+    // Add tabs in order: $DD Overview, Send $DD, Receive $DD, Mint $DD, Redeem $DD, $DD Vault, $DD Transactions
+    m_tabWidget->addTab(m_overviewWidget, tr("$DD Overview"));
+    m_tabWidget->addTab(m_sendWidget, tr("Send $DD"));
+    m_tabWidget->addTab(m_receiveWidget, tr("Receive $DD"));
+    m_tabWidget->addTab(m_mintWidget, tr("Mint $DD"));
+    m_tabWidget->addTab(m_redeemWidget, tr("Redeem $DD"));
+    m_tabWidget->addTab(m_positionsWidget, tr("$DD Vault"));
+    m_tabWidget->addTab(m_transactionsWidget, tr("$DD Transactions"));
 
     // Create activation status overlay
     m_activationLabel = new QLabel(this);

@@ -115,7 +115,7 @@ void DigiDollarPositionsWidget::setupTableHeader()
 {
     QStringList headers;
     headers << tr("Vault ID")
-            << tr("DD Minted")
+            << tr("$DD Minted")
             << tr("DGB Collateral")
             << tr("Lock Date")
             << tr("Lock Tier")
@@ -392,7 +392,7 @@ void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
         const QString healthText = formatHealthStatus(position.health);
         QString details = tr("Vault Details\n\n"
                            "Vault ID: %1\n"
-                           "DD Minted: %2\n"
+                           "$DD Minted: %2\n"
                            "DGB Collateral: %3\n"
                            "Lock Period: %4\n"
                            "Blocks Remaining: %5\n"
@@ -594,7 +594,7 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     ddItem->setFont(monospaceFont);
     ddItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
     ddItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    ddItem->setToolTip(tr("DigiDollar Minted: %1\nThis is the amount of DD tokens you received for this position")
+    ddItem->setToolTip(tr("DigiDollar Minted: %1\nThis is the amount of $DD tokens you received for this position")
                      .arg(formatDDAmount(position.ddMinted)));
 
     // Apply redeemed styling
@@ -912,7 +912,7 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
             .arg(successColor)
             .arg(successHover)
             .arg(successPressed);
-        tooltip = tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the DD tokens");
+        tooltip = tr("Click to redeem this DigiDollar position\nThis will return your DGB collateral and burn the $DD tokens");
         button->setEnabled(true);
     } else {
         // Locked - vault hasn't matured yet - grayed out button with dark text
@@ -1047,7 +1047,7 @@ QWidget* DigiDollarPositionsWidget::createHealthWidget(double health) const
 
 QString DigiDollarPositionsWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 2) + " DD";
+    return QString::number(amount, 'f', 2) + " $DD";
 }
 
 QString DigiDollarPositionsWidget::formatDGBAmount(double amount) const
@@ -1087,7 +1087,7 @@ void DigiDollarPositionsWidget::setPrivacy(bool privacy)
     m_privacy = privacy;
     m_positionsTable->setVisible(!m_privacy);
     if (m_privacy) {
-        m_statusLabel->setText(tr("Privacy mode activated for the DD Vault tab. To unmask the values, uncheck Settings->Mask values."));
+        m_statusLabel->setText(tr("Privacy mode activated for the $DD Vault tab. To unmask the values, uncheck Settings->Mask values."));
         m_statusLabel->show();
     } else {
         updatePositions();

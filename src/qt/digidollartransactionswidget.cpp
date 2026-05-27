@@ -264,7 +264,7 @@ void DigiDollarTransactionsWidget::setupTable()
     m_table->setHorizontalHeaderLabels({
         tr("Date"),
         tr("Type"),
-        tr("Amount (DD)"),
+        tr("Amount ($DD)"),
         tr("Lock Period"),
         tr("Note"),
         tr("Transaction ID"),
@@ -361,7 +361,7 @@ void DigiDollarTransactionsWidget::setPrivacy(bool privacy)
     m_privacy = privacy;
     m_table->setVisible(!m_privacy);
     if (m_privacy) {
-        m_statusLabel->setText(tr("Privacy mode activated for the DD Transactions tab. To unmask the values, uncheck Settings->Mask values."));
+        m_statusLabel->setText(tr("Privacy mode activated for the $DD Transactions tab. To unmask the values, uncheck Settings->Mask values."));
         m_statusLabel->setVisible(true);
     } else {
         updateTransactions();
@@ -725,7 +725,7 @@ QString DigiDollarTransactionsWidget::formatDDAmount(CAmount amount) const
     // Amount is in cents, convert to DD with 2 decimal places
     const CAmount absAmount = amount < 0 ? -amount : amount;
     const QString prefix = amount > 0 ? "+" : (amount < 0 ? "-" : "");
-    return prefix + "$" + QString::number(absAmount / 100.0, 'f', 2) + " DD";
+    return prefix + QString::number(absAmount / 100.0, 'f', 2) + " $DD";
 }
 
 QString DigiDollarTransactionsWidget::formatTimestamp(uint64_t timestamp) const

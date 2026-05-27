@@ -526,7 +526,7 @@ void DigiDollarCoinControlDialog::updateLabels(DDCoinControl& m_coin_control, Wa
     // stats
     l1->setText(QString::number(nQuantity));                                           // Quantity
     // DD amounts are stored in cents, divide by 100 to get dollars
-    l2->setText(QString("$%1 DD").arg(nAmount / 100.0, 0, 'f', 2));                    // Amount in DD dollars
+    l2->setText(QString("%1 $DD").arg(nAmount / 100.0, 0, 'f', 2));                    // Amount in DD dollars
 }
 
 void DigiDollarCoinControlDialog::changeEvent(QEvent* e)
@@ -600,11 +600,11 @@ void DigiDollarCoinControlDialog::updateView()
 
             // amount (display in DD dollars, dd_amount is in cents)
             double dd_display = dd_utxo.dd_amount / 100.0;
-            itemOutput->setText(COLUMN_AMOUNT, QString("$%1 DD").arg(dd_display, 0, 'f', 2));
+            itemOutput->setText(COLUMN_AMOUNT, QString("%1 $DD").arg(dd_display, 0, 'f', 2));
             itemOutput->setData(COLUMN_AMOUNT, Qt::UserRole, QVariant((qlonglong)dd_utxo.dd_amount));
 
             // label
-            itemOutput->setText(COLUMN_LABEL, tr("DD UTXO"));
+            itemOutput->setText(COLUMN_LABEL, tr("$DD UTXO"));
 
             // address - show txid:vout
             QString outpoint_str = QString::fromStdString(dd_utxo.outpoint.hash.GetHex()).left(16) + "...:" + QString::number(dd_utxo.outpoint.n);
@@ -637,7 +637,7 @@ void DigiDollarCoinControlDialog::updateView()
         {
             itemWalletAddress->setText(COLUMN_CHECKBOX, "(" + QString::number(nChildren) + ")");
             double dd_display_sum = nSum / 100.0;
-            itemWalletAddress->setText(COLUMN_AMOUNT, QString("$%1 DD").arg(dd_display_sum, 0, 'f', 2));
+            itemWalletAddress->setText(COLUMN_AMOUNT, QString("%1 $DD").arg(dd_display_sum, 0, 'f', 2));
             itemWalletAddress->setData(COLUMN_AMOUNT, Qt::UserRole, QVariant((qlonglong)nSum));
         }
     }

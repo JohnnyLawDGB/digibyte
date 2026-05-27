@@ -172,7 +172,7 @@ void DigiDollarRedeemWidget::setupCoinControlSection()
     // "Inputs..." button to open coin control dialog
     m_coinControlButton = new QPushButton(tr("Inputs..."), this);
     m_coinControlButton->setObjectName("coinControlButton");
-    m_coinControlButton->setToolTip(tr("Manually select DD inputs to burn for redemption"));
+    m_coinControlButton->setToolTip(tr("Manually select $DD inputs to burn for redemption"));
     m_coinControlButton->setMinimumWidth(80);
     m_coinControlLayout->addWidget(m_coinControlButton);
 
@@ -256,7 +256,7 @@ void DigiDollarRedeemWidget::setupAmountSection()
     m_amountLayout->addWidget(amountTitle, 0, 0, 1, 3);
 
     // Amount input
-    m_amountLabel = new QLabel(tr("DD to Redeem:"), this);
+    m_amountLabel = new QLabel(tr("$DD to Redeem:"), this);
     m_amountEdit = new QLineEdit(this);
     m_amountEdit->setObjectName("amountEdit");
     m_amountEdit->setReadOnly(true);  // Make read-only - exact amount only
@@ -264,7 +264,7 @@ void DigiDollarRedeemWidget::setupAmountSection()
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_amountEdit->setFont(monospaceFont);
 
-    m_amountSuffix = new QLabel("DD", this);
+    m_amountSuffix = new QLabel("$DD", this);
     m_amountSuffix->setObjectName("amountSuffix");
 
     m_amountLayout->addWidget(m_amountLabel, 1, 0);
@@ -274,7 +274,7 @@ void DigiDollarRedeemWidget::setupAmountSection()
     // Redeemable amount
     m_redeemableLabel = new QLabel(tr("Amount to Redeem:"), this);  // Changed from "Max Redeemable"
     m_redeemableLabel->setObjectName("redeemableLabel");
-    m_redeemableValue = new QLabel("0.00 DD", this);
+    m_redeemableValue = new QLabel("0.00 $DD", this);
     m_redeemableValue->setObjectName("redeemableValue");
     m_redeemableValue->setFont(monospaceFont);
 
@@ -306,8 +306,8 @@ void DigiDollarRedeemWidget::setupPositionInfoSection()
     QFont monospaceFont = GUIUtil::fixedPitchFont();
 
     // DD Minted
-    m_ddMintedLabel = new QLabel(tr("DD Minted:"), this);
-    m_ddMintedValue = new QLabel("0.00 DD", this);
+    m_ddMintedLabel = new QLabel(tr("$DD Minted:"), this);
+    m_ddMintedValue = new QLabel("0.00 $DD", this);
     m_ddMintedValue->setObjectName("ddMintedValue");
     m_ddMintedValue->setFont(monospaceFont);
     m_positionInfoLayout->addWidget(m_ddMintedLabel, 1, 0);
@@ -569,22 +569,22 @@ void DigiDollarRedeemWidget::onRedeemClicked()
         if (requiredDDBurn > m_positionDDMinted) {
             // ERR mode active
             errorMsg = tr("Insufficient DigiDollars for Emergency Redemption.\n\n"
-                         "You have: %1 DD\n"
-                         "Required: %2 DD\n\n"
-                         "System health is below 100%, requiring additional DD to redeem.\n"
-                         "You need %3 DD more to complete this redemption.")
-                .arg(QString::number(ddBalance, 'f', 2))
-                .arg(QString::number(requiredDDBurn, 'f', 2))
-                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 2));
+                         "You have: %1\n"
+                         "Required: %2\n\n"
+                         "System health is below 100%, requiring additional $DD to redeem.\n"
+                         "You need %3 more to complete this redemption.")
+                .arg(formatDDAmount(ddBalance))
+                .arg(formatDDAmount(requiredDDBurn))
+                .arg(formatDDAmount(requiredDDBurn - ddBalance));
         } else {
             // Normal redemption
             errorMsg = tr("Insufficient DigiDollars.\n\n"
-                         "You have: %1 DD\n"
-                         "Required: %2 DD\n\n"
-                         "You need %3 DD more to redeem this position.")
-                .arg(QString::number(ddBalance, 'f', 2))
-                .arg(QString::number(requiredDDBurn, 'f', 2))
-                .arg(QString::number(requiredDDBurn - ddBalance, 'f', 2));
+                         "You have: %1\n"
+                         "Required: %2\n\n"
+                         "You need %3 more to redeem this position.")
+                .arg(formatDDAmount(ddBalance))
+                .arg(formatDDAmount(requiredDDBurn))
+                .arg(formatDDAmount(requiredDDBurn - ddBalance));
         }
 
         Q_EMIT message(tr("Insufficient DigiDollar Balance"), errorMsg, QMessageBox::Warning);
@@ -600,10 +600,10 @@ void DigiDollarRedeemWidget::onRedeemClicked()
         // ERR mode - show additional DD burn requirement
         confirmText = tr("Close vault %1 and redeem %2?\n\n"
                         "Emergency Redemption Ratio (ERR) is active.\n"
-                        "Required DD burn: %3 DD")
+                        "Required $DD burn: %3")
             .arg(m_selectedPositionId)
             .arg(formatDDAmount(m_positionDDMinted))
-            .arg(QString::number(requiredDDBurn, 'f', 2));
+            .arg(formatDDAmount(requiredDDBurn));
     } else {
         confirmText = tr("Close vault %1 and redeem %2?")
             .arg(m_selectedPositionId)
@@ -682,7 +682,7 @@ void DigiDollarRedeemWidget::onRedeemClicked()
 //     msgBox.setWindowTitle(tr("Confirm Redeem All"));
 //     msgBox.setText(tr("Redeem entire position %1?")
 //                   .arg(m_selectedPositionId));
-//     msgBox.setInformativeText(tr("Amount: %1 DD\nThis will close the position and release all collateral.")
+//     msgBox.setInformativeText(tr("Amount: %1\nThis will close the position and release all collateral.")
 //                              .arg(formatDDAmount(m_redeemableAmount)));
 //     msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
 //     msgBox.setDefaultButton(QMessageBox::No);
@@ -1049,14 +1049,14 @@ QString DigiDollarRedeemWidget::redeemDisabledReason() const
         return tr("Amount must match the full redeemable DigiDollar amount for this vault.");
     }
     if (!validateDDBalance()) {
-        return tr("Insufficient DigiDollar balance to burn the required DD for this redemption.");
+        return tr("Insufficient DigiDollar balance to burn the required $DD for this redemption.");
     }
     return tr("This DigiDollar vault cannot be redeemed yet.");
 }
 
 QString DigiDollarRedeemWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 2) + " DD";
+    return QString::number(amount, 'f', 2) + " $DD";
 }
 
 QString DigiDollarRedeemWidget::formatDGBAmount(double amount) const

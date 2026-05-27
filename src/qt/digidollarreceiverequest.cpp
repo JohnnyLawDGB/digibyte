@@ -431,7 +431,7 @@ QString DigiDollarReceiveRequestDialog::formatDDAmount(CAmount amount) const
 {
     // Amount is stored in cents for DD (100 cents = 1 DD)
     double ddAmount = amount / 100.0;
-    return QString::number(ddAmount, 'f', 2) + " DD";
+    return QString::number(ddAmount, 'f', 2) + " $DD";
 }
 
 QString DigiDollarReceiveRequestDialog::formatDDURI(const SendCoinsRecipient &info) const

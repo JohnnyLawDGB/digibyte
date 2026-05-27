@@ -254,7 +254,7 @@ TransactionTableModel::TransactionTableModel(const PlatformStyle *_platformStyle
 {
     subscribeToCoreSignals();
 
-    columns << QString() << QString() << tr("Date") << tr("Type") << tr("Label") << tr("Amount (%1/DD)").arg(DigiByteUnits::shortName(walletModel->getOptionsModel()->getDisplayUnit()));
+    columns << QString() << QString() << tr("Date") << tr("Type") << tr("Label") << tr("Amount (%1/$DD)").arg(DigiByteUnits::shortName(walletModel->getOptionsModel()->getDisplayUnit()));
     priv->refreshWallet(walletModel->wallet());
 
     connect(walletModel->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &TransactionTableModel::updateDisplayUnit);
@@ -269,7 +269,7 @@ TransactionTableModel::~TransactionTableModel()
 /** Updates the column title to include both the selected DGB display unit and DigiDollar rows. */
 void TransactionTableModel::updateAmountColumnTitle()
 {
-    columns[Amount] = tr("Amount (%1/DD)").arg(DigiByteUnits::shortName(walletModel->getOptionsModel()->getDisplayUnit()));
+    columns[Amount] = tr("Amount (%1/$DD)").arg(DigiByteUnits::shortName(walletModel->getOptionsModel()->getDisplayUnit()));
     Q_EMIT headerDataChanged(Qt::Horizontal,Amount,Amount);
 }
 
@@ -495,7 +495,7 @@ QString TransactionTableModel::formatTxAmount(const TransactionRecord *wtx, bool
         const CAmount amount = wtx->ddAmount;
         const CAmount absAmount = amount < 0 ? -amount : amount;
         const QString prefix = amount > 0 ? QString("+") : (amount < 0 ? QString("-") : QString());
-        str = prefix + QString("$") + QString::number(absAmount / 100.0, 'f', 2) + QString(" DD");
+        str = prefix + QString::number(absAmount / 100.0, 'f', 2) + QString(" $DD");
     } else {
         str = DigiByteUnits::format(walletModel->getOptionsModel()->getDisplayUnit(), wtx->credit + wtx->debit, false, separators);
     }

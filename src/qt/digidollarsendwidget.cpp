@@ -147,7 +147,7 @@ void DigiDollarSendWidget::setupCoinControlSection()
     // "Inputs..." button to open coin control dialog
     m_coinControlButton = new QPushButton(tr("Inputs..."), this);
     m_coinControlButton->setObjectName("coinControlButton");
-    m_coinControlButton->setToolTip(tr("Manually select DD inputs to spend"));
+    m_coinControlButton->setToolTip(tr("Manually select $DD inputs to spend"));
     m_coinControlButton->setMinimumWidth(80);
     m_coinControlLayout->addWidget(m_coinControlButton);
 
@@ -260,7 +260,7 @@ void DigiDollarSendWidget::setupAmountSection()
     m_amountEdit->setObjectName("amountEdit");
     m_amountEdit->setValidator(m_amountValidator);
     m_amountEdit->setPlaceholderText("0.00");
-    m_amountEdit->setToolTip(tr("The amount of DigiDollar to send.\n\n• Minimum: $1.00\n• Maximum: $100,000.00\n• Up to 2 decimal places (cents)"));
+    m_amountEdit->setToolTip(tr("The amount of DigiDollar to send.\n\n• Minimum: 1.00 $DD\n• Maximum: 100,000.00 $DD\n• Up to 2 decimal places (cents)"));
     m_amountEdit->setFocusPolicy(Qt::StrongFocus);
     m_amountEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
     QFont monospaceFont = GUIUtil::fixedPitchFont();
@@ -278,10 +278,10 @@ void DigiDollarSendWidget::setupAmountSection()
     m_amountLayout->addLayout(amountInputLayout, 0, 1);
 
     // USD equivalent display
-    m_usdEquivalentLabel = new QLabel(tr("USD Equivalent:"), this);
+    m_usdEquivalentLabel = new QLabel(tr("$USD Equivalent:"), this);
     m_usdEquivalentLabel->setObjectName("usdEquivalentLabel");
     m_usdEquivalentLabel->setToolTip(tr("Equivalent value in US Dollars (DigiDollar is pegged to $1 USD)"));
-    m_usdEquivalentValue = new QLabel("$0.00", this);
+    m_usdEquivalentValue = new QLabel("0.00 $USD", this);
     m_usdEquivalentValue->setObjectName("usdEquivalentValue");
     m_usdEquivalentValue->setFont(monospaceFont);
     m_usdEquivalentValue->setToolTip(tr("USD value updates in real-time as you type"));
@@ -293,7 +293,7 @@ void DigiDollarSendWidget::setupAmountSection()
     m_availableBalanceLabel = new QLabel(tr("Available:"), this);
     m_availableBalanceLabel->setObjectName("availableBalanceLabel");
     m_availableBalanceLabel->setToolTip(tr("Your current available DigiDollar balance"));
-    m_availableBalanceValue = new QLabel("0.00 DD", this);
+    m_availableBalanceValue = new QLabel("0.00 $DD", this);
     m_availableBalanceValue->setObjectName("availableBalanceValue");
     m_availableBalanceValue->setFont(monospaceFont);
     m_availableBalanceValue->setToolTip(tr("Your current spendable DigiDollar balance"));
@@ -359,7 +359,7 @@ void DigiDollarSendWidget::setupFeeSection()
     m_feeLabel = new QLabel(tr("Transaction fee:"), this);
     m_feeLabel->setObjectName("feeLabel");
     m_feeLabel->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
-    m_feeLabel->setToolTip(tr("Network fee paid in DGB (not deducted from DD amount)"));
+    m_feeLabel->setToolTip(tr("Network fee paid in DGB (not deducted from $DD amount)"));
     m_feeValue = new QLabel("~0.1 DGB", this);
     m_feeValue->setObjectName("feeValue");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
@@ -370,7 +370,7 @@ void DigiDollarSendWidget::setupFeeSection()
     m_feeLayout->addWidget(m_feeValue, 0, 1);
 
     // Total amount display
-    m_totalLabel = new QLabel(tr("Total DD:"), this);
+    m_totalLabel = new QLabel(tr("Total $DD:"), this);
     m_totalLabel->setObjectName("totalLabel");
     m_totalLabel->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
     m_totalLabel->setToolTip(tr("Total DigiDollar amount to send (fee is paid separately in DGB)"));
@@ -378,10 +378,10 @@ void DigiDollarSendWidget::setupFeeSection()
     boldFont.setBold(true);
     m_totalLabel->setFont(boldFont);
 
-    m_totalValue = new QLabel("0.00 DD", this);
+    m_totalValue = new QLabel("0.00 $DD", this);
     m_totalValue->setObjectName("totalValue");
     m_totalValue->setFont(monospaceFont);
-    m_totalValue->setToolTip(tr("Total DD to send (DGB fee is paid from your DGB balance)"));
+    m_totalValue->setToolTip(tr("Total $DD to send (DGB fee is paid from your DGB balance)"));
 
     m_feeLayout->addWidget(m_totalLabel, 1, 0);
     m_feeLayout->addWidget(m_totalValue, 1, 1);
@@ -600,7 +600,7 @@ void DigiDollarSendWidget::onSendClicked()
                      "Valid amount format:\n"
                      "• Positive number\n"
                      "• Maximum 2 decimal places\n"
-                     "• Between 1.00 and 100,000.00 DD\n\n"
+                     "• Between 1.00 $DD and 100,000.00 $DD\n\n"
                      "Please enter a valid amount."));
         m_amountEdit->setFocus();
         return;
@@ -614,8 +614,8 @@ void DigiDollarSendWidget::onSendClicked()
                   tr("You don't have enough DigiDollar for this transfer.\n\n"
                      "Available balance: %1\n"
                      "Amount to send: %2\n\n"
-                     "Note: Transaction fees are paid in DGB (not DD).\n\n"
-                     "Please enter a smaller amount or add more DD to your wallet.")
+                     "Note: Transaction fees are paid in DGB (not $DD).\n\n"
+                     "Please enter a smaller amount or add more $DD to your wallet.")
                   .arg(formatDDAmount(m_availableBalance))
                   .arg(formatDDAmount(amount)));
         m_amountEdit->setFocus();
@@ -718,7 +718,7 @@ void DigiDollarSendWidget::updateUSDEquivalent()
         double usdValue = amount * 1.0; // DD should be pegged to $1
         m_usdEquivalentValue->setText(formatUSDAmount(usdValue));
     } else {
-        m_usdEquivalentValue->setText("$0.00");
+        m_usdEquivalentValue->setText("0.00 $USD");
     }
     // REMOVED: All programmatic styling - Let CSS handle theming
 }
@@ -775,12 +775,12 @@ bool DigiDollarSendWidget::validateBalance() const
 
 QString DigiDollarSendWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 2) + " DD";
+    return QString::number(amount, 'f', 2) + " $DD";
 }
 
 QString DigiDollarSendWidget::formatUSDAmount(double amount) const
 {
-    return "$" + QString::number(amount, 'f', 2);
+    return QString::number(amount, 'f', 2) + " $USD";
 }
 
 // PHASE 7.3: Error display helper
@@ -859,7 +859,7 @@ bool DigiDollarSendWidget::showConfirmationDialog(const QString& address, double
         const int selected_count = static_cast<int>(m_coinControl->ListSelected().size());
         const CAmount selected_amount = selectedDigiDollarAmount();
         question_string.append("<hr /><b>");
-        question_string.append(tr("Selected DD inputs"));
+        question_string.append(tr("Selected $DD inputs"));
         question_string.append("</b>: ");
         question_string.append(tr("%1 input(s), %2 selected")
             .arg(selected_count)
@@ -1034,7 +1034,7 @@ void DigiDollarSendWidget::showBackendError(int status, const QString& reasonFai
             "%1\n\n"
             "Please:\n"
             "• Enter a smaller amount, or\n"
-            "• Add more DD to your wallet"
+            "• Add more $DD to your wallet"
         ).arg(reasonFailed);
         break;
 
@@ -1053,7 +1053,7 @@ void DigiDollarSendWidget::showBackendError(int status, const QString& reasonFai
             errorMessage = tr(
                 "Unable to select DigiDollar for transfer.\n\n"
                 "This may occur if:\n"
-                "• Your DD is locked in pending transactions\n"
+                "• Your $DD is locked in pending transactions\n"
                 "• The requested amount requires too many inputs\n\n"
                 "Please try:\n"
                 "• Waiting for pending transactions to confirm\n"

@@ -47,7 +47,7 @@
 #include <QFontMetrics>
 
 namespace {
-static const QString MAX_EXPECTED_BLOCKCHAIN_DD_SUPPLY = QStringLiteral("$11,000,000,000.00 DD");
+static const QString MAX_EXPECTED_BLOCKCHAIN_DD_SUPPLY = QStringLiteral("11,000,000,000.00 $DD");
 static const QString MAX_EXPECTED_BLOCKCHAIN_DGB_LOCKED = QStringLiteral("21,000,000,000.00 DGB");
 static constexpr int TOTALS_VALUE_HORIZONTAL_PADDING = 36;
 static constexpr int TOTALS_FRAME_HORIZONTAL_PADDING = 72;
@@ -188,7 +188,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     // DD Balance (Available / Confirmed)
     m_ddBalanceLabel = new QLabel(tr("Available"), this);
     m_ddBalanceLabel->setObjectName("ddBalanceLabel");
-    m_ddBalanceValue = new QLabel("0.00 DD", this);
+    m_ddBalanceValue = new QLabel("0.00 $DD", this);
     m_ddBalanceValue->setObjectName("ddBalanceValue");
     m_ddBalanceValue->setCursor(QCursor(Qt::IBeamCursor));
     m_ddBalanceValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
@@ -200,7 +200,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     // DD Pending (Unconfirmed)
     m_ddPendingLabel = new QLabel(tr("Pending"), this);
     m_ddPendingLabel->setObjectName("ddPendingLabel");
-    m_ddPendingValue = new QLabel("0.00 DD", this);
+    m_ddPendingValue = new QLabel("0.00 $DD", this);
     m_ddPendingValue->setObjectName("ddPendingValue");
     m_ddPendingValue->setCursor(QCursor(Qt::IBeamCursor));
     m_ddPendingValue->setAlignment(Qt::AlignRight | Qt::AlignTrailing | Qt::AlignVCenter);
@@ -229,7 +229,7 @@ void DigiDollarOverviewWidget::setupBalanceSection()
     m_balanceLayout->addWidget(line, 4, 0, 1, 2);
 
     // USD Value (Total — confirmed only)
-    m_usdValueLabel = new QLabel(tr("Total:"), this);
+    m_usdValueLabel = new QLabel(tr("Total $USD:"), this);
     m_usdValueLabel->setObjectName("usdValueLabel");
     m_usdValueValue = new QLabel(formatUSDAmount(0), this);
     m_usdValueValue->setObjectName("usdValueValue");
@@ -302,7 +302,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     m_systemHealthLayout->setObjectName("healthGridLayout");
 
     // Oracle Price
-    m_oraclePriceLabel = new QLabel(tr("DGB/USD Price:"), this);
+    m_oraclePriceLabel = new QLabel(tr("DGB/$USD Price:"), this);
     m_oraclePriceLabel->setObjectName("oraclePriceLabel");
     m_oraclePriceValue = new QLabel("Loading...", this);
     m_oraclePriceValue->setObjectName("oraclePriceValue");
@@ -355,7 +355,7 @@ void DigiDollarOverviewWidget::setupSystemHealthSection()
     totalsLayout->setContentsMargins(15, 15, 15, 15);
 
     // Blockchain Total DD Supply (prominent)
-    m_networkTotalDDLabel = new QLabel(tr("Blockchain DD Supply"), this);
+    m_networkTotalDDLabel = new QLabel(tr("Blockchain $DD Supply"), this);
     m_networkTotalDDLabel->setObjectName("networkTotalDDLabel");
     m_networkTotalDDLabel->setAlignment(Qt::AlignCenter);
     m_networkTotalDDLabel->setWordWrap(false);
@@ -555,7 +555,7 @@ void DigiDollarOverviewWidget::incomingDDTransaction(const QString& date, const 
 {
     // Add transaction to list widget
     QListWidgetItem* item = new QListWidgetItem(m_transactionsList);
-    QString transactionText = QString("%1 %2 DD - %3")
+    QString transactionText = QString("%1 %2 $DD - %3")
                                 .arg(type)
                                 .arg(amount)
                                 .arg(date);
@@ -698,7 +698,7 @@ void DigiDollarOverviewWidget::updateOraclePrice()
     }
 
     if (m_oraclePrice > 0) {
-        m_oraclePriceValue->setText(QString("$%1").arg(QString::number(m_oraclePrice, 'f', 6)));
+        m_oraclePriceValue->setText(QString("%1 $USD").arg(QString::number(m_oraclePrice, 'f', 6)));
     } else {
         m_oraclePriceValue->setText(tr("Oracle unavailable"));
     }
@@ -756,9 +756,9 @@ void DigiDollarOverviewWidget::updateSystemHealth()
         QString ddFormatted = locale.toString(totalDD, 'f', 2);
         QString dgbFormatted = locale.toString(totalCollateralDGB, 'f', 2);
 
-        // Use rich text for colored formatting: white $ and DD, green numbers
+        // Use rich text for colored formatting: green numbers and white $DD label
         m_networkTotalDDValue->setTextFormat(Qt::RichText);
-        m_networkTotalDDValue->setText(QString("<span style='color: white;'>$</span><span style='color: #00FF88; font-weight: bold;'>%1</span><span style='color: white;'> DD</span>").arg(ddFormatted));
+        m_networkTotalDDValue->setText(QString("<span style='color: #00FF88; font-weight: bold;'>%1</span><span style='color: white;'> $DD</span>").arg(ddFormatted));
 
         m_networkTotalCollateralValue->setTextFormat(Qt::RichText);
         m_networkTotalCollateralValue->setText(QString("<span style='color: #00FF88; font-weight: bold;'>%1</span><span style='color: white;'> DGB</span>").arg(dgbFormatted));
@@ -857,7 +857,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         const bool is_outflow = (tx.category == "send" || tx.category == "redeem") || tx.amount < 0;
         const bool is_inflow = (tx.category == "receive" || tx.category == "mint") || tx.amount > 0;
         const QString amountPrefix = absAmount == 0 ? "" : (is_outflow ? "-" : (is_inflow ? "+" : ""));
-        QString amount = QString("$%1").arg(static_cast<double>(absAmount) / 100.0, 0, 'f', 2);
+        QString amount = QString("%1 $DD").arg(static_cast<double>(absAmount) / 100.0, 0, 'f', 2);
         amount.prepend(amountPrefix);
         return amount;
     };
@@ -987,7 +987,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         item->setSizeHint(itemWidget->sizeHint());
         item->setData(RecentTxIdRole, QString::fromStdString(tx.txid));
         item->setData(RecentTypeRole, categoryText);
-        item->setData(RecentAmountRole, QStringLiteral("%1 DD").arg(amountLabel->text()));
+        item->setData(RecentAmountRole, amountLabel->text());
         item->setData(RecentDateRole, dateLabel->text());
         item->setData(RecentConfirmationsRole, confirmText);
         item->setData(RecentNoteRole, QString::fromStdString(tx.comment));
@@ -1015,7 +1015,7 @@ void DigiDollarOverviewWidget::activateRecentTransaction(QListWidgetItem* item)
 
 QString DigiDollarOverviewWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 2) + " DD";
+    return QString::number(amount, 'f', 2) + " $DD";
 }
 
 QString DigiDollarOverviewWidget::formatDGBAmount(double amount) const
@@ -1025,7 +1025,7 @@ QString DigiDollarOverviewWidget::formatDGBAmount(double amount) const
 
 QString DigiDollarOverviewWidget::formatUSDAmount(double amount) const
 {
-    return "$" + QString::number(amount, 'f', 2) + " USD";
+    return QString::number(amount, 'f', 2) + " $USD";
 }
 
 void DigiDollarOverviewWidget::setMonospacedFont(bool use_embedded_font)

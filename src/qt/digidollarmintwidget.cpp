@@ -170,7 +170,7 @@ void DigiDollarMintWidget::setupMintAmountSection()
     const auto& ddParams = Params().GetDigiDollarParams();
     const double minMintAmount = ddParams.minMintAmount / 100.0;
     const double maxMintAmount = ddParams.maxMintAmount / 100.0;
-    m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\n• Minimum: $%1\n• Maximum: $%2\n• Up to 2 decimal places (cents)")
+    m_amountEdit->setToolTip(tr("The amount of DigiDollar to mint.\n\n• Minimum: %1 $DD\n• Maximum: %2 $DD\n• Up to 2 decimal places (cents)")
         .arg(QString::number(minMintAmount, 'f', 2))
         .arg(QString::number(maxMintAmount, 'f', 2)));
     m_amountEdit->setFocusPolicy(Qt::StrongFocus);
@@ -181,7 +181,7 @@ void DigiDollarMintWidget::setupMintAmountSection()
     // Set buddy AFTER m_amountEdit is created
     m_amountLabel->setBuddy(m_amountEdit);
 
-    m_amountSuffix = new QLabel("DD", this);
+    m_amountSuffix = new QLabel("$DD", this);
     m_amountSuffix->setObjectName("amountSuffix");
     // Theme styling applied in applyTheme()
 
@@ -192,10 +192,10 @@ void DigiDollarMintWidget::setupMintAmountSection()
     m_amountLayout->addLayout(amountInputLayout, 1, 1);
 
     // USD value
-    m_usdValueLabel = new QLabel(tr("USD Equivalent:"), this);
+    m_usdValueLabel = new QLabel(tr("$USD Equivalent:"), this);
     m_usdValueLabel->setObjectName("usdValueLabel");
     m_usdValueLabel->setToolTip(tr("Equivalent value in US Dollars (DigiDollar is pegged to $1 USD)"));
-    m_usdValueValue = new QLabel("$0.00", this);
+    m_usdValueValue = new QLabel("0.00 $USD", this);
     m_usdValueValue->setObjectName("usdValueValue");
     m_usdValueValue->setFont(monospaceFont);
     // Theme styling applied in applyTheme() and updateUSDEquivalent()
@@ -305,7 +305,7 @@ void DigiDollarMintWidget::setupCollateralSection()
     m_oraclePriceLabel = new QLabel(tr("Oracle Price:"), this);
     m_oraclePriceLabel->setObjectName("oraclePriceLabel");
     m_oraclePriceLabel->setToolTip(tr("Current DGB price from oracle feed"));
-    m_oraclePriceValue = new QLabel("$0.01 USD/DGB", this);
+    m_oraclePriceValue = new QLabel("0.01 $USD/DGB", this);
     m_oraclePriceValue->setObjectName("oraclePriceValue");
     QFont monospaceFont = GUIUtil::fixedPitchFont();
     m_oraclePriceValue->setFont(monospaceFont);
@@ -527,7 +527,7 @@ void DigiDollarMintWidget::updateOraclePrice()
     LogPrintf("DigiDollar Mint: Final m_oraclePrice = %f\n", m_oraclePrice);
 
     if (m_oraclePrice > 0) {
-        m_oraclePriceValue->setText(formatUSDAmount(m_oraclePrice) + " USD/DGB");
+        m_oraclePriceValue->setText(formatUSDAmount(m_oraclePrice) + "/DGB");
     } else {
         m_oraclePriceValue->setText(tr("Oracle unavailable"));
     }
@@ -660,7 +660,7 @@ void DigiDollarMintWidget::onMintClicked()
         priceChangeBox.setText(
             tr("The oracle price changed while you were reviewing.\n\n"
                "Required collateral is now %1 (was %2).\n"
-               "Oracle price: %3 USD/DGB (was %4 USD/DGB)\n\n"
+               "Oracle price: %3/DGB (was %4/DGB)\n\n"
                "Would you like to continue with the updated amount?")
             .arg(formatDGBAmount(m_requiredCollateral))
             .arg(formatDGBAmount(previousCollateral))
@@ -709,7 +709,7 @@ void DigiDollarMintWidget::onMintClicked()
             Q_EMIT message(title,
                            tr("The oracle price changed during confirmation, so the mint details were refreshed.\n\n"
                               "Required collateral is now %1 (was %2).\n"
-                              "Oracle price: %3 USD/DGB (was %4 USD/DGB)\n\n"
+                              "Oracle price: %3/DGB (was %4/DGB)\n\n"
                               "Please review the updated values and click Mint again if they look correct.")
                            .arg(formatDGBAmount(m_requiredCollateral))
                            .arg(formatDGBAmount(previousCollateral))
@@ -733,7 +733,7 @@ void DigiDollarMintWidget::onMintClicked()
     QMessageBox msgBox(this);
     msgBox.setWindowTitle(tr("Confirm DigiDollar Mint"));
     msgBox.setIcon(QMessageBox::Warning);
-    msgBox.setText(tr("Mint %1 DD by locking %2 DGB?")
+    msgBox.setText(tr("Mint %1 by locking %2 DGB?")
                   .arg(formatDDAmount(m_mintAmount))
                   .arg(formatDGBAmount(m_requiredCollateral)));
 
@@ -796,7 +796,7 @@ void DigiDollarMintWidget::onMintClicked()
         finalWarning.setInformativeText(tr(
             "<p style='font-size:14pt; font-weight:bold; color:#ff0000;'>YOUR DGB WILL BE LOCKED FOR %1!</p>"
             "<p style='font-size:12pt;'><b>Amount to Lock:</b> <span style='color:#ff6600;'>%2</span></p>"
-            "<p style='font-size:12pt;'><b>DD to Receive:</b> <span style='color:#00aa00;'>%3</span></p>"
+            "<p style='font-size:12pt;'><b>$DD to Receive:</b> <span style='color:#00aa00;'>%3</span></p>"
             "<hr>"
             "<p style='font-size:11pt;'>Once confirmed, this action <b>CANNOT BE UNDONE</b>.</p>"
             "<p style='font-size:11pt;'>Your DGB collateral becomes redeemable at block <b>%4</b>, after the lock period plus the %5-block network confirmation buffer.</p>"
@@ -846,7 +846,7 @@ void DigiDollarMintWidget::onMintClicked()
         if (result.status == WalletModel::OK) {
             // Format collateral amount
             QString collateralStr = QString::number(result.collateralLocked / 100000000.0, 'f', 8) + " DGB";
-            QString ddAmountStr = QString::number(ddAmountCents / 100.0, 'f', 2) + " DD";
+            QString ddAmountStr = formatDDAmount(ddAmountCents / 100.0);
 
             QString successMessage = tr("DigiDollar mint transaction created successfully!\n\n"
                            "Transaction ID:\n%1\n\n"
@@ -994,7 +994,7 @@ bool DigiDollarMintWidget::validateCollateral() const
 
 QString DigiDollarMintWidget::formatDDAmount(double amount) const
 {
-    return QString::number(amount, 'f', 2) + " DD";
+    return QString::number(amount, 'f', 2) + " $DD";
 }
 
 QString DigiDollarMintWidget::formatDGBAmount(double amount) const
@@ -1004,7 +1004,7 @@ QString DigiDollarMintWidget::formatDGBAmount(double amount) const
 
 QString DigiDollarMintWidget::formatUSDAmount(double amount) const
 {
-    return "$" + QString::number(amount, 'f', 6);
+    return QString::number(amount, 'f', 6) + " $USD";
 }
 
 QString DigiDollarMintWidget::formatRatio(double ratio) const
@@ -1133,7 +1133,7 @@ void DigiDollarMintWidget::setPrivacy(bool privacy)
     updateCollateralCalculation();
     if (m_privacy) {
         m_usdValueValue->setText(maskValue(formatUSDAmount(0)));
-        m_oraclePriceValue->setText(maskValue(formatUSDAmount(0) + " USD/DGB"));
+        m_oraclePriceValue->setText(maskValue(formatUSDAmount(0) + "/DGB"));
     } else {
         updateOraclePrice();
     }

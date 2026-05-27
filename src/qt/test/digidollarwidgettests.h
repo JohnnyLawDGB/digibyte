@@ -44,6 +44,7 @@ private Q_SLOTS:
     void privacyTabSetPrivacySlotTests();
     void privacyOverviewMaskTests();
     void overviewUsdValueShowsUsdSuffixWhenPrivacyOff();
+    void digiDollarAmountLabelsUseCurrencyPrefix();
     void overviewPrivacyMaskHidesAmountUnits();
     void overviewLayoutStretchFavorsBlockchainTotals();
     void overviewBlockchainTotalsFitLaunchScaleValues();

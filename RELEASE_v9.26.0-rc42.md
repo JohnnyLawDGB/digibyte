@@ -24,12 +24,14 @@ Upgrade target:
 What changed from RC41:
 
 - Wallet/RPC mint and redeem relay handling was hardened.
+- Rapid DigiDollar mint, send, and redeem bursts were hardened so batches of 20 settle without duplicate inputs, local conflicts, abandoned sends, or false redeemed vaults.
 - Fragmented UTXO mint consolidation was completed.
 - DigiDollar Qt send/status/redeem/double-click workflows were fixed.
+- DigiDollar now shows a first-entry experimental risk warning with a "don't show again" option after acceptance.
 - Qt tooltip and DigiDollar modal styling were visually QAed and corrected.
 - Tier-0/minimum-mint user feedback and validation were clarified.
 - DGBstats oracle/testnet25 copy and fractional difficulty display were fixed.
-- The local multi-oracle testnet harness was kept runnable with live price movement.
+- The local multi-oracle testnet harness was kept runnable with live price movement and now stress-tests rapid DigiDollar mints, sends, and redeems.
 - Testnet oracle slot 17 was assigned to active operator `digibyte-maxi` without changing the 9-signature oracle quorum.
 
 What did not change:
@@ -50,7 +52,7 @@ What did not change:
 
 RC42 closes the RC41 issue-validation pass.
 
-It fixes confirmed RC41 regressions in DigiDollar wallet/RPC commit ordering, fragmented mint consolidation, Qt status refresh, locked-wallet redeem state, dark-mode/readability styling, DigiDollar transaction details, DigiDollar modal theming, minimum mint copy, tier-0 validation, and DGBstats testnet/oracle displays.
+It fixes confirmed RC41 regressions in DigiDollar wallet/RPC commit ordering, rapid mint/send/redeem wallet state, fragmented mint consolidation, Qt status refresh, locked-wallet redeem state, dark-mode/readability styling, DigiDollar transaction details, DigiDollar modal theming, minimum mint copy, tier-0 validation, and DGBstats testnet/oracle displays.
 
 RC42 is not an economic redesign and not a new testnet reset.
 
@@ -74,13 +76,19 @@ RC42 is not an economic redesign and not a new testnet reset.
 - DGBstats oracle onboarding: updated oracle/testnet25 copy to six active exchanges, v0x03-only bundles, 60-second exchange fetch/broadcast, and assigned-slot coordination.
 - DigiDollar Overview double-click: double-clicking a recent DigiDollar transaction now switches to DD Transactions and focuses the matching row.
 - DigiDollar Transactions double-click: double-clicking a DD transaction now opens a DigiDollar details window like normal DGB transactions.
+- DigiDollar duplicate details: prevented DD transaction double-clicks from opening two detail dialogs for one row.
 - DigiDollar transaction details theme: DD transaction details use green DigiDollar styling in light and dark mode instead of normal DGB blue.
 - DigiDollar modal dialogs: DD coin selection, payment request, and address book dialogs now force green DigiDollar light/dark styling.
+- DigiDollar experimental warning: first entry into the DigiDollar tab shows a direct risk warning with an accepted "don't show again" preference.
 - DigiDollar Send note field: renamed the misleading local `Label` field to local `Note` and updated tooltip/copy.
-- Rapid batch mint state: clarified local/stempool/mempool/rejected/confirmed DigiDollar history states and added lock-tier reject context.
+- Rapid batch mint state: serialized mint selection/commit with DD wallet state so concurrent mints cannot reuse the same DGB inputs.
+- Rapid DD send state: committed DD sends through the wallet once, rejected unsafe fee-input chains, and stopped outgoing change from recording as sender-side receives.
+- Rapid redeem state: rejected or stale redemption transactions are abandoned cleanly so inputs release and vaults do not get stuck pending.
+- Wallet abandonment crash: recursive abandonment now skips live confirmed/mempool descendants instead of aborting on `!wtx.InMempool()`.
+- Rapid-state fuzzing: added a DigiDollar rapid mint/send/redeem state-model fuzz target covering reject, abandon, and confirm orderings.
 - Redeem wallet relay: fixed RPC redeem to commit through wallet relay once and make rapid duplicate redeems fail cleanly.
 - Owner-key guard test: corrected the source guard that proves DigiDollar owner keys are stored before wallet-owned commit.
-- Multi-oracle harness: kept `test_multi_oracle_testnet.sh` runnable end to end while live DGB price moved.
+- Multi-oracle harness: added 20 rapid mints, 20 rapid redemptions, and 20 rapid sends to `test_multi_oracle_testnet.sh`.
 - Testnet oracle slot 17: added active operator `digibyte-maxi` with pubkey `03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47`; testnet active roster is now 18 keys and quorum remains 9 signatures.
 - RC41 ledger: documented final validation status, test evidence, visual QA evidence, and commit hashes for all 18 tracked issues.
 
@@ -124,16 +132,16 @@ Minimum RC42 operator checklist:
 
 ## Validation Status
 
-Focused RC42 validation completed on May 26, 2026 from `feature/digidollar-v1`.
+Focused RC42 validation completed on May 26, 2026 from `feature/digidollar-v1`. Rapid-state follow-up validation completed on May 27, 2026 from the same branch.
 
 | Gate | Status |
 | --- | --- |
-| Build: `make -j$(nproc)` | PASS |
-| Unit tests: `./src/test/test_digibyte --show_progress` | PASS, 3386 test cases |
-| Qt tests: `env QT_QPA_PLATFORM=offscreen src/qt/test/test_digibyte-qt` | PASS |
-| Functional tests: `python3 test/functional/test_runner.py --jobs=$(nproc)` | PASS, all runnable tests passed from 371 listed jobs |
-| Fuzz smoke: `python3 test/fuzz/test_runner.py --par 8 /tmp/digibyte-fuzz-seed` | PASS, 247 targets with one seed input per target |
-| Multi-oracle testnet25 script: `./test_multi_oracle_testnet.sh` | PASS end to end, 222 OK, 0 failed, warning-only live-market observations |
+| Build: `make -C src -j4 digibyted test/test_digibyte test/fuzz/fuzz qt/test/test_digibyte-qt` | PASS |
+| Unit tests: `./src/test/test_digibyte --show_progress` | PASS, 3387 test cases |
+| Qt tests: `QT_QPA_PLATFORM=offscreen ./src/qt/test/test_digibyte-qt` | PASS |
+| Functional tests: `test/functional/test_runner.py --jobs=4` | PASS, 371 listed jobs passed in 665 seconds runtime / 2470 seconds accumulated runtime |
+| Fuzz smoke: all `./src/test/fuzz/fuzz` targets with deterministic seed corpus | PASS, 248 targets in 29 seconds |
+| Multi-oracle testnet25 script: `./test_multi_oracle_testnet.sh` | PASS end to end, 383 total checks, 382 OK, 0 failed, warning-only live-market observations |
 | DGBstats tests: `npm run test:run` | PASS, 23 files / 523 tests |
 | DGBstats build: `npm run build` | PASS with pre-existing ESLint warnings |
 | DGBstats E2E: `npm run test:e2e` | FAIL, broad pre-existing Playwright environment/data failures |
@@ -142,10 +150,11 @@ Focused RC42 validation completed on May 26, 2026 from `feature/digidollar-v1`.
 
 Important validation notes:
 
-- The final multi-oracle run used live market data and passed all DigiDollar mint, redeem, transfer, persistence, reindex, restore, and oracle checks with 18 active local oracles and 9-of-35 consensus; live oracle consensus price during the run was about `$0.00356`/DGB.
-- The final multi-oracle script log was `/tmp/digidollar_debug_logs/test_run_20260526_172022.log`.
+- The final multi-oracle run used live market data and passed all DigiDollar mint, redeem, transfer, persistence, reindex, restore, and oracle checks with 18 active local oracles and unchanged 9-of-35 consensus.
+- The final multi-oracle script included 20 rapid tier-0 mints, 20 rapid redemptions, a 20-output DD self-fragmentation step, and 20 rapid 5 DD sends.
+- The final multi-oracle script log was `/tmp/digidollar_debug_logs/test_run_20260527_080130.log`.
 - The functional suite reported environment-gated skips only and warned that `feature_assumeutxo.py` and `feature_assumevalid.py` are not in the configured test list.
-- A final tagged-head functional run with explicit `--jobs=$(nproc)` passed in 190 seconds runtime / 4507 seconds accumulated runtime.
+- The final full functional run used explicit `--jobs=4` and passed in 665 seconds runtime / 2470 seconds accumulated runtime.
 - DGBstats Playwright E2E remained red independently of the RC42 fixes, with broad loading-state, mocked-data, touch-target, browser-matrix, and route-specific expectations failing in this environment.
 
 ---
@@ -205,6 +214,14 @@ Visual QA covered dark-mode global tooltips, DigiDollar tooltips, long wrapped t
 - `14da7a8d9e` doc: finalize RC42 release notes
 - `8e9b4b4c6a` test: remove brittle DigiDollar RPC timing assertion
 - `f7f5e5a1ee` chainparams: add digibyte-maxi testnet oracle
+- `06903d2b39` fix: gate oracle startup validation logs
+- `b48a0aa6ce` feat: warn before entering DigiDollar tab
+- `e459a96f80` fix: avoid duplicate DigiDollar transaction detail dialogs
+- `4f4c7a415e` copy: clarify DigiDollar experimental warning
+- `1a6836f4e6` release: bump version to v9.26.0-rc43
+- `b53f7ac5ba` fix: harden rapid DigiDollar wallet state transitions
+- `13b1de4788` test: fuzz rapid DigiDollar wallet state transitions
+- `13953fdf6e` test: stress rapid DigiDollar ops in oracle testnet
 
 Related DGBstats commits:
 
@@ -219,6 +236,7 @@ Please focus RC42 testing on:
 
 - Upgrading RC41 nodes without wiping `testnet25`.
 - Rapid mint and redeem attempts from RPC and Qt.
+- Rapid batches of up to 20 mints, sends, and redeems without mining between RPC calls.
 - Fragmented UTXO minting and consolidation.
 - DigiDollar send/status refresh while the wallet is busy.
 - Redeem screens when a vault is redeemable but the encrypted wallet is locked.

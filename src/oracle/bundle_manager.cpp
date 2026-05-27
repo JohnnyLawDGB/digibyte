@@ -1849,7 +1849,7 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
                                                        static_cast<uint32_t>(height));
                     }
                 }
-                LogPrintf("Oracle: Found price %llu micro-USD at height %d\n",
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: Found price %llu micro-USD at height %d\n",
                          bundle.median_price_micro_usd, height);
             }
         }
@@ -2490,7 +2490,7 @@ bool OracleBundleManager::ValidateMuSig2Bundle(const COracleBundle& bundle,
     secp256k1_xonly_pubkey agg_pk;
     secp256k1_musig_keyagg_cache cache;
 
-    LogPrintf("Oracle: ValidateMuSig2Bundle: bitmap=%s, total_oracles=%d, oracle_ids=[%s]\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: ValidateMuSig2Bundle: bitmap=%s, total_oracles=%d, oracle_ids=[%s]\n",
              HexStr(bundle.participation_bitmap),
              params.nOracleTotalOracles,
              [&]() -> std::string {
@@ -2532,7 +2532,7 @@ bool OracleBundleManager::ValidateMuSig2Bundle(const COracleBundle& bundle,
         return false;
     }
 
-    LogPrintf("Oracle: MuSig2 bundle validated: %zu oracles, price=%llu micro-USD\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: MuSig2 bundle validated: %zu oracles, price=%llu micro-USD\n",
              oracle_ids.size(), bundle.median_price_micro_usd);
 
     return true;

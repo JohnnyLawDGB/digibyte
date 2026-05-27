@@ -205,7 +205,7 @@ bool MuSig2OracleAggregator::ComputeAggregatePubkey(
                  pubkey_ptrs.size());
         return false;
     }
-    LogPrintf("Oracle: ComputeAggregatePubkey: SUCCESS for %zu oracles\n", sorted_ids.size());
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: ComputeAggregatePubkey: SUCCESS for %zu oracles\n", sorted_ids.size());
 
     // Store in cache with LRU eviction
     {

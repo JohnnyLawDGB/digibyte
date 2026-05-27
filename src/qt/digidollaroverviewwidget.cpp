@@ -51,6 +51,8 @@ static const QString MAX_EXPECTED_BLOCKCHAIN_DD_SUPPLY = QStringLiteral("$11,000
 static const QString MAX_EXPECTED_BLOCKCHAIN_DGB_LOCKED = QStringLiteral("21,000,000,000.00 DGB");
 static constexpr int TOTALS_VALUE_HORIZONTAL_PADDING = 36;
 static constexpr int TOTALS_FRAME_HORIZONTAL_PADDING = 72;
+static constexpr int RECENT_TX_AMOUNT_COLUMN_MIN_WIDTH = 128;
+static constexpr int RECENT_TX_COLUMN_SPACING = 16;
 
 enum RecentTransactionRole {
     RecentTxIdRole = Qt::UserRole + 1,
@@ -850,6 +852,27 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
     // NOTE: Removed expensive per-transaction getWalletTxDetails loop
     // Confirmations are now calculated on-demand in GetDDTransactionHistory()
 
+    auto formatRecentAmount = [](const DDTransaction& tx) {
+        const CAmount absAmount = tx.amount < 0 ? -tx.amount : tx.amount;
+        const bool is_outflow = (tx.category == "send" || tx.category == "redeem") || tx.amount < 0;
+        const bool is_inflow = (tx.category == "receive" || tx.category == "mint") || tx.amount > 0;
+        const QString amountPrefix = absAmount == 0 ? "" : (is_outflow ? "-" : (is_inflow ? "+" : ""));
+        QString amount = QString("$%1").arg(static_cast<double>(absAmount) / 100.0, 0, 'f', 2);
+        amount.prepend(amountPrefix);
+        return amount;
+    };
+
+    QFont monospaceFont = GUIUtil::fixedPitchFont();
+    QFontMetrics amountMetrics(monospaceFont);
+    int amountColumnWidth = RECENT_TX_AMOUNT_COLUMN_MIN_WIDTH;
+    int measuredCount = 0;
+    for (const auto& tx : transactions) {
+        if (measuredCount >= 20) break;
+        ++measuredCount;
+        amountColumnWidth = std::max(amountColumnWidth,
+                                     amountMetrics.horizontalAdvance(formatRecentAmount(tx)) + 12);
+    }
+
     // Clear existing items
     m_transactionsList->clear();
 
@@ -863,6 +886,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         QWidget* itemWidget = new QWidget();
         QHBoxLayout* layout = new QHBoxLayout(itemWidget);
         layout->setContentsMargins(10, 5, 10, 5);
+        layout->setSpacing(RECENT_TX_COLUMN_SPACING);
 
         // Transaction type icon and category with lock period for mints
         QString icon;
@@ -902,25 +926,24 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         }
 
         QLabel* iconLabel = new QLabel(icon);
+        iconLabel->setObjectName("recentTxIconLabel");
         iconLabel->setFixedWidth(30);
+        iconLabel->setAlignment(Qt::AlignCenter);
         layout->addWidget(iconLabel);
 
         QLabel* categoryLabel = new QLabel(categoryText);
+        categoryLabel->setObjectName("recentTxCategoryLabel");
         categoryLabel->setFixedWidth(130);  // Wide enough for "Redeem 180-day"
         layout->addWidget(categoryLabel);
 
         // Amount — DDTransaction stores unsigned magnitudes, so derive sign from
         // category (send/redeem are outflows, receive/mint are inflows). This
         // matches listdigidollartxs RPC behaviour and the row colour logic below.
-        const CAmount absAmount = tx.amount < 0 ? -tx.amount : tx.amount;
-        const bool is_outflow = (tx.category == "send" || tx.category == "redeem") || tx.amount < 0;
-        const bool is_inflow = (tx.category == "receive" || tx.category == "mint") || tx.amount > 0;
-        const QString amountPrefix = absAmount == 0 ? "" : (is_outflow ? "-" : (is_inflow ? "+" : ""));
-        QLabel* amountLabel = new QLabel(amountPrefix + QString("$%1").arg(absAmount / 100.0, 0, 'f', 2));
-        QFont monospaceFont = GUIUtil::fixedPitchFont();
+        QLabel* amountLabel = new QLabel(formatRecentAmount(tx));
+        amountLabel->setObjectName("recentTxAmountLabel");
         amountLabel->setFont(monospaceFont);
-        amountLabel->setMinimumWidth(std::max(112, amountLabel->fontMetrics().horizontalAdvance(amountLabel->text())));
-        amountLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+        amountLabel->setFixedWidth(amountColumnWidth);
+        amountLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
         amountLabel->setAlignment(Qt::AlignRight);
         if (tx.amount < 0 || tx.category == "send" || tx.category == "redeem") {
             amountLabel->setStyleSheet("color: #ff4646;");
@@ -943,6 +966,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
             confirmText = tr("Confirmed");
         }
         QLabel* confirmLabel = new QLabel(confirmText);
+        confirmLabel->setObjectName("recentTxStatusLabel");
         if (tx.is_local) {
             confirmLabel->setToolTip(tr("Created locally but not currently in mempool. It may need rebroadcast or may have been rejected."));
         }
@@ -952,6 +976,7 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         // Date/time
         QDateTime dateTime = QDateTime::fromSecsSinceEpoch(tx.timestamp);
         QLabel* dateLabel = new QLabel(dateTime.toString("MMM dd, yyyy"));
+        dateLabel->setObjectName("recentTxDateLabel");
         dateLabel->setAlignment(Qt::AlignRight);
         layout->addWidget(dateLabel);
 

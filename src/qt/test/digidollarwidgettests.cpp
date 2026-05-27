@@ -3620,18 +3620,23 @@ void DigiDollarWidgetTests::overviewRecentTransactionAmountIsRightAligned()
     DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
     QVERIFY(dd_wallet != nullptr);
 
-    DDTransaction tx;
-    tx.txid = "b000000000000000000000000000000000000000000000000000000000000001";
-    tx.amount = 123456;
-    tx.timestamp = GetTime();
-    tx.confirmations = 1;
-    tx.incoming = false;
-    tx.address = "TDtestlocaladdress";
-    tx.category = "send";
-    tx.lock_tier = -1;
-    tx.fee = 0;
-    tx.abandoned = false;
-    dd_wallet->AddMockTransaction(tx);
+    auto pushPendingMint = [&](const std::string& txid, CAmount amount, int64_t timestamp) {
+        DDTransaction tx;
+        tx.txid = txid;
+        tx.amount = amount;
+        tx.timestamp = timestamp;
+        tx.confirmations = 0;
+        tx.incoming = true;
+        tx.address = "TDtestlocaladdress";
+        tx.category = "mint";
+        tx.lock_tier = 0;
+        tx.fee = 0;
+        tx.abandoned = false;
+        tx.is_local = false;
+        dd_wallet->AddMockTransaction(tx);
+    };
+    pushPendingMint("b000000000000000000000000000000000000000000000000000000000000001", 10000, GetTime() + 1);
+    pushPendingMint("b000000000000000000000000000000000000000000000000000000000000002", 123456789, GetTime());
 
     DigiDollarMiniGUI mini_gui(m_node);
     mini_gui.initModelForWallet(m_node, wallet);
@@ -3639,25 +3644,64 @@ void DigiDollarWidgetTests::overviewRecentTransactionAmountIsRightAligned()
     DigiDollarOverviewWidget overviewWidget;
     overviewWidget.setWalletModel(mini_gui.walletModel.get());
     overviewWidget.setClientModel(mini_gui.clientModel.get());
+    overviewWidget.resize(1000, 700);
     overviewWidget.show();
     overviewWidget.updateView();
     QCoreApplication::processEvents();
 
     QListWidget* transactionsList = overviewWidget.findChild<QListWidget*>("transactionsList");
     QVERIFY(transactionsList != nullptr);
-    QVERIFY(transactionsList->count() >= 1);
+    QVERIFY(transactionsList->count() >= 2);
 
-    QWidget* itemWidget = transactionsList->itemWidget(transactionsList->item(0));
-    QVERIFY(itemWidget != nullptr);
-    const QList<QLabel*> labels = itemWidget->findChildren<QLabel*>();
-    QVERIFY2(labels.size() >= 5, "expected icon/category/amount/confirmations/date labels per row");
+    bool foundSmall = false;
+    bool foundLarge = false;
+    int smallAmountLeft = -1;
+    int smallStatusLeft = -1;
+    int largeAmountLeft = -1;
+    int largeStatusLeft = -1;
 
-    QLabel* amountLabel = labels.at(2);
-    QCOMPARE(amountLabel->text(), QStringLiteral("-$1234.56"));
-    QVERIFY2(amountLabel->alignment() & Qt::AlignRight,
-             "Recent transaction amount label should be right-aligned for decimal-place alignment");
-    QVERIFY2(amountLabel->minimumWidth() >= amountLabel->fontMetrics().horizontalAdvance(QStringLiteral("-$1234.56")),
-             "Recent transaction amount label should reserve enough width for the exact formatted amount");
+    for (int row = 0; row < 2; ++row) {
+        QWidget* itemWidget = transactionsList->itemWidget(transactionsList->item(row));
+        QVERIFY(itemWidget != nullptr);
+        const QList<QLabel*> labels = itemWidget->findChildren<QLabel*>();
+        QVERIFY2(labels.size() >= 5, "expected icon/category/amount/confirmations/date labels per row");
+        QLabel* categoryLabel = labels.at(1);
+        QLabel* amountLabel = labels.at(2);
+        QLabel* statusLabel = labels.at(3);
+        QCOMPARE(categoryLabel->text(), QStringLiteral("Mint 1-hr"));
+        QCOMPARE(statusLabel->text(), QStringLiteral("Pending"));
+        QVERIFY2(amountLabel->alignment() & Qt::AlignRight,
+                 "Recent transaction amount label should be right-aligned for decimal-place alignment");
+        QVERIFY2(amountLabel->minimumWidth() >= 128,
+                 qPrintable(QString("Recent transaction amount column should reserve a stable readable width; got %1")
+                            .arg(amountLabel->minimumWidth())));
+        QVERIFY2(statusLabel->geometry().left() - amountLabel->geometry().right() >= 16,
+                 qPrintable(QString("Recent transaction amount/status columns should have a clear gap; amount right=%1 status left=%2")
+                            .arg(amountLabel->geometry().right())
+                            .arg(statusLabel->geometry().left())));
+
+        if (amountLabel->text() == QStringLiteral("+$100.00")) {
+            foundSmall = true;
+            smallAmountLeft = amountLabel->geometry().left();
+            smallStatusLeft = statusLabel->geometry().left();
+        } else if (amountLabel->text() == QStringLiteral("+$1234567.89")) {
+            foundLarge = true;
+            largeAmountLeft = amountLabel->geometry().left();
+            largeStatusLeft = statusLabel->geometry().left();
+        }
+    }
+
+    QVERIFY2(foundSmall, "expected small pending mint row");
+    QVERIFY2(foundLarge, "expected large pending mint row");
+    QCOMPARE(smallAmountLeft, largeAmountLeft);
+    QCOMPARE(smallStatusLeft, largeStatusLeft);
+
+    if (qEnvironmentVariableIsSet("DIGIBYTE_QT_SAVE_DD_OVERVIEW_QA")) {
+        const QString path = QStringLiteral("/tmp/digibyte_dd_overview_recent_alignment_qa.png");
+        const QPixmap pixmap = overviewWidget.grab();
+        QVERIFY2(pixmap.save(path), qPrintable(QStringLiteral("failed to save DD overview alignment QA screenshot to %1").arg(path)));
+        qInfo("DD overview recent transaction alignment QA screenshot: %s", qPrintable(path));
+    }
 }
 
 void DigiDollarWidgetTests::overviewRecentTransactionDoubleClickOpensTransactionsTab()

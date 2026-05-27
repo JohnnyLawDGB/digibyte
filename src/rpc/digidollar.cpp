@@ -17,6 +17,7 @@
 #include <oracle/node.h>
 #include <oracle/mock_oracle.h>
 #include <oracle/signing_orchestrator.h>
+#include <oracle/musig2_aggregator.h>
 #include <consensus/digidollar.h>
 #include <consensus/dca.h>
 #include <consensus/err.h>
@@ -135,6 +136,23 @@ namespace {
         return false;
     }
 #endif
+
+    const std::vector<std::string>& OracleDisplayNames()
+    {
+        static const std::vector<std::string> names = {
+            "Jared", "Green Candle", "Bastian", "DanGB", "Shenger",
+            "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie",
+            "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
+            "Neel", "DigiSwarm", "GTO90", "digibyte-maxi"
+        };
+        return names;
+    }
+
+    std::string OracleDisplayName(uint32_t oracle_id)
+    {
+        const auto& names = OracleDisplayNames();
+        return oracle_id < names.size() ? names[oracle_id] : strprintf("Oracle %u", oracle_id);
+    }
 
     void PublishRegtestMockMuSig2Quote(int32_t quote_height)
     {
@@ -4520,6 +4538,158 @@ static RPCHelpMan getalloracleprices()
 }
 
 
+static RPCHelpMan getoraclesigners()
+{
+    return RPCHelpMan{"getoraclesigners",
+                "\nShow which oracles signed recent on-chain MuSig2 oracle bundles.\n"
+                "This read-only RPC scans recent active-chain blocks, extracts DigiDollar\n"
+                "oracle bundles, decodes each v0x03 participation bitmap, and returns the\n"
+                "actual signer IDs plus configured oracle metadata. It does not require a\n"
+                "wallet and does not change oracle, wallet, or consensus state.\n",
+                {
+                    {"blocks", RPCArg::Type::NUM, RPCArg::Default{100}, "Number of recent blocks to scan (clamped to 1..1000)"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "chain_height", "Current active-chain height"},
+                        {RPCResult::Type::NUM, "scan_blocks", "Number of recent blocks scanned"},
+                        {RPCResult::Type::NUM, "required_signers", "Minimum MuSig2 signer count required by consensus"},
+                        {RPCResult::Type::NUM, "total_oracle_slots", "Total reserved oracle bitmap slots"},
+                        {RPCResult::Type::NUM, "active_oracle_slots", "Number of oracle public keys currently active in consensus"},
+                        {RPCResult::Type::NUM, "bundle_count", "Number of bundles found in the scan window"},
+                        {RPCResult::Type::ARR, "bundles", "Recent on-chain oracle bundles, newest first",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::NUM, "height", "Block height containing the bundle"},
+                                        {RPCResult::Type::STR_HEX, "blockhash", "Block hash containing the bundle"},
+                                        {RPCResult::Type::NUM, "epoch", "Oracle epoch covered by the bundle"},
+                                        {RPCResult::Type::NUM, "version", "Oracle bundle version"},
+                                        {RPCResult::Type::NUM, "price_micro_usd", "Consensus DGB/USD price in micro-USD"},
+                                        {RPCResult::Type::NUM, "price_usd", "Consensus DGB/USD price in USD"},
+                                        {RPCResult::Type::NUM, "timestamp", "Bundle timestamp"},
+                                        {RPCResult::Type::STR_HEX, "participation_bitmap", "Raw v0x03 participation bitmap"},
+                                        {RPCResult::Type::BOOL, "bitmap_valid", "Whether the bitmap decoded cleanly"},
+                                        {RPCResult::Type::NUM, "signer_count", "Number of signer IDs decoded from the bitmap"},
+                                        {RPCResult::Type::ARR, "signer_ids", "Decoded signer oracle IDs",
+                                            {
+                                                {RPCResult::Type::NUM, "", "Oracle ID"},
+                                            }
+                                        },
+                                        {RPCResult::Type::ARR, "signers", "Decoded signer metadata",
+                                            {
+                                                {RPCResult::Type::OBJ, "", "",
+                                                    {
+                                                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID"},
+                                                        {RPCResult::Type::STR, "name", "Oracle display name"},
+                                                        {RPCResult::Type::BOOL, "configured", "Whether this oracle ID exists in chainparams"},
+                                                        {RPCResult::Type::BOOL, "in_consensus", "Whether this oracle ID is within the active consensus pubkey set"},
+                                                        {RPCResult::Type::BOOL, "is_active", "Whether chainparams marks this oracle node active"},
+                                                        {RPCResult::Type::STR_HEX, "pubkey", "Configured compressed oracle public key"},
+                                                        {RPCResult::Type::STR, "endpoint", "Configured oracle endpoint"},
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    }
+                                }
+                            }
+                        },
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getoraclesigners", "") +
+                    HelpExampleCli("getoraclesigners", "200") +
+                    HelpExampleRpc("getoraclesigners", "20")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            const ChainstateManager& chainman = EnsureAnyChainman(request.context);
+            const CChainParams& params = Params();
+            const Consensus::Params& consensus = params.GetConsensus();
+            OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
+
+            int scan_blocks = OptionalParamIsSet(request, 0) ? request.params[0].getInt<int>() : 100;
+            if (scan_blocks < 1) scan_blocks = 1;
+            if (scan_blocks > 1000) scan_blocks = 1000;
+
+            const int tip_height = WITH_LOCK(cs_main, return chainman.ActiveChain().Height());
+            UniValue bundles(UniValue::VARR);
+            int bundle_count = 0;
+
+            {
+                LOCK(cs_main);
+                const int first_height = std::max(0, tip_height - scan_blocks + 1);
+                for (int h = tip_height; h >= first_height; --h) {
+                    CBlockIndex* pindex = chainman.ActiveChain()[h];
+                    if (!pindex) continue;
+
+                    CBlock block;
+                    if (!chainman.m_blockman.ReadBlockFromDisk(block, *pindex)) continue;
+                    if (block.vtx.empty()) continue;
+
+                    COracleBundle bundle;
+                    if (!bundle_manager.ExtractOracleBundle(*block.vtx[0], bundle)) continue;
+
+                    std::vector<uint8_t> signer_ids;
+                    bool bitmap_valid = false;
+                    if (bundle.IsMuSig2() && !bundle.participation_bitmap.empty()) {
+                        signer_ids = MuSig2OracleAggregator::DecodeBitmap(
+                            bundle.participation_bitmap,
+                            static_cast<uint16_t>(consensus.nOracleTotalOracles));
+                        bitmap_valid = !signer_ids.empty();
+                    }
+
+                    UniValue signer_id_array(UniValue::VARR);
+                    UniValue signer_array(UniValue::VARR);
+                    for (uint8_t signer_id : signer_ids) {
+                        signer_id_array.push_back(static_cast<int>(signer_id));
+
+                        const OracleNodeInfo* oracle = params.GetOracleNode(signer_id);
+                        UniValue signer(UniValue::VOBJ);
+                        signer.pushKV("oracle_id", static_cast<int>(signer_id));
+                        signer.pushKV("name", OracleDisplayName(signer_id));
+                        signer.pushKV("configured", oracle != nullptr);
+                        signer.pushKV("in_consensus", static_cast<int>(signer_id) < consensus.nOraclePubkeyCount);
+                        signer.pushKV("is_active", oracle ? oracle->is_active : false);
+                        signer.pushKV("pubkey", oracle ? HexStr(oracle->pubkey) : std::string{});
+                        signer.pushKV("endpoint", oracle ? oracle->endpoint : std::string{});
+                        signer_array.push_back(signer);
+                    }
+
+                    UniValue bundle_obj(UniValue::VOBJ);
+                    bundle_obj.pushKV("height", h);
+                    bundle_obj.pushKV("blockhash", pindex->GetBlockHash().GetHex());
+                    bundle_obj.pushKV("epoch", bundle.epoch);
+                    bundle_obj.pushKV("version", static_cast<int>(bundle.version));
+                    bundle_obj.pushKV("price_micro_usd", static_cast<int64_t>(bundle.median_price_micro_usd));
+                    bundle_obj.pushKV("price_usd", static_cast<double>(bundle.median_price_micro_usd) / 1000000.0);
+                    bundle_obj.pushKV("timestamp", bundle.timestamp);
+                    bundle_obj.pushKV("participation_bitmap", HexStr(bundle.participation_bitmap));
+                    bundle_obj.pushKV("bitmap_valid", bitmap_valid);
+                    bundle_obj.pushKV("signer_count", static_cast<int>(signer_ids.size()));
+                    bundle_obj.pushKV("signer_ids", signer_id_array);
+                    bundle_obj.pushKV("signers", signer_array);
+                    bundles.push_back(bundle_obj);
+                    ++bundle_count;
+                }
+            }
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("chain_height", tip_height);
+            result.pushKV("scan_blocks", scan_blocks);
+            result.pushKV("required_signers", consensus.nOracleConsensusRequired);
+            result.pushKV("total_oracle_slots", consensus.nOracleTotalOracles);
+            result.pushKV("active_oracle_slots", consensus.nOraclePubkeyCount);
+            result.pushKV("bundle_count", bundle_count);
+            result.pushKV("bundles", bundles);
+            return result;
+        },
+    };
+}
+
+
 // sendoracleprice RPC REMOVED — Security vulnerability.
 // Oracle operators must NOT be able to inject arbitrary prices.
 // Oracle prices come exclusively from live exchange aggregation.
@@ -5601,6 +5771,7 @@ void RegisterDigiDollarRPCCommands(CRPCTable &t)
         // Oracle management commands
         // sendoracleprice REMOVED — security vulnerability (fake price injection)
         {"oracle", &getoracles},
+        {"oracle", &getoraclesigners},
         {"oracle", &listoracle},
         // {"oracle", &startoracle},  // Moved to wallet RPC table for wallet key loading
         {"oracle", &stoporacle},

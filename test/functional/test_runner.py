@@ -293,6 +293,7 @@ BASE_SCRIPTS = [
     'digidollar_oracle_block_rules_relay.py',
     'digidollar_oracle_bundle_reject_matrix.py',
     'digidollar_oracle_consistency.py',
+    'digidollar_oracle_signers.py',
     'digidollar_oracle_keygen.py',
     'digidollar_oracle_reorg_cache.py',
     'digidollar_oracle_rpc_staleness.py',

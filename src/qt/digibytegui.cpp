@@ -1167,11 +1167,10 @@ bool DigiByteGUI::confirmDigiDollarExperimentalWarning()
     msg_box.setIcon(QMessageBox::Warning);
     msg_box.setTextFormat(Qt::PlainText);
     msg_box.setTextInteractionFlags(Qt::TextSelectableByMouse);
-    msg_box.setText(tr("DigiDollar is experimental software.\n\n"
-                       "It is a new decentralized dollar system built into DigiByte. Although it has been extensively tested, "
-                       "the developers cannot guarantee that future issues, risks, or vulnerabilities will not be discovered.\n\n"
-                       "Proceed only if you understand these risks and are willing to use DigiDollar at your own responsibility."));
-    msg_box.setInformativeText(tr("Review the DigiDollar documentation before using it with funds you cannot afford to risk."));
+    msg_box.setText(tr("DigiDollar is experimental decentralized software.\n\n"
+                       "It has been extensively tested, but it is new and may still contain bugs, security issues, or other risks.\n\n"
+                       "Proceed only if you understand this and accept full responsibility. Use DigiDollar at your own risk."));
+    msg_box.setInformativeText(tr("Do not use funds you cannot afford to lose."));
     QCheckBox* dont_show_again = new QCheckBox(tr("Don't show this warning again"), &msg_box);
     dont_show_again->setObjectName(QStringLiteral("digiDollarExperimentalWarningDontShowAgain"));
     msg_box.setCheckBox(dont_show_again);

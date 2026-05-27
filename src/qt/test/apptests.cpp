@@ -82,10 +82,11 @@ void ClickDigiDollarAndHandleWarning(QAction* digi_dollar_action, bool remember,
 
         saw_dialog = true;
         QCOMPARE(dialog->windowTitle(), QStringLiteral("DigiDollar Experimental Feature"));
-        QVERIFY2(dialog->text().contains(QStringLiteral("experimental software")), qPrintable(dialog->text()));
-        QVERIFY2(dialog->text().contains(QStringLiteral("new decentralized dollar system")), qPrintable(dialog->text()));
+        QVERIFY2(dialog->text().contains(QStringLiteral("DigiDollar is experimental")), qPrintable(dialog->text()));
         QVERIFY2(dialog->text().contains(QStringLiteral("extensively tested")), qPrintable(dialog->text()));
-        QVERIFY2(dialog->text().contains(QStringLiteral("future issues, risks, or vulnerabilities")), qPrintable(dialog->text()));
+        QVERIFY2(dialog->text().contains(QStringLiteral("bugs, security issues, or other risks")), qPrintable(dialog->text()));
+        QVERIFY2(dialog->text().contains(QStringLiteral("at your own risk")), qPrintable(dialog->text()));
+        QVERIFY2(dialog->informativeText().contains(QStringLiteral("funds you cannot afford to lose")), qPrintable(dialog->informativeText()));
 
         QCheckBox* check_box = dialog->findChild<QCheckBox*>(QStringLiteral("digiDollarExperimentalWarningDontShowAgain"));
         QVERIFY(check_box != nullptr);

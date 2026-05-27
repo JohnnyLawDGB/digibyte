@@ -174,6 +174,7 @@ declare -A BOB_MINTS     # txid -> dd_amount
 declare -A BOB_COLLATERAL # txid -> collateral_dgb
 BOB_TIER0_MINT1=""
 BOB_TIER0_MINT2=""
+BOB_STRESS_MINTS=()
 
 # Test counters
 TOTAL_TESTS=0
@@ -355,6 +356,54 @@ confirm_dd_mint() {
 
     wait_for_tx_confirmed "$cli" "$wallet" "$txid" "$miner_cli" "$miner_addr" "$label" 80 || exit 1
     wait_for_dd_position_active "$cli" "$wallet" "$txid" "$amount" "$label" 45 || exit 1
+}
+
+assert_wallet_tx_clean() {
+    local cli=$1
+    local wallet=$2
+    local txid=$3
+    local label=$4
+    local txjson confs abandoned conflicts
+
+    txjson=$($cli -rpcwallet=$wallet gettransaction "$txid" 2>/dev/null || echo "{}")
+    confs=$(echo "$txjson" | jq -r '.confirmations // 0' 2>/dev/null || echo "0")
+    abandoned=$(echo "$txjson" | jq -r '.abandoned // false' 2>/dev/null || echo "false")
+    conflicts=$(echo "$txjson" | jq -r '(.walletconflicts // []) | length' 2>/dev/null || echo "0")
+
+    if [ "$confs" -gt 0 ] 2>/dev/null && [ "$abandoned" = "false" ] && [ "$conflicts" = "0" ]; then
+        print_status "ok" "$label clean wallet state (confirmed=$confs, conflicts=0, abandoned=false)"
+        return 0
+    fi
+
+    print_status "fail" "$label dirty wallet state (confirmed=$confs, conflicts=$conflicts, abandoned=$abandoned)"
+    echo "$txjson" | jq . 2>/dev/null || echo "$txjson"
+    return 1
+}
+
+assert_positions_not_redeemed() {
+    local cli=$1
+    local wallet=$2
+    local positions=$3
+    local label=$4
+    local redeemed=0
+    local txid status
+
+    for txid in $positions; do
+        status=$($cli -rpcwallet=$wallet listdigidollarpositions false 2>/dev/null \
+            | jq -r --arg txid "$txid" '.[] | select(.position_id == $txid) | .status' 2>/dev/null \
+            | head -1)
+        if [ "$status" = "redeemed" ]; then
+            redeemed=$((redeemed + 1))
+        fi
+    done
+
+    if [ "$redeemed" -eq 0 ]; then
+        print_status "ok" "$label did not mark unrelated vaults as redeemed"
+        return 0
+    fi
+
+    print_status "fail" "$redeemed unrelated vault(s) showed redeemed after $label"
+    return 1
 }
 
 assert_no_pending_positions() {
@@ -762,17 +811,19 @@ echo "Bob's Qt started (PID: $BOB_PID)"
 
 require_rpc_ready "$BOB_CLI" "Bob" "Bob's Qt RPC is ready" "Bob's Qt failed to start"
 
-# Step 3: Setup Bob's wallet and generate lots of DGB for 12+ mints
+# Step 3: Setup Bob's wallet and generate enough mature DGB for normal mints
+# plus the rapid 20-mint stress batch. The live oracle price can move, so keep
+# this intentionally high enough to test DD state handling instead of funding.
 print_header "Step 3: Setting up Bob's wallet with sufficient DGB"
 $BOB_CLI createwallet "bob" 2>/dev/null || true
 BOB_ADDR=$($BOB_CLI -rpcwallet=bob getnewaddress "mining" "bech32")
 echo "Bob's mining address: $BOB_ADDR"
 
-# Bob needs DGB for 12 mints at ~$100 each. At $0.01/DGB that's ~$12,000 collateral
-# Plus 150% collateralization = ~$18,000 worth of DGB = ~1,800,000 DGB
-# Mining 300 blocks = 300 * 72000 = 21,600,000 DGB (plenty)
-echo "Mining 350 blocks for Bob's coinbase maturity and DGB..."
-$BOB_CLI generatetoaddress 350 "$BOB_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
+# Bob needs DGB for the scripted tier mints and an additional 20x $100 tier-0
+# rapid stress batch. Mining 1500 blocks gives the harness enough confirmed
+# coinbase outputs and collateral headroom at low live DGB prices.
+echo "Mining 1500 blocks for Bob's coinbase maturity and DGB..."
+$BOB_CLI generatetoaddress 1500 "$BOB_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
 HEIGHT=$($BOB_CLI getblockcount)
 print_status "ok" "Mined to height $HEIGHT"
 
@@ -1244,6 +1295,7 @@ if echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
     EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 10000))
 else
     print_status "fail" "Tier 0 Mint #1 failed: $MINT_RESULT"
+    exit 1
 fi
 
 print_subheader "Tier 0 - Second Mint (larger amount for DD change test)"
@@ -1261,6 +1313,7 @@ if echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
     EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 11000))
 else
     print_status "fail" "Tier 0 Mint #2 failed: $MINT_RESULT"
+    exit 1
 fi
 
 # Now mint at tiers 1-8 (9 tiers total: 0-8) - Using $110 to test DD change scenario
@@ -1281,6 +1334,7 @@ for tier in 1 2 3 4 5 6 7 8; do
     EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 11000))
     else
         print_status "fail" "Tier $tier Mint failed: $MINT_RESULT"
+        exit 1
     fi
 
 done
@@ -1295,6 +1349,48 @@ echo "Bob completed 10 mints (tier0 \$100, tier0 \$110, tiers 1-8 \$110 each)"
 echo "Expected Bob DD: $EXPECT_BOB_DD cents (\$$(echo "scale=2; $EXPECT_BOB_DD / 100" | bc))"
 verify_all_balances "After Bob's 10 Mints (\$1090 total)"
 list_dd_positions "$BOB_CLI" "bob" "Bob"
+
+# ====================================================================================
+# Step 10B: RAPID BATCH MINT STRESS - 20x tier 0 mints without mining between RPCs
+# ====================================================================================
+print_header "Step 10B: Rapid Batch Mint Stress (20x \$100 tier 0)"
+echo "Submitting 20 mintdigidollar RPCs back-to-back, then confirming them together."
+echo "This verifies rapid mint input reservation does not create local conflicts."
+
+refresh_oracle_prices
+BOB_STRESS_MINTS=()
+for i in $(seq 1 20); do
+    echo "  Rapid mint $i/20..."
+    set +e
+    MINT_RESULT=$($BOB_CLI -rpcwallet=bob mintdigidollar 10000 0 2>&1)
+    MINT_EXIT=$?
+    set -e
+    if [ $MINT_EXIT -eq 0 ] && echo "$MINT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+        TXID=$(echo "$MINT_RESULT" | jq -r '.txid')
+        BOB_STRESS_MINTS+=("$TXID")
+        echo "    accepted: ${TXID:0:16}..."
+    else
+        print_status "fail" "Rapid mint $i failed: $(echo "$MINT_RESULT" | head -c 180)"
+        exit 1
+    fi
+done
+
+echo "Mining one live-oracle block to confirm the rapid mint batch..."
+$BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" >/dev/null 2>&1
+sync_all_nodes
+
+for i in "${!BOB_STRESS_MINTS[@]}"; do
+    TXID="${BOB_STRESS_MINTS[$i]}"
+    LABEL="Rapid mint $((i + 1))/20"
+    wait_for_tx_confirmed "$BOB_CLI" "bob" "$TXID" "$BOB_CLI" "$BOB_ADDR" "$LABEL" 80 || exit 1
+    wait_for_dd_position_active "$BOB_CLI" "bob" "$TXID" 10000 "$LABEL" 45 || exit 1
+    assert_wallet_tx_clean "$BOB_CLI" "bob" "$TXID" "$LABEL" || exit 1
+done
+
+EXPECT_BOB_DD=$((EXPECT_BOB_DD + 200000))
+EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 200000))
+assert_no_pending_positions "$BOB_CLI" "bob" "Bob after rapid mint batch"
+verify_all_balances "After rapid 20x \$100 mint batch"
 
 # ====================================================================================
 # Step 11: Early redemption test (should FAIL - tier 0 still locked)
@@ -1370,6 +1466,58 @@ print_status "ok" "Tier 0 unlock heights reached; redemption window is open"
 echo ""
 echo "Bob's tier 0 positions status:"
 echo "$TIER0_POS_JSON" | jq -r '.[] | select(.lock_tier == 0) | "  [\(.status)] \(.dd_minted) cents - unlock: \(.unlock_height)"' 2>/dev/null || echo "  Error reading positions"
+
+# ====================================================================================
+# Step 12A: RAPID REDEEM STRESS - 20 redemptions without mining between RPCs
+# ====================================================================================
+print_header "Step 12A: Rapid Redeem Stress (20x \$100 tier 0)"
+echo "Submitting 20 redeemdigidollar RPCs back-to-back against the isolated stress mints."
+echo "This verifies rapid redemptions do not leave local conflicts or stale pending state."
+
+RAPID_REDEEM_TXS=()
+for i in "${!BOB_STRESS_MINTS[@]}"; do
+    POSITION_ID="${BOB_STRESS_MINTS[$i]}"
+    echo "  Rapid redeem $((i + 1))/20: ${POSITION_ID:0:16}..."
+    set +e
+    REDEEM_RESULT=$($BOB_CLI -rpcwallet=bob redeemdigidollar "$POSITION_ID" 10000 2>&1)
+    REDEEM_EXIT=$?
+    set -e
+    if [ $REDEEM_EXIT -eq 0 ] && echo "$REDEEM_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+        TXID=$(echo "$REDEEM_RESULT" | jq -r '.txid')
+        RAPID_REDEEM_TXS+=("$TXID")
+        echo "    accepted: ${TXID:0:16}..."
+    else
+        print_status "fail" "Rapid redeem $((i + 1)) failed: $(echo "$REDEEM_RESULT" | head -c 180)"
+        exit 1
+    fi
+done
+
+echo "Mining one live-oracle block to confirm the rapid redeem batch..."
+$BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" >/dev/null 2>&1
+sync_all_nodes
+
+for i in "${!RAPID_REDEEM_TXS[@]}"; do
+    TXID="${RAPID_REDEEM_TXS[$i]}"
+    LABEL="Rapid redeem $((i + 1))/20"
+    wait_for_tx_confirmed "$BOB_CLI" "bob" "$TXID" "$BOB_CLI" "$BOB_ADDR" "$LABEL" 80 || exit 1
+    assert_wallet_tx_clean "$BOB_CLI" "bob" "$TXID" "$LABEL" || exit 1
+done
+
+for POSITION_ID in "${BOB_STRESS_MINTS[@]}"; do
+    STATUS=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false 2>/dev/null \
+        | jq -r --arg txid "$POSITION_ID" '.[] | select(.position_id == $txid) | .status' 2>/dev/null \
+        | head -1)
+    if [ "$STATUS" != "redeemed" ]; then
+        print_status "fail" "Stress vault ${POSITION_ID:0:16} status is ${STATUS:-missing}, expected redeemed after confirmed redeem"
+        exit 1
+    fi
+done
+print_status "ok" "All 20 stress vaults show redeemed only after confirmed redemptions"
+
+EXPECT_BOB_DD=$((EXPECT_BOB_DD - 200000))
+EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD - 200000))
+assert_no_pending_positions "$BOB_CLI" "bob" "Bob after rapid redeem batch"
+verify_all_balances "After rapid 20x redeem batch"
 
 # ====================================================================================
 # Step 12B: DD CHANGE TEST - Create mixed-size UTXOs via transfers
@@ -1595,6 +1743,91 @@ verify_all_balances "After Bob's Second Redemption"
 list_dd_positions "$BOB_CLI" "bob" "Bob"
 
 # ====================================================================================
+# Step 15B: RAPID SEND STRESS - 20 sends without mining between RPCs
+# ====================================================================================
+print_header "Step 15B: Rapid DD Send Stress"
+echo "Submitting 20x 5 DD sends without mining between RPCs."
+echo "This verifies DD sends stay clean and do not mark unrelated vaults redeemed."
+
+RAPID_SEND_TXS=()
+CHARLIE_RAPID_DD_ADDR=$($CHARLIE_CLI -rpcwallet=charlie getdigidollaraddress 2>/dev/null)
+echo "Rapid send destination (Charlie): $CHARLIE_RAPID_DD_ADDR"
+
+UNREDEEMED_BEFORE_SEND=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false 2>/dev/null \
+    | jq -r '.[] | select(.status != "redeemed") | .position_id' 2>/dev/null)
+
+echo "Creating 20 confirmed 5 DD self-send fragments for deterministic rapid send inputs..."
+BOB_DD_BEFORE_FRAGMENT=$(get_dd_balance "$BOB_CLI" "bob")
+SELF_SEND_AMOUNTS="{"
+for i in $(seq 1 20); do
+    SELF_ADDR=$($BOB_CLI -rpcwallet=bob getdigidollaraddress "rapid-send-fragment-$i" 2>/dev/null)
+    if [ "$i" -gt 1 ]; then
+        SELF_SEND_AMOUNTS+=","
+    fi
+    SELF_SEND_AMOUNTS+="\"$SELF_ADDR\":500"
+done
+SELF_SEND_AMOUNTS+="}"
+
+set +e
+FRAGMENT_RESULT=$($BOB_CLI -rpcwallet=bob sendmanydigidollar "" "$SELF_SEND_AMOUNTS" "rapid send input fragmentation" 2>&1)
+FRAGMENT_EXIT=$?
+set -e
+if [ $FRAGMENT_EXIT -eq 0 ] && echo "$FRAGMENT_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+    FRAGMENT_TXID=$(echo "$FRAGMENT_RESULT" | jq -r '.txid')
+    echo "  self-fragment tx accepted: ${FRAGMENT_TXID:0:16}..."
+else
+    print_status "fail" "Rapid send self-fragmentation failed: $(echo "$FRAGMENT_RESULT" | head -c 180)"
+    exit 1
+fi
+
+echo "Mining one live-oracle block to confirm rapid send input fragments..."
+$BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" >/dev/null 2>&1
+sync_all_nodes
+wait_for_tx_confirmed "$BOB_CLI" "bob" "$FRAGMENT_TXID" "$BOB_CLI" "$BOB_ADDR" "Rapid send self-fragmentation" 80 || exit 1
+assert_wallet_tx_clean "$BOB_CLI" "bob" "$FRAGMENT_TXID" "Rapid send self-fragmentation" || exit 1
+assert_positions_not_redeemed "$BOB_CLI" "bob" "$UNREDEEMED_BEFORE_SEND" "DD self-fragmentation" || exit 1
+
+BOB_DD_AFTER_FRAGMENT=$(get_dd_balance "$BOB_CLI" "bob")
+if [ "$BOB_DD_AFTER_FRAGMENT" -ne "$BOB_DD_BEFORE_FRAGMENT" ]; then
+    print_status "fail" "Self-fragmentation changed Bob DD balance ($BOB_DD_BEFORE_FRAGMENT -> $BOB_DD_AFTER_FRAGMENT)"
+    exit 1
+fi
+print_status "ok" "Self-fragmentation preserved Bob DD balance at $BOB_DD_AFTER_FRAGMENT cents"
+
+for i in $(seq 1 20); do
+    echo "  Rapid send $i/20: Bob -> Charlie 500 cents..."
+    set +e
+    SEND_RESULT=$($BOB_CLI -rpcwallet=bob senddigidollar "$CHARLIE_RAPID_DD_ADDR" 500 2>&1)
+    SEND_EXIT=$?
+    set -e
+    if [ $SEND_EXIT -eq 0 ] && echo "$SEND_RESULT" | jq -e '.txid' > /dev/null 2>&1; then
+        TXID=$(echo "$SEND_RESULT" | jq -r '.txid')
+        RAPID_SEND_TXS+=("$TXID")
+        echo "    accepted: ${TXID:0:16}..."
+    else
+        print_status "fail" "Rapid DD send $i failed: $(echo "$SEND_RESULT" | head -c 180)"
+        exit 1
+    fi
+done
+
+assert_positions_not_redeemed "$BOB_CLI" "bob" "$UNREDEEMED_BEFORE_SEND" "rapid DD sends" || exit 1
+
+echo "Mining one live-oracle block to confirm the rapid send batch..."
+$BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" >/dev/null 2>&1
+sync_all_nodes
+
+for i in "${!RAPID_SEND_TXS[@]}"; do
+    TXID="${RAPID_SEND_TXS[$i]}"
+    LABEL="Rapid send $((i + 1))/20"
+    wait_for_tx_confirmed "$BOB_CLI" "bob" "$TXID" "$BOB_CLI" "$BOB_ADDR" "$LABEL" 80 || exit 1
+    assert_wallet_tx_clean "$BOB_CLI" "bob" "$TXID" "$LABEL" || exit 1
+done
+
+EXPECT_BOB_DD=$((EXPECT_BOB_DD - 10000))
+EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 10000))
+verify_all_balances "After rapid 20x 5 DD send batch"
+
+# ====================================================================================
 # Step 16: Alice Mints $100 at Tier 3 (90 days)
 # ====================================================================================
 print_header "Step 16: Alice Mints \$100 at Tier 3 (90 days)"
@@ -1619,6 +1852,7 @@ if [ $ALICE_MINT_EXIT -eq 0 ] && echo "$ALICE_MINT" | jq -e '.txid' > /dev/null 
     EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 10000))
 else
     print_status "fail" "Alice Tier 3 Mint failed: $ALICE_MINT"
+    exit 1
 fi
 
 sync_all_nodes
@@ -1632,13 +1866,13 @@ ALICE_DGB=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
 echo "Alice's DGB balance: $ALICE_DGB DGB"
 
 # Top up Alice if her first mint consumed most spendable collateral. Live
-# exchange prices can move slightly during the run, and tier 5 needs enough
-# DGB for the full collateral amount plus fees.
+# exchange prices can move during the run, so keep enough headroom for the
+# second mint at low DGB prices.
 ALICE_BAL_INT=$(echo "$ALICE_DGB" | cut -d. -f1)
-if [ "$ALICE_BAL_INT" -lt 120000 ] 2>/dev/null; then
-    echo "Alice balance low ($ALICE_DGB DGB) — sending 50000 DGB from Bob..."
+if [ "$ALICE_BAL_INT" -lt 200000 ] 2>/dev/null; then
+    echo "Alice balance low ($ALICE_DGB DGB) — sending 200000 DGB from Bob..."
     ALICE_TOP=$($ALICE_CLI -rpcwallet=alice getnewaddress "" "legacy" 2>/dev/null)
-    $BOB_CLI -rpcwallet=bob sendtoaddress "$ALICE_TOP" 50000 > /dev/null 2>&1
+    $BOB_CLI -rpcwallet=bob sendtoaddress "$ALICE_TOP" 200000 > /dev/null 2>&1
     $BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
     sync_all_nodes
     ALICE_DGB=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
@@ -1662,6 +1896,7 @@ if [ $ALICE_MINT_EXIT -eq 0 ] && echo "$ALICE_MINT" | jq -e '.txid' > /dev/null 
     EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 10000))
 else
     print_status "fail" "Alice Tier 5 Mint failed: $ALICE_MINT"
+    exit 1
 fi
 
 sync_all_nodes
@@ -1695,6 +1930,7 @@ if [ $CHARLIE_MINT_EXIT -eq 0 ] && echo "$CHARLIE_MINT" | jq -e '.txid' > /dev/n
     EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 10000))
 else
     print_status "fail" "Charlie Tier 7 Mint failed: $CHARLIE_MINT"
+    exit 1
 fi
 
 sync_all_nodes
@@ -1709,10 +1945,10 @@ echo "Charlie's DGB balance: $CHARLIE_DGB DGB"
 
 # Top up Charlie if balance is low (collateral at low oracle EMA price can be huge)
 CHARLIE_BAL_INT=$(echo "$CHARLIE_DGB" | cut -d. -f1)
-if [ "$CHARLIE_BAL_INT" -lt 80000 ] 2>/dev/null; then
-    echo "Charlie balance low ($CHARLIE_DGB DGB) — sending 50000 DGB from Bob..."
+if [ "$CHARLIE_BAL_INT" -lt 200000 ] 2>/dev/null; then
+    echo "Charlie balance low ($CHARLIE_DGB DGB) — sending 200000 DGB from Bob..."
     CHARLIE_TOP=$($CHARLIE_CLI -rpcwallet=charlie getnewaddress "" "legacy" 2>/dev/null)
-    $BOB_CLI -rpcwallet=bob sendtoaddress "$CHARLIE_TOP" 50000 > /dev/null 2>&1
+    $BOB_CLI -rpcwallet=bob sendtoaddress "$CHARLIE_TOP" 200000 > /dev/null 2>&1
     $BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
     sync_all_nodes
     CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
@@ -1736,6 +1972,7 @@ if [ $CHARLIE_MINT_EXIT -eq 0 ] && echo "$CHARLIE_MINT" | jq -e '.txid' > /dev/n
     EXPECT_NETWORK_DD=$((EXPECT_NETWORK_DD + 10000))
 else
     print_status "fail" "Charlie Tier 8 Mint failed: $CHARLIE_MINT"
+    exit 1
 fi
 
 sync_all_nodes

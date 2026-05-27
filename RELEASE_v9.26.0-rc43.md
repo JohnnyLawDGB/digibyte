@@ -30,6 +30,8 @@ What changed from RC42:
 - The DigiDollar tab now shows a first-entry experimental risk warning with a "don't show again" option after acceptance.
 - DigiDollar transaction details no longer open duplicate dialogs on double-click.
 - DD Overview recent transaction columns now align cleanly for pending rows and mixed amount widths.
+- DigiDollar Qt amount labels now use the consistent `<amount> $DD` format throughout overview, send, mint, redeem, vault, transaction, and dialog surfaces.
+- Oracle operators can now run `createoraclekey` before DigiDollar activation to generate fresh mainnet oracle pubkeys, while real DigiDollar/oracle actions remain disabled until activation.
 - Oracle startup validation logging is gated to avoid misleading startup noise before the node is ready.
 - RC42 DGBstats, oracle onboarding, tooltip, modal, transaction-detail, and dark-mode fixes are carried forward.
 
@@ -45,6 +47,7 @@ What did not change:
 - Testnet active oracle roster remains 18 keys.
 - Oracle quorum remains 9 signatures.
 - Mainnet activation status does not change.
+- Mainnet oracle operation remains disabled before activation; only local oracle key creation is allowed.
 - DigiDollar economic rules, ERR policy, DCA policy, address formats, and wallet database format do not change.
 
 ---
@@ -56,6 +59,8 @@ RC43 is the RC42 stabilization follow-up.
 It focuses on real wallet-state failure modes found during rapid DigiDollar use: repeated DD sends, rapid batch mints, rapid redemptions, local/conflicting wallet transactions, false redeemed vault display, and the old `!wtx.InMempool()` crash path.
 
 RC43 also finishes the RC42 Qt usability cleanup with the DigiDollar experimental warning, duplicate detail-dialog prevention, and DD Overview recent transaction column alignment.
+
+For mainnet launch planning, RC43 also resolves the oracle-key chicken-and-egg issue: operators can generate fresh mainnet oracle keys before DigiDollar is active, without enabling oracle operation or any DigiDollar protocol action.
 
 RC43 is not an economic redesign and not a new testnet reset.
 
@@ -75,6 +80,9 @@ RC43 is not an economic redesign and not a new testnet reset.
 - Experimental warning copy: simplified the warning text to be direct, readable, and explicit about proceeding at the user's own risk.
 - Duplicate DD details: DD transaction double-clicks now open one details dialog instead of two.
 - DD Overview alignment: recent transaction amount/status/date columns now keep stable alignment for pending rows and different amount widths.
+- `$DD` labels: Qt now formats DigiDollar amounts consistently as `<amount> $DD` across tabs, balances, dialogs, transaction rows, and details.
+- Pre-activation oracle keys: `createoraclekey` now works before DigiDollar activation for local wallet key setup and mainnet pubkey collection.
+- Activation safety: `startoracle`, price signing, mint, redeem, transfer, validation, and protocol state-changing RPCs remain blocked until DigiDollar is active.
 - Oracle startup logs: startup validation is gated so early chainstate/config readiness does not produce misleading operator noise.
 - RC42 carry-forward: DGBstats difficulty/oracle copy, Qt tooltip readability, green DD modal styling, DD transaction details theming, and tier-0 copy fixes remain included.
 
@@ -134,6 +142,8 @@ Focused RC43 validation completed on May 27, 2026 from `feature/digidollar-v1`.
 | Fuzz smoke: all `./src/test/fuzz/fuzz` targets with deterministic seed corpus | PASS, 248 targets in 29 seconds |
 | Multi-oracle testnet25 script: `./test_multi_oracle_testnet.sh` | PASS end to end, 383 total checks, 382 OK, 0 failed, warning-only live-market observations |
 | DD Overview alignment QA: `DIGIBYTE_QT_SAVE_DD_OVERVIEW_QA=1 QT_QPA_PLATFORM=offscreen ./src/qt/test/test_digibyte-qt overviewRecentTransactionAmountIsRightAligned` | PASS, screenshot captured |
+| Pre-activation oracle key gating: `test/functional/digidollar_rpc_gating.py` | PASS, `createoraclekey` allowed at DEFINED state and 30 protocol/action RPCs still blocked |
+| Oracle key regression set: `test/functional/test_runner.py --jobs=3 digidollar_rpc_gating.py digidollar_oracle_keygen.py digidollar_encrypted_wallet.py digidollar_wave18_rpc_matrix.py` | PASS |
 | DGBstats tests carried from RC42: `npm run test:run` | PASS, 23 files / 523 tests |
 | DGBstats build carried from RC42: `npm run build` | PASS with pre-existing ESLint warnings |
 | DGBstats E2E carried from RC42: `npm run test:e2e` | FAIL, broad pre-existing Playwright environment/data failures |
@@ -146,6 +156,7 @@ Important validation notes:
 - The final multi-oracle script included 20 rapid tier-0 mints, 20 rapid redemptions, a 20-output DD self-fragmentation step, and 20 rapid 5 DD sends.
 - The final multi-oracle script log was `/tmp/digidollar_debug_logs/test_run_20260527_080130.log`.
 - The final full functional run used explicit `--jobs=4` and passed in 665 seconds runtime / 2470 seconds accumulated runtime.
+- The post-RC43 oracle-key gating check proves `createoraclekey` is wallet-only pre-activation setup and does not loosen the activation gate around oracle operation or DigiDollar protocol actions.
 - The DD Overview alignment screenshot was saved to `/tmp/digibyte_dd_overview_recent_alignment_qa.png`.
 - DGBstats Playwright E2E remained red independently of the RC43 fixes, with broad loading-state, mocked-data, touch-target, browser-matrix, and route-specific expectations failing in this environment.
 
@@ -175,8 +186,29 @@ Visual QA covered dark-mode global tooltips, DigiDollar tooltips, long wrapped t
 
 ---
 
+## Mainnet Oracle Key Collection
+
+RC43 allows fresh mainnet oracle pubkeys to be collected before DigiDollar activates.
+
+Only `createoraclekey <oracle_id>` is allowed before activation, and only as local wallet key management. It generates and stores the operator's private key in their wallet, then returns the compressed public key for chainparams inclusion. Nothing is broadcast, no oracle starts, no prices are signed, and no DigiDollar state changes.
+
+Expected mainnet operator flow:
+
+1. Install the pre-activation RC43-or-later build.
+2. Create or load the intended oracle wallet and unlock it if encrypted.
+3. Run `createoraclekey <oracle_id>`.
+4. Send only the returned `pubkey` to the maintainer.
+5. Keep the wallet backed up; it contains the private oracle key.
+6. Wait for the final activation release that hardcodes the collected pubkeys.
+
+Still blocked before activation: `startoracle`, price signing, oracle operation, minting, redeeming, sending/transferring `$DD`, validation/state mutation, and all other DigiDollar protocol actions.
+
+---
+
 ## Commit Summary Since RC42
 
+- `4fc8f7d83e` fix: allow pre-activation oracle key generation
+- `f53bbc7c78` fix: standardize DigiDollar Qt currency labels
 - `06903d2b39` fix: gate oracle startup validation logs
 - `b48a0aa6ce` feat: warn before entering DigiDollar tab
 - `e459a96f80` fix: avoid duplicate DigiDollar transaction detail dialogs
@@ -209,6 +241,8 @@ Please focus RC43 testing on:
 - DD Transactions double-click details opening exactly one dialog.
 - DD Overview recent transaction row alignment for pending and confirmed rows.
 - DD Overview recent transaction double-click navigation to the DD Transactions tab.
+- Consistent `<amount> $DD` labels across DigiDollar overview, send, mint, redeem, vault, transaction, and dialog surfaces.
+- Pre-activation `createoraclekey <oracle_id>` on a not-yet-active chain, verifying it returns a fresh public key while `startoracle` and all real DigiDollar actions stay blocked.
 - Tooltips in light and dark mode across normal DGB pages and DigiDollar pages.
 - DigiDollar coin selection, payment request, and address book dialogs in light and dark mode.
 - DGBstats testnet difficulty display and oracle/testnet25 operator copy.
@@ -220,7 +254,7 @@ Oracle operators should keep using `testnet25`, P2P port `12032`, and their assi
 ## Known Risks
 
 - RC43 does not include mainnet activation. Mainnet launch still requires the explicit release and activation decision.
-- Mainnet reserve oracle slots remain placeholders until operators provide mainnet oracle keys and a later release adds those keys to chainparams.
+- Mainnet reserve oracle slots remain placeholders until operators provide mainnet oracle pubkeys and a later release adds those keys to chainparams. RC43 now supports generating those keys before activation through `createoraclekey`.
 - If fewer than 9 valid active oracle operators are online and fresh, new oracle bundles should fail closed.
 - DGBstats Playwright E2E remains red independently of the RC43 fixes; the DGBstats changes carried into RC43 are covered by passing Vitest tests and production build.
 
@@ -230,4 +264,4 @@ Oracle operators should keep using `testnet25`, P2P port `12032`, and their assi
 
 RC43 is the RC42 stabilization follow-up for the same public `testnet25`.
 
-It keeps the testnet, oracle quorum, and DigiDollar economics unchanged, hardens rapid DigiDollar wallet-state behavior, improves stress/fuzz coverage, finishes the requested Qt warning/dialog/alignment cleanup, and leaves the network ready for continued testnet25 validation.
+It keeps the testnet, oracle quorum, and DigiDollar economics unchanged, hardens rapid DigiDollar wallet-state behavior, improves stress/fuzz coverage, finishes the requested Qt warning/dialog/alignment/`$DD` cleanup, enables safe pre-activation mainnet oracle pubkey collection, and leaves the network ready for continued testnet25 validation.

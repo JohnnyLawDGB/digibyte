@@ -655,6 +655,16 @@ void DigiDollarTransactionsWidget::showDetails()
             return;
         }
 
+        for (QDialog* dialog : m_openedDialogs) {
+            if (!dialog || dialog->property("ddTxid").toString() != txid) continue;
+            if (dialog->isMinimized()) {
+                dialog->showNormal();
+            }
+            dialog->raise();
+            dialog->activateWindow();
+            return;
+        }
+
         const QString noteText = noteItem ? noteItem->text() : QString();
         const QString lockText = lockItem ? lockItem->text() : QString();
         QString details;
@@ -673,6 +683,7 @@ void DigiDollarTransactionsWidget::showDetails()
         details += QStringLiteral("</body></html>");
 
         DigiDollarTransactionDetailsDialog* dlg = new DigiDollarTransactionDetailsDialog(txid, details, isDarkTheme(), this);
+        dlg->setProperty("ddTxid", txid);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
         m_openedDialogs.append(dlg);
         connect(dlg, &QObject::destroyed, [this, dlg] {

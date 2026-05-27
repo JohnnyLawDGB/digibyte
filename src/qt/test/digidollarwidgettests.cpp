@@ -3809,25 +3809,32 @@ void DigiDollarWidgetTests::transactionsWidgetDoubleClickShowsDetailsDialog()
                                                    Qt::DirectConnection,
                                                    Q_ARG(QTableWidgetItem*, txidItem));
     QVERIFY2(invoked, "DD transactions table must expose the itemDoubleClicked signal");
+    const bool activated = QMetaObject::invokeMethod(table, "itemActivated",
+                                                     Qt::DirectConnection,
+                                                     Q_ARG(QTableWidgetItem*, txidItem));
+    QVERIFY2(activated, "DD transactions table must expose the itemActivated signal");
     QCoreApplication::processEvents();
 
-    QDialog* detailsDialog = nullptr;
-    for (QWidget* widget : QApplication::topLevelWidgets()) {
-        QDialog* dialog = qobject_cast<QDialog*>(widget);
-        if (!dialog || !dialog->isVisible()) continue;
-        if (dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
-            detailsDialog = dialog;
-            break;
-        }
-    }
-    if (!detailsDialog) {
-        for (QDialog* dialog : transactionsWidget.findChildren<QDialog*>()) {
-            if (dialog && dialog->isVisible() && dialog->windowTitle().startsWith(QStringLiteral("Details for "))) {
-                detailsDialog = dialog;
-                break;
+    const auto findDetailsDialogs = [&]() {
+        std::vector<QDialog*> dialogs;
+        const auto appendIfDetailsDialog = [&](QDialog* dialog) {
+            if (!dialog || !dialog->isVisible()) return;
+            if (!dialog->windowTitle().startsWith(QStringLiteral("Details for "))) return;
+            if (std::find(dialogs.begin(), dialogs.end(), dialog) == dialogs.end()) {
+                dialogs.push_back(dialog);
             }
+        };
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            appendIfDetailsDialog(qobject_cast<QDialog*>(widget));
         }
-    }
+        for (QDialog* dialog : transactionsWidget.findChildren<QDialog*>()) {
+            appendIfDetailsDialog(dialog);
+        }
+        return dialogs;
+    };
+    const std::vector<QDialog*> detailsDialogs = findDetailsDialogs();
+    QCOMPARE(static_cast<int>(detailsDialogs.size()), 1);
+    QDialog* detailsDialog = detailsDialogs.front();
     QVERIFY2(detailsDialog, "double-clicking a DD transaction row must open a non-modal transaction details dialog");
     QCOMPARE(detailsDialog->objectName(), QStringLiteral("DDTransactionDescDialog"));
     QVERIFY2(detailsDialog->windowTitle().contains(QString::fromStdString(tx.txid)),

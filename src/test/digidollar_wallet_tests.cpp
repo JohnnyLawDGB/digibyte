@@ -3905,6 +3905,50 @@ BOOST_FIXTURE_TEST_CASE(test_removed_pending_digidollar_mint_is_abandoned_and_no
     BOOST_CHECK_EQUAL(found->confirmations, -1);
 }
 
+BOOST_FIXTURE_TEST_CASE(test_removed_digidollar_parent_does_not_abandon_live_mempool_descendant, TestChain100Setup)
+{
+    std::unique_ptr<wallet::WalletDatabase> database = wallet::CreateMockableWalletDatabase();
+    std::shared_ptr<wallet::CWallet> wallet = std::make_shared<wallet::CWallet>(m_node.chain.get(), "", std::move(database));
+    wallet->LoadWallet();
+    wallet->EnsureDDWallet();
+
+    CMutableTransaction parent_mtx;
+    parent_mtx.SetDigiDollarType(::DD_TX_TRANSFER);
+    parent_mtx.vin.emplace_back(COutPoint(m_coinbase_txns.front()->GetHash(), 0));
+    parent_mtx.vout.emplace_back(0, CScript() << OP_TRUE);
+    parent_mtx.vout.emplace_back(0, CScript() << OP_RETURN);
+    CTransactionRef parent_tx = MakeTransactionRef(std::move(parent_mtx));
+    const uint256 parent_txid = parent_tx->GetHash();
+
+    CMutableTransaction child_mtx;
+    child_mtx.SetDigiDollarType(::DD_TX_TRANSFER);
+    child_mtx.vin.emplace_back(COutPoint(parent_txid, 0));
+    child_mtx.vout.emplace_back(0, CScript() << OP_RETURN);
+    CTransactionRef child_tx = MakeTransactionRef(std::move(child_mtx));
+    const uint256 child_txid = child_tx->GetHash();
+
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddToWallet(parent_tx, wallet::TxStateInMempool{}) != nullptr);
+        BOOST_REQUIRE(wallet->AddToWallet(child_tx, wallet::TxStateInMempool{}) != nullptr);
+        BOOST_CHECK(wallet->GetWalletTx(parent_txid)->InMempool());
+        BOOST_CHECK(wallet->GetWalletTx(child_txid)->InMempool());
+    }
+
+    wallet->transactionRemovedFromMempool(parent_tx, MemPoolRemovalReason::EXPIRY);
+
+    {
+        LOCK(wallet->cs_wallet);
+        const wallet::CWalletTx* parent_wtx = wallet->GetWalletTx(parent_txid);
+        const wallet::CWalletTx* child_wtx = wallet->GetWalletTx(child_txid);
+        BOOST_REQUIRE(parent_wtx != nullptr);
+        BOOST_REQUIRE(child_wtx != nullptr);
+        BOOST_CHECK(parent_wtx->isAbandoned());
+        BOOST_CHECK(child_wtx->InMempool());
+        BOOST_CHECK(!child_wtx->isAbandoned());
+    }
+}
+
 /**
  * Test: mempool-imported pending redeem deactivates the live position
  *

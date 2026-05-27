@@ -1590,39 +1590,32 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
 
         LogPrintf("DigiDollar: Transaction signed successfully\n");
 
-        // FIX #3: Broadcast transaction to network (GREEN PHASE)
-        // Create transaction reference for broadcasting
+        // Commit through the wallet-owned relay path exactly once. DD state is
+        // updated only after CommitTransaction accepts the transaction into the
+        // wallet/mempool flow.
         CTransactionRef tx_ref = MakeTransactionRef(result.tx);
 
         // Get transaction ID
         txid = tx_ref->GetHash().ToString();
 
-        // Submit to mempool and broadcast to network
-        if (m_wallet) {
-            // Access chainstate through wallet's chain interface
-            std::string broadcast_error;
-            const CAmount max_tx_fee = wallet::DEFAULT_TRANSACTION_MAXFEE;  // Use default max fee
-
-            // Use chain().broadcastTransaction() which handles both mempool acceptance and network broadcast
-            bool broadcast_success = m_wallet->chain().broadcastTransaction(
-                tx_ref,
-                max_tx_fee,
-                /*relay=*/true,  // Relay to network
-                broadcast_error
-            );
-
-            if (!broadcast_success) {
-                error = strprintf("Transaction rejected by network: %s", broadcast_error);
-                LogPrintf("DigiDollar: Broadcast failed - %s\n", broadcast_error);
-                return false;
-            }
-
-            LogPrintf("DigiDollar: Transaction broadcast successful - txid: %s\n", txid);
-        } else {
+        if (!m_wallet) {
             LogPrintf("DigiDollar: WARNING - No wallet context, transaction built but not broadcast\n");
             error = "No wallet context for broadcasting";
             return false;
         }
+
+        const uint256 tx_hash = tx_ref->GetHash();
+        pending_outgoing_dd_txs.insert(tx_hash);
+        std::string commit_error;
+        const bool commit_success = CommitDDTransaction(tx_ref, commit_error);
+        pending_outgoing_dd_txs.erase(tx_hash);
+        if (!commit_success) {
+            error = strprintf("Transaction rejected by wallet/mempool: %s", commit_error);
+            LogPrintf("DigiDollar: Commit failed - %s\n", commit_error);
+            return false;
+        }
+
+        LogPrintf("DigiDollar: Transaction committed successfully - txid: %s\n", txid);
 
         // FIX #2: CRITICAL - Time-locks (collateral positions) NEVER change during transfers!
         // Only DD UTXOs move. The locked DGB stays in place until redemption.
@@ -1694,13 +1687,28 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
                     CAmount dd_amount = dd_amounts[dd_output_index];
 
                     // Recipient DD outputs are emitted first, followed by optional DD change.
-                    // Only the change output is automatically ours here; self-recipient detection
-                    // is handled by normal incoming-output scanning.
+                    // The commit callback is suppressed for this outgoing tx so it cannot
+                    // mis-record our DD change as a receive before the send row exists.
+                    // Track change here, and also track real self-recipient outputs.
                     bool is_ours = (dd_output_index >= recipients.size());
+                    if (!is_ours && m_wallet) {
+                        wallet::isminetype mine = m_wallet->IsMine(txout);
+                        is_ours = (mine & wallet::ISMINE_SPENDABLE);
+                    }
+                    if (!is_ours && txout.scriptPubKey.size() == 34 && txout.scriptPubKey[0] == OP_1) {
+                        std::array<unsigned char, 32> output_key;
+                        std::copy(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.begin() + 34, output_key.begin());
+                        is_ours = dd_address_keys.count(output_key) > 0 ||
+                                  dd_crypted_address_keys.count(output_key) > 0;
+                    }
 
                     if (is_ours) {
                         COutPoint new_utxo(result.tx.GetHash(), i);
                         dd_utxos[new_utxo] = dd_amount;
+                        DigiDollar::RegisterScriptMetadata(txout.scriptPubKey,
+                                                           DigiDollar::ScriptType::DD_TOKEN_OUTPUT,
+                                                           dd_amount,
+                                                           0);
 
                         // Store the owner key for this new DD UTXO so we can spend it later
                         // Use StoreOwnerKey to ensure persistence to database
@@ -4916,25 +4924,14 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         // Create transaction reference
         tx_out = MakeTransactionRef(result.tx);
 
-        // FIX #3: Broadcast transaction to network (GREEN PHASE)
         if (m_wallet) {
-            std::string broadcast_error;
-            const CAmount max_tx_fee = wallet::DEFAULT_TRANSACTION_MAXFEE;
-
-            // Broadcast transaction (includes mempool submission and network relay)
-            bool broadcast_success = m_wallet->chain().broadcastTransaction(
-                tx_out,
-                max_tx_fee,
-                /*relay=*/true,
-                broadcast_error
-            );
-
-            if (!broadcast_success) {
-                LogPrintf("DigiDollar: Broadcast failed - %s\n", broadcast_error);
+            std::string commit_error;
+            if (!CommitDDTransaction(tx_out, commit_error)) {
+                LogPrintf("DigiDollar: Commit failed - %s\n", commit_error);
                 return false;
             }
 
-            LogPrintf("DigiDollar: Transaction broadcast successful - txid: %s\n",
+            LogPrintf("DigiDollar: Transaction committed successfully - txid: %s\n",
                      tx_out->GetHash().ToString());
         } else {
             LogPrintf("DigiDollar: WARNING - No wallet context, transaction built but not broadcast (test mode)\n");
@@ -5755,11 +5752,9 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
     // Lock wallet and get available coins
     LOCK(m_wallet->cs_wallet);
     wallet::CCoinControl coin_control;
-    // Allow unconfirmed DGB change from our own previous transactions.
-    // This is required for rapid consecutive DD transfers — each transfer
-    // produces DGB change that's unconfirmed, and the next transfer needs
-    // it for fees. Since we created these UTXOs ourselves, they're safe.
-    coin_control.m_include_unsafe_inputs = true;
+    // Keep the wallet's normal safe coin policy. Trusted own unconfirmed
+    // change can still be selected, while unsafe/replaced/conflicted inputs
+    // are excluded so rapid DD sends do not build on stale fee chains.
 
     wallet::CoinFilterParams filter_params;
     filter_params.only_spendable = true;
@@ -7259,8 +7254,20 @@ bool DigiDollarWallet::CommitDDTransaction(const CTransactionRef& tx, std::strin
         wallet::mapValue_t mapValue;  // Empty metadata for DD transfers
         std::vector<std::pair<std::string, std::string>> orderForm; // Empty order form
 
-        // CommitTransaction does not return a value, it throws on error
-        m_wallet->CommitTransaction(tx, std::move(mapValue), std::move(orderForm));
+        std::string commit_error;
+        const bool commit_success = m_wallet->CommitTransaction(
+            tx, std::move(mapValue), std::move(orderForm), &commit_error);
+
+        if (!commit_success) {
+            error = commit_error.empty() ? "Transaction rejected by mempool" : commit_error;
+            LogPrintf("DigiDollar: CommitDDTransaction - REJECTED: %s\n", error);
+            if (m_wallet->TransactionCanBeAbandoned(txid)) {
+                m_wallet->AbandonTransaction(txid);
+                LogPrintf("DigiDollar: CommitDDTransaction - Abandoned rejected local transaction %s\n",
+                          txid.ToString());
+            }
+            return false;
+        }
 
         LogPrintf("DigiDollar: Successfully committed transaction %s to mempool\n", txid.ToString());
         return true;
@@ -7416,6 +7423,12 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
 
         if (dd_amounts.empty()) {
             return; // No DD amounts in this transaction
+        }
+
+        if (pending_outgoing_dd_txs.count(txid) > 0) {
+            LogPrintf("DigiDollar: Skipping incoming-history scan for outgoing DD tx %s during wallet commit\n",
+                      txid.GetHex());
+            return;
         }
 
         // Now check P2TR outputs we own

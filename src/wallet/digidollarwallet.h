@@ -14,6 +14,7 @@
 #include <digidollar/txbuilder.h>
 #include <base58.h>
 
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -164,6 +165,7 @@ private:
     std::map<std::string, WalletDDBalance> dd_balances GUARDED_BY(cs_dd_wallet);
     std::map<uint256, WalletCollateralPosition> collateral_positions GUARDED_BY(cs_dd_wallet);
     std::vector<DDTransaction> transaction_history GUARDED_BY(cs_dd_wallet);
+    std::set<uint256> pending_outgoing_dd_txs GUARDED_BY(cs_dd_wallet);
 
     // FIX #1: Track actual DD UTXOs (not just positions)
     // Maps (txid, vout) → DD amount in cents

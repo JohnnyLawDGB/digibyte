@@ -1378,9 +1378,13 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
     }
 
     auto try_updating_state = [](CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
-        // If the orig tx was not in block/mempool, none of its spends can be.
-        assert(!wtx.isConfirmed());
-        assert(!wtx.InMempool());
+        // Recursive abandon can be reached while mempool removal callbacks are
+        // still walking a parent/child package. A descendant that is still
+        // confirmed or in mempool is live wallet state and must not be marked
+        // abandoned just because its parent was removed first.
+        if (wtx.isConfirmed() || wtx.InMempool()) {
+            return TxUpdate::UNCHANGED;
+        }
         // If already conflicted or abandoned, no need to set abandoned
         if (!wtx.isConflicted() && !wtx.isAbandoned()) {
             wtx.m_state = TxStateInactive{/*abandoned=*/true};

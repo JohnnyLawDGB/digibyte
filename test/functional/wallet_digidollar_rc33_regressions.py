@@ -12,9 +12,12 @@ rapid consecutive redemptions across mining and restart.
 
 from decimal import Decimal
 from pathlib import Path
+import threading
+import urllib.parse
 
 from test_framework.test_framework import DigiByteTestFramework
-from test_framework.util import assert_equal
+from test_framework.messages import tx_from_hex
+from test_framework.util import assert_equal, get_rpc_proxy
 
 
 ORACLE_PRICE_MICRO_USD = 100_000_000  # $100/DGB keeps the test small.
@@ -28,7 +31,7 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0"]]
+        self.extra_args = [["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0", "-rpcthreads=8"]]
 
     def add_options(self, parser):
         self.add_wallet_options(parser)
@@ -49,6 +52,8 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         self.test_repeated_mints_spend_unconfirmed_change()
         self.test_fragmented_multi_pass_mint_consolidates_and_confirms()
         self.test_rapid_mints_confirm_after_restart()
+        self.test_concurrent_rapid_mints_have_unique_inputs()
+        self.test_rapid_dd_sends_confirm_without_redeeming_vaults()
         self.test_rapid_redeems_confirm_after_restart()
 
     def create_descriptor_wallet(self, name):
@@ -63,6 +68,13 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
 
     def funder_wallet(self):
         return self.get_loaded_wallet(self.default_wallet_name)
+
+    def assert_confirmed_clean(self, wallet, txid):
+        tx = wallet.gettransaction(txid)
+        assert tx["confirmations"] > 0
+        assert_equal(tx.get("abandoned", False), False)
+        assert_equal(tx.get("walletconflicts", []), [])
+        return tx
 
     def test_redeem_rpc_uses_wallet_owned_relay(self):
         self.log.info("Testing redeem RPC uses wallet-owned relay path")
@@ -231,26 +243,136 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         positions = rapid.listdigidollarpositions(False)
         position_ids = {p["position_id"]: p for p in positions}
         for mint in mints:
-            tx = rapid.gettransaction(mint["txid"])
-            assert tx["confirmations"] > 0
+            self.assert_confirmed_clean(rapid, mint["txid"])
             assert mint["position_id"] in position_ids
             assert position_ids[mint["position_id"]]["confirmations"] > 0
             assert_equal(position_active(position_ids[mint["position_id"]]), True)
 
-    def test_rapid_redeems_confirm_after_restart(self):
-        self.log.info("Testing rapid redemptions do not report success then disappear")
+    def test_concurrent_rapid_mints_have_unique_inputs(self):
+        self.log.info("Testing 20 concurrent 100 DD mints do not create wallet conflicts")
         node = self.nodes[0]
-        redeem_wallet = self.create_descriptor_wallet("rc33_rapid_redeem")
+        rapid = self.create_descriptor_wallet("rc42_concurrent_mint")
 
         outputs = {
-            redeem_wallet.getnewaddress(): Decimal("12.00")
-            for _ in range(12)
+            rapid.getnewaddress(): Decimal("12.00")
+            for _ in range(24)
+        }
+        self.funder_wallet().sendmany("", outputs)
+        self.generate(node, 1)
+        assert_equal(len(rapid.listunspent(1)), 24)
+
+        results = []
+        errors = []
+        lock = threading.Lock()
+        rapid_url = f"{node.url}/wallet/{urllib.parse.quote('rc42_concurrent_mint')}"
+
+        def mint_worker():
+            try:
+                wallet_rpc = get_rpc_proxy(rapid_url, node.index, timeout=60, coveragedir=self.options.coveragedir)
+                result = wallet_rpc.mintdigidollar(10000, 0)
+                with lock:
+                    results.append(result)
+            except Exception as e:
+                with lock:
+                    errors.append(str(e))
+
+        threads = [threading.Thread(target=mint_worker) for _ in range(20)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert_equal(errors, [])
+        assert_equal(len(results), 20)
+        txids = [mint["txid"] for mint in results]
+        assert_equal(len(set(txids)), 20)
+
+        spent_inputs = set()
+        for txid in txids:
+            raw = tx_from_hex(node.getrawtransaction(txid))
+            for vin in raw.vin:
+                prevout = (f"{vin.prevout.hash:064x}", vin.prevout.n)
+                assert prevout not in spent_inputs
+                spent_inputs.add(prevout)
+            assert txid in node.getrawmempool()
+
+        self.generate(node, 1)
+        self.restart_node(0, extra_args=["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0", "-rpcthreads=8"])
+        node = self.nodes[0]
+        rapid = self.get_loaded_wallet("rc42_concurrent_mint")
+        node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+
+        positions = rapid.listdigidollarpositions(False)
+        position_ids = {p["position_id"]: p for p in positions}
+        for mint in results:
+            self.assert_confirmed_clean(rapid, mint["txid"])
+            assert mint["position_id"] in position_ids
+            assert_equal(position_active(position_ids[mint["position_id"]]), True)
+
+    def test_rapid_dd_sends_confirm_without_redeeming_vaults(self):
+        self.log.info("Testing 20 rapid 5 DD sends confirm and leave vaults active")
+        node = self.nodes[0]
+        sender = self.create_descriptor_wallet("rc42_rapid_send_sender")
+        receiver = self.create_descriptor_wallet("rc42_rapid_send_receiver")
+
+        outputs = {
+            sender.getnewaddress(): Decimal("12.00")
+            for _ in range(24)
         }
         self.funder_wallet().sendmany("", outputs)
         self.generate(node, 1)
 
         mints = []
-        for _ in range(8):
+        for _ in range(20):
+            mint = sender.mintdigidollar(10000, 0)
+            mints.append(mint)
+            assert mint["txid"] in node.getrawmempool()
+        self.generate(node, 1)
+
+        sends = []
+        for _ in range(20):
+            send = sender.senddigidollar(receiver.getdigidollaraddress(), 500)
+            sends.append(send)
+            assert send["txid"] in node.getrawmempool()
+
+        positions_before_confirm = sender.listdigidollarpositions(False)
+        minted_ids = {mint["position_id"] for mint in mints}
+        for position in positions_before_confirm:
+            if position["position_id"] in minted_ids:
+                assert position["status"] != "redeemed"
+
+        self.generate(node, 1)
+        self.restart_node(0, extra_args=["-digidollar=1", "-txindex=1", "-mocktime=0", "-dandelion=0", "-rpcthreads=8"])
+        node = self.nodes[0]
+        sender = self.get_loaded_wallet("rc42_rapid_send_sender")
+        receiver = self.get_loaded_wallet("rc42_rapid_send_receiver")
+        node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
+
+        for send in sends:
+            self.assert_confirmed_clean(sender, send["txid"])
+
+        positions = sender.listdigidollarpositions(False)
+        position_ids = {p["position_id"]: p for p in positions}
+        for mint in mints:
+            assert mint["position_id"] in position_ids
+            assert position_ids[mint["position_id"]]["status"] != "redeemed"
+
+        assert_equal(receiver.getdigidollarbalance()["total"], 10000)
+
+    def test_rapid_redeems_confirm_after_restart(self):
+        self.log.info("Testing 20 rapid redemptions do not report success then disappear")
+        node = self.nodes[0]
+        redeem_wallet = self.create_descriptor_wallet("rc33_rapid_redeem")
+
+        outputs = {
+            redeem_wallet.getnewaddress(): Decimal("12.00")
+            for _ in range(24)
+        }
+        self.funder_wallet().sendmany("", outputs)
+        self.generate(node, 1)
+
+        mints = []
+        for _ in range(20):
             mints.append(redeem_wallet.mintdigidollar(10000, 0))
         self.generate(node, 1)
 
@@ -274,8 +396,7 @@ class WalletDigiDollarRC33RegressionsTest(DigiByteTestFramework):
         node.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
 
         for redeem in redeems:
-            tx = redeem_wallet.gettransaction(redeem["txid"])
-            assert tx["confirmations"] > 0
+            self.assert_confirmed_clean(redeem_wallet, redeem["txid"])
 
         positions = redeem_wallet.listdigidollarpositions(False)
         remaining = [p for p in positions if p["position_id"] in {m["position_id"] for m in mints} and position_active(p)]

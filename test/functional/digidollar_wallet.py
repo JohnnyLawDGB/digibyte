@@ -288,11 +288,13 @@ class DigiDollarWalletTest(DigiByteTestFramework):
 
         # Verify transfer in wallet transaction history
         wallet_txs = self.nodes[1].listdigidollartxs()
-        transfer_tx = next((tx for tx in wallet_txs if tx['txid'] == transfer_txid), None)
+        matching_sender_txs = [tx for tx in wallet_txs if tx['txid'] == transfer_txid]
+        transfer_tx = next((tx for tx in matching_sender_txs if tx['category'] == 'send'), None)
 
         assert transfer_tx is not None
         assert transfer_tx['category'] == 'send'
         assert Decimal(transfer_tx['amount']) == -transfer_amount  # Negative for send
+        assert not any(tx['category'] == 'receive' for tx in matching_sender_txs)
 
         # Verify on receiver side
         receiver_txs = self.nodes[2].listdigidollartxs()

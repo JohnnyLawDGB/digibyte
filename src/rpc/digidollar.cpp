@@ -1174,6 +1174,17 @@ RPCHelpMan mintdigidollar()
             // Convert lock tier to days
             int lockDays = GetLockDaysForTier(lockTier);
 
+            DigiDollarWallet* dd_wallet = pwallet->GetDDWallet();
+            if (!dd_wallet) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar wallet state is not initialized");
+            }
+
+            // Serialize mint coin selection, signing, commit, and DD position
+            // persistence. This prevents concurrent mint RPC workers from
+            // selecting the same wallet inputs from stale AvailableCoins()
+            // snapshots before the first mint is committed.
+            LOCK2(pwallet->cs_wallet, dd_wallet->cs_dd_wallet);
+
             // Get available UTXOs from wallet and build value map
             std::vector<COutPoint> availableUtxos;
             std::map<COutPoint, CAmount> utxoValues;
@@ -1387,11 +1398,6 @@ RPCHelpMan mintdigidollar()
             CTransactionRef tx = MakeTransactionRef(result.tx);
             const uint256 positionId = tx->GetHash();
 
-            if (pwallet->GetDDWallet()) {
-                LOCK(pwallet->cs_wallet);
-                pwallet->GetDDWallet()->StoreOwnerKey(positionId, ownerKey);
-            }
-
             const bool should_broadcast = pwallet->GetBroadcastTransactions();
             if (should_broadcast) {
                 RefreshRegtestMockMuSig2QuoteForMempool(*pwallet);
@@ -1408,6 +1414,11 @@ RPCHelpMan mintdigidollar()
                 commit_success = pwallet->CommitTransaction(tx, {}, {}, &commit_error);
             }
             if (should_broadcast && !commit_success) {
+                if (pwallet->TransactionCanBeAbandoned(positionId)) {
+                    pwallet->AbandonTransaction(positionId);
+                    LogPrintf("DigiDollar RPC Mint: Abandoned rejected local mint transaction %s\n",
+                              positionId.ToString());
+                }
                 throw JSONRPCError(RPC_TRANSACTION_REJECTED,
                     strprintf("Mint transaction rejected by mempool: %s", commit_error));
             }
@@ -1417,7 +1428,7 @@ RPCHelpMan mintdigidollar()
             int unlockHeight = mintHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
 
             // CRITICAL FIX: Persist DD position to DigiDollarWallet
-            if (should_broadcast && pwallet->GetDDWallet()) {
+            if (should_broadcast && dd_wallet) {
                 WalletCollateralPosition position;
                 position.dd_timelock_id = positionId;
                 position.dgb_collateral = result.collateralRequired;
@@ -1428,7 +1439,8 @@ RPCHelpMan mintdigidollar()
                 position.owner_keyid = ownerKey.GetPubKey().GetID();
 
                 LOCK(pwallet->cs_wallet);
-                pwallet->GetDDWallet()->AddCollateralPosition(position);
+                dd_wallet->StoreOwnerKey(positionId, ownerKey);
+                dd_wallet->AddCollateralPosition(position);
 
                 // CRITICAL FIX: Track the DD UTXO so it can be found by GetDDUTXOs()
                 // The DD token output is always at vout[1] in a mint transaction:
@@ -1437,7 +1449,7 @@ RPCHelpMan mintdigidollar()
                 //   vout[2] = OP_RETURN metadata
                 //   vout[3] = Change output (optional)
                 COutPoint ddOutpoint(positionId, 1);
-                pwallet->GetDDWallet()->AddDDUTXO(ddOutpoint, ddAmount);
+                dd_wallet->AddDDUTXO(ddOutpoint, ddAmount);
 
                 // CRITICAL FIX #2: Persist DD UTXO to wallet database so it survives daemon restart
                 {
@@ -1454,7 +1466,7 @@ RPCHelpMan mintdigidollar()
                          position.dd_timelock_id.ToString(), ddAmount);
             } else {
                 LogPrintf("DigiDollar RPC: DD position not persisted (broadcast=%d, ddwallet=%d)\n",
-                          should_broadcast ? 1 : 0, pwallet->GetDDWallet() ? 1 : 0);
+                          should_broadcast ? 1 : 0, dd_wallet ? 1 : 0);
             }
 
             const int baseRatio = DigiDollar::GetCollateralRatioForLockTime(
@@ -2197,6 +2209,12 @@ RPCHelpMan redeemdigidollar()
                 commit_success = pwallet->CommitTransaction(redeemTx, {}, {}, &commit_error);
             }
             if (should_broadcast && !commit_success) {
+                const uint256 redeem_txid = redeemTx->GetHash();
+                if (pwallet->TransactionCanBeAbandoned(redeem_txid)) {
+                    pwallet->AbandonTransaction(redeem_txid);
+                    LogPrintf("DigiDollar RPC Redeem: Abandoned rejected local redemption transaction %s\n",
+                              redeem_txid.ToString());
+                }
                 throw JSONRPCError(RPC_TRANSACTION_REJECTED,
                     strprintf("Redemption transaction rejected by mempool: %s", commit_error));
             }

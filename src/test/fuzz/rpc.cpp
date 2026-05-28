@@ -101,6 +101,7 @@ const std::vector<std::string> RPC_COMMANDS_NOT_SAFE_FOR_FUZZING{
     "getoracleprice",
     "getoraclepubkey",
     "getoracles",
+    "getoraclesigners",
     "getprotectionstatus",
     "getredemptioninfo",
     "importdigidollaraddress",

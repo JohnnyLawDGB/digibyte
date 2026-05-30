@@ -9,6 +9,7 @@
 #include <wallet/receive.h>
 #include <wallet/coincontrol.h>
 #include <wallet/scriptpubkeyman.h>
+#include <common/args.h>
 #include <interfaces/chain.h>
 #include <digidollar/txbuilder.h>
 #include <digidollar/validation.h>
@@ -5706,7 +5707,7 @@ bool DigiDollarWallet::PlanDigiDollarTransfer(const std::vector<std::pair<CDigiD
     if (preset_dd_inputs) {
         if (!SelectDDCoins(plan.total_amount, *preset_dd_inputs, plan.dd_utxos, plan.selected_dd_total, &plan.dd_amounts, &error)) return false;
     } else if (!SelectDDCoins(plan.total_amount, plan.dd_utxos, plan.selected_dd_total, &plan.dd_amounts)) {
-        error = "No spendable DD UTXOs found. Make sure mint transaction is confirmed.";
+        error = "No spendable confirmed DD UTXOs found. Please wait for prior DigiDollar transfer confirmation or confirm a mint before sending again.";
         return false;
     }
 
@@ -5752,9 +5753,11 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
     // Lock wallet and get available coins
     LOCK(m_wallet->cs_wallet);
     wallet::CCoinControl coin_control;
-    // Keep the wallet's normal safe coin policy. Trusted own unconfirmed
-    // change can still be selected, while unsafe/replaced/conflicted inputs
-    // are excluded so rapid DD sends do not build on stale fee chains.
+    // Keep the wallet's normal safe coin policy. With Dandelion enabled, DD
+    // transactions use confirmed DGB fee inputs only so rapid sends do not
+    // build fee-change chains that can be promoted from the stempool out of
+    // ancestor order.
+    const bool require_confirmed_fee_inputs = gArgs.GetBoolArg("-dandelion", true);
 
     wallet::CoinFilterParams filter_params;
     filter_params.only_spendable = true;
@@ -5779,6 +5782,11 @@ bool DigiDollarWallet::SelectFeeCoins(const CAmount& fee_amount, std::vector<COu
     // Select UTXOs until fee covered, excluding any specified UTXOs
     for (const auto& coin : available_coins) {
         if (selected_total >= fee_amount) break;
+        if (require_confirmed_fee_inputs && coin.depth < 1) {
+            LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: SelectFeeCoins - skipping unconfirmed fee UTXO %s:%u while Dandelion is enabled\n",
+                     coin.outpoint.hash.ToString(), coin.outpoint.n);
+            continue;
+        }
 
         COutPoint outpoint = coin.outpoint;
         CAmount amount = coin.txout.nValue;

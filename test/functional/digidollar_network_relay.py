@@ -325,6 +325,8 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.nodes[3].generate(110)  # Get mature coinbase
         self.nodes[3].mintdigidollar(20000, 4)  # $200.00 in cents, tier 4 (365 days)
         self.mine_and_sync_dd(3, sync_indices=[3])
+        self.nodes[3].mintdigidollar(20000, 4)  # second confirmed DD input for sendmany spam regression
+        self.mine_and_sync_dd(3, sync_indices=[3])
         # Only sync node 3 (Dandelion test, node 4 not connected yet)
         # Don't sync_all as nodes aren't fully connected
 
@@ -344,6 +346,20 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.publish_musig2_quotes([3, 4])
         result = self.nodes[3].senddigidollar(receiver_address, transfer_amount_cents)
         txid = result['txid']
+
+        sender_history = [tx for tx in self.nodes[3].listdigidollartxs(20, 0) if tx['txid'] == txid]
+        assert_equal(len(sender_history), 1)
+        assert_equal(sender_history[0]['category'], 'send')
+        assert_equal(sender_history[0]['abandoned'], False)
+        assert_equal(sender_history[0]['wallet_state'], 'pending')
+
+        rapid_result = self.nodes[3].senddigidollar(self.nodes[4].getdigidollaraddress(), 100)
+        rapid_txid = rapid_result['txid']
+        rapid_history = [tx for tx in self.nodes[3].listdigidollartxs(20, 0) if tx['txid'] == rapid_txid]
+        assert_equal(len(rapid_history), 1)
+        assert_equal(rapid_history[0]['category'], 'send')
+        assert_equal(rapid_history[0]['abandoned'], False)
+        assert_equal(rapid_history[0]['wallet_state'], 'pending')
 
         # With Dandelion++:
         # 1. Transaction enters stempool on sender
@@ -365,8 +381,8 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
             mempool_3 = self.nodes[3].getrawmempool()
             mempool_4 = self.nodes[4].getrawmempool()
 
-            if txid in mempool_3 or txid in mempool_4:
-                self.log.info(f"✓ Transaction fluffed to mempool after {elapsed}s")
+            if all(t in mempool_3 or t in mempool_4 for t in [txid, rapid_txid]):
+                self.log.info(f"✓ Transactions fluffed to mempool after {elapsed}s")
                 in_mempool = True
                 break
 
@@ -395,7 +411,8 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
             fluffed = False
             for _ in range(30):
                 mempool_3 = self.nodes[3].getrawmempool()
-                if txid in mempool_3:
+                mempool_4 = self.nodes[4].getrawmempool()
+                if all(t in mempool_3 or t in mempool_4 for t in [txid, rapid_txid]):
                     fluffed = True
                     break
                 time.sleep(1)
@@ -427,7 +444,57 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
                 break
             block_hash = block['previousblockhash']
         assert found_confirmed, f"Dandelion transaction {txid} not found in recent blocks"
+        sender_history = [tx for tx in self.nodes[3].listdigidollartxs(20, 0) if tx['txid'] == txid]
+        assert_equal(len(sender_history), 1)
+        assert_equal(sender_history[0]['abandoned'], False)
+        assert_equal(sender_history[0]['wallet_state'], 'confirmed')
+        rapid_history = [tx for tx in self.nodes[3].listdigidollartxs(20, 0) if tx['txid'] == rapid_txid]
+        assert_equal(len(rapid_history), 1)
+        assert_equal(rapid_history[0]['abandoned'], False)
+        assert_equal(rapid_history[0]['wallet_state'], 'confirmed')
         self.log.info("✓ Dandelion transaction confirmed")
+
+        self.log.info("Sending sendmanydigidollar with Dandelion++ enabled...")
+        sendmany_addrs = [self.nodes[4].getdigidollaraddress(), self.nodes[4].getdigidollaraddress()]
+        sendmany_result = self.nodes[3].sendmanydigidollar("", {sendmany_addrs[0]: 1000, sendmany_addrs[1]: 1000}, "dandelion sendmany")
+        sendmany_txid = sendmany_result['txid']
+        assert_equal(sendmany_result['total_amount'], 2000)
+
+        sendmany_history = [tx for tx in self.nodes[3].listdigidollartxs(20, 0) if tx['txid'] == sendmany_txid]
+        assert_equal(len(sendmany_history), 1)
+        assert_equal(sendmany_history[0]['category'], 'send')
+        assert_equal(sendmany_history[0]['abandoned'], False)
+        assert_equal(sendmany_history[0]['wallet_state'], 'pending')
+
+        fluffed_sendmany = False
+        for _ in range(60):
+            if sendmany_txid in self.nodes[3].getrawmempool() or sendmany_txid in self.nodes[4].getrawmempool():
+                fluffed_sendmany = True
+                break
+            time.sleep(1)
+
+        if not fluffed_sendmany:
+            import time as _time
+            now = int(_time.time())
+            for n in [self.nodes[3], self.nodes[4]]:
+                n.setmocktime(now + 120)
+            for _ in range(30):
+                if sendmany_txid in self.nodes[3].getrawmempool() or sendmany_txid in self.nodes[4].getrawmempool():
+                    fluffed_sendmany = True
+                    break
+                time.sleep(1)
+
+        if not fluffed_sendmany:
+            raw_tx = self.nodes[3].getrawtransaction(sendmany_txid)
+            self.nodes[3].sendrawtransaction(raw_tx)
+
+        self.sync_mempools([self.nodes[3], self.nodes[4]])
+        self.mine_and_sync_dd(3, sync_indices=[3, 4])
+
+        sendmany_history = [tx for tx in self.nodes[3].listdigidollartxs(20, 0) if tx['txid'] == sendmany_txid]
+        assert_equal(len(sendmany_history), 1)
+        assert_equal(sendmany_history[0]['abandoned'], False)
+        assert_equal(sendmany_history[0]['wallet_state'], 'confirmed')
 
         self.log.info("✓ Dandelion++ integration test passed")
 

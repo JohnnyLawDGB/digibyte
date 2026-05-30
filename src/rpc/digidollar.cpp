@@ -1643,6 +1643,11 @@ RPCHelpMan senddigidollar()
             CAmount balance = dd_wallet->GetTotalDDBalance();
             LogPrintf("DigiDollar RPC: GetTotalDDBalance() returned %d\n", balance);
             if (amount > balance) {
+                const CAmount pending_balance = dd_wallet->GetPendingDDBalance();
+                if (amount <= balance + pending_balance) {
+                    throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
+                        "Insufficient confirmed DD balance; please wait for prior DigiDollar transfer confirmation and try again.");
+                }
                 throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
                     strprintf("Insufficient DD balance (have %d cents, need %d cents)",
                              balance, amount));
@@ -1846,6 +1851,11 @@ RPCHelpMan sendmanydigidollar()
 
             CAmount balance = dd_wallet->GetTotalDDBalance();
             if (total_amount > balance) {
+                const CAmount pending_balance = dd_wallet->GetPendingDDBalance();
+                if (total_amount <= balance + pending_balance) {
+                    throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
+                        "Insufficient confirmed DD balance; please wait for prior DigiDollar transfer confirmation and try again.");
+                }
                 throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS,
                     strprintf("Insufficient DD balance (have %d cents, need %d cents)",
                              balance, total_amount));

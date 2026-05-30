@@ -198,7 +198,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         retry_addr = self.nodes[3].getdigidollaraddress()
         assert_raises_rpc_error(
             -6,
-            "Insufficient DD balance",
+            "wait for prior DigiDollar transfer confirmation",
             self.nodes[0].senddigidollar,
             retry_addr,
             100,

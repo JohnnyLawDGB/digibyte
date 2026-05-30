@@ -58,7 +58,7 @@ The Oracle System provides **decentralized price feeds** for the DigiByte blockc
 **Core principle: cryptographic threshold consensus, on-chain compact, off-chain signed.**
 
 V1 ships with:
-- **Threshold MuSig2 quorum**: 9 signatures from the configured active mainnet/testnet keyset in a 35-slot reserved roster, 4-of-7 regtest. The aggregate signature is verified by every full node against the on-chain participation bitmap.
+- **Threshold MuSig2 quorum**: 7 signatures from the configured 21-active mainnet/testnet keyset in a 35-slot reserved roster, 4-of-7 regtest. The aggregate signature is verified by every full node against the on-chain participation bitmap.
 - **One on-chain format**: v0x03 (`bitmap_len + bitmap + epoch + price + timestamp + 64-byte aggregate sig`). Legacy v0x01 (single-message compact) and v0x02 (multi-message with per-oracle sigs) are explicitly rejected at extraction and validation time.
 - **Six working exchange fetchers** (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko — see `src/oracle/exchange.cpp:1042-1071`). The classes for Coinbase, Kraken, Messari, Bittrex, Poloniex still compile but are **not** initialized into `MultiExchangeAggregator::fetchers`. CoinMarketCap was removed entirely. The current fetch loop is sequential, then filtered by a 10% median-deviation outlier rule.
 - **Block-cadence validation** aligned with DigiByte's 15-second block target;
@@ -168,7 +168,7 @@ Core implementation:
 │                                          startoracle, mintdigidollar, etc.)
 └── src/kernel/chainparams.cpp             vOracleNodes (35 mainnet/testnet reserved slots,
                                            7 regtest), vOraclePublicKeys
-                                           (17 active mainnet/testnet, 7 regtest), nDDActivationHeight,
+                                           (21 active mainnet/testnet, 7 regtest), nDDActivationHeight,
                                            nOracleActivationHeight, nDigiDollarMuSig2Height, BIP9 params
 
 Tests (current; counts in REPO_MAP_DIGIDOLLAR.md):
@@ -1709,7 +1709,7 @@ bool OracleDataValidator::ValidateBlockOracleData(
 | **Bundle Count** | DD mint/redeem active blocks require exactly one oracle bundle; DD transfer-only and non-DD blocks do not | `src/validation.cpp` | `bad-oracle-*` | Block rejected |
 | **Format** | MuSig2 v0x03 bundle only for V1 | `src/oracle/bundle_manager.cpp` | `bad-oracle-version` / `bad-oracle-format` | Block rejected |
 | **MuSig2 Aggregate Signature** | 64-byte aggregate signature over the V1 message domain | `src/oracle/musig2/*` | `bad-oracle-signature` | Block rejected |
-| **Roster/Quorum** | Consensus-active signer set, launch floor 9 signatures | `src/oracle/bundle_manager.cpp`, chainparams | `bad-oracle-quorum` / signer rejection | Block rejected |
+| **Roster/Quorum** | Consensus-active signer set, floor 7 signatures | `src/oracle/bundle_manager.cpp`, chainparams | `bad-oracle-quorum` / signer rejection | Block rejected |
 | **Timestamp/Epoch** | Bundle epoch and timestamp must be fresh for the block being validated | `src/oracle/bundle_manager.cpp` | `bad-oracle-timestamp` / stale epoch | Block rejected |
 | **Non-DD Blocks** | No oracle bundle required for ordinary DGB blocks | `src/validation.cpp` | N/A | Ordinary blocks remain valid |
 
@@ -1854,18 +1854,18 @@ int nDigiDollarMuSig2Height{std::numeric_limits<int>::max()};
 consensus.nDDActivationHeight        = 23627520;                       // BIP9 min_activation_height
 consensus.nOracleActivationHeight    = consensus.nDDActivationHeight;  // 23627520
 consensus.nDigiDollarMuSig2Height    = 0;
-consensus.nOracleRequiredMessages    = 9;     // off-chain quorum input to MuSig2
+consensus.nOracleRequiredMessages    = 7;     // off-chain quorum input to MuSig2
 consensus.nOracleTotalOracles        = 35;
-consensus.nOraclePubkeyCount         = 17;
-consensus.nOracleConsensusRequired   = 9;     // on-chain MuSig2 threshold
+consensus.nOraclePubkeyCount         = 21;
+consensus.nOracleConsensusRequired   = 7;     // on-chain MuSig2 threshold
 
 // Testnet override:
 consensus.nDDActivationHeight        = 600;
 consensus.nOracleActivationHeight    = 600;
 consensus.nDigiDollarMuSig2Height    = 0;
 consensus.nOracleTotalOracles        = 35;
-consensus.nOraclePubkeyCount         = 17;
-consensus.nOracleConsensusRequired   = 9;
+consensus.nOraclePubkeyCount         = 21;
+consensus.nOracleConsensusRequired   = 7;
 
 // Regtest override (chainparams.cpp:1112-1119):
 consensus.nDDActivationHeight        = 650;
@@ -1879,15 +1879,15 @@ consensus.nOracleConsensusRequired   = 4;
 
 | Network | On-chain quorum | Oracles configured | `nDDActivationHeight` | `nOracleActivationHeight` | `nDigiDollarMuSig2Height` |
 |---------|-----------------|--------------------|-----------------------|---------------------------|---------------------------|
-| Mainnet | 9 signatures from active keyset | 35 in `vOracleNodes` (slots 0-16 active in `vOraclePublicKeys`; slots 17-34 reserve, inactive) | 23 627 520 | 23 627 520 | 0 |
-| Testnet25 | 9 signatures from active keyset | 35 in `vOracleNodes` (slots 0-16 active in `vOraclePublicKeys`; slots 17-34 reserve, inactive) | 600 | 600 | 0 |
+| Mainnet | 7 signatures from active keyset | 35 in `vOracleNodes` (slots 0-20 active in `vOraclePublicKeys`; slots 21-34 reserve, inactive) | 23 627 520 | 23 627 520 | 0 |
+| Testnet26 | 7 signatures from active keyset | 35 in `vOracleNodes` (slots 0-20 active in `vOraclePublicKeys`; slots 21-34 reserve, inactive) | 600 | 600 | 0 |
 | Regtest | 4-of-7 MuSig2 | 7 in `vOracleNodes` (all in `vOraclePublicKeys`) | 650 | 650 | 0 |
 
 There is no longer a "mainnet validation bypass" — mainnet runs the same validator and the same MuSig2 verification path as testnet and regtest.
 
-### 14.3 Mainnet/Testnet Oracle Keys (17 Active — RC41 slot order 0–16)
+### 14.3 Mainnet/Testnet Oracle Keys (21 Active - RC44 slot order 0-20)
 
-**Location:** `src/kernel/chainparams.cpp` mainnet/testnet `consensus.vOraclePublicKeys.push_back(...)` blocks. The mainnet and testnet rosters share the same active operators and slot order for slots 0-16.
+**Location:** `src/kernel/chainparams.cpp` mainnet/testnet `consensus.vOraclePublicKeys.push_back(...)` blocks. The mainnet and testnet rosters share the same active operators and slot order for slots 0-20.
 
 | Slot | Operator |
 |------|----------|
@@ -1908,8 +1908,12 @@ There is no longer a "mainnet validation bypass" — mainnet runs the same valid
 | 14 | Neel |
 | 15 | DigiSwarm |
 | 16 | GTO90 |
+| 17 | digibyte-maxi |
+| 18 | Anthony |
+| 19 | mbah_jambon |
+| 20 | Camden |
 
-Mainnet and testnet25 `vOracleNodes` slots 17–34 are reserve operator metadata. They are *not* added to `consensus.vOraclePublicKeys` until a release assigns real oracle keys, are ignored by the off-chain pending-message quorum, and cannot sign a valid V1 MuSig2 bundle. The local mini-testnet mode also keeps the 35-slot shape while marking reserve slots inactive.
+Mainnet and testnet26 `vOracleNodes` slots 21-34 are reserve operator metadata. They are *not* added to `consensus.vOraclePublicKeys` until a release assigns real oracle keys, are ignored by the off-chain pending-message quorum, and cannot sign a valid V1 MuSig2 bundle. The local mini-testnet mode also keeps the 35-slot shape while marking reserve slots inactive.
 
 ### 14.4 V1 Validator Helpers (`src/oracle/bundle_manager.cpp`)
 
@@ -1959,7 +1963,7 @@ There is no longer a separate "activate Phase Two on testnet" step — testnet/r
 - v0x03 on-chain payload: `version + bitmap_len + bitmap + epoch + price + timestamp + 64-byte aggregate sig` (`COracleBundle::SerializeV03Data`, `OracleBundleManager::CreateOracleScript`)
 - Validator: single code path for mainnet/testnet/regtest in `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2139`)
 - P2P handlers: 9 message types in `src/protocol.cpp:53-62`; price/consensus/MuSig2/getoracles handlers are gated on `Consensus::IsOracleActive` in `src/net_processing.cpp` ~5440–6340, `oraclebundle` is accepted-and-dropped, and `oraclehb` is signed/rate-limited telemetry without the same height gate.
-- BIP9: bit 23, mainnet start `2026-06-01`, mainnet timeout `2027-06-01`, mainnet `min_activation_height=23627520`, mainnet window 40320 / threshold 28224 (70%); testnet25 start at genesis, `min_activation_height=600`, window 200, threshold 140 (70%); regtest `ALWAYS_ACTIVE`
+- BIP9: bit 23, mainnet start `2026-06-01`, mainnet timeout `2027-06-01`, mainnet `min_activation_height=23627520`, mainnet window 40320 / threshold 28224 (70%); testnet26 start at genesis, `min_activation_height=600`, window 200, threshold 140 (70%); regtest `ALWAYS_ACTIVE`
 - `OP_CHECKPRICE` consults `g_get_oracle_consensus_price` (`src/script/interpreter.cpp:725`); fails closed when price ≤ 0
 - 6 active exchange fetchers initialized in `MultiExchangeAggregator::InitializeFetchers` (`src/oracle/exchange.cpp:1042-1071`); 5 fetcher classes still compile but are NOT initialized (Coinbase, Kraken, Messari, Bittrex, Poloniex); CoinMarketCap removed entirely. `FetchAllPrices()` iterates the initialized fetchers sequentially.
 - `min_required_sources = 2` is the `MultiExchangeAggregator` header default (`src/oracle/exchange.h:235`); the production caller `OracleNode::FetchMedianPrice` raises the floor to 3 via `SetMinRequiredSources(3)` (`src/oracle/node.cpp:450`), so the live oracle daemon publishes only when >=3 of the 6 fetchers respond. Outlier filtering removes prices more than 10% from the median and aggregation requires the source floor before and after filtering.
@@ -1970,8 +1974,8 @@ Oracle price format:   Micro-USD (1,000,000 = $1.00 USD)
 Validation range:      100 - 100,000,000 micro-USD ($0.0001 - $100.00)
 On-chain bundle size:  86-byte minimum v0x03 data; 90 bytes on the 35-slot mainnet/testnet bitmap
 Off-chain attestation: 128-byte COraclePriceMessage (32-byte XOnly pubkey + 64-byte Schnorr)
-Quorum:                9 signatures from the configured active mainnet/testnet keyset, 4-of-7 regtest
-Activation heights:    Mainnet 23627520, testnet25 600, regtest height gates 650 by default
+Quorum:                7 signatures from the configured active mainnet/testnet keyset, 4-of-7 regtest
+Activation heights:    Mainnet 23627520, testnet26 600, regtest height gates 650 by default
 ```
 
 Regtest note: the default BIP9 deployment is `ALWAYS_ACTIVE` with

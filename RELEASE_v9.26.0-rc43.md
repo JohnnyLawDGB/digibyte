@@ -12,7 +12,7 @@ Release: https://github.com/DigiByte-Core/digibyte/releases/tag/v9.26.0-rc43
 
 RC43 does not reset public DigiDollar testnet.
 
-RC41 moved public testing to `testnet25`. RC42 kept that network and added the active `digibyte-maxi` oracle slot. RC43 keeps the same chain, same ports, same activation heights, same 35-slot oracle roster capacity, same 18 active testnet oracle keys, same 9-signature oracle quorum, and same `v0x03` oracle bundle format.
+RC41 moved public testing to `testnet25`. RC42 kept that network and added the active `digibyte-maxi` oracle slot. The RC43 fix pass keeps the same chain, same ports, same activation heights, same 35-slot oracle roster capacity, and same `v0x03` oracle bundle format while updating mainnet/testnet to 21 active oracle keys with a 7-signature quorum.
 
 Upgrade target:
 
@@ -20,7 +20,7 @@ Upgrade target:
 - RC41 `testnet25` nodes can also upgrade directly to RC43.
 - Do not wipe `testnet25` just because of RC43.
 - Do not return to `testnet24`; RC43 is still the RC41/RC42 public testnet chain.
-- Existing oracle operators should keep their assigned RC42/testnet25 slot and key material unless separately coordinated.
+- Existing oracle operators should keep their assigned testnet25 slot and key material unless separately coordinated.
 
 What changed from RC42:
 
@@ -33,6 +33,7 @@ What changed from RC42:
 - DigiDollar Qt amount labels now use the consistent `<amount> $DD` format throughout overview, send, mint, redeem, vault, transaction, and dialog surfaces.
 - Oracle operators can now run `createoraclekey` before DigiDollar activation to generate fresh mainnet oracle pubkeys, while real DigiDollar/oracle actions remain disabled until activation.
 - Oracle startup validation logging is gated to avoid misleading startup noise before the node is ready.
+- Mainnet and testnet oracle consensus now use 21 active slots and require 7 MuSig2 signatures.
 - RC42 DGBstats, oracle onboarding, tooltip, modal, transaction-detail, and dark-mode fixes are carried forward.
 
 What did not change:
@@ -44,8 +45,8 @@ What did not change:
 - Oracle testnet activation height remains `600`.
 - Oracle epoch length remains `40` blocks.
 - Oracle bundle format remains `v0x03`.
-- Testnet active oracle roster remains 18 keys.
-- Oracle quorum remains 9 signatures.
+- Testnet active oracle roster is 21 keys.
+- Oracle quorum is 7 signatures.
 - Mainnet activation status does not change.
 - Mainnet oracle operation remains disabled before activation; only local oracle key creation is allowed.
 - DigiDollar economic rules, ERR policy, DCA policy, address formats, and wallet database format do not change.
@@ -104,18 +105,19 @@ RC43 is not an economic redesign and not a new testnet reset.
 | DigiDollar activation height | `600` |
 | Oracle activation height | `600` |
 | Oracle epoch length | `40` blocks |
-| Oracle roster | 35 reserved slots, 18 active testnet slots |
-| Oracle quorum | 9 signatures from the configured active MuSig2 keyset |
+| Oracle roster | 35 reserved slots, 21 active mainnet/testnet slots |
+| Oracle quorum | 7 signatures from the configured active MuSig2 keyset |
 | Oracle bundle format | `v0x03` MuSig2 aggregate bundle |
 
 Older operator notes that mention `testnet24` or P2P port `12031` are stale for RC43. Use the values above.
 
-RC43 carries forward RC42 testnet slot 17 for `digibyte-maxi`:
+RC43 carries forward RC42 testnet slot 17 for `digibyte-maxi` and adds active slots 18-20:
 
-- Name: `digibyte-maxi`
-- Slot: `17`
-- Pubkey: `03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47`
-- Quorum impact: none; quorum remains 9 signatures.
+- Slot 17 `digibyte-maxi`: `03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47`
+- Slot 18 Anthony: `0345f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89`
+- Slot 19 `mbah_jambon`: `031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42`
+- Slot 20 Camden: `03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c`
+- Quorum impact: mainnet/testnet quorum is 7 signatures from the active 21-key roster.
 
 Minimum RC43 operator checklist:
 
@@ -152,7 +154,7 @@ Focused RC43 validation completed on May 27, 2026 from `feature/digidollar-v1`.
 
 Important validation notes:
 
-- The final multi-oracle run used live market data and passed all DigiDollar mint, redeem, transfer, persistence, reindex, restore, and oracle checks with 18 active local oracles and unchanged 9-of-35 consensus.
+- The final multi-oracle run used live market data and passed all DigiDollar mint, redeem, transfer, persistence, reindex, restore, and oracle checks with 21 active local oracles and 7-of-21 consensus.
 - The final multi-oracle script included 20 rapid tier-0 mints, 20 rapid redemptions, a 20-output DD self-fragmentation step, and 20 rapid 5 DD sends.
 - The final multi-oracle script log was `/tmp/digidollar_debug_logs/test_run_20260527_080130.log`.
 - The final full functional run used explicit `--jobs=4` and passed in 665 seconds runtime / 2470 seconds accumulated runtime.

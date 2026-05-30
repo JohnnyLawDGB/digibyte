@@ -1,7 +1,7 @@
 # DigiDollar Oracle System - V1 Explainer
 
-*Updated: 2026-05-21*
-*Document Version: 6.1 - RC41 launch-parameter refresh*
+*Updated: 2026-05-30*
+*Document Version: 6.2 - RC44 testnet26 and 7-of-21 refresh*
 
 ## V1 Summary
 
@@ -24,11 +24,11 @@ mined, relayed as fallback, or used to update the price cache in V1.
 
 | Network | Oracle metadata slots | Consensus-active slots | Quorum |
 |---------|-----------------------|------------------------|--------|
-| Mainnet | 35 | 17, slots 0-16 | 9 signatures from active keyset |
-| Testnet25 | 35 | 17, slots 0-16 | 9 signatures from active keyset |
+| Mainnet | 35 | 21, slots 0-20 | 7 signatures from active keyset |
+| Testnet26 | 35 | 21, slots 0-20 | 7 signatures from active keyset |
 | Regtest | 7 | 7, slots 0-6 | 4-of-7 |
 
-Mainnet and testnet slots 17-34 are reserve metadata entries. They are not part of
+Mainnet and testnet slots 21-34 are reserve metadata entries. They are not part of
 `consensus.vOraclePublicKeys`, do not count toward pending-message quorum, do
 not appear in the MuSig2 bitmap, and cannot contribute to the V1 aggregate
 signature until a later release adds their x-only keys to the consensus roster

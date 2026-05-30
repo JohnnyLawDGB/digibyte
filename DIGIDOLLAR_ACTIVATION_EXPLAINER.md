@@ -20,7 +20,7 @@ DigiDollar activates on the DigiByte blockchain through **BIP9 version bit signa
 | Confirmation Window | 40,320 blocks (~1 week) |
 | Threshold | 70% (28,224 of 40,320) |
 
-### Testnet (testnet25)
+### Testnet (testnet26)
 | Parameter | Value |
 |-----------|-------|
 | Bit | 23 |

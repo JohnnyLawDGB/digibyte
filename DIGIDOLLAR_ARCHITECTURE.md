@@ -207,8 +207,8 @@ Phase 1 (data structures, P2TR scripts, DD addresses, transaction versioning) an
 ├─────────────────────────────────────────────┤
 │ Oracle System Integration:                  │
 │ • V1 mainnet/testnet: 35 reserved oracle    │
-│   slots, 17 active at launch, 9 MuSig2      │
-│   signatures required (BIP-340 aggregate,   │
+│   slots, 21 active, 7 MuSig2 signatures     │
+│   required (BIP-340 aggregate,              │
 │   BIP-327 MuSig2)                           │
 │ • Regtest: 4-of-7 (chainparams override)    │
 │ • Median price in micro-USD format          │
@@ -1520,7 +1520,7 @@ The V1 branch (`feature/digidollar-v1`) closed a series of consensus and policy 
 
 ## 15. Known Open Items
 
-- **Mainnet oracle infrastructure rollout** — The 17 active oracle slots (mainnet/testnet) require operator deployment; consensus is wired and tested.
+- **Mainnet oracle infrastructure rollout** — The 21 active oracle slots (mainnet/testnet) require operator deployment; consensus is wired and tested.
 - **Supplemental witness diagnostics** — Collateral outputs use a NUMS internal key and wallet/RPC redemption signs via Taproot script path today. `ValidateScriptPathSpending()` is only a supplemental DD helper that logs/returns true; standard Taproot validation plus NUMS output reconstruction carry consensus enforcement.
 - **GUI notification polish** — Real-time balance signals and recent-requests persistence are tracked outside this protocol document.
 

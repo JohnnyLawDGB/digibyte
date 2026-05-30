@@ -57,7 +57,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
 {
     SelectParams(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
-    // Mainnet uses MuSig2 immediately on top of 9-of-17 oracle consensus (RC30).
+    // Mainnet uses MuSig2 immediately on top of 7-of-21 oracle consensus.
     BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
@@ -65,7 +65,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet also switches immediately to MuSig2 (9-of-18, RC42).
+    // Testnet also switches immediately to MuSig2 (7-of-21).
     BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
@@ -85,18 +85,18 @@ BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_and_total_slots)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // RC42 testnet uses 18 active oracle pubkeys in a 35-slot roster.
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 18);
+    // RC43 testnet uses 21 active oracle pubkeys in a 35-slot roster.
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 21);
     BOOST_CHECK_EQUAL(params.nOracleTotalOracles, 35);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
 
-BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_9)
+BOOST_AUTO_TEST_CASE(test_oracle_consensus_required_is_7)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // 9 signatures are required from the active consensus keyset.
-    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 9);
+    // 7 signatures are required from the active consensus keyset.
+    BOOST_CHECK_EQUAL(params.nOracleConsensusRequired, 7);
     BOOST_CHECK_LE(params.nOracleConsensusRequired, params.nOraclePubkeyCount);
 }
 
@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_config_unique_by_pubkey)
     }
 }
 
-BOOST_AUTO_TEST_CASE(testnet_digibyte_maxi_slot_17_is_active)
+BOOST_AUTO_TEST_CASE(testnet_rc43_slots_17_to_20_are_active)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
@@ -158,18 +158,42 @@ BOOST_AUTO_TEST_CASE(testnet_digibyte_maxi_slot_17_is_active)
         "03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47";
     constexpr const char* DIGIBYTE_MAXI_XONLY =
         "649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47";
+    constexpr const char* ANTHONY_COMPRESSED =
+        "0345f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89";
+    constexpr const char* MBAH_JAMBON_COMPRESSED =
+        "031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42";
+    constexpr const char* CAMDEN_COMPRESSED =
+        "03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c";
+    constexpr const char* ANTHONY_XONLY =
+        "45f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89";
+    constexpr const char* MBAH_JAMBON_XONLY =
+        "1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42";
+    constexpr const char* CAMDEN_XONLY =
+        "018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c";
 
-    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 18);
-    BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 9);
-    BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), 18U);
-    BOOST_REQUIRE_GE(nodes.size(), 18U);
+    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 21);
+    BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 7);
+    BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), 21U);
+    BOOST_REQUIRE_GE(nodes.size(), 21U);
 
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[17], DIGIBYTE_MAXI_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[18], ANTHONY_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[19], MBAH_JAMBON_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[20], CAMDEN_XONLY);
     BOOST_CHECK_EQUAL(nodes[17].id, 17U);
     BOOST_CHECK(nodes[17].is_active);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                           nodes[17].pubkey.data(), nodes[17].pubkey.size())),
                       DIGIBYTE_MAXI_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                          nodes[18].pubkey.data(), nodes[18].pubkey.size())),
+                      ANTHONY_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                          nodes[19].pubkey.data(), nodes[19].pubkey.size())),
+                      MBAH_JAMBON_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                          nodes[20].pubkey.data(), nodes[20].pubkey.size())),
+                      CAMDEN_COMPRESSED);
 }
 
 // ============================================================================

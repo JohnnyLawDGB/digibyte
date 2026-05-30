@@ -47,7 +47,7 @@ rpcpassword=yourpassword
 # [test]
 # digidollar=1
 # txindex=1
-# addnode=oracle1.digibyte.io:12032
+# addnode=oracle1.digibyte.io:12033
 ```
 
 That's it. Your existing DGB infrastructure stays the same — DD runs alongside it.
@@ -216,7 +216,7 @@ digibyte-cli getoracleprice
 ```
 
 **Oracle details:**
-- 35 reserved oracle slots on testnet/mainnet, 17 active at launch, 9 MuSig2 signatures required
+- 35 reserved oracle slots on testnet/mainnet, 21 active, 7 MuSig2 signatures required
 - 4-of-7 MuSig2 on regtest
 - Active price sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 feeders, registered in `src/oracle/exchange.cpp:1042-1071`)
 - Median-based aggregation with median-distance outlier rejection (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`); the live oracle daemon (`OracleNode::FetchMedianPrice` in `src/oracle/node.cpp:445-450`) requires **3** valid exchange responses before publishing, even though the aggregator's library default is 2 (`src/oracle/exchange.h:235`)
@@ -352,7 +352,7 @@ Exchanges typically handle deposits and withdrawals — not minting or redeeming
 
 ## 13. Test on Testnet Now!
 
-The current public testnet in this source tree is **testnet25**. DigiDollar activation is BIP9-gated at/after block 600 once 140 of 200 blocks signal; verify status with `getdigidollardeploymentinfo`.
+The current public testnet in this source tree is **testnet26**. DigiDollar activation is BIP9-gated at/after block 600 once 140 of 200 blocks signal; verify status with `getdigidollardeploymentinfo`.
 
 ### Testnet Quick Start
 
@@ -363,7 +363,7 @@ The current public testnet in this source tree is **testnet25**. DigiDollar acti
    [test]
    digidollar=1
    txindex=1
-   addnode=oracle1.digibyte.io:12032
+   addnode=oracle1.digibyte.io:12033
    server=1
    rpcuser=youruser
    rpcpassword=yourpassword
@@ -378,11 +378,11 @@ The current public testnet in this source tree is **testnet25**. DigiDollar acti
 
 | Parameter | Value |
 |-----------|-------|
-| Testnet name | testnet25 |
-| P2P Port | 12032 |
+| Testnet name | testnet26 |
+| P2P Port | 12033 |
 | DD Address Prefix | `TD` |
 | Status | BIP9 bit 23, min activation height 600; check `getdigidollardeploymentinfo` for current status |
-| Oracle | 35 reserved slots, 17 active at launch, 9 MuSig2 signatures required, 6 exchange sources |
+| Oracle | 35 reserved slots, 21 active, 7 MuSig2 signatures required, 6 exchange sources |
 
 ---
 
@@ -390,7 +390,7 @@ The current public testnet in this source tree is **testnet25**. DigiDollar acti
 
 | Milestone | Date |
 |-----------|------|
-| Testnet | Current source tree uses testnet25; activation is BIP9-gated at/after block 600 |
+| Testnet | Current source tree uses testnet26; activation is BIP9-gated at/after block 600 |
 | BIP9 signaling window opens | June 1, 2026 |
 | BIP9 signaling window closes | June 1, 2027 |
 | Minimum activation height | 23,627,520 |

@@ -9,7 +9,7 @@
  * - State transitions: CREATED→NONCES_COLLECTING→NONCES_COMPLETE→SIGNING→COMPLETE
  * - Nonce generation, collection, aggregation
  * - Partial signature creation and aggregation
- * - 9-of-17 active signer quorum inside the 35-slot oracle reserve (RC41)
+ * - Configured active signer quorum inside the 35-slot oracle reserve
  * - Security: nonce zeroing, reuse prevention
  * - Timeout/failure transitions
  * - Concurrent epoch isolation
@@ -134,6 +134,14 @@ static uint8_t ActiveMuSig2OracleCount()
     BOOST_REQUIRE(active_count > 0);
     BOOST_REQUIRE(active_count < 256);
     return static_cast<uint8_t>(active_count);
+}
+
+static uint8_t ActiveMuSig2Threshold()
+{
+    const int threshold = Params().GetConsensus().nOracleConsensusRequired;
+    BOOST_REQUIRE(threshold > 0);
+    BOOST_REQUIRE(threshold < 256);
+    return static_cast<uint8_t>(threshold);
 }
 
 // ============================================================================
@@ -346,7 +354,7 @@ BOOST_AUTO_TEST_CASE(required_participants_use_epoch_hash_not_sequential_ids)
     BOOST_REQUIRE(ctx);
 
     constexpr int32_t epoch = 40;
-    constexpr uint8_t threshold = 9;
+    const uint8_t threshold = ActiveMuSig2Threshold();
 
     MuSig2SigningSession session(epoch, threshold);
     BOOST_REQUIRE(session.InitializePassive(MakeSingleKeyAggCache(ctx)));
@@ -379,7 +387,7 @@ BOOST_AUTO_TEST_CASE(required_participants_use_chain_seeded_epoch_hash)
     BOOST_REQUIRE(ctx);
 
     constexpr int32_t epoch = 52;
-    constexpr uint8_t threshold = 9;
+    const uint8_t threshold = ActiveMuSig2Threshold();
     const uint256 seed_a = FilledSeed(0x11);
     const uint256 seed_b = FilledSeed(0x22);
 
@@ -416,7 +424,7 @@ BOOST_AUTO_TEST_CASE(required_participants_and_context_converge_across_nonce_arr
     BOOST_REQUIRE(ctx);
 
     constexpr int32_t epoch = 61;
-    constexpr uint8_t threshold = 9;
+    const uint8_t threshold = ActiveMuSig2Threshold();
     const uint256 seed = FilledSeed(0x37);
 
     const uint8_t active_count = ActiveMuSig2OracleCount();
@@ -430,7 +438,7 @@ BOOST_AUTO_TEST_CASE(required_participants_and_context_converge_across_nonce_arr
 
     std::vector<uint8_t> descending = all_ids;
     std::reverse(descending.begin(), descending.end());
-    const std::vector<uint8_t> mixed{6, 2, 15, 0, 8, 14, 1, 10, 3, 16, 7, 4, 12, 5, 11, 9, 13};
+    const std::vector<uint8_t> mixed{6, 2, 15, 0, 8, 14, 1, 10, 3, 16, 7, 4, 12, 5, 11, 9, 13, 20, 18, 17, 19};
 
     MuSig2SigningSession ascending_session(epoch, threshold);
     MuSig2SigningSession descending_session(epoch, threshold);
@@ -487,7 +495,7 @@ BOOST_AUTO_TEST_CASE(required_participants_reject_committee_that_omits_known_bet
     BOOST_REQUIRE(ctx);
 
     constexpr int32_t epoch = 63;
-    constexpr uint8_t threshold = 9;
+    const uint8_t threshold = ActiveMuSig2Threshold();
     const uint256 seed = FilledSeed(0x63);
 
     const uint8_t active_count = ActiveMuSig2OracleCount();
@@ -532,10 +540,10 @@ BOOST_AUTO_TEST_CASE(session_context_id_changes_when_epoch_selection_seed_change
     BOOST_REQUIRE(ctx);
 
     constexpr int32_t epoch = 62;
-    constexpr uint8_t threshold = 9;
+    const uint8_t threshold = ActiveMuSig2Threshold();
     const uint256 seed_a = FilledSeed(0x51);
     const uint256 seed_b = FilledSeed(0x52);
-    const std::vector<uint8_t> participants{0, 1, 2, 3, 4, 5, 6, 7, 8};
+    const std::vector<uint8_t> participants{0, 1, 2, 3, 4, 5, 6};
 
     MuSig2SigningSession session_a(epoch, threshold);
     MuSig2SigningSession session_b(epoch, threshold);
@@ -573,9 +581,9 @@ BOOST_AUTO_TEST_CASE(session_context_id_changes_when_attempt_id_changes)
     BOOST_REQUIRE(ctx);
 
     constexpr int32_t epoch = 63;
-    constexpr uint8_t threshold = 9;
+    const uint8_t threshold = ActiveMuSig2Threshold();
     const uint256 seed = FilledSeed(0x53);
-    const std::vector<uint8_t> participants{0, 1, 2, 3, 4, 5, 6, 7, 8};
+    const std::vector<uint8_t> participants{0, 1, 2, 3, 4, 5, 6};
 
     MuSig2SigningSession attempt0(epoch, threshold, 0);
     MuSig2SigningSession attempt1(epoch, threshold, 1);
@@ -613,8 +621,8 @@ BOOST_AUTO_TEST_CASE(required_participants_complete_with_offline_low_ids)
     BOOST_REQUIRE(ctx);
 
     constexpr int32_t epoch = 40;
-    constexpr uint8_t threshold = 9;
-    const std::vector<uint8_t> online_ids{0, 1, 2, 3, 4, 5, 10, 14, 15};
+    const uint8_t threshold = ActiveMuSig2Threshold();
+    const std::vector<uint8_t> online_ids{0, 1, 2, 3, 4, 10, 14};
 
     MuSig2SigningSession session(epoch, threshold);
     BOOST_REQUIRE(session.InitializePassive(MakeSingleKeyAggCache(ctx)));

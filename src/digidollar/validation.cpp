@@ -1021,7 +1021,7 @@ bool ValidateNormalRedemption(const CScript& script, int currentHeight) {
 
 bool ValidateEmergencyRedemption(const CScript& script,
                                 const std::vector<std::vector<unsigned char>>& sigs) {
-    // Emergency path requires 9-of-17 oracle signatures (RC30)
+    // Emergency path currently retains the legacy fixed threshold.
     const size_t requiredSigs = 9;
 
     // Count valid signatures (simplified check)

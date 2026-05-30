@@ -77,8 +77,8 @@ struct ConsensusParams {
 
     // Oracle configuration
     uint32_t oracleCount = 35;                 // Total reserved oracle slots
-    uint32_t activeOracles = 17;               // Active oracle keys in the current roster
-    uint32_t oracleThreshold = 9;              // 9 signatures required
+    uint32_t activeOracles = 21;               // Active oracle keys in the current roster
+    uint32_t oracleThreshold = 7;              // 7 signatures required
     uint32_t priceValidBlocks = 20;            // 5 minutes at 15s blocks
 
     // Protection mechanisms

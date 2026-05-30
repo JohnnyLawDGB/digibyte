@@ -653,7 +653,7 @@ BOOST_FIXTURE_TEST_SUITE(musig2_signing_orchestration_mainnet_tests, MainParamsM
 BOOST_AUTO_TEST_CASE(mainnet_signing_roster_excludes_reserve_metadata_slots)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
-    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 17);
+    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 21);
     BOOST_REQUIRE_GT(Params().GetOracleNodes().size(),
                      static_cast<size_t>(consensus.nOraclePubkeyCount));
 

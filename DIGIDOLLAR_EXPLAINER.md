@@ -162,7 +162,7 @@ Supply chain, gaming, and other wallet-native payment flows can be explored on t
 
 DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet — users maintain complete control of their private keys throughout the entire process.
 
-**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time is pending; mainnet remains gated by the configured start time, minimum height, threshold, current testnet25/RC41 validation, and mainnet oracle-operator deployment. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
+**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time is pending; mainnet remains gated by the configured start time, minimum height, threshold, current testnet26/RC44 validation, and mainnet oracle-operator deployment. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
 
 ### Core Technologies
 
@@ -222,7 +222,7 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-Mainnet/testnet expose 17 active oracle slots in `consensus.vOraclePublicKeys` at RC41 launch and 35 total reserved slots in `vOracleNodes`. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 9 configured active oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
+Mainnet/testnet expose 21 active oracle slots in `consensus.vOraclePublicKeys` and 35 total reserved slots in `vOracleNodes`. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 7 configured active oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.
@@ -388,7 +388,7 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 | Custom durations rejected | Mint validation enforces canonical tier windows: `[tier_blocks, tier_blocks + 100]` | `src/digidollar/validation.cpp:1325-1366, 1574-1593` |
 | DCA tiers | 1.00 / 1.25 / 1.50 / 2.00 (≥150 / 120-149 / 110-119 / <110) | `src/consensus/dca.cpp:51-57` (HEALTH_TIERS) and `src/consensus/digidollar.h:87-92` (dcaLevels) |
 | ERR ratios | 0.95 / 0.90 / 0.85 / 0.80 | `src/consensus/err.cpp:53-58` (ERR_TIERS) |
-| Oracle config | 35 reserved slots, 17 active at launch, 9 signatures required (mainnet/testnet); 4-of-7 regtest | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
+| Oracle config | 35 reserved slots, 21 active, 7 signatures required (mainnet/testnet); 4-of-7 regtest | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
 | Cooldown period | 8640 blocks (~36h) | `src/consensus/volatility.h:63` (`COOLDOWN_BLOCKS`) |
 | DD amount unit | Cents (100 = $1.00) | `src/consensus/digidollar.h:70-73`, `src/digidollar/digidollar.h` |
 | Oracle price unit | Micro-USD (1,000,000 = $1.00) | `src/oracle/bundle_manager.*`, `src/script/interpreter.cpp` |
@@ -413,7 +413,7 @@ The V1 branch closes the consensus and policy gaps that the previous draft of th
 | DD supply alert (not a cap) | `src/digidollar/health.h:83` | Monitoring threshold only |
 
 **Where this leaves operators**:
-- **Regtest / testnet**: Fully exercisable today; testnet25 is configured with `min_activation_height = 600`.
+- **Regtest / testnet**: Fully exercisable today; testnet26 is configured with `min_activation_height = 600`.
 - **Mainnet**: Configuration is in place (BIP9 bit 23, start time 2026-06-01, timeout 2027-06-01, `min_activation_height = 23627520`). Outstanding work is operational — mainnet oracle operator deployment and continued testnet validation.
 
 ---

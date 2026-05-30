@@ -260,7 +260,7 @@ bool ValidateNormalRedemption(const CScript& script, int currentHeight);
 /**
  * Validate emergency redemption path conditions
  *
- * Verifies 9-of-17 oracle signature threshold is met (RC30).
+ * Verifies the configured oracle signature threshold is met.
  *
  * @param script Emergency redemption script
  * @param sigs Oracle signatures provided

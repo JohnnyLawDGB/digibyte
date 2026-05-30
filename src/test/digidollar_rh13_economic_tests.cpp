@@ -376,11 +376,11 @@ BOOST_AUTO_TEST_CASE(rh13_06_utxo_bloat_griefing)
 
 // ============================================================================
 // ATTACK VECTOR 7: Oracle Quorum Manipulation
-// With the RC41 chainparams (9 signatures from 17 active keys in a 35-slot roster),
+// With the RC43 fix-pass chainparams (7 signatures from 21 active keys in a 35-slot roster),
 // can colluding oracles manipulate the system?
 // This test exercises the DEFAULT ConsensusParams struct values
-// (src/consensus/digidollar.h): 35 reserved slots, 17 active keys, 9 threshold.
-// Consensus::Params tracks the same 9-signature threshold per chain.
+// (src/consensus/digidollar.h): 35 reserved slots, 21 active keys, 7 threshold.
+// Consensus::Params tracks the same 7-signature threshold per chain.
 // ============================================================================
 
 BOOST_AUTO_TEST_CASE(rh13_07_oracle_quorum_manipulation)
@@ -389,26 +389,24 @@ BOOST_AUTO_TEST_CASE(rh13_07_oracle_quorum_manipulation)
 
     // Oracle struct defaults in src/consensus/digidollar.h.
     BOOST_CHECK_EQUAL(params.oracleCount, 35);
-    BOOST_CHECK_EQUAL(params.activeOracles, 17);
-    BOOST_CHECK_EQUAL(params.oracleThreshold, 9);
+    BOOST_CHECK_EQUAL(params.activeOracles, 21);
+    BOOST_CHECK_EQUAL(params.oracleThreshold, 7);
 
     // Attack 1: Can N colluding oracles set arbitrary price?
-    // YES — the threshold (here: struct default 8) is the bar. Colluders meeting it
-    // control the price. RC30 per-chain threshold is 9-of-17 (stricter).
+    // YES — the threshold is the bar. Colluders meeting it control the price.
     //
     // But: Oracle activation is gated by hardcoded public keys and inactive slots
     // cannot sign until a coordinated release adds their x-only keys.
     //
     // FINDING: ValidateConsensusParams ensures the threshold is non-zero and does
-    // not exceed the active key roster. Chainparams set the launch threshold to
-    // 9 signatures from the 17 currently active keys.
+    // not exceed the active key roster. Chainparams set the RC43 fix-pass
+    // threshold to 7 signatures from the 21 active keys.
 
     // Verify the configured launch threshold.
-    BOOST_CHECK(params.oracleThreshold > params.activeOracles / 2);  // 9 > 8
-
-    // Default struct is a strict majority of the current active roster:
-    BOOST_CHECK_EQUAL(params.oracleThreshold, params.activeOracles / 2 + 1);
-    // Future 35-active-key releases may keep the same 9-signature threshold.
+    BOOST_CHECK_GT(params.oracleThreshold, 0U);
+    BOOST_CHECK_LE(params.oracleThreshold, params.activeOracles);
+    BOOST_CHECK_EQUAL(params.oracleThreshold, 7);
+    BOOST_CHECK_EQUAL(params.activeOracles, 21);
 }
 
 // ============================================================================

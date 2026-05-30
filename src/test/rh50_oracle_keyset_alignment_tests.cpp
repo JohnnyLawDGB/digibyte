@@ -231,10 +231,10 @@ BOOST_AUTO_TEST_CASE(mainnet_testnet_have_35_slots_with_inactive_reserves)
         const CChainParams& params = Params();
         const Consensus::Params& consensus = params.GetConsensus();
         const auto& nodes = params.GetOracleNodes();
-        const int expected_active = ct == ChainType::TESTNET ? 18 : 17;
+        const int expected_active = 21;
 
         BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, 35);
-        BOOST_CHECK_EQUAL(consensus.nOracleConsensusRequired, 9);
+        BOOST_CHECK_EQUAL(consensus.nOracleConsensusRequired, 7);
         BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, expected_active);
         BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(expected_active));
         BOOST_CHECK_EQUAL(nodes.size(), 35U);

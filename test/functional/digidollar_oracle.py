@@ -20,11 +20,11 @@ from test_framework.util import (
 from decimal import Decimal
 import time
 
-# Oracle constants (should match src/primitives/oracle.h)
-# RC41: 35 reserved slots, 17 active launch keys, 9 signatures required.
+# Oracle constants (should match current mainnet/testnet chainparams)
+# RC43 fix pass: 35 reserved slots, 21 active keys, 7 signatures required.
 ORACLE_TOTAL_COUNT = 35
-ORACLE_ACTIVE_COUNT = 17
-ORACLE_CONSENSUS_REQUIRED = 9
+ORACLE_ACTIVE_COUNT = 21
+ORACLE_CONSENSUS_REQUIRED = 7
 
 
 class DigiDollarOracleTest(DigiByteTestFramework):
@@ -109,11 +109,10 @@ class DigiDollarOracleTest(DigiByteTestFramework):
             for param in expected_params:
                 assert param in oracle_config, f"Missing oracle config parameter: {param}"
 
-            # Verify configuration values match consensus parameters
-            # RC41: 35 reserved slots, 17 active launch keys, 9 signatures required.
+            # Verify configuration values match consensus parameters.
             assert_equal(oracle_config['total_oracles'], 35)
-            assert_equal(oracle_config['active_oracles_per_epoch'], 17)
-            assert_equal(oracle_config['consensus_threshold'], 9)
+            assert_equal(oracle_config['active_oracles_per_epoch'], 21)
+            assert_equal(oracle_config['consensus_threshold'], 7)
             assert_equal(oracle_config['price_valid_blocks'], 20)
 
             # Verify configuration is consistent across nodes

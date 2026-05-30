@@ -143,7 +143,8 @@ namespace {
             "Jared", "Green Candle", "Bastian", "DanGB", "Shenger",
             "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie",
             "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
-            "Neel", "DigiSwarm", "GTO90", "digibyte-maxi"
+            "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony",
+            "mbah_jambon", "Camden"
         };
         return names;
     }
@@ -4504,7 +4505,7 @@ static RPCHelpMan getalloracleprices()
 
             // Oracle names from chainparams
             const std::vector<OracleNodeInfo>& oracle_nodes = Params().GetOracleNodes();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce", "Neel", "DigiSwarm", "GTO90"};
+            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce", "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony", "mbah_jambon", "Camden"};
 
             // Build result
             UniValue result(UniValue::VOBJ);
@@ -4745,6 +4746,9 @@ static RPCHelpMan getoracles()
                                 {RPCResult::Type::STR_HEX, "pubkey", "Oracle public key"},
                                 {RPCResult::Type::STR, "endpoint", "Oracle network endpoint"},
                                 {RPCResult::Type::BOOL, "is_active", "Whether oracle is configured as active"},
+                                {RPCResult::Type::NUM, "active_oracle_count", "Active MuSig2 oracle key count"},
+                                {RPCResult::Type::NUM, "total_oracle_slots", "Total reserved oracle slots"},
+                                {RPCResult::Type::NUM, "consensus_threshold", "Required MuSig2 oracle signatures"},
                                 {RPCResult::Type::BOOL, "in_consensus", "Whether oracle slot is in the active MuSig2 quorum (true if oracle_id < oracle_pubkey_count). Slots beyond oracle_pubkey_count are reserves and cannot vote in consensus."},
                                 {RPCResult::Type::NUM, "last_price_micro_usd", "Last reported price in micro-USD"},
                                 {RPCResult::Type::NUM, "last_price_usd", "Last reported price in USD"},
@@ -4822,6 +4826,9 @@ static RPCHelpMan getoracles()
                 info.pushKV("pubkey", HexStr(oc.pubkey));
                 info.pushKV("endpoint", oc.endpoint);
                 info.pushKV("is_active", oc.is_active);
+                info.pushKV("active_oracle_count", params.GetConsensus().nOraclePubkeyCount);
+                info.pushKV("total_oracle_slots", params.GetConsensus().nOracleTotalOracles);
+                info.pushKV("consensus_threshold", params.GetConsensus().nOracleConsensusRequired);
                 // Wave 9 (Agent C): expose whether this slot can vote in
                 // consensus. The MuSig2 aggregator (`ValidateMuSig2Bundle`)
                 // rejects signers whose id >= nOraclePubkeyCount, so a

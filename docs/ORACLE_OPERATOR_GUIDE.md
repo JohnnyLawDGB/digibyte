@@ -7,13 +7,13 @@
 
 DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are **hardcoded in `src/kernel/chainparams.cpp`** — every oracle operator must:
 
-1. Run a current DigiByte Core release (RC41 is the current launch-readiness release candidate at the time of writing) and create a descriptor wallet
+1. Run a current DigiByte Core release (RC44 is the current testnet26 release candidate at the time of writing) and create a descriptor wallet
 2. Run `createoraclekey` to generate their oracle keypair inside the wallet
 3. Send their **public key only** to the DigiByte Core maintainer
 4. The maintainer adds their key to `chainparams.cpp` and ships a new release
 5. The operator runs `startoracle` — the wallet provides the private key automatically
 
-For current testnet release/migration mechanics (testnet25, P2P port 12032, RPC port 14026) and retired testnet decommissioning notes, follow `DIGIDOLLAR_ORACLE_SETUP.md`.
+For current testnet release/migration mechanics (testnet26, P2P port 12033, RPC port 14026) and retired testnet decommissioning notes, follow `DIGIDOLLAR_ORACLE_SETUP.md`.
 
 ---
 
@@ -72,7 +72,7 @@ Mainnet and testnet chainparams allocate 35 oracle slots (IDs 0–34), but only 
 
 Send **only these two things**:
 1. Your **pubkey** from the output above (66-char hex starting with `02` or `03`)
-2. Your **server endpoint** (e.g., `myserver.com:12032` for testnet25, or `myserver.com:12024` for mainnet)
+2. Your **server endpoint** (e.g., `myserver.com:12033` for testnet26, or `myserver.com:12024` for mainnet)
 
 **⚠️ NEVER share your private key. It stays in your wallet.**
 
@@ -121,7 +121,7 @@ You can also provide the key explicitly if needed:
 ### Step 8: Monitor
 
 ```bash
-tail -f ~/.digibyte/testnet25/debug.log | grep -i oracle
+tail -f ~/.digibyte/testnet26/debug.log | grep -i oracle
 ```
 
 ---
@@ -184,7 +184,7 @@ digibyte-cli -testnet -rpcwallet=oracle startoracle <id>
 The live oracle requires **3 of 6 exchange responses** to publish (see "What Your Oracle Does" above). Search the debug log for fetcher errors:
 
 ```bash
-tail -n 2000 ~/.digibyte/testnet25/debug.log | grep -E "Oracle: (Insufficient|Exception|Failed to fetch|Initialized)"
+tail -n 2000 ~/.digibyte/testnet26/debug.log | grep -E "Oracle: (Insufficient|Exception|Failed to fetch|Initialized)"
 ```
 
 Specifically:
@@ -210,9 +210,9 @@ When an operator sends you their 33-byte compressed public key, add it to **two 
 
 ### 1. vOracleNodes (33-byte compressed CPubKey)
 
-In `InitializeOracleNodes()` — match the network's P2P port (mainnet 12024, testnet25 12032):
+In `InitializeOracleNodes()` — match the network's P2P port (mainnet 12024, testnet26 12033):
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12032", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12033", true},
 ```
 
 ### 2. consensus.vOraclePublicKeys (32-byte x-only key — strip the 02/03 prefix)
@@ -231,8 +231,8 @@ Then recompile and distribute the updated binary.
 
 | Network | Total Slots | Active (in MuSig2 quorum) | Consensus | Notes |
 |---------|------------|---------------------------|-----------|-------|
-| Mainnet | 35 (IDs 0–34) | 17 (slots 0–16) | 9 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Slots 17–34 stay reserve placeholders after activation until promoted by a future chainparams release. |
-| Testnet (testnet25) | 35 (IDs 0–34) | 17 (slots 0–16) | 9 signatures from active keyset | Active from height 600. Slots 17–34 are inactive reserve placeholders. |
+| Mainnet | 35 (IDs 0-34) | 21 (slots 0-20) | 7 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Slots 21-34 stay reserve placeholders after activation until promoted by a future chainparams release. |
+| Testnet (testnet26) | 35 (IDs 0-34) | 21 (slots 0-20) | 7 signatures from active keyset | Active from height 600. Slots 21-34 are inactive reserve placeholders. |
 | Regtest | 7 (IDs 0–6) | 7 | 4-of-7 MuSig2 | Always active. |
 
 To confirm a slot is in the active quorum at runtime, call
@@ -251,7 +251,7 @@ To confirm a slot is in the active quorum at runtime, call
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12032 (testnet25 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
+| Ports | 12033 (testnet26 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
 
 ---
 
@@ -287,4 +287,4 @@ To confirm a slot is in the active quorum at runtime, call
 
 ---
 
-*Verified against the DigiByte Core RC41 codebase on `feature/digidollar-v1`. Current public testnet instructions target testnet25 / P2P 12032 / RPC 14026. All RPC commands tested in regtest.*
+*Verified against the DigiByte Core RC44 codebase on `feature/digidollar-v1`. Current public testnet instructions target testnet26 / P2P 12033 / RPC 14026. All RPC commands tested in regtest.*

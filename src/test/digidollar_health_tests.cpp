@@ -141,7 +141,7 @@ BOOST_FIXTURE_TEST_CASE(test_system_metrics_collection, DigiDollarHealthTestSetu
 
     // Oracle status
     BOOST_CHECK_GE(metrics.activeOracles, 0);
-    BOOST_CHECK_LE(metrics.activeOracles, 20); // Max reasonable oracles
+    BOOST_CHECK_LE(metrics.activeOracles, 35); // Reserved oracle roster capacity
     BOOST_CHECK_GE(metrics.lastOraclePrice, 0);
     BOOST_CHECK_GE(metrics.lastOracleUpdate, 0);
 }

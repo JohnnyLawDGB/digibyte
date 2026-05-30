@@ -1,21 +1,21 @@
 # DigiDollar Testnet Oracle Setup - V1
 
-*Updated: 2026-05-21*
+*Updated: 2026-05-30*
 
-This guide describes the current DigiDollar V1 oracle flow on `testnet25`.
+This guide describes the current DigiDollar V1 oracle flow on `testnet26`.
 Older `sendoracleprice` / single-oracle setup instructions are obsolete:
 `sendoracleprice` was removed and raw v0x01/v0x02 oracle bundles are rejected.
 
 ## Testnet Parameters
 
-- Network: `testnet25`
-- P2P port: `12032`
+- Network: `testnet26`
+- P2P port: `12033`
 - Bech32 HRP: `dgbt`
 - DigiDollar activation: height 600 / BIP9 active
 - Oracle activation: same trigger as DigiDollar
 - On-chain bundle format: MuSig2 v0x03 only
-- Consensus roster: 35 reserved slots, IDs `0..34`; slots `0..16` are active at launch
-- Quorum: 9 signatures from the active keyset
+- Consensus roster: 35 reserved slots, IDs `0..34`; slots `0..20` are active
+- Quorum: 7 signatures from the active keyset
 
 ## Required Configuration
 

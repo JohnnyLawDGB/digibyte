@@ -63,7 +63,7 @@ class MuSig2SigningSession {
 public:
     /**
      * @param[in] epoch       The epoch this session is signing for.
-     * @param[in] min_signers Minimum number of signers required (e.g., 9 for 9-of-17).
+     * @param[in] min_signers Minimum number of signers required (e.g., 7 for 7-of-21).
      */
     MuSig2SigningSession(int32_t epoch, uint8_t min_signers, uint32_t attempt_id = 0);
     ~MuSig2SigningSession();

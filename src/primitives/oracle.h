@@ -16,7 +16,7 @@
 #include <vector>
 
 //! Oracle consensus constants (defined before classes for use in default parameters)
-static constexpr int ORACLE_CONSENSUS_REQUIRED = 9;     // 9 oracle signatures required
+static constexpr int ORACLE_CONSENSUS_REQUIRED = 7;     // 7 oracle signatures required
 static constexpr int ORACLE_ACTIVE_COUNT = 35;          // Maximum active oracle roster capacity
 static constexpr int ORACLE_TOTAL_COUNT = 35;           // 35 total reserved oracle slots
 static constexpr int ORACLE_MAX_AGE_SECONDS = 3600;    // 1 hour max age for prices

@@ -510,7 +510,7 @@ For wallet integrators that bypass the Qt widget and submit raw mint transaction
 
 ## 13. Test on Testnet Now!
 
-The current public testnet in this source tree is **testnet25**. DigiDollar activation is BIP9-gated at/after block 600 once 140 of 200 blocks signal; verify live status with `getdigidollardeploymentinfo`.
+The current public testnet in this source tree is **testnet26**. DigiDollar activation is BIP9-gated at/after block 600 once 140 of 200 blocks signal; verify live status with `getdigidollardeploymentinfo`.
 
 ### Quick Setup
 
@@ -521,7 +521,7 @@ The current public testnet in this source tree is **testnet25**. DigiDollar acti
    [test]
    digidollar=1
    txindex=1
-   addnode=oracle1.digibyte.io:12032
+   addnode=oracle1.digibyte.io:12033
    server=1
    rpcuser=yourusername
    rpcpassword=yourpassword
@@ -534,10 +534,10 @@ The current public testnet in this source tree is **testnet25**. DigiDollar acti
 
 | Parameter | Value |
 |-----------|-------|
-| Testnet name | testnet25 |
-| P2P Port | 12032 (set in `src/kernel/chainparams.cpp`) |
+| Testnet name | testnet26 |
+| P2P Port | 12033 (set in `src/kernel/chainparams.cpp`) |
 | DD Address Prefix | `TD` |
-| Oracle Consensus | 35 reserved slots, 17 active at launch, 9 signatures required |
+| Oracle Consensus | 35 reserved slots, 21 active, 7 signatures required |
 | Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders, see `src/oracle/exchange.cpp:1042-1071`) |
 | Outlier filter | Median-distance: prices ≥ `outlier_threshold × median` are dropped (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`) |
 | Activation | BIP9 bit 23, min activation height 600; check `getdigidollardeploymentinfo` for current status |

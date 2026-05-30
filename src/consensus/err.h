@@ -136,7 +136,7 @@ public:
      * Check if oracle consensus exists for ERR activation.
      *
      * @param bundle Oracle bundle containing price messages
-     * @return True if sufficient oracle consensus (9-of-17, RC30) exists
+     * @return True if sufficient configured oracle consensus exists
      *
      * Validates that:
      * - At least 8 valid oracle signatures
@@ -210,7 +210,7 @@ public:
      *
      * Activation requirements:
      * - System health below 100%
-     * - Valid oracle consensus (9-of-17 signatures, RC30)
+     * - Valid configured oracle consensus
      * - ERR not already active
      * - Oracle messages within time window
      */

@@ -169,21 +169,20 @@ BOOST_AUTO_TEST_CASE(oracle_bundle_consensus_requirement)
     // No messages - no consensus
     BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // RC41: 9-of-35 reserved slots, with 9 messages required for consensus.
-    // Add 8 messages - still no consensus (need 9)
-    for (int i = 0; i < 8; i++) {
+    // Add one fewer than the configured quorum - still no consensus.
+    for (int i = 0; i < ORACLE_CONSENSUS_REQUIRED - 1; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
     BOOST_CHECK(!bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
-    // Add 9th message - now has consensus
-    COraclePriceMessage msg9(8, 6000, GetTime());  // $0.006 (realistic price)
-    bundle.AddMessage(msg9);
+    // Add the quorum signer - now has consensus.
+    COraclePriceMessage quorum_msg(ORACLE_CONSENSUS_REQUIRED - 1, 6000, GetTime());
+    bundle.AddMessage(quorum_msg);
     BOOST_CHECK(bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED));
 
     // Test with more messages up to the reserved active-capacity limit.
-    for (int i = 9; i < 17; i++) {
+    for (int i = ORACLE_CONSENSUS_REQUIRED; i < 17; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006 (realistic price)
         bundle.AddMessage(msg);
     }
@@ -492,7 +491,7 @@ BOOST_AUTO_TEST_CASE(oracle_selection_shuffles_exact_active_count)
 
 BOOST_AUTO_TEST_CASE(oracle_selection_insufficient_oracles)
 {
-    // Test with fewer than ORACLE_ACTIVE_COUNT oracles (RC30: 17)
+    // Test with fewer than the configured active-oracle capacity.
     std::vector<OracleNodeInfo> few_oracles;
     for (int i = 0; i < 10; i++) {
         CKey key;
@@ -541,7 +540,7 @@ BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 35);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 17);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 21);
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
@@ -551,7 +550,7 @@ BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 35);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 18);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 21);
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
@@ -591,8 +590,8 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_data_validity)
         BOOST_CHECK(!oracle.endpoint.empty());
         BOOST_CHECK(oracle.endpoint.find(":") != std::string::npos); // Should have port
 
-        // First 17 slots are active; remaining reserved slots are inactive.
-        BOOST_CHECK_EQUAL(oracle.is_active, oracle.id < 17);
+        // First 21 slots are active; remaining reserved slots are inactive.
+        BOOST_CHECK_EQUAL(oracle.is_active, oracle.id < 21);
 
         // Test oracle passes validation
         BOOST_CHECK(oracle.IsValid());
@@ -649,8 +648,8 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
         std::string port_str = oracle.endpoint.substr(colon_pos + 1);
         int port = std::stoi(port_str);
 
-        // Valid port ranges: 9001-9035 for digidollar.org, or 12024-12032 for digibyte.io (testnet P2P ports)
-        bool valid_port = (port >= 9001 && port <= 9035) || (port >= 12024 && port <= 12032);
+        // Valid port ranges: 9001-9035 for digidollar.org, or 12024-12033 for digibyte.io (testnet P2P ports)
+        bool valid_port = (port >= 9001 && port <= 9035) || (port >= 12024 && port <= 12033);
         BOOST_CHECK(valid_port);
     }
 }
@@ -1110,7 +1109,7 @@ BOOST_AUTO_TEST_CASE(test_p2p_message_validation)
     // Test 4: Bundle message validation
     COracleBundle test_bundle(10);
 
-    // Add maximum allowed messages (RC30: 17)
+    // Add maximum allowed messages.
     for (int i = 0; i < ORACLE_ACTIVE_COUNT; i++) {
         COraclePriceMessage msg(i, 6000, GetTime());  // $0.006
         test_bundle.AddMessage(msg);

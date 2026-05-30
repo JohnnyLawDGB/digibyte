@@ -7034,7 +7034,7 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
     // FIX VERIFIED [T3-05a]: HasConsensus() no longer has default parameters.
     // All callers must pass min_required explicitly from chainparams.
     // The compile-time ORACLE_CONSENSUS_REQUIRED constant is only used in tests
-    // to explicitly request mainnet's 9-of-17 threshold (RC30).
+    // to explicitly request the current mainnet/testnet threshold.
 
     const Consensus::Params& params = Params().GetConsensus();
     int runtime_required = params.nOracleRequiredMessages;
@@ -7043,8 +7043,8 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
     BOOST_TEST_MESSAGE("Network oracle config: " << runtime_required << "-of-" << runtime_total);
     BOOST_TEST_MESSAGE("Compile-time constant ORACLE_CONSENSUS_REQUIRED=" << ORACLE_CONSENSUS_REQUIRED);
 
-    // Simulate a testnet scenario: 5 valid messages should meet 5-of-8 threshold
-    // Use arbitrary smaller threshold (5) vs the mainnet/testnet RC30 value (9 via ORACLE_CONSENSUS_REQUIRED)
+    // Simulate a testnet scenario: 5 valid messages should meet 5-of-8 threshold.
+    // Use arbitrary smaller threshold (5) vs the mainnet/testnet value.
     int smaller_required = 5;
 
     COracleBundle bundle(0);
@@ -7062,10 +7062,10 @@ BOOST_AUTO_TEST_CASE(T3_05a_consensus_threshold_default_parameter_mismatch)
     BOOST_CHECK_MESSAGE(bundle.HasConsensus(smaller_required),
         "5 messages should meet 5-message threshold");
 
-    // With RC30 threshold (ORACLE_CONSENSUS_REQUIRED=9), 5 messages is NOT sufficient — this is CORRECT behavior
+    // With the current mainnet/testnet threshold, 5 messages is NOT sufficient.
     bool larger_consensus = bundle.HasConsensus(ORACLE_CONSENSUS_REQUIRED);
     BOOST_CHECK_MESSAGE(!larger_consensus,
-        "FIXED: HasConsensus(9) correctly rejects 5-message bundle (RC30). "
+        "FIXED: HasConsensus(current threshold) correctly rejects 5-message bundle. "
         "After fix, there are no default parameters — all callers pass explicit threshold "
         "from chainparams.nOracleRequiredMessages, so each network uses the right value.");
 
@@ -14374,8 +14374,8 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01f_eclipse_mainnet_oracle_gap)
     // RC41: mainnet oracle activation is set.
     BOOST_CHECK_NE(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
 
-    // RC41: 9 signatures from 35 reserved slots.
-    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 9);
+    // RC43 fix pass: 7 signatures from 35 reserved slots.
+    BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 7);
     BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 35);
 
     BOOST_TEST_MESSAGE("T8-01f: Eclipse mainnet oracle gap ⚠️ — "
@@ -17089,9 +17089,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04a_oracle_id_8_in_configured_range)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
 {
-    // RC41 resolves the older count mismatch: the static P2P bound, consensus
+    // RC43 resolves the count mismatch: the static P2P bound, consensus
     // total, and configured node roster all describe the same 35 reserved slots.
-    // Only the first 17 slots are active today and present in vOraclePublicKeys.
+    // The first 21 slots are active today and present in vOraclePublicKeys.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
     const Consensus::Params& consensus = params.GetConsensus();
@@ -17107,8 +17107,8 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
     BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, static_cast<int>(all_oracles.size()));
     BOOST_TEST_MESSAGE("  nOracleTotalOracles == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
 
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 17);
-    BOOST_CHECK_EQUAL(static_cast<int>(consensus.vOraclePublicKeys.size()), 17);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 21);
+    BOOST_CHECK_EQUAL(static_cast<int>(consensus.vOraclePublicKeys.size()), 21);
 
     // Verify nOracleRequiredMessages < nOracleTotalOracles
     BOOST_CHECK_LT(consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
@@ -17323,7 +17323,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04e_pending_messages_map_key_boundary)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
 {
-    // Mainnet has 35 reserved oracle nodes with 17 currently active. SelectOraclesForEpoch
+    // Mainnet has 35 reserved oracle nodes with 21 currently active. SelectOraclesForEpoch
     // must return only active nodes and must be deterministic for the same epoch.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
@@ -17333,9 +17333,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_30_oracles)
     BOOST_TEST_MESSAGE("  ORACLE_ACTIVE_COUNT: " + std::to_string(ORACLE_ACTIVE_COUNT));
 
     std::vector<OracleNodeInfo> selected = SelectOraclesForEpoch(all_oracles, 42);
-    BOOST_CHECK_EQUAL(selected.size(), 17U);
+    BOOST_CHECK_EQUAL(selected.size(), 21U);
     for (const auto& oracle : selected) {
-        BOOST_CHECK_LT(oracle.id, 17U);
+        BOOST_CHECK_LT(oracle.id, 21U);
         BOOST_CHECK(oracle.is_active);
     }
 
@@ -17377,13 +17377,13 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
 
     // vOraclePublicKeys contains the active signing roster, not inactive reserve slots.
     BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(consensus.nOraclePubkeyCount));
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 17);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 21);
     BOOST_TEST_MESSAGE("  vOraclePublicKeys has " + std::to_string(consensus.vOraclePublicKeys.size()) +
                       " keys on mainnet ✅ (Phase 3 MuSig2)");
 
     BOOST_TEST_MESSAGE("  📝 P2P uses ORACLE_TOTAL_COUNT — matches chainparams total slots");
     BOOST_TEST_MESSAGE("  📝 nOraclePubkeyCount (" + std::to_string(consensus.nOraclePubkeyCount)
-                      + ") = active signing keyset for RC41");
+                      + ") = active signing keyset for RC43");
 }
 
 // =============================================================================

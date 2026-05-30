@@ -28,7 +28,7 @@
  *      decodes to empty and quorum returns false.
  *
  * The harness runs across mainnet, testnet, and regtest chainparams to
- * cover the 4-of-7 (regtest) and 9-of-17 (mainnet/testnet) thresholds.
+ * cover the 4-of-7 (regtest) and 7-of-21 (mainnet/testnet) thresholds.
  */
 
 #include <cassert>
@@ -138,7 +138,7 @@ FUZZ_TARGET(oracle_musig2_bitmap_invariants, .init = initialize_oracle_musig2_bi
 
     // Iterate a few rounds across the three chain rosters to surface any
     // chain-dependent boundary surprises (regtest 4-of-7 vs mainnet/testnet
-    // 9-of-17 vs whatever the harness selector chose).
+    // mainnet/testnet vs whatever the harness selector chose).
     LIMITED_WHILE(fdp.remaining_bytes() > 0, 30) {
         const uint8_t chain_pick = fdp.ConsumeIntegralInRange<uint8_t>(0, 2);
         switch (chain_pick) {

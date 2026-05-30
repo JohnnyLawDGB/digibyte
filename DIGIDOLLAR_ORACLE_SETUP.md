@@ -28,7 +28,7 @@
 
 ## Overview
 
-DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are hardcoded in `src/kernel/chainparams.cpp`. The current source tree uses `testnet25` (P2P port 12032, RPC port 14026, data dir `~/.digibyte/testnet25/`); historical testnet24/testnet23/testnet21 details are preserved only for operators decommissioning an old install. The workflow:
+DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. Oracle public keys are hardcoded in `src/kernel/chainparams.cpp`. The current source tree uses `testnet26` (P2P port 12033, RPC port 14026, data dir `~/.digibyte/testnet26/`); historical testnet25/testnet24/testnet23/testnet21 details are preserved only for operators decommissioning an old install. The workflow:
 
 1. Generate an oracle keypair via `createoraclekey` (stored in your wallet)
 2. Send your **public key only** to the maintainer
@@ -73,13 +73,13 @@ debug=net
 
 > **`testnet=1` goes at the top** (not under any section). Everything else under `[test]`.
 
-`addnode=oracle1.digibyte.io` resolves onto the current `testnet25` chain on port **12032**. If you want to pin the port explicitly:
+`addnode=oracle1.digibyte.io` resolves onto the current `testnet26` chain on port **12033**. If you want to pin the port explicitly:
 
 ```ini
-addnode=oracle1.digibyte.io:12032
+addnode=oracle1.digibyte.io:12033
 ```
 
-(The retired `testnet24` chain used port `12031`; `testnet23` used port `12030`; the older `testnet21` chain used port `12035`. See the historical footnote at the end if you are decommissioning an old install.)
+(The retired `testnet25` chain used port `12032`; `testnet24` used port `12031`; `testnet23` used port `12030`; the older `testnet21` chain used port `12035`. See the historical footnote at the end if you are decommissioning an old install.)
 
 Optional:
 ```ini
@@ -92,7 +92,7 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned active oracle ID (slot **0–16**) from the maintainer; mainnet and testnet25 both reserve 35 slots and launch with 17 consensus-active MuSig2 public keys. Slots 17-34 are inactive reserve entries: they cannot satisfy V1 quorum until a future release adds their x-only keys to `consensus.vOraclePublicKeys` and marks the slot active.
+For first-time oracle operators. You need an assigned active oracle ID (slot **0–20**) from the maintainer; mainnet and testnet26 both reserve 35 slots and use 21 consensus-active MuSig2 public keys with a 7-signature quorum. Slots 21-34 are inactive reserve entries: they cannot satisfy V1 quorum until a future release adds their x-only keys to `consensus.vOraclePublicKeys` and marks the slot active.
 
 ```bash
 # 1. Start your node
@@ -116,7 +116,7 @@ digibyte-cli -testnet getoracles true
 
 **Qt wallet users:** Create wallet via **File → Create Wallet**, name it `oracle`. Then **Help → Debug Window → Console** to run `createoraclekey` and `startoracle`.
 
-> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet25/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
+> ⚠️ **Use just the wallet name** (`"oracle"`), not a full path like `"/home/user/.digibyte/testnet26/wallets/oracle/"`. See [Fixing Wallet Name](#fixing-wallet-name) if you already did this.
 
 ---
 
@@ -124,7 +124,7 @@ digibyte-cli -testnet getoracles true
 
 Your oracle key persists in your wallet across upgrades. You do **not** need to generate a new key.
 
-### Current testnet25 restart / upgrade
+### Current testnet26 restart / upgrade
 
 ```bash
 # 1. Stop your node
@@ -151,7 +151,7 @@ digibyte-cli -testnet getoracles true
 
 ### Decommissioning retired testnets
 
-If you are still running the retired `testnet24` chain (port **12031**, data dir `~/.digibyte/testnet24/`), `testnet23` chain (port **12030**, data dir `~/.digibyte/testnet23/`), or older `testnet21` chain (port **12035**, data dir `~/.digibyte/testnet21/`), migration to current `testnet25` (port **12032**, data dir `~/.digibyte/testnet25/`) is a **fresh chain**: do **not** copy old `blocks/` or `chainstate/`. Migrate only the wallet that holds your oracle key, then follow the New Oracle Setup steps above against the fresh testnet25 directory.
+If you are still running the retired `testnet25` chain (port **12032**, data dir `~/.digibyte/testnet25/`), `testnet24` chain (port **12031**, data dir `~/.digibyte/testnet24/`), `testnet23` chain (port **12030**, data dir `~/.digibyte/testnet23/`), or older `testnet21` chain (port **12035**, data dir `~/.digibyte/testnet21/`), migration to current `testnet26` (port **12033**, data dir `~/.digibyte/testnet26/`) is a **fresh chain**: do **not** copy old `blocks/` or `chainstate/`. Migrate only the wallet that holds your oracle key, then follow the New Oracle Setup steps above against the fresh testnet26 directory.
 
 ---
 
@@ -211,7 +211,7 @@ removed / paid API key required).
 
 | Release | Chain | Testnet P2P Port | Active Oracles | Consensus Required |
 |---------|-------|------------------|----------------|--------------------|
-| Current source tree | `testnet25` | **12032** | 17 active / 35 reserved | 9 signatures |
+| Current source tree | `testnet26` | **12033** | 21 active / 35 reserved | 7 signatures |
 | Retired | `testnet24` | 12031 | n/a (chain retired) | n/a |
 | Retired | `testnet23` | 12030 | n/a (chain retired) | n/a |
 | Retired | `testnet21` | 12035 | n/a (chain retired) | n/a |
@@ -244,8 +244,8 @@ and consensus threshold
 ## Monitoring
 
 ```bash
-# Current testnet25 log path
-tail -f ~/.digibyte/testnet25/debug.log | grep -i "oracle\|digidollar"
+# Current testnet26 log path
+tail -f ~/.digibyte/testnet26/debug.log | grep -i "oracle\|digidollar"
 
 # Check current oracle price
 digibyte-cli -testnet getoracleprice
@@ -501,9 +501,9 @@ digibyte-cli -testnet getprotectionstatus
 
 When an operator sends their `pubkey` (33-byte compressed, e.g. `0398720f...eb7b57`), add it to **two locations** in `src/kernel/chainparams.cpp`:
 
-**1. `vOracleNodes`** — use the full 33-byte compressed key. The testnet25 P2P port is `12032` (mainnet `12024`):
+**1. `vOracleNodes`** — use the full 33-byte compressed key. The testnet26 P2P port is `12033` (mainnet `12024`):
 ```cpp
-{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12032", true},
+{5, ParsePubKey("0398720f6d15252fb2c3501107d46129589d8ab56e0f967be2e470f40675eb7b57"), "operator.server.com:12033", true},
 ```
 
 **2. `consensus.vOraclePublicKeys`** — strip the `02`/`03` prefix to get the 32-byte x-only key:
@@ -523,21 +523,21 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 | RAM | 2 GB | 4+ GB |
 | Disk | 20 GB | 50+ GB SSD |
 | Network | Outbound HTTPS | Static IP or DNS |
-| Ports | 12032 (testnet25 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
+| Ports | 12033 (testnet26 P2P), 12024 (mainnet P2P) | Open inbound + outbound |
 
 ---
 
 ## File Locations
 
-| Component | Current testnet25 | Mainnet |
+| Component | Current testnet26 | Mainnet |
 |-----------|-------------------|---------|
 | Config | `~/.digibyte/digibyte.conf` | `~/.digibyte/digibyte.conf` |
-| Data dir | `~/.digibyte/testnet25/` | `~/.digibyte/` |
-| Debug log | `~/.digibyte/testnet25/debug.log` | `~/.digibyte/debug.log` |
-| Wallets | `~/.digibyte/testnet25/wallets/` | `~/.digibyte/wallets/` |
-| RPC cookie | `~/.digibyte/testnet25/.cookie` | `~/.digibyte/.cookie` |
+| Data dir | `~/.digibyte/testnet26/` | `~/.digibyte/` |
+| Debug log | `~/.digibyte/testnet26/debug.log` | `~/.digibyte/debug.log` |
+| Wallets | `~/.digibyte/testnet26/wallets/` | `~/.digibyte/wallets/` |
+| RPC cookie | `~/.digibyte/testnet26/.cookie` | `~/.digibyte/.cookie` |
 
-> **Historical retired testnets:** `testnet24` used `~/.digibyte/testnet24/` with port 12031; `testnet23` used `~/.digibyte/testnet23/` with port 12030; older `testnet21` used `~/.digibyte/testnet21/` with port 12035. Those chains are offline/retired; preserved here only so operators know which directories to archive or delete.
+> **Historical retired testnets:** `testnet25` used `~/.digibyte/testnet25/` with port 12032; `testnet24` used `~/.digibyte/testnet24/` with port 12031; `testnet23` used `~/.digibyte/testnet23/` with port 12030; older `testnet21` used `~/.digibyte/testnet21/` with port 12035. Those chains are offline/retired; preserved here only so operators know which directories to archive or delete.
 
 ---
 
@@ -546,8 +546,8 @@ Both locations MUST match the same key. If they don't, `ValidateOracleKey()` wil
 If `getwalletinfo` shows the full path as wallet name:
 
 ```bash
-# Current testnet25 example
-digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet25/wallets/oracle/"
+# Current testnet26 example
+digibyte-cli -testnet unloadwallet "/home/user/.digibyte/testnet26/wallets/oracle/"
 
 # Reload with just the name
 digibyte-cli -testnet loadwallet "oracle"
@@ -558,4 +558,4 @@ digibyte-cli -testnet -rpcwallet=oracle getwalletinfo
 
 ---
 
-*Verified against the current `feature/digidollar-v1` source tree. New operators should target `testnet25` (port 12032) or mainnet (port 12024). Retired `testnet24`/port 12031, `testnet23`/port 12030, and `testnet21`/port 12035 details are documented only as decommissioning footnotes.*
+*Verified against the current `feature/digidollar-v1` source tree. New operators should target `testnet26` (port 12033) or mainnet (port 12024). Retired `testnet25`/port 12032, `testnet24`/port 12031, `testnet23`/port 12030, and `testnet21`/port 12035 details are documented only as decommissioning footnotes.*

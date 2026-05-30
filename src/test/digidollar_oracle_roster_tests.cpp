@@ -33,9 +33,9 @@ namespace {
 constexpr int32_t ROSTER_ACTIVE_HEIGHT = 650;
 constexpr uint64_t ROSTER_PRICE = 51000;
 constexpr int64_t ROSTER_TIMESTAMP = 1735689600;
-constexpr uint16_t ROSTER_TOTAL_SLOTS = 30;
-constexpr int ROSTER_ACTIVE_OPERATORS = 20;
-constexpr int ROSTER_QUORUM = 9;
+constexpr uint16_t ROSTER_TOTAL_SLOTS = 35;
+constexpr int ROSTER_ACTIVE_OPERATORS = 21;
+constexpr int ROSTER_QUORUM = 7;
 
 struct LocalMiniTestnetSetup : public BasicTestingSetup {
     LocalMiniTestnetSetup()
@@ -241,14 +241,14 @@ BOOST_AUTO_TEST_CASE(local_mini_testnet_uses_small_assumed_storage_size)
     BOOST_CHECK_EQUAL(Params().AssumedChainStateSize(), 0U);
 }
 
-BOOST_AUTO_TEST_CASE(expanded_roster_accepts_valid_9_sig_bundle_after_activation)
+BOOST_AUTO_TEST_CASE(expanded_roster_accepts_valid_7_sig_bundle_after_activation)
 {
     const Consensus::Params params = ExpandedRosterParams(ROSTER_ACTIVE_HEIGHT);
     BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, ROSTER_ACTIVE_OPERATORS);
     BOOST_REQUIRE_GT(params.nOraclePubkeyCount, 17);
 
     COracleBundle bundle = MakeRosterBundle();
-    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6, 7, 18};
+    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6};
     BOOST_REQUIRE(SignTestnetV03Bundle(bundle, signer_ids, ROSTER_TOTAL_SLOTS));
 
     PhaseThreeResult result = ValidatePhaseThree(bundle, ROSTER_ACTIVE_HEIGHT, params);
@@ -256,7 +256,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_accepts_valid_9_sig_bundle_after_activation
                        << " error='" << result.error << "'");
 
     BOOST_CHECK_MESSAGE(result.ok,
-        "a valid 9-sig MuSig2 bundle from a >17 active-operator roster must verify after activation");
+        "a valid 7-sig MuSig2 bundle from the 21-active-operator roster must verify after activation");
 }
 
 BOOST_AUTO_TEST_CASE(expanded_roster_rejects_same_bundle_before_activation)
@@ -264,7 +264,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_same_bundle_before_activation)
     const Consensus::Params params = ExpandedRosterParams(ROSTER_ACTIVE_HEIGHT + 1);
 
     COracleBundle bundle = MakeRosterBundle();
-    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6, 7, 18};
+    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6};
     BOOST_REQUIRE(SignTestnetV03Bundle(bundle, signer_ids, ROSTER_TOTAL_SLOTS));
 
     PhaseThreeResult result = ValidatePhaseThree(bundle, ROSTER_ACTIVE_HEIGHT, params);
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_same_bundle_before_activation)
                        << " error='" << result.error << "'");
 
     BOOST_CHECK_MESSAGE(!result.ok,
-        "the same >17 roster bundle must be rejected before roster activation");
+        "the same 21-active roster bundle must be rejected before roster activation");
     BOOST_CHECK_MESSAGE(result.error.find("activation") != std::string::npos,
         "pre-activation rejection should identify the roster activation gate, got: " + result.error);
 }
@@ -282,7 +282,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_out_of_roster_signer)
     const Consensus::Params params = ExpandedRosterParams(ROSTER_ACTIVE_HEIGHT);
 
     COracleBundle bundle = MakeRosterBundle();
-    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6, 7, 21};
+    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 21};
     BOOST_REQUIRE(SignTestnetV03Bundle(bundle, signer_ids, ROSTER_TOTAL_SLOTS));
 
     PhaseThreeResult result = ValidatePhaseThree(bundle, ROSTER_ACTIVE_HEIGHT, params);
@@ -290,13 +290,13 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_out_of_roster_signer)
                        << " error='" << result.error << "'");
 
     BOOST_CHECK_MESSAGE(!result.ok,
-        "signer id 21 is outside the 20-active-operator roster and must reject");
+        "signer id 21 is outside the 21-active-operator roster and must reject");
     BOOST_CHECK_MESSAGE(!result.error.empty(), "out-of-roster rejection must report an error");
 }
 
 BOOST_AUTO_TEST_CASE(expanded_roster_rejects_duplicate_signer_bitmap_input)
 {
-    const std::vector<uint8_t> duplicate_signers{0, 1, 2, 3, 4, 5, 6, 7, 7, 18};
+    const std::vector<uint8_t> duplicate_signers{0, 1, 2, 3, 4, 5, 6, 6};
     const std::vector<unsigned char> bitmap =
         MuSig2OracleAggregator::EncodeBitmap(duplicate_signers, ROSTER_TOTAL_SLOTS);
 
@@ -309,7 +309,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_wrong_domain_signature)
     const Consensus::Params params = ExpandedRosterParams(ROSTER_ACTIVE_HEIGHT);
 
     COracleBundle bundle = MakeRosterBundle();
-    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6, 7, 8};
+    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 6};
     BOOST_REQUIRE(SignTestnetV03Bundle(bundle, signer_ids, ROSTER_TOTAL_SLOTS,
                                        WrongRosterDomainHash(bundle)));
 

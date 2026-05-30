@@ -273,14 +273,14 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK_GT(mainDD.minMintAmountActivationHeight, 0);
     BOOST_CHECK_GT(testDD.minMintAmountActivationHeight, 0);
 
-    // Mainnet/testnet both use a 9-signature quorum in a 35-slot roster.
+    // Mainnet/testnet both use a 7-signature quorum in a 35-slot roster.
     // (kept in sync with Consensus::Params nOracleRequiredMessages/nOracleTotalOracles).
-    BOOST_CHECK_EQUAL(mainDD.oracleThreshold, 9);
-    BOOST_CHECK_EQUAL(testDD.oracleThreshold, 9);
+    BOOST_CHECK_EQUAL(mainDD.oracleThreshold, 7);
+    BOOST_CHECK_EQUAL(testDD.oracleThreshold, 7);
     BOOST_CHECK_EQUAL(mainDD.oracleCount, 35);
     BOOST_CHECK_EQUAL(testDD.oracleCount, 35);
-    BOOST_CHECK_EQUAL(mainDD.activeOracles, 17);
-    BOOST_CHECK_EQUAL(testDD.activeOracles, 18);
+    BOOST_CHECK_EQUAL(mainDD.activeOracles, 21);
+    BOOST_CHECK_EQUAL(testDD.activeOracles, 21);
     BOOST_CHECK_EQUAL(regTestDD.oracleThreshold, 1); // Regtest: 1-of-1 (Phase One, unchanged)
 
     // Test activation heights

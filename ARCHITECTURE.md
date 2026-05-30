@@ -253,7 +253,7 @@ struct Params {
 };
 ```
 
-`Consensus::DEPLOYMENT_DIGIDOLLAR` (bit 23) is the BIP9 deployment that gates `SCRIPT_VERIFY_DIGIDOLLAR`; production `min_activation_height` and `nDDActivationHeight` are aligned in `src/kernel/chainparams.cpp` (mainnet 23627520, testnet25 600). Testnet25 uses default P2P port 12032, data directory `testnet25`, reset genesis timestamp 1779393600, and the same timestamp as its BIP9 start. Default regtest uses BIP9 `ALWAYS_ACTIVE` / `min_activation_height=0` with DD/oracle P2P height gates at 650; the direct `-digidollaractivationheight=N` knob retargets both BIP9 and those height gates. Startup oracle-price cache reconstruction follows the BIP9 predicate used by block connection so regtest BIP9-active oracle bundles below 650 are not skipped on restart/reindex. `nDigiDollarMuSig2Height = 0` on every chain, so MuSig2 v0x03 oracle bundles are required as soon as DigiDollar is active.
+`Consensus::DEPLOYMENT_DIGIDOLLAR` (bit 23) is the BIP9 deployment that gates `SCRIPT_VERIFY_DIGIDOLLAR`; production `min_activation_height` and `nDDActivationHeight` are aligned in `src/kernel/chainparams.cpp` (mainnet 23627520, testnet26 600). Testnet26 uses default P2P port 12033, data directory `testnet26`, reset genesis timestamp 1780156800, and the same timestamp as its BIP9 start. Default regtest uses BIP9 `ALWAYS_ACTIVE` / `min_activation_height=0` with DD/oracle P2P height gates at 650; the direct `-digidollaractivationheight=N` knob retargets both BIP9 and those height gates. Startup oracle-price cache reconstruction follows the BIP9 predicate used by block connection so regtest BIP9-active oracle bundles below 650 are not skipped on restart/reindex. `nDigiDollarMuSig2Height = 0` on every chain, so MuSig2 v0x03 oracle bundles are required as soon as DigiDollar is active.
 
 ### 3.3 Block Validation Results
 
@@ -1181,8 +1181,8 @@ Aggregate Schnorr signature + participation bitmap → Coinbase OP_RETURN
 
 | Network | DD activation (`nDDActivationHeight`) | Oracle activation (`nOracleActivationHeight`) | MuSig2 (`nDigiDollarMuSig2Height`) | On-chain quorum |
 |---------|--------------------------------------|----------------------------------------------|-----------------------------------|-----------------|
-| Mainnet | 23,627,520 | 23,627,520 (= DD) | 0 | 9 signatures from 17 configured active keys in a 35-slot roster |
-| Testnet25 | 600 | 600 (= DD) | 0 | 9 signatures from 17 configured active keys in a 35-slot roster |
+| Mainnet | 23,627,520 | 23,627,520 (= DD) | 0 | 7 signatures from 21 configured active keys in a 35-slot roster |
+| Testnet26 | 600 | 600 (= DD) | 0 | 7 signatures from 21 configured active keys in a 35-slot roster |
 | Regtest | 650 | 650 (= DD) | 0 | 4-of-7 |
 
 `nDigiDollarMuSig2Height = 0` on all networks (`src/kernel/chainparams.cpp:314,576,1119`), so once DigiDollar is active the only accepted on-chain bundle format is MuSig2 v0x03. The legacy `nDigiDollarPhase2Height` / `nDigiDollarPhase3Height` fields no longer exist.

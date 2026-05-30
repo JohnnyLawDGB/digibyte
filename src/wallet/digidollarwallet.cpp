@@ -3951,8 +3951,17 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
 bool DigiDollarWallet::AddRedemptionToHistory(const DDTransaction& tx) {
     LOCK(cs_dd_wallet);
     try {
-        // Add to in-memory history
-        transaction_history.push_back(tx);
+        bool updated = false;
+        for (auto& existing : transaction_history) {
+            if (existing.txid == tx.txid && existing.category == tx.category) {
+                existing = tx;
+                updated = true;
+                break;
+            }
+        }
+        if (!updated) {
+            transaction_history.push_back(tx);
+        }
 
         // Persist to database
         if (m_wallet) {

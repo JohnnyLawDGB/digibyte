@@ -2446,6 +2446,26 @@ RPCHelpMan listdigidollarpositions()
             // narrowed to (mirrors the listdigidollartxs paging contract).
             int skipped = 0;
             int processed = 0;
+            auto has_pending_redeem = [&](const WalletCollateralPosition& pos) {
+                const COutPoint collateral_outpoint(pos.dd_timelock_id, 0);
+                for (const auto& wallet_entry : pwallet->mapWallet) {
+                    const wallet::CWalletTx& wtx = wallet_entry.second;
+                    if (!wtx.tx || ::GetDigiDollarTxType(*wtx.tx) != ::DD_TX_REDEEM) continue;
+                    bool spends_position = false;
+                    for (const CTxIn& txin : wtx.tx->vin) {
+                        if (txin.prevout == collateral_outpoint) {
+                            spends_position = true;
+                            break;
+                        }
+                    }
+                    if (!spends_position) continue;
+                    if (wtx.isAbandoned()) continue;
+                    if (pwallet->GetTxDepthInMainChain(wtx) == 0 && wtx.isUnconfirmed()) {
+                        return true;
+                    }
+                }
+                return false;
+            };
             for (const auto& pos : positions) {
                 // Apply filters
                 if (activeOnly && !pos.is_active) continue;
@@ -2475,7 +2495,7 @@ RPCHelpMan listdigidollarpositions()
                 // Status
                 std::string status;
                 if (!pos.is_active) {
-                    status = "redeemed";
+                    status = has_pending_redeem(pos) ? "pending_redeem" : "redeemed";
                 } else if (confirmations <= 0) {
                     status = "pending";
                 } else {

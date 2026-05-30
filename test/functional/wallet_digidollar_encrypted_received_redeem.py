@@ -89,6 +89,16 @@ class WalletDigiDollarEncryptedReceivedRedeemTest(DigiByteTestFramework):
         redeem = encrypted.redeemdigidollar(position_id, amount)
         assert "txid" in redeem
         self.sync_mempools()
+
+        positions = encrypted.listdigidollarpositions(False)
+        pending = [p for p in positions if p["position_id"] == position_id]
+        assert_equal(len(pending), 1)
+        assert_equal(pending[0]["status"], "pending_redeem")
+
+        # The redeem was created by node1, while mine_sync mines on node0. Publish
+        # a fresh mock MuSig2 quote on the miner for the next block height so the
+        # pending DD redeem is eligible for block inclusion.
+        miner.setmockoracleprice(500000)
         self.mine_sync()
 
         assert_equal(encrypted.getdigidollarbalance()["total"], 0)

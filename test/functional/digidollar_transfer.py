@@ -16,6 +16,7 @@ from test_framework.util import (
     assert_greater_than,
     assert_greater_than_or_equal,
     assert_raises_rpc_error,
+    p2p_port,
 )
 from decimal import Decimal
 
@@ -62,6 +63,12 @@ class DigiDollarTransferTest(DigiByteTestFramework):
     def mine_and_sync_dd(self, node_idx, blocks=1):
         self.publish_musig2_quotes()
         return self.generate(self.nodes[node_idx], blocks)
+
+    def ensure_connected(self, from_idx, to_idx):
+        to_port = p2p_port(to_idx)
+        if any(peer.get("addr", "").endswith(f":{to_port}") for peer in self.nodes[from_idx].getpeerinfo()):
+            return
+        self.connect_nodes(from_idx, to_idx)
 
     def run_test(self):
         self.log.info("Testing DigiDollar transfer operations...")
@@ -246,6 +253,46 @@ class DigiDollarTransferTest(DigiByteTestFramework):
         assert_equal(len([tx for tx in recv_addr1 if tx['txid'] == local_txid and tx['category'] == 'receive' and tx['amount'] == Decimal('200')]), 1)
         assert_equal(len([tx for tx in recv_addr2 if tx['txid'] == local_txid and tx['category'] == 'receive' and tx['amount'] == Decimal('300')]), 1)
 
+        # Regression: an external sendmany to many addresses in one local
+        # wallet must show every local recipient output, not just the first
+        # txid-level receive row persisted by older wallets.
+        receiver_initial = Decimal(self.nodes[3].getdigidollarbalance()['total'])
+        receiver_addrs = [self.nodes[3].getdigidollaraddress() for _ in range(10)]
+        external_amounts = {addr: 200 for addr in receiver_addrs}
+
+        external_result = self.nodes[0].sendmanydigidollar("", external_amounts, "sendmany 10 local receiver outputs")
+        external_txid = external_result['txid']
+        assert_equal(external_result['total_amount'], 2000)
+
+        self.mine_and_sync_dd(0)
+
+        receiver_final = Decimal(self.nodes[3].getdigidollarbalance()['total'])
+        assert_equal(receiver_final, receiver_initial + Decimal(2000))
+
+        receiver_rows = [
+            tx for tx in self.nodes[3].listdigidollartxs(50, 0, "", "receive")
+            if tx['txid'] == external_txid
+        ]
+        assert_equal(len(receiver_rows), 10)
+        assert_equal(sum(tx['amount'] for tx in receiver_rows), Decimal('2000'))
+        for addr in receiver_addrs:
+            addr_rows = [
+                tx for tx in self.nodes[3].listdigidollartxs(20, 0, addr, "receive")
+                if tx['txid'] == external_txid
+            ]
+            assert_equal(len(addr_rows), 1)
+            assert_equal(addr_rows[0]['amount'], Decimal('200'))
+
+        self.restart_node(3)
+        receiver_rows_after_restart = [
+            tx for tx in self.nodes[3].listdigidollartxs(50, 0, "", "receive")
+            if tx['txid'] == external_txid
+        ]
+        assert_equal(len(receiver_rows_after_restart), 10)
+        assert_equal(sum(tx['amount'] for tx in receiver_rows_after_restart), Decimal('2000'))
+        self.connect_nodes(2, 3)
+        self.sync_all()
+
     def test_multi_input_transfers(self):
         """Test transfers that require multiple DD inputs."""
         self.log.info("Testing multi-input transfers...")
@@ -400,7 +447,7 @@ class DigiDollarTransferTest(DigiByteTestFramework):
 
         # Ensure all nodes are connected
         for i in range(self.num_nodes - 1):
-            self.connect_nodes(i, i + 1)
+            self.ensure_connected(i, i + 1)
 
         # Create transfer on node 0
         receiver_address = self.nodes[3].getdigidollaraddress()

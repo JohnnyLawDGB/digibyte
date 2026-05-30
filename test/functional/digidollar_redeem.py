@@ -47,6 +47,7 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         self.setup_digidollar_test()
 
         # Run test scenarios
+        self.test_redemption_change_history_classification()
         self.test_normal_redemption()
         self.test_partial_redemption_rejected()  # Changed from test_partial_redemption
         self.test_exact_amount_enforcement()      # New test
@@ -121,6 +122,47 @@ class DigiDollarRedeemTest(DigiByteTestFramework):
         total_expected = 225000  # Node 0 total in cents ($2250)
         actual_balance = self.nodes[0].getdigidollarbalance()
         assert_equal(actual_balance['total'], total_expected)
+
+    def test_redemption_change_history_classification(self):
+        """DD change from redemption must not appear as a normal receive."""
+        self.log.info("Testing redemption DD change history classification...")
+
+        smallest_position = min(
+            self.position_info,
+            key=lambda pos: pos["amount_cents"],
+        )
+        position_id = smallest_position["position_id"]
+        position_amount = smallest_position["amount_cents"]
+        assert_equal(position_amount, 50000)
+
+        # Spend the exact matching DD token away while keeping the collateral
+        # position. Redeeming the position must then burn a larger confirmed DD
+        # UTXO and create DD change.
+        self.nodes[0].senddigidollar(self.nodes[2].getdigidollaraddress(), position_amount)
+        self.nodes[0].generate(1)
+        self.sync_all()
+
+        self.publish_musig2_quote(self.nodes[0])
+        redeem_result = self.nodes[0].redeemdigidollar(position_id, position_amount)
+        redeem_txid = redeem_result["txid"]
+
+        self.nodes[0].generate(1)
+        self.sync_all()
+
+        history_rows = [tx for tx in self.nodes[0].listdigidollartxs(50, 0) if tx["txid"] == redeem_txid]
+        redeem_rows = [tx for tx in history_rows if tx["category"] == "redeem"]
+        receive_rows = [tx for tx in history_rows if tx["category"] == "receive"]
+        change_rows = [tx for tx in history_rows if tx["category"] == "redeem_change"]
+
+        assert_equal(len(redeem_rows), 1)
+        assert_equal(redeem_rows[0]["amount"], Decimal(-position_amount))
+        assert_equal(len(receive_rows), 0)
+        assert_equal(len(change_rows), 1)
+        assert_equal(change_rows[0]["amount"], Decimal(25000))
+
+        # The change must still be accounted as spendable DD after confirmation.
+        balance = self.nodes[0].getdigidollarbalance()
+        assert_equal(balance["total"], 125000)
 
     def test_normal_redemption(self):
         """Test normal EXACT-AMOUNT redemption process."""

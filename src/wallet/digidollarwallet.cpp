@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <regex>
 #include <set>
 
@@ -135,6 +136,40 @@ static bool IsStandardDDTokenOutput(const CTxOut& txout)
            txout.scriptPubKey.IsWitnessProgram(witness_version, witness_program) &&
            witness_version == 1 &&
            witness_program.size() == WITNESS_V1_TAPROOT_SIZE;
+}
+
+static std::vector<CAmount> ExtractDDMetadataAmounts(const CTransaction& tx, int expected_type)
+{
+    std::vector<CAmount> amounts;
+    for (const CTxOut& txout : tx.vout) {
+        const CScript& script = txout.scriptPubKey;
+        if (script.empty() || script[0] != OP_RETURN) continue;
+
+        auto pc = script.begin();
+        opcodetype opcode;
+        std::vector<unsigned char> data;
+
+        if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) continue;
+        if (!script.GetOp(pc, opcode, data)) continue;
+        if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
+        if (!script.GetOp(pc, opcode, data)) continue;
+
+        try {
+            CScriptNum tx_type(data, true);
+            if (tx_type.getint() != expected_type) return {};
+
+            while (script.GetOp(pc, opcode, data)) {
+                if (data.empty()) continue;
+                CScriptNum amount(data, true, 8);
+                const CAmount value = amount.GetInt64();
+                if (value > 0) amounts.push_back(value);
+            }
+        } catch (const scriptnum_error&) {
+            return {};
+        }
+        break;
+    }
+    return amounts;
 }
 
 // CDigiDollarAddress is defined in base58.h - no need to redefine
@@ -1800,85 +1835,47 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
     // Return actual transaction history (with mock fallback for testing)
     std::vector<DDTransaction> history = transaction_history;
 
-    // Synthesize receive-side rows for send-to-self/sendmany-to-local-addresses.
-    // The database stores one DDTransaction per txid, so a sendmany created by this
-    // wallet is persisted as the aggregate send row (address="multiple"). For the
-    // Qt table and RPC address filters, local recipient outputs still need to be
-    // visible as receives. Build those rows on demand from the confirmed wallet tx
-    // and the wallet's DD address keys, while excluding trailing DD change output.
+    // Synthesize per-output wallet history rows from wallet transactions. The
+    // database stores one DDTransaction per txid, so multi-recipient receives
+    // and redemption DD change need display rows built on demand.
     if (m_wallet) {
         LOCK(m_wallet->cs_wallet);
-        for (const auto& sendtx : transaction_history) {
-            if (sendtx.incoming || sendtx.category != "send" || sendtx.amount == 0) continue;
-            const CAmount send_amount = sendtx.amount < 0 ? -sendtx.amount : sendtx.amount;
-
-            uint256 send_txid;
-            send_txid.SetHex(sendtx.txid);
-            const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(send_txid);
-            if (!wtx || !wtx->tx) continue;
-
-            std::vector<CAmount> dd_amounts;
-            for (const CTxOut& txout : wtx->tx->vout) {
-                const CScript& script = txout.scriptPubKey;
-                if (script.empty() || script[0] != OP_RETURN) continue;
-
-                auto pc = script.begin();
-                opcodetype opcode;
-                std::vector<unsigned char> data;
-
-                if (!script.GetOp(pc, opcode, data) || opcode != OP_RETURN) continue;
-                if (!script.GetOp(pc, opcode, data)) continue;
-                if (data.size() != 2 || data[0] != 'D' || data[1] != 'D') continue;
-                if (!script.GetOp(pc, opcode, data)) continue;
-
-                int tx_type = 0;
-                try {
-                    CScriptNum txTypeNum(data, true);
-                    tx_type = txTypeNum.getint();
-                } catch (const scriptnum_error&) {
-                    break;
-                }
-                if (tx_type != 2) break;
-
-                while (script.GetOp(pc, opcode, data) && !data.empty()) {
-                    try {
-                        CScriptNum amtNum(data, true, 8); // 8-byte max for large DD amounts
-                        CAmount amount = amtNum.GetInt64();
-                        if (amount > 0) dd_amounts.push_back(amount);
-                    } catch (const scriptnum_error&) {
-                        break;
-                    }
-                }
-                break;
+        std::set<std::string> txids_with_synthesized_rows;
+        std::vector<DDTransaction> synthesized_rows;
+        std::set<std::string> local_send_txids;
+        for (const auto& hist_tx : transaction_history) {
+            if (!hist_tx.incoming && hist_tx.category == "send") {
+                local_send_txids.insert(hist_tx.txid);
             }
+        }
 
-            if (dd_amounts.empty()) continue;
+        auto is_local_dd_output = [this](const CTxOut& txout) {
+            if (!IsStandardDDTokenOutput(txout)) return false;
 
-            // Recipients are emitted first by TransferTxBuilder; optional DD change
-            // follows. The persisted send amount is the sum of recipient amounts.
-            CAmount recipient_sum = 0;
-            size_t recipient_count = 0;
-            for (CAmount amount : dd_amounts) {
-                recipient_sum += amount;
-                ++recipient_count;
-                if (recipient_sum >= send_amount) break;
-            }
-            if (recipient_sum != send_amount || recipient_count == 0) continue;
+            std::array<unsigned char, 32> output_key;
+            std::copy(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.begin() + 34, output_key.begin());
+            const bool is_mine = m_wallet->IsMine(txout.scriptPubKey);
+            const bool has_plain_key = dd_address_keys.find(output_key) != dd_address_keys.end();
+            const bool has_crypted_key = dd_crypted_address_keys.find(output_key) != dd_crypted_address_keys.end();
+            return is_mine || has_plain_key || has_crypted_key;
+        };
+
+        auto append_local_output_rows = [&](const DDTransaction& base_tx,
+                                            const CTransaction& tx,
+                                            int tx_type,
+                                            size_t max_dd_outputs,
+                                            const std::string& category) {
+            const std::vector<CAmount> dd_amounts = ExtractDDMetadataAmounts(tx, tx_type);
+            if (dd_amounts.empty()) return;
 
             size_t dd_output_index = 0;
-            for (size_t n = 0; n < wtx->tx->vout.size(); ++n) {
-                const CTxOut& txout = wtx->tx->vout[n];
-                if (txout.nValue != 0 || txout.scriptPubKey.size() != 34 || txout.scriptPubKey[0] != OP_1) continue;
+            for (const CTxOut& txout : tx.vout) {
+                if (!IsStandardDDTokenOutput(txout)) continue;
 
                 const size_t amount_index = dd_output_index++;
-                if (amount_index >= recipient_count || amount_index >= dd_amounts.size()) continue; // change or malformed
-
-                std::array<unsigned char, 32> output_key;
-                std::copy(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.begin() + 34, output_key.begin());
-                const bool is_mine = m_wallet->IsMine(txout.scriptPubKey);
-                const bool has_plain_key = dd_address_keys.find(output_key) != dd_address_keys.end();
-                const bool has_crypted_key = dd_crypted_address_keys.find(output_key) != dd_crypted_address_keys.end();
-                if (!is_mine && !has_plain_key && !has_crypted_key) continue; // not a local recipient
+                if (amount_index >= dd_amounts.size()) continue;
+                if (amount_index >= max_dd_outputs) continue;
+                if (!is_local_dd_output(txout)) continue;
 
                 CTxDestination dest;
                 std::string dd_address;
@@ -1886,31 +1883,66 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
                     dd_address = DigiDollar::EncodeDigiDollarAddress(dest, Params());
                 }
 
-                bool already_exists = false;
-                for (const auto& existing : history) {
-                    if (existing.txid == sendtx.txid && existing.category == "receive" && existing.address == dd_address) {
-                        already_exists = true;
+                bool duplicate = false;
+                for (const auto& existing : synthesized_rows) {
+                    if (existing.txid == base_tx.txid && existing.category == category &&
+                        existing.address == dd_address && existing.amount == dd_amounts[amount_index]) {
+                        duplicate = true;
                         break;
                     }
                 }
-                if (already_exists) continue;
+                if (duplicate) continue;
 
-                DDTransaction receive_tx;
-                receive_tx.txid = sendtx.txid;
-                receive_tx.amount = dd_amounts[amount_index];
-                receive_tx.timestamp = sendtx.timestamp;
-                receive_tx.confirmations = sendtx.confirmations;
-                receive_tx.incoming = true;
-                receive_tx.address = dd_address;
-                receive_tx.category = "receive";
-                receive_tx.blockheight = sendtx.blockheight;
-                receive_tx.blockhash = sendtx.blockhash;
-                receive_tx.fee = 0;
-                receive_tx.comment = sendtx.comment;
-                receive_tx.abandoned = sendtx.abandoned;
-                receive_tx.lock_tier = -1;
-                history.push_back(receive_tx);
+                DDTransaction row = base_tx;
+                row.amount = dd_amounts[amount_index];
+                row.incoming = true;
+                row.address = dd_address;
+                row.category = category;
+                row.fee = 0;
+                row.lock_tier = -1;
+                synthesized_rows.push_back(row);
+                txids_with_synthesized_rows.insert(base_tx.txid);
             }
+        };
+
+        for (const auto& hist_tx : transaction_history) {
+            uint256 txid;
+            txid.SetHex(hist_tx.txid);
+            const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(txid);
+            if (!wtx || !wtx->tx) continue;
+
+            if (!hist_tx.incoming && hist_tx.category == "send" && hist_tx.amount != 0) {
+                const CAmount send_amount = hist_tx.amount < 0 ? -hist_tx.amount : hist_tx.amount;
+                const std::vector<CAmount> dd_amounts = ExtractDDMetadataAmounts(*wtx->tx, DD_TX_TRANSFER);
+                CAmount recipient_sum = 0;
+                size_t recipient_count = 0;
+                for (CAmount amount : dd_amounts) {
+                    recipient_sum += amount;
+                    ++recipient_count;
+                    if (recipient_sum >= send_amount) break;
+                }
+                if (recipient_sum == send_amount && recipient_count > 0) {
+                    append_local_output_rows(hist_tx, *wtx->tx, DD_TX_TRANSFER, recipient_count, "receive");
+                }
+            } else if (hist_tx.incoming && hist_tx.category == "receive" && !local_send_txids.count(hist_tx.txid)) {
+                append_local_output_rows(hist_tx, *wtx->tx, DD_TX_TRANSFER, std::numeric_limits<size_t>::max(), "receive");
+            } else if (!hist_tx.incoming && hist_tx.category == "redeem") {
+                append_local_output_rows(hist_tx, *wtx->tx, DD_TX_REDEEM, std::numeric_limits<size_t>::max(), "redeem_change");
+            }
+        }
+
+        if (!txids_with_synthesized_rows.empty()) {
+            std::vector<DDTransaction> filtered_history;
+            filtered_history.reserve(history.size() + synthesized_rows.size());
+            for (const auto& hist_tx : history) {
+                if (txids_with_synthesized_rows.count(hist_tx.txid) &&
+                    (hist_tx.category == "receive" || hist_tx.category == "redeem_change")) {
+                    continue;
+                }
+                filtered_history.push_back(hist_tx);
+            }
+            filtered_history.insert(filtered_history.end(), synthesized_rows.begin(), synthesized_rows.end());
+            history = std::move(filtered_history);
         }
     }
 
@@ -7424,8 +7456,10 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
             }
         }
 
-        // Skip mint transactions - they're already handled by mint code
-        if (txType == 1) {
+        // Skip mint transactions and redemption change for history insertion.
+        // Redemption history is recorded by redeemdigidollar; any DD change is
+        // synthesized as redeem_change in GetDDTransactionHistory().
+        if (txType == DD_TX_MINT || txType == DD_TX_REDEEM) {
             return;
         }
 

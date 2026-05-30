@@ -236,6 +236,7 @@ void DigiDollarTransactionsWidget::setupFilterBar()
     m_typeFilter->addItem(tr("Sends"), "send");
     m_typeFilter->addItem(tr("Receives"), "receive");
     m_typeFilter->addItem(tr("Redemptions"), "redeem");
+    m_typeFilter->addItem(tr("Redemption Change"), "redeem_change");
 
     // Search box
     QLabel* searchLabel = new QLabel(tr("Search:"), this);
@@ -506,6 +507,9 @@ void DigiDollarTransactionsWidget::populateTable()
 
             // Type with lock period for mints/redeems
             QString typeText = category.left(1).toUpper() + category.mid(1);
+            if (category == "redeem_change") {
+                typeText = tr("Redemption Change");
+            }
             if ((category == "mint" || category == "redeem") && lockTier >= 0) {
                 QString lockPeriodShort = formatLockPeriodShort(lockTier);
                 if (!lockPeriodShort.isEmpty()) {
@@ -523,7 +527,7 @@ void DigiDollarTransactionsWidget::populateTable()
 
             // Color code: green for receives/mints, red for sends/redeems
             // Use theme-appropriate colors that work in both light and dark mode
-            bool isPositive = (category == "receive" || category == "mint");
+            bool isPositive = (category == "receive" || category == "mint" || category == "redeem_change");
             amountItem->setForeground(getAmountColor(isPositive));
             m_table->setItem(row, Column::Amount, amountItem);
 

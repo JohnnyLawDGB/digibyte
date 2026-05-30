@@ -3677,12 +3677,12 @@ RPCHelpMan listdigidollartxs()
 {
     return RPCHelpMan{"listdigidollartxs",
                 "\nList DigiDollar transactions from the wallet.\n"
-                "Returns recent DD transactions including mints, sends, receives, and redemptions.\n",
+                "Returns recent DD transactions including mints, sends, receives, redemptions, and redemption change.\n",
                 {
                     {"count", RPCArg::Type::NUM, RPCArg::Default{10}, "Number of transactions to return"},
                     {"skip", RPCArg::Type::NUM, RPCArg::Default{0}, "Number of transactions to skip"},
                     {"address", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Filter by specific DD address"},
-                    {"category", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Filter by category (mint/send/receive/redeem)"}
+                    {"category", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Filter by category (mint/send/receive/redeem/redeem_change)"}
                 },
                 RPCResult{
                     RPCResult::Type::ARR, "", "",
@@ -3690,7 +3690,7 @@ RPCHelpMan listdigidollartxs()
                         {RPCResult::Type::OBJ, "", "",
                             {
                                 {RPCResult::Type::STR_HEX, "txid", "Transaction ID"},
-                                {RPCResult::Type::STR, "category", "Transaction category (mint/send/receive/redeem)"},
+                                {RPCResult::Type::STR, "category", "Transaction category (mint/send/receive/redeem/redeem_change)"},
                                 {RPCResult::Type::STR_AMOUNT, "amount", "DD amount (positive for receives, negative for sends)"},
                                 {RPCResult::Type::STR, "address", "DigiDollar address involved"},
                                 {RPCResult::Type::NUM, "confirmations", "Number of confirmations"},

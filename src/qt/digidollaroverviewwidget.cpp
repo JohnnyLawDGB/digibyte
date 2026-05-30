@@ -914,6 +914,9 @@ void DigiDollarOverviewWidget::updateRecentTransactions()
         } else if (tx.category == "redeem") {
             icon = "💰";
             categoryText = lockPeriodStr.isEmpty() ? tr("Redeem") : tr("Redeem %1").arg(lockPeriodStr);
+        } else if (tx.category == "redeem_change") {
+            icon = "💰";
+            categoryText = tr("Redemption Change");
         } else if (tx.category == "send") {
             icon = "📤";
             categoryText = tr("Send");

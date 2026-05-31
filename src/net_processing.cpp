@@ -13,6 +13,7 @@
 #include <consensus/amount.h>
 #include <consensus/validation.h>
 #include <deploymentstatus.h>
+#include <digidollar/digidollar.h>
 #include <hash.h>
 #include <headerssync.h>
 #include <index/blockfilterindex.h>
@@ -1160,6 +1161,15 @@ static bool PeerKnowsOracle(Peer& peer, const uint256& hash)
 {
     LOCK(peer.m_oracle_inventory_mutex);
     return peer.m_oracle_inventory_known_filter.contains(hash);
+}
+
+/** Oracle P2P is active only when the legacy oracle height and DigiDollar BIP9 deployment are both active. */
+static bool IsOracleP2PActive(const ChainstateManager& chainman)
+{
+    const CBlockIndex* tip = WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip());
+    const int height = tip ? tip->nHeight : 0;
+    return Consensus::IsOracleActive(chainman.GetConsensus(), height) &&
+           DigiDollar::IsDigiDollarEnabled(tip, chainman);
 }
 
 /** Whether this peer can serve us blocks. */
@@ -4031,9 +4041,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // Request oracle data from new peer for discovery
         // This enables newly connected/restarted nodes to catch up on oracle prices
         {
-            const Consensus::Params& cparams = m_chainman.GetConsensus();
             int chain_height = m_chainman.ActiveChain().Height();
-            if (chain_height >= cparams.nOracleActivationHeight) {
+            if (IsOracleP2PActive(m_chainman)) {
                 int32_t current_epoch = GetCurrentEpoch(chain_height);
                 GetOracleDataMsg oracle_request;
                 oracle_request.epoch = current_epoch;
@@ -5441,8 +5450,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEPRICE) {
-        // Gate: ignore oracle messages before activation height
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        // Gate: ignore oracle messages before DigiDollar/oracle activation
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 
@@ -5608,8 +5617,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEBUNDLE) {
-        // Gate: ignore oracle messages before activation height
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        // Gate: ignore oracle messages before DigiDollar/oracle activation
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 
@@ -5625,8 +5634,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLECONSENSUS) {
-        // Gate: ignore oracle messages before activation height
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        // Gate: ignore oracle messages before DigiDollar/oracle activation
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 
@@ -5744,8 +5753,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEATTESTATION) {
-        // Gate: ignore oracle messages before activation height
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        // Gate: ignore oracle messages before DigiDollar/oracle activation
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 
@@ -5848,7 +5857,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEMUSIGNONCE) {
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 
@@ -5961,7 +5970,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEMUSIGCONTEXT) {
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 
@@ -6055,7 +6064,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEMUSIGPARTIALSIG) {
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 
@@ -6250,8 +6259,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::GETORACLES) {
-        // Gate: ignore oracle messages before activation height
-        if (!Consensus::IsOracleActive(m_chainman.GetConsensus(), m_chainman.ActiveChain().Height())) {
+        // Gate: ignore oracle messages before DigiDollar/oracle activation
+        if (!IsOracleP2PActive(m_chainman)) {
             return;
         }
 

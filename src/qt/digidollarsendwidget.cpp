@@ -973,29 +973,34 @@ void DigiDollarSendWidget::executeTransfer(const QString& address, double amount
 }
 
 // PHASE 7.3: Success notification
-void DigiDollarSendWidget::showSuccess(const QString& txid, double amount)
+QString DigiDollarSendWidget::buildSuccessMessage(const QString& txid, double amount) const
 {
-    QString successMsg = tr(
-        "<b style='font-size: 14px; color: green;'>✓ DigiDollar Transfer Successful</b><br/><br/>"
+    return tr(
+        "<b style='font-size: 14px; color: green;'>✓ DigiDollar Transfer Broadcast</b><br/><br/>"
         "<table cellpadding='4' style='font-size: 12px;'>"
         "<tr><td><b>Amount Sent:</b></td><td align='right'>%1</td></tr>"
         "<tr><td><b>Transaction ID:</b></td><td style='font-family: monospace; font-size: 10px;'>%2</td></tr>"
         "</table><br/>"
         "<span style='color: #666; font-size: 11px;'>"
         "Your transaction has been broadcast to the network.<br/>"
-        "It will be confirmed in the next block."
+        "It is pending until miners include it in a block and the block confirms."
         "</span>"
     ).arg(formatDDAmount(amount))
      .arg(txid);
+}
+
+void DigiDollarSendWidget::showSuccess(const QString& txid, double amount)
+{
+    QString successMsg = buildSuccessMessage(txid, amount);
 
     QMessageBox msgBox(this);
-    msgBox.setWindowTitle(tr("Transfer Successful"));
+    msgBox.setWindowTitle(tr("Transfer Broadcast"));
     msgBox.setText(successMsg);
     msgBox.setIcon(QMessageBox::Information);
     msgBox.setStandardButtons(QMessageBox::Ok);
     msgBox.exec();
 
-    LogPrintf("DigiDollar: Transfer successful - txid: %s\n", txid.toStdString());
+    LogPrintf("DigiDollar: Transfer broadcast - txid: %s\n", txid.toStdString());
 }
 
 // PHASE 7.3: Backend error message mapping
@@ -1353,6 +1358,11 @@ WalletModel::DigiDollarSendResult DigiDollarSendWidget::sendDigiDollarForTesting
         presetInputs = &selectedInputs;
     }
     return m_walletModel->sendDigiDollar(address, amount, comment, presetInputs);
+}
+
+QString DigiDollarSendWidget::successMessageForTesting(const QString& txid, double amount) const
+{
+    return buildSuccessMessage(txid, amount);
 }
 
 void DigiDollarSendWidget::setPrivacy(bool privacy)

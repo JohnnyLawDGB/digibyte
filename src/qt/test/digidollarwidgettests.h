@@ -31,6 +31,7 @@ private Q_SLOTS:
     void qtMintStoresDescriptorRecoverableOwnerKey();
     void staleMintUnlockHeightCacheRepairsFromOpReturn();
     void sendWidgetTests();
+    void sendSuccessDialogDoesNotPromiseNextBlockConfirmation();
     void sendWidgetCoinControlLabelsMirrorDgb();
     void sendWidgetCoinControlDialogSelectionFeedsSend();
     void sendWidgetNoteFieldTests();

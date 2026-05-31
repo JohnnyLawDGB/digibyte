@@ -63,6 +63,8 @@ public:
     void setSelectedDigiDollarInputsForTesting(const std::vector<COutPoint>& inputs);
     /** Test hook for verifying the widget forwards selected DD inputs to WalletModel without opening modal UI. */
     WalletModel::DigiDollarSendResult sendDigiDollarForTesting(const QString& address, CAmount amount, const QString& comment = "");
+    /** Test hook for verifying success copy without opening a modal dialog. */
+    QString successMessageForTesting(const QString& txid, double amount) const;
 
 Q_SIGNALS:
     /** Fired when a message should be reported to the user */
@@ -125,6 +127,7 @@ private:
     void showWarning(const QString& title, const QString& message);
     bool checkWalletState();
     bool showConfirmationDialog(const QString& address, double amount);
+    QString buildSuccessMessage(const QString& txid, double amount) const;
     void executeTransfer(const QString& address, double amount);
     void showSuccess(const QString& txid, double amount);
     void showBackendError(int status, const QString& reasonFailed);

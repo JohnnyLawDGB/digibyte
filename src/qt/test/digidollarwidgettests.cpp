@@ -68,6 +68,7 @@
 #include <QListWidget>
 #include <QTableWidget>
 #include <QTreeWidget>
+#include <QTextDocumentFragment>
 #include <QTextEdit>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -840,6 +841,24 @@ void DigiDollarWidgetTests::sendWidgetTests()
 
     const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
     TestSendWidget(m_node, wallet);
+}
+
+void DigiDollarWidgetTests::sendSuccessDialogDoesNotPromiseNextBlockConfirmation()
+{
+    std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
+    DigiDollarSendWidget sendWidget(platformStyle.get());
+
+    const QString message = sendWidget.successMessageForTesting(
+        QStringLiteral("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+        12.34);
+    const QString plain = QTextDocumentFragment::fromHtml(message).toPlainText();
+
+    QVERIFY2(plain.contains(QStringLiteral("broadcast to the network"), Qt::CaseInsensitive),
+             qPrintable(plain));
+    QVERIFY2(plain.contains(QStringLiteral("pending"), Qt::CaseInsensitive),
+             qPrintable(plain));
+    QVERIFY2(!plain.contains(QStringLiteral("will be confirmed in the next block"), Qt::CaseInsensitive),
+             qPrintable(plain));
 }
 
 void DigiDollarWidgetTests::sendWidgetCoinControlLabelsMirrorDgb()

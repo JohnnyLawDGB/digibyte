@@ -2630,21 +2630,11 @@ RPCHelpMan getdigidollaraddress()
             // Parse parameters
             std::string label = OptionalParamIsSet(request, 0) ? request.params[0].get_str() : "";
 
-            // DigiDollar addresses must be P2TR (Taproot/bech32m)
-            OutputType output_type = OutputType::BECH32M;
-
-            // Generate new destination
-            auto op_dest = pwallet->GetNewDestination(output_type, label);
-            if (!op_dest) {
-                throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(op_dest).original);
-            }
-            CTxDestination dest = *op_dest;
-
             // Generate an HD-derived key for DD addresses
             // This allows the key to be recovered from wallet seed
             LogPrintf("DigiDollar: getdigidollaraddress - generating HD key for DD address\n");
 
-            CKey dd_key = pwallet->GetHDKeyForDigiDollar("dd-address");
+            CKey dd_key = pwallet->GetHDKeyForDigiDollar(label);
             if (!dd_key.IsValid()) {
                 throw JSONRPCError(RPC_WALLET_ERROR, "DigiDollar address generation requires a descriptor/bech32m HD wallet with private keys enabled");
             }
@@ -2683,7 +2673,7 @@ RPCHelpMan getdigidollaraddress()
             }
 
             // Create the destination from the output_key
-            dest = WitnessV1Taproot(output_key);
+            CTxDestination dest = WitnessV1Taproot(output_key);
 
             // Import the address WITH private key so wallet can sign spending transactions
             // This allows wallet to automatically sign DD transfers like normal DGB transactions
@@ -2722,6 +2712,11 @@ RPCHelpMan getdigidollaraddress()
                     LogPrintf("DigiDollar: WARNING - Failed to parse DD address descriptor: %s\n", error);
                 }
             }
+
+            // AddWalletDescriptor records non-internal descriptors as regular
+            // receive entries. Reclassify this destination so DD receive labels
+            // do not pollute the normal DGB address book.
+            pwallet->SetAddressBook(dest, label, wallet::AddressPurpose::DIGIDOLLAR);
 
             // Encode as DigiDollar address
             std::string newAddress = EncodeDigiDollarAddress(dest);

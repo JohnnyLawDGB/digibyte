@@ -105,6 +105,7 @@ class DigiDollarAddressTest(DigiByteTestFramework):
         self.log.info("=== listdigidollaraddresses tests ===")
         self.test_list_addresses_empty_wallet()
         self.test_list_addresses_after_generation()
+        self.test_get_address_does_not_create_dgb_receive_entry()
         self.test_list_addresses_with_balance()
         self.test_list_addresses_include_watchonly()
 
@@ -407,6 +408,31 @@ class DigiDollarAddressTest(DigiByteTestFramework):
                 self.log.info(f"  Address: {addr_info['address']}")
 
         self.log.info("Address list after generation test passed")
+
+    def test_get_address_does_not_create_dgb_receive_entry(self):
+        self.log.info("Testing getdigidollaraddress keeps DD labels out of normal DGB receive book...")
+
+        label = "dd_final_009_rpc_label"
+        assert_raises_rpc_error(
+            -11,
+            "No addresses with label",
+            self.nodes[0].getaddressesbylabel,
+            label,
+        )
+
+        dd_address = self.nodes[0].getdigidollaraddress(label)
+        assert dd_address.startswith("RD"), f"Expected regtest DD address, got {dd_address}"
+
+        entries = self.nodes[0].getaddressesbylabel(label)
+        receive_entries = {
+            address: info
+            for address, info in entries.items()
+            if info.get("purpose") == "receive"
+        }
+        assert_equal(receive_entries, {})
+        assert any(info.get("purpose") == "digidollar" for info in entries.values()), entries
+
+        self.log.info("getdigidollaraddress did not leak a normal DGB receive entry")
 
     def test_list_addresses_with_balance(self):
         self.log.info("Testing listdigidollaraddresses with balance filter...")

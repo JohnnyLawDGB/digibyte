@@ -4910,6 +4910,7 @@ static RPCHelpMan listoracle()
                         {RPCResult::Type::STR_HEX, "pubkey", /*optional=*/ true, "Oracle public key"},
                         {RPCResult::Type::NUM, "price_micro_usd", /*optional=*/ true, "Current price being reported"},
                         {RPCResult::Type::NUM, "price_usd", /*optional=*/ true, "Current price in USD"},
+                        {RPCResult::Type::STR, "price_source", /*optional=*/ true, "Where price came from: local/on-chain/pending/none"},
                         {RPCResult::Type::NUM, "last_update", /*optional=*/ true, "Last update timestamp"},
                         {RPCResult::Type::STR, "software_version", /*optional=*/ true, "Local node software version"},
                         {RPCResult::Type::NUM, "client_version", /*optional=*/ true, "Local integer client version"},

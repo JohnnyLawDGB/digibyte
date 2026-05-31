@@ -15,9 +15,11 @@
 #include <deploymentinfo.h>
 #include <deploymentstatus.h>
 #include <key_io.h>
+#include <logging.h>
 #include <net.h>
 #include <node/context.h>
 #include <node/miner.h>
+#include <oracle/bundle_manager.h>
 #include <pow.h>
 #include <rpc/blockchain.h>
 #include <rpc/mining.h>
@@ -52,6 +54,35 @@ using node::UpdateTime;
 
 // DigiByte: Default mining algorithm
 extern int miningAlgo;
+
+static bool BlockTemplateHasExpiredOracleCommitment(const CBlock& block)
+{
+    if (block.vtx.empty() || !block.vtx[0] || !block.vtx[0]->IsCoinBase()) {
+        return false;
+    }
+
+    bool has_oracle_output = false;
+    for (const CTxOut& out : block.vtx[0]->vout) {
+        if (out.scriptPubKey.size() >= 2 &&
+            out.scriptPubKey[0] == OP_RETURN &&
+            out.scriptPubKey[1] == OP_ORACLE) {
+            has_oracle_output = true;
+            break;
+        }
+    }
+    if (!has_oracle_output) return false;
+
+    COracleBundle bundle;
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    if (!manager.ExtractOracleBundle(*block.vtx[0], bundle)) {
+        return true;
+    }
+
+    const int64_t block_time = block.GetBlockTime();
+    return bundle.timestamp <= 0 ||
+           bundle.timestamp > block_time + 60 ||
+           block_time - bundle.timestamp > ORACLE_MAX_AGE_SECONDS;
+}
 
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
@@ -908,10 +939,7 @@ static RPCHelpMan getblocktemplate()
     static int64_t time_start;
     static std::unique_ptr<CBlockTemplate> pblocktemplate;
     static int lastAlgo;  // DigiByte: Track algorithm changes
-    if (pindexPrev != active_chain.Tip() ||
-        (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5) ||
-        algo != lastAlgo)  // DigiByte: Regenerate template if algorithm changed
-    {
+    auto rebuild_template = [&]() {
         // Clear pindexPrev so future calls make a new block, despite any failures from here on
         pindexPrev = nullptr;
 
@@ -929,6 +957,13 @@ static RPCHelpMan getblocktemplate()
 
         // Need to update only after we know CreateNewBlock succeeded
         pindexPrev = pindexPrevNew;
+    };
+
+    if (pindexPrev != active_chain.Tip() ||
+        (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5) ||
+        algo != lastAlgo)  // DigiByte: Regenerate template if algorithm changed
+    {
+        rebuild_template();
     }
     CHECK_NONFATAL(pindexPrev);
     CBlock* pblock = &pblocktemplate->block; // pointer for convenience
@@ -936,6 +971,16 @@ static RPCHelpMan getblocktemplate()
     // Update nTime
     UpdateTime(pblock, consensusParams, pindexPrev, algo);
     pblock->nNonce = 0;
+
+    if (BlockTemplateHasExpiredOracleCommitment(*pblock)) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "getblocktemplate: cached oracle-bearing template became stale after time update; rebuilding\n");
+        rebuild_template();
+        CHECK_NONFATAL(pindexPrev);
+        pblock = &pblocktemplate->block;
+        UpdateTime(pblock, consensusParams, pindexPrev, algo);
+        pblock->nNonce = 0;
+    }
 
     // NOTE: If at some point we support pre-segwit miners post-segwit-activation, this needs to take segwit support into consideration
     const bool fPreSegWit = !DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT);

@@ -4798,8 +4798,6 @@ static RPCHelpMan getoracles()
             OracleBundleManager& bundle_manager = OracleBundleManager::GetInstance();
             OracleManager& oracle_manager = OracleManager::GetInstance();
 
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce", "Neel", "DigiSwarm", "GTO90"};
-
             int32_t current_height = chainman.ActiveChain().Height();
             int32_t current_epoch = GetCurrentEpoch(current_height);
             std::vector<OracleNodeInfo> selected_oracles = SelectOraclesForEpoch(all_oracles, current_epoch);
@@ -4822,7 +4820,7 @@ static RPCHelpMan getoracles()
 
                 UniValue info(UniValue::VOBJ);
                 info.pushKV("oracle_id", static_cast<int>(oc.id));
-                info.pushKV("name", i < oracle_names.size() ? oracle_names[i] : "Unknown");
+                info.pushKV("name", OracleDisplayName(oc.id));
                 info.pushKV("pubkey", HexStr(oc.pubkey));
                 info.pushKV("endpoint", oc.endpoint);
                 info.pushKV("is_active", oc.is_active);
@@ -4935,7 +4933,6 @@ static RPCHelpMan listoracle()
                 }
             }
             OracleManager& oracle_manager = OracleManager::GetInstance();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce", "Neel", "DigiSwarm", "GTO90"};
 
             UniValue result(UniValue::VOBJ);
 
@@ -4949,7 +4946,7 @@ static RPCHelpMan listoracle()
 
                     result.pushKV("running", true);
                     result.pushKV("oracle_id", (int)id);
-                    result.pushKV("name", id < oracle_names.size() ? oracle_names[id] : "Unknown");
+                    result.pushKV("name", OracleDisplayName(id));
 
                     const CChainParams& params = Params();
                     const std::vector<OracleNodeInfo>& oracles = params.GetOracleNodes();

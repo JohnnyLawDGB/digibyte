@@ -297,6 +297,7 @@ BASE_SCRIPTS = [
     'digidollar_oracle_keygen.py',
     'digidollar_oracle_reorg_cache.py',
     'digidollar_oracle_rpc_staleness.py',
+    'digidollar_testnet26_oracle_roster_rpc.py',
     'digidollar_pending_position_status.py',
     'digidollar_rpc_addresses.py',
     'digidollar_rpc_amount_filters.py',

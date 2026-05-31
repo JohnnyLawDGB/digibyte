@@ -1000,10 +1000,9 @@ Useful RPCs:
 ```bash
 digibyte-cli -testnet getblockchaininfo
 digibyte-cli -testnet getnetworkinfo
-digibyte-cli -testnet getoracleinfo
 digibyte-cli -testnet getoracles
+digibyte-cli -testnet getoraclesigners
 digibyte-cli -testnet listoracle
-digibyte-cli -testnet listoraclekeys
 digibyte-cli -testnet getoracleprice
 digibyte-cli -testnet getdigidollarstats
 ```

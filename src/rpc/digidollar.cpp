@@ -98,6 +98,26 @@ namespace {
     }
 
 #ifdef ENABLE_WALLET
+    bool HasPendingDigiDollarRedeem(const wallet::CWallet& wallet, const uint256& position_id)
+    {
+        const COutPoint collateral_outpoint(position_id, 0);
+        for (const auto& wallet_entry : wallet.mapWallet) {
+            const wallet::CWalletTx& wtx = wallet_entry.second;
+            if (!wtx.tx || ::GetDigiDollarTxType(*wtx.tx) != ::DD_TX_REDEEM) continue;
+            if (wtx.isAbandoned()) continue;
+            if (wallet.GetTxDepthInMainChain(wtx) != 0 || !wtx.isUnconfirmed()) continue;
+
+            for (const auto& txin : wtx.tx->vin) {
+                if (txin.prevout == collateral_outpoint) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+#endif
+
+#ifdef ENABLE_WALLET
     bool TryStartOracleFromPrivateKey(OracleManager& oracle_manager, uint32_t oracle_id, const std::string& private_key_hex, const std::string& key_source, bool allow_initialized_without_running, std::string& status_message, bool* initialized_out = nullptr)
     {
         bool initialized = false;
@@ -2450,24 +2470,7 @@ RPCHelpMan listdigidollarpositions()
             int skipped = 0;
             int processed = 0;
             auto has_pending_redeem = [&](const WalletCollateralPosition& pos) {
-                const COutPoint collateral_outpoint(pos.dd_timelock_id, 0);
-                for (const auto& wallet_entry : pwallet->mapWallet) {
-                    const wallet::CWalletTx& wtx = wallet_entry.second;
-                    if (!wtx.tx || ::GetDigiDollarTxType(*wtx.tx) != ::DD_TX_REDEEM) continue;
-                    bool spends_position = false;
-                    for (const CTxIn& txin : wtx.tx->vin) {
-                        if (txin.prevout == collateral_outpoint) {
-                            spends_position = true;
-                            break;
-                        }
-                    }
-                    if (!spends_position) continue;
-                    if (wtx.isAbandoned()) continue;
-                    if (pwallet->GetTxDepthInMainChain(wtx) == 0 && wtx.isUnconfirmed()) {
-                        return true;
-                    }
-                }
-                return false;
+                return HasPendingDigiDollarRedeem(*pwallet, pos.dd_timelock_id);
             };
             for (const auto& pos : positions) {
                 // Apply filters
@@ -3535,7 +3538,7 @@ RPCHelpMan getredemptioninfo()
                         {RPCResult::Type::NUM, "unlock_height", "Block height when position unlocks"},
                         {RPCResult::Type::NUM, "timelock_remaining", "Blocks until unlock (0 if unlocked)"},
                         {RPCResult::Type::STR_AMOUNT, "penalty_amount", "Penalty amount (if early redemption)"},
-                        {RPCResult::Type::STR, "status", "Position status"},
+                        {RPCResult::Type::STR, "status", "Position status (pending/active/unlocked/pending_redeem/redeemed)"},
                         {RPCResult::Type::STR, "unlock_date", "Estimated unlock date"}
                     }
                 },
@@ -3602,10 +3605,14 @@ RPCHelpMan getredemptioninfo()
             int blocksRemaining = std::max(0, static_cast<int>(foundPosition.unlock_height - currentHeight));
             const int confirmations = dd_wallet->GetDDTransactionConfirmations(positionId);
             const bool walletPrivateKeysDisabled = pwallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+            const bool pendingRedeem = !foundPosition.is_active &&
+                                       HasPendingDigiDollarRedeem(*pwallet, foundPosition.dd_timelock_id);
 
             // Determine status
             std::string status;
-            if (!foundPosition.is_active) {
+            if (pendingRedeem) {
+                status = "pending_redeem";
+            } else if (!foundPosition.is_active) {
                 status = "redeemed";
             } else if (confirmations <= 0) {
                 status = "pending";

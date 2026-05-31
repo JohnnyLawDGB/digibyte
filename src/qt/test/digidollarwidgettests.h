@@ -100,6 +100,7 @@ private Q_SLOTS:
     void redeemWidgetRefreshesWhenWalletUnlocks();
     void redeemWidgetButtonStateReady();
     void positionsWidgetLockedTooltipShowsRemainingBlocksAndTime();
+    void positionsWidgetPendingRedeemButtonNotRedeemed();
     void redeemWidgetKeepsTimelockedPositionDisabled();
     void mintDigiDollarRejectsPrivateKeyDisabledWallet();
 };

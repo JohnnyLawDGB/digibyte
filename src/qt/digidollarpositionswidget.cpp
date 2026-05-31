@@ -470,6 +470,7 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
 
     // Get positions from wallet backend
     std::vector<WalletCollateralPosition> walletPositions = GetWalletPositions();
+    const std::set<uint256> pendingRedeemPositions = GetPendingRedeemPositionIds();
 
     for (const auto& wp : walletPositions) {
         // Skip positions with 0 collateral - these are RECEIVED DD, not minted vaults
@@ -516,8 +517,10 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         // Private-key-disabled/watch-only wallets may observe vaults but cannot unlock them.
         pos.canRedeem = walletCanSign && (pos.blocksRemaining == 0) && wp.is_active;
 
-        // Track redeemed status
-        pos.isRedeemed = !wp.is_active;
+        // A wallet marks the position inactive as soon as a redemption spend is
+        // created. Keep unconfirmed spends visually pending until they confirm.
+        pos.isPendingRedeem = !wp.is_active && pendingRedeemPositions.count(wp.dd_timelock_id) > 0;
+        pos.isRedeemed = !wp.is_active && !pos.isPendingRedeem;
 
         // Get the mint transaction timestamp from the wallet
         pos.mintTime = 0;  // Default to 0 (will show current time if not found)
@@ -732,7 +735,9 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
 
     // Time Remaining - always show actual time remaining
     QString timeText;
-    if (position.isRedeemed) {
+    if (position.isPendingRedeem) {
+        timeText = tr("Pending");
+    } else if (position.isRedeemed) {
         timeText = tr("Redeemed");
     } else if (position.blocksRemaining <= 0) {
         timeText = tr("Unlocked");  // Show "Unlocked" for expired but not redeemed
@@ -745,7 +750,14 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     timeItem->setTextAlignment(Qt::AlignCenter);
 
     // Apply styling based on status
-    if (position.isRedeemed) {
+    if (position.isPendingRedeem) {
+        QString pendingColor = isDarkTheme ? "#ffb74d" : "#856404";
+        QString pendingBg = isDarkTheme ? "#4a3a1f" : "#fff3cd";
+        timeItem->setForeground(QBrush(QColor(pendingColor)));
+        timeItem->setBackground(QBrush(QColor(pendingBg)));
+        timeItem->setFont(QFont(timeItem->font().family(), timeItem->font().pointSize(), QFont::Bold));
+        timeItem->setToolTip(tr("Redemption is pending confirmation"));
+    } else if (position.isRedeemed) {
         // Redeemed status - grayed out
         timeItem->setForeground(QBrush(redeemedTextColor));
         timeItem->setBackground(QBrush(redeemedBgColor));
@@ -784,13 +796,14 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     const bool isWalletLocked =
         m_walletModel ? m_walletModel->getEncryptionStatus() == WalletModel::Locked : false;
     QPushButton* redeemButton = createRedeemButton(
-        position.positionId, position.isRedeemed, position.canRedeem, isWatchOnly, isWalletLocked, position.blocksRemaining);
+        position.positionId, position.isPendingRedeem, position.isRedeemed, position.canRedeem, isWatchOnly, isWalletLocked, position.blocksRemaining);
     m_positionsTable->setCellWidget(row, COL_ACTIONS, redeemButton);
 }
 
-QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining)
+QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isPendingRedeem, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining)
 {
     // Set button text based on status (priority order):
+    // - "Pending" if a redeem transaction is unconfirmed
     // - "Redeemed" if already redeemed (with strikethrough)
     // - "Watch-Only" if the wallet has private keys disabled and so cannot
     //   ever construct a redemption witness
@@ -798,7 +811,9 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
     // - "Redeem" if can redeem now (green, clickable)
     // - "Locked" if vault hasn't matured yet (grayed out)
     QString buttonText;
-    if (isRedeemed) {
+    if (isPendingRedeem) {
+        buttonText = tr("Pending");
+    } else if (isRedeemed) {
         buttonText = tr("Redeemed");
     } else if (isWatchOnly) {
         buttonText = tr("Watch-Only");
@@ -822,7 +837,25 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
     QString buttonStyle;
     QString tooltip;
 
-    if (isRedeemed) {
+    if (isPendingRedeem) {
+        QString pendingBg = isDarkTheme ? "#5a4520" : "#fff3cd";
+        QString pendingText = isDarkTheme ? "#ffcf7a" : "#856404";
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: %2; "
+            "  border: 1px solid %2; "
+            "  border-radius: 5px; "
+            "  padding: 6px 8px; "
+            "  font-weight: 600; "
+            "  font-size: 10px; "
+            "  min-width: 60px; "
+            "}")
+            .arg(pendingBg)
+            .arg(pendingText);
+        tooltip = tr("Redemption pending confirmation\nThis vault is not final until the redeem transaction confirms.");
+        button->setEnabled(false);
+    } else if (isRedeemed) {
         // Redeemed status - grayed out button with strikethrough
         QString redeemedBg = isDarkTheme ? "#555555" : "#cccccc";
         QString redeemedText = isDarkTheme ? "#999999" : "#888888";
@@ -1141,6 +1174,46 @@ std::vector<WalletCollateralPosition> DigiDollarPositionsWidget::GetWalletPositi
     }
 
     return positions;
+}
+
+std::set<uint256> DigiDollarPositionsWidget::GetPendingRedeemPositionIds() const
+{
+    std::set<uint256> pendingPositions;
+
+    if (!m_walletModel) {
+        return pendingPositions;
+    }
+
+    try {
+        for (const interfaces::WalletTx& wtx : m_walletModel->wallet().getWalletTxs()) {
+            if (!wtx.tx || DigiDollar::GetDigiDollarTxType(*wtx.tx) != DigiDollar::DD_TX_REDEEM) {
+                continue;
+            }
+
+            interfaces::WalletTxStatus status;
+            interfaces::WalletOrderForm orderForm;
+            bool inMempool = false;
+            int numBlocks = 0;
+            interfaces::WalletTx details = m_walletModel->wallet().getWalletTxDetails(
+                wtx.tx->GetHash(), status, orderForm, inMempool, numBlocks);
+            if (!details.tx) {
+                continue;
+            }
+            if (!inMempool || status.is_abandoned || status.depth_in_main_chain != 0 || status.is_in_main_chain) {
+                continue;
+            }
+
+            for (const CTxIn& txin : wtx.tx->vin) {
+                if (txin.prevout.n == 0) {
+                    pendingPositions.insert(txin.prevout.hash);
+                }
+            }
+        }
+    } catch (...) {
+        pendingPositions.clear();
+    }
+
+    return pendingPositions;
 }
 
 double DigiDollarPositionsWidget::CalculatePositionHealth(CAmount ddAmount, CAmount dgbCollateral, CAmount oraclePrice) const

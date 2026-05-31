@@ -9,6 +9,8 @@
 #include <consensus/amount.h>
 #include <wallet/digidollarwallet.h>
 
+#include <set>
+
 class WalletModel;
 class ClientModel;
 
@@ -32,6 +34,7 @@ struct DigiDollarPosition {
     int blocksRemaining;
     double health;
     bool canRedeem;
+    bool isPendingRedeem;
     bool isRedeemed;
     int64_t mintTime;      // Unix timestamp of mint transaction
 };
@@ -86,7 +89,7 @@ private:
     void addPositionToTable(const DigiDollarPosition& position, int row);
     // Wallet-state badges keep matured vaults from looking redeemable when
     // this wallet cannot currently sign.
-    QPushButton* createRedeemButton(const QString& positionId, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining);
+    QPushButton* createRedeemButton(const QString& positionId, bool isPendingRedeem, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining);
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;
@@ -97,6 +100,7 @@ private:
     // Backend integration helpers
     CAmount GetMockOraclePrice() const;
     std::vector<WalletCollateralPosition> GetWalletPositions() const;
+    std::set<uint256> GetPendingRedeemPositionIds() const;
     double CalculatePositionHealth(CAmount ddAmount, CAmount dgbCollateral, CAmount oraclePrice) const;
     int getLockTierBlocks(int tier) const;
 

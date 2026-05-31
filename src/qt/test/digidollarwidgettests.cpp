@@ -1667,11 +1667,36 @@ void DigiDollarWidgetTests::positionsWidgetLockedTooltipShowsRemainingBlocksAndT
         false,
         false,
         false,
+        false,
         95);
     QVERIFY(redeemButton != nullptr);
     QCOMPARE(redeemButton->text(), QString("Locked"));
     QVERIFY(redeemButton->toolTip().contains("Time remaining: 23m"));
     QVERIFY(redeemButton->toolTip().contains("Blocks remaining: 95"));
+}
+
+void DigiDollarWidgetTests::positionsWidgetPendingRedeemButtonNotRedeemed()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    DigiDollarPositionsWidget positionsWidget;
+    QPushButton* redeemButton = positionsWidget.createRedeemButton(
+        QString::fromStdString(uint256::ONE.GetHex()),
+        true,
+        false,
+        false,
+        false,
+        false,
+        0);
+    QVERIFY(redeemButton != nullptr);
+    QCOMPARE(redeemButton->text(), QString("Pending"));
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("pending confirmation"));
+    QVERIFY(!redeemButton->toolTip().contains("already been redeemed"));
 }
 
 // DD-FA-FUNC-031 (Wave 19 Agent A): WalletModel::mintDigiDollar must

@@ -67,6 +67,9 @@ class WalletDigiDollarPendingRedeemRestartTest(DigiByteTestFramework):
         position = next(p for p in node.listdigidollarpositions(False) if p["position_id"] == position_id)
         assert_equal(position_is_active(position), False)
         assert_equal(position["status"], "pending_redeem")
+        redemption_info = node.getredemptioninfo(position_id)
+        assert_equal(redemption_info["status"], "pending_redeem")
+        assert_equal(redemption_info["can_redeem"], False)
 
         self.log.info("Restarting without mempool persistence or wallet rebroadcast")
         self.restart_node(0, extra_args=["-txindex=1", "-persistmempool=0", "-walletbroadcast=0"])
@@ -106,6 +109,9 @@ class WalletDigiDollarPendingRedeemRestartTest(DigiByteTestFramework):
 
         position = next(p for p in node.listdigidollarpositions(False) if p["position_id"] == position_id)
         assert_equal(position["status"], "redeemed")
+        redemption_info = node.getredemptioninfo(position_id)
+        assert_equal(redemption_info["status"], "redeemed")
+        assert_equal(redemption_info["can_redeem"], False)
 
 
 if __name__ == "__main__":

@@ -6176,6 +6176,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::ORACLEHEARTBEAT) {
+        if (!IsOracleP2PActive(m_chainman)) {
+            return;
+        }
+
         OracleVersionHeartbeatMsg heartbeat_msg;
         vRecv >> heartbeat_msg;
 

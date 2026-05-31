@@ -29,7 +29,9 @@ referenced RPCs do not even exist). Wave 20 needs a real exercise of:
     `oracleprice` is *ignored* before `nOracleActivationHeight` (the gate
     `Consensus::IsOracleActive` short-circuits before `Misbehaving`).
 7.  BIP9-inactive peer above the oracle height still ignores oracle P2P frames.
-8.  Peer recovery after disconnect — a second honest peer can reconnect
+8.  Heartbeat telemetry uses the same activation gate as oracle data-path
+    messages and is ignored before DigiDollar is active.
+9.  Peer recovery after disconnect — a second honest peer can reconnect
     after the attacker is banned and successfully exchange oracle data.
 
 Wave 20 ID assignments (next-free per Wave 19 ledger):
@@ -119,6 +121,35 @@ def build_signed_oracle_price(oracle_id: int, price_micro_usd: int,
     else:
         msg.schnorr_sig = b"\x00" * 64
     return msg
+
+
+class msg_oracleheartbeat:
+    """oraclehb message carrying a signed operator-version heartbeat."""
+
+    msgtype = b"oraclehb"
+
+    def __init__(self, oracle_id=0, timestamp=0):
+        self.oracle_id = oracle_id
+        self.timestamp = timestamp
+
+    def serialize(self):
+        r = struct.pack("<B", 1)                  # heartbeat_version
+        r += struct.pack("<I", self.oracle_id)
+        r += struct.pack("<q", self.timestamp)
+        r += struct.pack("<Q", 1)                 # nonce
+        r += struct.pack("<i", 9260044)           # client_version
+        r += struct.pack("<i", 70019)             # p2p_protocol_version
+        r += struct.pack("<B", 1)                 # oracle_protocol_version
+        r += struct.pack("<B", 1)                 # musig2_context_version
+        version = b"test-heartbeat"
+        subversion = b"/DigiByte:test/"
+        r += ser_compact_size(len(version)) + version
+        r += ser_compact_size(len(subversion)) + subversion
+        r += ser_compact_size(64) + (b"\x00" * 64)  # deliberately invalid signature
+        return r
+
+    def __repr__(self):
+        return f"msg_oracleheartbeat(oracle_id={self.oracle_id})"
 
 
 def _peer_for_p2p(node, p2p_conn):
@@ -213,6 +244,7 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
         self.test_getoracles_flooding_rate_limited()
         self.test_pre_activation_peer_ignores_oracleprice()
         self.test_inactive_bip9_peer_ignores_oracleprice()
+        self.test_inactive_bip9_peer_ignores_oracleheartbeat()
         self.test_recovery_after_attacker_disconnect()
 
         self.log.info("Wave 20 oracle P2P tests passed")
@@ -538,6 +570,21 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
             peer.send_message(request)
         peer.sync_with_ping(timeout=10)
         assert_equal(peer.message_count.get("oracleprice", 0), baseline)
+        self.nodes[3].disconnect_p2ps()
+
+    # ------------------------------------------------------------------
+    # 8b. BIP9-inactive peer ignores heartbeat telemetry
+    # ------------------------------------------------------------------
+    def test_inactive_bip9_peer_ignores_oracleheartbeat(self):
+        self.log.info("Test 8b: BIP9-inactive node ignores oracle heartbeat telemetry")
+        peer = self.nodes[3].add_p2p_connection(P2PInterface())
+
+        for _ in range(10):
+            peer.send_message(msg_oracleheartbeat(oracle_id=0, timestamp=int(time.time())))
+        peer.sync_with_ping(timeout=15)
+        assert peer.is_connected, (
+            "BIP9-inactive peer disconnected attacker on oracle heartbeat — "
+            "heartbeat P2P gate did not require active DigiDollar deployment")
         self.nodes[3].disconnect_p2ps()
 
     # ------------------------------------------------------------------

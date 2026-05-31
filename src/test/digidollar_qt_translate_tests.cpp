@@ -47,6 +47,22 @@ BOOST_AUTO_TEST_CASE(translate_volatility_freeze)
     BOOST_CHECK(user.find("volatility") != std::string::npos);
 }
 
+BOOST_AUTO_TEST_CASE(translate_current_volatility_reject_tokens)
+{
+    const std::vector<std::string> consensus_reasons{
+        "minting-frozen-volatility",
+        "all-operations-frozen",
+        "minting-frozen-volatility-candidate",
+    };
+
+    for (const std::string& consensus : consensus_reasons) {
+        const std::string user = TranslateMintRejectReasonForUser(consensus);
+        BOOST_CHECK_NE(user, consensus);
+        BOOST_CHECK(user.find("volatility") != std::string::npos ||
+                    user.find("frozen") != std::string::npos);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(translate_bad_lock_tier_duration)
 {
     const std::string consensus = "bad-mint-lock-tier-duration";

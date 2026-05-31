@@ -50,7 +50,8 @@ inline std::string TranslateMintRejectReasonForUser(const std::string& reason)
 
     // Volatility freeze is active; the oracle price would cross the
     // freeze threshold (src/digidollar/validation.cpp:2600-2604).
-    if (contains("volatility-freeze") || contains("volatility-protection")) {
+    if (contains("volatility-freeze") || contains("volatility-protection") ||
+        contains("minting-frozen-volatility") || contains("all-operations-frozen")) {
         return "DigiDollar minting is temporarily frozen due to oracle "
                "price volatility. Please try again later when prices stabilise.";
     }

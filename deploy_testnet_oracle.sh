@@ -53,8 +53,11 @@ BRANCH="feature/digidollar-v1"
 DIGIBYTE_DIR="$HOME/digibyte"
 DATA_DIR="$HOME/.digibyte-testnet"
 WALLET_NAME="Oracle_Seed"
-ORACLE_ID=0
-ORACLE_PRIVATE_KEY="0000000000000000000000000000000000000000000000000000000000000001"
+TESTNET_NAME="testnet26"
+TESTNET_P2P_PORT=12033
+TESTNET_RPC_PORT=14026
+ORACLE_ID="${ORACLE_ID:-0}"
+ORACLE_PRIVATE_KEY="${ORACLE_PRIVATE_KEY:-}"
 
 # Detect number of CPU cores for parallel compilation
 NPROC=$(nproc 2>/dev/null || echo 2)
@@ -70,6 +73,9 @@ echo "  Repository: $REPO_URL"
 echo "  Branch: $BRANCH"
 echo "  Install dir: $DIGIBYTE_DIR"
 echo "  Data dir: $DATA_DIR"
+echo "  Testnet: $TESTNET_NAME"
+echo "  P2P port: $TESTNET_P2P_PORT"
+echo "  RPC port: $TESTNET_RPC_PORT"
 echo "  Build jobs: $MAKE_JOBS"
 echo ""
 
@@ -187,12 +193,12 @@ echo -e "\n${YELLOW}[4/9] Configuring firewall...${NC}"
 sudo ufw allow ssh
 
 # Allow DigiByte testnet P2P port
-sudo ufw allow 12028/tcp comment 'DigiByte Testnet P2P'
+sudo ufw allow "$TESTNET_P2P_PORT/tcp" comment 'DigiByte Testnet P2P'
 
 # Enable firewall if not already enabled
 sudo ufw --force enable
 
-echo -e "${GREEN}Firewall configured. Port 12028 is open.${NC}"
+echo -e "${GREEN}Firewall configured. Port $TESTNET_P2P_PORT is open.${NC}"
 
 # ============================================================================
 # Step 5: Create Configuration
@@ -239,8 +245,8 @@ printtoconsole=0
 
 # Testnet-specific settings
 [test]
-port=12028
-rpcport=14028
+port=$TESTNET_P2P_PORT
+rpcport=$TESTNET_RPC_PORT
 rpcbind=127.0.0.1
 rpcallowip=127.0.0.1
 acceptnonstdtxn=1
@@ -304,7 +310,7 @@ sleep 2
 echo "Testing direct startup..."
 $DIGIBYTE_DIR/src/digibyted -testnet -datadir=$DATA_DIR -daemon -pid=$DATA_DIR/digibyted.pid 2>&1 || {
     echo -e "${RED}Direct startup failed. Checking debug log...${NC}"
-    tail -50 "$DATA_DIR/testnet5/debug.log" 2>/dev/null || echo "No debug log yet"
+    tail -50 "$DATA_DIR/$TESTNET_NAME/debug.log" 2>/dev/null || echo "No debug log yet"
     echo -e "${YELLOW}Trying to continue anyway...${NC}"
 }
 
@@ -324,7 +330,7 @@ echo "Waiting for node to initialize..."
 sleep 10
 
 # CLI shortcut
-CLI="$DIGIBYTE_DIR/src/digibyte-cli -datadir=$DATA_DIR"
+CLI="$DIGIBYTE_DIR/src/digibyte-cli -testnet -datadir=$DATA_DIR"
 
 # Wait for RPC to be ready (up to 6 minutes for slow VPS)
 for i in {1..180}; do
@@ -333,7 +339,7 @@ for i in {1..180}; do
         break
     fi
     if [ $i -eq 180 ]; then
-        echo -e "${RED}Node failed to start. Check logs: tail -f $DATA_DIR/testnet5/debug.log${NC}"
+        echo -e "${RED}Node failed to start. Check logs: tail -f $DATA_DIR/$TESTNET_NAME/debug.log${NC}"
         exit 1
     fi
     echo "Waiting for RPC... ($i/180)"
@@ -361,10 +367,31 @@ echo -e "${GREEN}Mining Address: ${BLUE}$MINING_ADDRESS${NC}"
 # Save address
 echo "$MINING_ADDRESS" > "$DATA_DIR/mining_address.txt"
 
-# Start Oracle
-echo "Starting Oracle $ORACLE_ID..."
-ORACLE_RESULT=$($CLI startoracle $ORACLE_ID "$ORACLE_PRIVATE_KEY" 2>&1)
-echo -e "${GREEN}Oracle: $ORACLE_RESULT${NC}"
+# Start Oracle if DigiDollar is active. Fresh testnet26 nodes may need to sync
+# and reach activation before startoracle is valid.
+echo "Checking DigiDollar activation before starting Oracle $ORACLE_ID..."
+DD_DEPLOYMENT_INFO=$($CLI getdigidollardeploymentinfo 2>/dev/null || true)
+ORACLE_STARTED=0
+if echo "$DD_DEPLOYMENT_INFO" | grep -q '"status"[[:space:]]*:[[:space:]]*"active"'; then
+    ORACLE_STATUS=0
+    if [ -z "$ORACLE_PRIVATE_KEY" ]; then
+        echo -e "${YELLOW}ORACLE_PRIVATE_KEY is not set; startoracle will try a wallet-stored key.${NC}"
+        ORACLE_RESULT=$($CLI -rpcwallet="$WALLET_NAME" startoracle "$ORACLE_ID" 2>&1) || ORACLE_STATUS=$?
+    else
+        ORACLE_RESULT=$($CLI -rpcwallet="$WALLET_NAME" startoracle "$ORACLE_ID" "$ORACLE_PRIVATE_KEY" 2>&1) || ORACLE_STATUS=$?
+    fi
+    ORACLE_STATUS=${ORACLE_STATUS:-0}
+    echo "$ORACLE_RESULT"
+    if [ "$ORACLE_STATUS" -ne 0 ] || ! echo "$ORACLE_RESULT" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        echo -e "${RED}Oracle did not start. Check the oracle ID, assigned key, wallet, and activation status.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Oracle $ORACLE_ID started successfully.${NC}"
+    ORACLE_STARTED=1
+else
+    echo -e "${YELLOW}DigiDollar is not active yet; oracle start skipped.${NC}"
+    echo -e "${YELLOW}After activation, run: dgb -rpcwallet=$WALLET_NAME startoracle $ORACLE_ID '<assigned_private_key_hex>'${NC}"
+fi
 
 # ============================================================================
 # Step 9: Generate Initial Blocks & Create Helper Scripts
@@ -381,7 +408,7 @@ mkdir -p "$HOME/bin"
 # CLI shortcut
 cat > "$HOME/bin/dgb" << EOF
 #!/bin/bash
-$DIGIBYTE_DIR/src/digibyte-cli -datadir=$DATA_DIR "\$@"
+$DIGIBYTE_DIR/src/digibyte-cli -testnet -datadir=$DATA_DIR "\$@"
 EOF
 chmod +x "$HOME/bin/dgb"
 
@@ -391,14 +418,14 @@ cat > "$HOME/bin/mine" << EOF
 BLOCKS=\${1:-1}
 ADDRESS=\$(cat $DATA_DIR/mining_address.txt)
 echo "Mining \$BLOCKS blocks to \$ADDRESS..."
-$DIGIBYTE_DIR/src/digibyte-cli -datadir=$DATA_DIR generatetoaddress \$BLOCKS \$ADDRESS
+$DIGIBYTE_DIR/src/digibyte-cli -testnet -datadir=$DATA_DIR generatetoaddress \$BLOCKS \$ADDRESS
 EOF
 chmod +x "$HOME/bin/mine"
 
 # Status script
 cat > "$HOME/bin/dgb-status" << EOF
 #!/bin/bash
-CLI="$DIGIBYTE_DIR/src/digibyte-cli -datadir=$DATA_DIR"
+CLI="$DIGIBYTE_DIR/src/digibyte-cli -testnet -datadir=$DATA_DIR"
 
 echo -e "\033[0;36m=== DigiByte Testnet Oracle Status ===\033[0m"
 echo ""
@@ -412,7 +439,8 @@ echo -e "\033[0;33mNetwork:\033[0m"
 
 echo ""
 echo -e "\033[0;33mOracle:\033[0m"
-\$CLI getoracleinfo 2>/dev/null | head -20 | sed 's/^/  /' || echo "  Oracle info not available"
+\$CLI listoracle 2>/dev/null | head -40 | sed 's/^/  /' || echo "  Local oracle status not available"
+\$CLI getoracles 2>/dev/null | head -40 | sed 's/^/  /' || true
 
 echo ""
 echo -e "\033[0;33mWallet ($WALLET_NAME):\033[0m"
@@ -430,7 +458,7 @@ chmod +x "$HOME/bin/dgb-status"
 # Logs script
 cat > "$HOME/bin/dgb-logs" << EOF
 #!/bin/bash
-tail -f $DATA_DIR/testnet5/debug.log
+tail -f $DATA_DIR/$TESTNET_NAME/debug.log
 EOF
 chmod +x "$HOME/bin/dgb-logs"
 
@@ -483,7 +511,11 @@ echo ""
 echo -e "  ${CYAN}testnetseed.digibyte.io${NC}  →  ${GREEN}$SERVER_IP${NC}"
 echo -e "  ${CYAN}oracle1.digibyte.io${NC}      →  ${GREEN}$SERVER_IP${NC}"
 echo ""
-echo -e "${GREEN}Your testnet oracle node is now running!${NC}"
+if [ "$ORACLE_STARTED" -eq 1 ]; then
+    echo -e "${GREEN}Your testnet oracle node is now running!${NC}"
+else
+    echo -e "${YELLOW}Your testnet node is running; oracle start is pending activation/key setup.${NC}"
+fi
 echo ""
 
 # Reload bashrc for current session

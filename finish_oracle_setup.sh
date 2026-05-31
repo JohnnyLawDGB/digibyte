@@ -1,29 +1,60 @@
 #!/bin/bash
 # Finish Oracle Setup - Run this after the deploy script times out but node is running
 
-CLI="sudo /root/digibyte/src/digibyte-cli -datadir=/root/.digibyte-testnet"
+DIGIBYTE_DIR="${DIGIBYTE_DIR:-/root/digibyte}"
+DATA_DIR="${DATA_DIR:-/root/.digibyte-testnet}"
+WALLET_NAME="${WALLET_NAME:-oracle_wallet}"
+ORACLE_ID="${ORACLE_ID:-0}"
+ORACLE_PRIVATE_KEY="${ORACLE_PRIVATE_KEY:-}"
+
+CLI="sudo $DIGIBYTE_DIR/src/digibyte-cli -testnet -datadir=$DATA_DIR"
+WALLET_CLI="$CLI -rpcwallet=$WALLET_NAME"
 
 echo "Checking node status..."
 $CLI getblockchaininfo | head -5
 
 echo ""
 echo "Creating wallet..."
-$CLI createwallet oracle_wallet 2>/dev/null || $CLI loadwallet oracle_wallet 2>/dev/null || echo "Wallet already loaded"
+$CLI createwallet "$WALLET_NAME" 2>/dev/null || $CLI loadwallet "$WALLET_NAME" 2>/dev/null || echo "Wallet already loaded"
 
 echo ""
 echo "Getting mining address..."
-ADDRESS=$($CLI getnewaddress)
+ADDRESS=$($WALLET_CLI getnewaddress)
 echo "Mining Address: $ADDRESS"
-sudo bash -c "echo '$ADDRESS' > /root/.digibyte-testnet/mining_address.txt"
+sudo bash -c "echo '$ADDRESS' > $DATA_DIR/mining_address.txt"
 
 echo ""
-echo "Starting Oracle 0..."
-$CLI startoracle 0 "0000000000000000000000000000000000000000000000000000000000000001"
+echo "Checking DigiDollar activation before starting Oracle $ORACLE_ID..."
+DD_DEPLOYMENT_INFO=$($CLI getdigidollardeploymentinfo 2>/dev/null || true)
+ORACLE_STARTED=0
+if echo "$DD_DEPLOYMENT_INFO" | grep -q '"status"[[:space:]]*:[[:space:]]*"active"'; then
+    ORACLE_STATUS=0
+    if [ -z "$ORACLE_PRIVATE_KEY" ]; then
+        echo "ORACLE_PRIVATE_KEY is not set; startoracle will try a wallet-stored key."
+        ORACLE_RESULT=$($WALLET_CLI startoracle "$ORACLE_ID" 2>&1) || ORACLE_STATUS=$?
+    else
+        ORACLE_RESULT=$($WALLET_CLI startoracle "$ORACLE_ID" "$ORACLE_PRIVATE_KEY" 2>&1) || ORACLE_STATUS=$?
+    fi
+    echo "$ORACLE_RESULT"
+    if [ "$ORACLE_STATUS" -ne 0 ] || ! echo "$ORACLE_RESULT" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        echo "Oracle did not start. Check the oracle ID, assigned key, wallet, and activation status."
+        exit 1
+    fi
+    ORACLE_STARTED=1
+else
+    echo "DigiDollar is not active yet; oracle start skipped."
+    echo "After activation, run: $WALLET_CLI startoracle $ORACLE_ID '<assigned_private_key_hex>'"
+fi
 
 echo ""
 echo "Oracle status:"
-$CLI getoracleinfo
+$CLI listoracle
+$CLI getoracles | head -40
 
 echo ""
-echo "Done! Oracle is running."
+if [ "$ORACLE_STARTED" -eq 1 ]; then
+    echo "Done! Oracle is running."
+else
+    echo "Done! Node and wallet are ready; oracle start is pending activation/key setup."
+fi
 echo "To mine blocks: $CLI generatetoaddress 1 $ADDRESS"

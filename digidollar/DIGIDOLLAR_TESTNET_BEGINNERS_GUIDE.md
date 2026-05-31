@@ -519,7 +519,7 @@ rpcuser=digidollar_tester   # Change this!
 rpcpassword=secure_password_here  # CHANGE THIS!
 rpcallowip=127.0.0.1        # Allow local connections
 rpcallowip=::1              # Allow IPv6 localhost
-rpcport=14024               # TestNet RPC port (default)
+rpcport=14026               # RC44 testnet26 RPC port (default)
 
 # Node Settings
 listen=1                     # Accept incoming connections
@@ -635,14 +635,14 @@ sleep 5
 2025-11-24T12:00:00Z HTTP: creating work queue of depth 16
 2025-11-24T12:00:00Z Config options rpcuser and rpcpassword will soon be deprecated. Locally-run instances may remove rpcuser to use cookie-based auth, or may be replaced with rpcauth. Please see share/rpcauth for rpcauth auth generation.
 2025-11-24T12:00:00Z HTTP: starting 4 worker threads
-2025-11-24T12:00:00Z Using wallet directory /home/user/.digibyte/testnet4/wallets
+2025-11-24T12:00:00Z Using wallet directory /home/user/.digibyte/testnet26/wallets
 2025-11-24T12:00:00Z init message: Verifying wallet(s)...
 2025-11-24T12:00:00Z init message: Loading banlist...
 2025-11-24T12:00:00Z init message: Starting network threads...
 2025-11-24T12:00:00Z net thread start
 2025-11-24T12:00:00Z addcon thread start
-2025-11-24T12:00:00Z Bound to [::]:12028
-2025-11-24T12:00:00Z Bound to 0.0.0.0:12028
+2025-11-24T12:00:00Z Bound to [::]:12033
+2025-11-24T12:00:00Z Bound to 0.0.0.0:12033
 2025-11-24T12:00:00Z init message: Done loading
 2025-11-24T12:00:00Z opencon thread start
 2025-11-24T12:00:00Z msghand thread start
@@ -2135,7 +2135,7 @@ See full documentation in Part IV, Section 15 of this guide.
 
 **Symptoms:**
 ```
-error: Could not connect to the server 127.0.0.1:14024
+error: Could not connect to the server 127.0.0.1:14026
 
 Make sure the digibyted server is running and that you are connecting to the correct RPC port.
 ```
@@ -2161,12 +2161,12 @@ ps aux | grep digibyted
 3. **Verify port:**
 ```bash
 grep rpcport ~/.digibyte/digibyte.conf
-# Should show: rpcport=14024
+# Should show: rpcport=14026
 ```
 
 4. **Check debug.log:**
 ```bash
-tail -f ~/.digibyte/testnet4/debug.log
+tail -f ~/.digibyte/testnet26/debug.log
 ```
 
 </details>
@@ -2344,22 +2344,22 @@ ADDR=$(./src/digibyte-cli -testnet -rpcwallet=test getnewaddress)
 
 **Linux:**
 ```bash
-tail -f ~/.digibyte/testnet4/debug.log
+tail -f ~/.digibyte/testnet26/debug.log
 ```
 
 **macOS:**
 ```bash
-tail -f ~/Library/Application\ Support/DigiByte/testnet4/debug.log
+tail -f ~/Library/Application\ Support/DigiByte/testnet26/debug.log
 ```
 
 **Filtering for DigiDollar:**
 ```bash
-tail -f ~/.digibyte/testnet4/debug.log | grep -i digidollar
+tail -f ~/.digibyte/testnet26/debug.log | grep -i digidollar
 ```
 
 **Filtering for Oracle:**
 ```bash
-tail -f ~/.digibyte/testnet4/debug.log | grep -i oracle
+tail -f ~/.digibyte/testnet26/debug.log | grep -i oracle
 ```
 
 ---

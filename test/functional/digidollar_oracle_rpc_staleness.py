@@ -67,6 +67,14 @@ class DigiDollarOracleRPCStalenessTest(DigiByteTestFramework):
             assert_equal(oracle["price_source"], "none")
             assert_equal(oracle["status"], "no_data")
 
+        self.log.info("Stale oracle must not block transfer-only DigiDollar sends")
+        balance_before = node.getdigidollarbalance()["total"]
+        receive_address = node.getdigidollaraddress()
+        send_result = node.senddigidollar(receive_address, 100)
+        assert_equal(len(send_result["txid"]), 64)
+        self.generate(node, 1)
+        assert_equal(node.getdigidollarbalance()["total"], balance_before)
+
         node.setmocktime(0)
 
 

@@ -286,6 +286,13 @@ static bool HasRecentValidMuSig2OracleQuote(const CChain& chain, BlockManager& b
     return false;
 }
 
+static bool DigiDollarMempoolTxRequiresOracleQuote(const CTransaction& tx)
+{
+    if (!DigiDollar::HasDigiDollarMarker(tx)) return false;
+    const DigiDollar::DigiDollarTxType tx_type = DigiDollar::GetDigiDollarTxType(tx);
+    return tx_type == DigiDollar::DD_TX_MINT || tx_type == DigiDollar::DD_TX_REDEEM;
+}
+
 GlobalMutex g_best_block_mutex;
 std::condition_variable g_best_block_cv;
 uint256 g_best_block;
@@ -590,7 +597,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
 
         if (DigiDollar::RequiresDigiDollarValidation(tx, ddProbeContext)) {
             std::string oracle_policy_error;
-            if (DigiDollar::HasDigiDollarMarker(tx) &&
+            if (DigiDollarMempoolTxRequiresOracleQuote(tx) &&
                 !HasRecentValidMuSig2OracleQuote(m_chain, m_blockman, m_chainman.GetConsensus(), oracle_policy_error)) {
                 LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: Removing reorg-resurrected tx %s because no recent MuSig2 oracle quote is available: %s\n",
                          tx.GetHash().ToString(), oracle_policy_error);
@@ -980,7 +987,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
 
         std::string oracle_policy_error;
-        if (!HasRecentValidMuSig2OracleQuote(m_active_chainstate.m_chain,
+        if (DigiDollarMempoolTxRequiresOracleQuote(tx) &&
+            !HasRecentValidMuSig2OracleQuote(m_active_chainstate.m_chain,
                                              m_active_chainstate.m_blockman,
                                              m_active_chainstate.m_chainman.GetConsensus(),
                                              oracle_policy_error)) {

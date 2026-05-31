@@ -49,7 +49,7 @@ Current releases create descriptor wallets by default. No special flags needed.
 
 Replace `0` with the oracle ID slot assigned to you by the maintainer.
 
-Mainnet and testnet chainparams allocate 35 oracle slots (IDs 0–34), but only slots **0–16** are part of the consensus-active MuSig2 roster (`consensus.vOraclePublicKeys`) at RC41 launch. Slots 17–34 are inactive reserve placeholders and cannot satisfy quorum until a future release adds the operator's x-only key to `consensus.vOraclePublicKeys` and marks the slot active. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
+Mainnet and testnet chainparams allocate 35 oracle slots (IDs 0–34), but only slots **0–20** are part of the current RC44 consensus-active MuSig2 roster (`consensus.vOraclePublicKeys`). Slots 21–34 are inactive reserve placeholders and cannot satisfy quorum until a future release adds the operator's x-only key to `consensus.vOraclePublicKeys` and marks the slot active. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
 
 **Output:**
 ```json

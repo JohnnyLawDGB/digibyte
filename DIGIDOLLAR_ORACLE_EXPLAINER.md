@@ -75,7 +75,7 @@ aggregate_sig              64 bytes
 
 The version byte is pushed separately as `0x03` before this payload. Regtest
 uses a one-byte bitmap; mainnet/testnet use a three-byte bitmap for the
-17-slot active roster.
+21-slot active roster.
 
 ## Miner Behavior
 

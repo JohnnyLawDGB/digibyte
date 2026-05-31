@@ -220,9 +220,9 @@ removed / paid API key required).
 
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| Active Oracles (`nOraclePubkeyCount`) | 17 | 7 | 17 |
+| Active Oracles (`nOraclePubkeyCount`) | 21 | 7 | 21 |
 | Reserved slots (`nOracleTotalOracles`) | 35 | 7 | 35 |
-| Consensus Required (`nOracleConsensusRequired`) | 9 | 4-of-7 | 9 |
+| Consensus Required (`nOracleConsensusRequired`) | 7 | 4-of-7 | 7 |
 | Activation Height (`nDDActivationHeight`) | 600 | 650 | BIP9 (23,627,520) |
 | Rotation Interval (`nDDOracleEpochBlocks`) | 40 blocks | 40 blocks | 40 blocks |
 | Price Update Interval (`nDDOracleUpdateInterval`) | 2 blocks | 1 block | 4 blocks |
@@ -231,9 +231,10 @@ removed / paid API key required).
 | MuSig2 Always-On (`nDigiDollarMuSig2Height`) | 0 | 0 | 0 |
 
 Values verified against `src/kernel/chainparams.cpp`. Mainnet and testnet have
-35 `vOracleNodes` metadata entries, but only slots 0-16 are in
-`consensus.vOraclePublicKeys` and can participate in V1 quorum at RC41 launch.
-Regtest has 7 active slots. The active oracle pubkey count (`nOraclePubkeyCount`)
+35 `vOracleNodes` metadata entries, but only slots 0-20 are in
+`consensus.vOraclePublicKeys` and can participate in the current RC44 V1 quorum.
+Slots 21-34 are reserve placeholders. Regtest has 7 active slots.
+The active oracle pubkey count (`nOraclePubkeyCount`)
 and consensus threshold
 (`nOracleConsensusRequired`) are configured per-network in
 `src/kernel/chainparams.cpp` and override the legacy constants in

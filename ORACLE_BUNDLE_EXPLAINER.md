@@ -57,9 +57,9 @@ The signer set is not "oracle IDs 0 through 8 forever." Current V1 code uses det
 2. Look at the oracle IDs that submitted valid nonces for the epoch.
 3. Score each one with `GetOracleEpochSelectionHash(epoch, oracle_id, epoch_selection_seed)`.
 4. Sort by score.
-5. Take the first threshold set, currently 9 signers on testnet/mainnet V1.
+5. Take the first threshold set, currently 7 signers on testnet/mainnet V1.
 
-That gives every node the same answer without a coordinator. The seed comes from the chain, so nobody can privately pick a favorite committee. It also means higher-numbered oracle IDs count. If IDs 6, 7, and 8 are offline but IDs 10, 14, and 15 are online and submit nonces, the session can still reach 9 signers.
+That gives every node the same answer without a coordinator. The seed comes from the chain, so nobody can privately pick a favorite committee. It also means higher-numbered oracle IDs count. If lower-numbered oracle IDs are offline but enough higher-numbered active IDs are online and submit nonces, the session can still reach the 7-signer quorum.
 
 Once the selected signers agree on the price, timestamp, signer set, nonce set, and epoch seed, they produce one aggregate MuSig2 signature. The miner puts that signature and the price into the block as a v0x03 oracle bundle.
 
@@ -97,7 +97,7 @@ The roster is the list of oracle public keys known by consensus parameters.
 
 The current V1 shape is:
 
-- Testnet/mainnet V1 target: 17 oracle public keys, 9 required signatures.
+- Testnet/mainnet V1 target: 21 oracle public keys, 7 required signatures.
 - Regtest: 7 oracle public keys, 4 required signatures.
 
 Changing the roster or threshold is a consensus-sensitive change. Do not do it casually.
@@ -365,7 +365,7 @@ That is the "random" part in plain terms:
 
 It is not a dice roll from one server. It is deterministic randomness from public chain data. Everyone gets the same answer after the seed block exists.
 
-Example with 9 required signers:
+Example with 7 required signers:
 
 ```text
 Epoch: 40
@@ -386,10 +386,10 @@ Compute score for each submitter:
 
 Sorted committee:
 
-  14, 5, 1, 3, 10, 0, 4, 2, 15
+  14, 5, 1, 3, 10, 0, 4
 ```
 
-All 9 submitted nonces, so the session can move forward.
+At least 7 submitted nonces, so the session can move forward.
 
 This is the important behavior:
 
@@ -652,12 +652,12 @@ The on-chain bundle format is unchanged by RC38.
 +------------+---------------+-------------------------------+
 ```
 
-Example shape for a 17-oracle roster:
+Example shape for the current 21-oracle active roster:
 
 ```text
 version       = 03
 bitmap_len    = 03
-bitmap        = 3 bytes, enough for oracle IDs 0..16
+bitmap        = 3 bytes, enough for oracle IDs 0..20
 epoch         = current oracle epoch
 price         = DGB/USD in micro-USD
 timestamp     = oracle consensus timestamp
@@ -782,7 +782,7 @@ The bundle only becomes useful when enough independent oracle keys signed the sa
 
 ## What RC38 Hardens
 
-RC38 keeps the on-chain v0x03 format and the 9-of-17 V1 model. It hardens the off-chain signing path so real testnet oracles can converge after restarts, timing drift, partial outages, and mixed message arrival order.
+RC38 kept the on-chain v0x03 format and the then-current 9-of-17 V1 model. Current RC44 chainparams use 7-of-21 on mainnet/testnet. The RC38 hardening still matters because it made the off-chain signing path converge after restarts, timing drift, partial outages, and mixed message arrival order.
 
 ### Problem
 
@@ -796,7 +796,7 @@ The previous hardening made nodes agree on a context proposal before they sign. 
 
 RC38 adds and enforces these rules:
 
-- The 9 signers are ranked with `GetOracleEpochSelectionHash(epoch, oracle_id, epoch_selection_seed)`.
+- The selected quorum signers are ranked with `GetOracleEpochSelectionHash(epoch, oracle_id, epoch_selection_seed)`.
 - The epoch seed comes from the chain boundary block, not from a remote peer.
 - Future epoch nonce prestart is allowed, but context signing waits until the seed exists.
 - A signed `OracleMusigContextMsg` announces the exact attempt, signer set, nonce set hash, price evidence hash, price, timestamp, epoch seed, and context ID.

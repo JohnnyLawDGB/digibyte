@@ -20,6 +20,8 @@ using namespace DigiDollar;
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_mint_tests, RegTestingSetup)
 
+static constexpr CAmount MIN_DD_MINT_FEE = 10000000; // 0.1 DGB
+
 // Helper function to create a test key
 CKey CreateTestKey() {
     CKey key;
@@ -603,11 +605,13 @@ BOOST_AUTO_TEST_CASE(transaction_fee_calculation)
     auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
     builder.SetUTXOValue(utxos[0], 7000 * COIN);
 
-    // Test different fee rates (in sat/kB, min is 100k sat/kB)
-    std::vector<CAmount> feeRates = {100000, 200000, 500000}; // sat/kB (100k, 200k, 500k)
+    // Low fee-rate callers should be floored to the DD minimum; a high
+    // enough rate can still pay above the floor.
+    std::vector<CAmount> feeRates = {100000, 500000, 50000000}; // sat/kB
 
     CAmount prevFee = 0;
-    for (CAmount feeRate : feeRates) {
+    for (size_t i = 0; i < feeRates.size(); ++i) {
+        CAmount feeRate = feeRates[i];
         TxBuilderMintParams mintParams;
         mintParams.ddAmount = 10000;
         SetCanonicalLock(mintParams, 365);
@@ -618,11 +622,40 @@ BOOST_AUTO_TEST_CASE(transaction_fee_calculation)
         TxBuilderResult result = builder.BuildMintTransaction(mintParams);
 
         BOOST_CHECK(result.success);
-        BOOST_CHECK(result.totalFees > 0);
-        BOOST_CHECK(result.totalFees > prevFee); // Higher rate = higher fee
+        BOOST_CHECK_GE(result.totalFees, MIN_DD_MINT_FEE);
+        if (i < 2) {
+            BOOST_CHECK_EQUAL(result.totalFees, MIN_DD_MINT_FEE);
+        } else {
+            BOOST_CHECK_GT(result.totalFees, MIN_DD_MINT_FEE);
+        }
+        BOOST_CHECK_GE(result.totalFees, prevFee);
 
         prevFee = result.totalFees;
     }
+}
+
+BOOST_AUTO_TEST_CASE(mint_fee_floor_applies_to_low_fee_rate_callers)
+{
+    const CChainParams& params = Params();
+    int height = 1000;
+    CAmount price = CreateTestOraclePrice();
+
+    MockMintTxBuilder builder(params, height, price);
+
+    auto utxos = CreateTestUTXOsWithValues({7000 * COIN});
+    builder.SetUTXOValue(utxos[0], 7000 * COIN);
+
+    TxBuilderMintParams mintParams;
+    mintParams.ddAmount = 10000;
+    SetCanonicalLock(mintParams, 365);
+    mintParams.ownerKey = CreateTestKey();
+    mintParams.feeRate = 500000; // Qt mint path rate, below the DD fee floor.
+    mintParams.utxos = utxos;
+
+    TxBuilderResult result = builder.BuildMintTransaction(mintParams);
+
+    BOOST_REQUIRE_MESSAGE(result.success, result.error);
+    BOOST_CHECK_GE(result.totalFees, MIN_DD_MINT_FEE);
 }
 
 BOOST_AUTO_TEST_CASE(transaction_signing_preparation)
@@ -675,10 +708,9 @@ BOOST_AUTO_TEST_CASE(edge_case_exact_collateral_no_change)
     CAmount ddAmount = 10000;
     int lockDays = 365;
     CAmount requiredCollateral = builder.CalculateRequiredCollateral(ddAmount, lockDays);
-    // Use realistic fee estimate based on ESTIMATED_TX_VSIZE (500 vB) @ 100k sat/kB
-    // Fee = (500 * 100000) / 1000 = 50,000 satoshis
-    // Add extra buffer for change output if created
-    CAmount estimatedFees = 75000; // 0.00075 DGB fee estimate (with buffer)
+    // Fund the exact collateral plus the DD mint fee floor. Low fee-rate
+    // callers are still charged at least this amount.
+    CAmount estimatedFees = MIN_DD_MINT_FEE;
 
     // Provide exact amount needed (collateral + fees)
     auto utxos = CreateTestUTXOsWithValues({requiredCollateral + estimatedFees});
@@ -920,9 +952,8 @@ BOOST_AUTO_TEST_CASE(integration_complete_mint_flow)
     BOOST_CHECK(script1.size() == 34 && script1[0] == OP_1 && script1[1] == 32);
     BOOST_CHECK(result.tx.vout[2].scriptPubKey[0] == OP_RETURN);
 
-    // Verify fees are reasonable
-    BOOST_CHECK(result.totalFees > 0);
-    BOOST_CHECK(result.totalFees < 1000000); // Less than 0.01 DGB in fees
+    // Verify the DD mint fee floor is enforced.
+    BOOST_CHECK_GE(result.totalFees, MIN_DD_MINT_FEE);
 }
 
 // ============================================================================

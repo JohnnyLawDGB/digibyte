@@ -34,6 +34,7 @@ static const size_t ESTIMATED_TX_VSIZE = 500;      // Estimated transaction size
 static const int DEFAULT_SYSTEM_COLLATERAL = 150;   // Default system health (150%)
 static const double MAX_FEE_RATIO = 0.5;           // Maximum fee as ratio of total input
 static const size_t MAX_TX_INPUTS = 400;           // Maximum inputs per transaction to stay under MAX_STANDARD_TX_WEIGHT
+static const CAmount MIN_DD_TX_FEE = 10000000;     // 0.1 DGB minimum DD transaction fee
 
 CAmount ApplyCollateralSafetyMargin(CAmount requiredCollateral)
 {
@@ -367,7 +368,7 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
     }
 
     // Estimate fees (rough estimate before final inputs are selected)
-    CAmount estimatedFees = ESTIMATED_TX_VSIZE * params.feeRate / 1000;
+    CAmount estimatedFees = std::max<CAmount>(ESTIMATED_TX_VSIZE * params.feeRate / 1000, MIN_DD_TX_FEE);
 
     // Sanity check on total required amount
     if (result.collateralRequired > MAX_MONEY - estimatedFees) {
@@ -429,7 +430,7 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
     result.totalFees = 0;
 
     // First iteration: calculate fee without change output
-    CAmount feeWithoutChange = CalculateFee(tx, params.feeRate);
+    CAmount feeWithoutChange = std::max<CAmount>(CalculateFee(tx, params.feeRate), MIN_DD_TX_FEE);
     change = totalIn - result.collateralRequired - feeWithoutChange;
 
     if (change < 0) {
@@ -459,7 +460,7 @@ TxBuilderResult MintTxBuilder::BuildMintTransaction(const TxBuilderMintParams& p
         tx.vout.push_back(CTxOut(change, changeScript));
 
         // Recalculate fee with change output included
-        result.totalFees = CalculateFee(tx, params.feeRate);
+        result.totalFees = std::max<CAmount>(CalculateFee(tx, params.feeRate), MIN_DD_TX_FEE);
 
         // Ensure fees are reasonable
         if (result.totalFees > static_cast<CAmount>(totalIn * MAX_FEE_RATIO)) {
@@ -764,12 +765,11 @@ TxBuilderResult TransferTxBuilder::BuildTransferTransaction(const TxBuilderTrans
     // If ddChange == 0, perfect match - no change output needed
 
     // Calculate actual fee based on transaction with all outputs
-    const CAmount MIN_DD_FEE = 10000000;  // 0.1 DGB minimum fee
     CAmount calculatedFee = CalculateFee(tx, params.feeRate);
-    CAmount actualFee = std::max(calculatedFee, MIN_DD_FEE);
+    CAmount actualFee = std::max(calculatedFee, MIN_DD_TX_FEE);
 
     LogPrintf("DigiDollar: Fee calculation - calculated: %d sats, minimum: %d sats, actual: %d sats\n",
-              calculatedFee, MIN_DD_FEE, actualFee);
+              calculatedFee, MIN_DD_TX_FEE, actualFee);
 
     if (totalFeeIn <= 0) {
         result.error = "Insufficient DGB fee input: no fee inputs selected";

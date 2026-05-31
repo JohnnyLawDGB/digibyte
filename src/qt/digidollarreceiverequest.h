@@ -31,6 +31,8 @@ public:
 
     void setModel(WalletModel *model);
     void setInfo(const SendCoinsRecipient &info);
+    /** Test hook for save-failure handling without opening a file dialog. */
+    QString saveQRImageForTesting(const QString& fileName) const;
 
 private Q_SLOTS:
     void onCopyURIClicked();
@@ -45,6 +47,7 @@ private:
     void updateUriContent();
     QString formatDDAmount(CAmount amount) const;
     QString formatDDURI(const SendCoinsRecipient &info) const;
+    bool saveQRImageToFile(const QString& fileName, QString& error) const;
 
     // UI Components
     QLabel* m_titleLabel;

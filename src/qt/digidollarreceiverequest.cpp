@@ -12,6 +12,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -421,10 +422,28 @@ void DigiDollarReceiveRequestDialog::onSaveQRClicked()
         return;
     }
 
+    QString error;
+    if (!saveQRImageToFile(fileName, error)) {
+        QMessageBox::critical(this, tr("QR Code Save Failed"), error);
+    }
+}
+
+bool DigiDollarReceiveRequestDialog::saveQRImageToFile(const QString& fileName, QString& error) const
+{
+    error.clear();
     QImage qrImage = m_qrWidget->exportImage();
     if (!qrImage.save(fileName, "PNG")) {
-        // Error saving - could show message box here
+        error = tr("Failed to save QR code to:\n%1").arg(fileName);
+        return false;
     }
+    return true;
+}
+
+QString DigiDollarReceiveRequestDialog::saveQRImageForTesting(const QString& fileName) const
+{
+    QString error;
+    saveQRImageToFile(fileName, error);
+    return error;
 }
 
 QString DigiDollarReceiveRequestDialog::formatDDAmount(CAmount amount) const

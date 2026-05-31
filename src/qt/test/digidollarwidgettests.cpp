@@ -48,6 +48,7 @@
 #include <QColor>
 #include <QCoreApplication>
 #include <QDialog>
+#include <QDir>
 #include <QEvent>
 #include <QFile>
 #include <QFontMetrics>
@@ -3697,6 +3698,28 @@ void DigiDollarWidgetTests::ddReceiveRejectsMalformedRequestAmount()
     QCOMPARE(wallet_model->wallet().getAddressReceiveRequests().size(), size_t{0});
     QVERIFY(!messageSpy.empty());
     QCOMPARE(messageSpy.first().at(0).toString(), QStringLiteral("Invalid Amount"));
+}
+
+void DigiDollarWidgetTests::ddReceiveRequestDialogReportsQRSaveFailure()
+{
+    DigiDollarReceiveRequestDialog dialog;
+
+    SendCoinsRecipient recipient;
+    recipient.address = EncodeDigiDollarAddressForNetwork(CChainParams::DIGIDOLLAR_ADDRESS_REGTEST);
+    recipient.label = QStringLiteral("save-failure");
+    recipient.amount = 12345;
+    recipient.message = QStringLiteral("should report failed save");
+    dialog.setInfo(recipient);
+
+    const QString missingDir = QDir::temp().filePath(QStringLiteral("digidollar-missing-qr-save-dir"));
+    QDir(missingDir).removeRecursively();
+    const QString fileName = missingDir + QStringLiteral("/request.png");
+    const QString error = dialog.saveQRImageForTesting(fileName);
+
+    QVERIFY2(!error.isEmpty(), "QR save failure should return an actionable error string");
+    QVERIFY2(error.contains(QStringLiteral("Failed to save QR code"), Qt::CaseInsensitive),
+             qPrintable(error));
+    QVERIFY2(error.contains(fileName), qPrintable(error));
 }
 
 // Regression test for shenger's Apr 20 RC30 UX report: on Windows dark

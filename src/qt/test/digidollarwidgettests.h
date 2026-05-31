@@ -79,6 +79,7 @@ private Q_SLOTS:
     void ddReceiveRemovePersistsAndKeepsDgbSeparated();
     void ddReceiveRequestDialogFormatsURIAndAmount();
     void ddReceiveRejectsMalformedRequestAmount();
+    void ddReceiveRequestDialogReportsQRSaveFailure();
     void darkThemePeerDetailWidgetHasExplicitRule();
     void darkThemeDigiDollarSendTotalLabelHasReadableContrast();
     void darkThemeShutdownWindowHasReadableSurface();

@@ -78,6 +78,11 @@ QString FormatDigiDollarRequestAmount(CAmount amount)
 {
     return QString::number(static_cast<double>(amount) / 100.0, 'f', 2);
 }
+
+bool IsCurrentNetworkDigiDollarAddress(const QString& address)
+{
+    return CDigiDollarAddress::IsValidDigiDollarAddressForCurrentNetwork(address.toStdString());
+}
 } // namespace
 
 DigiDollarReceiveWidget::DigiDollarReceiveWidget(QWidget *parent) :
@@ -738,8 +743,8 @@ void DigiDollarReceiveWidget::onShowRequestClicked()
 
     QString address = addressFromRow(row);
 
-    // Verify this is a DD address before showing dialog
-    if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+    // Verify this is a current-network DD address before showing dialog.
+    if (!IsCurrentNetworkDigiDollarAddress(address)) {
         LogPrint(BCLog::QT, "DigiDollarReceiveWidget: Address is not a valid DD address: %s\n",
                 address.toStdString());
         Q_EMIT message(tr("Error"),
@@ -825,8 +830,8 @@ void DigiDollarReceiveWidget::populateRecentRequests()
         // Get address
         QString address = entry.recipient.address;
 
-        // Filter: Only show DigiDollar addresses (DD/TD/RD prefix)
-        if (!CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+        // Filter: only show DigiDollar requests for the active chain.
+        if (!IsCurrentNetworkDigiDollarAddress(address)) {
             continue;  // Skip non-DD addresses
         }
 
@@ -1000,7 +1005,7 @@ bool DigiDollarReceiveWidget::getSelectedRequest(RecentRequestEntry& entry) cons
 
 bool DigiDollarReceiveWidget::findDigiDollarRequest(const QString& address, RecentRequestEntry& entry) const
 {
-    if (!m_walletModel || address.isEmpty() || !CDigiDollarAddress::IsValidDigiDollarAddress(address.toStdString())) {
+    if (!m_walletModel || address.isEmpty() || !IsCurrentNetworkDigiDollarAddress(address)) {
         return false;
     }
 
@@ -1014,7 +1019,7 @@ bool DigiDollarReceiveWidget::findDigiDollarRequest(const QString& address, Rece
             continue;
         }
         if (candidate.recipient.address == address &&
-            CDigiDollarAddress::IsValidDigiDollarAddress(candidate.recipient.address.toStdString())) {
+            IsCurrentNetworkDigiDollarAddress(candidate.recipient.address)) {
             entry = candidate;
             return true;
         }
@@ -1025,7 +1030,7 @@ bool DigiDollarReceiveWidget::findDigiDollarRequest(const QString& address, Rece
 bool DigiDollarReceiveWidget::updateDigiDollarRequest(const RecentRequestEntry& entry)
 {
     if (!m_walletModel || entry.id == 0 ||
-        !CDigiDollarAddress::IsValidDigiDollarAddress(entry.recipient.address.toStdString())) {
+        !IsCurrentNetworkDigiDollarAddress(entry.recipient.address)) {
         return false;
     }
 

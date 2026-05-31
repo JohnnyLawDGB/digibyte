@@ -122,6 +122,17 @@ std::shared_ptr<wallet::CWallet> SetupDescriptorsWallet(interfaces::Node& node, 
     return wallet;
 }
 
+QString EncodeDigiDollarAddressForNetwork(int network_type)
+{
+    uint256 hash;
+    hash.SetHex("89abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567");
+    XOnlyPubKey xonly(hash);
+    CDigiDollarAddress addr;
+    bool ok = addr.SetDigiDollar(CTxDestination{WitnessV1Taproot(xonly)}, network_type);
+    assert(ok);
+    return QString::fromStdString(addr.ToString());
+}
+
 CTransactionRef MakePendingDDTx()
 {
     CMutableTransaction tx;
@@ -3238,6 +3249,61 @@ void DigiDollarWidgetTests::ddReceiveDoubleClickShowsRequestDialog()
 
     dialog->close();
     QCoreApplication::processEvents();
+}
+
+void DigiDollarWidgetTests::ddReceiveHidesCrossNetworkRequests()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    TestChain100Setup test;
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    const std::shared_ptr<wallet::CWallet>& wallet = SetupDescriptorsWallet(m_node, test);
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    WalletModel* wallet_model = mini_gui.walletModel.get();
+    QVERIFY(wallet_model != nullptr);
+    QVERIFY(wallet_model->getRecentRequestsTableModel() != nullptr);
+
+    const QString currentAddress = wallet_model->getNewDigiDollarAddress(QStringLiteral("current-network-request"));
+    const QString mainnetAddress = EncodeDigiDollarAddressForNetwork(CChainParams::DIGIDOLLAR_ADDRESS);
+    QVERIFY2(currentAddress.startsWith(QStringLiteral("RD")), "regtest receive address should use RD prefix");
+    QVERIFY2(mainnetAddress.startsWith(QStringLiteral("DD")), "test fixture should create a mainnet DD address");
+
+    SendCoinsRecipient currentRecipient;
+    currentRecipient.address = currentAddress;
+    currentRecipient.label = QStringLiteral("current");
+    currentRecipient.amount = 1234;
+    wallet_model->getRecentRequestsTableModel()->addNewRequest(currentRecipient);
+
+    RecentRequestEntry staleEntry;
+    staleEntry.id = 100;
+    staleEntry.date = QDateTime::currentDateTime();
+    staleEntry.recipient.address = mainnetAddress;
+    staleEntry.recipient.label = QStringLiteral("stale-mainnet");
+    staleEntry.recipient.amount = 5678;
+    DataStream staleStream{};
+    staleStream << staleEntry;
+    QVERIFY(wallet_model->wallet().setAddressReceiveRequest(
+        DecodeDigiDollarAddress(mainnetAddress.toStdString()), ToString(staleEntry.id), staleStream.str()));
+
+    DigiDollarReceiveWidget receive;
+    receive.setWalletModel(wallet_model);
+    receive.updateRecentRequests();
+
+    QTableWidget* table = receive.findChild<QTableWidget*>("requestsTable");
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->rowCount(), 1);
+    QCOMPARE(table->item(0, 3)->data(Qt::UserRole).toString(), currentAddress);
 }
 
 void DigiDollarWidgetTests::ddReceiveEditPersistsAndKeepsDgbSeparated()

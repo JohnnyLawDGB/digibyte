@@ -194,11 +194,19 @@ class DigiDollarTransferTest(DigiByteTestFramework):
             "duplicate recipient regression",
         )
 
-        result = self.nodes[0].sendmanydigidollar("", amounts, "sendmany functional test")
+        sendmany_comment = "sendmany functional test"
+        result = self.nodes[0].sendmanydigidollar("", amounts, sendmany_comment)
         assert 'txid' in result
         assert_equal(result['total_amount'], 500)
         assert_equal(result['amounts'][addr1], 200)
         assert_equal(result['amounts'][addr2], 300)
+        assert_equal(result['comment'], sendmany_comment)
+        sendmany_rows = [
+            tx for tx in self.nodes[0].listdigidollartxs(20, 0)
+            if tx['txid'] == result['txid'] and tx['category'] == 'send'
+        ]
+        assert_equal(len(sendmany_rows), 1)
+        assert_equal(sendmany_rows[0]['comment'], sendmany_comment)
 
         # The first send spends node0's confirmed DD UTXO and creates DD change.
         # That change is unconfirmed and must not be available for a second DD send.

@@ -694,7 +694,8 @@ WalletModel::DigiDollarSendResult WalletModel::sendDigiDollar(const QString& add
         // Call backend to create and send transaction
         std::string txid;
         std::string error;
-        bool success = ddWallet->TransferDigiDollar(recipientAddr, amount, txid, error, nullptr, preset_dd_inputs);
+        bool success = ddWallet->TransferDigiDollar(recipientAddr, amount, txid, error,
+                                                    nullptr, preset_dd_inputs, comment.toStdString());
 
         if (!success) {
             // Transaction creation or sending failed

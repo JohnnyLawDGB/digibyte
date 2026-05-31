@@ -79,7 +79,8 @@ class DigiDollarBug11Bug18Test(DigiByteTestFramework):
         selectable = sorted(self.nodes[0].listdigidollarunspent(), key=lambda u: u["amount"], reverse=True)
         selected = [{"txid": selectable[0]["txid"], "vout": selectable[0]["vout"]}]
         assert_equal(selectable[0]["amount"], 5000)
-        send_result = self.nodes[0].senddigidollar(recv_addr, 100, "", 0, selected)  # $1.00 = 100 cents
+        send_comment = "selected send note"
+        send_result = self.nodes[0].senddigidollar(recv_addr, 100, send_comment, 0, selected)  # $1.00 = 100 cents
 
         self.log.info(f"senddigidollar result: {send_result}")
         raw_selected_send = self.nodes[0].getrawtransaction(send_result["txid"], True)
@@ -93,6 +94,14 @@ class DigiDollarBug11Bug18Test(DigiByteTestFramework):
         # txid should be present
         assert 'txid' in send_result
         assert len(send_result['txid']) == 64
+        assert_equal(send_result['comment'], send_comment)
+
+        send_rows = [
+            tx for tx in self.nodes[0].listdigidollartxs(20, 0)
+            if tx['txid'] == send_result['txid'] and tx['category'] == 'send'
+        ]
+        assert_equal(len(send_rows), 1)
+        assert_equal(send_rows[0]['comment'], send_comment)
 
         # fee_paid should be a number (not hardcoded 0 necessarily)
         assert 'fee_paid' in send_result

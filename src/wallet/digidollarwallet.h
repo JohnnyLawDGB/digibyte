@@ -531,12 +531,14 @@ public:
     bool TransferDigiDollarMany(const std::vector<std::pair<CDigiDollarAddress, CAmount>>& recipients,
                                 std::string& txid, std::string& error,
                                 CAmount* dd_change_out = nullptr,
-                                const std::vector<COutPoint>* preset_dd_inputs = nullptr);
+                                const std::vector<COutPoint>* preset_dd_inputs = nullptr,
+                                const std::string& comment = "");
 
     bool TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
                             std::string& txid, std::string& error,
                             CAmount* dd_change_out = nullptr,
-                            const std::vector<COutPoint>* preset_dd_inputs = nullptr);
+                            const std::vector<COutPoint>* preset_dd_inputs = nullptr,
+                            const std::string& comment = "");
 
     /**
      * Get current DD balance (legacy method)

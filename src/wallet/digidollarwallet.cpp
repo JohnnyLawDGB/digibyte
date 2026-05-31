@@ -1318,7 +1318,8 @@ bool DigiDollarWallet::IsLockedByDD(const COutPoint& outpoint) const
 bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiDollarAddress, CAmount>>& recipients,
                                              std::string& txid, std::string& error,
                                              CAmount* dd_change_out,
-                                             const std::vector<COutPoint>* preset_dd_inputs) {
+                                             const std::vector<COutPoint>* preset_dd_inputs,
+                                             const std::string& comment) {
     auto locks = LockDDWallet();
     // Clear previous results
     txid.clear();
@@ -1776,6 +1777,7 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
         tx.incoming = false;
         tx.address = recipients.size() == 1 ? recipients.front().first.ToString() : "multiple";
         tx.category = "send";
+        tx.comment = comment;
 
         transaction_history.push_back(tx);
 
@@ -1810,8 +1812,9 @@ bool DigiDollarWallet::TransferDigiDollarMany(const std::vector<std::pair<CDigiD
 bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount amount,
                                           std::string& txid, std::string& error,
                                           CAmount* dd_change_out,
-                                          const std::vector<COutPoint>* preset_dd_inputs) {
-    return TransferDigiDollarMany({{to, amount}}, txid, error, dd_change_out, preset_dd_inputs);
+                                          const std::vector<COutPoint>* preset_dd_inputs,
+                                          const std::string& comment) {
+    return TransferDigiDollarMany({{to, amount}}, txid, error, dd_change_out, preset_dd_inputs, comment);
 }
 
 CAmount DigiDollarWallet::GetDDBalanceLegacy() const {

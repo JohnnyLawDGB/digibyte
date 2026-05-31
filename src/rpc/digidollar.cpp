@@ -1558,7 +1558,8 @@ RPCHelpMan senddigidollar()
                         {RPCResult::Type::STR, "status", "Transaction status (success/pending/failed)"},
                         {RPCResult::Type::STR_AMOUNT, "fee_paid", "Transaction fee paid in DGB (optional)"},
                         {RPCResult::Type::NUM, "inputs_used", "Number of DD inputs consumed (optional)"},
-                        {RPCResult::Type::NUM, "change_amount", "DD change amount in cents if any (optional)"}
+                        {RPCResult::Type::NUM, "change_amount", "DD change amount in cents if any (optional)"},
+                        {RPCResult::Type::STR, "comment", /*optional=*/true, "Optional wallet comment"}
                     }
                 },
                 RPCExamples{
@@ -1661,7 +1662,7 @@ RPCHelpMan senddigidollar()
             std::string error;
             CAmount dd_change = 0;
             LogPrintf("DigiDollar RPC: Calling TransferDigiDollar()...\n");
-            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error, &dd_change, preset_dd_inputs);
+            bool success = dd_wallet->TransferDigiDollar(dd_address, amount, txid, error, &dd_change, preset_dd_inputs, comment);
             LogPrintf("DigiDollar RPC: TransferDigiDollar() returned success=%d\n", success);
 
             if (!success) {
@@ -1872,7 +1873,8 @@ RPCHelpMan sendmanydigidollar()
 
             std::string txid;
             std::string error;
-            bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error, nullptr, preset_dd_inputs);
+            std::string comment = OptionalParamIsSet(request, 2) ? request.params[2].get_str() : "";
+            bool success = dd_wallet->TransferDigiDollarMany(recipients, txid, error, nullptr, preset_dd_inputs, comment);
             if (!success) {
                 if (error.find("dd-input-amounts-unknown") != std::string::npos) {
                     throw JSONRPCError(RPC_WALLET_ERROR,

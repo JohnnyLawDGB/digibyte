@@ -68,6 +68,35 @@ else
     MAKE_JOBS=$NPROC
 fi
 
+stop_configured_node() {
+    local pid=""
+    local cmdline=""
+
+    "$DIGIBYTE_DIR/src/digibyte-cli" -testnet -datadir="$DATA_DIR" stop >/dev/null 2>&1 || true
+    sleep 2
+
+    if [ ! -f "$DATA_DIR/digibyted.pid" ]; then
+        return 0
+    fi
+
+    pid="$(tr -cd '0-9' < "$DATA_DIR/digibyted.pid" 2>/dev/null || true)"
+    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+        return 0
+    fi
+
+    cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || ps -p "$pid" -o args= 2>/dev/null || true)"
+    if printf '%s' "$cmdline" | grep -F -q "digibyted" &&
+       printf '%s' "$cmdline" | grep -F -q -- "-datadir=$DATA_DIR"; then
+        kill "$pid" 2>/dev/null || true
+        sleep 2
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    else
+        echo -e "${YELLOW}PID file points to a process outside $DATA_DIR; leaving it running.${NC}"
+    fi
+}
+
 echo -e "${BLUE}Configuration:${NC}"
 echo "  Repository: $REPO_URL"
 echo "  Branch: $BRANCH"
@@ -302,13 +331,12 @@ echo -e "${GREEN}Systemd service created and enabled.${NC}"
 # ============================================================================
 echo -e "\n${YELLOW}[7/9] Starting DigiByte node...${NC}"
 
-# Kill any existing instance
-pkill -9 digibyted 2>/dev/null || true
-sleep 2
+# Stop only the instance using this script's configured datadir.
+stop_configured_node
 
 # First try starting directly to catch any errors
 echo "Testing direct startup..."
-$DIGIBYTE_DIR/src/digibyted -testnet -datadir=$DATA_DIR -daemon -pid=$DATA_DIR/digibyted.pid 2>&1 || {
+"$DIGIBYTE_DIR/src/digibyted" -testnet -datadir="$DATA_DIR" -daemon -pid="$DATA_DIR/digibyted.pid" 2>&1 || {
     echo -e "${RED}Direct startup failed. Checking debug log...${NC}"
     tail -50 "$DATA_DIR/$TESTNET_NAME/debug.log" 2>/dev/null || echo "No debug log yet"
     echo -e "${YELLOW}Trying to continue anyway...${NC}"
@@ -316,11 +344,10 @@ $DIGIBYTE_DIR/src/digibyted -testnet -datadir=$DATA_DIR -daemon -pid=$DATA_DIR/d
 
 # Wait and check if it started
 sleep 5
-if pgrep -x digibyted > /dev/null; then
+if "$DIGIBYTE_DIR/src/digibyte-cli" -testnet -datadir="$DATA_DIR" getblockchaininfo >/dev/null 2>&1; then
     echo -e "${GREEN}Node started successfully via direct method!${NC}"
     # Stop it so we can restart via systemd
-    $DIGIBYTE_DIR/src/digibyte-cli -testnet -datadir=$DATA_DIR stop 2>/dev/null || pkill -9 digibyted
-    sleep 3
+    stop_configured_node
 fi
 
 # Now start via systemd

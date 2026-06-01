@@ -10,6 +10,7 @@
 #include <key.h>
 #include <util/chaintype.h>
 
+#include <cassert>
 #include <cstdint>
 #include <vector>
 
@@ -63,16 +64,17 @@ FUZZ_TARGET(oracle_price_message_sign_verify, .init = initialize_oracle_price_me
     msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
 
     bool signed_ok = msg.Sign(key);
+    assert(signed_ok);
     if (signed_ok) {
         // Valid signature must verify
         bool verify_ok = msg.Verify();
-        (void)verify_ok;  // Exercise Verify() but don't assert
+        assert(verify_ok);
 
         // Corrupt the signature and verify it fails
         if (!msg.schnorr_sig.empty()) {
             msg.schnorr_sig[0] ^= 0x01;
             bool verify_corrupted = msg.Verify();
-            (void)verify_corrupted;  // Should be false, but don't assert
+            assert(!verify_corrupted);
         }
     }
 }

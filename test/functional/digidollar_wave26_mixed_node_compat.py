@@ -374,8 +374,9 @@ class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
             assert txid in self.nodes[i].getrawmempool(), \
                 f"node{i} missing plain DGB tx at active height"
 
-        # Mine on node 0; the resulting block must have NO oracle bundle
-        # (no DD tx in it) and must validate cleanly on both nodes.
+        # Mine on node 0. The resulting block has no price-dependent DD tx
+        # and must validate cleanly on both nodes. Miners may still stamp an
+        # opportunistic fresh OP_ORACLE bundle, so absence is not required.
         block_hash = self.nodes[0].generate(1)[0]
         self.sync_blocks(self.nodes)
         for i in range(self.num_nodes):
@@ -404,7 +405,7 @@ class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
             assert_equal(self._coinbase_oracle_version(self.nodes[i], dd_block_hash), "03")
 
         self.log.info(
-            "  active non-DD block (h=%d) has NO oracle output; "
+            "  active non-DD block (h=%d) confirmed without requiring oracle data; "
             "active DD-touching block (h=%d) carries OP_ORACLE",
             new_tip_height, self.nodes[0].getblockcount(),
         )

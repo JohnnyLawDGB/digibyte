@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace ExchangeAPI;
@@ -64,6 +65,33 @@ MultiExchangeAggregator::ExchangePrice MakeFeed(const std::string& name, CAmount
 {
     return MultiExchangeAggregator::ExchangePrice(name, price, ts == 0 ? GetTime() : ts, ok, 1.0);
 }
+
+class MockBinanceFallbackFetcher final : public BinanceFetcher
+{
+public:
+    MockBinanceFallbackFetcher(std::string dgb_usdt_response,
+                               std::string dgb_btc_response,
+                               std::string btc_usdt_response)
+        : m_dgb_usdt_response(std::move(dgb_usdt_response)),
+          m_dgb_btc_response(std::move(dgb_btc_response)),
+          m_btc_usdt_response(std::move(btc_usdt_response))
+    {
+    }
+
+protected:
+    std::string HttpGet(const std::string& url) override
+    {
+        if (url.find("DGBUSDT") != std::string::npos) return m_dgb_usdt_response;
+        if (url.find("DGBBTC") != std::string::npos) return m_dgb_btc_response;
+        if (url.find("BTCUSDT") != std::string::npos) return m_btc_usdt_response;
+        return "";
+    }
+
+private:
+    std::string m_dgb_usdt_response;
+    std::string m_dgb_btc_response;
+    std::string m_btc_usdt_response;
+};
 
 } // namespace
 
@@ -370,6 +398,30 @@ BOOST_AUTO_TEST_CASE(malformed_trailing_junk_price_string_yields_zero)
     BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(std::string("0.01234usd")), 0);
     BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(std::string("0.01234 1")), 0);
     BOOST_CHECK_EQUAL(fetcher.ConvertToMicroUSD(std::string("1.23e-2x")), 0);
+}
+
+BOOST_AUTO_TEST_CASE(binance_btc_fallback_rejects_trailing_junk_pair_price)
+{
+    MockBinanceFallbackFetcher dgb_btc_junk(
+        R"({"symbol":"DGBUSDT","price":"0"})",
+        R"({"symbol":"DGBBTC","price":"0.00000010usd"})",
+        R"({"symbol":"BTCUSDT","price":"65000.00"})");
+    BOOST_CHECK_EQUAL(dgb_btc_junk.FetchPrice(), 0);
+
+    MockBinanceFallbackFetcher btc_usdt_junk(
+        R"({"symbol":"DGBUSDT","price":"0"})",
+        R"({"symbol":"DGBBTC","price":"0.00000010"})",
+        R"({"symbol":"BTCUSDT","price":"65000.00usd"})");
+    BOOST_CHECK_EQUAL(btc_usdt_junk.FetchPrice(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(binance_btc_fallback_accepts_valid_pair_prices)
+{
+    MockBinanceFallbackFetcher fetcher(
+        R"({"symbol":"DGBUSDT","price":"0"})",
+        R"({"symbol":"DGBBTC","price":"0.00000010"})",
+        R"({"symbol":"BTCUSDT","price":"65000.00"})");
+    BOOST_CHECK_EQUAL(fetcher.FetchPrice(), 6500);
 }
 
 /**

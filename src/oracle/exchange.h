@@ -59,7 +59,7 @@ public:
 
 protected:
     //! Make HTTP GET request
-    std::string HttpGet(const std::string& url);
+    virtual std::string HttpGet(const std::string& url);
 };
 
 /**

@@ -24,6 +24,43 @@
 
 namespace ExchangeAPI {
 
+namespace {
+
+static constexpr int PRICE_PARSE_DECIMALS = 12;
+static constexpr int64_t PRICE_PARSE_SCALE = 1000000000000LL;
+static constexpr CAmount MAX_REASONABLE_PRICE_MICRO_USD = 10 * 1000000;
+
+CAmount ConvertBinancePairPricesToMicroUSD(const std::string& dgb_btc_str, const std::string& btc_usdt_str)
+{
+    int64_t dgb_btc_scaled = 0;
+    if (!ParseFixedPoint(dgb_btc_str, PRICE_PARSE_DECIMALS, &dgb_btc_scaled)) {
+        LogPrintf("Oracle: Binance fallback rejected malformed DGB/BTC price string '%s'\n", dgb_btc_str.c_str());
+        return 0;
+    }
+
+    int64_t btc_usdt_scaled = 0;
+    if (!ParseFixedPoint(btc_usdt_str, PRICE_PARSE_DECIMALS, &btc_usdt_scaled)) {
+        LogPrintf("Oracle: Binance fallback rejected malformed BTC/USDT price string '%s'\n", btc_usdt_str.c_str());
+        return 0;
+    }
+
+    if (dgb_btc_scaled <= 0 || btc_usdt_scaled <= 0) return 0;
+    if (dgb_btc_scaled > PRICE_PARSE_SCALE) return 0; // DGB/BTC > 1 is outside sane fallback bounds.
+
+    const __int128 numerator = static_cast<__int128>(dgb_btc_scaled) *
+                               static_cast<__int128>(btc_usdt_scaled) * 1000000;
+    const __int128 denominator = static_cast<__int128>(PRICE_PARSE_SCALE) *
+                                 static_cast<__int128>(PRICE_PARSE_SCALE);
+    const __int128 price_micro_usd = numerator / denominator;
+    if (price_micro_usd <= 0 || price_micro_usd > MAX_REASONABLE_PRICE_MICRO_USD) {
+        return 0;
+    }
+
+    return static_cast<CAmount>(price_micro_usd);
+}
+
+} // namespace
+
 // CURL callback function for writing response data
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* response)
 {
@@ -257,7 +294,6 @@ CAmount BaseExchangeFetcher::ConvertToMicroUSD(const std::string& price_str)
     // Exchange APIs commonly report more precision than micro-USD. Parse with
     // extra fixed-point precision, then truncate to micro-USD, while still
     // rejecting malformed strings or trailing junk.
-    static constexpr int PRICE_PARSE_DECIMALS = 12;
     static constexpr int64_t PRICE_PARSE_TO_MICRO_USD = 1000000;
     int64_t parsed_price = 0;
     if (!ParseFixedPoint(price_str, PRICE_PARSE_DECIMALS, &parsed_price)) {
@@ -267,7 +303,6 @@ CAmount BaseExchangeFetcher::ConvertToMicroUSD(const std::string& price_str)
 
     // Keep the string path on exact integer arithmetic and the same exchange
     // sanity cap as the double compatibility overload.
-    static constexpr CAmount MAX_REASONABLE_PRICE_MICRO_USD = 10 * 1000000;
     const CAmount price_micro_usd = parsed_price / PRICE_PARSE_TO_MICRO_USD;
     if (price_micro_usd <= 0 || price_micro_usd > MAX_REASONABLE_PRICE_MICRO_USD) {
         return 0;
@@ -399,13 +434,11 @@ CAmount BinanceFetcher::FetchDGBBTC_BTCUSDT()
             return 0;
         }
 
-        double dgb_btc = std::stod(dgb_btc_json["price"].get_str());
-        double btc_usdt = std::stod(btc_usdt_json["price"].get_str());
-        double dgb_usd = dgb_btc * btc_usdt;
-
-        CAmount price_micro_usd = ConvertToMicroUSD(dgb_usd);
-        LogPrint(BCLog::DIGIDOLLAR, "Binance (via BTC): DGB/BTC=%f, BTC/USDT=%f, DGB/USD=%f (%lld micro-USD)\n",
-                 dgb_btc, btc_usdt, dgb_usd, price_micro_usd);
+        const std::string dgb_btc_str = dgb_btc_json["price"].get_str();
+        const std::string btc_usdt_str = btc_usdt_json["price"].get_str();
+        CAmount price_micro_usd = ConvertBinancePairPricesToMicroUSD(dgb_btc_str, btc_usdt_str);
+        LogPrint(BCLog::DIGIDOLLAR, "Binance (via BTC): DGB/BTC=%s, BTC/USDT=%s (%lld micro-USD)\n",
+                 dgb_btc_str.c_str(), btc_usdt_str.c_str(), price_micro_usd);
         return price_micro_usd;
 
     } catch (const std::exception& e) {

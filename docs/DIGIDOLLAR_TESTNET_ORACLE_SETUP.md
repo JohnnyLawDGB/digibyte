@@ -28,11 +28,12 @@ Example `digibyte.conf` entries:
 testnet=1
 server=1
 txindex=1
-
-# Operator node only:
-oracle=1
-oracleid=<your-slot-id>
+digidollar=1
 ```
+
+Do not add `oracle` or `oracleid` config keys. Oracle identity is wallet/RPC
+driven in V1: create or load the key with `createoraclekey`, then start the
+operator with `startoracle` after DigiDollar is active.
 
 The oracle private key should be created or loaded through the wallet RPC flow:
 

@@ -42,9 +42,14 @@ else
 fi
 
 echo ""
-echo "Oracle status:"
-$CLI listoracle
-$CLI getoracles | head -40
+if [ "$ORACLE_STARTED" -eq 1 ]; then
+    echo "Oracle status:"
+    $CLI listoracle
+    $CLI getoracles | head -40
+else
+    echo "Oracle status unavailable until DigiDollar is active and startoracle succeeds."
+    $CLI getdigidollardeploymentinfo 2>/dev/null | head -20 || true
+fi
 
 echo ""
 if [ "$ORACLE_STARTED" -eq 1 ]; then

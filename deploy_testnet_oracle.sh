@@ -7,8 +7,8 @@
 # 2. Clones the correct branch
 # 3. Builds DigiByte from source
 # 4. Configures and starts the node
-# 5. Creates Oracle_Seed wallet
-# 6. Starts Oracle 0
+# 5. Creates Oracle_Seed wallet and oracle key
+# 6. Starts Oracle 0 when the wallet key is authorized and DigiDollar is active
 # 7. Starts mining blocks
 # 8. Sets up systemd for auto-restart
 #
@@ -57,6 +57,7 @@ WALLET_NAME="Oracle_Seed"
 TESTNET_NAME="testnet26"
 TESTNET_P2P_PORT=12033
 TESTNET_RPC_PORT=14026
+TESTNET_GENESIS_HASH="0135174514d831ecc687a15e1ae31164bebf92d58bf279ab929226b8470b1dd3"
 ORACLE_ID="${ORACLE_ID:-0}"
 
 # Detect number of CPU cores for parallel compilation
@@ -396,6 +397,24 @@ echo -e "${GREEN}Mining Address: ${BLUE}$MINING_ADDRESS${NC}"
 # Save address
 echo "$MINING_ADDRESS" > "$DATA_DIR/mining_address.txt"
 
+# Ensure the wallet has an oracle key. If this creates a new key, send the
+# returned pubkey to the maintainer and wait for chainparams before startoracle
+# can run successfully on public networks.
+ORACLE_KEY_STATUS=0
+ORACLE_KEY_RESULT=$($CLI -rpcwallet="$WALLET_NAME" createoraclekey "$ORACLE_ID" 2>&1) || ORACLE_KEY_STATUS=$?
+if [ "$ORACLE_KEY_STATUS" -eq 0 ]; then
+    echo -e "${GREEN}Oracle key created/stored for slot $ORACLE_ID:${NC}"
+    echo "$ORACLE_KEY_RESULT"
+else
+    if echo "$ORACLE_KEY_RESULT" | grep -q "Oracle key already exists"; then
+        echo -e "${YELLOW}Oracle key already exists in wallet '$WALLET_NAME' for slot $ORACLE_ID.${NC}"
+    else
+        echo -e "${RED}Oracle key setup failed:${NC}"
+        echo "$ORACLE_KEY_RESULT"
+        exit 1
+    fi
+fi
+
 # Start Oracle if DigiDollar is active. Fresh testnet26 nodes may need to sync
 # and reach activation before startoracle is valid.
 echo "Checking DigiDollar activation before starting Oracle $ORACLE_ID..."
@@ -457,6 +476,12 @@ echo ""
 
 echo -e "\033[0;33mBlockchain:\033[0m"
 \$CLI getblockchaininfo 2>/dev/null | grep -E '"chain"|"blocks"|"headers"|"verificationprogress"' | sed 's/^/  /'
+ACTUAL_GENESIS=\$(\$CLI getblockhash 0 2>/dev/null || true)
+if [ "\$ACTUAL_GENESIS" = "$TESTNET_GENESIS_HASH" ]; then
+    echo "  genesis: \$ACTUAL_GENESIS (testnet26 OK)"
+else
+    echo "  genesis: \$ACTUAL_GENESIS (EXPECTED testnet26 $TESTNET_GENESIS_HASH)"
+fi
 
 echo ""
 echo -e "\033[0;33mNetwork:\033[0m"

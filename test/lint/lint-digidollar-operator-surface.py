@@ -21,13 +21,6 @@ FORBIDDEN = {
         "<assigned_private_key_hex>",
         "0000000000000000000000000000000000000000000000000000000000000001",
     ],
-    "finish_oracle_setup.sh": [
-        "getoracleinfo",
-        "WALLET_NAME=\"${WALLET_NAME:-oracle_wallet}\"",
-        "ORACLE_PRIVATE_KEY",
-        "<assigned_private_key_hex>",
-        "0000000000000000000000000000000000000000000000000000000000000001",
-    ],
     "docs/ORACLE_OPERATOR_GUIDE.md": [
         "raw_hex_private_key",
     ],
@@ -44,6 +37,23 @@ FORBIDDEN = {
     "ORACLE_BUNDLE_EXPLAINER.md": [
         "getoracleinfo",
         "listoraclekeys",
+    ],
+    "WALLET_MIGRATION_GUIDE.md": [
+        "future testnet resets",
+        "17-oracle list",
+        "**rc30 (current)**",
+    ],
+    "docs/DIGIDOLLAR_TESTNET_ORACLE_SETUP.md": [
+        "oracle=1",
+        "oracleid=<your-slot-id>",
+    ],
+    "finish_oracle_setup.sh": [
+        "getoracleinfo",
+        "WALLET_NAME=\"${WALLET_NAME:-oracle_wallet}\"",
+        "ORACLE_PRIVATE_KEY",
+        "<assigned_private_key_hex>",
+        "echo \"Oracle status:\"\n$CLI listoracle",
+        "0000000000000000000000000000000000000000000000000000000000000001",
     ],
     "test_multi_oracle_testnet.sh": [
         "startoracle 0  \"$ORACLE_KEY_0\"  2>/dev/null || true",
@@ -62,15 +72,6 @@ FORBIDDEN = {
 }
 
 REQUIRED = {
-    "deploy_testnet_oracle.sh": [
-        "TESTNET_NAME=\"testnet26\"",
-        "TESTNET_P2P_PORT=12033",
-        "TESTNET_RPC_PORT=14026",
-        "umask 077",
-        "install -d -m 700 \"$DATA_DIR\"",
-        "chmod 600 \"$CONFIG_FILE\"",
-        "listoracle",
-    ],
     "finish_oracle_setup.sh": [
         "-testnet",
         "WALLET_NAME=\"${WALLET_NAME:-Oracle_Seed}\"",
@@ -83,6 +84,27 @@ REQUIRED = {
     ],
     "ORACLE_BUNDLE_EXPLAINER.md": [
         "getoraclesigners",
+        "listoracle",
+    ],
+    "WALLET_MIGRATION_GUIDE.md": [
+        "ARCHIVED RC30-ONLY",
+        "Do not use this guide for RC44/testnet26",
+        "DIGIDOLLAR_ORACLE_SETUP.md",
+    ],
+    "docs/DIGIDOLLAR_TESTNET_ORACLE_SETUP.md": [
+        "digidollar=1",
+        "createoraclekey <oracle_id>",
+        "startoracle <oracle_id>",
+    ],
+    "deploy_testnet_oracle.sh": [
+        "TESTNET_NAME=\"testnet26\"",
+        "TESTNET_P2P_PORT=12033",
+        "TESTNET_RPC_PORT=14026",
+        "TESTNET_GENESIS_HASH=\"0135174514d831ecc687a15e1ae31164bebf92d58bf279ab929226b8470b1dd3\"",
+        "createoraclekey \"$ORACLE_ID\"",
+        "install -d -m 700 \"$DATA_DIR\"",
+        "chmod 600 \"$CONFIG_FILE\"",
+        "ACTUAL_GENESIS=\\$(\\$CLI getblockhash 0 2>/dev/null || true)",
         "listoracle",
     ],
     "test_multi_oracle_testnet.sh": [

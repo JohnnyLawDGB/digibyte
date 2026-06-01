@@ -1,7 +1,12 @@
 # Oracle Wallet Migration Guide — DigiByte DigiDollar Testnet
 
+## ARCHIVED RC30-ONLY
+
+Do not use this guide for RC44/testnet26. Current RC44/testnet26 wallet and
+oracle migration instructions live in `DIGIDOLLAR_ORACLE_SETUP.md`.
+
 **Last Updated:** 2026-04-19
-**Applies to:** v9.26.0-rc30 (testnet23) and future testnet resets
+**Applies to:** historical v9.26.0-rc30 (`testnet23`) only
 
 > **RC30 migration in one line:** copy `wallets/Oracle/` from `testnet21/` (rc28/rc29) into `testnet23/` (rc30), then patch the SQLite `application_id` from `0xFDD2B9E3` → `0xFDD2B9E4`. Everything else below explains how and why.
 
@@ -9,7 +14,10 @@
 
 ## Overview
 
-When a new DigiDollar testnet release resets the chain (e.g., testnet21 → testnet23 for rc30), your Oracle wallet must be migrated to the new testnet directory. The wallet contains your Schnorr/MuSig2 oracle keypair — **this key does NOT change between resets**, so your slot in the 17-oracle list stays with you across migrations.
+When the historical rc30 release reset the chain from testnet21 to testnet23,
+oracle wallets had to be migrated to the new testnet directory. The wallet
+contains your Schnorr/MuSig2 oracle keypair. For current RC44/testnet26
+instructions, use `DIGIDOLLAR_ORACLE_SETUP.md` instead.
 
 However, simply copying `wallet.dat` into the new directory will fail due to two separate validation checks introduced in recent releases. This guide walks through every step to get your Oracle wallet working on the new chain.
 
@@ -320,7 +328,7 @@ Your pubkey should be the same as before the reset. The keypair lives in the wal
 | rc27 and earlier | `testnet19/20` | `0xFCD1B8E2` | 4241602786 |
 | rc28 | `testnet21`    | `0xFDD2B9E3` | 4258445795 |
 | rc29 | `testnet21`    | `0xFDD2B9E3` | 4258445795 |
-| **rc30 (current)** | **`testnet23`** | **`0xFDD2B9E4`** | **4258445796** |
+| rc30 historical | `testnet23` | `0xFDD2B9E4` | 4258445796 |
 
 > **Note:** rc29 did not reset the chain — it shared testnet21 with rc28. rc30 is the first reset since rc28, which is why everyone migrating to rc30 patches `0xFDD2B9E3` → `0xFDD2B9E4`.
 >

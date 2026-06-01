@@ -522,6 +522,7 @@ def main():
     parser.add_argument('--help', '-h', '-?', action='store_true', help='print help text and exit')
     parser.add_argument('--jobs', '-j', type=int, default=4, help='how many test scripts to run in parallel. Default=4.')
     parser.add_argument('--keepcache', '-k', action='store_true', help='the default behavior is to flush the cache directory on startup. --keepcache retains the cache from the previous testrun.')
+    parser.add_argument('--list', action='store_true', help='list selected test scripts and exit without running them')
     parser.add_argument('--quiet', '-q', action='store_true', help='only print dots, results summary and failure logs')
     parser.add_argument('--tmpdirprefix', '-t', default=tempfile.gettempdir(), help="Root directory for datadirs")
     parser.add_argument('--failfast', '-F', action='store_true', help='stop execution after the first test failure')
@@ -611,6 +612,12 @@ def main():
     if not test_list:
         print("No valid test scripts specified. Check that your test is in one "
               "of the test lists in test_runner.py, or run test_runner.py with no arguments to run all tests")
+        sys.exit(0)
+
+    if args.list:
+        for test in test_list:
+            print(test)
+        shutil.rmtree(tmpdir, ignore_errors=True)
         sys.exit(0)
 
     if args.help:

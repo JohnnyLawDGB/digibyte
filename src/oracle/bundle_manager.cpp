@@ -707,6 +707,18 @@ bool OracleBundleManager::UpdateBundle(const COracleBundle& bundle)
     std::lock_guard<std::mutex> lock(mtx_bundles);
 
     epoch_bundles[bundle.epoch] = bundle;
+    const int32_t newest_epoch = std::max_element(
+        epoch_bundles.begin(), epoch_bundles.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; })->first;
+    for (auto it = epoch_bundles.begin(); it != epoch_bundles.end(); ) {
+        if (it->first < newest_epoch - 1) {
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Pruning stale bundle for epoch %d after update\n", it->first);
+            it = epoch_bundles.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     LogPrintf("Oracle: Updated bundle for epoch %d with %d messages\n",
              bundle.epoch, bundle.messages.size());
 

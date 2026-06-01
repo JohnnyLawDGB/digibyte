@@ -175,6 +175,40 @@ BOOST_AUTO_TEST_CASE(height_to_price_cap_at_1000)
 }
 
 // ============================================================================
+// DD-FINAL-023: UpdateBundle must not let regtest/mock epoch_bundles grow
+// without bound.
+//
+// `PublishRegtestMockMuSig2Quote()` reaches `UpdateBundle()` directly when
+// mock oracle prices are refreshed for mempool admission. CleanupOldBundles()
+// documents the intended current+previous retention window, but the production
+// update path must enforce that window itself.
+// ============================================================================
+BOOST_AUTO_TEST_CASE(update_bundle_prunes_stale_epochs)
+{
+    OracleBundleManager& manager = OracleBundleManager::GetInstance();
+    manager.Clear();
+    manager.SetEnabled(true);
+
+    for (int32_t epoch = 1; epoch <= 10; ++epoch) {
+        COracleBundle bundle(epoch);
+        bundle.median_price_micro_usd = 6000 + epoch;
+        bundle.timestamp = GetTime() + epoch;
+        BOOST_REQUIRE(manager.UpdateBundle(bundle));
+    }
+
+    BOOST_CHECK_LE(manager.GetStats().active_bundles, 2U);
+
+    // Inserting an old epoch after a newer quote must not re-grow stale state.
+    COracleBundle old_bundle(3);
+    old_bundle.median_price_micro_usd = 7000;
+    old_bundle.timestamp = GetTime() + 11;
+    BOOST_REQUIRE(manager.UpdateBundle(old_bundle));
+    BOOST_CHECK_LE(manager.GetStats().active_bundles, 2U);
+
+    manager.Clear();
+}
+
+// ============================================================================
 // DD-FA-TEST-037: DeserializeV03Data rejects pathological payloads in
 // bounded CPU time.
 //

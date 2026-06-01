@@ -139,6 +139,52 @@ static bool IsStandardDDTokenOutput(const CTxOut& txout)
            witness_program.size() == WITNESS_V1_TAPROOT_SIZE;
 }
 
+static bool IsCanonicalP2TROutput(const CScript& script)
+{
+    int witness_version = -1;
+    std::vector<unsigned char> witness_program;
+    return script.IsWitnessProgram(witness_version, witness_program) &&
+           witness_version == 1 &&
+           witness_program.size() == WITNESS_V1_TAPROOT_SIZE;
+}
+
+struct MintOutputIndexes {
+    uint32_t collateral_index{std::numeric_limits<uint32_t>::max()};
+    uint32_t dd_token_index{std::numeric_limits<uint32_t>::max()};
+    CAmount collateral_amount{0};
+};
+
+static bool FindMintOutputIndexes(const CTransaction& tx, MintOutputIndexes& indexes)
+{
+    indexes = {};
+
+    if (DigiDollar::GetDigiDollarTxType(tx) != DigiDollar::DD_TX_MINT) {
+        return false;
+    }
+
+    int collateral_count = 0;
+    int dd_token_count = 0;
+    for (uint32_t i = 0; i < tx.vout.size(); ++i) {
+        const CTxOut& txout = tx.vout[i];
+        if (!IsCanonicalP2TROutput(txout.scriptPubKey)) {
+            continue;
+        }
+
+        if (txout.nValue > 0) {
+            ++collateral_count;
+            indexes.collateral_index = i;
+            indexes.collateral_amount = txout.nValue;
+        } else if (txout.nValue == 0) {
+            ++dd_token_count;
+            indexes.dd_token_index = i;
+        }
+    }
+
+    return collateral_count == 1 &&
+           dd_token_count == 1 &&
+           indexes.collateral_amount > 0;
+}
+
 static std::vector<CAmount> ExtractDDMetadataAmounts(const CTransaction& tx, int expected_type)
 {
     std::vector<CAmount> amounts;
@@ -272,15 +318,21 @@ size_t DigiDollarWallet::LoadFromDatabase()
         wallet::WalletBatch lock_batch(m_wallet->GetDatabase());
         for (const auto& [pos_id, pos] : collateral_positions) {
             if (pos.is_active) {
-                // Lock collateral output (vout[0] of mint TX)
                 COutPoint collateralOutpoint(pos.dd_timelock_id, 0);
+                COutPoint ddTokenOutpoint(pos.dd_timelock_id, 1);
+                auto tx_it = m_wallet->mapWallet.find(pos.dd_timelock_id);
+                if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                    MintOutputIndexes mint_outputs;
+                    if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                        collateralOutpoint = COutPoint(pos.dd_timelock_id, mint_outputs.collateral_index);
+                        ddTokenOutpoint = COutPoint(pos.dd_timelock_id, mint_outputs.dd_token_index);
+                    }
+                }
                 if (!m_wallet->IsLockedCoin(collateralOutpoint)) {
                     if (m_wallet->LockCoin(collateralOutpoint, &lock_batch)) {
                         locked_count++;
                     }
                 }
-                // Lock DD token output (vout[1] of mint TX)
-                COutPoint ddTokenOutpoint(pos.dd_timelock_id, 1);
                 if (!m_wallet->IsLockedCoin(ddTokenOutpoint)) {
                     if (m_wallet->LockCoin(ddTokenOutpoint, &lock_batch)) {
                         locked_count++;
@@ -689,7 +741,7 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
     // This handles the case where dd_owner_keys is empty (e.g., after wallet restore)
     // but we've already processed the MINT tx and added it to collateral_positions
     if (collateral_positions.count(txid) > 0) {
-        // This txid is a MINT we own - so vout[1] (the DD output) is ours
+        // This txid is a MINT we own, so its canonical DD token output is ours.
         return true;
     }
 
@@ -1306,10 +1358,23 @@ size_t DigiDollarWallet::GetPositionCount() const
 
 bool DigiDollarWallet::IsLockedByDD(const COutPoint& outpoint) const
 {
-    LOCK(cs_dd_wallet);
+    auto locks = LockDDWallet();
     if (dd_utxos.count(outpoint)) return true;
     for (const auto& [id, pos] : collateral_positions) {
-        if (pos.is_active && COutPoint(id, 0) == outpoint) return true;
+        if (!pos.is_active) continue;
+
+        COutPoint collateral_outpoint(id, 0);
+        if (m_wallet) {
+            auto tx_it = m_wallet->mapWallet.find(id);
+            if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                MintOutputIndexes mint_outputs;
+                if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                    collateral_outpoint = COutPoint(id, mint_outputs.collateral_index);
+                }
+            }
+        }
+
+        if (collateral_outpoint == outpoint) return true;
     }
     return false;
 }
@@ -2267,16 +2332,15 @@ uint32_t DigiDollarWallet::DeriveLockTierFromHeight(int64_t mint_height, int64_t
 
 bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int block_height, WalletCollateralPosition& pos_out)
 {
-    // Extract complete position data from a MINT transaction
-    // DD_TX_MINT structure (v2 - with explicit tier):
-    // vout[0]: P2TR Collateral Lock (nValue = dgb_collateral)
-    // vout[1]: P2TR DD Token (nValue = 0)
-    // vout[2]: OP_RETURN ("DD" | txType=1 | dd_minted | unlock_height | lock_tier)
+    // Extract complete position data from a MINT transaction.
+    // Consensus identifies the collateral/DD token outputs by structure:
+    // one positive-value P2TR collateral output and one zero-value P2TR DD token.
+    // The OP_RETURN carries ("DD" | txType=1 | dd_minted | unlock_height | lock_tier).
     //
     // NOTE: lock_tier is REQUIRED in OP_RETURN. Old format transactions without
     // explicit tier are not supported (clean testnet restart).
 
-    if (DigiDollar::GetDigiDollarTxType(tx) != DD_TX_MINT) {
+    if (DigiDollar::GetDigiDollarTxType(tx) != DigiDollar::DD_TX_MINT) {
         LogPrintf("DigiDollar: ExtractPositionFromMintTx - Transaction is not a DD mint\n");
         return false;
     }
@@ -2286,13 +2350,9 @@ bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int blo
         return false;
     }
 
-    if (tx.vout[0].nValue <= 0) {
-        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Mint collateral output has no value\n");
-        return false;
-    }
-
-    if (tx.vout[1].nValue != 0 || tx.vout[1].scriptPubKey.size() != 34 || tx.vout[1].scriptPubKey[0] != OP_1) {
-        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Mint DD token output is not canonical P2TR\n");
+    MintOutputIndexes mint_outputs;
+    if (!FindMintOutputIndexes(tx, mint_outputs)) {
+        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Mint outputs are not canonical\n");
         return false;
     }
 
@@ -2310,13 +2370,8 @@ bool DigiDollarWallet::ExtractPositionFromMintTx(const CTransaction& tx, int blo
         return false;
     }
 
-    // 3. Get collateral amount from vout[0]
-    if (tx.vout.empty()) {
-        LogPrintf("DigiDollar: ExtractPositionFromMintTx - Transaction has no outputs\n");
-        return false;
-    }
-
-    CAmount dgb_collateral = tx.vout[0].nValue;
+    // 3. Get collateral amount from the consensus-recognized output
+    CAmount dgb_collateral = mint_outputs.collateral_amount;
 
     // 4. Extract lock tier from OP_RETURN (REQUIRED - no fallback to derivation)
     uint32_t lock_tier = 0;
@@ -2408,6 +2463,48 @@ bool DigiDollarWallet::RefreshPositionMetadataFromMintTx(const uint256& position
     return WriteDDTimeLock(repaired);
 }
 
+bool DigiDollarWallet::GetMintCollateralOutpoint(const uint256& position_id, COutPoint& collateral_outpoint) const
+{
+    auto locks = LockDDWallet();
+    if (!m_wallet) {
+        return false;
+    }
+
+    auto tx_it = m_wallet->mapWallet.find(position_id);
+    if (tx_it == m_wallet->mapWallet.end() || !tx_it->second.tx) {
+        return false;
+    }
+
+    MintOutputIndexes mint_outputs;
+    if (!FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+        return false;
+    }
+
+    collateral_outpoint = COutPoint(position_id, mint_outputs.collateral_index);
+    return true;
+}
+
+bool DigiDollarWallet::GetMintDDTokenOutpoint(const uint256& position_id, COutPoint& dd_token_outpoint) const
+{
+    auto locks = LockDDWallet();
+    if (!m_wallet) {
+        return false;
+    }
+
+    auto tx_it = m_wallet->mapWallet.find(position_id);
+    if (tx_it == m_wallet->mapWallet.end() || !tx_it->second.tx) {
+        return false;
+    }
+
+    MintOutputIndexes mint_outputs;
+    if (!FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+        return false;
+    }
+
+    dd_token_outpoint = COutPoint(position_id, mint_outputs.dd_token_index);
+    return true;
+}
+
 void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int block_height) {
     auto locks = LockDDWallet();
     if (!m_wallet) return;
@@ -2473,24 +2570,26 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
 
         LOCK(m_wallet->cs_wallet);
 
-        // For restored wallets, IsMine(vout[0]) fails because the collateral uses
+        MintOutputIndexes mint_outputs;
+        if (!FindMintOutputIndexes(tx, mint_outputs)) {
+            LogPrintf("DigiDollar: ProcessDDTxForRescan - Mint outputs are not canonical, skipping\n");
+            return;
+        }
+
+        // For restored wallets, IsMine(collateral) fails because the collateral uses
         // a custom MAST tree that the wallet doesn't know about. Ownership must
         // still be proven by the DD token output itself. Ordinary DGB inputs or
         // change/payment outputs in the same transaction are not proof that this
         // wallet owns the DD position.
         bool is_our_mint = false;
 
-        // Mint transactions place the DD token at vout[1]. Only claim the mint
-        // if this wallet can prove spendability of that 0-value P2TR DD output.
-        if (tx.vout.size() >= 2) {
-            const CTxOut& dd_txout = tx.vout[1];
-            const bool looks_like_dd_token = dd_txout.nValue == 0 &&
-                                             dd_txout.scriptPubKey.size() == 34 &&
-                                             dd_txout.scriptPubKey[0] == OP_1;
-            if (looks_like_dd_token && IsDDOutputMine(dd_txout, tx.GetHash())) {
-                is_our_mint = true;
-                LogPrintf("DigiDollar: ProcessDDTxForRescan - Our DD mint token found at vout[1]\n");
-            }
+        // Only claim the mint if this wallet can prove spendability of the
+        // consensus-recognized zero-value P2TR DD output.
+        const CTxOut& dd_txout = tx.vout[mint_outputs.dd_token_index];
+        if (IsDDOutputMine(dd_txout, tx.GetHash())) {
+            is_our_mint = true;
+            LogPrintf("DigiDollar: ProcessDDTxForRescan - Our DD mint token found at vout[%u]\n",
+                      mint_outputs.dd_token_index);
         }
 
         if (!is_our_mint) {
@@ -2505,8 +2604,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             // chain data, but redemption still needs the mint owner key indexed
             // by mint txid. If IsDDOutputMine() recovered the key from imported
             // descriptors, promote the DD output key to the owner-key map here.
-            if (tx.vout.size() >= 2) {
-                const CTxOut& dd_txout = tx.vout[1];
+            {
                 CKey owner_key;
                 if (!GetOwnerKey(tx.GetHash(), owner_key)) {
                     if (GetDDOutputSpendingKey(dd_txout, owner_key)) {
@@ -2582,7 +2680,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 }
             }
 
-            // CRITICAL FIX: Also restore the DD UTXO (vout[1] contains the DD tokens)
+            // CRITICAL FIX: Also restore the DD UTXO
             // This is needed because dd_utxos map is not exported with descriptors
             //
             // IMPORTANT: We must ALWAYS add the DD UTXO here, even if IsSpent() returns true.
@@ -2596,14 +2694,14 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             //
             // The TRANSFER/REDEEM processing will remove spent UTXOs from dd_utxos, so the
             // final state will be correct.
-            if (tx.vout.size() >= 2) {
-                COutPoint ddOutpoint(tx.GetHash(), 1);
+            {
+                COutPoint ddOutpoint(tx.GetHash(), mint_outputs.dd_token_index);
                 // Check if not already tracked
                 if (dd_utxos.find(ddOutpoint) == dd_utxos.end()) {
                     // Always add the DD UTXO - TRANSFER/REDEEM processing will remove if spent
                     dd_utxos[ddOutpoint] = pos.dd_minted;
-                    LogPrintf("DigiDollar: Added DD UTXO %s:1 during MINT rescan (DD: %lld)\n",
-                              tx.GetHash().GetHex(), pos.dd_minted);
+                    LogPrintf("DigiDollar: Added DD UTXO %s:%u during MINT rescan (DD: %lld)\n",
+                              tx.GetHash().GetHex(), mint_outputs.dd_token_index, pos.dd_minted);
 
                     // Only persist if not spent - spent UTXOs will be removed by TRANSFER/REDEEM
                     if (!m_wallet->IsSpent(ddOutpoint)) {
@@ -2622,18 +2720,18 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
             // CRITICAL FIX: Lock collateral and DD token UTXOs during rescan
             // to prevent wallet coin selection from picking them for regular DGB sends.
             {
-                COutPoint collateralOutpoint(tx.GetHash(), 0);
-                COutPoint ddTokenOutpoint(tx.GetHash(), 1);
+                COutPoint collateralOutpoint(tx.GetHash(), mint_outputs.collateral_index);
+                COutPoint ddTokenOutpoint(tx.GetHash(), mint_outputs.dd_token_index);
                 wallet::WalletBatch lock_batch(m_wallet->GetDatabase());
                 if (!m_wallet->IsLockedCoin(collateralOutpoint)) {
                     m_wallet->LockCoin(collateralOutpoint, &lock_batch);
-                    LogPrintf("DigiDollar: Locked collateral UTXO %s:0 during rescan\n",
-                              tx.GetHash().GetHex().substr(0, 16).c_str());
+                    LogPrintf("DigiDollar: Locked collateral UTXO %s:%u during rescan\n",
+                              tx.GetHash().GetHex().substr(0, 16).c_str(), mint_outputs.collateral_index);
                 }
                 if (!m_wallet->IsLockedCoin(ddTokenOutpoint)) {
                     m_wallet->LockCoin(ddTokenOutpoint, &lock_batch);
-                    LogPrintf("DigiDollar: Locked DD token UTXO %s:1 during rescan\n",
-                              tx.GetHash().GetHex().substr(0, 16).c_str());
+                    LogPrintf("DigiDollar: Locked DD token UTXO %s:%u during rescan\n",
+                              tx.GetHash().GetHex().substr(0, 16).c_str(), mint_outputs.dd_token_index);
                 }
             }
 
@@ -2942,7 +3040,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
     }
     else if (ddTxType == 3) {  // REDEEM transaction
         // Find which position was redeemed and mark inactive
-        // REDEEM tx spends the collateral output (vout[0] of mint tx) AND DD UTXOs
+        // REDEEM tx spends the mint collateral output and DD UTXOs
         LogPrintf("DigiDollar: ProcessDDTxForRescan - Found REDEEM tx %s\n", tx.GetHash().GetHex());
 
         LOCK(m_wallet->cs_wallet);
@@ -2963,8 +3061,20 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
 
         for (const CTxIn& txin : tx.vin) {
             auto it = collateral_positions.find(txin.prevout.hash);
-            if (it != collateral_positions.end() && txin.prevout.n == 0) {
-                // This input spends vout[0] of a mint tx we track
+            if (it != collateral_positions.end()) {
+                COutPoint collateral_outpoint(txin.prevout.hash, 0);
+                auto tx_it = m_wallet->mapWallet.find(txin.prevout.hash);
+                if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                    MintOutputIndexes mint_outputs;
+                    if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                        collateral_outpoint = COutPoint(txin.prevout.hash, mint_outputs.collateral_index);
+                    }
+                }
+                if (txin.prevout != collateral_outpoint) {
+                    continue;
+                }
+
+                // This input spends the collateral output of a mint tx we track
                 it->second.is_active = false;
                 UpdatePositionStatus(it->first, false);
 
@@ -3862,27 +3972,26 @@ CAmount DigiDollarWallet::GetDDFromUTXO(const COutPoint& outpoint) const {
 
 bool DigiDollarWallet::IsDDTokenUnspent(const uint256& dd_timelock_id) const {
     auto locks = LockDDWallet();
-    // DD token output is always at index 1 of the mint transaction
-    COutPoint dd_token_outpoint(dd_timelock_id, 1);
-
-    // Check if the DD token UTXO exists in our tracking map
-    auto it = dd_utxos.find(dd_token_outpoint);
+    auto it = std::find_if(dd_utxos.begin(), dd_utxos.end(),
+        [&](const auto& entry) { return entry.first.hash == dd_timelock_id; });
     if (it == dd_utxos.end()) {
         // Not in our tracking map - could be already spent/transferred
-        LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 not in dd_utxos map\n",
+        LogPrintf("DigiDollar: IsDDTokenUnspent - no DD UTXO for mint %s in dd_utxos map\n",
                   dd_timelock_id.ToString());
         return false;
     }
+
+    const COutPoint& dd_token_outpoint = it->first;
 
     // Verify UTXO is still unspent in the wallet
     if (m_wallet && m_wallet->IsSpent(dd_token_outpoint)) {
-        LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 is spent (transferred away)\n",
-                  dd_timelock_id.ToString());
+        LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:%u is spent (transferred away)\n",
+                  dd_timelock_id.ToString(), dd_token_outpoint.n);
         return false;
     }
 
-    LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:1 is still unspent (%lld cents)\n",
-              dd_timelock_id.ToString(), static_cast<long long>(it->second));
+    LogPrintf("DigiDollar: IsDDTokenUnspent - UTXO %s:%u is still unspent (%lld cents)\n",
+              dd_timelock_id.ToString(), dd_token_outpoint.n, static_cast<long long>(it->second));
     return true;
 }
 
@@ -3899,9 +4008,17 @@ void DigiDollarWallet::AddCollateralPosition(const WalletCollateralPosition& pos
                   position.dd_timelock_id.GetHex(), static_cast<long long>(position.dd_minted), static_cast<long long>(position.dgb_collateral),
                   position.lock_tier, position.is_active ? "YES" : "NO");
 
-        // FIX #1: Add DD UTXO to tracking map
-        // DD output from mint is always at vout 1
+        // FIX #1: Add DD UTXO to tracking map.
         COutPoint dd_outpoint(position.dd_timelock_id, 1);
+        if (m_wallet) {
+            auto tx_it = m_wallet->mapWallet.find(position.dd_timelock_id);
+            if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                MintOutputIndexes mint_outputs;
+                if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                    dd_outpoint = COutPoint(position.dd_timelock_id, mint_outputs.dd_token_index);
+                }
+            }
+        }
         dd_utxos[dd_outpoint] = position.dd_minted;
         LogPrintf("DigiDollar: Added DD UTXO to tracking - %s:%u (%lld cents)\n",
                   dd_outpoint.hash.ToString(), dd_outpoint.n, static_cast<long long>(position.dd_minted));
@@ -4223,11 +4340,20 @@ size_t DigiDollarWallet::ValidatePositionStates()
     // Collect collateral outpoints for real collateral positions. DD change
     // compatibility entries have no collateral and must not be reconciled here.
     std::map<COutPoint, Coin> coins_to_check;
+    std::map<uint256, COutPoint> position_outpoints;
     std::vector<uint256> position_ids;
     for (const auto& [id, pos] : collateral_positions) {
         if (pos.dgb_collateral > 0) {
             COutPoint collateral_outpoint(pos.dd_timelock_id, 0);
+            auto tx_it = m_wallet->mapWallet.find(pos.dd_timelock_id);
+            if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                MintOutputIndexes mint_outputs;
+                if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                    collateral_outpoint = COutPoint(pos.dd_timelock_id, mint_outputs.collateral_index);
+                }
+            }
             coins_to_check[collateral_outpoint] = Coin();
+            position_outpoints[id] = collateral_outpoint;
             position_ids.push_back(id);
         }
     }
@@ -4251,7 +4377,7 @@ size_t DigiDollarWallet::ValidatePositionStates()
 
     size_t corrected = 0;
     for (const auto& id : position_ids) {
-        COutPoint collateral_outpoint(id, 0);
+        COutPoint collateral_outpoint = position_outpoints.count(id) ? position_outpoints.at(id) : COutPoint(id, 0);
         const Coin& coin = coins_to_check[collateral_outpoint];
         auto it = collateral_positions.find(id);
         if (it == collateral_positions.end()) {
@@ -4307,13 +4433,22 @@ size_t DigiDollarWallet::ReconcilePositionStates()
     }
 
     std::map<COutPoint, Coin> coins_to_check;
+    std::map<uint256, COutPoint> position_outpoints;
     std::vector<uint256> position_ids;
     {
         auto locks = LockDDWallet();
         for (const auto& [id, pos] : collateral_positions) {
             if (pos.dgb_collateral > 0) {
-                const COutPoint collateral_outpoint(pos.dd_timelock_id, 0);
+                COutPoint collateral_outpoint(pos.dd_timelock_id, 0);
+                auto tx_it = m_wallet->mapWallet.find(pos.dd_timelock_id);
+                if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                    MintOutputIndexes mint_outputs;
+                    if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                        collateral_outpoint = COutPoint(pos.dd_timelock_id, mint_outputs.collateral_index);
+                    }
+                }
                 coins_to_check[collateral_outpoint] = Coin();
+                position_outpoints[id] = collateral_outpoint;
                 position_ids.push_back(id);
             }
         }
@@ -4359,7 +4494,8 @@ size_t DigiDollarWallet::ReconcilePositionStates()
                           id.ToString());
             }
 
-            const COutPoint collateral_outpoint(it->second.dd_timelock_id, 0);
+            const COutPoint collateral_outpoint =
+                position_outpoints.count(id) ? position_outpoints.at(id) : COutPoint(it->second.dd_timelock_id, 0);
             auto coin_it = coins_to_check.find(collateral_outpoint);
             const bool coin_spent = coin_it == coins_to_check.end() || coin_it->second.IsSpent();
             const bool wallet_spent = m_wallet->IsSpent(collateral_outpoint);
@@ -4570,6 +4706,53 @@ bool DigiDollarWallet::ProcessTransactionForDD(const CTransaction& tx, const uin
 
                     LogPrint(BCLog::WALLETDB, "DigiDollar: ProcessTxForDD - Added DD UTXO %s:%zu (%lld cents)\n",
                              txid.ToString(), n, static_cast<long long>(dd_amount));
+                }
+
+                if (ddTxType == DD_TX_MINT) {
+                    int block_height = -1;
+                    auto wtx_it = m_wallet->mapWallet.find(txid);
+                    if (wtx_it != m_wallet->mapWallet.end()) {
+                        if (auto* conf = wtx_it->second.state<wallet::TxStateConfirmed>()) {
+                            block_height = conf->confirmed_block_height;
+                        }
+                    }
+
+                    WalletCollateralPosition pos;
+                    if (ExtractPositionFromMintTx(tx, block_height, pos)) {
+                        CKey owner_key;
+                        if (!GetOwnerKey(txid, owner_key) && GetDDOutputSpendingKey(txout, owner_key)) {
+                            StoreOwnerKey(txid, owner_key);
+                        }
+                        if (GetOwnerKey(txid, owner_key)) {
+                            pos.owner_keyid = owner_key.GetPubKey().GetID();
+                        }
+
+                        auto existing_position = collateral_positions.find(pos.dd_timelock_id);
+                        if (existing_position == collateral_positions.end() ||
+                            existing_position->second.dd_minted != pos.dd_minted ||
+                            existing_position->second.dgb_collateral != pos.dgb_collateral ||
+                            existing_position->second.lock_tier != pos.lock_tier ||
+                            existing_position->second.unlock_height != pos.unlock_height ||
+                            existing_position->second.owner_keyid != pos.owner_keyid) {
+                            WriteDDTimeLock(pos);
+                            changed = true;
+                            LogPrint(BCLog::WALLETDB,
+                                     "DigiDollar: ProcessTxForDD - Added/repaired mint position %s from confirmed wallet tx\n",
+                                     txid.ToString());
+                        }
+
+                        MintOutputIndexes mint_outputs;
+                        if (FindMintOutputIndexes(tx, mint_outputs)) {
+                            wallet::WalletBatch lock_batch(m_wallet->GetDatabase());
+                            const COutPoint collateral_outpoint(txid, mint_outputs.collateral_index);
+                            if (!m_wallet->IsLockedCoin(collateral_outpoint)) {
+                                m_wallet->LockCoin(collateral_outpoint, &lock_batch);
+                            }
+                            if (!m_wallet->IsLockedCoin(outpoint)) {
+                                m_wallet->LockCoin(outpoint, &lock_batch);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -4965,8 +5148,8 @@ bool DigiDollarWallet::TransferDigiDollar(const CDigiDollarAddress& to, CAmount 
         }
 
         // CRITICAL: DD Transfers DON'T create/destroy time-locks!
-        // Time-locks (vout[0] of mint) stay intact until redemption
-        // Only DD tokens (vout[1]) move between wallets
+        // Time-locks stay intact until redemption.
+        // Only DD token UTXOs move between wallets.
         //
         // What we need to do:
         // 1. Mark spent DD UTXOs as spent (NOT the time-lock position!)
@@ -5069,7 +5252,11 @@ bool DigiDollarWallet::RedeemDigiDollar(const uint256& dd_timelock_id, const CAm
         DigiDollar::RedeemTxBuilder builder(Params(), currentHeight, oraclePrice);
 
         DigiDollar::TxBuilderRedeemParams params;
-        params.collateralOutpoint = COutPoint(dd_timelock_id, 0); // Assuming output 0
+        if (!GetMintCollateralOutpoint(dd_timelock_id, params.collateralOutpoint)) {
+            LogPrintf("DigiDollar: RedeemDigiDollar blocked because collateral outpoint could not be resolved for %s\n",
+                      dd_timelock_id.ToString());
+            return false;
+        }
         params.ddToRedeem = amount;
         params.path = builder.DetermineRedemptionPath(params);
 
@@ -6327,10 +6514,20 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
         WalletCollateralPosition position;
         bool is_collateral = false;
         for (const auto& [pos_id, pos] : collateral_positions) {
-            if (pos_id == outpoint.hash && outpoint.n == 0) {  // Collateral is always vout[0]
-                position = pos;
-                is_collateral = true;
-                break;
+            if (pos_id == outpoint.hash) {
+                COutPoint collateral_outpoint(pos_id, 0);
+                auto tx_it = m_wallet->mapWallet.find(pos_id);
+                if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                    MintOutputIndexes mint_outputs;
+                    if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                        collateral_outpoint = COutPoint(pos_id, mint_outputs.collateral_index);
+                    }
+                }
+                if (outpoint == collateral_outpoint) {
+                    position = pos;
+                    is_collateral = true;
+                    break;
+                }
             }
         }
 
@@ -6397,7 +6594,7 @@ bool DigiDollarWallet::SignDDInputs(CMutableTransaction& tx,
             continue;  // Move to next input
         }
 
-        // This is collateral (vout[0]) - position already found above
+        // This is collateral - position already found above
         // Use the position data to reconstruct MAST tree
         LogPrintf("DigiDollar: SignDDInputs - Output %s:%d is collateral, using script-path signing\n",
                   outpoint.hash.ToString(), outpoint.n);
@@ -6699,6 +6896,14 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
                   collateral_outpoint.hash.ToString());
         return false;
     }
+    COutPoint expected_collateral_outpoint;
+    if (!GetMintCollateralOutpoint(collateral_outpoint.hash, expected_collateral_outpoint) ||
+        expected_collateral_outpoint != collateral_outpoint) {
+        LogPrintf("DigiDollar: SignRedemptionTransaction - Collateral outpoint mismatch for %s (got %u, expected %u)\n",
+                  collateral_outpoint.hash.ToString(), collateral_outpoint.n,
+                  expected_collateral_outpoint.n);
+        return false;
+    }
 
     LOCK(m_wallet->cs_wallet);
 
@@ -6925,8 +7130,8 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
     }
 
     // 7. Sign DD inputs (indices 1, 2, 3...) using KEY-PATH spending
-    // DD token outputs (vout[1]) are simple P2TR with key-path only (no MAST, no CLTV)
-    // Only collateral outputs (vout[0]) have MAST and use script-path spending
+    // DD token outputs are simple P2TR with key-path only (no MAST, no CLTV).
+    // Collateral outputs have MAST and use script-path spending.
     for (size_t i = 0; i < dd_utxos.size(); i++) {
         size_t input_index = 1 + i;  // DD inputs start at index 1 (after collateral at index 0)
 
@@ -6990,7 +7195,7 @@ bool DigiDollarWallet::SignRedemptionTransaction(CMutableTransaction& tx,
 
         // CRITICAL: DD token outputs are simple P2TR with key-path only (no MAST, no CLTV)
         // DD can be at any vout index:
-        //   - vout[1] for minted DD (collateral at vout[0])
+        //   - the mint DD token output
         //   - vout[0] for transfer recipient DD
         //   - vout[1+] for transfer change DD
         // All use the same key-path signing approach
@@ -7109,7 +7314,7 @@ bool DigiDollarWallet::MarkDDUTXOsSpent(const std::vector<COutPoint>& spent_utxo
                       utxo.hash.ToString(), utxo.n, static_cast<long long>(utxo_it->second));
         }
 
-        // Check if this is a DDTimeLock position (only at vout[1])
+        // Check if this is a DDTimeLock position
         if (utxo.n == 1) {
             // Find position in cache
             auto it = collateral_positions.find(utxo.hash);

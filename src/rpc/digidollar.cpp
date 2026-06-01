@@ -1481,13 +1481,9 @@ RPCHelpMan mintdigidollar()
                 dd_wallet->StoreOwnerKey(positionId, ownerKey);
                 dd_wallet->AddCollateralPosition(position);
 
-                // CRITICAL FIX: Track the DD UTXO so it can be found by GetDDUTXOs()
-                // The DD token output is always at vout[1] in a mint transaction:
-                //   vout[0] = Collateral (P2TR with timelock)
-                //   vout[1] = DD token output (P2TR with 0 value) <- THIS IS THE DD UTXO
-                //   vout[2] = OP_RETURN metadata
-                //   vout[3] = Change output (optional)
+                // CRITICAL FIX: Track the DD UTXO so it can be found by GetDDUTXOs().
                 COutPoint ddOutpoint(positionId, 1);
+                dd_wallet->GetMintDDTokenOutpoint(positionId, ddOutpoint);
                 dd_wallet->AddDDUTXO(ddOutpoint, ddAmount);
 
                 // CRITICAL FIX #2: Persist DD UTXO to wallet database so it survives daemon restart
@@ -1501,8 +1497,8 @@ RPCHelpMan mintdigidollar()
                     }
                 }
 
-                LogPrintf("DigiDollar RPC: Added position %s with %d DD cents, stored owner key, and tracked DD UTXO at vout 1\n",
-                         position.dd_timelock_id.ToString(), ddAmount);
+                LogPrintf("DigiDollar RPC: Added position %s with %d DD cents, stored owner key, and tracked DD UTXO at vout %u\n",
+                         position.dd_timelock_id.ToString(), ddAmount, ddOutpoint.n);
             } else {
                 LogPrintf("DigiDollar RPC: DD position not persisted (broadcast=%d, ddwallet=%d)\n",
                           should_broadcast ? 1 : 0, dd_wallet ? 1 : 0);
@@ -2011,8 +2007,7 @@ RPCHelpMan redeemdigidollar()
 
             LogPrintf("DigiDollar: ====== REDEMPTION REQUEST ======\n");
             LogPrintf("DigiDollar: Position ID (mint txid): %s\n", positionId.ToString());
-            LogPrintf("DigiDollar: Will try to spend: %s:0 (collateral) and %s:1 (DD token)\n",
-                     positionId.ToString(), positionId.ToString());
+            LogPrintf("DigiDollar: Resolving mint collateral and DD token outpoints from wallet metadata\n");
 
             // Get position from wallet
             LOCK(pwallet->cs_wallet);
@@ -2047,6 +2042,15 @@ RPCHelpMan redeemdigidollar()
             if (!found) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Position not found after metadata repair");
             }
+
+            COutPoint collateralOutpoint;
+            if (!dd_wallet->GetMintCollateralOutpoint(positionId, collateralOutpoint)) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    "Cannot resolve DigiDollar collateral output for this position. "
+                    "Rescan or restore the wallet before redeeming.");
+            }
+            LogPrintf("DigiDollar: Will try to spend collateral %s:%u\n",
+                      collateralOutpoint.hash.ToString(), collateralOutpoint.n);
 
             // Check if redeemable
             int currentHeight = pwallet->GetLastBlockHeight();
@@ -2113,7 +2117,7 @@ RPCHelpMan redeemdigidollar()
             }
 
             DigiDollar::TxBuilderRedeemParams redeemParams;
-            redeemParams.collateralOutpoint = COutPoint(positionId, 0); // Collateral is at vout 0
+            redeemParams.collateralOutpoint = collateralOutpoint;
             redeemParams.ddUtxos = selectedDDUtxos;  // Use any DD from wallet (fungible)
             redeemParams.ddAmounts = selectedDDAmounts;  // CRITICAL: Pass amounts for DD change calculation
             redeemParams.ddToRedeem = requiredDDBurn;

@@ -115,10 +115,10 @@ struct WalletCollateralPosition {
 
 /**
  * Represents a spendable DigiDollar UTXO
- * DD UTXOs are always at output index 1 of DDTimeLock mint transactions
+ * DD UTXOs may be mint token outputs or later transfer outputs.
  */
 struct DDUtxo {
-    COutPoint outpoint;     // UTXO reference (dd_timelock_id, 1)
+    COutPoint outpoint;     // UTXO reference
     CAmount dd_amount;      // DD amount in cents
     bool is_spendable;      // Always true for active DDTimeLocks
 
@@ -625,6 +625,13 @@ public:
      * @return true if authoritative metadata was available and cache now matches it
      */
     bool RefreshPositionMetadataFromMintTx(const uint256& position_id);
+
+    /**
+     * Resolve the actual collateral output index from the mint transaction.
+     * Consensus identifies mint collateral by structure, not by fixed vout.
+     */
+    bool GetMintCollateralOutpoint(const uint256& position_id, COutPoint& collateral_outpoint) const;
+    bool GetMintDDTokenOutpoint(const uint256& position_id, COutPoint& dd_token_outpoint) const;
 
     // ====================================================================
     // Redemption Functions (Task 3.9)

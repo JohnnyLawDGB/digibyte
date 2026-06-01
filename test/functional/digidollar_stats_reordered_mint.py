@@ -3,8 +3,9 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
-Regression test for DD-RH-059: digidollarstatsindex must account for a
-consensus-valid mint when ordinary DGB change appears before the DD OP_RETURN.
+Regression test for DD-RH-059: DigiDollar wallet/index state must account for a
+consensus-valid mint when ordinary DGB change appears before the mint vault
+outputs and DD OP_RETURN.
 """
 
 from test_framework.messages import CTxWitness, tx_from_hex
@@ -25,7 +26,7 @@ class DigiDollarStatsReorderedMintTest(DigiByteTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
-    def reorder_change_before_opreturn(self, raw_hex):
+    def reorder_change_before_collateral(self, raw_hex):
         tx = tx_from_hex(raw_hex)
         opreturn_index = next(
             i for i, txout in enumerate(tx.vout)
@@ -40,9 +41,9 @@ class DigiDollarStatsReorderedMintTest(DigiByteTestFramework):
 
         original_outputs = tx.vout
         tx.vout = [
+            original_outputs[change_index],
             original_outputs[0],
             original_outputs[1],
-            original_outputs[change_index],
             original_outputs[opreturn_index],
         ] + [
             txout for i, txout in enumerate(original_outputs)
@@ -66,8 +67,8 @@ class DigiDollarStatsReorderedMintTest(DigiByteTestFramework):
         mint = node.mintdigidollar(dd_amount, 0)
         raw_template = node.gettransaction(mint["txid"])["hex"]
 
-        self.log.info("Reordering DGB change before the DD OP_RETURN and re-signing")
-        reordered_unsigned = self.reorder_change_before_opreturn(raw_template)
+        self.log.info("Reordering DGB change before the vault outputs and re-signing")
+        reordered_unsigned = self.reorder_change_before_collateral(raw_template)
         signed = node.signrawtransactionwithwallet(reordered_unsigned)
         assert signed["complete"]
 
@@ -82,6 +83,9 @@ class DigiDollarStatsReorderedMintTest(DigiByteTestFramework):
         stats = node.getdigidollarstats()
         assert_equal(stats["total_dd_supply"], dd_amount)
         assert_equal(stats["active_positions"], 1)
+
+        positions = node.listdigidollarpositions(False)
+        assert_equal(len([p for p in positions if p["position_id"] == reordered_txid]), 1)
 
 
 if __name__ == "__main__":

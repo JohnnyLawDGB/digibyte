@@ -35,9 +35,9 @@
 #
 # MULTI-ORACLE CONSENSUS TESTS (Step 27A-E):
 # - 27A: 21/21 active oracles agree on price -> consensus PASSES (>= 7-of-21)
-# - 27B: 6/35 oracles send a new price       -> REJECTED (below 7-of-21 threshold)
-# - 27C: 15 agree on $0.01, 1 outlier (slot 15) sends $0.05 -> median filters
-# - 27D: All 21 active oracles agree again   -> full recovery
+# - 27B: Verify manual sendoracleprice injection remains removed
+# - 27C: Check live exchange outlier-filter evidence when an outlier occurs
+# - 27D: Verify continued oracle consensus after live price refresh
 # - 27E: Verify on-chain v0x03 oracle bundle byte size and prefix in coinbase
 #
 # WALLET PERSISTENCE TESTS:
@@ -185,6 +185,8 @@ STRESS_DD_TOTAL=$((STRESS_DD_CENTS * STRESS_MINT_COUNT))
 TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
+WARN_TESTS=0
+ORACLE_CACHE_REBUILT=false
 
 print_status() {
     local status=$1
@@ -198,6 +200,8 @@ print_status() {
         FAILED_TESTS=$((FAILED_TESTS + 1))
     elif [ "$status" = "warn" ]; then
         echo -e "${YELLOW}[WARN]${NC} $message"
+        WARN_TESTS=$((WARN_TESTS + 1))
+        TOTAL_TESTS=$((TOTAL_TESTS - 1))
     elif [ "$status" = "info" ]; then
         echo -e "${CYAN}[INFO]${NC} $message"
         TOTAL_TESTS=$((TOTAL_TESTS - 1))  # Don't count info as test
@@ -604,6 +608,14 @@ sync_all_nodes() {
         local frank_height=$($FRANK_CLI getblockcount 2>/dev/null || echo "0")
         local grace_height=$($GRACE_CLI getblockcount 2>/dev/null || echo "0")
         local heidi_height=$($HEIDI_CLI getblockcount 2>/dev/null || echo "0")
+        local bob_hash=$($BOB_CLI getbestblockhash 2>/dev/null || echo "")
+        local alice_hash=$($ALICE_CLI getbestblockhash 2>/dev/null || echo "")
+        local charlie_hash=$($CHARLIE_CLI getbestblockhash 2>/dev/null || echo "")
+        local dave_hash=$($DAVE_CLI getbestblockhash 2>/dev/null || echo "")
+        local eve_hash=$($EVE_CLI getbestblockhash 2>/dev/null || echo "")
+        local frank_hash=$($FRANK_CLI getbestblockhash 2>/dev/null || echo "")
+        local grace_hash=$($GRACE_CLI getbestblockhash 2>/dev/null || echo "")
+        local heidi_hash=$($HEIDI_CLI getbestblockhash 2>/dev/null || echo "")
 
         if [ "$bob_height" = "$alice_height" ] && \
            [ "$bob_height" = "$charlie_height" ] && \
@@ -611,8 +623,16 @@ sync_all_nodes() {
            [ "$bob_height" = "$eve_height" ] && \
            [ "$bob_height" = "$frank_height" ] && \
            [ "$bob_height" = "$grace_height" ] && \
-           [ "$bob_height" = "$heidi_height" ]; then
-            echo "[SYNC OK] All nodes at height $bob_height"
+           [ "$bob_height" = "$heidi_height" ] && \
+           [ "$bob_hash" = "$alice_hash" ] && \
+           [ "$bob_hash" = "$charlie_hash" ] && \
+           [ "$bob_hash" = "$dave_hash" ] && \
+           [ "$bob_hash" = "$eve_hash" ] && \
+           [ "$bob_hash" = "$frank_hash" ] && \
+           [ "$bob_hash" = "$grace_hash" ] && \
+           [ "$bob_hash" = "$heidi_hash" ] && \
+           [ -n "$bob_hash" ]; then
+            echo "[SYNC OK] All nodes at height $bob_height (${bob_hash:0:16}...)"
             return 0
         fi
 
@@ -628,6 +648,7 @@ sync_all_nodes() {
 
     echo "Warning: Nodes did not converge to a common tip"
     echo "  Final heights: bob=$bob_height alice=$alice_height charlie=$charlie_height dave=$dave_height eve=$eve_height frank=$frank_height grace=$grace_height heidi=$heidi_height"
+    echo "  Final hashes: bob=${bob_hash:0:16} alice=${alice_hash:0:16} charlie=${charlie_hash:0:16} dave=${dave_hash:0:16} eve=${eve_hash:0:16} frank=${frank_hash:0:16} grace=${grace_hash:0:16} heidi=${heidi_hash:0:16}"
     return 1
 }
 
@@ -651,37 +672,58 @@ refresh_oracle_prices() {
     sleep 3  # Give oracle price threads time to fetch + broadcast
 }
 
+start_oracle_checked() {
+    local cli=$1
+    local oracle_id=$2
+    local oracle_key=$3
+    local host=$4
+    local result exit_code
+
+    set +e
+    result=$($cli startoracle "$oracle_id" "$oracle_key" 2>&1)
+    exit_code=$?
+    set -e
+
+    if [ $exit_code -eq 0 ] && echo "$result" | jq -e '.success == true and (.status == "running" or .was_already_running == true)' >/dev/null 2>&1; then
+        print_status "ok" "Oracle slot $oracle_id started on $host"
+        return 0
+    fi
+
+    print_status "fail" "Oracle slot $oracle_id failed to start on $host: $(echo "$result" | head -c 220)"
+    return 1
+}
+
 start_all_oracles() {
     # Distribute 21 active oracles across all 8 nodes (7-of-21 threshold, RC44).
     # Bob: oracles 0, 1, 16, 18
-    $BOB_CLI     startoracle 0  "$ORACLE_KEY_0"  2>/dev/null || true
-    $BOB_CLI     startoracle 1  "$ORACLE_KEY_1"  2>/dev/null || true
+    start_oracle_checked "$BOB_CLI"     0  "$ORACLE_KEY_0"  "Bob" || exit 1
+    start_oracle_checked "$BOB_CLI"     1  "$ORACLE_KEY_1"  "Bob" || exit 1
     # Alice: oracles 2, 3, 17, 19
-    $ALICE_CLI   startoracle 2  "$ORACLE_KEY_2"  2>/dev/null || true
-    $ALICE_CLI   startoracle 3  "$ORACLE_KEY_3"  2>/dev/null || true
+    start_oracle_checked "$ALICE_CLI"   2  "$ORACLE_KEY_2"  "Alice" || exit 1
+    start_oracle_checked "$ALICE_CLI"   3  "$ORACLE_KEY_3"  "Alice" || exit 1
     # Charlie: oracles 4, 5, 20
-    $CHARLIE_CLI startoracle 4  "$ORACLE_KEY_4"  2>/dev/null || true
-    $CHARLIE_CLI startoracle 5  "$ORACLE_KEY_5"  2>/dev/null || true
+    start_oracle_checked "$CHARLIE_CLI" 4  "$ORACLE_KEY_4"  "Charlie" || exit 1
+    start_oracle_checked "$CHARLIE_CLI" 5  "$ORACLE_KEY_5"  "Charlie" || exit 1
     # Dave: oracles 6, 7
-    $DAVE_CLI    startoracle 6  "$ORACLE_KEY_6"  2>/dev/null || true
-    $DAVE_CLI    startoracle 7  "$ORACLE_KEY_7"  2>/dev/null || true
+    start_oracle_checked "$DAVE_CLI"    6  "$ORACLE_KEY_6"  "Dave" || exit 1
+    start_oracle_checked "$DAVE_CLI"    7  "$ORACLE_KEY_7"  "Dave" || exit 1
     # Eve: oracles 8, 9
-    $EVE_CLI     startoracle 8  "$ORACLE_KEY_8"  2>/dev/null || true
-    $EVE_CLI     startoracle 9  "$ORACLE_KEY_9"  2>/dev/null || true
+    start_oracle_checked "$EVE_CLI"     8  "$ORACLE_KEY_8"  "Eve" || exit 1
+    start_oracle_checked "$EVE_CLI"     9  "$ORACLE_KEY_9"  "Eve" || exit 1
     # Frank: oracles 10, 11
-    $FRANK_CLI   startoracle 10 "$ORACLE_KEY_10" 2>/dev/null || true
-    $FRANK_CLI   startoracle 11 "$ORACLE_KEY_11" 2>/dev/null || true
+    start_oracle_checked "$FRANK_CLI"   10 "$ORACLE_KEY_10" "Frank" || exit 1
+    start_oracle_checked "$FRANK_CLI"   11 "$ORACLE_KEY_11" "Frank" || exit 1
     # Grace: oracles 12, 13
-    $GRACE_CLI   startoracle 12 "$ORACLE_KEY_12" 2>/dev/null || true
-    $GRACE_CLI   startoracle 13 "$ORACLE_KEY_13" 2>/dev/null || true
+    start_oracle_checked "$GRACE_CLI"   12 "$ORACLE_KEY_12" "Grace" || exit 1
+    start_oracle_checked "$GRACE_CLI"   13 "$ORACLE_KEY_13" "Grace" || exit 1
     # Heidi: oracles 14, 15
-    $HEIDI_CLI   startoracle 14 "$ORACLE_KEY_14" 2>/dev/null || true
-    $HEIDI_CLI   startoracle 15 "$ORACLE_KEY_15" 2>/dev/null || true
-    $BOB_CLI     startoracle 16 "$ORACLE_KEY_16" 2>/dev/null || true
-    $ALICE_CLI   startoracle 17 "$ORACLE_KEY_17" 2>/dev/null || true
-    $BOB_CLI     startoracle 18 "$ORACLE_KEY_18" 2>/dev/null || true
-    $ALICE_CLI   startoracle 19 "$ORACLE_KEY_19" 2>/dev/null || true
-    $CHARLIE_CLI startoracle 20 "$ORACLE_KEY_20" 2>/dev/null || true
+    start_oracle_checked "$HEIDI_CLI"   14 "$ORACLE_KEY_14" "Heidi" || exit 1
+    start_oracle_checked "$HEIDI_CLI"   15 "$ORACLE_KEY_15" "Heidi" || exit 1
+    start_oracle_checked "$BOB_CLI"     16 "$ORACLE_KEY_16" "Bob" || exit 1
+    start_oracle_checked "$ALICE_CLI"   17 "$ORACLE_KEY_17" "Alice" || exit 1
+    start_oracle_checked "$BOB_CLI"     18 "$ORACLE_KEY_18" "Bob" || exit 1
+    start_oracle_checked "$ALICE_CLI"   19 "$ORACLE_KEY_19" "Alice" || exit 1
+    start_oracle_checked "$CHARLIE_CLI" 20 "$ORACLE_KEY_20" "Charlie" || exit 1
 }
 
 stop_qt_node() {
@@ -727,6 +769,74 @@ stop_qt_node() {
     return 1
 }
 
+cleanup_qt_nodes() {
+    if [ "${KEEP_QT_OPEN:-0}" = "1" ]; then
+        return 0
+    fi
+
+    local pids=(
+        "${BOB_PID:-}" "${ALICE_PID:-}" "${CHARLIE_PID:-}" "${DAVE_PID:-}"
+        "${EVE_PID:-}" "${FRANK_PID:-}" "${GRACE_PID:-}" "${HEIDI_PID:-}"
+    )
+    local cli_cmds=(
+        "$BOB_CLI" "$ALICE_CLI" "$CHARLIE_CLI" "$DAVE_CLI"
+        "$EVE_CLI" "$FRANK_CLI" "$GRACE_CLI" "$HEIDI_CLI"
+    )
+    local names=(
+        "Bob" "Alice" "Charlie" "Dave"
+        "Eve" "Frank" "Grace" "Heidi"
+    )
+
+    for i in "${!pids[@]}"; do
+        local pid="${pids[$i]}"
+        if [[ "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" >/dev/null 2>&1; then
+            echo "Requesting ${names[$i]}'s Qt shutdown..."
+            ${cli_cmds[$i]} stop >/dev/null 2>&1 || kill -TERM "$pid" 2>/dev/null || true
+
+            for _ in {1..30}; do
+                if ! ps -p "$pid" >/dev/null 2>&1; then
+                    break
+                fi
+                sleep 1
+            done
+
+            if ps -p "$pid" >/dev/null 2>&1; then
+                kill -TERM "$pid" 2>/dev/null || true
+                sleep 2
+            fi
+
+            if ps -p "$pid" >/dev/null 2>&1; then
+                kill -9 "$pid" 2>/dev/null || true
+            fi
+
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+    echo "All tracked Qt testnet processes closed."
+}
+
+stop_existing_harness_processes() {
+    local datadirs=(
+        "$BOB_DATADIR" "$ALICE_DATADIR" "$CHARLIE_DATADIR" "$DAVE_DATADIR"
+        "$EVE_DATADIR" "$FRANK_DATADIR" "$GRACE_DATADIR" "$HEIDI_DATADIR"
+    )
+
+    echo "Stopping existing local mini-testnet processes owned by this harness..."
+    for datadir in "${datadirs[@]}"; do
+        pkill -TERM -f "digibyte-qt.*-datadir=$datadir" 2>/dev/null || true
+        pkill -TERM -f "digibyted.*-datadir=$datadir" 2>/dev/null || true
+    done
+    sleep 2
+
+    for datadir in "${datadirs[@]}"; do
+        pkill -9 -f "digibyte-qt.*-datadir=$datadir" 2>/dev/null || true
+        pkill -9 -f "digibyted.*-datadir=$datadir" 2>/dev/null || true
+    done
+    sleep 1
+}
+
+trap cleanup_qt_nodes EXIT
+
 # Tier descriptions (9 tiers: 0-8)
 get_tier_description() {
     local tier=$1
@@ -752,16 +862,9 @@ get_tier_description() {
 # Step 1: Clean environment
 print_header "Step 1: Cleaning environment"
 
-# Kill any existing testnet processes (try graceful first, then force)
-echo "Stopping any existing testnet processes..."
-pkill -f "digibyte-qt.*testnet" 2>/dev/null || true
-pkill -f "digibyted.*testnet" 2>/dev/null || true
-sleep 2
-
-# Force kill if still running
-pkill -9 -f "digibyte-qt.*testnet" 2>/dev/null || true
-pkill -9 -f "digibyted.*testnet" 2>/dev/null || true
-sleep 1
+# Kill only prior local mini-testnet processes that used this harness's
+# temporary datadirs. Do not stop unrelated public testnet26 operators.
+stop_existing_harness_processes
 
 # Clean up ALL test data directories to prevent stale wallet data issues
 echo "Removing old test data directories (8 nodes)..."
@@ -1164,20 +1267,17 @@ HEARTBEAT_COUNT=0
 for i in {1..20}; do
     HEARTBEAT_COUNT=$($BOB_CLI getoracles true 2>/dev/null \
         | jq '[.[] | select(.heartbeat_status == "fresh")] | length' 2>/dev/null || echo "0")
-    if [ "$HEARTBEAT_COUNT" -ge 7 ] 2>/dev/null; then
+    if [ "$HEARTBEAT_COUNT" -eq 21 ] 2>/dev/null; then
         break
     fi
     echo "  Fresh oracle heartbeats seen: $HEARTBEAT_COUNT/21 ($i/20)"
     sleep 3
 done
 
-if [ "$HEARTBEAT_COUNT" -ge 7 ] 2>/dev/null; then
-    print_status "ok" "Signed oracle version heartbeats visible: $HEARTBEAT_COUNT fresh heartbeat(s)"
-    if [ "$HEARTBEAT_COUNT" -lt 21 ] 2>/dev/null; then
-        print_status "warn" "Only $HEARTBEAT_COUNT/21 active oracle heartbeats reached Bob so far; continuing because quorum visibility is present"
-    fi
+if [ "$HEARTBEAT_COUNT" -eq 21 ] 2>/dev/null; then
+    print_status "ok" "Signed oracle version heartbeats visible from all 21 active slots"
 else
-    print_status "fail" "Fewer than 7 fresh signed oracle heartbeats visible after startup ($HEARTBEAT_COUNT/21)"
+    print_status "fail" "Expected all 21 active oracle heartbeats after startup, saw $HEARTBEAT_COUNT/21"
     $BOB_CLI getoracles true 2>/dev/null | jq '[.[] | {oracle_id, heartbeat_status, software_version, client_version, musig2_context_version}]' || true
     exit 1
 fi
@@ -2349,9 +2449,9 @@ echo "Price after injection-removal check: \$$PRICE_AFTER_27B"
 # ====================================================================================
 # Step 27C: Live Exchange Outlier Filter Evidence
 # ====================================================================================
-# Fake oracle injection is gone, so the outlier test is now validated through
-# the live exchange aggregator logs: at least one exchange outlier should be
-# filtered when it deviates materially from the median.
+# Fake oracle injection is gone, so this step records live exchange outlier
+# filtering when an outlier naturally occurs. Absence of an outlier is a warning
+# and must not be summarized as coverage of a forced disagreement scenario.
 print_header "Step 27C: Live Exchange Outlier Filter Evidence"
 echo ""
 echo "Refreshing live oracle feeds and checking debug.log for exchange outlier filtering."
@@ -2360,33 +2460,35 @@ echo ""
 refresh_oracle_prices
 PRICE_AFTER_27C=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
 echo "Price after live refresh: \$$PRICE_AFTER_27C"
+ORACLE_OUTLIER_OBSERVED=false
 
 if grep -qi "Filtered outlier" "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" 2>/dev/null; then
+    ORACLE_OUTLIER_OBSERVED=true
     print_status "ok" "Live exchange outlier filter triggered"
     grep -i "Filtered outlier" "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" | tail -3
 else
-    print_status "warn" "No live exchange outlier observed in this run; continuing with live consensus price \$$PRICE_AFTER_27C"
+    print_status "warn" "Live exchange outlier filter observation is optional; no outlier was observed in this run"
 fi
 
 # ====================================================================================
-# Step 27D: Oracle Recovery - All 21 active oracles agree again
+# Step 27D: Oracle Continued Consensus
 # ====================================================================================
-print_header "Step 27D: Oracle Recovery Test (all 21 active oracles agree)"
+print_header "Step 27D: Oracle Continued Consensus Test"
 echo ""
-echo "All 21 active oracles resume broadcasting the live price to verify recovery"
-echo "after the 27B/27C disagreement scenarios."
+echo "All 21 active oracles continue broadcasting live exchange prices after"
+echo "the manual-injection removal and optional outlier-observation checks."
 echo ""
 
 refresh_oracle_prices
 
 PRICE_AFTER_27D=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd // "N/A"')
-echo "Price after recovery: \$$PRICE_AFTER_27D"
+echo "Price after continued-consensus refresh: \$$PRICE_AFTER_27D"
 
 if [ "$PRICE_AFTER_27D" != "N/A" ] && [ "$PRICE_AFTER_27D" != "0" ] && \
    [ "$PRICE_AFTER_27D" != "0.00000000" ] && [ -n "$PRICE_AFTER_27D" ]; then
-    print_status "ok" "Oracle recovery successful: 7-of-21 consensus restored at \$$PRICE_AFTER_27D"
+    print_status "ok" "Oracle continued consensus successful: 7-of-21 threshold active at \$$PRICE_AFTER_27D"
 else
-    print_status "fail" "Oracle did NOT recover — price: \$$PRICE_AFTER_27D"
+    print_status "fail" "Oracle consensus failed after live refresh — price: \$$PRICE_AFTER_27D"
 fi
 
 sync_all_nodes
@@ -2394,7 +2496,7 @@ sync_all_nodes
 # ====================================================================================
 # Step 27E: On-chain oracle bundle size + version verification
 # ====================================================================================
-# After Step 27D restores oracle consensus, mine a fresh block and inspect
+# After Step 27D confirms continued oracle consensus, mine a fresh block and inspect
 # the coinbase OP_RETURN scriptPubKey to confirm an on-chain OP_ORACLE bundle
 # landed. V1 requires a v0x03 MuSig2 bundle; v0x02 fallback bundles are not
 # accepted as production validation fallbacks.
@@ -2638,33 +2740,20 @@ fi
 print_subheader "Stopping Bob's Qt for restore test..."
 stop_qt_node "Bob" "$BOB_PID" "$BOB_CLI" "restore test"
 
-print_subheader "Simulating wallet corruption by renaming wallet file..."
+print_subheader "Simulating wallet loss by moving the original wallet directory..."
 
-# Move original wallet to simulate corruption/loss
-ORIGINAL_WALLET="$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob/wallet.dat"
-if [ -f "$ORIGINAL_WALLET" ]; then
-    mv "$ORIGINAL_WALLET" "${ORIGINAL_WALLET}.original_backup"
-    print_status "ok" "Original wallet moved to simulate loss"
-elif [ -d "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob" ]; then
-    # Descriptor wallet - just rename the directory
-    mv "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob" "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob_original_backup"
+ORIGINAL_WALLET_DIR="$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob"
+ORIGINAL_WALLET_BACKUP="${ORIGINAL_WALLET_DIR}.original_backup"
+if [ -e "$ORIGINAL_WALLET_DIR" ]; then
+    rm -rf "$ORIGINAL_WALLET_BACKUP"
+    mv "$ORIGINAL_WALLET_DIR" "$ORIGINAL_WALLET_BACKUP"
     print_status "ok" "Original wallet directory moved to simulate loss"
+else
+    print_status "fail" "Original wallet directory missing before restore test: $ORIGINAL_WALLET_DIR"
+    exit 1
 fi
 
-print_subheader "Restoring wallet from backup..."
-
-# Restore from backup
-if [ -f "$ORIGINAL_WALLET.original_backup" ]; then
-    # Legacy wallet
-    cp "$BACKUP_FILE" "$ORIGINAL_WALLET"
-    print_status "ok" "Backup restored to wallet location"
-elif [ -d "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob_original_backup" ]; then
-    # Descriptor wallet - restore original for now (backup may need different handling)
-    mv "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob_original_backup" "$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob"
-    print_status "ok" "Wallet directory restored"
-fi
-
-print_subheader "Restarting Bob's Qt with restored wallet..."
+print_subheader "Restarting Bob's Qt before restorewallet..."
 
 setsid env -i \
     DISPLAY="${DISPLAY}" \
@@ -2698,8 +2787,20 @@ require_rpc_ready "$BOB_CLI" "Bob (restored)" "Bob's Qt RPC is ready after resto
 
 sleep 5
 
-# Try to load wallet if needed
-$BOB_CLI loadwallet "bob" 2>/dev/null || true
+print_subheader "Restoring wallet from backup via restorewallet RPC..."
+
+set +e
+RESTORE_RESULT=$($BOB_CLI restorewallet "bob" "$BACKUP_FILE" 2>&1)
+RESTORE_EXIT=$?
+set -e
+
+if [ $RESTORE_EXIT -eq 0 ] && echo "$RESTORE_RESULT" | jq -e '.name == "bob"' >/dev/null 2>&1; then
+    print_status "ok" "Wallet restored from backup file via restorewallet"
+else
+    print_status "fail" "restorewallet failed: $RESTORE_RESULT"
+    exit 1
+fi
+
 sleep 2
 
 # Restart all oracles
@@ -2864,8 +2965,10 @@ fi
 # Verify oracle price cache was rebuilt
 ORACLE_STATUS=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.status // "inactive"')
 if [ "$ORACLE_STATUS" = "active" ]; then
+    ORACLE_CACHE_REBUILT=true
     print_status "ok" "Oracle price cache rebuilt after reindex"
 else
+    ORACLE_CACHE_REBUILT=false
     print_status "warn" "Oracle status after reindex: $ORACLE_STATUS"
 fi
 
@@ -3411,10 +3514,10 @@ echo ""
 # Record Bob's original state
 BOB_DD_BEFORE_EXPORT=$EXPECT_BOB_DD
 BOB_DGB_BEFORE_EXPORT=$(get_dgb_balance "$BOB_CLI" "bob")
-BOB_POSITIONS_BEFORE_EXPORT=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null | jq 'length')
+BOB_POSITIONS_BEFORE_EXPORT=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false 2>/dev/null | jq 'length')
 
 # Get detailed position info
-BOB_POSITIONS_DETAIL_BEFORE=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null)
+BOB_POSITIONS_DETAIL_BEFORE=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false 2>/dev/null)
 
 # Get DD transaction history (all types)
 BOB_DD_TXS_BEFORE=$($BOB_CLI -rpcwallet=bob listdigidollartxs 100 0 2>/dev/null)
@@ -3425,8 +3528,12 @@ BOB_REDEEM_COUNT_BEFORE=$(echo "$BOB_DD_TXS_BEFORE" | jq '[.[] | select(.categor
 BOB_TOTAL_TXS_BEFORE=$(echo "$BOB_DD_TXS_BEFORE" | jq 'length' 2>/dev/null || echo "0")
 
 # Count inactive (redeemed) positions
-BOB_INACTIVE_POSITIONS_BEFORE=$(echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq '[.[] | select(.is_active == false)] | length' 2>/dev/null || echo "0")
-BOB_ACTIVE_POSITIONS_BEFORE=$(echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq '[.[] | select(.is_active == true)] | length' 2>/dev/null || echo "0")
+BOB_INACTIVE_POSITIONS_BEFORE=$(echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq 'def dd_active: if (.is_active | type) == "boolean" then .is_active else ((.status // "") == "active" or (.status // "") == "unlocked") end; [.[] | select(dd_active | not)] | length' 2>/dev/null || echo "0")
+BOB_ACTIVE_POSITIONS_BEFORE=$(echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq 'def dd_active: if (.is_active | type) == "boolean" then .is_active else ((.status // "") == "active" or (.status // "") == "unlocked") end; [.[] | select(dd_active)] | length' 2>/dev/null || echo "0")
+
+if [ "$BOB_INACTIVE_POSITIONS_BEFORE" -le 0 ] 2>/dev/null; then
+    print_status "fail" "Bob restore fixture has no redeemed positions to validate"
+fi
 
 echo "========== BOB ORIGINAL STATE =========="
 echo "  DD Balance:          $BOB_DD_BEFORE_EXPORT cents"
@@ -3442,7 +3549,7 @@ echo "    Receive:           $BOB_RECEIVE_COUNT_BEFORE"
 echo "    Redeem:            $BOB_REDEEM_COUNT_BEFORE"
 echo ""
 echo "Position Details:"
-echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq -r '.[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | active: \(.is_active) | status: \(.status)"' 2>/dev/null
+echo "$BOB_POSITIONS_DETAIL_BEFORE" | jq -r 'def dd_active: if (.is_active | type) == "boolean" then .is_active else ((.status // "") == "active" or (.status // "") == "unlocked") end; .[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | active: \(dd_active) | status: \(.status)"' 2>/dev/null
 echo "==========================================="
 echo ""
 
@@ -3553,10 +3660,10 @@ print_subheader "Step 34e: Verifying Bob's restored wallet DD state (NO export/i
 # Get restored wallet state
 BOB_RESTORED_DD=$(get_dd_balance "$BOB_CLI" "bob_restored")
 BOB_RESTORED_DGB=$(get_dgb_balance "$BOB_CLI" "bob_restored")
-BOB_RESTORED_POSITIONS=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions 2>/dev/null | jq 'length')
+BOB_RESTORED_POSITIONS=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions false 2>/dev/null | jq 'length')
 
 # Get detailed position info from restored wallet
-BOB_RESTORED_POSITIONS_DETAIL=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions 2>/dev/null)
+BOB_RESTORED_POSITIONS_DETAIL=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions false 2>/dev/null)
 
 # Get DD transaction history from restored wallet
 BOB_RESTORED_DD_TXS=$($BOB_CLI -rpcwallet=bob_restored listdigidollartxs 100 0 2>/dev/null)
@@ -3567,8 +3674,8 @@ BOB_RESTORED_REDEEM_COUNT=$(echo "$BOB_RESTORED_DD_TXS" | jq '[.[] | select(.cat
 BOB_RESTORED_TOTAL_TXS=$(echo "$BOB_RESTORED_DD_TXS" | jq 'length' 2>/dev/null || echo "0")
 
 # Count inactive (redeemed) positions in restored wallet
-BOB_RESTORED_INACTIVE_POSITIONS=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq '[.[] | select(.is_active == false)] | length' 2>/dev/null || echo "0")
-BOB_RESTORED_ACTIVE_POSITIONS=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq '[.[] | select(.is_active == true)] | length' 2>/dev/null || echo "0")
+BOB_RESTORED_INACTIVE_POSITIONS=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq 'def dd_active: if (.is_active | type) == "boolean" then .is_active else ((.status // "") == "active" or (.status // "") == "unlocked") end; [.[] | select(dd_active | not)] | length' 2>/dev/null || echo "0")
+BOB_RESTORED_ACTIVE_POSITIONS=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq 'def dd_active: if (.is_active | type) == "boolean" then .is_active else ((.status // "") == "active" or (.status // "") == "unlocked") end; [.[] | select(dd_active)] | length' 2>/dev/null || echo "0")
 
 echo ""
 echo "========== BOB RESTORED WALLET STATE =========="
@@ -3585,7 +3692,7 @@ echo "    Receive:           $BOB_RESTORED_RECEIVE_COUNT (expected: $BOB_RECEIVE
 echo "    Redeem:            $BOB_RESTORED_REDEEM_COUNT (expected: $BOB_REDEEM_COUNT_BEFORE)"
 echo ""
 echo "Restored Position Details:"
-echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq -r '.[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | active: \(.is_active) | status: \(.status)"' 2>/dev/null || echo "  No positions found"
+echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq -r 'def dd_active: if (.is_active | type) == "boolean" then .is_active else ((.status // "") == "active" or (.status // "") == "unlocked") end; .[] | "  \(.position_id[0:16])... | DD: \(.dd_minted) cents | DGB: \(.dgb_collateral) | tier: \(.lock_tier) | active: \(dd_active) | status: \(.status)"' 2>/dev/null || echo "  No positions found"
 echo "================================================"
 echo ""
 
@@ -3668,7 +3775,7 @@ if [ "$BOB_RESTORED_INACTIVE_POSITIONS" -gt 0 ]; then
     echo "Testing that redeemed positions cannot be redeemed again..."
 
     # Get an inactive position ID
-    INACTIVE_POSITION_ID=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq -r '[.[] | select(.is_active == false)][0].position_id' 2>/dev/null)
+    INACTIVE_POSITION_ID=$(echo "$BOB_RESTORED_POSITIONS_DETAIL" | jq -r 'def dd_active: if (.is_active | type) == "boolean" then .is_active else ((.status // "") == "active" or (.status // "") == "unlocked") end; [.[] | select(dd_active | not)][0].position_id' 2>/dev/null)
 
     if [ -n "$INACTIVE_POSITION_ID" ] && [ "$INACTIVE_POSITION_ID" != "null" ]; then
         echo "  Testing redemption of inactive position: ${INACTIVE_POSITION_ID:0:16}..."
@@ -3758,6 +3865,7 @@ echo ""
 echo "  Total Tests:  $TOTAL_TESTS"
 echo "  Passed:       $PASSED_TESTS"
 echo "  Failed:       $FAILED_TESTS"
+echo "  Warnings:     $WARN_TESTS"
 echo ""
 
 if [ $FAILED_TESTS -gt 0 ]; then
@@ -3786,9 +3894,13 @@ echo "MULTI-ORACLE COVERAGE:"
 echo "  [x] 21 active oracles started across 8 wallet nodes (7-of-21 threshold, RC44)"
 echo "  [x] Oracle prices refreshed before every mint"
 echo "  [x] 7-of-21 consensus verification (Step 27A)"
-echo "  [x] Below threshold rejection - 6-of-21 (Step 27B)"
-echo "  [x] Median filter with live exchange outlier evidence (Step 27C)"
-echo "  [x] Oracle recovery after disagreement (Step 27D)"
+echo "  [x] Manual oracle injection RPC removed (Step 27B)"
+if [ "${ORACLE_OUTLIER_OBSERVED:-false}" = "true" ]; then
+    echo "  [x] Live exchange outlier filter observed (Step 27C)"
+else
+    echo "  [warn] Live exchange outlier filter observation is optional; no outlier was observed (Step 27C)"
+fi
+echo "  [x] Oracle continued consensus after live refresh (Step 27D)"
 echo "  [x] On-chain v0x03 bundle prefix + size assertion (Step 27E)"
 echo "  [x] All oracles restarted after wallet restart/reindex"
 echo ""
@@ -3796,11 +3908,26 @@ echo "WALLET PERSISTENCE COVERAGE (BOB):"
 echo "  [x] Wallet restart - DD balances persist through Qt wallet restart"
 echo "  [x] Wallet backup/restore - DD balances survive backup and restore"
 echo "  [x] Chain reindex - DD balances rebuild correctly with -reindex"
-echo "  [x] Oracle price cache rebuilt after reindex"
+if [ "$ORACLE_CACHE_REBUILT" = "true" ]; then
+    echo "  [x] Oracle price cache rebuilt after reindex"
+else
+    echo "  [warn] Oracle price cache was not active after reindex"
+fi
 echo "  [x] DD positions preserved through all persistence tests"
 echo "  [x] Export-reimport - FULL wallet restore via descriptor export/import"
-echo "  [x] Redeemed positions correctly marked inactive after recovery"
-echo "  [x] DD transaction history restored (mint, send, receive, redeem)"
+if [ "$BOB_RESTORED_INACTIVE_POSITIONS" = "$BOB_INACTIVE_POSITIONS_BEFORE" ] && [ "$BOB_INACTIVE_POSITIONS_BEFORE" -gt 0 ] 2>/dev/null; then
+    echo "  [x] Redeemed positions correctly marked inactive after recovery"
+else
+    echo "  [warn] Redeemed-position recovery coverage was incomplete"
+fi
+if [ "$BOB_RESTORED_MINT_COUNT" -ge "$BOB_MINT_COUNT_BEFORE" ] 2>/dev/null \
+    && [ "$BOB_RESTORED_SEND_COUNT" -ge "$BOB_SEND_COUNT_BEFORE" ] 2>/dev/null \
+    && [ "$BOB_RESTORED_RECEIVE_COUNT" -ge "$BOB_RECEIVE_COUNT_BEFORE" ] 2>/dev/null \
+    && [ "$BOB_RESTORED_REDEEM_COUNT" -ge "$BOB_REDEEM_COUNT_BEFORE" ] 2>/dev/null; then
+    echo "  [x] DD transaction history restored (mint, send, receive, redeem)"
+else
+    echo "  [warn] DD transaction history restored partially; see category counts above"
+fi
 echo ""
 echo "WALLET PERSISTENCE COVERAGE (ALICE):"
 echo "  [x] Rescanblockchain - DD balances restored after wallet rescan"
@@ -3865,8 +3992,8 @@ fi
 echo ""
 BOB_LIVE_POS=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null | jq 'length')
 BOB_RESTORED_LIVE_POS=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions 2>/dev/null | jq 'length')
-echo "  bob Positions:          $BOB_LIVE_POS"
-echo "  bob_restored Positions: $BOB_RESTORED_LIVE_POS"
+echo "  bob Active Positions:          $BOB_LIVE_POS"
+echo "  bob_restored Active Positions: $BOB_RESTORED_LIVE_POS"
 echo ""
 
 echo "Commands for manual testing:"
@@ -3885,13 +4012,14 @@ echo ""
 echo "KEEP_QT_OPEN=1 keeps Qt windows open after the run; default closes them for automation."
 echo ""
 
-trap "kill $BOB_PID $ALICE_PID $CHARLIE_PID $DAVE_PID $EVE_PID $FRANK_PID $GRACE_PID $HEIDI_PID 2>/dev/null; echo 'All 8 Qt windows closed.'" EXIT
 if [ "${KEEP_QT_OPEN:-0}" = "1" ]; then
     trap - EXIT
     echo "KEEP_QT_OPEN=1 set; leaving all 8 Qt windows open."
     echo "Qt PIDs: $BOB_PID $ALICE_PID $CHARLIE_PID $DAVE_PID $EVE_PID $FRANK_PID $GRACE_PID $HEIDI_PID"
 else
     echo "Automation mode: closing Qt windows now."
+    cleanup_qt_nodes
+    trap - EXIT
 fi
 
 if [ "$FAILED_TESTS" -gt 0 ]; then

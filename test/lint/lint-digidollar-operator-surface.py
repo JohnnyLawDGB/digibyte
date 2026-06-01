@@ -32,6 +32,20 @@ FORBIDDEN = {
         "getoracleinfo",
         "listoraclekeys",
     ],
+    "test_multi_oracle_testnet.sh": [
+        "startoracle 0  \"$ORACLE_KEY_0\"  2>/dev/null || true",
+        "mv \"$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob_original_backup\" \"$BOB_DATADIR/$TESTNET_SUBDIR/wallets/bob\"",
+        "trap \"kill $BOB_PID",
+        "pkill -f \"digibyte-qt.*testnet\"",
+        "pkill -9 -f \"digibyte-qt.*testnet\"",
+        "Below threshold rejection - 6-of-21 (Step 27B)",
+        "Median filter with live exchange outlier evidence (Step 27C)",
+        "Oracle recovery after disagreement (Step 27D)",
+        "BOB_POSITIONS_BEFORE_EXPORT=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null | jq 'length')",
+        "BOB_RESTORED_POSITIONS=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions 2>/dev/null | jq 'length')",
+        "select(.is_active == false)",
+        "select(.is_active == true)",
+    ],
 }
 
 REQUIRED = {
@@ -55,6 +69,25 @@ REQUIRED = {
     "ORACLE_BUNDLE_EXPLAINER.md": [
         "getoraclesigners",
         "listoracle",
+    ],
+    "test_multi_oracle_testnet.sh": [
+        "WARN_TESTS=0",
+        "ORACLE_CACHE_REBUILT=false",
+        "stop_existing_harness_processes",
+        "cleanup_qt_nodes()",
+        "start_oracle_checked",
+        "bob_hash=$($BOB_CLI getbestblockhash",
+        "[ \"$bob_hash\" = \"$alice_hash\" ]",
+        "restorewallet \"bob\" \"$BACKUP_FILE\"",
+        "if [ \"$HEARTBEAT_COUNT\" -eq 21 ]",
+        "Manual oracle injection RPC removed (Step 27B)",
+        "Live exchange outlier filter observation is optional",
+        "BOB_POSITIONS_BEFORE_EXPORT=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false",
+        "BOB_RESTORED_POSITIONS=$($BOB_CLI -rpcwallet=bob_restored listdigidollarpositions false",
+        "Bob restore fixture has no redeemed positions to validate",
+        "def dd_active:",
+        "Redeemed-position recovery coverage was incomplete",
+        "DD transaction history restored partially; see category counts above",
     ],
 }
 

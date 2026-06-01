@@ -367,6 +367,25 @@ BOOST_AUTO_TEST_CASE(phase_one_no_mainnet_activation)
     // BOOST_CHECK(consensus.vOraclePublicKeys.empty() || !consensus.fOracleEnabled);
 }
 
+BOOST_AUTO_TEST_CASE(mainnet_oracle_endpoints_use_mainnet_p2p_port)
+{
+    SelectParams(ChainType::MAIN);
+    const CChainParams& params = Params();
+    const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
+
+    BOOST_REQUIRE_EQUAL(params.GetDefaultPort(), 12024);
+    BOOST_REQUIRE_EQUAL(oracle_nodes.size(), 35U);
+
+    for (const auto& oracle : oracle_nodes) {
+        BOOST_CHECK_MESSAGE(oracle.endpoint.size() >= 6 &&
+                            oracle.endpoint.rfind(":12024") == oracle.endpoint.size() - 6,
+            "Mainnet oracle endpoint for slot " << oracle.id <<
+            " must use mainnet P2P port 12024, got " << oracle.endpoint);
+    }
+
+    SelectParams(ChainType::MAIN);
+}
+
 // ============================================================================
 // PART 4: Network-Specific Configuration Tests (BONUS)
 // ============================================================================

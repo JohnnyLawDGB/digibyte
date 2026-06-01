@@ -540,7 +540,8 @@ BOOST_AUTO_TEST_CASE(chainparams_mainnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 35);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 21);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(),
+                      static_cast<uint32_t>(chainparams->GetConsensus().nOraclePubkeyCount));
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
@@ -550,7 +551,8 @@ BOOST_AUTO_TEST_CASE(chainparams_testnet_oracle_count)
     const std::vector<OracleNodeInfo>& oracles = chainparams->GetOracleNodes();
 
     BOOST_CHECK_EQUAL(oracles.size(), 35);
-    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(), 21);
+    BOOST_CHECK_EQUAL(chainparams->GetActiveOracleCount(),
+                      static_cast<uint32_t>(chainparams->GetConsensus().nOraclePubkeyCount));
 }
 
 BOOST_AUTO_TEST_CASE(chainparams_regtest_oracle_count)
@@ -591,7 +593,7 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_data_validity)
         BOOST_CHECK(oracle.endpoint.find(":") != std::string::npos); // Should have port
 
         // First active roster slots are active; remaining reserved slots are inactive.
-        BOOST_CHECK_EQUAL(oracle.is_active, oracle.id < 23);
+        BOOST_CHECK_EQUAL(oracle.is_active, oracle.id < 24);
 
         // Test oracle passes validation
         BOOST_CHECK(oracle.IsValid());

@@ -34,7 +34,7 @@ constexpr int32_t ROSTER_ACTIVE_HEIGHT = 650;
 constexpr uint64_t ROSTER_PRICE = 51000;
 constexpr int64_t ROSTER_TIMESTAMP = 1735689600;
 constexpr uint16_t ROSTER_TOTAL_SLOTS = 35;
-constexpr int ROSTER_ACTIVE_OPERATORS = 23;
+constexpr int ROSTER_ACTIVE_OPERATORS = 24;
 constexpr int ROSTER_QUORUM = 7;
 
 struct LocalMiniTestnetSetup : public BasicTestingSetup {
@@ -256,7 +256,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_accepts_valid_7_sig_bundle_after_activation
                        << " error='" << result.error << "'");
 
     BOOST_CHECK_MESSAGE(result.ok,
-        "a valid 7-sig MuSig2 bundle from the 21-active-operator roster must verify after activation");
+        "a valid 7-sig MuSig2 bundle from the active operator roster must verify after activation");
 }
 
 BOOST_AUTO_TEST_CASE(expanded_roster_rejects_same_bundle_before_activation)
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_same_bundle_before_activation)
                        << " error='" << result.error << "'");
 
     BOOST_CHECK_MESSAGE(!result.ok,
-        "the same 21-active roster bundle must be rejected before roster activation");
+        "the same active roster bundle must be rejected before roster activation");
     BOOST_CHECK_MESSAGE(result.error.find("activation") != std::string::npos,
         "pre-activation rejection should identify the roster activation gate, got: " + result.error);
 }
@@ -282,7 +282,8 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_out_of_roster_signer)
     const Consensus::Params params = ExpandedRosterParams(ROSTER_ACTIVE_HEIGHT);
 
     COracleBundle bundle = MakeRosterBundle();
-    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, 21};
+    const uint8_t first_reserve_id = static_cast<uint8_t>(params.nOraclePubkeyCount);
+    const std::vector<uint8_t> signer_ids{0, 1, 2, 3, 4, 5, first_reserve_id};
     BOOST_REQUIRE(SignTestnetV03Bundle(bundle, signer_ids, ROSTER_TOTAL_SLOTS));
 
     PhaseThreeResult result = ValidatePhaseThree(bundle, ROSTER_ACTIVE_HEIGHT, params);
@@ -290,7 +291,8 @@ BOOST_AUTO_TEST_CASE(expanded_roster_rejects_out_of_roster_signer)
                        << " error='" << result.error << "'");
 
     BOOST_CHECK_MESSAGE(!result.ok,
-        "signer id 21 is outside the 21-active-operator roster and must reject");
+        "first reserve signer id " + std::to_string(first_reserve_id) +
+            " is outside the active operator roster and must reject");
     BOOST_CHECK_MESSAGE(!result.error.empty(), "out-of-roster rejection must report an error");
 }
 

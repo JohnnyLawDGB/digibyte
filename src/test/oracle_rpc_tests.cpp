@@ -63,7 +63,8 @@ BOOST_AUTO_TEST_CASE(getoracles_oracle_names_coverage)
         "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie",
         "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
         "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony",
-        "mbah_jambon", "Camden", "Twoface123", "LivingTheLife"
+        "mbah_jambon", "Camden", "Twoface123", "LivingTheLife",
+        "ChozenOne43"
     };
 
     size_t active_count = 0;

@@ -1305,7 +1305,7 @@ BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_mainnet_tests, MainParamsOracleBu
 BOOST_AUTO_TEST_CASE(mainnet_reserve_messages_do_not_satisfy_pending_consensus)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
-    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 23);
+    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 24);
     BOOST_REQUIRE_EQUAL(consensus.nOracleConsensusRequired, 7);
     BOOST_REQUIRE_GT(Params().GetOracleNodes().size(),
                      static_cast<size_t>(consensus.nOraclePubkeyCount));
@@ -1315,14 +1315,17 @@ BOOST_AUTO_TEST_CASE(mainnet_reserve_messages_do_not_satisfy_pending_consensus)
     manager.SetEnabled(true);
     manager.SetMinOracleCount(consensus.nOracleConsensusRequired);
 
+    const uint32_t first_reserve_id = static_cast<uint32_t>(consensus.nOraclePubkeyCount);
+    const uint32_t reserve_end = static_cast<uint32_t>(Params().GetOracleNodes().size());
     const int64_t now = GetTime();
-    for (uint32_t oracle_id = 21; oracle_id < 30; ++oracle_id) {
+    for (uint32_t oracle_id = first_reserve_id;
+         oracle_id < reserve_end && oracle_id < first_reserve_id + 9; ++oracle_id) {
         manager.InjectTestMessage(oracle_bundle_manager_tests::MakeRegtestOracleMessage(
             oracle_id, 7000 + oracle_id, now));
     }
 
     COraclePriceMessage reserve_msg =
-        oracle_bundle_manager_tests::MakeRegtestOracleMessage(21, 7000, now);
+        oracle_bundle_manager_tests::MakeRegtestOracleMessage(first_reserve_id, 7000, now);
     BOOST_CHECK_MESSAGE(!manager.AddOracleMessage(reserve_msg),
         "reserve-slot oracle messages must be rejected before entering pending consensus");
     BOOST_CHECK_MESSAGE(!manager.AddConsensusAttestation(reserve_msg),

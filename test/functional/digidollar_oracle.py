@@ -23,7 +23,7 @@ import time
 # Oracle constants (should match current mainnet/testnet chainparams)
 # Launch roster: 35 reserved slots, active key prefix, 7 signatures required.
 ORACLE_TOTAL_COUNT = 35
-ORACLE_ACTIVE_COUNT = 23
+ORACLE_ACTIVE_COUNT = 24
 ORACLE_CONSENSUS_REQUIRED = 7
 
 

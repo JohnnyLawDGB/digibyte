@@ -86,7 +86,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_and_total_slots)
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
     // Testnet uses the active oracle pubkey prefix inside a 35-slot roster.
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 23);
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 24);
     BOOST_CHECK_EQUAL(params.nOracleTotalOracles, 35);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_config_unique_by_pubkey)
     }
 }
 
-BOOST_AUTO_TEST_CASE(testnet_rc43_slots_17_to_20_are_active)
+BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
@@ -164,24 +164,45 @@ BOOST_AUTO_TEST_CASE(testnet_rc43_slots_17_to_20_are_active)
         "031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42";
     constexpr const char* CAMDEN_COMPRESSED =
         "03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c";
+    constexpr const char* TWOFACE123_COMPRESSED =
+        "03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86";
+    constexpr const char* LIVINGTHELIFE_COMPRESSED =
+        "0367011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e";
+    constexpr const char* CHOZENONE43_COMPRESSED =
+        "03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d";
     constexpr const char* ANTHONY_XONLY =
         "45f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89";
     constexpr const char* MBAH_JAMBON_XONLY =
         "1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42";
     constexpr const char* CAMDEN_XONLY =
         "018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c";
+    constexpr const char* TWOFACE123_XONLY =
+        "d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86";
+    constexpr const char* LIVINGTHELIFE_XONLY =
+        "67011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e";
+    constexpr const char* CHOZENONE43_XONLY =
+        "b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d";
 
-    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 23);
+    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 24);
     BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 7);
-    BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), 21U);
-    BOOST_REQUIRE_GE(nodes.size(), 21U);
+    BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), static_cast<size_t>(params.nOraclePubkeyCount));
+    BOOST_REQUIRE_GE(nodes.size(), static_cast<size_t>(params.nOraclePubkeyCount));
 
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[17], DIGIBYTE_MAXI_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[18], ANTHONY_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[19], MBAH_JAMBON_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[20], CAMDEN_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[21], TWOFACE123_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[22], LIVINGTHELIFE_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[23], CHOZENONE43_XONLY);
     BOOST_CHECK_EQUAL(nodes[17].id, 17U);
     BOOST_CHECK(nodes[17].is_active);
+    BOOST_CHECK_EQUAL(nodes[21].id, 21U);
+    BOOST_CHECK(nodes[21].is_active);
+    BOOST_CHECK_EQUAL(nodes[22].id, 22U);
+    BOOST_CHECK(nodes[22].is_active);
+    BOOST_CHECK_EQUAL(nodes[23].id, 23U);
+    BOOST_CHECK(nodes[23].is_active);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                           nodes[17].pubkey.data(), nodes[17].pubkey.size())),
                       DIGIBYTE_MAXI_COMPRESSED);
@@ -194,6 +215,15 @@ BOOST_AUTO_TEST_CASE(testnet_rc43_slots_17_to_20_are_active)
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                           nodes[20].pubkey.data(), nodes[20].pubkey.size())),
                       CAMDEN_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                          nodes[21].pubkey.data(), nodes[21].pubkey.size())),
+                      TWOFACE123_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                          nodes[22].pubkey.data(), nodes[22].pubkey.size())),
+                      LIVINGTHELIFE_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                          nodes[23].pubkey.data(), nodes[23].pubkey.size())),
+                      CHOZENONE43_COMPRESSED);
 }
 
 // ============================================================================

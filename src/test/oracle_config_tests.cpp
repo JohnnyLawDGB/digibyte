@@ -101,7 +101,7 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
 
     // Verify testnet: 35 reserved slots, active keys, 7 signatures required.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 7);   // 7 signatures required
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 23);    // 23 active oracles
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 24);    // 24 active oracles
     BOOST_CHECK_EQUAL(ddParams.oracleCount, 35);      // 35 reserved slots
 
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
     // Active testnet keys live inside the 35-slot roster.
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 23);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 24);
 
     // Verify oracle nodes match configuration
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
@@ -286,7 +286,7 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     }
 
     // Active oracles in the oracle nodes list.
-    BOOST_CHECK_EQUAL(active_count, 22);
+    BOOST_CHECK_EQUAL(active_count, static_cast<int>(ddParams.activeOracles));
     BOOST_CHECK_EQUAL((int)oracle_nodes.size(), 35);
 
     LogPrintf("Phase Two oracle count: %d active, %d total\n",
@@ -310,7 +310,7 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
 
     // Testnet: 7 signatures from the active key prefix in a 35-slot roster.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 7);
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 23);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 24);
 
     // Verify testnet active set keeps the configured 7-signature quorum.
     BOOST_CHECK(ddParams.oracleThreshold > 0);
@@ -357,7 +357,7 @@ BOOST_AUTO_TEST_CASE(phase_one_no_mainnet_activation)
         }
     }
 
-    BOOST_CHECK_EQUAL(active_count, 22);
+    BOOST_CHECK_EQUAL(active_count, static_cast<int>(params.GetDigiDollarParams().activeOracles));
 
     LogPrintf("Mainnet oracle configuration: %d nodes configured, activation at height %d\n",
               oracle_nodes.size(), consensus.nDDActivationHeight);

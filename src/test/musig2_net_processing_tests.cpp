@@ -85,18 +85,20 @@ BOOST_AUTO_TEST_CASE(musig2_relay_authorization_rejects_reserve_slots)
     ScopedParamsRestore restore;
 
     SelectParams(ChainType::MAIN);
-    BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 23);
-    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), 20));
-    BOOST_CHECK_MESSAGE(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 21),
-        "mainnet reserve slot 21 must not be accepted for MuSig2 relay");
+    const int mainnet_active = Params().GetConsensus().nOraclePubkeyCount;
+    BOOST_REQUIRE_EQUAL(mainnet_active, 24);
+    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), mainnet_active - 1));
+    BOOST_CHECK_MESSAGE(!IsAuthorizedMuSig2OracleIdForRelay(Params(), mainnet_active),
+        "mainnet first reserve slot must not be accepted for MuSig2 relay");
     BOOST_CHECK_MESSAGE(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 29),
         "mainnet reserve slot 29 must not be accepted for MuSig2 relay");
     BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), ORACLE_TOTAL_COUNT));
 
     SelectParams(ChainType::TESTNET);
-    BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 23);
-    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), 20));
-    BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 21));
+    const int testnet_active = Params().GetConsensus().nOraclePubkeyCount;
+    BOOST_REQUIRE_EQUAL(testnet_active, 24);
+    BOOST_CHECK(IsAuthorizedMuSig2OracleIdForRelay(Params(), testnet_active - 1));
+    BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), testnet_active));
 
     SelectParams(ChainType::REGTEST);
     BOOST_REQUIRE_EQUAL(Params().GetConsensus().nOraclePubkeyCount, 7);

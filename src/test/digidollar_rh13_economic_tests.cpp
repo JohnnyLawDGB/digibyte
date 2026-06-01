@@ -389,7 +389,7 @@ BOOST_AUTO_TEST_CASE(rh13_07_oracle_quorum_manipulation)
 
     // Oracle struct defaults in src/consensus/digidollar.h.
     BOOST_CHECK_EQUAL(params.oracleCount, 35);
-    BOOST_CHECK_EQUAL(params.activeOracles, 23);
+    BOOST_CHECK_EQUAL(params.activeOracles, 24);
     BOOST_CHECK_EQUAL(params.oracleThreshold, 7);
 
     // Attack 1: Can N colluding oracles set arbitrary price?
@@ -406,7 +406,7 @@ BOOST_AUTO_TEST_CASE(rh13_07_oracle_quorum_manipulation)
     BOOST_CHECK_GT(params.oracleThreshold, 0U);
     BOOST_CHECK_LE(params.oracleThreshold, params.activeOracles);
     BOOST_CHECK_EQUAL(params.oracleThreshold, 7);
-    BOOST_CHECK_EQUAL(params.activeOracles, 23);
+    BOOST_CHECK_EQUAL(params.activeOracles, 24);
 }
 
 // ============================================================================

@@ -19,6 +19,7 @@
 # ============================================================================
 
 set -e
+umask 077
 
 # Colors for output
 RED='\033[0;31m'
@@ -233,12 +234,13 @@ echo -e "${GREEN}Firewall configured. Port $TESTNET_P2P_PORT is open.${NC}"
 # ============================================================================
 echo -e "\n${YELLOW}[5/9] Creating node configuration...${NC}"
 
-mkdir -p "$DATA_DIR"
+install -d -m 700 "$DATA_DIR"
+CONFIG_FILE="$DATA_DIR/digibyte.conf"
 
 # Generate secure RPC password
 RPC_PASSWORD=$(openssl rand -hex 32)
 
-cat > "$DATA_DIR/digibyte.conf" << EOF
+cat > "$CONFIG_FILE" << EOF
 # ============================================
 # DigiDollar Testnet Oracle Node Configuration
 # Generated: $(date)
@@ -279,9 +281,10 @@ rpcbind=127.0.0.1
 rpcallowip=127.0.0.1
 acceptnonstdtxn=1
 EOF
+chmod 600 "$CONFIG_FILE"
 
 echo -e "${GREEN}Configuration created.${NC}"
-echo "  Config file: $DATA_DIR/digibyte.conf"
+echo "  Config file: $CONFIG_FILE"
 echo "  RPC Password: (saved in config)"
 
 # ============================================================================

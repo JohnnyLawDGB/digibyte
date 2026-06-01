@@ -66,6 +66,9 @@ REQUIRED = {
         "TESTNET_NAME=\"testnet26\"",
         "TESTNET_P2P_PORT=12033",
         "TESTNET_RPC_PORT=14026",
+        "umask 077",
+        "install -d -m 700 \"$DATA_DIR\"",
+        "chmod 600 \"$CONFIG_FILE\"",
         "listoracle",
     ],
     "finish_oracle_setup.sh": [

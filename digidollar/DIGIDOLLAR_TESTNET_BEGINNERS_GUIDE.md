@@ -1020,13 +1020,13 @@ Think of the Oracle as a **decentralized price reporter**:
 7. **Validation** - All nodes verify the price data when validating blocks
 8. **Caching** - The price is cached and available for DigiDollar operations
 
-### V1 Oracle (TestNet 2025)
+### V1 Oracle (TestNet 2026)
 
 **Current Status:**
-- ✅ **17 configured oracle slots** with a 9-signature launch quorum
+- ✅ **21 active oracle slots** with a 7-signature launch quorum
 - ✅ **Live exchange-backed pricing** on testnet/mainnet
 - ✅ **MuSig2 v0x03 bundles** in the coinbase oracle output
-- ✅ **Activates at Block 650** (with DigiDollar)
+- ✅ **Activates at Block 600** (with DigiDollar)
 
 Mock price RPCs are regtest-only helpers and are not a testnet/mainnet fallback.
 

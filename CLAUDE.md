@@ -84,7 +84,7 @@ These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VER
 
 Slots 17–34 on mainnet and testnet are reserve `vOracleNodes` entries; they are inactive and do not participate in consensus until a later release adds their x-only keys to `consensus.vOraclePublicKeys` and marks the slot active. The 35-slot range is still valid for operator identity and RPC/P2P bounds checks.
 
-`src/primitives/oracle.h:19-21` declares header defaults `ORACLE_CONSENSUS_REQUIRED=9`, `ORACLE_ACTIVE_COUNT=35`, `ORACLE_TOTAL_COUNT=35`. Chainparams sets `nOracleConsensusRequired`, `nOraclePubkeyCount`, and `nOracleTotalOracles` per network at startup, so those chainparams values are what the validator and MuSig2 aggregator use.
+`src/primitives/oracle.h:19-21` declares header defaults `ORACLE_CONSENSUS_REQUIRED=7`, `ORACLE_ACTIVE_COUNT=35`, `ORACLE_TOTAL_COUNT=35`. Chainparams sets `nOracleConsensusRequired`, `nOraclePubkeyCount`, and `nOracleTotalOracles` per network at startup, so those chainparams values are what the validator and MuSig2 aggregator use.
 
 ## DigiDollar critical constants
 
@@ -134,7 +134,7 @@ LOCK_TIER_OPRETURN    = stored explicitly in mint OP_RETURN; consensus rejects
 | Mempool | `IsDigiDollarEnabled` + `HasDigiDollarMarker`; DD txs additionally require a recent valid MuSig2 oracle quote via `HasRecentValidMuSig2OracleQuote` | `src/validation.cpp:224-286, 976-989` |
 | Block | `IsDigiDollarEnabled` + `HasDigiDollarMarker` during `ConnectBlock`; coinbase oracle bundles require V1 MuSig2 version via `CheckMuSig2OracleBundleVersion` | `src/validation.cpp:185, 2808-3214` |
 | Script | `SCRIPT_VERIFY_DIGIDOLLAR` flag | `src/validation.cpp` |
-| P2P | `Consensus::IsOracleActive(params, height)` at the top of the price/consensus/MuSig2/getoracles handlers: `oracleprice`, `oraclebundle` (accepted-and-dropped — V1 puts the bundle on-chain), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `getoracles`. `oraclehb` is authenticated, roster-limited, and rate-limited; current code does not put the same height gate at the top of that handler. Wire names defined in `src/protocol.cpp:53-62`. | `src/net_processing.cpp` |
+| P2P | `IsOracleP2PActive` at the top of all oracle handlers, including `oraclehb`, `oracleprice`, `oraclebundle` (accepted-and-dropped — V1 puts the bundle on-chain), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, and `getoracles`. Wire names defined in `src/protocol.cpp:53-62`. | `src/net_processing.cpp` |
 | Qt | `DigiDollarTab` activation overlay; widgets check `isVisible()` before polling | `src/qt/digidollartab.cpp` |
 | Price cache | `UpdatePriceCache` gated on `DEPLOYMENT_DIGIDOLLAR` | `src/validation.cpp` (rh61 fix) |
 

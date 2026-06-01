@@ -47,6 +47,40 @@ FORBIDDEN = {
         "oracle=1",
         "oracleid=<your-slot-id>",
     ],
+    "docs/DIGIDOLLAR_ORACLE_SETUP_COMPLETE_GUIDE.md": [
+        "oracle=1",
+        "oracleid=<oracle-id>",
+    ],
+    "DIGIDOLLAR_ORACLE_SETUP.md": [
+        "startoracle <oracle_id> [private_key_hex]",
+    ],
+    "digidollar/DIGIDOLLAR_TESTNET_BEGINNERS_GUIDE.md": [
+        "17 configured oracle slots",
+        "9-signature launch quorum",
+        "Activates at Block 650",
+    ],
+    "DIGIDOLLAR_EXPLAINER.md": [
+        "slots 0-16 consensus-active",
+        "requires 9 BIP-340 Schnorr signatures",
+        "ORACLE_CONSENSUS_REQUIRED=9",
+    ],
+    "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
+        "slots 0–16",
+        "oraclehb` heartbeats are the current telemetry exception",
+        "ORACLEHEARTBEAT` is not guarded",
+    ],
+    "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
+        "one oracle relay handler that does not currently share",
+        "oraclehb` is signed/rate-limited telemetry without the same height gate",
+        "Replaced by 9-signature mainnet/testnet MuSig2",
+    ],
+    "CLAUDE.md": [
+        "current code does not put the same height gate",
+    ],
+    "REPO_MAP_DIGIDOLLAR.md": [
+        "currently has no height gate",
+        "slot 0–16 ordering",
+    ],
     "finish_oracle_setup.sh": [
         "getoracleinfo",
         "WALLET_NAME=\"${WALLET_NAME:-oracle_wallet}\"",
@@ -95,6 +129,42 @@ REQUIRED = {
         "digidollar=1",
         "createoraclekey <oracle_id>",
         "startoracle <oracle_id>",
+    ],
+    "docs/DIGIDOLLAR_ORACLE_SETUP_COMPLETE_GUIDE.md": [
+        "digidollar=1",
+        "Do not add `oracle` or `oracleid` config keys",
+    ],
+    "DIGIDOLLAR_ORACLE_SETUP.md": [
+        "startoracle <oracle_id>",
+        "Normal setup loads the oracle private key from the wallet",
+    ],
+    "digidollar/DIGIDOLLAR_TESTNET_BEGINNERS_GUIDE.md": [
+        "21 active oracle slots",
+        "7-signature launch quorum",
+        "Activates at Block 600",
+    ],
+    "DIGIDOLLAR_EXPLAINER.md": [
+        "21 active oracle slots",
+        "requires 7 BIP-340 Schnorr signatures",
+        "ORACLE_CONSENSUS_REQUIRED=7",
+    ],
+    "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
+        "slots 0-20",
+        "including signed `oraclehb` heartbeats",
+        "uses `IsOracleP2PActive`",
+    ],
+    "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
+        "including `oraclehb`, share the `IsOracleP2PActive` gate",
+        "21 active slots",
+        "Replaced by 7-signature mainnet/testnet MuSig2",
+    ],
+    "CLAUDE.md": [
+        "including `oraclehb`",
+        "IsOracleP2PActive",
+    ],
+    "REPO_MAP_DIGIDOLLAR.md": [
+        "all use `IsOracleP2PActive`",
+        "slot 0-20 ordering",
     ],
     "deploy_testnet_oracle.sh": [
         "TESTNET_NAME=\"testnet26\"",

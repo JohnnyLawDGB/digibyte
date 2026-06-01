@@ -293,9 +293,10 @@ Returns `pubkey` (33-byte compressed) and `pubkey_xonly` (32-byte x-only). Send 
 Start the oracle price feed thread. Loads the private key from your wallet.
 
 ```
-digibyte-cli -testnet -rpcwallet=oracle startoracle <oracle_id> [private_key_hex]
+digibyte-cli -testnet -rpcwallet=oracle startoracle <oracle_id>
 ```
-The optional `private_key_hex` overrides the wallet key (not recommended). Must be re-run after every node restart.
+Normal setup loads the oracle private key from the wallet. Must be re-run after
+every node restart.
 
 #### `stoporacle`
 Stop a running oracle.

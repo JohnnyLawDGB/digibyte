@@ -77,8 +77,9 @@ V1 ships with:
 
 - ✅ OP_ORACLE opcode (0xbf) wired through script flag `SCRIPT_VERIFY_DIGIDOLLAR`
 - ✅ MuSig2 v0x03 on-chain format only — `OracleBundleManager::CreateOracleScript` produces v0x03 (`src/oracle/bundle_manager.cpp:877-925`); `ExtractOracleBundle` rejects v0x01/v0x02 (`src/oracle/bundle_manager.cpp:1000-1057`)
+- ✅ 35 reserved oracle slots with 21 active slots and a 7-signature mainnet/testnet quorum
 - ✅ Single validator path on mainnet and testnet (`OracleDataValidator::ValidateBlockOracleData`, `src/oracle/bundle_manager.cpp:2139`) — the prior mainnet short-circuit is gone
-- ✅ P2P message surface: `oracleprice`, `oraclebundle` (received-and-dropped), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles` (`src/protocol.cpp:53-62`, handlers in `src/net_processing.cpp` 5440–6340). `oraclehb` is signed telemetry and is the one oracle relay handler that does not currently share the `IsOracleActive` height gate.
+- ✅ P2P message surface: `oracleprice`, `oraclebundle` (received-and-dropped), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles` (`src/protocol.cpp:53-62`, handlers in `src/net_processing.cpp` 5440–6340). All oracle P2P handlers, including `oraclehb`, share the `IsOracleP2PActive` gate.
 - ✅ Six initialized exchange fetchers (`src/oracle/exchange.cpp:1042-1071`)
 - ✅ Block-validated price cache, gated by BIP9 `DEPLOYMENT_DIGIDOLLAR` (`src/validation.cpp:3064-3094, 3365-3372`)
 - ✅ BIP-340 Schnorr verification at every relay hop, with bound-from-chainparams pubkey replacement before verification (`src/net_processing.cpp:5462-5491`) so an attacker cannot ship their own pubkey alongside a forged signature
@@ -1962,7 +1963,7 @@ There is no longer a separate "activate Phase Two on testnet" step — testnet/r
 - Price format: micro-USD (`1,000,000 = $1.00 USD`), constants `ORACLE_MIN_PRICE_MICRO_USD=100`, `ORACLE_MAX_PRICE_MICRO_USD=100000000` (`src/primitives/oracle.h:23-24`)
 - v0x03 on-chain payload: `version + bitmap_len + bitmap + epoch + price + timestamp + 64-byte aggregate sig` (`COracleBundle::SerializeV03Data`, `OracleBundleManager::CreateOracleScript`)
 - Validator: single code path for mainnet/testnet/regtest in `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2139`)
-- P2P handlers: 9 message types in `src/protocol.cpp:53-62`; price/consensus/MuSig2/getoracles handlers are gated on `Consensus::IsOracleActive` in `src/net_processing.cpp` ~5440–6340, `oraclebundle` is accepted-and-dropped, and `oraclehb` is signed/rate-limited telemetry without the same height gate.
+- P2P handlers: 9 message types in `src/protocol.cpp:53-62`; price/consensus/MuSig2/getoracles handlers, including `oraclehb`, share the `IsOracleP2PActive` gate in `src/net_processing.cpp` ~5440–6340, and `oraclebundle` is accepted-and-dropped.
 - BIP9: bit 23, mainnet start `2026-06-01`, mainnet timeout `2027-06-01`, mainnet `min_activation_height=23627520`, mainnet window 40320 / threshold 28224 (70%); testnet26 start at genesis, `min_activation_height=600`, window 200, threshold 140 (70%); regtest `ALWAYS_ACTIVE`
 - `OP_CHECKPRICE` consults `g_get_oracle_consensus_price` (`src/script/interpreter.cpp:725`); fails closed when price ≤ 0
 - 6 active exchange fetchers initialized in `MultiExchangeAggregator::InitializeFetchers` (`src/oracle/exchange.cpp:1042-1071`); 5 fetcher classes still compile but are NOT initialized (Coinbase, Kraken, Messari, Bittrex, Poloniex); CoinMarketCap removed entirely. `FetchAllPrices()` iterates the initialized fetchers sequentially.
@@ -1995,6 +1996,6 @@ These items appeared in earlier revisions of this document. They are recorded he
 | Mainnet validation returns true (bundle_manager.cpp:2229) | Removed (commit `f0d9a7b2c7`); validator runs identically on mainnet and testnet |
 | v0x01 / v0x02 oracle bundle accepted on-chain | Rejected at extraction, surfaced by the validator as `bad-oracle-malformed`. The `bad-oracle-legacy` branch only fires when extraction returns true with a non-MuSig2 version and remains as defense-in-depth; commits `bbb85cf363`, `fa29405adc`, `f2bb0a19a4` |
 | Empty `schnorr_sig` bypasses verification in P2P | Bound to chainparams pubkey then verified in `src/net_processing.cpp:5462-5491`; v0x03 on-chain bundle uses an aggregate signature that is always required |
-| Phase One single oracle on testnet/regtest | Replaced by 9-signature mainnet/testnet MuSig2 / 4-of-7 regtest MuSig2 |
+| Phase One single oracle on testnet/regtest | Replaced by 7-signature mainnet/testnet MuSig2 / 4-of-7 regtest MuSig2 |
 | `sendoracleprice` RPC | Removed |
 | Mock prices reachable from `OP_CHECKPRICE` | Removed (commit `f77678cd0f`); `g_get_oracle_consensus_price` is the only source, fails closed |

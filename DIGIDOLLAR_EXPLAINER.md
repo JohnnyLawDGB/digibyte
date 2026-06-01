@@ -170,7 +170,15 @@ DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. 
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-Mainnet/testnet: 35 reserved oracle slots with slots 0-16 consensus-active at RC41 launch. The active keyset uses MuSig2 BIP-327 threshold consensus and requires 9 BIP-340 Schnorr signatures. Slots 17-34 are inactive reserve metadata until a later release adds operator x-only keys to `consensus.vOraclePublicKeys` and marks the slots active. Regtest: 4-of-7 (chainparams overrides the header defaults). Oracle prices are reported in micro-USD format (1,000,000 = $1.00). `primitives/oracle.h` now declares header defaults `ORACLE_TOTAL_COUNT=35`, `ORACLE_ACTIVE_COUNT=35`, and `ORACLE_CONSENSUS_REQUIRED=9`; per-network chainparams values such as `nOraclePubkeyCount` and `nOracleConsensusRequired` remain authoritative for validation.
+Mainnet/testnet: 35 reserved oracle slots with 21 active oracle slots (0-20)
+and reserve metadata in slots 21-34. The active keyset uses MuSig2 BIP-327
+threshold consensus and requires 7 BIP-340 Schnorr signatures. Regtest remains
+4-of-7 for local testing. Oracle prices are reported in micro-USD format
+(1,000,000 = $1.00). `primitives/oracle.h` now declares header defaults
+`ORACLE_TOTAL_COUNT=35`, `ORACLE_ACTIVE_COUNT=35`, and
+`ORACLE_CONSENSUS_REQUIRED=7`; per-network chainparams values such as
+`nOraclePubkeyCount` and `nOracleConsensusRequired` remain authoritative for
+validation.
 
 #### MAST Implementation
 Efficient script execution with Merkleized Alternative Script Trees. The collateral vault uses **2 redemption paths**:

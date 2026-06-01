@@ -831,7 +831,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 
 ### src/net_processing.cpp
 - ⚠️ Handles `ORACLEPRICE`, accepted-and-dropped `ORACLEBUNDLE`, `ORACLECONSENSUS`, `ORACLEATTESTATION`, `ORACLEMUSIGNONCE`, `ORACLEMUSIGCONTEXT`, `ORACLEMUSIGPARTIALSIG`, `ORACLEHEARTBEAT`, and `GETORACLES`
-- ⚠️ Price/consensus/MuSig2/getoracles handlers use `Consensus::IsOracleActive`; `ORACLEHEARTBEAT` is signed, roster-limited, deduplicated, and rate-limited but currently has no height gate
+- ⚠️ Price/consensus/MuSig2/getoracles/heartbeat handlers all use `IsOracleP2PActive`; `ORACLEHEARTBEAT` is also signed, roster-limited, deduplicated, and rate-limited
 - ⚠️ `GETORACLES` is rate-limited to 10 requests/minute/peer, accepts epochs in `[current_epoch - 24, current_epoch + 1]`, and replies with matching fresh `ORACLEPRICE` messages plus recent `ORACLEHEARTBEAT` messages
 - ⚠️ Oracle message validation, rate limiting, and Misbehaving scoring for invalid MuSig2/heartbeat messages
 
@@ -1041,7 +1041,7 @@ present in the tree but not compiled into the current unit-test binary.
 | `rh15_crypto_primitives_tests.cpp` | RH-15: hash domain separation, __int128 edge cases, version-marker ambiguity, MuSig2 nonce/key validation |
 | `rh29_coinbase_oracle_manipulation_tests.cpp` | RH-29: coinbase OP_RETURN injection, multiple oracle bundles, version confusion, signature replay, withholding |
 | `rh39_eclipse_attack_tests.cpp` | RH-39: eclipse + oracle suppression, selective relay, message ordering, INV/GETDATA withholding, sybil spoofing |
-| `rh50_oracle_keyset_alignment_tests.cpp` | RH-50: oracle keyset alignment invariant — vOracleNodes ↔ vOraclePublicKeys slot 0–16 ordering |
+| `rh50_oracle_keyset_alignment_tests.cpp` | RH-50: oracle keyset alignment invariant — vOracleNodes ↔ vOraclePublicKeys slot 0-20 ordering |
 | `rh51_checkphase3_v1_split_tests.cpp` | RH-51: regtest activation-gate asymmetry hardening (regtest/mainnet divergence at heights 0–649) |
 | `rh52_bip34_scriptnum_escape_tests.cpp` | RH-52: BIP34 coinbase-height CScriptNum escape in oracle validators (Wave-1 PoC; fixed in `2b37384e79`) |
 | `rh53_op_checkprice_mock_weaponization_tests.cpp` | RH-53: OP_CHECKPRICE mock-price weaponization regression (Wave-2 PoC; live oracle wired in `f77678cd0f`) |

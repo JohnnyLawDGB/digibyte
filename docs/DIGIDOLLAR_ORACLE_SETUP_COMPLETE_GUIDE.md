@@ -31,11 +31,12 @@ Example:
 ```ini
 server=1
 txindex=1
-
-# Operator node only
-oracle=1
-oracleid=<oracle-id>
+digidollar=1
 ```
+
+Do not add `oracle` or `oracleid` config keys. Oracle identity is wallet/RPC
+driven in V1: create or load the key with `createoraclekey`, then start the
+operator with `startoracle` after DigiDollar is active.
 
 Network-specific options such as `testnet=1` or `regtest=1` are still required
 for non-mainnet operation.

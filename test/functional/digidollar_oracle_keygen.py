@@ -10,7 +10,9 @@ from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
 )
+import os
 import re
+import tempfile
 
 
 class DigiDollarOracleKeygenTest(DigiByteTestFramework):
@@ -84,6 +86,100 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         assert_equal(result1["stored_in_wallet"], True)
         assert result1["pubkey"] != pubkey, "oracle 1 should have different pubkey than oracle 0"
 
+        # --- DD-RH: restored wallet should still expose configured oracle keys ---
+        self.log.info("Test: wallet-configured oracle key should be visible before startoracle")
+        pubkey_result = wallet.getoraclepubkey(0)
+        assert_equal(pubkey_result["oracle_id"], 0)
+        assert_equal(pubkey_result["pubkey_full"], pubkey)
+        assert_equal(pubkey_result["pubkey"], pubkey_xonly)
+        assert_equal(pubkey_result["is_running"], False)
+        assert_equal(pubkey_result["configured_in_wallet"], True)
+        assert_equal(pubkey_result["source"], "wallet")
+        assert_equal(pubkey_result["wallet_name"], "oracle_test")
+        assert "not running" in pubkey_result["message"]
+        assert "private" not in pubkey_result
+
+        list_result = wallet.listoracle()
+        assert_equal(list_result["running"], False)
+        assert_equal(list_result["configured"], True)
+        assert_equal(list_result["oracle_id"], 0)
+        assert_equal(list_result["pubkey"], pubkey)
+        assert_equal(list_result["wallet_name"], "oracle_test")
+        assert "not running" in list_result["message"]
+
+        self.log.info("Test: wrong selected wallet should not claim another wallet's oracle key")
+        node.createwallet("oracle_empty")
+        empty_wallet = node.get_wallet_rpc("oracle_empty")
+        assert_raises_rpc_error(-8, "selected wallet 'oracle_empty' has no stored oracle key for oracle ID 0", empty_wallet.getoraclepubkey, 0)
+        empty_list = empty_wallet.listoracle()
+        assert_equal(empty_list["running"], False)
+        assert_equal(empty_list["configured"], False)
+        assert_equal(empty_list["wallet_name"], "oracle_empty")
+        assert "no stored oracle key for oracle ID 0" in empty_list["message"]
+        wrong_start = empty_wallet.startoracle(0)
+        assert_equal(wrong_start["success"], False)
+        assert "selected wallet 'oracle_empty' has no stored oracle key for oracle ID 0" in wrong_start["message"]
+        assert "createoraclekey" not in wrong_start["message"].lower()
+
+        self.log.info("Test: multiple loaded wallets without wallet selection should be clear")
+        assert_raises_rpc_error(-19, "Wallet file not specified", node.startoracle, 0)
+
+        self.log.info("Test: oracle key persists across backupwallet/restorewallet")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            backup_file = os.path.join(temp_dir, "oracle_test_backup.dat")
+            wallet.backupwallet(backup_file)
+            node.restorewallet("oracle_restored", backup_file)
+            restored_wallet = node.get_wallet_rpc("oracle_restored")
+
+            assert_raises_rpc_error(None, "already exists", restored_wallet.createoraclekey, 0)
+
+            restored_pubkey = restored_wallet.getoraclepubkey(0)
+            assert_equal(restored_pubkey["oracle_id"], 0)
+            assert_equal(restored_pubkey["pubkey_full"], pubkey)
+            assert_equal(restored_pubkey["pubkey"], pubkey_xonly)
+            assert_equal(restored_pubkey["configured_in_wallet"], True)
+            assert restored_pubkey["source"] in ("wallet", "running_oracle")
+            assert_equal(restored_pubkey["wallet_name"], "oracle_restored")
+
+            restored_list = restored_wallet.listoracle()
+            assert_equal(restored_list["running"], False)
+            assert_equal(restored_list["configured"], True)
+            assert_equal(restored_list["oracle_id"], 0)
+            assert_equal(restored_list["pubkey"], pubkey)
+            assert_equal(restored_list["wallet_name"], "oracle_restored")
+
+        self.log.info("Test: encrypted restored wallet exposes public key while locked")
+        node.createwallet("encrypted_oracle")
+        encrypted_wallet = node.get_wallet_rpc("encrypted_oracle")
+        encrypted_wallet.encryptwallet("oracle-passphrase")
+        encrypted_wallet.walletpassphrase("oracle-passphrase", 600)
+        encrypted_result = encrypted_wallet.createoraclekey(2)
+        encrypted_pubkey = encrypted_result["pubkey"]
+        encrypted_xonly = encrypted_result["pubkey_xonly"]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            encrypted_backup = os.path.join(temp_dir, "encrypted_oracle_backup.dat")
+            encrypted_wallet.backupwallet(encrypted_backup)
+            node.restorewallet("encrypted_oracle_restored", encrypted_backup)
+            encrypted_restored = node.get_wallet_rpc("encrypted_oracle_restored")
+            encrypted_restored.walletlock()
+
+            locked_pubkey = encrypted_restored.getoraclepubkey(2)
+            assert_equal(locked_pubkey["oracle_id"], 2)
+            assert_equal(locked_pubkey["pubkey_full"], encrypted_pubkey)
+            assert_equal(locked_pubkey["pubkey"], encrypted_xonly)
+            assert_equal(locked_pubkey["configured_in_wallet"], True)
+            assert_equal(locked_pubkey["source"], "wallet")
+            assert_equal(locked_pubkey["wallet_name"], "encrypted_oracle_restored")
+            assert "private" not in locked_pubkey
+
+            assert_raises_rpc_error(-13, "walletpassphrase", encrypted_restored.startoracle, 2)
+            encrypted_restored.walletpassphrase("oracle-passphrase", 600)
+            unlocked_start = encrypted_restored.startoracle(2)
+            assert_equal(unlocked_start["oracle_id"], 2)
+            assert_equal(unlocked_start["success"], False)
+            assert "not authorized" in unlocked_start["message"].lower() or "mismatch" in unlocked_start["message"].lower()
+            assert "createoraclekey" not in unlocked_start["message"].lower()
+
         # --- Test 7: createoraclekey 35 should fail (max oracle_id is 34) ---
         self.log.info("Test: createoraclekey 35 should fail (invalid oracle_id)")
         assert_raises_rpc_error(None, None, wallet.createoraclekey, 35)
@@ -116,21 +212,13 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         # On regtest, chainparams oracle keys are test keys, so the wallet-generated
         # key won't match. We expect a pubkey mismatch error.
         self.log.info("Test: startoracle 0 from wallet should fail with pubkey mismatch on regtest")
-        try:
-            start_result = wallet.startoracle(0)
-            self.log.info(f"startoracle 0 returned: {start_result}")
-            assert_equal(start_result["oracle_id"], 0)
-            assert_equal(start_result["success"], False)
-            assert_equal(start_result["status"], "stopped")
-            assert_equal(start_result["initialized"], True)
-            assert "price fetcher is not running" in start_result["message"]
-        except Exception as e:
-            err_msg = str(e)
-            self.log.info(f"startoracle 0 failed as expected: {err_msg}")
-            assert "internal bug detected" not in err_msg.lower(), err_msg
-            # Should mention pubkey mismatch or similar
-            assert "pubkey" in err_msg.lower() or "mismatch" in err_msg.lower() or "key" in err_msg.lower(), \
-                f"Expected pubkey-related error, got: {err_msg}"
+        start_result = wallet.startoracle(0)
+        self.log.info(f"startoracle 0 returned: {start_result}")
+        assert_equal(start_result["oracle_id"], 0)
+        assert_equal(start_result["success"], False)
+        assert_equal(start_result["status"], "stopped")
+        assert "not authorized" in start_result["message"].lower() or "mismatch" in start_result["message"].lower()
+        assert "createoraclekey" not in start_result["message"].lower()
 
         # --- Test 9: Key persistence across wallet unload/reload ---
         self.log.info("Test: oracle key persists across wallet unload/reload")
@@ -143,20 +231,13 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
 
         # startoracle 0 should still attempt to load the key from wallet
         # (same pubkey mismatch error proves key was loaded from wallet)
-        try:
-            start_result = wallet.startoracle(0)
-            self.log.info(f"startoracle 0 after reload returned: {start_result}")
-            assert_equal(start_result["oracle_id"], 0)
-            assert_equal(start_result["success"], False)
-            assert_equal(start_result["status"], "stopped")
-            assert_equal(start_result["initialized"], True)
-            assert "price fetcher is not running" in start_result["message"]
-        except Exception as e:
-            err_msg = str(e)
-            self.log.info(f"startoracle 0 after reload failed as expected: {err_msg}")
-            assert "internal bug detected" not in err_msg.lower(), err_msg
-            assert "pubkey" in err_msg.lower() or "mismatch" in err_msg.lower() or "key" in err_msg.lower(), \
-                f"Expected pubkey-related error after reload, got: {err_msg}"
+        start_result = wallet.startoracle(0)
+        self.log.info(f"startoracle 0 after reload returned: {start_result}")
+        assert_equal(start_result["oracle_id"], 0)
+        assert_equal(start_result["success"], False)
+        assert_equal(start_result["status"], "stopped")
+        assert "not authorized" in start_result["message"].lower() or "mismatch" in start_result["message"].lower()
+        assert "createoraclekey" not in start_result["message"].lower()
 
         self.log.info("All oracle keygen tests passed!")
 

@@ -1039,6 +1039,7 @@ public:
     bool HasOracleKey(uint32_t oracle_id) const;
     bool StoreOracleKey(uint32_t oracle_id, const CKey& key);
     bool GetOracleKey(uint32_t oracle_id, CKey& key_out);
+    bool GetOraclePubKey(uint32_t oracle_id, CPubKey& pubkey_out);
     bool EncryptOracleKeys(const CKeyingMaterial& vMasterKeyIn, WalletBatch* encrypted_batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void TryAutoStartOracles();
 

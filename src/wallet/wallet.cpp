@@ -4805,6 +4805,25 @@ bool CWallet::GetOracleKey(uint32_t oracle_id, CKey& key_out)
     return true;
 }
 
+bool CWallet::GetOraclePubKey(uint32_t oracle_id, CPubKey& pubkey_out)
+{
+    WalletBatch batch(GetDatabase());
+    CPubKey pubkey;
+    std::vector<unsigned char> vchCryptedSecret;
+    if (batch.ReadCryptedOracleKey(oracle_id, pubkey, vchCryptedSecret)) {
+        pubkey_out = pubkey;
+        return pubkey_out.IsValid();
+    }
+
+    CKey plaintext_key;
+    if (!batch.ReadOracleKey(oracle_id, plaintext_key)) {
+        return false;
+    }
+
+    pubkey_out = plaintext_key.GetPubKey();
+    return pubkey_out.IsValid();
+}
+
 bool CWallet::EncryptOracleKeys(const CKeyingMaterial& vMasterKeyIn, WalletBatch* encrypted_batch)
 {
     AssertLockHeld(cs_wallet);

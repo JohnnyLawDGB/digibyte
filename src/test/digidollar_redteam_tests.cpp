@@ -17091,7 +17091,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
 {
     // RC43 resolves the count mismatch: the static P2P bound, consensus
     // total, and configured node roster all describe the same 35 reserved slots.
-    // The first 21 slots are active today and present in vOraclePublicKeys.
+    // The active slots are present in vOraclePublicKeys.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
     const Consensus::Params& consensus = params.GetConsensus();
@@ -17107,8 +17107,8 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
     BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, static_cast<int>(all_oracles.size()));
     BOOST_TEST_MESSAGE("  nOracleTotalOracles == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
 
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 21);
-    BOOST_CHECK_EQUAL(static_cast<int>(consensus.vOraclePublicKeys.size()), 21);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 22);
+    BOOST_CHECK_EQUAL(static_cast<int>(consensus.vOraclePublicKeys.size()), 22);
 
     // Verify nOracleRequiredMessages < nOracleTotalOracles
     BOOST_CHECK_LT(consensus.nOracleRequiredMessages, consensus.nOracleTotalOracles);
@@ -17377,7 +17377,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
 
     // vOraclePublicKeys contains the active signing roster, not inactive reserve slots.
     BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(consensus.nOraclePubkeyCount));
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 21);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 22);
     BOOST_TEST_MESSAGE("  vOraclePublicKeys has " + std::to_string(consensus.vOraclePublicKeys.size()) +
                       " keys on mainnet ✅ (Phase 3 MuSig2)");
 

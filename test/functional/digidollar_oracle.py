@@ -21,9 +21,9 @@ from decimal import Decimal
 import time
 
 # Oracle constants (should match current mainnet/testnet chainparams)
-# RC43 fix pass: 35 reserved slots, 21 active keys, 7 signatures required.
+# RC43+ roster: 35 reserved slots, active key prefix, 7 signatures required.
 ORACLE_TOTAL_COUNT = 35
-ORACLE_ACTIVE_COUNT = 21
+ORACLE_ACTIVE_COUNT = 22
 ORACLE_CONSENSUS_REQUIRED = 7
 
 
@@ -111,7 +111,7 @@ class DigiDollarOracleTest(DigiByteTestFramework):
 
             # Verify configuration values match consensus parameters.
             assert_equal(oracle_config['total_oracles'], 35)
-            assert_equal(oracle_config['active_oracles_per_epoch'], 21)
+            assert_equal(oracle_config['active_oracles_per_epoch'], ORACLE_ACTIVE_COUNT)
             assert_equal(oracle_config['consensus_threshold'], 7)
             assert_equal(oracle_config['price_valid_blocks'], 20)
 

@@ -28,7 +28,7 @@
  *      decodes to empty and quorum returns false.
  *
  * The harness runs across mainnet, testnet, and regtest chainparams to
- * cover the 4-of-7 (regtest) and 7-of-21 (mainnet/testnet) thresholds.
+ * cover the 4-of-7 (regtest) and 7-signature (mainnet/testnet) thresholds.
  */
 
 #include <cassert>

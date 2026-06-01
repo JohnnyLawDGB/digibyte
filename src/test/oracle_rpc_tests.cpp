@@ -51,18 +51,27 @@ BOOST_AUTO_TEST_CASE(getoracles_chainparams_has_oracles)
 /**
  * Test: Oracle names array covers all configured oracles
  *
- * getoracles uses a hardcoded names array. Verify it has at least as
- * many entries as configured oracle nodes.
+ * getoracles uses operator display names for active slots. Verify the
+ * active launch roster has names for every consensus oracle.
  */
 BOOST_AUTO_TEST_CASE(getoracles_oracle_names_coverage)
 {
     SelectParams(ChainType::TESTNET);
     const std::vector<OracleNodeInfo>& oracles = Params().GetOracleNodes();
-    std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie"};
+    std::vector<std::string> oracle_names = {
+        "Jared", "Green Candle", "Bastian", "DanGB", "Shenger",
+        "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie",
+        "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
+        "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony",
+        "mbah_jambon", "Camden", "Twoface123"
+    };
 
-    // Names array should cover all configured oracles (up to 7)
-    size_t count = std::min(oracles.size(), (size_t)7);
-    BOOST_CHECK_GE(oracle_names.size(), count);
+    size_t active_count = 0;
+    for (const auto& oracle : oracles) {
+        if (oracle.is_active) ++active_count;
+    }
+
+    BOOST_CHECK_EQUAL(oracle_names.size(), active_count);
 }
 
 /**

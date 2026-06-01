@@ -57,7 +57,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
 {
     SelectParams(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
-    // Mainnet uses MuSig2 immediately on top of 7-of-21 oracle consensus.
+    // Mainnet uses MuSig2 immediately on top of 7-signature oracle consensus.
     BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
@@ -65,7 +65,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet also switches immediately to MuSig2 (7-of-21).
+    // Testnet also switches immediately to MuSig2 (7 signatures).
     BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
 }
 
@@ -85,8 +85,8 @@ BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_and_total_slots)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // RC43 testnet uses 21 active oracle pubkeys in a 35-slot roster.
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 21);
+    // Testnet uses the active oracle pubkey prefix inside a 35-slot roster.
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 22);
     BOOST_CHECK_EQUAL(params.nOracleTotalOracles, 35);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
@@ -171,7 +171,7 @@ BOOST_AUTO_TEST_CASE(testnet_rc43_slots_17_to_20_are_active)
     constexpr const char* CAMDEN_XONLY =
         "018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c";
 
-    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 21);
+    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 22);
     BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 7);
     BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), 21U);
     BOOST_REQUIRE_GE(nodes.size(), 21U);

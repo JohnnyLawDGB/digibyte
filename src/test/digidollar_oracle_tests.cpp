@@ -590,8 +590,8 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_data_validity)
         BOOST_CHECK(!oracle.endpoint.empty());
         BOOST_CHECK(oracle.endpoint.find(":") != std::string::npos); // Should have port
 
-        // First 21 slots are active; remaining reserved slots are inactive.
-        BOOST_CHECK_EQUAL(oracle.is_active, oracle.id < 21);
+        // First active roster slots are active; remaining reserved slots are inactive.
+        BOOST_CHECK_EQUAL(oracle.is_active, oracle.id < 22);
 
         // Test oracle passes validation
         BOOST_CHECK(oracle.IsValid());

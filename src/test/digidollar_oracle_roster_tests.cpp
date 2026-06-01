@@ -34,7 +34,7 @@ constexpr int32_t ROSTER_ACTIVE_HEIGHT = 650;
 constexpr uint64_t ROSTER_PRICE = 51000;
 constexpr int64_t ROSTER_TIMESTAMP = 1735689600;
 constexpr uint16_t ROSTER_TOTAL_SLOTS = 35;
-constexpr int ROSTER_ACTIVE_OPERATORS = 21;
+constexpr int ROSTER_ACTIVE_OPERATORS = 22;
 constexpr int ROSTER_QUORUM = 7;
 
 struct LocalMiniTestnetSetup : public BasicTestingSetup {

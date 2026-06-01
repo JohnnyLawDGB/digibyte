@@ -164,7 +164,7 @@ namespace {
             "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie",
             "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
             "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony",
-            "mbah_jambon", "Camden"
+            "mbah_jambon", "Camden", "Twoface123"
         };
         return names;
     }
@@ -4511,9 +4511,7 @@ static RPCHelpMan getalloracleprices()
             // Use shared scanner (Bug #15: consistent with getoracles)
             OracleScanResult scan = ScanOracleDataFromChain(chainman, bundle_manager, oracle_manager, scan_blocks);
 
-            // Oracle names from chainparams
             const std::vector<OracleNodeInfo>& oracle_nodes = Params().GetOracleNodes();
-            std::vector<std::string> oracle_names = {"Jared", "Green Candle", "Bastian", "DanGB", "Shenger", "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie", "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce", "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony", "mbah_jambon", "Camden"};
 
             // Build result
             UniValue result(UniValue::VOBJ);
@@ -4527,7 +4525,7 @@ static RPCHelpMan getalloracleprices()
             for (size_t i = 0; i < oracle_nodes.size(); ++i) {
                 UniValue oracle_obj(UniValue::VOBJ);
                 oracle_obj.pushKV("oracle_id", (int)oracle_nodes[i].id);
-                oracle_obj.pushKV("name", i < oracle_names.size() ? oracle_names[i] : "Unknown");
+                oracle_obj.pushKV("name", OracleDisplayName(oracle_nodes[i].id));
                 oracle_obj.pushKV("endpoint", oracle_nodes[i].endpoint);
 
                 auto it = scan.oracle_data.find(oracle_nodes[i].id);

@@ -35,7 +35,7 @@ std::array<unsigned char, 32> SerializeXOnly(const secp256k1_xonly_pubkey& pk)
 
 } // anonymous namespace
 
-// Use testnet fixture: 21 active oracles, 7-of-21 consensus.
+// Use testnet fixture: active oracle key prefix, 7-signature consensus.
 struct TestnetSetup : public BasicTestingSetup {
     TestnetSetup() : BasicTestingSetup(ChainType::TESTNET) {}
 };
@@ -335,7 +335,7 @@ BOOST_AUTO_TEST_CASE(rh01_duplicate_key_injection_deduplicated)
 // Attack Vector 4: Below-threshold sets rejected
 BOOST_AUTO_TEST_CASE(rh01_below_threshold_rejected)
 {
-    // Below the 7-of-21 threshold.
+    // Below the 7-signature threshold.
     std::vector<uint8_t> too_few = {0, 1, 2, 3, 4, 5};
     auto bitmap = MuSig2OracleAggregator::EncodeBitmap(too_few, 21);
     BOOST_CHECK(bitmap.empty());

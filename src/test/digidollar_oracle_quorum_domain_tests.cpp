@@ -31,7 +31,8 @@
  *    aggregate (determinism).
  *
  * 5) Cross-network: regtest 4-of-7 aggregate must differ from mainnet
- *    7-of-21 aggregate, even for the same price/timestamp/epoch.
+ *    aggregate signed by the 7-signature roster, even for the same
+ *    price/timestamp/epoch.
  *
  * Coverage notes (campaign tracking):
  *   DD-FA-TEST-010 — Wave 9 test/fuzz hardening for quorum boundaries,
@@ -297,7 +298,7 @@ BOOST_AUTO_TEST_CASE(quorum_7_of_21_accepts_signed_bundle)
     std::string error;
     BOOST_CHECK(OracleBundleManager::ValidateMuSig2Bundle(bundle, QD_BLOCK_HEIGHT, params, error));
     BOOST_CHECK_MESSAGE(error.empty(),
-        "7-of-21 quorum must accept without error, got: " + error);
+        "7-signature quorum must accept without error, got: " + error);
 }
 
 BOOST_AUTO_TEST_CASE(quorum_6_of_21_rejected_below_threshold)
@@ -406,13 +407,13 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
     SelectParams(ChainType::MAIN);
     {
         const Consensus::Params& params = Params().GetConsensus();
-        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 21);
+        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 22);
         BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
         // Reserve slots are valid bitmap positions in the 35-slot reserve,
         // but cannot satisfy consensus until a future release adds pubkeys
         // and raises nOraclePubkeyCount.
-        for (uint8_t reserve_id = 21; reserve_id <= 34; ++reserve_id) {
+        for (uint8_t reserve_id = 22; reserve_id <= 34; ++reserve_id) {
             CheckReserveIdRejectedByBundleValidation(
                 params, params.nDDActivationHeight, reserve_id, "Mainnet");
         }
@@ -421,10 +422,10 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
     SelectParams(ChainType::TESTNET);
     {
         const Consensus::Params& params = Params().GetConsensus();
-        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 21);
+        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 22);
         BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
-        for (uint8_t reserve_id = 21; reserve_id <= 34; ++reserve_id) {
+        for (uint8_t reserve_id = 22; reserve_id <= 34; ++reserve_id) {
             CheckReserveIdRejectedByBundleValidation(
                 params, params.nDDActivationHeight, reserve_id, "Testnet");
         }
@@ -475,14 +476,14 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_all_zero_rejected)
 
 BOOST_AUTO_TEST_CASE(roster_bitmap_single_participant_rejected)
 {
-    // 1-of-21 must be below the 7-of-21 threshold.
+    // 1-of-active-roster must be below the 7-signature threshold.
     const std::vector<uint8_t> single{0};
-    auto encoded = MuSig2OracleAggregator::EncodeBitmap(single, /*total_oracles=*/21);
+    auto encoded = MuSig2OracleAggregator::EncodeBitmap(single, /*total_oracles=*/22);
     BOOST_CHECK_MESSAGE(encoded.empty(),
-        "EncodeBitmap must reject single-participant set under 7-of-21 quorum");
+        "EncodeBitmap must reject single-participant set under 7-signature quorum");
 
-    std::vector<unsigned char> handcrafted = EncodeBitmapUnchecked(single, 21);
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    std::vector<unsigned char> handcrafted = EncodeBitmapUnchecked(single, 22);
+    Consensus::Params params = MakeQuorumDomainParams(22, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     bundle.participation_bitmap = handcrafted;
     bundle.aggregate_sig.assign(64, 0);

@@ -21,9 +21,9 @@ from decimal import Decimal
 import time
 
 # Oracle constants (should match current mainnet/testnet chainparams)
-# RC43+ roster: 35 reserved slots, active key prefix, 7 signatures required.
+# Launch roster: 35 reserved slots, active key prefix, 7 signatures required.
 ORACLE_TOTAL_COUNT = 35
-ORACLE_ACTIVE_COUNT = 22
+ORACLE_ACTIVE_COUNT = 23
 ORACLE_CONSENSUS_REQUIRED = 7
 
 

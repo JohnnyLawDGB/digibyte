@@ -407,13 +407,13 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
     SelectParams(ChainType::MAIN);
     {
         const Consensus::Params& params = Params().GetConsensus();
-        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 22);
+        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 23);
         BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
         // Reserve slots are valid bitmap positions in the 35-slot reserve,
         // but cannot satisfy consensus until a future release adds pubkeys
         // and raises nOraclePubkeyCount.
-        for (uint8_t reserve_id = 22; reserve_id <= 34; ++reserve_id) {
+        for (uint8_t reserve_id = 23; reserve_id <= 34; ++reserve_id) {
             CheckReserveIdRejectedByBundleValidation(
                 params, params.nDDActivationHeight, reserve_id, "Mainnet");
         }
@@ -422,10 +422,10 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
     SelectParams(ChainType::TESTNET);
     {
         const Consensus::Params& params = Params().GetConsensus();
-        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 22);
+        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 23);
         BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
-        for (uint8_t reserve_id = 22; reserve_id <= 34; ++reserve_id) {
+        for (uint8_t reserve_id = 23; reserve_id <= 34; ++reserve_id) {
             CheckReserveIdRejectedByBundleValidation(
                 params, params.nDDActivationHeight, reserve_id, "Testnet");
         }
@@ -478,12 +478,12 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_single_participant_rejected)
 {
     // 1-of-active-roster must be below the 7-signature threshold.
     const std::vector<uint8_t> single{0};
-    auto encoded = MuSig2OracleAggregator::EncodeBitmap(single, /*total_oracles=*/22);
+    auto encoded = MuSig2OracleAggregator::EncodeBitmap(single, /*total_oracles=*/23);
     BOOST_CHECK_MESSAGE(encoded.empty(),
         "EncodeBitmap must reject single-participant set under 7-signature quorum");
 
-    std::vector<unsigned char> handcrafted = EncodeBitmapUnchecked(single, 22);
-    Consensus::Params params = MakeQuorumDomainParams(22, 7);
+    std::vector<unsigned char> handcrafted = EncodeBitmapUnchecked(single, 23);
+    Consensus::Params params = MakeQuorumDomainParams(23, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     bundle.participation_bitmap = handcrafted;
     bundle.aggregate_sig.assign(64, 0);

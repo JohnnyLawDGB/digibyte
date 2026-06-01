@@ -164,7 +164,7 @@ namespace {
             "Ycagel", "Aussie", "LookInto", "JohnnyLawDGB", "Ogilvie",
             "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
             "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony",
-            "mbah_jambon", "Camden", "Twoface123"
+            "mbah_jambon", "Camden", "Twoface123", "LivingTheLife"
         };
         return names;
     }

@@ -231,7 +231,7 @@ BOOST_AUTO_TEST_CASE(mainnet_testnet_have_35_slots_with_inactive_reserves)
         const CChainParams& params = Params();
         const Consensus::Params& consensus = params.GetConsensus();
         const auto& nodes = params.GetOracleNodes();
-        const int expected_active = 22;
+        const int expected_active = 23;
 
         BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, 35);
         BOOST_CHECK_EQUAL(consensus.nOracleConsensusRequired, 7);

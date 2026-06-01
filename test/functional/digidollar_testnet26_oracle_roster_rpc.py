@@ -5,7 +5,7 @@
 
 """RC44 testnet26 oracle roster RPC regression.
 
-The public RC44 testnet roster has 22 active MuSig2 oracle slots. The local
+The public RC44 testnet roster has 23 active MuSig2 oracle slots. The local
 mini-testnet harness uses `-testnet -easypow`, which keeps the testnet26 chain
 identity while swapping to deterministic local oracle keys so the active roster
 can be exercised without production private keys.
@@ -82,13 +82,13 @@ class DigiDollarTestnet26OracleRosterRPCTest(DigiByteTestFramework):
 
         deployment = node.getdigidollardeploymentinfo()
         assert_equal(deployment["enabled"], True)
-        assert_equal(deployment["oracle_pubkey_count"], 22)
+        assert_equal(deployment["oracle_pubkey_count"], 23)
         assert_equal(deployment["oracle_consensus_required"], 7)
         assert_equal(deployment["oracle_total_slots"], 35)
 
-        self.log.info("Verify getoracles names all 22 active RC44 slots")
+        self.log.info("Verify getoracles names all 23 active RC44 slots")
         active_oracles = node.getoracles(True, 20)
-        assert_equal(len(active_oracles), 22)
+        assert_equal(len(active_oracles), 23)
 
         expected_names = {
             17: "digibyte-maxi",
@@ -96,12 +96,13 @@ class DigiDollarTestnet26OracleRosterRPCTest(DigiByteTestFramework):
             19: "mbah_jambon",
             20: "Camden",
             21: "Twoface123",
+            22: "LivingTheLife",
         }
         for oracle in active_oracles:
             oracle_id = oracle["oracle_id"]
             assert_equal(oracle["is_active"], True)
             assert_equal(oracle["in_consensus"], True)
-            assert_equal(oracle["active_oracle_count"], 22)
+            assert_equal(oracle["active_oracle_count"], 23)
             assert_equal(oracle["consensus_threshold"], 7)
             assert not oracle["name"].startswith("Oracle "), (
                 "active oracle slot %d must have an operator display name" % oracle_id

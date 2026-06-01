@@ -101,7 +101,7 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
 
     // Verify testnet: 35 reserved slots, active keys, 7 signatures required.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 7);   // 7 signatures required
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 22);    // 22 active oracles
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 23);    // 23 active oracles
     BOOST_CHECK_EQUAL(ddParams.oracleCount, 35);      // 35 reserved slots
 
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
     // Active testnet keys live inside the 35-slot roster.
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 22);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 23);
 
     // Verify oracle nodes match configuration
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
@@ -310,7 +310,7 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
 
     // Testnet: 7 signatures from the active key prefix in a 35-slot roster.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 7);
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 22);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 23);
 
     // Verify testnet active set keeps the configured 7-signature quorum.
     BOOST_CHECK(ddParams.oracleThreshold > 0);

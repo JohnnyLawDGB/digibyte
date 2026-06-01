@@ -279,8 +279,8 @@ BOOST_AUTO_TEST_CASE(chainparams_digidollar_integration_test)
     BOOST_CHECK_EQUAL(testDD.oracleThreshold, 7);
     BOOST_CHECK_EQUAL(mainDD.oracleCount, 35);
     BOOST_CHECK_EQUAL(testDD.oracleCount, 35);
-    BOOST_CHECK_EQUAL(mainDD.activeOracles, 22);
-    BOOST_CHECK_EQUAL(testDD.activeOracles, 22);
+    BOOST_CHECK_EQUAL(mainDD.activeOracles, 23);
+    BOOST_CHECK_EQUAL(testDD.activeOracles, 23);
     BOOST_CHECK_EQUAL(regTestDD.oracleThreshold, 1); // Regtest: 1-of-1 (Phase One, unchanged)
 
     // Test activation heights

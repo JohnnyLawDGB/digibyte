@@ -1305,7 +1305,7 @@ BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_mainnet_tests, MainParamsOracleBu
 BOOST_AUTO_TEST_CASE(mainnet_reserve_messages_do_not_satisfy_pending_consensus)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
-    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 22);
+    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 23);
     BOOST_REQUIRE_EQUAL(consensus.nOracleConsensusRequired, 7);
     BOOST_REQUIRE_GT(Params().GetOracleNodes().size(),
                      static_cast<size_t>(consensus.nOraclePubkeyCount));

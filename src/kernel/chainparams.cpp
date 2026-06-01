@@ -295,7 +295,7 @@ public:
         // DigiDollar consensus parameters (mainnet)
         digidollarParams = DigiDollar::ConsensusParams();
         digidollarParams.oracleThreshold = 7;   // 7 signatures required
-        digidollarParams.activeOracles = 22;    // 22 active oracle keys
+        digidollarParams.activeOracles = 23;    // 23 active oracle keys
         digidollarParams.oracleCount = 35;      // 35 reserved oracle slots
 
         // Initialize DigiDollar Oracle Nodes (35 reserved slots)
@@ -322,11 +322,11 @@ public:
         //   3. Add OracleNodeInfo to vOracleNodes (same slot order)
         //   4. Update nOraclePubkeyCount/nOracleConsensusRequired
         //   5. Deploy via coordinated software upgrade
-        consensus.nOraclePubkeyCount = 22;
+        consensus.nOraclePubkeyCount = 23;
         consensus.nOracleConsensusRequired = 7;
 
-        // Oracle public keys (x-only, 32 bytes) — ordered by active oracle slot (0-21).
-        // Slots 22-34 are reserved in vOracleNodes and remain inactive until a
+        // Oracle public keys (x-only, 32 bytes) — ordered by active oracle slot (0-22).
+        // Slots 23-34 are reserved in vOracleNodes and remain inactive until a
         // future coordinated release adds real operator keys to this roster.
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
@@ -352,6 +352,7 @@ public:
         consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
         consensus.vOraclePublicKeys.push_back("018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c");  // 20: Camden
         consensus.vOraclePublicKeys.push_back("d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86");  // 21: Twoface123
+        consensus.vOraclePublicKeys.push_back("67011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e");  // 22: LivingTheLife
 
         LogPrintf("Oracle: Mainnet MuSig2 oracle bundles active at block %d, %d-of-%d quorum\n",
                  consensus.nDigiDollarMuSig2Height, consensus.nOracleConsensusRequired,
@@ -385,17 +386,17 @@ private:
             {15, ParsePubKey("02447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digidollar.org:12024", true},
             {16, ParsePubKey("0383b9c6d229a6347370517fc11329abebeae511055702b0408158f2205035adc7"), "oracle17.digidollar.org:12024", true},
 
-            // Oracle 17-21: Active launch roster additions.
+            // Oracle 17-22: Active launch roster additions.
             {17, ParsePubKey("03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47"), "oracle18.digidollar.org:12024", true},  // digibyte-maxi (RC42)
             {18, ParsePubKey("0345f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89"), "oracle19.digidollar.org:12024", true},  // Anthony
             {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digidollar.org:12024", true},  // mbah_jambon
             {20, ParsePubKey("03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c"), "oracle21.digidollar.org:12024", true},  // Camden
             {21,  ParsePubKey("03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86"), "oracle22.digidollar.org:12024", true},  // Twoface123
+            {22,  ParsePubKey("0367011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e"), "oracle23.digidollar.org:12024", true},  // LivingTheLife
 
-            // Oracle 22-34: Reserved inactive slots. Replace placeholder metadata
+            // Oracle 23-34: Reserved inactive slots. Replace placeholder metadata
             // with real operator pubkeys/endpoints and add the x-only key above
             // before enabling a slot in a future release.
-            {22,  ParsePubKey("02356a192b7913b04c54574d18c28d46e6395428ab3e43ad63e5e5c4cf9ef18c0c"), "oracle23.digidollar.org:12024", false},
             {23,  ParsePubKey("03da4b9237bacccdf19c0760cab7aec4a8359010b04d69a05fb6ed5a5e9cdb37f6"), "oracle24.digidollar.org:12024", false},
             {24,  ParsePubKey("0277de68daecd823babbb58edb1c8e14d7106e83bb6d6ba7c1c6e0e476c6de5273"), "oracle25.digidollar.org:12024", false},
             {25,  ParsePubKey("031b6453892473a467d07372d45eb05abc20316478a8f89a0e74023c3c05a8e1e7"), "oracle26.digidollar.org:12024", false},
@@ -577,7 +578,7 @@ public:
         digidollarParams.minMintAmountActivationHeight = 1;  // Activate $100 min at height 150000
         digidollarParams.maxMintAmount = 10000000;         // 10,000,000 cents = $100k maximum
         digidollarParams.oracleThreshold = 7;                         // 7 signatures required
-        digidollarParams.activeOracles = 22;                          // 22 active oracle keys
+        digidollarParams.activeOracles = 23;                          // 23 active oracle keys
         digidollarParams.oracleCount = 35;                            // 35 reserved oracle slots
 
         // Initialize DigiDollar Oracle Nodes (same as mainnet for compatibility)
@@ -593,14 +594,14 @@ public:
         consensus.nDigiDollarMuSig2Height = 0;  // MuSig2 active immediately on testnet
 
         // MuSig2 oracle configuration — 7 signatures from the active key roster.
-        consensus.nOraclePubkeyCount = 22;
+        consensus.nOraclePubkeyCount = 23;
         consensus.nOracleConsensusRequired = 7;
 
-        // Testnet oracle public keys (x-only, 32 bytes) — ordered by active oracle slot (0-21)
+        // Testnet oracle public keys (x-only, 32 bytes) — ordered by active oracle slot (0-22)
         // for deterministic MuSig2 key aggregation.
         //
         // Production testnet oracle public keys:
-        // 22 active operators in slots 0-21 of the 35-slot launch roster.
+        // 23 active operators in slots 0-22 of the 35-slot launch roster.
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
@@ -624,9 +625,10 @@ public:
         consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
         consensus.vOraclePublicKeys.push_back("018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c");  // 20: Camden
         consensus.vOraclePublicKeys.push_back("d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86");  // 21: Twoface123
+        consensus.vOraclePublicKeys.push_back("67011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e");  // 22: LivingTheLife
         //
         // LOCAL MINI-TESTNET TESTING (disabled; retained for future use).
-        // Test keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..21.
+        // Test keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..22.
         // Enable this block (and the matching vOracleNodes block in
         // InitializeOracleNodes()) when running test_multi_oracle_testnet.sh.
         //
@@ -653,6 +655,7 @@ public:
         // consensus.vOraclePublicKeys.push_back("5c771dd86c9a08f1ee8f6b27ad937edab441e72ad63cc26e07ef7f09ae525589");  // 19: test oracle 19
         // consensus.vOraclePublicKeys.push_back("0923a87f7e4d3c4f972883a5045156f9598576f79f8441f35c1c7ed27842efb8");  // 20: test oracle 20
         // consensus.vOraclePublicKeys.push_back("b103e6fe28c03edbb31f1df7beb143d57d2ed443174bc8f140ea9870db155fe9");  // 21: test oracle 21
+        // consensus.vOraclePublicKeys.push_back("d1a62f9b7c0911e8e0755b7f6c510716761b569b473e5262e78f2d40fe226356");  // 22: test oracle 22
 
         if (options.easy_pow) {
             EnableLocalMiniTestnetMode();
@@ -673,8 +676,8 @@ private:
     void EnableLocalMiniTestnetMode() {
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fEasyPow = true;
-        digidollarParams.activeOracles = 22;
-        consensus.nOraclePubkeyCount = 22;
+        digidollarParams.activeOracles = 23;
+        consensus.nOraclePubkeyCount = 23;
 
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee");  //  0: test oracle 0
@@ -699,6 +702,7 @@ private:
         consensus.vOraclePublicKeys.push_back("5c771dd86c9a08f1ee8f6b27ad937edab441e72ad63cc26e07ef7f09ae525589");  // 19: test oracle 19
         consensus.vOraclePublicKeys.push_back("0923a87f7e4d3c4f972883a5045156f9598576f79f8441f35c1c7ed27842efb8");  // 20: test oracle 20
         consensus.vOraclePublicKeys.push_back("b103e6fe28c03edbb31f1df7beb143d57d2ed443174bc8f140ea9870db155fe9");  // 21: test oracle 21
+        consensus.vOraclePublicKeys.push_back("d1a62f9b7c0911e8e0755b7f6c510716761b569b473e5262e78f2d40fe226356");  // 22: test oracle 22
 
         vOracleNodes = {
             { 0, ParsePubKey("03a69d02b2e39684deacead23e3b34191af99a124411465b19bc0a6e1384f70dee"), "localhost:9001", true},
@@ -723,7 +727,7 @@ private:
             {19, ParsePubKey("035c771dd86c9a08f1ee8f6b27ad937edab441e72ad63cc26e07ef7f09ae525589"), "localhost:9020", true},
             {20, ParsePubKey("030923a87f7e4d3c4f972883a5045156f9598576f79f8441f35c1c7ed27842efb8"), "localhost:9021", true},
             {21, ParsePubKey("02b103e6fe28c03edbb31f1df7beb143d57d2ed443174bc8f140ea9870db155fe9"), "localhost:9022", true},
-            {22, ParsePubKey("02356a192b7913b04c54574d18c28d46e6395428ab3e43ad63e5e5c4cf9ef18c0c"), "localhost:9023", false},
+            {22, ParsePubKey("03d1a62f9b7c0911e8e0755b7f6c510716761b569b473e5262e78f2d40fe226356"), "localhost:9023", true},
             {23, ParsePubKey("03da4b9237bacccdf19c0760cab7aec4a8359010b04d69a05fb6ed5a5e9cdb37f6"), "localhost:9024", false},
             {24, ParsePubKey("0277de68daecd823babbb58edb1c8e14d7106e83bb6d6ba7c1c6e0e476c6de5273"), "localhost:9025", false},
             {25, ParsePubKey("031b6453892473a467d07372d45eb05abc20316478a8f89a0e74023c3c05a8e1e7"), "localhost:9026", false},
@@ -746,7 +750,7 @@ private:
 
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // 22 active oracle keys plus inactive reserve slots for the 35-slot roster.
+        // 23 active oracle keys plus inactive reserve slots for the 35-slot roster.
         //
         // Production testnet oracle nodes.
         vOracleNodes = {
@@ -772,7 +776,7 @@ private:
             {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digibyte.io:12033", true},  // mbah_jambon
             {20, ParsePubKey("03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c"), "oracle21.digibyte.io:12033", true},  // Camden
             {21, ParsePubKey("03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86"), "oracle22.digibyte.io:12033", true},  // Twoface123
-            {22, ParsePubKey("02356a192b7913b04c54574d18c28d46e6395428ab3e43ad63e5e5c4cf9ef18c0c"), "oracle23.digibyte.io:12033", false},
+            {22, ParsePubKey("0367011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e"), "oracle23.digibyte.io:12033", true},  // LivingTheLife
             {23, ParsePubKey("03da4b9237bacccdf19c0760cab7aec4a8359010b04d69a05fb6ed5a5e9cdb37f6"), "oracle24.digibyte.io:12033", false},
             {24, ParsePubKey("0277de68daecd823babbb58edb1c8e14d7106e83bb6d6ba7c1c6e0e476c6de5273"), "oracle25.digibyte.io:12033", false},
             {25, ParsePubKey("031b6453892473a467d07372d45eb05abc20316478a8f89a0e74023c3c05a8e1e7"), "oracle26.digibyte.io:12033", false},
@@ -788,7 +792,7 @@ private:
         };
         //
         // LOCAL MINI-TESTNET TESTING (disabled; retained for future use).
-        // Test keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..21.
+        // Test keys derived from SHA256("digibyte_testnet_oracle_N"), N=0..22.
         // Enable this block (and the matching vOraclePublicKeys block in CTestNetParams)
         // when running test_multi_oracle_testnet.sh.
         //
@@ -815,6 +819,7 @@ private:
         //     {19, ParsePubKey("035c771dd86c9a08f1ee8f6b27ad937edab441e72ad63cc26e07ef7f09ae525589"), "localhost:9020", true},   // test oracle 19
         //     {20, ParsePubKey("030923a87f7e4d3c4f972883a5045156f9598576f79f8441f35c1c7ed27842efb8"), "localhost:9021", true},   // test oracle 20
         //     {21, ParsePubKey("02b103e6fe28c03edbb31f1df7beb143d57d2ed443174bc8f140ea9870db155fe9"), "localhost:9022", true},   // test oracle 21
+        //     {22, ParsePubKey("03d1a62f9b7c0911e8e0755b7f6c510716761b569b473e5262e78f2d40fe226356"), "localhost:9023", true},   // test oracle 22
         // };
     }
 };

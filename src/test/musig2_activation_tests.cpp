@@ -86,7 +86,7 @@ BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_and_total_slots)
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
     // Testnet uses the active oracle pubkey prefix inside a 35-slot roster.
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 22);
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 23);
     BOOST_CHECK_EQUAL(params.nOracleTotalOracles, 35);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
@@ -171,7 +171,7 @@ BOOST_AUTO_TEST_CASE(testnet_rc43_slots_17_to_20_are_active)
     constexpr const char* CAMDEN_XONLY =
         "018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c";
 
-    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 22);
+    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 23);
     BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 7);
     BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), 21U);
     BOOST_REQUIRE_GE(nodes.size(), 21U);

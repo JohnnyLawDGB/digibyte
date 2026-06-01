@@ -14374,7 +14374,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01f_eclipse_mainnet_oracle_gap)
     // RC41: mainnet oracle activation is set.
     BOOST_CHECK_NE(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
 
-    // RC43 fix pass: 7 signatures from 35 reserved slots.
+    // Launch roster: 7 signatures from 35 reserved slots.
     BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 7);
     BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 35);
 
@@ -17089,7 +17089,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04a_oracle_id_8_in_configured_range)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
 {
-    // RC43 resolves the count mismatch: the static P2P bound, consensus
+    // The launch roster resolves the count mismatch: the static P2P bound, consensus
     // total, and configured node roster all describe the same 35 reserved slots.
     // The active slots are present in vOraclePublicKeys.
     const CChainParams& params = Params();
@@ -17107,7 +17107,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
     BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, static_cast<int>(all_oracles.size()));
     BOOST_TEST_MESSAGE("  nOracleTotalOracles == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
 
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 22);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 23);
     BOOST_CHECK_EQUAL(static_cast<int>(consensus.vOraclePublicKeys.size()), 22);
 
     // Verify nOracleRequiredMessages < nOracleTotalOracles
@@ -17377,13 +17377,13 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
 
     // vOraclePublicKeys contains the active signing roster, not inactive reserve slots.
     BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(consensus.nOraclePubkeyCount));
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 22);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 23);
     BOOST_TEST_MESSAGE("  vOraclePublicKeys has " + std::to_string(consensus.vOraclePublicKeys.size()) +
                       " keys on mainnet ✅ (Phase 3 MuSig2)");
 
     BOOST_TEST_MESSAGE("  📝 P2P uses ORACLE_TOTAL_COUNT — matches chainparams total slots");
     BOOST_TEST_MESSAGE("  📝 nOraclePubkeyCount (" + std::to_string(consensus.nOraclePubkeyCount)
-                      + ") = active signing keyset for RC43");
+                      + ") = active signing keyset for launch roster");
 }
 
 // =============================================================================

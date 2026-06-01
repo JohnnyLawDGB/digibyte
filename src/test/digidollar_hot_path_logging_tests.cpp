@@ -200,6 +200,24 @@ BOOST_AUTO_TEST_CASE(rc30_hot_path_logs_are_gated_in_source)
         // every rejected DD tx; matches shenger's repro log line exactly.
         {src_root / "validation.cpp",
          "DigiDollar: Transaction validation failed (txid: %s): %s"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: TickEpochSession h=%d epoch=%d state=%d is_oracle=%d"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: Step 1 - local_ids.size()=%zu for epoch %d"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: Step 1 - all_oracle_ids.size()=%zu"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: Step 1 - key aggregation succeeded for %zu oracle IDs"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: Skipping oracle %d epoch %d - already broadcast"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: Skipping oracle %d - GetOracleNode returned null"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: Skipping oracle %d - invalid private key"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: oracle %d pubkey size=%d hex=%s"},
+        {src_root / "oracle" / "signing_orchestrator.cpp",
+         "Oracle: Skipping oracle %d - secp256k1_ec_pubkey_parse failed"},
     };
 
     for (const auto& site : sites) {

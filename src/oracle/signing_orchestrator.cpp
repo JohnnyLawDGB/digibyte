@@ -1117,7 +1117,7 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
     MuSig2SessionState state = session->GetState();
     bool is_oracle = IsOracleNode();
 
-    LogPrintf("Oracle: TickEpochSession h=%d epoch=%d state=%d is_oracle=%d\n",
+    LogPrint(BCLog::DIGIDOLLAR, "Oracle: TickEpochSession h=%d epoch=%d state=%d is_oracle=%d\n",
              block_height, epoch, static_cast<int>(state), is_oracle);
 
     if (!m_aggregator) {
@@ -1129,43 +1129,43 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
         OracleManager& om = OracleManager::GetInstance();
         const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
 
-        LogPrintf("Oracle: Step 1 - local_ids.size()=%zu for epoch %d\n", local_ids.size(), epoch);
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Step 1 - local_ids.size()=%zu for epoch %d\n", local_ids.size(), epoch);
 
         // Build full oracle ID list for key aggregation
         std::vector<uint8_t> all_oracle_ids = GetConsensusOracleIdsForSigning();
 
-        LogPrintf("Oracle: Step 1 - all_oracle_ids.size()=%zu\n", all_oracle_ids.size());
+        LogPrint(BCLog::DIGIDOLLAR, "Oracle: Step 1 - all_oracle_ids.size()=%zu\n", all_oracle_ids.size());
 
         secp256k1_xonly_pubkey agg_pk;
         secp256k1_musig_keyagg_cache cache;
         if (m_aggregator->ComputeAggregatePubkey(all_oracle_ids, agg_pk, cache)) {
-            LogPrintf("Oracle: Step 1 - key aggregation succeeded for %zu oracle IDs\n", all_oracle_ids.size());
+            LogPrint(BCLog::DIGIDOLLAR, "Oracle: Step 1 - key aggregation succeeded for %zu oracle IDs\n", all_oracle_ids.size());
             secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
             for (uint32_t oid : local_ids) {
                 uint8_t oid8 = static_cast<uint8_t>(oid);
                 // Skip if already generated nonce for this oracle
                 if (m_nonce_broadcast_tracker[epoch].count(oid8)) {
-                    LogPrintf("Oracle: Skipping oracle %d epoch %d - already broadcast\n", oid8, epoch);
+                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Skipping oracle %d epoch %d - already broadcast\n", oid8, epoch);
                     continue;
                 }
 
                 OracleNode* onode = om.GetOracleNode(oid);
                 if (!onode) {
-                    LogPrintf("Oracle: Skipping oracle %d - GetOracleNode returned null\n", oid8);
+                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Skipping oracle %d - GetOracleNode returned null\n", oid8);
                     continue;
                 }
                 CKey key = onode->GetOraclePrivateKey();
                 if (!key.IsValid()) {
-                    LogPrintf("Oracle: Skipping oracle %d - invalid private key\n", oid8);
+                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Skipping oracle %d - invalid private key\n", oid8);
                     continue;
                 }
                 CPubKey cpk = key.GetPubKey();
-                LogPrintf("Oracle: oracle %d pubkey size=%d hex=%s\n", oid8, cpk.size(), HexStr(cpk));
+                LogPrint(BCLog::DIGIDOLLAR, "Oracle: oracle %d pubkey size=%d hex=%s\n", oid8, cpk.size(), HexStr(cpk));
 
                 secp256k1_pubkey secp_pk;
                 if (!secp256k1_ec_pubkey_parse(ctx, &secp_pk, cpk.data(), cpk.size())) {
-                    LogPrintf("Oracle: Skipping oracle %d - secp256k1_ec_pubkey_parse failed\n", oid8);
+                    LogPrint(BCLog::DIGIDOLLAR, "Oracle: Skipping oracle %d - secp256k1_ec_pubkey_parse failed\n", oid8);
                     continue;
                 }
 

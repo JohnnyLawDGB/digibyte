@@ -18,6 +18,7 @@
 class CChainParams;
 
 bool IsAuthorizedMuSig2OracleIdForRelay(const CChainParams& params, uint32_t oracle_id);
+bool IsMuSig2RelayEpochInRange(int32_t message_epoch, int32_t current_epoch);
 static constexpr uint8_t ORACLE_MUSIG2_SESSION_CONTEXT_VERSION = 2;
 
 /**

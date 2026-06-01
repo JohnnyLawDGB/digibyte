@@ -104,4 +104,18 @@ BOOST_AUTO_TEST_CASE(musig2_relay_authorization_rejects_reserve_slots)
     BOOST_CHECK(!IsAuthorizedMuSig2OracleIdForRelay(Params(), 7));
 }
 
+BOOST_AUTO_TEST_CASE(musig2_relay_epoch_window_allows_current_epoch_zero)
+{
+    BOOST_CHECK_MESSAGE(IsMuSig2RelayEpochInRange(0, 0),
+        "local/regtest activation below the epoch length makes epoch 0 the current signing epoch");
+    BOOST_CHECK(IsMuSig2RelayEpochInRange(1, 0));
+    BOOST_CHECK(!IsMuSig2RelayEpochInRange(-1, 0));
+    BOOST_CHECK(!IsMuSig2RelayEpochInRange(2, 0));
+
+    BOOST_CHECK(!IsMuSig2RelayEpochInRange(0, 1));
+    BOOST_CHECK(IsMuSig2RelayEpochInRange(1, 1));
+    BOOST_CHECK(IsMuSig2RelayEpochInRange(2, 1));
+    BOOST_CHECK(!IsMuSig2RelayEpochInRange(3, 1));
+}
+
 BOOST_AUTO_TEST_SUITE_END()

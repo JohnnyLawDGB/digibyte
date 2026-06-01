@@ -5897,14 +5897,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // ── RH-03 Fix: Epoch sanity check ──
-        // Reject messages for non-positive, stale, or far-future epochs.
+        // Reject messages for negative, stale, or far-future epochs.
         // Current epoch is derived from chain height; allow current + 1 for
         // race conditions during epoch transitions. Older epochs are no longer
         // useful for signing and can otherwise amplify stale session state.
         {
             int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
-            if (nonce_msg.epoch <= 0 || nonce_msg.epoch < current_epoch ||
-                nonce_msg.epoch > current_epoch + 1) {
+            if (!IsMuSig2RelayEpochInRange(nonce_msg.epoch, current_epoch)) {
                 LogPrint(BCLog::NET, "MuSig2 nonce epoch out of range (epoch=%d, current=%d) peer=%d\n",
                          nonce_msg.epoch, current_epoch, pfrom.GetId());
                 Misbehaving(*peer, 5, "MuSig2 nonce epoch out of range");
@@ -6004,8 +6003,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         {
             int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
-            if (context_msg.epoch <= 0 || context_msg.epoch < current_epoch ||
-                context_msg.epoch > current_epoch + 1) {
+            if (!IsMuSig2RelayEpochInRange(context_msg.epoch, current_epoch)) {
                 LogPrint(BCLog::NET, "MuSig2 context epoch out of range (epoch=%d, current=%d) peer=%d\n",
                          context_msg.epoch, current_epoch, pfrom.GetId());
                 Misbehaving(*peer, 5, "MuSig2 context epoch out of range");
@@ -6109,12 +6107,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // ── RH-03 Fix: Epoch sanity check ──
         // Current and current+1 are the only useful relay windows. Stale
-        // positive epochs must not be relayed or ingested into obsolete
+        // epochs must not be relayed or ingested into obsolete
         // sessions.
         {
             int32_t current_epoch = GetCurrentEpoch(m_chainman.ActiveChain().Height());
-            if (partial_sig_msg.epoch <= 0 || partial_sig_msg.epoch < current_epoch ||
-                partial_sig_msg.epoch > current_epoch + 1) {
+            if (!IsMuSig2RelayEpochInRange(partial_sig_msg.epoch, current_epoch)) {
                 LogPrint(BCLog::NET, "MuSig2 partial sig epoch out of range (epoch=%d, current=%d) peer=%d\n",
                          partial_sig_msg.epoch, current_epoch, pfrom.GetId());
                 Misbehaving(*peer, 5, "MuSig2 partial sig epoch out of range");

@@ -315,6 +315,13 @@ bool IsAuthorizedMuSig2OracleIdForRelay(const CChainParams& params, uint32_t ora
     return oracle_config && oracle_config->is_active;
 }
 
+bool IsMuSig2RelayEpochInRange(int32_t message_epoch, int32_t current_epoch)
+{
+    return message_epoch >= 0 &&
+           message_epoch >= current_epoch &&
+           message_epoch <= current_epoch + 1;
+}
+
 uint256 OracleMusigNonceMsg::GetSignatureHash() const
 {
     // Tagged hash for authentication:

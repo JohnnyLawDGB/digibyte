@@ -528,7 +528,7 @@ void DigiDollarOverviewWidget::setClientModel(ClientModel* model)
 
         // Initial updates
         updateOraclePrice();
-        updateSystemHealth();
+        updateSystemHealthIfDue(/*force=*/true);
 
         // Connect to options model for font updates
         if (m_clientModel->getOptionsModel()) {
@@ -546,8 +546,19 @@ void DigiDollarOverviewWidget::updateView()
     if (!isVisible()) return;
     updateBalance();
     updateOraclePrice();
-    updateSystemHealth();
+    updateSystemHealthIfDue(/*force=*/false);
     updateRecentTransactions();
+}
+
+void DigiDollarOverviewWidget::updateSystemHealthIfDue(bool force)
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!force && m_lastSystemHealthUpdateTime > 0 &&
+        now - m_lastSystemHealthUpdateTime < SYSTEM_HEALTH_UPDATE_INTERVAL_MS) {
+        return;
+    }
+    m_lastSystemHealthUpdateTime = now;
+    updateSystemHealth();
 }
 
 void DigiDollarOverviewWidget::incomingDDTransaction(const QString& date, const QString& amount,

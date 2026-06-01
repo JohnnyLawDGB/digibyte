@@ -77,6 +77,7 @@ private:
     void setupRecentTransactionsSection();
     void connectSignals();
     void addDemoTransactions(); // For demo purposes only
+    void updateSystemHealthIfDue(bool force);
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;
@@ -143,7 +144,9 @@ private:
     // Throttling - minimum 5 seconds between updates during sync
     qint64 m_lastBalanceUpdateTime{0};
     qint64 m_lastTxUpdateTime{0};
+    qint64 m_lastSystemHealthUpdateTime{0};
     static constexpr int UPDATE_THROTTLE_MS = 5000;
+    static constexpr int SYSTEM_HEALTH_UPDATE_INTERVAL_MS = 30000;
 };
 
 #endif // DIGIBYTE_QT_DIGIDOLLAROVERVIEWWIDGET_H

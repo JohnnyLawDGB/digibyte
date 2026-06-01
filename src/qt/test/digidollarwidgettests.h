@@ -50,6 +50,7 @@ private Q_SLOTS:
     void overviewLayoutStretchFavorsBlockchainTotals();
     void overviewBlockchainTotalsFitLaunchScaleValues();
     void overviewHealthUsesCollateralizedLanguage();
+    void overviewSystemHealthRpcPollingIsThrottled();
     void overviewPendingBalanceHasThemeRules();
     void digiDollarSectionUsesGreenThemeRules();
     void digiDollarModalDialogsUseGreenThemeRules();

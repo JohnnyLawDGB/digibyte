@@ -2468,6 +2468,47 @@ void DigiDollarWidgetTests::overviewHealthUsesCollateralizedLanguage()
     QCOMPARE(systemHealthBar->format(), QStringLiteral("0% Collateralization"));
 }
 
+void DigiDollarWidgetTests::overviewSystemHealthRpcPollingIsThrottled()
+{
+    const auto readFile = [](const char* path) -> QString {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromUtf8(f.readAll());
+    };
+    const auto findFile = [&](const QStringList& candidates) -> QString {
+        for (const auto& p : candidates) {
+            const QString text = readFile(p.toUtf8().constData());
+            if (!text.isEmpty()) return text;
+        }
+        return {};
+    };
+
+    const QString header = findFile({
+        QStringLiteral("src/qt/digidollaroverviewwidget.h"),
+        QStringLiteral("../src/qt/digidollaroverviewwidget.h"),
+        QStringLiteral("../../src/qt/digidollaroverviewwidget.h"),
+        QStringLiteral("qt/digidollaroverviewwidget.h"),
+    });
+    QVERIFY2(!header.isEmpty(), "could not locate digidollaroverviewwidget.h from current working directory");
+
+    const QString source = findFile({
+        QStringLiteral("src/qt/digidollaroverviewwidget.cpp"),
+        QStringLiteral("../src/qt/digidollaroverviewwidget.cpp"),
+        QStringLiteral("../../src/qt/digidollaroverviewwidget.cpp"),
+        QStringLiteral("qt/digidollaroverviewwidget.cpp"),
+    });
+    QVERIFY2(!source.isEmpty(), "could not locate digidollaroverviewwidget.cpp from current working directory");
+
+    QVERIFY2(header.contains(QStringLiteral("SYSTEM_HEALTH_UPDATE_INTERVAL_MS")),
+             "Overview must keep an explicit, separate throttle for getdigidollarstats polling");
+    QVERIFY2(header.contains(QStringLiteral("m_lastSystemHealthUpdateTime")),
+             "Overview must remember the last system-health RPC time");
+    QVERIFY2(source.contains(QStringLiteral("updateSystemHealthIfDue")),
+             "Overview must call system-health updates through a throttling helper");
+    QVERIFY2(!source.contains(QStringLiteral("updateOraclePrice();\n    updateSystemHealth();\n    updateRecentTransactions();")),
+             "updateView must not call getdigidollarstats on every 5-second UI refresh");
+}
+
 void DigiDollarWidgetTests::overviewPendingBalanceHasThemeRules()
 {
     const auto readFile = [](const char* path) -> QString {

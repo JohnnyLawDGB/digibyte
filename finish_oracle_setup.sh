@@ -3,9 +3,8 @@
 
 DIGIBYTE_DIR="${DIGIBYTE_DIR:-/root/digibyte}"
 DATA_DIR="${DATA_DIR:-/root/.digibyte-testnet}"
-WALLET_NAME="${WALLET_NAME:-oracle_wallet}"
+WALLET_NAME="${WALLET_NAME:-Oracle_Seed}"
 ORACLE_ID="${ORACLE_ID:-0}"
-ORACLE_PRIVATE_KEY="${ORACLE_PRIVATE_KEY:-}"
 
 CLI="sudo $DIGIBYTE_DIR/src/digibyte-cli -testnet -datadir=$DATA_DIR"
 WALLET_CLI="$CLI -rpcwallet=$WALLET_NAME"
@@ -29,12 +28,8 @@ DD_DEPLOYMENT_INFO=$($CLI getdigidollardeploymentinfo 2>/dev/null || true)
 ORACLE_STARTED=0
 if echo "$DD_DEPLOYMENT_INFO" | grep -q '"status"[[:space:]]*:[[:space:]]*"active"'; then
     ORACLE_STATUS=0
-    if [ -z "$ORACLE_PRIVATE_KEY" ]; then
-        echo "ORACLE_PRIVATE_KEY is not set; startoracle will try a wallet-stored key."
-        ORACLE_RESULT=$($WALLET_CLI startoracle "$ORACLE_ID" 2>&1) || ORACLE_STATUS=$?
-    else
-        ORACLE_RESULT=$($WALLET_CLI startoracle "$ORACLE_ID" "$ORACLE_PRIVATE_KEY" 2>&1) || ORACLE_STATUS=$?
-    fi
+    echo "Starting oracle from the wallet-stored key created by createoraclekey."
+    ORACLE_RESULT=$($WALLET_CLI startoracle "$ORACLE_ID" 2>&1) || ORACLE_STATUS=$?
     echo "$ORACLE_RESULT"
     if [ "$ORACLE_STATUS" -ne 0 ] || ! echo "$ORACLE_RESULT" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         echo "Oracle did not start. Check the oracle ID, assigned key, wallet, and activation status."
@@ -43,7 +38,7 @@ if echo "$DD_DEPLOYMENT_INFO" | grep -q '"status"[[:space:]]*:[[:space:]]*"activ
     ORACLE_STARTED=1
 else
     echo "DigiDollar is not active yet; oracle start skipped."
-    echo "After activation, run: $WALLET_CLI startoracle $ORACLE_ID '<assigned_private_key_hex>'"
+    echo "After activation, run: $WALLET_CLI startoracle $ORACLE_ID"
 fi
 
 echo ""

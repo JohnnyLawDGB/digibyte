@@ -17,11 +17,24 @@ FORBIDDEN = {
         "14028",
         "testnet5",
         "getoracleinfo",
+        "ORACLE_PRIVATE_KEY",
+        "<assigned_private_key_hex>",
         "0000000000000000000000000000000000000000000000000000000000000001",
     ],
     "finish_oracle_setup.sh": [
         "getoracleinfo",
+        "WALLET_NAME=\"${WALLET_NAME:-oracle_wallet}\"",
+        "ORACLE_PRIVATE_KEY",
+        "<assigned_private_key_hex>",
         "0000000000000000000000000000000000000000000000000000000000000001",
+    ],
+    "docs/ORACLE_OPERATOR_GUIDE.md": [
+        "raw_hex_private_key",
+    ],
+    "src/rpc/digidollar.cpp": [
+        "Provide private_key parameter",
+        "Oracle private key must be provided",
+        "your_private_key_hex",
     ],
     "build_digibyte_ubuntu.sh": [
         "Testnet P2P:  12028",
@@ -53,12 +66,11 @@ REQUIRED = {
         "TESTNET_NAME=\"testnet26\"",
         "TESTNET_P2P_PORT=12033",
         "TESTNET_RPC_PORT=14026",
-        "ORACLE_PRIVATE_KEY",
         "listoracle",
     ],
     "finish_oracle_setup.sh": [
         "-testnet",
-        "ORACLE_PRIVATE_KEY",
+        "WALLET_NAME=\"${WALLET_NAME:-Oracle_Seed}\"",
         "listoracle",
     ],
     "build_digibyte_ubuntu.sh": [

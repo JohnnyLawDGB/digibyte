@@ -5171,7 +5171,7 @@ RPCHelpMan startoracle()
                 "Requires oracle private key to be configured for this node.\n",
                 {
                     {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID to start (0-34)"},
-                    {"private_key", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Oracle private key (if not already configured)"}
+                    {"private_key", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "Legacy emergency recovery only. Prefer the key stored by createoraclekey; passing secrets via CLI can expose them to shell history and process listings."}
                 },
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -5187,9 +5187,7 @@ RPCHelpMan startoracle()
                 },
                 RPCExamples{
                     HelpExampleCli("startoracle", "5") +
-                    HelpExampleCli("startoracle", "5 \"your_private_key_hex\"") +
-                    HelpExampleRpc("startoracle", "5") +
-                    HelpExampleRpc("startoracle", "5, \"your_private_key_hex\"")
+                    HelpExampleRpc("startoracle", "5")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
@@ -5288,8 +5286,8 @@ RPCHelpMan startoracle()
                                 status_message = strprintf("Wallet access error: %s", e.what());
                             }
                             if (!loaded_from_wallet && !success) {
-                                status_message = "Oracle not configured. Provide private_key parameter or run createoraclekey first.";
-                                warning = "Oracle private key must be provided for first-time setup, or use createoraclekey to generate one";
+                                status_message = "Oracle not configured in this wallet. Run createoraclekey first or load the wallet containing the oracle key.";
+                                warning = "Start failed because this wallet has no stored oracle key for the requested slot";
                             }
                         }
                     }

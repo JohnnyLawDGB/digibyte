@@ -102,10 +102,9 @@ The maintainer adds your key to `chainparams.cpp` and releases an updated binary
 }
 ```
 
-You can also provide the key explicitly if needed:
-```bash
-./src/digibyte-cli -testnet startoracle 0 "raw_hex_private_key"
-```
+Do not paste oracle private keys into shell commands. Use the wallet-stored key
+created by `createoraclekey`; it keeps the secret out of shell history and
+process listings.
 
 ### Step 7: Verify Your Oracle is Running
 
@@ -260,7 +259,7 @@ To confirm a slot is in the active quorum at runtime, call
 | Command | Description |
 |---------|-------------|
 | `createoraclekey <oracle_id>` | Generate oracle keypair in wallet (wallet-context RPC) |
-| `startoracle <id> [privkey_hex]` | Start oracle — loads private key from wallet if no privkey given (wallet-context RPC) |
+| `startoracle <id>` | Start oracle from the key stored by `createoraclekey` (wallet-context RPC) |
 | `stoporacle <id>` | Stop oracle price thread |
 | `getoraclepubkey <id>` | Check oracle key and status |
 | `getoracles [active_only] [scan_blocks]` | List all configured oracles with chain status |

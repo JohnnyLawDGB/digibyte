@@ -57,7 +57,6 @@ TESTNET_NAME="testnet26"
 TESTNET_P2P_PORT=12033
 TESTNET_RPC_PORT=14026
 ORACLE_ID="${ORACLE_ID:-0}"
-ORACLE_PRIVATE_KEY="${ORACLE_PRIVATE_KEY:-}"
 
 # Detect number of CPU cores for parallel compilation
 NPROC=$(nproc 2>/dev/null || echo 2)
@@ -401,12 +400,8 @@ DD_DEPLOYMENT_INFO=$($CLI getdigidollardeploymentinfo 2>/dev/null || true)
 ORACLE_STARTED=0
 if echo "$DD_DEPLOYMENT_INFO" | grep -q '"status"[[:space:]]*:[[:space:]]*"active"'; then
     ORACLE_STATUS=0
-    if [ -z "$ORACLE_PRIVATE_KEY" ]; then
-        echo -e "${YELLOW}ORACLE_PRIVATE_KEY is not set; startoracle will try a wallet-stored key.${NC}"
-        ORACLE_RESULT=$($CLI -rpcwallet="$WALLET_NAME" startoracle "$ORACLE_ID" 2>&1) || ORACLE_STATUS=$?
-    else
-        ORACLE_RESULT=$($CLI -rpcwallet="$WALLET_NAME" startoracle "$ORACLE_ID" "$ORACLE_PRIVATE_KEY" 2>&1) || ORACLE_STATUS=$?
-    fi
+    echo -e "${YELLOW}Starting oracle from the wallet-stored key created by createoraclekey.${NC}"
+    ORACLE_RESULT=$($CLI -rpcwallet="$WALLET_NAME" startoracle "$ORACLE_ID" 2>&1) || ORACLE_STATUS=$?
     ORACLE_STATUS=${ORACLE_STATUS:-0}
     echo "$ORACLE_RESULT"
     if [ "$ORACLE_STATUS" -ne 0 ] || ! echo "$ORACLE_RESULT" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
@@ -417,7 +412,7 @@ if echo "$DD_DEPLOYMENT_INFO" | grep -q '"status"[[:space:]]*:[[:space:]]*"activ
     ORACLE_STARTED=1
 else
     echo -e "${YELLOW}DigiDollar is not active yet; oracle start skipped.${NC}"
-    echo -e "${YELLOW}After activation, run: dgb -rpcwallet=$WALLET_NAME startoracle $ORACLE_ID '<assigned_private_key_hex>'${NC}"
+    echo -e "${YELLOW}After activation, run: dgb -rpcwallet=$WALLET_NAME startoracle $ORACLE_ID${NC}"
 fi
 
 # ============================================================================

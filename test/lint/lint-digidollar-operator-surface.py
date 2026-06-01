@@ -58,6 +58,11 @@ FORBIDDEN = {
         "17 configured oracle slots",
         "9-signature launch quorum",
         "Activates at Block 650",
+        "activates at block 650",
+        "after block 650",
+        "reach block 650",
+        ">= 650",
+        "< 650",
     ],
     "DIGIDOLLAR_EXPLAINER.md": [
         "slots 0-16 consensus-active",
@@ -67,10 +72,12 @@ FORBIDDEN = {
     "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
         "slots 0–16",
         "oraclehb` heartbeats are the current telemetry exception",
+        "Signed oracle version heartbeats are the current exception",
         "ORACLEHEARTBEAT` is not guarded",
     ],
     "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
         "one oracle relay handler that does not currently share",
+        "heartbeat is authenticated telemetry without that height",
         "oraclehb` is signed/rate-limited telemetry without the same height gate",
         "Replaced by 9-signature mainnet/testnet MuSig2",
     ],

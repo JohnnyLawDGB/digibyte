@@ -4,7 +4,7 @@
 
 DigiDollar activates on the DigiByte blockchain through **BIP9 version bit signaling** — the same proven mechanism used by Bitcoin for SegWit and other soft forks. This ensures DigiDollar only activates when a supermajority of miners explicitly signal support, preventing chain splits and ensuring network consensus.
 
-**Key principle:** Nothing consensus-critical for DigiDollar works until activation. DD/oracle RPCs, DD transactions, DD opcodes, oracle price relay, oracle consensus relay, MuSig2 relay, and `getoracles` are dormant until the activation predicates below pass. Signed oracle version heartbeats are the current exception noted under P2P handling: they are authenticated telemetry and are not consensus price inputs.
+**Key principle:** Nothing consensus-critical for DigiDollar works until activation. DD/oracle RPCs, DD transactions, DD opcodes, oracle price relay, oracle consensus relay, MuSig2 relay, `getoracles`, and signed oracle version heartbeats are dormant until the activation predicates below pass.
 
 ---
 

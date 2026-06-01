@@ -160,10 +160,10 @@ Core implementation:
 ├── src/script/interpreter.{h,cpp}         g_get_oracle_consensus_price hook for OP_CHECKPRICE
 ├── src/validation.cpp                     CheckBlock → ValidateBlockOracleData; ConnectBlock price
 │                                          cache; UpdatePriceCache gated on BIP9 DEPLOYMENT_DIGIDOLLAR
-├── src/net_processing.cpp                 P2P handlers (~5440–6340), mostly gated on IsOracleActive
-│                                          (heartbeat is authenticated telemetry without that height
-│                                          gate), rate-limited, with chainparams pubkey replacement
-│                                          before signature verification
+├── src/net_processing.cpp                 P2P handlers (~5440–6340), including heartbeat, are gated
+│                                          by IsOracleP2PActive, rate-limited, roster-limited, and
+│                                          verified with chainparams pubkey replacement before
+│                                          signature verification
 ├── src/rpc/digidollar.cpp                 17 node-context RPCs; sendoracleprice REMOVED
 ├── src/wallet/rpc/wallet.cpp              15 wallet-context DD/oracle RPCs (createoraclekey,
 │                                          startoracle, mintdigidollar, etc.)

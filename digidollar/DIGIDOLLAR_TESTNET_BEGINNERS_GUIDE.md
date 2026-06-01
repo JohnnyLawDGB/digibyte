@@ -540,7 +540,7 @@ debug=oracle                # Enable Oracle debug logs
 logips=1                    # Log peer IP addresses
 
 # DigiDollar Specific
-# (No special config needed - activates at block 650)
+# (No special config needed - activates at block 600 on testnet26)
 
 EOF
 ```
@@ -574,8 +574,8 @@ graph TD
     E --> F
     F --> G[Validate Blocks]
     G --> H{Current Height?}
-    H -->|< 650| I[Regular Mode]
-    H -->|>= 650| J[DigiDollar Active!]
+    H -->|< 600| I[Regular Mode]
+    H -->|>= 600| J[DigiDollar Active!]
 ```
 
 ### Starting the Daemon (Command Line)
@@ -665,7 +665,7 @@ digibyte-qt -testnet
 1. **Splash Screen** - "DigiByte Core" loading
 2. **Main Window Opens** - Shows balance, transactions
 3. **Syncing Status** - Bottom-right corner shows sync progress
-4. **DigiDollar Tab** - Will appear after block 650
+4. **DigiDollar Tab** - Will appear after block 600
 
 ---
 
@@ -695,8 +695,8 @@ digibyte-qt -testnet
 graph TD
     A[Get New Address] --> B[Generate Blocks]
     B --> C{Check Height}
-    C -->|< 650| D[Keep Mining]
-    C -->|>= 650| E[DigiDollar Active!]
+    C -->|< 600| D[Keep Mining]
+    C -->|>= 600| E[DigiDollar Active!]
     D --> B
     E --> F[Stop Mining]
     F --> G[Test DigiDollar]
@@ -896,12 +896,12 @@ watch -n 5 './src/digibyte-cli -testnet getblockcount'
 
 #### Step 6: Verify DigiDollar Activation
 
-Once you reach block 650:
+Once you reach block 600:
 
 ```bash
 # Check that we're past activation
 ./src/digibyte-cli -testnet getblockcount
-# Should show: 650 or higher
+# Should show: 600 or higher
 
 # Check DigiDollar deployment status
 ./src/digibyte-cli -testnet getdeploymentinfo | jq '.deployments.digidollar'
@@ -2313,7 +2313,7 @@ error: {"code":-1,"message":"Oracle price not available"}
 ```
 
 **Causes:**
-- Below activation height (650)
+- Below testnet26 activation height (600)
 - No oracle bundle in recent blocks
 - On regtest only: mock oracle not set
 
@@ -2322,7 +2322,7 @@ error: {"code":-1,"message":"Oracle price not available"}
 1. **Check height:**
 ```bash
 ./src/digibyte-cli -testnet getblockcount
-# Must be >= 650
+# Must be >= 600
 ```
 
 2. **Verify live oracle price:**

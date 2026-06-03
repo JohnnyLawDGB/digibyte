@@ -359,6 +359,8 @@ public:
         consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
         consensus.vOraclePublicKeys.push_back("557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894");  // 27: DennisPitallano
         consensus.vOraclePublicKeys.push_back("902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb");  // 28: DigiHash Mining Pool placeholder
+        consensus.vOraclePublicKeys.push_back("d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58");  // 29: Michael E / medgboracle3452
+        consensus.vOraclePublicKeys.push_back("d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58");  // 29: Michael E / medgboracle3452
         consensus.vOraclePublicKeys.push_back("902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb");  // 28: DigiHash Mining Pool placeholder
         consensus.vOraclePublicKeys.push_back("557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894");  // 27: DennisPitallano
         consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
@@ -414,7 +416,7 @@ private:
             {26,  ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digidollar.org:12024", true},  // HashedMax
             {27,  ParsePubKey("02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894"), "oracle28.digidollar.org:12024", true},  // DennisPitallano
             {28,  ParsePubKey("02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb"), "oracle29.digidollar.org:12024", true},  // DigiHash Mining Pool placeholder
-            {29,  ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "oracle30.digidollar.org:12024", false},
+            {29,  ParsePubKey("03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58"), "oracle30.digidollar.org:12024", true},  // Michael E / medgboracle3452
             {30,  ParsePubKey("03c7481c9305df583bf505a7cf9148d6aaaf0bb351d75a945efe57a13c82187480"), "oracle31.digidollar.org:12024", false},
             {31,  ParsePubKey("02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b"), "oracle32.digidollar.org:12024", false},
             {32,  ParsePubKey("03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7"), "oracle33.digidollar.org:12024", false},
@@ -797,7 +799,7 @@ private:
             {26, ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digibyte.io:12033", true},   // HashedMax
             {27, ParsePubKey("02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894"), "oracle28.digibyte.io:12033", true},   // DennisPitallano
             {28, ParsePubKey("02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb"), "oracle29.digibyte.io:12033", true},   // DigiHash Mining Pool placeholder
-            {29, ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "oracle30.digibyte.io:12033", false},
+            {29, ParsePubKey("03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58"), "85.239.234.52:12033", true},   // Michael E / medgboracle3452
             {30, ParsePubKey("03c7481c9305df583bf505a7cf9148d6aaaf0bb351d75a945efe57a13c82187480"), "oracle31.digibyte.io:12033", false},
             {31, ParsePubKey("02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b"), "oracle32.digibyte.io:12033", false},
             {32, ParsePubKey("03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7"), "oracle33.digibyte.io:12033", false},

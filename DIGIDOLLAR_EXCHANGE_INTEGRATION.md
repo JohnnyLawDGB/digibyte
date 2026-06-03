@@ -216,7 +216,7 @@ digibyte-cli getoracleprice
 ```
 
 **Oracle details:**
-- 35 reserved oracle slots on testnet/mainnet, 21 active, 7 MuSig2 signatures required
+- 35 active oracle slots on testnet/mainnet, 7 MuSig2 signatures required
 - 4-of-7 MuSig2 on regtest
 - Active price sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 feeders, registered in `src/oracle/exchange.cpp:1042-1071`)
 - Median-based aggregation with median-distance outlier rejection (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`); the live oracle daemon (`OracleNode::FetchMedianPrice` in `src/oracle/node.cpp:445-450`) requires **3** valid exchange responses before publishing, even though the aggregator's library default is 2 (`src/oracle/exchange.h:235`)
@@ -382,7 +382,7 @@ The current public testnet in this source tree is **testnet26**. DigiDollar acti
 | P2P Port | 12033 |
 | DD Address Prefix | `TD` |
 | Status | BIP9 bit 23, min activation height 600; check `getdigidollardeploymentinfo` for current status |
-| Oracle | 35 reserved slots, 21 active, 7 MuSig2 signatures required, 6 exchange sources |
+| Oracle | 35 active slots, 7 MuSig2 signatures required, 6 exchange sources |
 
 ---
 

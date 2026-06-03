@@ -1,8 +1,9 @@
 # DigiByte Core v9.26.0-rc44 Release Notes
 
-RC44 is a DigiDollar release-candidate fix pass that resets public DigiDollar
-testnet and publishes the coordinated 21-active-oracle roster with a 7-signature
-MuSig2 quorum.
+RC44 is the DigiDollar release candidate for a full public testnet reset and
+the 35-slot oracle roster. Mainnet and testnet26 now expose 35 active MuSig2
+oracle slots with a 7-signature quorum. Slots without final operator keys use
+placeholder pubkeys so the full roster shape can be tested before launch.
 
 ## Testnet26 Reset
 
@@ -30,28 +31,39 @@ before wiping old data, then start clean on `testnet26`.
 
 1. Stop RC43 or older testnet nodes.
 2. Back up wallets and oracle key material.
-3. Do not copy old `blocks/`, `chainstate/`, `peers.dat`, oracle messages, or
-   cached MuSig2 state from `testnet25`.
+3. Do not copy old `blocks/`, `chainstate/`, `peers.dat`, oracle messages, or cached MuSig2 state from `testnet25`.
 4. Start RC44 with `-testnet`, using the new `testnet26` data directory.
 5. Open and advertise P2P port `12033`.
-6. Update static `addnode` and oracle endpoint config from port `12032` to
-   `12033`.
+6. Update static `addnode` and oracle endpoint config from port `12032` to `12033`.
 7. Confirm `getblockchaininfo` reports the RC44 genesis hash above.
+8. For mainnet, generate a new wallet/oracle key. Keep existing testnet keys for testnet26 only.
 
 ## Oracle Roster
 
-Mainnet and testnet now use 21 active oracle slots and require 7 valid MuSig2
-signatures per oracle bundle. Slots 0-20 are active; slots 21-34 remain reserved
-inactive metadata.
+Mainnet and testnet26 now use 35 active oracle slots and require 7 valid MuSig2
+signatures per oracle bundle. Active oracle IDs are `0` through `34`; ID `35`
+is outside the configured roster and must be rejected.
 
-New active slots in this release:
+New slots added since the previous 24-slot code baseline:
 
 | Slot | Operator | Compressed public key |
 |------|----------|-----------------------|
-| 17 | digibyte-maxi | `03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47` |
-| 18 | Anthony | `0345f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89` |
-| 19 | mbah_jambon | `031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42` |
-| 20 | Camden | `03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c` |
+| 24 | ckunchained | `03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e` |
+| 25 | JMag | `034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672` |
+| 26 | HashedMax / HMPool | `038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8` |
+| 27 | DennisPitallano | `02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894` |
+| 28 | DigiHash Mining Pool placeholder | `02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb` |
+| 29 | Michael E / medgboracle3452 | `03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58` |
+| 30 | Scott K / DigibyteDaily | `03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61` |
+| 31 | DigiRoos / Oracle31-Peer2Peer placeholder pending corrected key | `02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b` |
+| 32 | Oracle32 placeholder | `03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7` |
+| 33 | Oracle33 placeholder | `02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc` |
+| 34 | Oracle34 placeholder | `03b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a` |
 
 All oracle operators, miners, seeders, and testnet nodes must run the same RC44
 binary before signing or mining on the new public testnet.
+
+Note: DigiRoos / Oracle31-Peer2Peer is assigned in the roster, but the latest
+submitted key string was odd-length hex and is not shipped as a consensus key.
+Replace slot 31's placeholder only after receiving a corrected full compressed
+public key.

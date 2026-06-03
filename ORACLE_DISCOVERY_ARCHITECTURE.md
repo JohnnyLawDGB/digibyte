@@ -4,7 +4,7 @@
 
 ## Current Implementation (V1, code as shipped)
 
-`src/kernel/chainparams.cpp` populates `vOracleNodes` for each network. Each entry contains a compressed pubkey, an `endpoint` string, and an `is_active` flag. Mainnet and testnet26 declare 35 metadata slots, with slots 0-20 in `consensus.vOraclePublicKeys` for the 7-of-21 V1 quorum; slots 21-34 are inactive reserve metadata that require a future coordinated software update before they can sign consensus bundles. Regtest declares 7.
+`src/kernel/chainparams.cpp` populates `vOracleNodes` for each network. Each entry contains a compressed pubkey, an `endpoint` string, and an `is_active` flag. Mainnet and testnet26 declare 35 active metadata slots, with slots 0-34 in `consensus.vOraclePublicKeys` for the 7-of-35 V1 quorum. Some tail slots use placeholder pubkeys until a future coordinated software update replaces them with final operator keys. Regtest declares 7.
 
 The `endpoint` field is informational metadata for operator coordination (it shows up in `getoracles` and `listoracle` RPC output). DigiByte Core does **not** make outbound connections to those endpoints — oracle data flows over the standard P2P graph. Wallet/light nodes therefore do not need to discover oracle endpoints to use DigiDollar; they only need a working P2P link to any peer that has the latest MuSig2 bundle.
 

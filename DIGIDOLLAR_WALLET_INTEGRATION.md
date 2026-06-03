@@ -537,7 +537,7 @@ The current public testnet in this source tree is **testnet26**. DigiDollar acti
 | Testnet name | testnet26 |
 | P2P Port | 12033 (set in `src/kernel/chainparams.cpp`) |
 | DD Address Prefix | `TD` |
-| Oracle Consensus | 35 reserved slots, 21 active, 7 signatures required |
+| Oracle Consensus | 35 active slots, 7 signatures required |
 | Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders, see `src/oracle/exchange.cpp:1042-1071`) |
 | Outlier filter | Median-distance: prices ≥ `outlier_threshold × median` are dropped (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`) |
 | Activation | BIP9 bit 23, min activation height 600; check `getdigidollardeploymentinfo` for current status |

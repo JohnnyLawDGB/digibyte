@@ -14,7 +14,7 @@ Older `sendoracleprice` / single-oracle setup instructions are obsolete:
 - DigiDollar activation: height 600 / BIP9 active
 - Oracle activation: same trigger as DigiDollar
 - On-chain bundle format: MuSig2 v0x03 only
-- Consensus roster: 35 reserved slots, IDs `0..34`; slots `0..20` are active
+- Consensus roster: 35 active slots, IDs `0..34`; slot ID `35` is outside the RC44 roster
 - Quorum: 7 signatures from the active keyset
 
 ## Required Configuration

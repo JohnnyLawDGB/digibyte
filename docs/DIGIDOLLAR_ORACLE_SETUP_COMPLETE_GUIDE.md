@@ -13,7 +13,7 @@ historical and no longer apply.
 - MuSig2 nonce and partial-signature rounds.
 - One on-chain v0x03 MuSig2 bundle in the coinbase when a block contains
   DigiDollar activity.
-- 7 signatures from the 21-active mainnet/testnet keyset inside a 35-slot reserve roster, and 4-of-7 quorum on regtest.
+- 7 signatures from the 35-active mainnet/testnet keyset, and 4-of-7 quorum on regtest.
 
 ## Operator Prerequisites
 

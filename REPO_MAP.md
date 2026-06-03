@@ -844,7 +844,7 @@
   - `vDeployments[]` (BIP9): includes `DEPLOYMENT_TESTDUMMY`, `DEPLOYMENT_TAPROOT` (bit 2), and ⚠️ `DEPLOYMENT_DIGIDOLLAR` (bit 23, gates `SCRIPT_VERIFY_DIGIDOLLAR`)
   - ⚠️ `nDDActivationHeight` / `nOracleActivationHeight` / `nDigiDollarMuSig2Height` → DigiDollar / oracle / MuSig2 v0x03 activation heights
   - ⚠️ `nDDOracleEpochBlocks` / `nDDOracleUpdateInterval` / `nOracleEpochLength` / `nOracleRequiredMessages` / `nOracleTotalOracles` → oracle system parameters
-  - ⚠️ `nOraclePubkeyCount` / `nOracleConsensusRequired` → MuSig2 quorum sizing (mainnet/testnet reserve 35 slots, 21 active keys and 7 signatures required)
+  - ⚠️ `nOraclePubkeyCount` / `nOracleConsensusRequired` → MuSig2 quorum sizing (mainnet/testnet 35 active keys and 7 signatures required)
   - ⚠️ `vOraclePublicKeys` → hardcoded oracle x-only Schnorr keys (slot order matches MuSig2 participation bitmap)
   - ⚠️ `IsMuSig2OracleActive(height)` → inline helper returning `height >= nDigiDollarMuSig2Height`
 - `BuriedDeployment` enum → activation heights for BIP34, BIP65, BIP66, CSV, SegWit, NVERSIONBIPS, RESERVEALGO, Odocrypt

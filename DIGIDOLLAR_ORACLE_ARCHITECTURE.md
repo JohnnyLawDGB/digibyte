@@ -58,7 +58,7 @@ The Oracle System provides **decentralized price feeds** for the DigiByte blockc
 **Core principle: cryptographic threshold consensus, on-chain compact, off-chain signed.**
 
 V1 ships with:
-- **Threshold MuSig2 quorum**: 7 signatures from the configured 21-active mainnet/testnet keyset in a 35-slot reserved roster, 4-of-7 regtest. The aggregate signature is verified by every full node against the on-chain participation bitmap.
+- **Threshold MuSig2 quorum**: 7 signatures from the configured 35-active mainnet/testnet keyset, 4-of-7 regtest. The aggregate signature is verified by every full node against the on-chain participation bitmap.
 - **One on-chain format**: v0x03 (`bitmap_len + bitmap + epoch + price + timestamp + 64-byte aggregate sig`). Legacy v0x01 (single-message compact) and v0x02 (multi-message with per-oracle sigs) are explicitly rejected at extraction and validation time.
 - **Six working exchange fetchers** (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko — see `src/oracle/exchange.cpp:1042-1071`). The classes for Coinbase, Kraken, Messari, Bittrex, Poloniex still compile but are **not** initialized into `MultiExchangeAggregator::fetchers`. CoinMarketCap was removed entirely. The current fetch loop is sequential, then filtered by a 10% median-deviation outlier rule.
 - **Block-cadence validation** aligned with DigiByte's 15-second block target;
@@ -77,7 +77,7 @@ V1 ships with:
 
 - ✅ OP_ORACLE opcode (0xbf) wired through script flag `SCRIPT_VERIFY_DIGIDOLLAR`
 - ✅ MuSig2 v0x03 on-chain format only — `OracleBundleManager::CreateOracleScript` produces v0x03 (`src/oracle/bundle_manager.cpp:877-925`); `ExtractOracleBundle` rejects v0x01/v0x02 (`src/oracle/bundle_manager.cpp:1000-1057`)
-- ✅ 35 reserved oracle slots with 21 active slots and a 7-signature mainnet/testnet quorum
+- ✅ 35 active slots (35 active oracle slots) with a 7-signature mainnet/testnet quorum
 - ✅ Single validator path on mainnet and testnet (`OracleDataValidator::ValidateBlockOracleData`, `src/oracle/bundle_manager.cpp:2139`) — the prior mainnet short-circuit is gone
 - ✅ P2P message surface: `oracleprice`, `oraclebundle` (received-and-dropped), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles` (`src/protocol.cpp:53-62`, handlers in `src/net_processing.cpp` 5440–6340). All oracle P2P handlers, including `oraclehb`, share the `IsOracleP2PActive` gate.
 - ✅ Six initialized exchange fetchers (`src/oracle/exchange.cpp:1042-1071`)
@@ -167,9 +167,9 @@ Core implementation:
 ├── src/rpc/digidollar.cpp                 17 node-context RPCs; sendoracleprice REMOVED
 ├── src/wallet/rpc/wallet.cpp              15 wallet-context DD/oracle RPCs (createoraclekey,
 │                                          startoracle, mintdigidollar, etc.)
-└── src/kernel/chainparams.cpp             vOracleNodes (35 mainnet/testnet reserved slots,
+└── src/kernel/chainparams.cpp             vOracleNodes (35 mainnet/testnet active slots,
                                            7 regtest), vOraclePublicKeys
-                                           (21 active mainnet/testnet, 7 regtest), nDDActivationHeight,
+                                           (35 active mainnet/testnet, 7 regtest), nDDActivationHeight,
                                            nOracleActivationHeight, nDigiDollarMuSig2Height, BIP9 params
 
 Tests (current; counts in REPO_MAP_DIGIDOLLAR.md):
@@ -1880,15 +1880,15 @@ consensus.nOracleConsensusRequired   = 4;
 
 | Network | On-chain quorum | Oracles configured | `nDDActivationHeight` | `nOracleActivationHeight` | `nDigiDollarMuSig2Height` |
 |---------|-----------------|--------------------|-----------------------|---------------------------|---------------------------|
-| Mainnet | 7 signatures from active keyset | 35 in `vOracleNodes` (slots 0-20 active in `vOraclePublicKeys`; slots 21-34 reserve, inactive) | 23 627 520 | 23 627 520 | 0 |
-| Testnet26 | 7 signatures from active keyset | 35 in `vOracleNodes` (slots 0-20 active in `vOraclePublicKeys`; slots 21-34 reserve, inactive) | 600 | 600 | 0 |
+| Mainnet | 7 signatures from active keyset | 35 in `vOracleNodes` and `vOraclePublicKeys` (slots 0-34 active) | 23 627 520 | 23 627 520 | 0 |
+| Testnet26 | 7 signatures from active keyset | 35 in `vOracleNodes` and `vOraclePublicKeys` (slots 0-34 active) | 600 | 600 | 0 |
 | Regtest | 4-of-7 MuSig2 | 7 in `vOracleNodes` (all in `vOraclePublicKeys`) | 650 | 650 | 0 |
 
 There is no longer a "mainnet validation bypass" — mainnet runs the same validator and the same MuSig2 verification path as testnet and regtest.
 
-### 14.3 Mainnet/Testnet Oracle Keys (21 Active - RC44 slot order 0-20)
+### 14.3 Mainnet/Testnet Oracle Keys (35 Active - RC44 slot order 0-34)
 
-**Location:** `src/kernel/chainparams.cpp` mainnet/testnet `consensus.vOraclePublicKeys.push_back(...)` blocks. The mainnet and testnet rosters share the same active operators and slot order for slots 0-20.
+**Location:** `src/kernel/chainparams.cpp` mainnet/testnet `consensus.vOraclePublicKeys.push_back(...)` blocks. The mainnet and testnet rosters share the same active operators/placeholders and slot order for slots 0-34.
 
 | Slot | Operator |
 |------|----------|
@@ -1914,7 +1914,7 @@ There is no longer a "mainnet validation bypass" — mainnet runs the same valid
 | 19 | mbah_jambon |
 | 20 | Camden |
 
-Mainnet and testnet26 `vOracleNodes` slots 21-34 are reserve operator metadata. They are *not* added to `consensus.vOraclePublicKeys` until a release assigns real oracle keys, are ignored by the off-chain pending-message quorum, and cannot sign a valid V1 MuSig2 bundle. The local mini-testnet mode also keeps the 35-slot shape while marking reserve slots inactive.
+Mainnet and testnet26 `vOracleNodes` slots 21-34 are active RC44 consensus metadata and are aligned with `consensus.vOraclePublicKeys`. Slot 31 currently carries a valid placeholder key while DigiRoos / Oracle31-Peer2Peer provides a corrected full compressed public key. The local mini-testnet mode still keeps a 24-key local-only harness because only slots 0-23 have deterministic local private keys there.
 
 ### 14.4 V1 Validator Helpers (`src/oracle/bundle_manager.cpp`)
 

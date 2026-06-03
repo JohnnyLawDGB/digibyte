@@ -198,7 +198,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `DigiDollar::BLOCKS_PER_DAY` → 5760 blocks (15-second block time)
 - `DigiDollarTxType` (enum) → DD_TX_NONE(0), DD_TX_MINT(1), DD_TX_TRANSFER(2), DD_TX_REDEEM(3), DD_TX_MAX(4)
 - `DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS` → 100-block consensus buffer used by mint validation; remaining lock blocks must be in `[canonical_blocks, canonical_blocks + 100]` for the claimed tier.
-- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%); mint limits (`minMintAmount=10000`, `maxMintAmount=10000000` in cents = $100–$100k); `minOutputAmount=100` ($1); oracle config defaults `oracleCount=35`, `activeOracles=21`, `oracleThreshold=7` (RC43 35-slot reserve); DCA levels `dcaLevels = [{150,100},{120,125},{110,150},{100,200}]` (system collateral % → multiplier %, e.g. 110-119% triggers 150%) — these match `src/consensus/dca.cpp:51-57` HEALTH_TIERS (1.00/1.25/1.50/2.00x).
+- `DigiDollar::ConsensusParams` (struct) → collateral ratios map (1h:1000%, 30d:500%, 90d:400%, 180d:350%, 1y:300%, 2y:275%, 3y:250%, 5y:225%, 7y:212%, 10y:200%); mint limits (`minMintAmount=10000`, `maxMintAmount=10000000` in cents = $100-$100k); `minOutputAmount=100` ($1); oracle config defaults `oracleCount=35`, `activeOracles=35`, `oracleThreshold=7` (RC44 35-slot active roster); DCA levels `dcaLevels = [{150,100},{120,125},{110,150},{100,200}]` (system collateral % → multiplier %, e.g. 110-119% triggers 150%) - these match `src/consensus/dca.cpp:51-57` HEALTH_TIERS (1.00/1.25/1.50/2.00x).
 - `GetCollateralRatioForLockTime(lockBlocks, params)` → returns collateral ratio % only for exact canonical lock periods; returns 0 for custom/in-between periods. Mint validation applies the 100-block buffer separately against the declared tier.
 - `GetDCAMultiplier(systemCollateral, params)` → returns collateral requirement multiplier from DCA levels
 - `IsValidMintAmount(amount, params)` → validates against min/max mint amounts
@@ -541,8 +541,8 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 
 ### src/primitives/oracle.h
 - **Constants** (`src/primitives/oracle.h:19-24`):
-  - `ORACLE_CONSENSUS_REQUIRED` = 9
-  - `ORACLE_ACTIVE_COUNT` = 35 (reserved slot capacity; chainparams `nOraclePubkeyCount` is authoritative for active MuSig2 keys)
+  - `ORACLE_CONSENSUS_REQUIRED` = 7
+  - `ORACLE_ACTIVE_COUNT` = 35 (RC44 active slot capacity; chainparams `nOraclePubkeyCount` is authoritative for active MuSig2 keys)
   - `ORACLE_TOTAL_COUNT` = 35
   - `ORACLE_MAX_AGE_SECONDS` = 3600 (1 hour)
   - `ORACLE_MIN_PRICE_MICRO_USD` = 100 ($0.0001)
@@ -564,7 +564,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetConsensusPrice(min_required)` → calculates median price from valid messages
   - `ValidateEpoch(current_epoch)` → checks epoch consistency
 - `OracleNodeInfo` (struct) → oracle node definition: id, pubkey, endpoint, is_active
-- `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of active `OracleNodeInfo` entries up to the 35-slot capacity; inactive reserve slots are filtered out
+- `SelectOraclesForEpoch(all_oracles, epoch)` → deterministic selection of active `OracleNodeInfo` entries across the configured 35-slot RC44 roster
 - `GetCurrentEpoch(block_height)` → calculates epoch from block height
 - `OracleP2P` (namespace) → unit-testable P2P validation helpers; production relay admission, per-peer rate limiting, stale-epoch rejection, and dedup live in `src/net_processing.cpp`
   - `ValidateIncomingMessage(message)` → comprehensive P2P message validation
@@ -1041,7 +1041,7 @@ present in the tree but not compiled into the current unit-test binary.
 | `rh15_crypto_primitives_tests.cpp` | RH-15: hash domain separation, __int128 edge cases, version-marker ambiguity, MuSig2 nonce/key validation |
 | `rh29_coinbase_oracle_manipulation_tests.cpp` | RH-29: coinbase OP_RETURN injection, multiple oracle bundles, version confusion, signature replay, withholding |
 | `rh39_eclipse_attack_tests.cpp` | RH-39: eclipse + oracle suppression, selective relay, message ordering, INV/GETDATA withholding, sybil spoofing |
-| `rh50_oracle_keyset_alignment_tests.cpp` | RH-50: oracle keyset alignment invariant — vOracleNodes ↔ vOraclePublicKeys slot 0-20 ordering |
+| `rh50_oracle_keyset_alignment_tests.cpp` | RH-50: oracle keyset alignment invariant — vOracleNodes ↔ vOraclePublicKeys slot 0-34 ordering |
 | `rh51_checkphase3_v1_split_tests.cpp` | RH-51: regtest activation-gate asymmetry hardening (regtest/mainnet divergence at heights 0–649) |
 | `rh52_bip34_scriptnum_escape_tests.cpp` | RH-52: BIP34 coinbase-height CScriptNum escape in oracle validators (Wave-1 PoC; fixed in `2b37384e79`) |
 | `rh53_op_checkprice_mock_weaponization_tests.cpp` | RH-53: OP_CHECKPRICE mock-price weaponization regression (Wave-2 PoC; live oracle wired in `f77678cd0f`) |

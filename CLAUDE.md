@@ -78,11 +78,11 @@ These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VER
 
 | Network | Total slots | Active | Consensus |
 |---------|-------------|--------|-----------|
-| Mainnet | 35 (`vOracleNodes`) | 21 (`consensus.vOraclePublicKeys` slots 0-20) | 7 signatures from active keyset |
-| Testnet | 35 | 21 (slots 0-20) | 7 signatures from active keyset |
+| Mainnet | 35 (`vOracleNodes`) | 35 (`consensus.vOraclePublicKeys` slots 0-34) | 7 signatures from active keyset |
+| Testnet | 35 | 35 (slots 0-34) | 7 signatures from active keyset |
 | Regtest | 7 | 7 | 4-of-7 |
 
-Slots 17–34 on mainnet and testnet are reserve `vOracleNodes` entries; they are inactive and do not participate in consensus until a later release adds their x-only keys to `consensus.vOraclePublicKeys` and marks the slot active. The 35-slot range is still valid for operator identity and RPC/P2P bounds checks.
+Slots 0-34 on mainnet and testnet are active. Tail placeholders are consensus-active until a later release replaces their x-only keys with final operator keys. ID 35 is outside the configured roster and must be rejected by RPC/P2P/bitmap bounds checks.
 
 `src/primitives/oracle.h:19-21` declares header defaults `ORACLE_CONSENSUS_REQUIRED=7`, `ORACLE_ACTIVE_COUNT=35`, `ORACLE_TOTAL_COUNT=35`. Chainparams sets `nOracleConsensusRequired`, `nOraclePubkeyCount`, and `nOracleTotalOracles` per network at startup, so those chainparams values are what the validator and MuSig2 aggregator use.
 

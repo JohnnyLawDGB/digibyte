@@ -170,10 +170,11 @@ DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. 
 Enhanced privacy using P2TR outputs and Schnorr signatures
 
 #### Decentralized Oracles
-Mainnet/testnet: 35 reserved oracle slots with 21 active oracle slots (0-20)
-and reserve metadata in slots 21-34. The active keyset uses MuSig2 BIP-327
-threshold consensus and requires 7 BIP-340 Schnorr signatures. Regtest remains
-4-of-7 for local testing. Oracle prices are reported in micro-USD format
+Mainnet/testnet: 35 active oracle slots (0-34). The active keyset uses MuSig2
+BIP-327 threshold consensus and requires 7 BIP-340 Schnorr signatures. Tail
+slots without final operator keys use placeholder pubkeys until a coordinated
+release replaces them. Regtest remains 4-of-7 for local testing. Oracle prices
+are reported in micro-USD format
 (1,000,000 = $1.00). `primitives/oracle.h` now declares header defaults
 `ORACLE_TOTAL_COUNT=35`, `ORACLE_ACTIVE_COUNT=35`, and
 `ORACLE_CONSENSUS_REQUIRED=7`; per-network chainparams values such as
@@ -230,7 +231,7 @@ Merkleized scripts for privacy and efficiency
 User creates a P2TR output with DGB collateral, embedding time lock (CLTV) and oracle price data. Script validates collateral ratio and mints corresponding DigiDollars.
 
 #### 2. Oracle Verification
-Mainnet/testnet expose 21 active oracle slots in `consensus.vOraclePublicKeys` and 35 total reserved slots in `vOracleNodes`. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 7 configured active oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
+Mainnet/testnet expose 35 active oracle slots in `consensus.vOraclePublicKeys` and `vOracleNodes`. Each DD-touching block carries a MuSig2 oracle bundle in the coinbase whose aggregate Schnorr signature represents 7 configured active oracles signing the same price (BIP-327 MuSig2 over BIP-340 Schnorr). Pre-V1 (legacy) oracle bundle versions are rejected once DigiDollar is active.
 
 #### 3. Redemption Process
 After time lock expires (verified by CLTV), user can redeem DigiDollars to unlock DGB. Script burns DigiDollars and releases collateral to user's address.
@@ -396,7 +397,7 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 | Custom durations rejected | Mint validation enforces canonical tier windows: `[tier_blocks, tier_blocks + 100]` | `src/digidollar/validation.cpp:1325-1366, 1574-1593` |
 | DCA tiers | 1.00 / 1.25 / 1.50 / 2.00 (≥150 / 120-149 / 110-119 / <110) | `src/consensus/dca.cpp:51-57` (HEALTH_TIERS) and `src/consensus/digidollar.h:87-92` (dcaLevels) |
 | ERR ratios | 0.95 / 0.90 / 0.85 / 0.80 | `src/consensus/err.cpp:53-58` (ERR_TIERS) |
-| Oracle config | 35 reserved slots, 21 active, 7 signatures required (mainnet/testnet); 4-of-7 regtest | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
+| Oracle config | 35 active slots, 7 signatures required (mainnet/testnet); 4-of-7 regtest | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
 | Cooldown period | 8640 blocks (~36h) | `src/consensus/volatility.h:63` (`COOLDOWN_BLOCKS`) |
 | DD amount unit | Cents (100 = $1.00) | `src/consensus/digidollar.h:70-73`, `src/digidollar/digidollar.h` |
 | Oracle price unit | Micro-USD (1,000,000 = $1.00) | `src/oracle/bundle_manager.*`, `src/script/interpreter.cpp` |

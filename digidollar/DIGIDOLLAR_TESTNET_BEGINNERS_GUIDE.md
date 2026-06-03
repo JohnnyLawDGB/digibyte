@@ -1023,7 +1023,7 @@ Think of the Oracle as a **decentralized price reporter**:
 ### V1 Oracle (TestNet 2026)
 
 **Current Status:**
-- ✅ **21 active oracle slots** with a 7-signature launch quorum
+- ✅ **35 active oracle slots** with a 7-signature launch quorum
 - ✅ **Live exchange-backed pricing** on testnet/mainnet
 - ✅ **MuSig2 v0x03 bundles** in the coinbase oracle output
 - ✅ **Activates at Block 600** (with DigiDollar)

@@ -1,7 +1,7 @@
 # DigiDollar Oracle System - V1 Explainer
 
 *Updated: 2026-05-30*
-*Document Version: 6.2 - RC44 testnet26 and 7-of-21 refresh*
+*Document Version: 6.3 - RC44 testnet26 and 7-of-35 refresh*
 
 ## V1 Summary
 
@@ -24,15 +24,14 @@ mined, relayed as fallback, or used to update the price cache in V1.
 
 | Network | Oracle metadata slots | Consensus-active slots | Quorum |
 |---------|-----------------------|------------------------|--------|
-| Mainnet | 35 | 21, slots 0-20 | 7 signatures from active keyset |
-| Testnet26 | 35 | 21, slots 0-20 | 7 signatures from active keyset |
+| Mainnet | 35 | 35, slots 0-34 | 7 signatures from active keyset |
+| Testnet26 | 35 | 35, slots 0-34 | 7 signatures from active keyset |
 | Regtest | 7 | 7, slots 0-6 | 4-of-7 |
 
-Mainnet and testnet slots 21-34 are reserve metadata entries. They are not part of
-`consensus.vOraclePublicKeys`, do not count toward pending-message quorum, do
-not appear in the MuSig2 bitmap, and cannot contribute to the V1 aggregate
-signature until a later release adds their x-only keys to the consensus roster
-and marks the slot active in chainparams.
+Mainnet and testnet slots 0-34 are in `consensus.vOraclePublicKeys` and
+`vOracleNodes`. Some tail slots use placeholder pubkeys until final operator
+keys are available, but the RC44 consensus surface validates the full 35-slot
+shape. Slot 35 is outside the configured roster.
 
 ## Operator Flow
 
@@ -74,8 +73,8 @@ aggregate_sig              64 bytes
 ```
 
 The version byte is pushed separately as `0x03` before this payload. Regtest
-uses a one-byte bitmap; mainnet/testnet use a three-byte bitmap for the
-21-slot active roster.
+uses a one-byte bitmap; mainnet/testnet use a five-byte bitmap for the
+35-slot active roster.
 
 ## Miner Behavior
 
@@ -192,7 +191,7 @@ mainnet/testnet use after activation.
   `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`,
   `oramusigpsig`, `oraclehb`, `getoracles`, and legacy `oraclebundle` drop
   behavior.
-- `src/kernel/chainparams.cpp` - active oracle keys, reserve metadata, quorum,
+- `src/kernel/chainparams.cpp` - active oracle keys, placeholder metadata, quorum,
   and activation parameters.
 
 ## Tests

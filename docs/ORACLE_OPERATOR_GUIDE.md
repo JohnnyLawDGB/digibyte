@@ -49,7 +49,7 @@ Current releases create descriptor wallets by default. No special flags needed.
 
 Replace `0` with the oracle ID slot assigned to you by the maintainer.
 
-Mainnet and testnet chainparams allocate 35 oracle slots (IDs 0–34), but only slots **0–20** are part of the current RC44 consensus-active MuSig2 roster (`consensus.vOraclePublicKeys`). Slots 21–34 are inactive reserve placeholders and cannot satisfy quorum until a future release adds the operator's x-only key to `consensus.vOraclePublicKeys` and marks the slot active. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
+Mainnet and testnet chainparams allocate 35 oracle slots (IDs 0–34), and all 35 are part of the current RC44 consensus-active MuSig2 roster (`consensus.vOraclePublicKeys`). Slot ID 35 is outside the configured roster. Regtest has 7 slots (IDs 0–6) with 4-of-7 consensus.
 
 **Output:**
 ```json
@@ -230,8 +230,8 @@ Then recompile and distribute the updated binary.
 
 | Network | Total Slots | Active (in MuSig2 quorum) | Consensus | Notes |
 |---------|------------|---------------------------|-----------|-------|
-| Mainnet | 35 (IDs 0-34) | 21 (slots 0-20) | 7 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Slots 21-34 stay reserve placeholders after activation until promoted by a future chainparams release. |
-| Testnet (testnet26) | 35 (IDs 0-34) | 21 (slots 0-20) | 7 signatures from active keyset | Active from height 600. Slots 21-34 are inactive reserve placeholders. |
+| Mainnet | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Tail placeholders are consensus-active until replaced by a future chainparams release. |
+| Testnet (testnet26) | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | Active from height 600. Tail placeholders are consensus-active until replaced by a future chainparams release. |
 | Regtest | 7 (IDs 0–6) | 7 | 4-of-7 MuSig2 | Always active. |
 
 To confirm a slot is in the active quorum at runtime, call

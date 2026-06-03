@@ -92,7 +92,7 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned active oracle ID (slot **0–20**) from the maintainer; mainnet and testnet26 both reserve 35 slots and use 21 consensus-active MuSig2 public keys with a 7-signature quorum. Slots 21-34 are inactive reserve entries: they cannot satisfy V1 quorum until a future release adds their x-only keys to `consensus.vOraclePublicKeys` and marks the slot active.
+For first-time oracle operators. You need an assigned active oracle ID (slot **0–34**) from the maintainer; mainnet and testnet26 both use 35 consensus-active MuSig2 public keys with a 7-signature quorum. Slot ID 35 is outside the configured RC44 roster.
 
 ```bash
 # 1. Start your node
@@ -211,7 +211,7 @@ removed / paid API key required).
 
 | Release | Chain | Testnet P2P Port | Active Oracles | Consensus Required |
 |---------|-------|------------------|----------------|--------------------|
-| Current source tree | `testnet26` | **12033** | 21 active / 35 reserved | 7 signatures |
+| Current source tree | `testnet26` | **12033** | 35 active | 7 signatures |
 | Retired | `testnet24` | 12031 | n/a (chain retired) | n/a |
 | Retired | `testnet23` | 12030 | n/a (chain retired) | n/a |
 | Retired | `testnet21` | 12035 | n/a (chain retired) | n/a |
@@ -231,9 +231,10 @@ removed / paid API key required).
 | MuSig2 Always-On (`nDigiDollarMuSig2Height`) | 0 | 0 | 0 |
 
 Values verified against `src/kernel/chainparams.cpp`. Mainnet and testnet have
-35 `vOracleNodes` metadata entries, but only slots 0-20 are in
-`consensus.vOraclePublicKeys` and can participate in the current RC44 V1 quorum.
-Slots 21-34 are reserve placeholders. Regtest has 7 active slots.
+35 `vOracleNodes` metadata entries and slots 0-34 are in
+`consensus.vOraclePublicKeys` for the current RC44 V1 quorum. Tail slots may
+use placeholder pubkeys until a coordinated release replaces them. Regtest has
+7 active slots.
 The active oracle pubkey count (`nOraclePubkeyCount`)
 and consensus threshold
 (`nOracleConsensusRequired`) are configured per-network in

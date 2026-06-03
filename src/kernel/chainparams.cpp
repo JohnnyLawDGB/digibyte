@@ -363,6 +363,8 @@ public:
         consensus.vOraclePublicKeys.push_back("603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61");  // 30: Scott K / DigibyteDaily
         consensus.vOraclePublicKeys.push_back("e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b");  // 31: DigiRoos / Oracle31-Peer2Peer placeholder
         consensus.vOraclePublicKeys.push_back("efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7");  // 32: Oracle32 placeholder
+        consensus.vOraclePublicKeys.push_back("e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc");  // 33: Oracle33 placeholder
+        consensus.vOraclePublicKeys.push_back("e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc");  // 33: Oracle33 placeholder
         consensus.vOraclePublicKeys.push_back("efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7");  // 32: Oracle32 placeholder
         consensus.vOraclePublicKeys.push_back("e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b");  // 31: DigiRoos / Oracle31-Peer2Peer placeholder
         consensus.vOraclePublicKeys.push_back("603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61");  // 30: Scott K / DigibyteDaily
@@ -426,7 +428,7 @@ private:
             {30,  ParsePubKey("03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61"), "oracle31.digidollar.org:12024", true},  // Scott K / DigibyteDaily
             {31,  ParsePubKey("02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b"), "oracle32.digidollar.org:12024", true},  // DigiRoos / Oracle31-Peer2Peer placeholder
             {32,  ParsePubKey("03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7"), "oracle33.digidollar.org:12024", true},  // Oracle32 placeholder
-            {33,  ParsePubKey("02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc"), "oracle34.digidollar.org:12024", false},
+            {33,  ParsePubKey("02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc"), "oracle34.digidollar.org:12024", true},  // Oracle33 placeholder
             {34,  ParsePubKey("03b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a"), "oracle35.digidollar.org:12024", false}
         };
     }
@@ -809,7 +811,7 @@ private:
             {30, ParsePubKey("03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61"), "oracle31.digibyte.io:12033", true},   // Scott K / DigibyteDaily
             {31, ParsePubKey("02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b"), "oracle32.digibyte.io:12033", true},   // DigiRoos / Oracle31-Peer2Peer placeholder
             {32, ParsePubKey("03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7"), "oracle33.digibyte.io:12033", true},   // Oracle32 placeholder
-            {33, ParsePubKey("02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc"), "oracle34.digibyte.io:12033", false},
+            {33, ParsePubKey("02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc"), "oracle34.digibyte.io:12033", true},   // Oracle33 placeholder
             {34, ParsePubKey("03b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a"), "oracle35.digibyte.io:12033", false},
         };
         //

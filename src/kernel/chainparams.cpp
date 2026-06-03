@@ -356,6 +356,8 @@ public:
         consensus.vOraclePublicKeys.push_back("b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d");  // 23: ChozenOne43
         consensus.vOraclePublicKeys.push_back("926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e");  // 24: ckunchained
         consensus.vOraclePublicKeys.push_back("4103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672");  // 25: JMag
+        consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
+        consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
         consensus.vOraclePublicKeys.push_back("4103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672");  // 25: JMag
         consensus.vOraclePublicKeys.push_back("926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e");  // 24: ckunchained
 
@@ -405,7 +407,7 @@ private:
             // before enabling a slot in a future release.
             {24,  ParsePubKey("03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e"), "oracle25.digidollar.org:12024", true},  // ckunchained
             {25,  ParsePubKey("034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672"), "oracle26.digidollar.org:12024", true},  // JMag
-            {26,  ParsePubKey("02ac3478d69a3c81fa62e60f5c3696165a4e5e6ac4cda4d41d92ee258b91e23e38"), "oracle27.digidollar.org:12024", false},
+            {26,  ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digidollar.org:12024", true},  // HashedMax
             {27,  ParsePubKey("03c1dfd96eea8cc2b62785275bca38ac261256e27864cf4f74db1c3bb5d8d08c42"), "oracle28.digidollar.org:12024", false},
             {28,  ParsePubKey("02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088b9"), "oracle29.digidollar.org:12024", false},
             {29,  ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "oracle30.digidollar.org:12024", false},
@@ -788,7 +790,7 @@ private:
             {23, ParsePubKey("03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d"), "oracle24.digibyte.io:12033", true},  // ChozenOne43
             {24, ParsePubKey("03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e"), "oracle25.digibyte.io:12033", true},   // ckunchained
             {25, ParsePubKey("034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672"), "oracle26.digibyte.io:12033", true},   // JMag
-            {26, ParsePubKey("02ac3478d69a3c81fa62e60f5c3696165a4e5e6ac4cda4d41d92ee258b91e23e38"), "oracle27.digibyte.io:12033", false},
+            {26, ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digibyte.io:12033", true},   // HashedMax
             {27, ParsePubKey("03c1dfd96eea8cc2b62785275bca38ac261256e27864cf4f74db1c3bb5d8d08c42"), "oracle28.digibyte.io:12033", false},
             {28, ParsePubKey("02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088b9"), "oracle29.digibyte.io:12033", false},
             {29, ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "oracle30.digibyte.io:12033", false},

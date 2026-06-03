@@ -99,10 +99,10 @@ BOOST_AUTO_TEST_CASE(testnet_oracle_consensus_requirements)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Verify testnet: 35 reserved slots, active keys, 7 signatures required.
+    // Verify testnet: 35 active slots, 7 signatures required.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 7);   // 7 signatures required
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 24);    // 24 active oracles
-    BOOST_CHECK_EQUAL(ddParams.oracleCount, 35);      // 35 reserved slots
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 35);    // 35 active oracles
+    BOOST_CHECK_EQUAL(ddParams.oracleCount, 35);      // 35 configured slots
 
     double consensus_ratio = static_cast<double>(ddParams.oracleThreshold) /
                              ddParams.oracleCount;
@@ -271,8 +271,8 @@ BOOST_AUTO_TEST_CASE(phase_one_single_oracle_requirement)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Active testnet keys live inside the 35-slot roster.
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 24);
+    // Active testnet keys fill the 35-slot RC44 roster.
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 35);
 
     // Verify oracle nodes match configuration
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
@@ -308,9 +308,9 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
     const CChainParams& params = Params();
     const DigiDollar::ConsensusParams& ddParams = params.GetDigiDollarParams();
 
-    // Testnet: 7 signatures from the active key prefix in a 35-slot roster.
+    // Testnet: 7 signatures from the full 35-slot active roster.
     BOOST_CHECK_EQUAL(ddParams.oracleThreshold, 7);
-    BOOST_CHECK_EQUAL(ddParams.activeOracles, 24);
+    BOOST_CHECK_EQUAL(ddParams.activeOracles, 35);
 
     // Verify testnet active set keeps the configured 7-signature quorum.
     BOOST_CHECK(ddParams.oracleThreshold > 0);
@@ -346,10 +346,10 @@ BOOST_AUTO_TEST_CASE(phase_one_no_mainnet_activation)
     // Verify mainnet has 35 oracle slots configured for future use.
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
 
-    // Mainnet should have full reserved oracle set configured.
+    // Mainnet should have full oracle set configured.
     BOOST_CHECK_EQUAL(oracle_nodes.size(), 35U);
 
-    // The launch slots are active; reserve slots are inactive.
+    // The RC44 launch roster activates every configured slot.
     int active_count = 0;
     for (const auto& oracle : oracle_nodes) {
         if (oracle.is_active) {

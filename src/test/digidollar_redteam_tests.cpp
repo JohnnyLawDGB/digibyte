@@ -14374,7 +14374,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_01f_eclipse_mainnet_oracle_gap)
     // RC41: mainnet oracle activation is set.
     BOOST_CHECK_NE(mainnet_consensus.nOracleActivationHeight, std::numeric_limits<int>::max());
 
-    // Launch roster: 7 signatures from 35 reserved slots.
+    // Launch roster: 7 signatures from 35 active slots.
     BOOST_CHECK_EQUAL(mainnet_consensus.nOracleRequiredMessages, 7);
     BOOST_CHECK_EQUAL(mainnet_consensus.nOracleTotalOracles, 35);
 
@@ -17090,7 +17090,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04a_oracle_id_8_in_configured_range)
 BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
 {
     // The launch roster resolves the count mismatch: the static P2P bound, consensus
-    // total, and configured node roster all describe the same 35 reserved slots.
+    // total, and configured node roster all describe the same 35 active slots.
     // The active slots are present in vOraclePublicKeys.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
@@ -17107,7 +17107,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04b_oracle_total_count_vs_configured_mismatch)
     BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, static_cast<int>(all_oracles.size()));
     BOOST_TEST_MESSAGE("  nOracleTotalOracles == vOracleNodes.size() == " + std::to_string(all_oracles.size()) + " ✅");
 
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 24);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 35);
     BOOST_CHECK_EQUAL(static_cast<int>(consensus.vOraclePublicKeys.size()), consensus.nOraclePubkeyCount);
 
     // Verify nOracleRequiredMessages < nOracleTotalOracles
@@ -17323,7 +17323,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04e_pending_messages_map_key_boundary)
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_reserved_oracles)
 {
-    // Mainnet has 35 reserved oracle nodes with an active prefix. SelectOraclesForEpoch
+    // Mainnet has 35 active oracle nodes. SelectOraclesForEpoch
     // must return only active nodes and must be deterministic for the same epoch.
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& all_oracles = params.GetOracleNodes();
@@ -17333,7 +17333,7 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_reserved_oracl
         if (oracle.is_active) ++active_count;
     }
 
-    BOOST_TEST_MESSAGE("=== T9-04f: SelectOraclesForEpoch with 35 reserved slots (mainnet context) ===");
+    BOOST_TEST_MESSAGE("=== T9-04f: SelectOraclesForEpoch with 35 active slots (mainnet context) ===");
     BOOST_TEST_MESSAGE("  Total oracles: " + std::to_string(all_oracles.size()));
     BOOST_TEST_MESSAGE("  ORACLE_ACTIVE_COUNT: " + std::to_string(ORACLE_ACTIVE_COUNT));
 
@@ -17349,13 +17349,13 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04f_select_oracles_for_epoch_with_reserved_oracl
     for (size_t i = 0; i < selected.size(); ++i) {
         BOOST_CHECK_EQUAL(selected[i].id, selected_again[i].id);
     }
-    BOOST_TEST_MESSAGE("  Active-only deterministic selection over 35 reserved slots ✅");
+    BOOST_TEST_MESSAGE("  Active-only deterministic selection over 35 active slots ✅");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
 {
-    // RC41 keeps static, consensus, and chainparams total slot counts aligned.
-    // The active signing keyset remains a smaller prefix of the reserved roster.
+    // RC44 keeps static, consensus, active keyset, and chainparams total slot
+    // counts aligned across the full 35-slot roster.
     const CChainParams& params = Params();
     const Consensus::Params& consensus = params.GetConsensus();
 
@@ -17380,9 +17380,9 @@ BOOST_AUTO_TEST_CASE(redteam_t9_04g_three_oracle_count_inconsistencies)
                       ") <= ORACLE_ACTIVE_COUNT (" + std::to_string(ORACLE_ACTIVE_COUNT) +
                       ") ✅ (consensus quorum within static bound)");
 
-    // vOraclePublicKeys contains the active signing roster, not inactive reserve slots.
+    // vOraclePublicKeys contains the full active signing roster.
     BOOST_CHECK_EQUAL(consensus.vOraclePublicKeys.size(), static_cast<size_t>(consensus.nOraclePubkeyCount));
-    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 24);
+    BOOST_CHECK_EQUAL(consensus.nOraclePubkeyCount, 35);
     BOOST_TEST_MESSAGE("  vOraclePublicKeys has " + std::to_string(consensus.vOraclePublicKeys.size()) +
                       " keys on mainnet ✅ (Phase 3 MuSig2)");
 

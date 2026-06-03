@@ -146,23 +146,23 @@ REQUIRED = {
         "Normal setup loads the oracle private key from the wallet",
     ],
     "digidollar/DIGIDOLLAR_TESTNET_BEGINNERS_GUIDE.md": [
-        "21 active oracle slots",
+        "35 active oracle slots",
         "7-signature launch quorum",
         "Activates at Block 600",
     ],
     "DIGIDOLLAR_EXPLAINER.md": [
-        "21 active oracle slots",
+        "35 active oracle slots",
         "requires 7 BIP-340 Schnorr signatures",
         "ORACLE_CONSENSUS_REQUIRED=7",
     ],
     "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
-        "slots 0-20",
+        "slots 0-34",
         "including signed `oraclehb` heartbeats",
         "uses `IsOracleP2PActive`",
     ],
     "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
         "including `oraclehb`, share the `IsOracleP2PActive` gate",
-        "21 active slots",
+        "35 active slots",
         "Replaced by 7-signature mainnet/testnet MuSig2",
     ],
     "CLAUDE.md": [
@@ -171,7 +171,7 @@ REQUIRED = {
     ],
     "REPO_MAP_DIGIDOLLAR.md": [
         "all use `IsOracleP2PActive`",
-        "slot 0-20 ordering",
+        "slot 0-34 ordering",
     ],
     "deploy_testnet_oracle.sh": [
         "TESTNET_NAME=\"testnet26\"",
@@ -193,7 +193,7 @@ REQUIRED = {
         "bob_hash=$($BOB_CLI getbestblockhash",
         "[ \"$bob_hash\" = \"$alice_hash\" ]",
         "restorewallet \"bob\" \"$BACKUP_FILE\"",
-        "if [ \"$HEARTBEAT_COUNT\" -eq 21 ]",
+        "if [ \"$HEARTBEAT_COUNT\" -eq 24 ]",
         "Manual oracle injection RPC removed (Step 27B)",
         "Live exchange outlier filter observation is optional",
         "BOB_POSITIONS_BEFORE_EXPORT=$($BOB_CLI -rpcwallet=bob listdigidollarpositions false",

@@ -23,7 +23,7 @@ FUZZ_TARGET(oracle_bundle_validation)
     bundle.timestamp = fuzzed_data.ConsumeIntegral<int64_t>();
     bundle.version = fuzzed_data.ConsumeIntegral<uint8_t>();
 
-    // Add fuzzed messages (0-20)
+    // Add fuzzed messages from the RC44 active ID range.
     uint8_t num_messages = fuzzed_data.ConsumeIntegralInRange<uint8_t>(0, 20);
     for (uint8_t i = 0; i < num_messages && fuzzed_data.remaining_bytes() > 20; ++i) {
         uint32_t oracle_id = fuzzed_data.ConsumeIntegral<uint32_t>();

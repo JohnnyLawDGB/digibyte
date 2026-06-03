@@ -3,16 +3,16 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-"""RC44 testnet26 oracle roster RPC regression.
+"""RC44 testnet26 local mini-testnet oracle roster RPC regression.
 
-The public RC44 testnet roster has 24 active MuSig2 oracle slots. The local
+The public RC44 testnet roster has 35 active MuSig2 oracle slots. The local
 mini-testnet harness uses `-testnet -easypow`, which keeps the testnet26 chain
-identity while swapping to deterministic local oracle keys so the active roster
-can be exercised without production private keys.
+identity while swapping to 24 deterministic local oracle keys so the harness
+can exercise quorum behavior without production private keys.
 
 This pins the operator-facing `getoracles` surface against stale 17-oracle
-display assumptions. Slots 17-20 are consensus-active in RC44 and must not
-show up as fallback display labels to operators.
+display assumptions in the local harness. Slots 17-23 must not show up as
+fallback display labels to operators.
 """
 
 import os
@@ -86,7 +86,7 @@ class DigiDollarTestnet26OracleRosterRPCTest(DigiByteTestFramework):
         assert_equal(deployment["oracle_consensus_required"], 7)
         assert_equal(deployment["oracle_total_slots"], 35)
 
-        self.log.info("Verify getoracles names all 24 active RC44 slots")
+        self.log.info("Verify getoracles names all 24 active local mini-testnet slots")
         active_oracles = node.getoracles(True, 20)
         assert_equal(len(active_oracles), 24)
 

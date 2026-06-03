@@ -438,7 +438,9 @@ BOOST_AUTO_TEST_CASE(required_participants_and_context_converge_across_nonce_arr
 
     std::vector<uint8_t> descending = all_ids;
     std::reverse(descending.begin(), descending.end());
-    const std::vector<uint8_t> mixed{6, 2, 15, 0, 8, 14, 1, 10, 3, 16, 7, 4, 12, 5, 11, 9, 13, 20, 18, 17, 19};
+    std::vector<uint8_t> mixed = all_ids;
+    std::rotate(mixed.begin(), mixed.begin() + 13, mixed.end());
+    std::reverse(mixed.begin() + 5, mixed.end());
 
     MuSig2SigningSession ascending_session(epoch, threshold);
     MuSig2SigningSession descending_session(epoch, threshold);

@@ -221,17 +221,16 @@ BOOST_AUTO_TEST_CASE(all_networks_validate_oracle_node_alignment)
 }
 
 // ---------------------------------------------------------------------------
-// RH50.6 — Mainnet/testnet expose a 35-slot oracle roster, while only slots
-// with operator keys in consensus.vOraclePublicKeys are active signers.
+// RH50.6 — Mainnet/testnet expose a fully active 35-slot oracle roster.
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(mainnet_testnet_have_35_slots_with_inactive_reserves)
+BOOST_AUTO_TEST_CASE(mainnet_testnet_have_35_active_slots)
 {
     for (ChainType ct : {ChainType::MAIN, ChainType::TESTNET}) {
         SelectParams(ct);
         const CChainParams& params = Params();
         const Consensus::Params& consensus = params.GetConsensus();
         const auto& nodes = params.GetOracleNodes();
-        const int expected_active = 24;
+        const int expected_active = 35;
 
         BOOST_CHECK_EQUAL(consensus.nOracleTotalOracles, 35);
         BOOST_CHECK_EQUAL(consensus.nOracleConsensusRequired, 7);
@@ -241,21 +240,16 @@ BOOST_AUTO_TEST_CASE(mainnet_testnet_have_35_slots_with_inactive_reserves)
 
         for (size_t slot = 0; slot < nodes.size(); ++slot) {
             BOOST_CHECK_EQUAL(nodes[slot].id, slot);
-            if (slot < static_cast<size_t>(consensus.nOraclePubkeyCount)) {
-                BOOST_CHECK_MESSAGE(nodes[slot].is_active,
-                    "slot " << slot << " must be active on " << params.GetChainTypeString());
-            } else {
-                BOOST_CHECK_MESSAGE(!nodes[slot].is_active,
-                    "reserve slot " << slot << " must remain inactive until its operator key is added");
-            }
+            BOOST_CHECK_MESSAGE(nodes[slot].is_active,
+                "slot " << slot << " must be active on " << params.GetChainTypeString());
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// RH50.7 — The config validator must permit the intended future 9-of-35
-// keyset. Adding operators should require chainparams keys plus a coordinated
-// release, not a validator rewrite.
+// RH50.7 — The config validator must permit an alternate 9-of-35 keyset.
+// Quorum changes should require chainparams keys plus a coordinated release,
+// not a validator rewrite.
 // ---------------------------------------------------------------------------
 BOOST_AUTO_TEST_CASE(validate_oracle_configuration_accepts_future_9_of_35)
 {
@@ -270,7 +264,7 @@ BOOST_AUTO_TEST_CASE(validate_oracle_configuration_accepts_future_9_of_35)
 
     BOOST_CHECK_MESSAGE(
         Consensus::ValidateOracleConfiguration(params),
-        "9-of-35 must be a valid MuSig2 oracle configuration for future roster expansion");
+        "9-of-35 must be a valid MuSig2 oracle configuration for coordinated quorum changes");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

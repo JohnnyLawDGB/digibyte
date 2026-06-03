@@ -650,23 +650,26 @@ struct MainParamsMuSig2Setup : public BasicTestingSetup {
 
 BOOST_FIXTURE_TEST_SUITE(musig2_signing_orchestration_mainnet_tests, MainParamsMuSig2Setup)
 
-BOOST_AUTO_TEST_CASE(mainnet_signing_roster_excludes_reserve_metadata_slots)
+BOOST_AUTO_TEST_CASE(mainnet_signing_roster_covers_full_35_slot_keyset)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
-    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 24);
-    BOOST_REQUIRE_GT(Params().GetOracleNodes().size(),
-                     static_cast<size_t>(consensus.nOraclePubkeyCount));
+    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 35);
+    BOOST_REQUIRE_EQUAL(Params().GetOracleNodes().size(),
+                        static_cast<size_t>(consensus.nOraclePubkeyCount));
 
     const std::vector<uint8_t> signing_ids =
         OracleSigningOrchestrator::GetConsensusOracleIdsForSigning();
     BOOST_CHECK_EQUAL(signing_ids.size(),
                       static_cast<size_t>(consensus.nOraclePubkeyCount));
+    for (uint8_t oracle_id = 0; oracle_id < consensus.nOraclePubkeyCount; ++oracle_id) {
+        BOOST_CHECK_EQUAL(signing_ids[oracle_id], oracle_id);
+    }
 
     MuSig2OracleAggregator aggregator;
     secp256k1_xonly_pubkey agg_pk;
     secp256k1_musig_keyagg_cache cache;
     BOOST_CHECK_MESSAGE(aggregator.ComputeAggregatePubkey(signing_ids, agg_pk, cache),
-                        "mainnet signing roster must aggregate without reserve slot ids");
+                        "mainnet signing roster must aggregate every RC44 slot");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

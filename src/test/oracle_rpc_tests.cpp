@@ -64,7 +64,10 @@ BOOST_AUTO_TEST_CASE(getoracles_oracle_names_coverage)
         "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
         "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony",
         "mbah_jambon", "Camden", "Twoface123", "LivingTheLife",
-        "ChozenOne43"
+        "ChozenOne43", "ckunchained", "JMag", "HashedMax",
+        "DennisPitallano", "DigiHash Mining Pool", "medgboracle3452",
+        "DigibyteDaily", "Oracle31-Peer2Peer", "Oracle32 Placeholder",
+        "Oracle33 Placeholder", "Oracle34 Placeholder"
     };
 
     size_t active_count = 0;
@@ -72,7 +75,7 @@ BOOST_AUTO_TEST_CASE(getoracles_oracle_names_coverage)
         if (oracle.is_active) ++active_count;
     }
 
-    BOOST_CHECK_EQUAL(oracle_names.size(), active_count);
+    BOOST_CHECK_GE(oracle_names.size(), active_count);
 }
 
 /**

@@ -26,7 +26,7 @@
 std::unique_ptr<OracleSigningOrchestrator> g_signing_orchestrator;
 
 namespace {
-constexpr size_t MAX_PENDING_PARTIALSIGS_PER_CONTEXT = 32;   // > any honest oracle count
+constexpr size_t MAX_PENDING_PARTIALSIGS_PER_CONTEXT = 40;   // > any honest oracle count
 constexpr size_t MAX_PENDING_PARTIALSIG_CONTEXTS_PER_EPOCH = 8;
 constexpr size_t MAX_PENDING_PARTIALSIGS_PER_EPOCH = 128;
 constexpr size_t MAX_PENDING_PARTIALSIG_EPOCHS = 8;           // +/- 4 epochs around current
@@ -170,7 +170,7 @@ std::vector<uint8_t> OracleSigningOrchestrator::GetConsensusOracleIdsForSigning(
     oracle_ids.reserve(nodes.size());
     for (const auto& node : nodes) {
         if (!node.is_active) continue;
-        // vOracleNodes may include reserve metadata beyond the consensus keyset.
+        // Enforce the consensus keyset bound even if node metadata is larger.
         if (node.id >= static_cast<uint32_t>(active_pubkeys)) continue;
         if (node.id > std::numeric_limits<uint8_t>::max()) continue;
         oracle_ids.push_back(static_cast<uint8_t>(node.id));

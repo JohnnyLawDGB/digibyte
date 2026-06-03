@@ -76,8 +76,8 @@ struct ConsensusParams {
     int minMintAmountActivationHeight = 0;     // Height at which minMintAmount rule activates
 
     // Oracle configuration
-    uint32_t oracleCount = 35;                 // Total reserved oracle slots
-    uint32_t activeOracles = 24;               // Active oracle keys in the current roster
+    uint32_t oracleCount = 35;                 // Total configured oracle slots
+    uint32_t activeOracles = 35;               // Active oracle keys in the current roster
     uint32_t oracleThreshold = 7;              // 7 signatures required
     uint32_t priceValidBlocks = 20;            // 5 minutes at 15s blocks
 

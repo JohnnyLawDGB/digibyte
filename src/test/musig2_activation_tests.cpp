@@ -85,8 +85,8 @@ BOOST_AUTO_TEST_CASE(test_oracle_pubkey_count_and_total_slots)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet uses the active oracle pubkey prefix inside a 35-slot roster.
-    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 24);
+    // Testnet uses the full 35-slot RC44 oracle roster.
+    BOOST_CHECK_EQUAL(params.nOraclePubkeyCount, 35);
     BOOST_CHECK_EQUAL(params.nOracleTotalOracles, 35);
     BOOST_CHECK_EQUAL(static_cast<int>(params.vOraclePublicKeys.size()), params.nOraclePubkeyCount);
 }
@@ -167,9 +167,31 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
     constexpr const char* TWOFACE123_COMPRESSED =
         "03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86";
     constexpr const char* LIVINGTHELIFE_COMPRESSED =
-        "0367011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e";
+        "039241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef";
     constexpr const char* CHOZENONE43_COMPRESSED =
         "03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d";
+    constexpr const char* CKUNCHAINED_COMPRESSED =
+        "03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e";
+    constexpr const char* JMAG_COMPRESSED =
+        "034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672";
+    constexpr const char* HASHEDMAX_COMPRESSED =
+        "038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8";
+    constexpr const char* DENNISPITALLANO_COMPRESSED =
+        "02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894";
+    constexpr const char* DIGIHASH_PLACEHOLDER_COMPRESSED =
+        "02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb";
+    constexpr const char* MEDGBORACLE3452_COMPRESSED =
+        "03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
+    constexpr const char* DIGIBYTEDAILY_COMPRESSED =
+        "03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61";
+    constexpr const char* DIGIROOS_COMPRESSED =
+        "02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b";
+    constexpr const char* ORACLE32_PLACEHOLDER_COMPRESSED =
+        "03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7";
+    constexpr const char* ORACLE33_PLACEHOLDER_COMPRESSED =
+        "02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc";
+    constexpr const char* ORACLE34_PLACEHOLDER_COMPRESSED =
+        "03b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a";
     constexpr const char* ANTHONY_XONLY =
         "45f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89";
     constexpr const char* MBAH_JAMBON_XONLY =
@@ -179,11 +201,33 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
     constexpr const char* TWOFACE123_XONLY =
         "d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86";
     constexpr const char* LIVINGTHELIFE_XONLY =
-        "67011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e";
+        "9241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef";
     constexpr const char* CHOZENONE43_XONLY =
         "b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d";
+    constexpr const char* CKUNCHAINED_XONLY =
+        "926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e";
+    constexpr const char* JMAG_XONLY =
+        "4103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672";
+    constexpr const char* HASHEDMAX_XONLY =
+        "8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8";
+    constexpr const char* DENNISPITALLANO_XONLY =
+        "557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894";
+    constexpr const char* DIGIHASH_PLACEHOLDER_XONLY =
+        "902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb";
+    constexpr const char* MEDGBORACLE3452_XONLY =
+        "d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
+    constexpr const char* DIGIBYTEDAILY_XONLY =
+        "603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61";
+    constexpr const char* DIGIROOS_XONLY =
+        "e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b";
+    constexpr const char* ORACLE32_PLACEHOLDER_XONLY =
+        "efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7";
+    constexpr const char* ORACLE33_PLACEHOLDER_XONLY =
+        "e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc";
+    constexpr const char* ORACLE34_PLACEHOLDER_XONLY =
+        "b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a";
 
-    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 24);
+    BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 35);
     BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 7);
     BOOST_REQUIRE_EQUAL(params.vOraclePublicKeys.size(), static_cast<size_t>(params.nOraclePubkeyCount));
     BOOST_REQUIRE_GE(nodes.size(), static_cast<size_t>(params.nOraclePubkeyCount));
@@ -195,14 +239,21 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[21], TWOFACE123_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[22], LIVINGTHELIFE_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[23], CHOZENONE43_XONLY);
-    BOOST_CHECK_EQUAL(nodes[17].id, 17U);
-    BOOST_CHECK(nodes[17].is_active);
-    BOOST_CHECK_EQUAL(nodes[21].id, 21U);
-    BOOST_CHECK(nodes[21].is_active);
-    BOOST_CHECK_EQUAL(nodes[22].id, 22U);
-    BOOST_CHECK(nodes[22].is_active);
-    BOOST_CHECK_EQUAL(nodes[23].id, 23U);
-    BOOST_CHECK(nodes[23].is_active);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[24], CKUNCHAINED_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[25], JMAG_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[26], HASHEDMAX_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[27], DENNISPITALLANO_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[28], DIGIHASH_PLACEHOLDER_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[29], MEDGBORACLE3452_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[30], DIGIBYTEDAILY_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[31], DIGIROOS_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[32], ORACLE32_PLACEHOLDER_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[33], ORACLE33_PLACEHOLDER_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[34], ORACLE34_PLACEHOLDER_XONLY);
+    for (uint32_t slot = 17; slot <= 34; ++slot) {
+        BOOST_CHECK_EQUAL(nodes[slot].id, slot);
+        BOOST_CHECK(nodes[slot].is_active);
+    }
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                           nodes[17].pubkey.data(), nodes[17].pubkey.size())),
                       DIGIBYTE_MAXI_COMPRESSED);
@@ -222,8 +273,41 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
                           nodes[22].pubkey.data(), nodes[22].pubkey.size())),
                       LIVINGTHELIFE_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
-                          nodes[23].pubkey.data(), nodes[23].pubkey.size())),
+                              nodes[23].pubkey.data(), nodes[23].pubkey.size())),
                       CHOZENONE43_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[24].pubkey.data(), nodes[24].pubkey.size())),
+                      CKUNCHAINED_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[25].pubkey.data(), nodes[25].pubkey.size())),
+                      JMAG_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[26].pubkey.data(), nodes[26].pubkey.size())),
+                      HASHEDMAX_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[27].pubkey.data(), nodes[27].pubkey.size())),
+                      DENNISPITALLANO_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[28].pubkey.data(), nodes[28].pubkey.size())),
+                      DIGIHASH_PLACEHOLDER_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[29].pubkey.data(), nodes[29].pubkey.size())),
+                      MEDGBORACLE3452_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[30].pubkey.data(), nodes[30].pubkey.size())),
+                      DIGIBYTEDAILY_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[31].pubkey.data(), nodes[31].pubkey.size())),
+                      DIGIROOS_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[32].pubkey.data(), nodes[32].pubkey.size())),
+                      ORACLE32_PLACEHOLDER_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[33].pubkey.data(), nodes[33].pubkey.size())),
+                      ORACLE33_PLACEHOLDER_COMPRESSED);
+    BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
+                              nodes[34].pubkey.data(), nodes[34].pubkey.size())),
+                      ORACLE34_PLACEHOLDER_COMPRESSED);
 }
 
 // ============================================================================

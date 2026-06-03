@@ -222,7 +222,10 @@ namespace {
             "ChopperBrian", "hallvardo", "DaPunzy", "DigiByteForce",
             "Neel", "DigiSwarm", "GTO90", "digibyte-maxi", "Anthony",
             "mbah_jambon", "Camden", "Twoface123", "LivingTheLife",
-            "ChozenOne43"
+            "ChozenOne43", "ckunchained", "JMag", "HashedMax",
+            "DennisPitallano", "DigiHash Mining Pool", "medgboracle3452",
+            "DigibyteDaily", "Oracle31-Peer2Peer", "Oracle32 Placeholder",
+            "Oracle33 Placeholder", "Oracle34 Placeholder"
         };
         return names;
     }
@@ -1080,7 +1083,7 @@ static RPCHelpMan getdigidollardeploymentinfo()
                         {RPCResult::Type::NUM, "musig2_format_activation_height", "Height at which the MuSig2 v0x03 bundle format activates (nDigiDollarMuSig2Height)"},
                         {RPCResult::Type::NUM, "oracle_pubkey_count", "Number of consensus oracle public keys configured for MuSig2 (nOraclePubkeyCount)"},
                         {RPCResult::Type::NUM, "oracle_consensus_required", "MuSig2 quorum size required to satisfy a v0x03 bundle (nOracleConsensusRequired)"},
-                        {RPCResult::Type::NUM, "oracle_total_slots", "Total oracle slots configured in chainparams (vOracleNodes.size); slots beyond oracle_pubkey_count are reserves and cannot vote"},
+                        {RPCResult::Type::NUM, "oracle_total_slots", "Total oracle slots configured in chainparams (vOracleNodes.size); oracle_id values must be below oracle_pubkey_count to vote"},
                         {RPCResult::Type::OBJ, "musig2_session", "Current MuSig2 signing session status (operator diagnostic)",
                             {
                                 {RPCResult::Type::NUM, "epoch", "Current epoch number (block_height / nDDOracleEpochBlocks)"},
@@ -4748,7 +4751,7 @@ static RPCHelpMan getoraclesigners()
                         {RPCResult::Type::NUM, "chain_height", "Current active-chain height"},
                         {RPCResult::Type::NUM, "scan_blocks", "Number of recent blocks scanned"},
                         {RPCResult::Type::NUM, "required_signers", "Minimum MuSig2 signer count required by consensus"},
-                        {RPCResult::Type::NUM, "total_oracle_slots", "Total reserved oracle bitmap slots"},
+                        {RPCResult::Type::NUM, "total_oracle_slots", "Total configured oracle bitmap slots"},
                         {RPCResult::Type::NUM, "active_oracle_slots", "Number of oracle public keys currently active in consensus"},
                         {RPCResult::Type::NUM, "bundle_count", "Number of bundles found in the scan window"},
                         {RPCResult::Type::ARR, "bundles", "Recent on-chain oracle bundles, newest first",
@@ -4909,9 +4912,9 @@ static RPCHelpMan getoracles()
                                 {RPCResult::Type::STR, "endpoint", "Oracle network endpoint"},
                                 {RPCResult::Type::BOOL, "is_active", "Whether oracle is configured as active"},
                                 {RPCResult::Type::NUM, "active_oracle_count", "Active MuSig2 oracle key count"},
-                                {RPCResult::Type::NUM, "total_oracle_slots", "Total reserved oracle slots"},
+                                {RPCResult::Type::NUM, "total_oracle_slots", "Total configured oracle slots"},
                                 {RPCResult::Type::NUM, "consensus_threshold", "Required MuSig2 oracle signatures"},
-                                {RPCResult::Type::BOOL, "in_consensus", "Whether oracle slot is in the active MuSig2 quorum (true if oracle_id < oracle_pubkey_count). Slots beyond oracle_pubkey_count are reserves and cannot vote in consensus."},
+                                {RPCResult::Type::BOOL, "in_consensus", "Whether oracle slot is in the active MuSig2 quorum (true if oracle_id < oracle_pubkey_count)."},
                                 {RPCResult::Type::NUM, "last_price_micro_usd", "Last reported price in micro-USD"},
                                 {RPCResult::Type::NUM, "last_price_usd", "Last reported price in USD"},
                                 {RPCResult::Type::NUM, "last_update", "Timestamp of last price"},
@@ -5465,6 +5468,17 @@ RPCHelpMan startoracle()
             bool initialized = was_already_running;
             std::string status_message;
             std::string warning;
+
+            if (!was_already_running && private_key_hex.empty()) {
+                if (request_wallet->IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+                    throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+                }
+                if (request_wallet->IsLocked()) {
+                    throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                        "DigiDollar oracle start requires the wallet to be unlocked. "
+                        "Error: Please enter the wallet passphrase with walletpassphrase first.");
+                }
+            }
 
             try {
                 if (was_already_running) {

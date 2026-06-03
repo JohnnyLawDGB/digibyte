@@ -1302,39 +1302,41 @@ struct MainParamsOracleBundleSetup : public BasicTestingSetup {
 
 BOOST_FIXTURE_TEST_SUITE(oracle_bundle_manager_mainnet_tests, MainParamsOracleBundleSetup)
 
-BOOST_AUTO_TEST_CASE(mainnet_reserve_messages_do_not_satisfy_pending_consensus)
+BOOST_AUTO_TEST_CASE(mainnet_out_of_range_messages_do_not_satisfy_pending_consensus)
 {
     const Consensus::Params& consensus = Params().GetConsensus();
-    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 24);
+    BOOST_REQUIRE_EQUAL(consensus.nOraclePubkeyCount, 35);
     BOOST_REQUIRE_EQUAL(consensus.nOracleConsensusRequired, 7);
-    BOOST_REQUIRE_GT(Params().GetOracleNodes().size(),
-                     static_cast<size_t>(consensus.nOraclePubkeyCount));
+    BOOST_REQUIRE_EQUAL(Params().GetOracleNodes().size(),
+                        static_cast<size_t>(consensus.nOraclePubkeyCount));
+    for (const auto& node : Params().GetOracleNodes()) {
+        BOOST_CHECK(node.is_active);
+    }
 
     OracleBundleManager& manager = OracleBundleManager::GetInstance();
     manager.Clear();
     manager.SetEnabled(true);
     manager.SetMinOracleCount(consensus.nOracleConsensusRequired);
 
-    const uint32_t first_reserve_id = static_cast<uint32_t>(consensus.nOraclePubkeyCount);
-    const uint32_t reserve_end = static_cast<uint32_t>(Params().GetOracleNodes().size());
+    const uint32_t first_out_of_range_id = static_cast<uint32_t>(consensus.nOraclePubkeyCount);
     const int64_t now = GetTime();
-    for (uint32_t oracle_id = first_reserve_id;
-         oracle_id < reserve_end && oracle_id < first_reserve_id + 9; ++oracle_id) {
+    for (uint32_t oracle_id = first_out_of_range_id;
+         oracle_id < first_out_of_range_id + consensus.nOracleConsensusRequired; ++oracle_id) {
         manager.InjectTestMessage(oracle_bundle_manager_tests::MakeRegtestOracleMessage(
-            oracle_id, 7000 + oracle_id, now));
+            oracle_id, 7000, now));
     }
 
-    COraclePriceMessage reserve_msg =
-        oracle_bundle_manager_tests::MakeRegtestOracleMessage(first_reserve_id, 7000, now);
-    BOOST_CHECK_MESSAGE(!manager.AddOracleMessage(reserve_msg),
-        "reserve-slot oracle messages must be rejected before entering pending consensus");
-    BOOST_CHECK_MESSAGE(!manager.AddConsensusAttestation(reserve_msg),
-        "reserve-slot oracle attestations must not enter the MuSig2 attestation pool");
+    COraclePriceMessage out_of_range_msg =
+        oracle_bundle_manager_tests::MakeRegtestOracleMessage(first_out_of_range_id, 7000, now);
+    BOOST_CHECK_MESSAGE(!manager.AddOracleMessage(out_of_range_msg),
+        "out-of-range oracle messages must be rejected before entering pending consensus");
+    BOOST_CHECK_MESSAGE(!manager.AddConsensusAttestation(out_of_range_msg),
+        "out-of-range oracle attestations must not enter the MuSig2 attestation pool");
 
     uint64_t consensus_price = 0;
     int64_t consensus_timestamp = 0;
     BOOST_CHECK_MESSAGE(!manager.ComputeConsensusValues(consensus_price, consensus_timestamp),
-        "reserve-slot oracle messages must not satisfy the active MuSig2 pending-message quorum");
+        "out-of-range oracle messages must not satisfy the active MuSig2 pending-message quorum");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

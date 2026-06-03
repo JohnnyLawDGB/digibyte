@@ -9,8 +9,8 @@
  * This suite locks the V1 invariants that drive consensus stability for the
  * MuSig2 oracle roster:
  *
- * 1) Quorum boundaries: 7-of-N success, 6-of-N failure, 21-of-21 success,
- *    0-of-21 failure, and out-of-active-roster failure.
+ * 1) Quorum boundaries: 7-of-N success, 6-of-N failure, 35-of-35 success,
+ *    0-of-35 failure, and out-of-active-roster failure.
  *
  * 2) Domain separation:
  *    - Wrong epoch / wrong height (epoch-derived) — bundle hash binds the
@@ -22,9 +22,9 @@
  *      cannot validate against another network's roster, even when price,
  *      timestamp, and epoch are identical.
  *
- * 3) Roster integrity: bitmap with duplicate participant ID, bitmap with
- *    reserve ID 21-34 (mainnet/testnet), bitmap shorter / longer than
- *    ceil(total_count/8), all-zero bitmap, single-participant (1-of-21).
+ * 3) Roster integrity: bitmap with duplicate participant ID, out-of-range
+ *    signer ID 35 (mainnet/testnet), bitmap shorter / longer than
+ *    ceil(total_count/8), all-zero bitmap, single-participant (1-of-35).
  *
  * 4) Aggregate-key drift: rotating a single key in chainparams MUST change
  *    the aggregate pubkey, and the same input must always produce the same
@@ -147,7 +147,7 @@ std::vector<unsigned char> EncodeBitmapUnchecked(const std::vector<uint8_t>& ora
 }
 
 // ----------------------------------------------------------------------------
-// 21-of-21 quorum helpers (use the testnet roster slot ordering directly)
+// 35-of-35 quorum helpers (use the testnet roster slot ordering directly)
 // ----------------------------------------------------------------------------
 
 constexpr int32_t QD_BLOCK_HEIGHT = 1000;
@@ -288,12 +288,12 @@ COracleBundle MakeBundleSkeleton(int32_t epoch, uint64_t price = QD_PRICE,
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_oracle_quorum_domain_tests, BasicTestingSetup)
 
-BOOST_AUTO_TEST_CASE(quorum_7_of_21_accepts_signed_bundle)
+BOOST_AUTO_TEST_CASE(quorum_7_of_35_accepts_signed_bundle)
 {
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6};
-    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/21));
+    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/35));
 
     std::string error;
     BOOST_CHECK(OracleBundleManager::ValidateMuSig2Bundle(bundle, QD_BLOCK_HEIGHT, params, error));
@@ -301,65 +301,65 @@ BOOST_AUTO_TEST_CASE(quorum_7_of_21_accepts_signed_bundle)
         "7-signature quorum must accept without error, got: " + error);
 }
 
-BOOST_AUTO_TEST_CASE(quorum_6_of_21_rejected_below_threshold)
+BOOST_AUTO_TEST_CASE(quorum_6_of_35_rejected_below_threshold)
 {
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5};
-    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/21));
+    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/35));
 
     std::string error;
     BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, QD_BLOCK_HEIGHT, params, error));
     BOOST_CHECK_MESSAGE(error.find("threshold") != std::string::npos ||
                         error.find("decoding") != std::string::npos,
-        "6-of-21 must reject with a threshold/bitmap error, got: " + error);
+        "6-of-35 must reject with a threshold/bitmap error, got: " + error);
 }
 
-BOOST_AUTO_TEST_CASE(quorum_21_of_21_accepts_unanimous_set)
+BOOST_AUTO_TEST_CASE(quorum_35_of_35_accepts_unanimous_set)
 {
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     std::vector<uint8_t> signers;
-    for (uint8_t i = 0; i < 21; ++i) signers.push_back(i);
-    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/21));
+    for (uint8_t i = 0; i < 35; ++i) signers.push_back(i);
+    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/35));
 
     std::string error;
     BOOST_CHECK(OracleBundleManager::ValidateMuSig2Bundle(bundle, QD_BLOCK_HEIGHT, params, error));
     BOOST_CHECK_MESSAGE(error.empty(),
-        "21-of-21 unanimous quorum must accept, got: " + error);
+        "35-of-35 unanimous quorum must accept, got: " + error);
 }
 
-BOOST_AUTO_TEST_CASE(quorum_0_of_21_rejected_zero_signers)
+BOOST_AUTO_TEST_CASE(quorum_0_of_35_rejected_zero_signers)
 {
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     bundle.aggregate_sig.assign(64, 0);
-    bundle.participation_bitmap.assign(3, 0); // canonical zero bitmap for 21 slots
+    bundle.participation_bitmap.assign(5, 0); // canonical zero bitmap for 35 slots
 
     std::string error;
     BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, QD_BLOCK_HEIGHT, params, error));
     BOOST_CHECK_MESSAGE(error.find("decoding") != std::string::npos ||
                         error.find("threshold") != std::string::npos ||
                         error.find("empty") != std::string::npos,
-        "0-of-21 (all-zero bitmap) must reject as decoding/threshold/empty, got: " + error);
+        "0-of-35 (all-zero bitmap) must reject as decoding/threshold/empty, got: " + error);
 }
 
 BOOST_AUTO_TEST_CASE(quorum_out_of_roster_id_rejected)
 {
-    // Build a 21-slot roster but encode a bitmap that selects an out-of-range
-    // signer id (slot 21). The bitmap must not even encode.
-    const std::vector<uint8_t> signers_with_oob{0, 1, 2, 3, 4, 5, 6, 21};
-    auto encoded = MuSig2OracleAggregator::EncodeBitmap(signers_with_oob, /*total_oracles=*/21);
+    // Build a 35-slot roster but encode a bitmap that selects an out-of-range
+    // signer id (slot 35). The bitmap must not even encode.
+    const std::vector<uint8_t> signers_with_oob{0, 1, 2, 3, 4, 5, 6, 35};
+    auto encoded = MuSig2OracleAggregator::EncodeBitmap(signers_with_oob, /*total_oracles=*/35);
     BOOST_CHECK_MESSAGE(encoded.empty(),
         "EncodeBitmap must reject ids >= total_oracles");
 
-    // A handcrafted bitmap that pretends slot 21 exists in a 21-slot roster
+    // A handcrafted bitmap that pretends slot 35 exists in a 35-slot roster
     // must also fail to decode (size mismatch / unused-bit guard).
-    std::vector<uint8_t> handcrafted_signers{0, 1, 2, 3, 4, 5, 6, 21};
-    auto handcrafted = EncodeBitmapUnchecked(handcrafted_signers, /*total_oracles=*/22);
-    auto decoded = MuSig2OracleAggregator::DecodeBitmap(handcrafted, /*total_oracles=*/21);
+    std::vector<uint8_t> handcrafted_signers{0, 1, 2, 3, 4, 5, 6, 35};
+    auto handcrafted = EncodeBitmapUnchecked(handcrafted_signers, /*total_oracles=*/36);
+    auto decoded = MuSig2OracleAggregator::DecodeBitmap(handcrafted, /*total_oracles=*/35);
     BOOST_CHECK_MESSAGE(decoded.empty(),
-        "DecodeBitmap with size for 22 must reject when total_oracles=21");
+        "DecodeBitmap with size for 36 must reject when total_oracles=35");
 }
 
 // ============================================================================
@@ -369,66 +369,63 @@ BOOST_AUTO_TEST_CASE(quorum_out_of_roster_id_rejected)
 BOOST_AUTO_TEST_CASE(roster_bitmap_duplicate_id_rejected_by_encode)
 {
     const std::vector<uint8_t> signers_with_dup{0, 1, 2, 3, 4, 5, 6, 7, 7, 8};
-    auto encoded = MuSig2OracleAggregator::EncodeBitmap(signers_with_dup, /*total_oracles=*/21);
+    auto encoded = MuSig2OracleAggregator::EncodeBitmap(signers_with_dup, /*total_oracles=*/35);
     BOOST_CHECK_MESSAGE(encoded.empty(),
         "EncodeBitmap must reject duplicate participant IDs");
 }
 
-static void CheckReserveIdRejectedByBundleValidation(const Consensus::Params& params,
-                                                     int32_t height,
-                                                     uint8_t reserve_id,
-                                                     const std::string& chain_name)
+static void CheckOutOfRangeIdRejectedByBundleValidation(const Consensus::Params& params,
+                                                        int32_t height,
+                                                        uint8_t out_of_range_id,
+                                                        const std::string& chain_name)
 {
-    const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6, 7, reserve_id};
-    auto encoded = MuSig2OracleAggregator::EncodeBitmap(
+    const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6, out_of_range_id};
+    const auto encoded = MuSig2OracleAggregator::EncodeBitmap(
         signers, static_cast<uint16_t>(params.nOracleTotalOracles));
-    BOOST_REQUIRE_MESSAGE(!encoded.empty(),
-        chain_name + " bitmap must encode reserve slot " + std::to_string(reserve_id) +
-        " inside the configured 35-slot reserve");
+    BOOST_CHECK_MESSAGE(encoded.empty(),
+        chain_name + " bitmap encode must reject signer " +
+        std::to_string(out_of_range_id) + " outside the configured 35-slot roster");
 
+    const auto handcrafted = EncodeBitmapUnchecked(
+        signers, static_cast<uint16_t>(params.nOracleTotalOracles + 1));
     auto decoded = MuSig2OracleAggregator::DecodeBitmap(
-        encoded, static_cast<uint16_t>(params.nOracleTotalOracles));
-    BOOST_REQUIRE(decoded == signers);
+        handcrafted, static_cast<uint16_t>(params.nOracleTotalOracles));
+    BOOST_CHECK_MESSAGE(decoded.empty(),
+        chain_name + " bitmap decode must reject handcrafted signer " +
+        std::to_string(out_of_range_id) + " outside the configured 35-slot roster");
 
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(height));
-    bundle.participation_bitmap = encoded;
+    bundle.participation_bitmap = handcrafted;
     bundle.aggregate_sig.assign(64, 0);
 
     std::string error;
     BOOST_CHECK_MESSAGE(!OracleBundleManager::ValidateMuSig2Bundle(bundle, height, params, error),
-        chain_name + " validation must reject inactive reserve signer " +
-        std::to_string(reserve_id));
-    BOOST_CHECK_MESSAGE(error.find("outside active oracle roster") != std::string::npos,
-        chain_name + " reserve signer should be rejected as outside active roster, got: " + error);
+        chain_name + " validation must reject out-of-range signer " +
+        std::to_string(out_of_range_id));
+    BOOST_CHECK_MESSAGE(!error.empty(),
+        chain_name + " out-of-range signer should report a rejection reason");
 }
 
-BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
+BOOST_AUTO_TEST_CASE(roster_bitmap_out_of_range_id_rejected_on_mainnet_testnet)
 {
     SelectParams(ChainType::MAIN);
     {
         const Consensus::Params& params = Params().GetConsensus();
-        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 24);
+        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 35);
         BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
-        // Reserve slots are valid bitmap positions in the 35-slot reserve,
-        // but cannot satisfy consensus until a future release adds pubkeys
-        // and raises nOraclePubkeyCount.
-        for (uint8_t reserve_id = 24; reserve_id <= 34; ++reserve_id) {
-            CheckReserveIdRejectedByBundleValidation(
-                params, params.nDDActivationHeight, reserve_id, "Mainnet");
-        }
+        CheckOutOfRangeIdRejectedByBundleValidation(
+            params, params.nDDActivationHeight, 35, "Mainnet");
     }
 
     SelectParams(ChainType::TESTNET);
     {
         const Consensus::Params& params = Params().GetConsensus();
-        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 24);
+        BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 35);
         BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 35);
 
-        for (uint8_t reserve_id = 24; reserve_id <= 34; ++reserve_id) {
-            CheckReserveIdRejectedByBundleValidation(
-                params, params.nDDActivationHeight, reserve_id, "Testnet");
-        }
+        CheckOutOfRangeIdRejectedByBundleValidation(
+            params, params.nDDActivationHeight, 35, "Testnet");
     }
 
     SelectParams(ChainType::MAIN);
@@ -436,34 +433,34 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_reserve_id_rejected_on_mainnet_testnet)
 
 BOOST_AUTO_TEST_CASE(roster_bitmap_shorter_than_expected_rejected)
 {
-    // 21 slots -> ceil(21/8) = 3 bytes. A 2-byte bitmap is too short.
-    std::vector<unsigned char> short_bitmap(2, 0xFF);
-    auto decoded = MuSig2OracleAggregator::DecodeBitmap(short_bitmap, /*total_oracles=*/21);
+    // 35 slots -> ceil(35/8) = 5 bytes. A 4-byte bitmap is too short.
+    std::vector<unsigned char> short_bitmap(4, 0xFF);
+    auto decoded = MuSig2OracleAggregator::DecodeBitmap(short_bitmap, /*total_oracles=*/35);
     BOOST_CHECK_MESSAGE(decoded.empty(),
         "Bitmap shorter than ceil(active_count/8) must be rejected");
 }
 
 BOOST_AUTO_TEST_CASE(roster_bitmap_longer_than_expected_rejected)
 {
-    // 21 slots -> 3 bytes. A 4-byte bitmap is too long.
-    std::vector<unsigned char> long_bitmap(4, 0x00);
+    // 35 slots -> 5 bytes. A 6-byte bitmap is too long.
+    std::vector<unsigned char> long_bitmap(6, 0x00);
     long_bitmap[0] = 0xFF;
     long_bitmap[1] = 0x01;
-    auto decoded = MuSig2OracleAggregator::DecodeBitmap(long_bitmap, /*total_oracles=*/21);
+    auto decoded = MuSig2OracleAggregator::DecodeBitmap(long_bitmap, /*total_oracles=*/35);
     BOOST_CHECK_MESSAGE(decoded.empty(),
         "Bitmap longer than ceil(active_count/8) must be rejected");
 }
 
 BOOST_AUTO_TEST_CASE(roster_bitmap_all_zero_rejected)
 {
-    // 21 slots: 3 zero bytes. DecodeBitmap currently returns an empty vector
+    // 35 slots: 5 zero bytes. DecodeBitmap currently returns an empty vector
     // (all bits unset), and HasMuSig2Quorum then rejects below threshold.
-    std::vector<unsigned char> zero_bitmap(3, 0x00);
-    auto decoded = MuSig2OracleAggregator::DecodeBitmap(zero_bitmap, /*total_oracles=*/21);
+    std::vector<unsigned char> zero_bitmap(5, 0x00);
+    auto decoded = MuSig2OracleAggregator::DecodeBitmap(zero_bitmap, /*total_oracles=*/35);
     BOOST_CHECK_MESSAGE(decoded.empty(),
         "All-zero bitmap must decode to no participants");
 
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     bundle.participation_bitmap = zero_bitmap;
     bundle.aggregate_sig.assign(64, 0);
@@ -478,12 +475,12 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_single_participant_rejected)
 {
     // 1-of-active-roster must be below the 7-signature threshold.
     const std::vector<uint8_t> single{0};
-    auto encoded = MuSig2OracleAggregator::EncodeBitmap(single, /*total_oracles=*/24);
+    auto encoded = MuSig2OracleAggregator::EncodeBitmap(single, /*total_oracles=*/35);
     BOOST_CHECK_MESSAGE(encoded.empty(),
         "EncodeBitmap must reject single-participant set under 7-signature quorum");
 
-    std::vector<unsigned char> handcrafted = EncodeBitmapUnchecked(single, 24);
-    Consensus::Params params = MakeQuorumDomainParams(24, 7);
+    std::vector<unsigned char> handcrafted = EncodeBitmapUnchecked(single, 35);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     COracleBundle bundle = MakeBundleSkeleton(GetCurrentEpoch(QD_BLOCK_HEIGHT));
     bundle.participation_bitmap = handcrafted;
     bundle.aggregate_sig.assign(64, 0);
@@ -492,7 +489,7 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_single_participant_rejected)
     BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, QD_BLOCK_HEIGHT, params, error));
     BOOST_CHECK_MESSAGE(error.find("threshold") != std::string::npos ||
                         error.find("decoding") != std::string::npos,
-        "1-of-21 hand-crafted bitmap must hit threshold/decoding error, got: " + error);
+        "1-of-35 hand-crafted bitmap must hit threshold/decoding error, got: " + error);
 }
 
 // ============================================================================
@@ -501,7 +498,7 @@ BOOST_AUTO_TEST_CASE(roster_bitmap_single_participant_rejected)
 
 BOOST_AUTO_TEST_CASE(aggregate_pubkey_changes_when_single_key_rotates)
 {
-    Consensus::Params base = MakeQuorumDomainParams(21, 7);
+    Consensus::Params base = MakeQuorumDomainParams(35, 7);
     Consensus::Params rotated = base;
     // Replace slot 11 (matches RC31 hallvardo rotation) with a fresh derived key.
     auto rotated_secret = EvenYSecretFor("digibyte_qd_rotated_oracle_11");
@@ -621,7 +618,7 @@ BOOST_AUTO_TEST_CASE(cross_network_aggregate_differs_between_regtest_and_mainnet
 
 BOOST_AUTO_TEST_CASE(domain_separation_wrong_payload_epoch_rejected)
 {
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     const int32_t expected_epoch = GetCurrentEpoch(QD_BLOCK_HEIGHT);
     const int32_t wrong_epoch = expected_epoch + 1;
 
@@ -631,7 +628,7 @@ BOOST_AUTO_TEST_CASE(domain_separation_wrong_payload_epoch_rejected)
     // to confirm is that the validator's epoch-binding gate rejects first.
     COracleBundle bundle = MakeBundleSkeleton(wrong_epoch);
     const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6, 7, 8};
-    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/21));
+    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/35));
 
     std::string error;
     BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, QD_BLOCK_HEIGHT, params, error));
@@ -641,14 +638,14 @@ BOOST_AUTO_TEST_CASE(domain_separation_wrong_payload_epoch_rejected)
 
 BOOST_AUTO_TEST_CASE(domain_separation_wrong_block_height_rejected)
 {
-    Consensus::Params params = MakeQuorumDomainParams(21, 7);
+    Consensus::Params params = MakeQuorumDomainParams(35, 7);
     const int32_t expected_epoch = GetCurrentEpoch(QD_BLOCK_HEIGHT);
 
     // Sign for the expected epoch but validate at a different height whose
     // epoch differs. (Find a height that maps to a different epoch.)
     COracleBundle bundle = MakeBundleSkeleton(expected_epoch);
     const std::vector<uint8_t> signers{0, 1, 2, 3, 4, 5, 6, 7, 8};
-    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/21));
+    BOOST_REQUIRE(SignBundleWithQuorumKeys(bundle, signers, /*total_oracles=*/35));
 
     int32_t different_height = QD_BLOCK_HEIGHT;
     while (GetCurrentEpoch(different_height) == expected_epoch) {

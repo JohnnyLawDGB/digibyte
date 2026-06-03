@@ -352,7 +352,7 @@ public:
         consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
         consensus.vOraclePublicKeys.push_back("018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c");  // 20: Camden
         consensus.vOraclePublicKeys.push_back("d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86");  // 21: Twoface123
-        consensus.vOraclePublicKeys.push_back("67011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e");  // 22: LivingTheLife
+        consensus.vOraclePublicKeys.push_back("9241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef");  // 22: LivingTheLife
         consensus.vOraclePublicKeys.push_back("b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d");  // 23: ChozenOne43
 
         LogPrintf("Oracle: Mainnet MuSig2 oracle bundles active at block %d, %d-of-%d quorum\n",
@@ -393,7 +393,7 @@ private:
             {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digidollar.org:12024", true},  // mbah_jambon
             {20, ParsePubKey("03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c"), "oracle21.digidollar.org:12024", true},  // Camden
             {21,  ParsePubKey("03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86"), "oracle22.digidollar.org:12024", true},  // Twoface123
-            {22,  ParsePubKey("0367011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e"), "oracle23.digidollar.org:12024", true},  // LivingTheLife
+            {22,  ParsePubKey("039241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef"), "oracle23.digidollar.org:12024", true},  // LivingTheLife
             {23,  ParsePubKey("03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d"), "oracle24.digidollar.org:12024", true},  // ChozenOne43
 
             // Oracle 24-34: Reserved inactive slots. Replace placeholder metadata
@@ -626,7 +626,7 @@ public:
         consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
         consensus.vOraclePublicKeys.push_back("018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c");  // 20: Camden
         consensus.vOraclePublicKeys.push_back("d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86");  // 21: Twoface123
-        consensus.vOraclePublicKeys.push_back("67011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e");  // 22: LivingTheLife
+        consensus.vOraclePublicKeys.push_back("9241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef");  // 22: LivingTheLife
         consensus.vOraclePublicKeys.push_back("b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d");  // 23: ChozenOne43
         //
         // LOCAL MINI-TESTNET TESTING (disabled; retained for future use).
@@ -780,7 +780,7 @@ private:
             {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digibyte.io:12033", true},  // mbah_jambon
             {20, ParsePubKey("03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c"), "oracle21.digibyte.io:12033", true},  // Camden
             {21, ParsePubKey("03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86"), "oracle22.digibyte.io:12033", true},  // Twoface123
-            {22, ParsePubKey("0367011bf97ad4e865374d33a9a981e584dccf247ee4f50b0a5268751877ce201e"), "oracle23.digibyte.io:12033", true},  // LivingTheLife
+            {22, ParsePubKey("039241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef"), "oracle23.digibyte.io:12033", true},  // LivingTheLife
             {23, ParsePubKey("03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d"), "oracle24.digibyte.io:12033", true},  // ChozenOne43
             {24, ParsePubKey("0277de68daecd823babbb58edb1c8e14d7106e83bb6d6ba7c1c6e0e476c6de5273"), "oracle25.digibyte.io:12033", false},
             {25, ParsePubKey("031b6453892473a467d07372d45eb05abc20316478a8f89a0e74023c3c05a8e1e7"), "oracle26.digibyte.io:12033", false},

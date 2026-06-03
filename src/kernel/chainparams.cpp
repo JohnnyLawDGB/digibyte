@@ -357,6 +357,8 @@ public:
         consensus.vOraclePublicKeys.push_back("926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e");  // 24: ckunchained
         consensus.vOraclePublicKeys.push_back("4103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672");  // 25: JMag
         consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
+        consensus.vOraclePublicKeys.push_back("557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894");  // 27: DennisPitallano
+        consensus.vOraclePublicKeys.push_back("557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894");  // 27: DennisPitallano
         consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
         consensus.vOraclePublicKeys.push_back("4103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672");  // 25: JMag
         consensus.vOraclePublicKeys.push_back("926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e");  // 24: ckunchained
@@ -408,7 +410,7 @@ private:
             {24,  ParsePubKey("03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e"), "oracle25.digidollar.org:12024", true},  // ckunchained
             {25,  ParsePubKey("034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672"), "oracle26.digidollar.org:12024", true},  // JMag
             {26,  ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digidollar.org:12024", true},  // HashedMax
-            {27,  ParsePubKey("03c1dfd96eea8cc2b62785275bca38ac261256e27864cf4f74db1c3bb5d8d08c42"), "oracle28.digidollar.org:12024", false},
+            {27,  ParsePubKey("02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894"), "oracle28.digidollar.org:12024", true},  // DennisPitallano
             {28,  ParsePubKey("02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088b9"), "oracle29.digidollar.org:12024", false},
             {29,  ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "oracle30.digidollar.org:12024", false},
             {30,  ParsePubKey("03c7481c9305df583bf505a7cf9148d6aaaf0bb351d75a945efe57a13c82187480"), "oracle31.digidollar.org:12024", false},
@@ -791,7 +793,7 @@ private:
             {24, ParsePubKey("03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e"), "oracle25.digibyte.io:12033", true},   // ckunchained
             {25, ParsePubKey("034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672"), "oracle26.digibyte.io:12033", true},   // JMag
             {26, ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digibyte.io:12033", true},   // HashedMax
-            {27, ParsePubKey("03c1dfd96eea8cc2b62785275bca38ac261256e27864cf4f74db1c3bb5d8d08c42"), "oracle28.digibyte.io:12033", false},
+            {27, ParsePubKey("02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894"), "oracle28.digibyte.io:12033", true},   // DennisPitallano
             {28, ParsePubKey("02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088b9"), "oracle29.digibyte.io:12033", false},
             {29, ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "oracle30.digibyte.io:12033", false},
             {30, ParsePubKey("03c7481c9305df583bf505a7cf9148d6aaaf0bb351d75a945efe57a13c82187480"), "oracle31.digibyte.io:12033", false},

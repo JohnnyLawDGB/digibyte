@@ -1915,13 +1915,12 @@ There is no longer a "mainnet validation bypass" — mainnet runs the same valid
 | 20 | Camden |
 
 Mainnet and testnet26 `vOracleNodes` slots 21-34 are active RC44 consensus
-metadata and are aligned with `consensus.vOraclePublicKeys`. Slot 28 remains
-the reserved DigiHash placeholder until the final pool operator key is supplied.
-Slot 31 is assigned to Peer2Peer / DigiRoos but remains a placeholder until a
-valid compressed secp256k1 oracle key is supplied; slots 32-34 use the
-submitted 3DogsKanab, LiberatedLark, and Manu_DGB_oracle keys. The local
-mini-testnet mode still keeps a 24-key local-only harness because only slots
-0-23 have deterministic local private keys there.
+metadata and are aligned with `consensus.vOraclePublicKeys`. Slot 28 uses the
+DigiHash Mining Pool key. Slot 31 is assigned to Peer2Peer / DigiRoos but
+remains a placeholder until a valid compressed secp256k1 oracle key is supplied;
+slots 32-34 use the submitted 3DogsKanab, LiberatedLark, and Manu_DGB_oracle
+keys. The local mini-testnet mode still keeps a 24-key local-only harness
+because only slots 0-23 have deterministic local private keys there.
 
 ### 14.4 V1 Validator Helpers (`src/oracle/bundle_manager.cpp`)
 

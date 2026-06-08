@@ -178,8 +178,8 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
         "038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8";
     constexpr const char* DENNISPITALLANO_COMPRESSED =
         "02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894";
-    constexpr const char* DIGIHASH_PLACEHOLDER_COMPRESSED =
-        "02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb";
+    constexpr const char* DIGIHASH_COMPRESSED =
+        "03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef";
     constexpr const char* MEDGBORACLE3452_COMPRESSED =
         "03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
     constexpr const char* DIGIBYTEDAILY_COMPRESSED =
@@ -212,8 +212,8 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
         "8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8";
     constexpr const char* DENNISPITALLANO_XONLY =
         "557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894";
-    constexpr const char* DIGIHASH_PLACEHOLDER_XONLY =
-        "902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb";
+    constexpr const char* DIGIHASH_XONLY =
+        "532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef";
     constexpr const char* MEDGBORACLE3452_XONLY =
         "d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
     constexpr const char* DIGIBYTEDAILY_XONLY =
@@ -243,7 +243,7 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[25], JMAG_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[26], HASHEDMAX_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[27], DENNISPITALLANO_XONLY);
-    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[28], DIGIHASH_PLACEHOLDER_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[28], DIGIHASH_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[29], MEDGBORACLE3452_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[30], DIGIBYTEDAILY_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[31], PEER2PEER_PLACEHOLDER_XONLY);
@@ -289,7 +289,7 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
                       DENNISPITALLANO_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[28].pubkey.data(), nodes[28].pubkey.size())),
-                      DIGIHASH_PLACEHOLDER_COMPRESSED);
+                      DIGIHASH_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[29].pubkey.data(), nodes[29].pubkey.size())),
                       MEDGBORACLE3452_COMPRESSED);

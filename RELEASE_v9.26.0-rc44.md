@@ -2,10 +2,9 @@
 
 RC44 is the DigiDollar release candidate for a full public testnet reset and
 the 35-slot oracle roster. Mainnet and testnet26 now expose 35 active MuSig2
-oracle slots with a 7-signature quorum. Slot 28 remains reserved for DigiHash
-with a placeholder key until the mining pool operator key is supplied, and
-slot 31 remains reserved for Peer2Peer / DigiRoos until a valid compressed
-secp256k1 oracle key is supplied.
+oracle slots with a 7-signature quorum. Slot 28 now uses the DigiHash Mining
+Pool key, and slot 31 remains reserved for Peer2Peer / DigiRoos until a valid
+compressed secp256k1 oracle key is supplied.
 
 ## Testnet26 Reset
 
@@ -54,7 +53,7 @@ New slots added since the previous 24-slot code baseline:
 | 25 | JMag | `034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672` |
 | 26 | HashedMax / HMPool | `038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8` |
 | 27 | DennisPitallano | `02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894` |
-| 28 | DigiHash Mining Pool placeholder | `02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb` |
+| 28 | DigiHash Mining Pool | `03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef` |
 | 29 | Michael E / medgboracle3452 | `03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58` |
 | 30 | Scott K / DigibyteDaily | `03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61` |
 | 31 | Peer2Peer / DigiRoos placeholder | `02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b` |
@@ -65,8 +64,7 @@ New slots added since the previous 24-slot code baseline:
 All oracle operators, miners, seeders, and testnet nodes must run the same RC44
 binary before signing or mining on the new public testnet.
 
-Note: slots 28 and 31 are intentionally reserved with placeholder public keys.
-Replace slot 28 after receiving DigiHash's full compressed public key. Replace
-slot 31 only after receiving a valid compressed secp256k1 key from
-Peer2Peer / DigiRoos; the previously submitted value is not a valid compressed
-secp256k1 public key and is not used in consensus.
+Note: slot 31 is intentionally reserved with a placeholder public key. Replace
+slot 31 only after receiving a valid compressed secp256k1 key from Peer2Peer /
+DigiRoos; the previously submitted value is not a valid compressed secp256k1
+public key and is not used in consensus.

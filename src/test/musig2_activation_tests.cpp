@@ -184,14 +184,14 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
         "03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
     constexpr const char* DIGIBYTEDAILY_COMPRESSED =
         "03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61";
-    constexpr const char* DIGIROOS_COMPRESSED =
+    constexpr const char* PEER2PEER_PLACEHOLDER_COMPRESSED =
         "02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b";
-    constexpr const char* ORACLE32_PLACEHOLDER_COMPRESSED =
-        "03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7";
-    constexpr const char* ORACLE33_PLACEHOLDER_COMPRESSED =
-        "02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc";
-    constexpr const char* ORACLE34_PLACEHOLDER_COMPRESSED =
-        "03b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a";
+    constexpr const char* THREEDOGSKANAB_COMPRESSED =
+        "035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8";
+    constexpr const char* LIBERATEDLARK_COMPRESSED =
+        "035b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0";
+    constexpr const char* MANU_DGB_ORACLE_COMPRESSED =
+        "03d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87";
     constexpr const char* ANTHONY_XONLY =
         "45f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89";
     constexpr const char* MBAH_JAMBON_XONLY =
@@ -218,14 +218,14 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
         "d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
     constexpr const char* DIGIBYTEDAILY_XONLY =
         "603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61";
-    constexpr const char* DIGIROOS_XONLY =
+    constexpr const char* PEER2PEER_PLACEHOLDER_XONLY =
         "e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b";
-    constexpr const char* ORACLE32_PLACEHOLDER_XONLY =
-        "efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7";
-    constexpr const char* ORACLE33_PLACEHOLDER_XONLY =
-        "e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc";
-    constexpr const char* ORACLE34_PLACEHOLDER_XONLY =
-        "b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a";
+    constexpr const char* THREEDOGSKANAB_XONLY =
+        "5878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8";
+    constexpr const char* LIBERATEDLARK_XONLY =
+        "5b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0";
+    constexpr const char* MANU_DGB_ORACLE_XONLY =
+        "d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87";
 
     BOOST_REQUIRE_EQUAL(params.nOraclePubkeyCount, 35);
     BOOST_REQUIRE_EQUAL(params.nOracleConsensusRequired, 7);
@@ -246,10 +246,10 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[28], DIGIHASH_PLACEHOLDER_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[29], MEDGBORACLE3452_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[30], DIGIBYTEDAILY_XONLY);
-    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[31], DIGIROOS_XONLY);
-    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[32], ORACLE32_PLACEHOLDER_XONLY);
-    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[33], ORACLE33_PLACEHOLDER_XONLY);
-    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[34], ORACLE34_PLACEHOLDER_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[31], PEER2PEER_PLACEHOLDER_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[32], THREEDOGSKANAB_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[33], LIBERATEDLARK_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[34], MANU_DGB_ORACLE_XONLY);
     for (uint32_t slot = 17; slot <= 34; ++slot) {
         BOOST_CHECK_EQUAL(nodes[slot].id, slot);
         BOOST_CHECK(nodes[slot].is_active);
@@ -298,16 +298,16 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
                       DIGIBYTEDAILY_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[31].pubkey.data(), nodes[31].pubkey.size())),
-                      DIGIROOS_COMPRESSED);
+                      PEER2PEER_PLACEHOLDER_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[32].pubkey.data(), nodes[32].pubkey.size())),
-                      ORACLE32_PLACEHOLDER_COMPRESSED);
+                      THREEDOGSKANAB_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[33].pubkey.data(), nodes[33].pubkey.size())),
-                      ORACLE33_PLACEHOLDER_COMPRESSED);
+                      LIBERATEDLARK_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[34].pubkey.data(), nodes[34].pubkey.size())),
-                      ORACLE34_PLACEHOLDER_COMPRESSED);
+                      MANU_DGB_ORACLE_COMPRESSED);
 }
 
 // ============================================================================

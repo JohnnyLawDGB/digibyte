@@ -224,8 +224,8 @@ namespace {
             "mbah_jambon", "Camden", "Twoface123", "LivingTheLife",
             "ChozenOne43", "ckunchained", "JMag", "HashedMax",
             "DennisPitallano", "DigiHash Mining Pool", "medgboracle3452",
-            "DigibyteDaily", "Oracle31-Peer2Peer", "Oracle32 Placeholder",
-            "Oracle33 Placeholder", "Oracle34 Placeholder"
+            "DigibyteDaily", "Peer2Peer", "3DogsKanab",
+            "LiberatedLark", "Manu_DGB_oracle"
         };
         return names;
     }

@@ -2,8 +2,10 @@
 
 RC44 is the DigiDollar release candidate for a full public testnet reset and
 the 35-slot oracle roster. Mainnet and testnet26 now expose 35 active MuSig2
-oracle slots with a 7-signature quorum. Slots without final operator keys use
-placeholder pubkeys so the full roster shape can be tested before launch.
+oracle slots with a 7-signature quorum. Slot 28 remains reserved for DigiHash
+with a placeholder key until the mining pool operator key is supplied, and
+slot 31 remains reserved for Peer2Peer / DigiRoos until a valid compressed
+secp256k1 oracle key is supplied.
 
 ## Testnet26 Reset
 
@@ -55,15 +57,16 @@ New slots added since the previous 24-slot code baseline:
 | 28 | DigiHash Mining Pool placeholder | `02902ba3cda1883801594b6e1b452790cc53948fda6c45e47c74e0fb4e8a8088bb` |
 | 29 | Michael E / medgboracle3452 | `03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58` |
 | 30 | Scott K / DigibyteDaily | `03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61` |
-| 31 | DigiRoos / Oracle31-Peer2Peer placeholder pending corrected key | `02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b` |
-| 32 | Oracle32 placeholder | `03efb70f482f919cc3abd8929b0f584736f88068e611724228f148a2fde7df5bd7` |
-| 33 | Oracle33 placeholder | `02e5cba4a02116ae376a38fb71e759095e6f169a5328868530d18035522af076bc` |
-| 34 | Oracle34 placeholder | `03b66508e1ec994f2451314d7a8c517a0da8ba9f9b9e93491a9470a5065a0bcc3a` |
+| 31 | Peer2Peer / DigiRoos placeholder | `02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b` |
+| 32 | 3DogsKanab | `035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8` |
+| 33 | LiberatedLark | `035b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0` |
+| 34 | Manu_DGB_oracle | `03d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87` |
 
 All oracle operators, miners, seeders, and testnet nodes must run the same RC44
 binary before signing or mining on the new public testnet.
 
-Note: DigiRoos / Oracle31-Peer2Peer is assigned in the roster, but the latest
-submitted key string was odd-length hex and is not shipped as a consensus key.
-Replace slot 31's placeholder only after receiving a corrected full compressed
-public key.
+Note: slots 28 and 31 are intentionally reserved with placeholder public keys.
+Replace slot 28 after receiving DigiHash's full compressed public key. Replace
+slot 31 only after receiving a valid compressed secp256k1 key from
+Peer2Peer / DigiRoos; the previously submitted value is not a valid compressed
+secp256k1 public key and is not used in consensus.

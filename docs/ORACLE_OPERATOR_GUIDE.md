@@ -230,8 +230,8 @@ Then recompile and distribute the updated binary.
 
 | Network | Total Slots | Active (in MuSig2 quorum) | Consensus | Notes |
 |---------|------------|---------------------------|-----------|-------|
-| Mainnet | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Tail placeholders are consensus-active until replaced by a future chainparams release. |
-| Testnet (testnet26) | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | Active from height 600. Tail placeholders are consensus-active until replaced by a future chainparams release. |
+| Mainnet | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Slots 28 and 31 are reserved placeholders until valid DigiHash and Peer2Peer / DigiRoos keys are supplied. |
+| Testnet (testnet26) | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | Active from height 600. Slots 28 and 31 are reserved placeholders until valid DigiHash and Peer2Peer / DigiRoos keys are supplied. |
 | Regtest | 7 (IDs 0–6) | 7 | 4-of-7 MuSig2 | Always active. |
 
 To confirm a slot is in the active quorum at runtime, call

@@ -29,9 +29,11 @@ mined, relayed as fallback, or used to update the price cache in V1.
 | Regtest | 7 | 7, slots 0-6 | 4-of-7 |
 
 Mainnet and testnet slots 0-34 are in `consensus.vOraclePublicKeys` and
-`vOracleNodes`. Some tail slots use placeholder pubkeys until final operator
-keys are available, but the RC44 consensus surface validates the full 35-slot
-shape. Slot 35 is outside the configured roster.
+`vOracleNodes`. Slot 28 is reserved for DigiHash with a placeholder pubkey
+until the final pool operator key is supplied. Slot 31 is assigned to
+Peer2Peer / DigiRoos but remains a placeholder until a valid compressed
+secp256k1 oracle key is supplied; slots 32-34 use final submitted operator
+keys. Slot 35 is outside the configured roster.
 
 ## Operator Flow
 

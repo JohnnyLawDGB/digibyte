@@ -172,9 +172,10 @@ Enhanced privacy using P2TR outputs and Schnorr signatures
 #### Decentralized Oracles
 Mainnet/testnet: 35 active oracle slots (0-34). The active keyset uses MuSig2
 BIP-327 threshold consensus and requires 7 BIP-340 Schnorr signatures. Slot 28
-uses the DigiHash Mining Pool key, and slot 31 remains a Peer2Peer / DigiRoos
-placeholder pending a valid compressed secp256k1 oracle key. Regtest remains
-4-of-7 for local testing. Oracle prices are reported in micro-USD format
+uses the DigiHash Mining Pool key, slot 31 uses the Peer2Peer / DigiRoos key,
+and all 35 configured slots contain valid compressed secp256k1 oracle keys.
+Regtest remains 4-of-7 for local testing. Oracle prices are reported in
+micro-USD format
 (1,000,000 = $1.00). `primitives/oracle.h` now declares header defaults
 `ORACLE_TOTAL_COUNT=35`, `ORACLE_ACTIVE_COUNT=35`, and
 `ORACLE_CONSENSUS_REQUIRED=7`; per-network chainparams values such as

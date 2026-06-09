@@ -326,8 +326,7 @@ public:
         consensus.nOracleConsensusRequired = 7;
 
         // Oracle public keys (x-only, 32 bytes) — ordered by active oracle slot (0-34).
-        // Slot 31 remains a placeholder until a valid operator key is supplied
-        // and replaced through a coordinated release.
+        // All 35 RC44 operator keys are configured for the launch roster.
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
@@ -361,7 +360,7 @@ public:
         consensus.vOraclePublicKeys.push_back("532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef");  // 28: DigiHash Mining Pool
         consensus.vOraclePublicKeys.push_back("d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58");  // 29: Michael E / medgboracle3452
         consensus.vOraclePublicKeys.push_back("603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61");  // 30: Scott K / DigibyteDaily
-        consensus.vOraclePublicKeys.push_back("e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b");  // 31: Peer2Peer / DigiRoos placeholder
+        consensus.vOraclePublicKeys.push_back("e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba");  // 31: Peer2Peer / DigiRoos
         consensus.vOraclePublicKeys.push_back("5878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8");  // 32: 3DogsKanab
         consensus.vOraclePublicKeys.push_back("5b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0");  // 33: LiberatedLark
         consensus.vOraclePublicKeys.push_back("d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87");  // 34: Manu_DGB_oracle
@@ -414,7 +413,7 @@ private:
             {28,  ParsePubKey("03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef"), "oracle29.digidollar.org:12024", true},   // DigiHash Mining Pool
             {29,  ParsePubKey("03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58"), "oracle30.digidollar.org:12024", true},   // Michael E / medgboracle3452
             {30,  ParsePubKey("03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61"), "oracle31.digidollar.org:12024", true},   // Scott K / DigibyteDaily
-            {31,  ParsePubKey("02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b"), "oracle32.digidollar.org:12024", true},   // Peer2Peer / DigiRoos placeholder
+            {31,  ParsePubKey("02e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba"), "oracle32.digidollar.org:12024", true},   // Peer2Peer / DigiRoos
             {32,  ParsePubKey("035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8"), "oracle33.digidollar.org:12024", true},   // 3DogsKanab
             {33,  ParsePubKey("035b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0"), "oracle34.digidollar.org:12024", true},   // LiberatedLark
             {34,  ParsePubKey("03d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87"), "oracle35.digidollar.org:12024", true}    // Manu_DGB_oracle
@@ -610,7 +609,7 @@ public:
         // for deterministic MuSig2 key aggregation.
         //
         // Production testnet oracle public keys:
-        // 34 assigned operators plus the Peer2Peer / DigiRoos placeholder in slot 31.
+        // 35 assigned operators for the RC44 launch roster.
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
         consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
@@ -643,7 +642,7 @@ public:
         consensus.vOraclePublicKeys.push_back("532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef");  // 28: DigiHash Mining Pool
         consensus.vOraclePublicKeys.push_back("d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58");  // 29: Michael E / medgboracle3452
         consensus.vOraclePublicKeys.push_back("603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61");  // 30: Scott K / DigibyteDaily
-        consensus.vOraclePublicKeys.push_back("e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b");  // 31: Peer2Peer / DigiRoos placeholder
+        consensus.vOraclePublicKeys.push_back("e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba");  // 31: Peer2Peer / DigiRoos
         consensus.vOraclePublicKeys.push_back("5878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8");  // 32: 3DogsKanab
         consensus.vOraclePublicKeys.push_back("5b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0");  // 33: LiberatedLark
         consensus.vOraclePublicKeys.push_back("d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87");  // 34: Manu_DGB_oracle
@@ -759,7 +758,7 @@ private:
             {28, ParsePubKey("03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef"), "localhost:9029", false},
             {29, ParsePubKey("03fe5dbbcea5ce7e2988b8c69bcfdfde8904aabc1f79c7b2bf6cd5dbec0d93c26c"), "localhost:9030", false},
             {30, ParsePubKey("03c7481c9305df583bf505a7cf9148d6aaaf0bb351d75a945efe57a13c82187480"), "localhost:9031", false},
-            {31, ParsePubKey("02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b"), "localhost:9032", false},
+            {31, ParsePubKey("02e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba"), "localhost:9032", false},
             {32, ParsePubKey("035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8"), "localhost:9033", false},
             {33, ParsePubKey("035b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0"), "localhost:9034", false},
             {34, ParsePubKey("03d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87"), "localhost:9035", false},
@@ -773,7 +772,7 @@ private:
 
     void InitializeOracleNodes() {
         // DigiDollar Oracle Nodes - Testnet
-        // 35 active oracle keys/placeholders for the RC44 roster.
+        // 35 active oracle keys for the RC44 roster.
         //
         // Production testnet oracle nodes.
         vOracleNodes = {
@@ -808,7 +807,7 @@ private:
             {28, ParsePubKey("03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef"), "oracle29.digibyte.io:12033", true},   // DigiHash Mining Pool
             {29, ParsePubKey("03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58"), "85.239.234.52:12033", true},           // Michael E / medgboracle3452
             {30, ParsePubKey("03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61"), "oracle31.digibyte.io:12033", true},   // Scott K / DigibyteDaily
-            {31, ParsePubKey("02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b"), "oracle32.digibyte.io:12033", true},   // Peer2Peer / DigiRoos placeholder
+            {31, ParsePubKey("02e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba"), "oracle32.digibyte.io:12033", true},   // Peer2Peer / DigiRoos
             {32, ParsePubKey("035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8"), "oracle33.digibyte.io:12033", true},   // 3DogsKanab
             {33, ParsePubKey("035b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0"), "oracle34.digibyte.io:12033", true},   // LiberatedLark
             {34, ParsePubKey("03d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87"), "oracle35.digibyte.io:12033", true},   // Manu_DGB_oracle

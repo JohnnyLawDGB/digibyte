@@ -233,9 +233,9 @@ removed / paid API key required).
 Values verified against `src/kernel/chainparams.cpp`. Mainnet and testnet have
 35 `vOracleNodes` metadata entries and slots 0-34 are in
 `consensus.vOraclePublicKeys` for the current RC44 V1 quorum. Slot 28 uses
-the DigiHash Mining Pool key, and slot 31 remains a Peer2Peer / DigiRoos
-placeholder pending a valid compressed secp256k1 oracle key. Regtest has 7
-active slots.
+the DigiHash Mining Pool key, slot 31 uses the Peer2Peer / DigiRoos key, and
+all 35 configured slots contain valid compressed secp256k1 oracle keys. Regtest
+has 7 active slots.
 The active oracle pubkey count (`nOraclePubkeyCount`)
 and consensus threshold
 (`nOracleConsensusRequired`) are configured per-network in

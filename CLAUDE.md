@@ -83,9 +83,9 @@ These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VER
 | Regtest | 7 | 7 | 4-of-7 |
 
 Slots 0-34 on mainnet and testnet are active. Slot 28 uses the DigiHash Mining
-Pool key, and slot 31 remains a Peer2Peer / DigiRoos placeholder pending a
-valid compressed secp256k1 oracle key. ID 35 is outside the configured roster
-and must be rejected by RPC/P2P/bitmap bounds checks.
+Pool key, slot 31 uses the Peer2Peer / DigiRoos key, and all 35 configured
+slots contain valid compressed secp256k1 oracle keys. ID 35 is outside the
+configured roster and must be rejected by RPC/P2P/bitmap bounds checks.
 
 `src/primitives/oracle.h:19-21` declares header defaults `ORACLE_CONSENSUS_REQUIRED=7`, `ORACLE_ACTIVE_COUNT=35`, `ORACLE_TOTAL_COUNT=35`. Chainparams sets `nOracleConsensusRequired`, `nOraclePubkeyCount`, and `nOracleTotalOracles` per network at startup, so those chainparams values are what the validator and MuSig2 aggregator use.
 

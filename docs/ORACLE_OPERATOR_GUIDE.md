@@ -230,8 +230,8 @@ Then recompile and distribute the updated binary.
 
 | Network | Total Slots | Active (in MuSig2 quorum) | Consensus | Notes |
 |---------|------------|---------------------------|-----------|-------|
-| Mainnet | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Slot 28 uses the DigiHash Mining Pool key; slot 31 remains a Peer2Peer / DigiRoos placeholder until a valid key is supplied. |
-| Testnet (testnet26) | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | Active from height 600. Slot 28 uses the DigiHash Mining Pool key; slot 31 remains a Peer2Peer / DigiRoos placeholder until a valid key is supplied. |
+| Mainnet | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | DigiDollar/MuSig2 activates at BIP9 min height 23,627,520. Slot 28 uses the DigiHash Mining Pool key; slot 31 uses the Peer2Peer / DigiRoos key. |
+| Testnet (testnet26) | 35 (IDs 0-34) | 35 (slots 0-34) | 7 signatures from active keyset | Active from height 600. Slot 28 uses the DigiHash Mining Pool key; slot 31 uses the Peer2Peer / DigiRoos key. |
 | Regtest | 7 (IDs 0–6) | 7 | 4-of-7 MuSig2 | Always active. |
 
 To confirm a slot is in the active quorum at runtime, call

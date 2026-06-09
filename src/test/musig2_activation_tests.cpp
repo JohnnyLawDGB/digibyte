@@ -184,8 +184,8 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
         "03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
     constexpr const char* DIGIBYTEDAILY_COMPRESSED =
         "03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61";
-    constexpr const char* PEER2PEER_PLACEHOLDER_COMPRESSED =
-        "02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b";
+    constexpr const char* PEER2PEER_COMPRESSED =
+        "02e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba";
     constexpr const char* THREEDOGSKANAB_COMPRESSED =
         "035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8";
     constexpr const char* LIBERATEDLARK_COMPRESSED =
@@ -218,8 +218,8 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
         "d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58";
     constexpr const char* DIGIBYTEDAILY_XONLY =
         "603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61";
-    constexpr const char* PEER2PEER_PLACEHOLDER_XONLY =
-        "e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b";
+    constexpr const char* PEER2PEER_XONLY =
+        "e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba";
     constexpr const char* THREEDOGSKANAB_XONLY =
         "5878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8";
     constexpr const char* LIBERATEDLARK_XONLY =
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[28], DIGIHASH_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[29], MEDGBORACLE3452_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[30], DIGIBYTEDAILY_XONLY);
-    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[31], PEER2PEER_PLACEHOLDER_XONLY);
+    BOOST_CHECK_EQUAL(params.vOraclePublicKeys[31], PEER2PEER_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[32], THREEDOGSKANAB_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[33], LIBERATEDLARK_XONLY);
     BOOST_CHECK_EQUAL(params.vOraclePublicKeys[34], MANU_DGB_ORACLE_XONLY);
@@ -298,7 +298,7 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
                       DIGIBYTEDAILY_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[31].pubkey.data(), nodes[31].pubkey.size())),
-                      PEER2PEER_PLACEHOLDER_COMPRESSED);
+                      PEER2PEER_COMPRESSED);
     BOOST_CHECK_EQUAL(HexStr(Span<const unsigned char>(
                               nodes[32].pubkey.data(), nodes[32].pubkey.size())),
                       THREEDOGSKANAB_COMPRESSED);

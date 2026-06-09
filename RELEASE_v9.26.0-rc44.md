@@ -3,8 +3,8 @@
 RC44 is the DigiDollar release candidate for a full public testnet reset and
 the 35-slot oracle roster. Mainnet and testnet26 now expose 35 active MuSig2
 oracle slots with a 7-signature quorum. Slot 28 now uses the DigiHash Mining
-Pool key, and slot 31 remains reserved for Peer2Peer / DigiRoos until a valid
-compressed secp256k1 oracle key is supplied.
+Pool key, slot 31 uses the Peer2Peer / DigiRoos key, and all 35 configured
+slots contain valid compressed secp256k1 oracle keys.
 
 ## Testnet26 Reset
 
@@ -56,15 +56,10 @@ New slots added since the previous 24-slot code baseline:
 | 28 | DigiHash Mining Pool | `03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef` |
 | 29 | Michael E / medgboracle3452 | `03d566a244719aa577d828da31ad9863f94686f710ac1f0638914eff5692ec7d58` |
 | 30 | Scott K / DigibyteDaily | `03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61` |
-| 31 | Peer2Peer / DigiRoos placeholder | `02e30e9349b7afcac60fb1db2997512079b3c8b6942c450f4f942c7d5e69e9a42b` |
+| 31 | Peer2Peer / DigiRoos | `02e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba` |
 | 32 | 3DogsKanab | `035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8` |
 | 33 | LiberatedLark | `035b3729a255bfbcff1bfd5b72fdb1a971b098545db7e874751179bc22c7f7f0b0` |
 | 34 | Manu_DGB_oracle | `03d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87` |
 
 All oracle operators, miners, seeders, and testnet nodes must run the same RC44
 binary before signing or mining on the new public testnet.
-
-Note: slot 31 is intentionally reserved with a placeholder public key. Replace
-slot 31 only after receiving a valid compressed secp256k1 key from Peer2Peer /
-DigiRoos; the previously submitted value is not a valid compressed secp256k1
-public key and is not used in consensus.

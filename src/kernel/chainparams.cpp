@@ -533,12 +533,12 @@ public:
         m_assumed_chain_state_size = 2;
 
         // DigiDollar testnet26 genesis (RC44, 2026) - 7-signature / 35-slot oracle reset
-        const char* pszTimestamp = "DigiDollar Testnet26: RC44 7-of-21 Oracle Reset on DigiByte";
+        const char* pszTimestamp = "DigiDollar Testnet26: RC44 7-of-35 Oracle Reset on DigiByte";
         const CScript genesisOutputScript = CScript() << 0x0 << OP_CHECKSIG;
-        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1780156800, 711761, 0x1e0ffff0, 1, 8000 * COIN);
+        genesis = CreateGenesisBlock(pszTimestamp, genesisOutputScript, 1780156800, 1283721, 0x1e0ffff0, 1, 8000 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x0135174514d831ecc687a15e1ae31164bebf92d58bf279ab929226b8470b1dd3"));
-        assert(genesis.hashMerkleRoot == uint256S("0xcfdf1bf7e7c947c54aab4ec81b963a5b869fa3e6e84db54970d5c224e0f1a170"));
+        assert(consensus.hashGenesisBlock == uint256S("0x0c9af936f28f7bd0e90c8f6235399063a026ed267bb53da398313b5d7aa55d82"));
+        assert(genesis.hashMerkleRoot == uint256S("0x76eca59f6a477206c602b72682a901fe87c48d1a6335ec3d094d5837c508c197"));
 
         vFixedSeeds.clear();
         vSeeds.clear();

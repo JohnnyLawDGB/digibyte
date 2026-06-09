@@ -177,7 +177,7 @@ REQUIRED = {
         "TESTNET_NAME=\"testnet26\"",
         "TESTNET_P2P_PORT=12033",
         "TESTNET_RPC_PORT=14026",
-        "TESTNET_GENESIS_HASH=\"0135174514d831ecc687a15e1ae31164bebf92d58bf279ab929226b8470b1dd3\"",
+        "TESTNET_GENESIS_HASH=\"0c9af936f28f7bd0e90c8f6235399063a026ed267bb53da398313b5d7aa55d82\"",
         "createoraclekey \"$ORACLE_ID\"",
         "install -d -m 700 \"$DATA_DIR\"",
         "chmod 600 \"$CONFIG_FILE\"",

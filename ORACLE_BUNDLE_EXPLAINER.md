@@ -782,7 +782,7 @@ The bundle only becomes useful when enough independent oracle keys signed the sa
 
 ## What RC38 Hardens
 
-RC38 kept the on-chain v0x03 format and the then-current 9-of-17 V1 model. Current RC44 chainparams use 7-of-21 on mainnet/testnet. The RC38 hardening still matters because it made the off-chain signing path converge after restarts, timing drift, partial outages, and mixed message arrival order.
+RC38 kept the on-chain v0x03 format and the then-current 9-of-17 V1 model. Current RC44 chainparams use 7-of-35 on mainnet/testnet. The RC38 hardening still matters because it made the off-chain signing path converge after restarts, timing drift, partial outages, and mixed message arrival order.
 
 ### Problem
 

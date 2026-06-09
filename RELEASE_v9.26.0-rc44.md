@@ -20,9 +20,9 @@ before wiping old data, then start clean on `testnet26`.
 | Testnet name | `testnet26` |
 | Data directory | `testnet26` |
 | Genesis timestamp | `1780156800` (2026-05-30 16:00:00 UTC) |
-| Genesis hash | `0x0135174514d831ecc687a15e1ae31164bebf92d58bf279ab929226b8470b1dd3` |
-| Merkle root | `0xcfdf1bf7e7c947c54aab4ec81b963a5b869fa3e6e84db54970d5c224e0f1a170` |
-| Genesis nonce | `711761` |
+| Genesis hash | `0x0c9af936f28f7bd0e90c8f6235399063a026ed267bb53da398313b5d7aa55d82` |
+| Merkle root | `0x76eca59f6a477206c602b72682a901fe87c48d1a6335ec3d094d5837c508c197` |
+| Genesis nonce | `1283721` |
 | Network magic | `fe c6 b9 e7` |
 | Default P2P port | `12033` |
 | RPC port | `14026` |
@@ -45,10 +45,13 @@ Mainnet and testnet26 now use 35 active oracle slots and require 7 valid MuSig2
 signatures per oracle bundle. Active oracle IDs are `0` through `34`; ID `35`
 is outside the configured roster and must be rejected.
 
-New slots added since the previous 24-slot code baseline:
+New slots added since the RC43 active roster:
 
 | Slot | Operator | Compressed public key |
 |------|----------|-----------------------|
+| 21 | Twoface123 | `03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86` |
+| 22 | LivingTheLife | `039241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef` |
+| 23 | ChozenOne43 | `03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d` |
 | 24 | ckunchained | `03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e` |
 | 25 | JMag | `034103ed4168d11dcaafa96494d5b3dd37247fa6deefa08d47f7004568792b1672` |
 | 26 | HashedMax / HMPool | `038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8` |
@@ -63,3 +66,51 @@ New slots added since the previous 24-slot code baseline:
 
 All oracle operators, miners, seeders, and testnet nodes must run the same RC44
 binary before signing or mining on the new public testnet.
+
+## Changes Since RC43
+
+RC44 carries forward the RC43 wallet-state stabilization work and adds the
+release reset and final oracle launch roster:
+
+- New `testnet26` chain with new network magic, genesis block, P2P port `12033`,
+  and a clean data directory.
+- Mainnet and testnet26 oracle consensus expanded from the RC43 active set to
+  35 active oracle slots with a 7-signature MuSig2 quorum.
+- Added final oracle slots 21-34, including DigiHash Mining Pool at slot 28 and
+  Peer2Peer / DigiRoos at slot 31.
+- Added `getoraclesigners` to decode MuSig2 bundle signer IDs and participation
+  details from oracle bundles.
+- Hardened oracle P2P activation gating so oracle relay, heartbeat relay, and
+  DigiDollar state-changing actions require the correct DigiDollar activation
+  state.
+- Hardened MuSig2 relay against stale, far-future, negative, and epoch-zero
+  edge cases.
+- Fixed stale oracle-bearing `getblocktemplate` cache reuse so miners rebuild
+  templates when oracle commitments expire.
+- Improved wallet DigiDollar UTXO tracking, redeem pending-state handling,
+  redeem change history, stale redemption reconciliation, collateral outpoint
+  resolution, restored wallet key visibility before `startoracle`, and rapid DD
+  send safety.
+- Updated operator scripts for testnet26, port `12033`, RPC `14026`, genesis
+  validation, wallet-key startup, datadir stop behavior, and stricter RPC
+  credential-file permissions.
+- Cleaned stale operator documentation and scripts for private-key CLI
+  assumptions, retired `getoracleinfo` references, retired testnet/port values,
+  and older 17/21/24-oracle wording.
+- Polished Qt DigiDollar surfaces for QR save failure handling, cross-network DD
+  receive-request filtering, clearer transfer finality copy, volatility mint
+  rejection handling, pending redeem display, and system-health polling.
+
+## Validation
+
+RC44 was validated after regenerating the final testnet26 genesis parameters
+for the 7-of-35 oracle reset:
+
+- `digibyted`, `digibyte-cli`, `digibyte-wallet`, and `test/test_digibyte`
+  release build targets.
+- Focused oracle tests covering MuSig2 activation, oracle RPC, roster alignment,
+  and oracle config.
+- Full unit suite: 3396 Boost test cases.
+- DigiDollar operator-surface lint and `git diff --check`.
+- Full functional suite: 375/375 passed with expected environment/unsupported
+  skips.

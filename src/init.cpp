@@ -2199,14 +2199,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // DigiDollar is active at the tip.
     DigiDollar::SystemHealthMonitor::ReconstructFromChain(chainman);
 
-    // Register the oracle consensus price hook used by OP_CHECKPRICE in
-    // the script interpreter. Delegates to the live OracleBundleManager
-    // cached_price (updated deterministically in ConnectBlock before DD
-    // transaction validation runs). The standalone libdigibyteconsensus.so
-    // build never reaches this line; OP_CHECKPRICE there fails closed.
-    g_get_oracle_consensus_price = []() -> CAmount {
-        return OracleBundleManager::GetInstance().GetLatestPrice();
-    };
+    // DD-FINAL-005 / AR-0: OP_CHECKPRICE is deterministically DISABLED (it now
+    // consumes its witness operand and always pushes vchFalse). The interpreter no
+    // longer consults g_get_oracle_consensus_price, so the production hook is left
+    // null here intentionally — wiring it to OracleBundleManager::GetLatestPrice()
+    // was node-local + wall-clock dependent and is exactly the cross-node
+    // non-determinism (chain-split) that DD-FINAL-005 removed. The hook symbol
+    // remains only for unit tests, which install their own scoped hook. A future
+    // price-checking opcode must bind to the block's own committed v0x03 bundle
+    // price to be consensus-safe.
 
     // ********************************************************* Step 13: finished
 

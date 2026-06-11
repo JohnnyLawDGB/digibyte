@@ -281,6 +281,7 @@ BASE_SCRIPTS = [
     'digidollar_stats_reordered_mint.py',
     'digidollar_redemption_amounts.py',
     'digidollar_protection.py',
+    'digidollar_health_restart_consensus.py',
     'digidollar_activation.py',
     'digidollar_basic.py',
     'digidollar_tx_amounts_debug.py',

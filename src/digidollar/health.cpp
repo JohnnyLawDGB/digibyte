@@ -18,10 +18,13 @@
 #include <coins.h>
 #include <core_io.h>
 #include <logging.h>
+#include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/transaction.h>
+#include <sync.h>
 #include <txmempool.h>
 #include <util/time.h>
+#include <validation.h>
 
 #include <limits>
 #include <util/moneystr.h>
@@ -446,6 +449,47 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
     LogPrintf("DigiDollar: Found %zu vaults, Total Collateral: %s DGB, Total DD: %s cents\n",
              vaults_found, FormatMoney(s_currentMetrics.totalCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply));
+}
+
+void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
+{
+    // DD-FINAL-003 / AR-CONSENSUS-1: seed the cached system-health metrics from
+    // the on-chain UTXO set at startup so consensus DCA/ERR health is identical
+    // on every node regardless of restart history. Mirrors the oracle price-cache
+    // reconstruction (OracleBundleManager::LoadPricesFromChain) called alongside
+    // this at node init.
+    // During a reindex / reindex-chainstate the node replays every block, so the
+    // incremental OnMint/OnRedeemConnected hooks rebuild the metrics on their own;
+    // a startup scan would be redundant. Skipping it also avoids touching the
+    // CoinsDB while the block files may be read-only mid-reindex.
+    if (node::fReindex) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Health: skipping startup reconstruction during reindex (block replay rebuilds metrics)\n");
+        return;
+    }
+    const CBlockIndex* tip = WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip());
+    if (tip == nullptr) {
+        return;
+    }
+    // Skip the (potentially expensive) full UTXO scan unless DigiDollar is active
+    // at the current tip — pre-activation and non-DD chains have no DD vaults.
+    if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Health: skipping startup reconstruction (DigiDollar not active at tip)\n");
+        return;
+    }
+
+    // Read-only pass: after chainstate load the coins cache is clean, so CoinsDB
+    // already holds the full UTXO set at the tip. We intentionally do NOT flush
+    // (no writes) so this is safe even on a read-only datadir.
+    Chainstate& active = chainman.ActiveChainstate();
+    {
+        LOCK(::cs_main);
+        ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr);
+    }
+    const SystemMetrics m = GetCachedMetrics();
+    LogPrintf("DigiDollar: startup health reconstruction complete - DD supply %s, collateral %s DGB\n",
+              FormatMoney(m.totalDDSupply), FormatMoney(m.totalCollateral));
 }
 
 // ============================================================================

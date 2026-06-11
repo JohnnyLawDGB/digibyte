@@ -19,6 +19,7 @@
 // Forward declarations
 class CCoinsView;
 class CTxMemPool;
+class ChainstateManager;
 
 namespace node {
     class BlockManager;
@@ -170,6 +171,25 @@ public:
      * @param mempool Optional mempool for checking recent transactions
      */
     static void ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr);
+
+    /**
+     * Reconstruct the cached system-health metrics (total DD supply + total
+     * collateral) from the on-chain UTXO set at node startup.
+     *
+     * CONSENSUS-CRITICAL (DD-FINAL-003 / AR-CONSENSUS-1): GetSystemCollateralRatio()
+     * and ResolveCanonicalHealth() read these cached metrics, which otherwise are
+     * only accumulated incrementally while the process runs. Without this startup
+     * reconstruction a restarted node sees totalDDSupply==0 and treats the system
+     * as maximally healthy (300%), diverging from a continuously-running node on
+     * DCA collateral requirements and ERR minting blocks -> chain split. This makes
+     * the cached metrics a deterministic function of chain state at the loaded tip,
+     * identical on every node regardless of restart history.
+     *
+     * No-op when DigiDollar is not active at the current tip (avoids an expensive
+     * full UTXO scan before activation and on non-DD chains).
+     * @param chainman Active chainstate manager (after chainstate load)
+     */
+    static void ReconstructFromChain(ChainstateManager& chainman);
 
     /**
      * Get cached metrics without triggering updates

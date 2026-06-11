@@ -57,6 +57,7 @@
 #include <node/mempool_args.h>
 #include <node/mempool_persist_args.h>
 #include <node/miner.h>
+#include <digidollar/health.h>
 #include <node/peerman_args.h>
 #include <node/ui_interface.h>
 #include <node/validation_cache_args.h>
@@ -2192,6 +2193,11 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     OracleBundleManager::GetInstance().SetConnman(node.connman.get());
     // Load oracle prices from blockchain (must be after chainstate is loaded)
     OracleBundleManager::LoadPricesFromChain(chainman);
+    // DD-FINAL-003 / AR-CONSENSUS-1: reconstruct cached system-health metrics
+    // (total DD supply + collateral) from the on-chain UTXO set so consensus
+    // DCA/ERR health does not depend on process restart history. No-op until
+    // DigiDollar is active at the tip.
+    DigiDollar::SystemHealthMonitor::ReconstructFromChain(chainman);
 
     // Register the oracle consensus price hook used by OP_CHECKPRICE in
     // the script interpreter. Delegates to the live OracleBundleManager

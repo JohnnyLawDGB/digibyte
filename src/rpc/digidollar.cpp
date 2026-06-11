@@ -1707,10 +1707,12 @@ RPCHelpMan senddigidollar()
     return RPCHelpMan{"senddigidollar",
                 "\nSend DigiDollar to another DigiDollar address.\n"
                 "Creates a transaction that transfers DigiDollar from your wallet to the specified address.\n"
+                "Amounts may be integer cents (for example 10000 = $100.00) or decimal dollars (for example 100.00 = $100.00).\n"
+                "A value written with a decimal point is always interpreted as dollars, so 10000.00 means $10,000.00, not $100.00.\n"
                 "This is the primary RPC command for Phase 7.7 - DD transfers via API.\n",
                 {
                     {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "DigiDollar address to send to (DD/TD/RD prefix)"},
-                    {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount to send (in USD cents, e.g., 10000 = $100.00)", RPCArgOptions{.skip_type_check = true}},
+                    {"amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "Amount to send: integer cents (e.g. 10000 = $100.00) OR decimal dollars (e.g. 100.00 = $100.00). A decimal point means dollars, so 10000.00 = $10,000.00.", RPCArgOptions{.skip_type_check = true}},
                     {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Optional comment for the transaction"},
                     {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "Deprecated compatibility argument; ignored because DigiDollar sends use the fixed DD fee policy", RPCArgOptions{.skip_type_check = true}},
                     {"selected_inputs", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "Optional DigiDollar inputs to spend, matching listdigidollarunspent output",

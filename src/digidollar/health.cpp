@@ -479,10 +479,14 @@ void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
         return;
     }
 
-    // Read-only pass: after chainstate load the coins cache is clean, so CoinsDB
-    // already holds the full UTXO set at the tip. We intentionally do NOT flush
-    // (no writes) so this is safe even on a read-only datadir.
+    // Flush the in-memory coins cache to disk so the CoinsDB cursor below sees
+    // every UTXO — matching the getdigidollarstats scan path. On an unclean restart
+    // or -loadblock the background importer may connect blocks whose coins are not
+    // yet flushed; without this the seed could undercount and (after DD-FINAL-004,
+    // which recomputes health from the seeded supply/collateral) diverge between
+    // nodes. The reindex path returned above, so by here the datadir is writable.
     Chainstate& active = chainman.ActiveChainstate();
+    active.ForceFlushStateToDisk();
     {
         LOCK(::cs_main);
         ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr);

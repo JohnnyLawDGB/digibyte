@@ -208,7 +208,10 @@ BOOST_AUTO_TEST_CASE(op_checkprice_basic)
     BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
-    BOOST_CHECK(CastToBool(stack.back())); // Should push true for matching price
+    // DD-FINAL-005 / AR-0: OP_CHECKPRICE is now deterministically DISABLED (it consulted a
+    // non-deterministic node-local/wall-clock price and could fork). It consumes the operand
+    // and always pushes FALSE regardless of any oracle price.
+    BOOST_CHECK(!CastToBool(stack.back()));
 }
 
 // Test OP_CHECKPRICE with non-matching price
@@ -351,14 +354,17 @@ BOOST_AUTO_TEST_CASE(complex_digidollar_script)
     CScript script;
     script << OP_DIGIDOLLAR << CScriptNum(100000); // Mark as DD output (pushes true)
     script << OP_DDVERIFY;                          // Verify the DD condition (pops true)
-    script << CScriptNum(100000) << OP_CHECKPRICE; // Check oracle price (pushes true)
+    script << CScriptNum(100000) << OP_CHECKPRICE; // DD-FINAL-005: OP_CHECKPRICE now disabled -> pushes FALSE
     script << CScriptNum(150) << CScriptNum(120) << OP_CHECKCOLLATERAL; // Check collateral (pushes true)
     script << OP_BOOLAND; // Combine last two conditions with AND
 
     BOOST_CHECK(EvalScript(stack, script, SCRIPT_VERIFY_DIGIDOLLAR, checker, SigVersion::TAPSCRIPT, execdata, &error));
     BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
     BOOST_CHECK_EQUAL(stack.size(), 1);
-    BOOST_CHECK(CastToBool(stack.back())); // All conditions should pass
+    // DD-FINAL-005 / AR-0: with OP_CHECKPRICE deterministically disabled (always FALSE), the
+    // BOOLAND of (FALSE oracle-price-check AND TRUE collateral-check) is FALSE. OP_CHECKPRICE
+    // is reserved/inert and never contributes a TRUE to a tapscript.
+    BOOST_CHECK(!CastToBool(stack.back()));
 }
 
 // Test script error string representation

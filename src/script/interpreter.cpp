@@ -714,35 +714,24 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                         return set_success(serror);
                     }
 
-                    // Stack: <price>
+                    // DD-FINAL-005 / AR-0: OP_CHECKPRICE is RESERVED and deterministically
+                    // DISABLED. It previously consulted the live oracle price via
+                    // g_get_oracle_consensus_price -> OracleBundleManager::GetLatestPrice,
+                    // whose value depends on the validating node's most-recently-connected
+                    // block AND a wall-clock (GetTime) staleness window. That made the
+                    // opcode's TRUE/FALSE result NON-DETERMINISTIC across nodes (clock skew,
+                    // cache-age timing, operator vs non-operator, mid-reorg ordering), so any
+                    // block containing an OP_CHECKPRICE tapscript spend could fork the chain.
+                    // No DigiDollar script template emits OP_CHECKPRICE (mint/redeem collateral
+                    // scripts use OP_DIGIDOLLAR/OP_DDVERIFY/OP_CHECKCOLLATERAL/OP_CHECKSIG/CLTV),
+                    // so disabling it — consume the witness operand and deterministically push
+                    // FALSE (fail closed) — has zero DigiDollar protocol impact and removes the
+                    // fork vector. A future price-checking opcode MUST bind to the block's own
+                    // committed v0x03 bundle price (not GetLatestPrice) to be consensus-safe.
                     if (stack.size() < 1)
                         return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
-
-                    // Fetch live oracle consensus price via the interpreter
-                    // hook registered by node init. Returns 0 when no oracle
-                    // price is available (pre-activation, oracle outage,
-                    // standalone consensus library). Zero price fails closed.
-                    const CAmount oraclePrice = g_get_oracle_consensus_price
-                                                    ? g_get_oracle_consensus_price()
-                                                    : CAmount{0};
-                    CScriptNum stackPrice(0);
-                    try {
-                        stackPrice = CScriptNum(stacktop(-1), fRequireMinimal);
-                    } catch (const scriptnum_error&) {
-                        popstack(stack);
-                        stack.push_back(vchFalse);  // Invalid price format
-                        break;
-                    }
-
                     popstack(stack);
-                    // Fail closed when oracle price is unavailable — a
-                    // missing or stale oracle must never produce a TRUE
-                    // result regardless of the witness operand.
-                    if (oraclePrice <= 0) {
-                        stack.push_back(vchFalse);
-                    } else {
-                        stack.push_back(oraclePrice == stackPrice.GetInt64() ? vchTrue : vchFalse);
-                    }
+                    stack.push_back(vchFalse);
                 }
                 break;
 

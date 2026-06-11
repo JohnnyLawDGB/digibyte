@@ -164,10 +164,12 @@ BOOST_AUTO_TEST_CASE(rh53_checkprice_must_consult_real_oracle_match_tapscript)
                        << " err=" << ScriptErrorString(out.err));
 
     BOOST_CHECK_MESSAGE(out.ok,
-        "OP_CHECKPRICE must evaluate without error when witness matches oracle.");
-    BOOST_CHECK_MESSAGE(out.top_is_true,
-        "OP_CHECKPRICE must push TRUE when the stack operand equals the live "
-        "oracle consensus price.");
+        "OP_CHECKPRICE must evaluate without error.");
+    // DD-FINAL-005 / AR-0: OP_CHECKPRICE is now deterministically DISABLED (reserved). It no
+    // longer consults any oracle price, so it can NEVER push TRUE — which makes the mock /
+    // wall-clock weaponization this suite guards against structurally impossible.
+    BOOST_CHECK_MESSAGE(!out.top_is_true,
+        "OP_CHECKPRICE must push FALSE (disabled) regardless of the oracle price.");
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +286,9 @@ BOOST_AUTO_TEST_CASE(rh53_control_price_equals_legacy_mock_still_matches)
 
     EvalOutcome out = RunCheckPrice(LEGACY_MOCK_ORACLE_PRICE, SigVersion::TAPSCRIPT);
     BOOST_CHECK(out.ok);
-    BOOST_CHECK(out.top_is_true);
+    // DD-FINAL-005 / AR-0: OP_CHECKPRICE disabled -> always FALSE even when the witness equals
+    // the (legacy mock) price; the opcode is inert and cannot be made to match any price.
+    BOOST_CHECK(!out.top_is_true);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

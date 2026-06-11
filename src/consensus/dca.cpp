@@ -23,12 +23,14 @@ static constexpr int DCA_BPS_SCALE = 10000;
 
 int ResolveCanonicalHealthForDCA(int requestedHealth, bool& staleHealth)
 {
+    // DD-FINAL-004 / AR-CONSENSUS-1 residual: the caller (ResolveCanonicalHealth)
+    // already supplies the deterministic health recomputed from this block's
+    // committed oracle price and the seeded supply/collateral. The cached
+    // systemHealth/hasCanonicalHealth is an RPC-display artifact derived from the
+    // node-local last-mint price, so comparing against it here would fail ApplyDCA
+    // closed (INT_MAX) on whichever nodes happened to serve a stats RPC between
+    // blocks -> consensus divergence. Trust the deterministic requestedHealth.
     staleHealth = false;
-    const SystemMetrics metrics = SystemHealthMonitor::GetCachedMetrics();
-    if (metrics.hasCanonicalHealth && metrics.totalDDSupply > 0 && metrics.systemHealth > 0) {
-        staleHealth = requestedHealth != metrics.systemHealth;
-        return metrics.systemHealth;
-    }
     return requestedHealth;
 }
 

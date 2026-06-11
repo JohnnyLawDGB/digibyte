@@ -93,14 +93,15 @@ static std::optional<int> ResolveCanonicalHealth(const ValidationContext& ctx,
     const DigiDollar::SystemMetrics metrics =
         DigiDollar::SystemHealthMonitor::GetCachedMetrics();
 
-    if (metrics.hasCanonicalHealth && metrics.systemHealth > 0) {
-        if (metrics.systemHealth != ctx.systemCollateral) {
-            LogPrint(BCLog::DIGIDOLLAR,
-                     "DigiDollar: Replacing supplied %s health %d%% with canonical cached health %d%%\n",
-                     operation, ctx.systemCollateral, metrics.systemHealth);
-        }
-        return metrics.systemHealth;
-    }
+    // DD-FINAL-004 / AR-CONSENSUS-1 residual: do NOT short-circuit on the cached
+    // systemHealth/hasCanonicalHealth. That cached value is set by the RPC display
+    // path (SystemHealthMonitor::UpdateTierMetrics via getdigidollarstats etc.) from
+    // the node-local last-mint price (GetLastOraclePrice), whereas consensus must use
+    // THIS block's committed oracle price. A node that happened to serve such an RPC
+    // between blocks would otherwise validate the next mint/redeem with the stale
+    // last-mint-price health and diverge from a node that recomputed from the block
+    // price -> chain split. Always recompute deterministically below from the seeded
+    // supply/collateral plus ctx.oraclePriceMicroUSD (the block's bundle price).
 
     if (metrics.totalDDSupply > 0) {
         if (ctx.oraclePriceMicroUSD > 0 && metrics.totalCollateral > 0) {

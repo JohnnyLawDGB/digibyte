@@ -6,11 +6,13 @@
 
 #include <consensus/digidollar.h>
 #include <consensus/dca.h>
+#include <digidollar/health.h>
 #include <kernel/chainparams.h>
 #include <chainparams.h>
 #include <test/util/setup_common.h>
 #include <chrono>
 #include <cmath>
+#include <limits>
 
 using namespace DigiDollar;
 using namespace DigiDollar::DCA;
@@ -634,6 +636,45 @@ BOOST_AUTO_TEST_CASE(test_dca_integration_stress)
         // Test graceful degradation - GREEN phase implemented
         BOOST_CHECK(resourceLimited); // GREEN phase: now handles resource exhaustion
     }
+}
+
+// DD-FINAL-004 / AR-CONSENSUS-1 residual regression: ApplyDCA must use the
+// deterministic health supplied by the caller (recomputed from the block's
+// committed oracle price), and must NOT be perturbed by the RPC-display cache
+// (hasCanonicalHealth/systemHealth set by getdigidollarstats from the node-local
+// last-mint price). Before the fix, ResolveCanonicalHealthForDCA returned the
+// cached systemHealth and flagged staleHealth whenever the supplied (block-price)
+// health differed, making ApplyDCA fail closed to INT_MAX on whichever nodes
+// happened to serve a stats RPC between blocks -> consensus divergence.
+BOOST_AUTO_TEST_CASE(dd_final_004_applydca_ignores_rpc_health_cache)
+{
+    // Poison the shared metrics cache exactly as the RPC display path would: a
+    // "canonical" health in the critical DCA band (1.5x) derived from a stale price.
+    SystemMetrics poisoned;
+    poisoned.totalDDSupply = 100000;       // active supply so the old branch armed
+    poisoned.totalCollateral = 5000000000; // non-zero
+    poisoned.systemHealth = 11500;         // 115% -> critical band (1.5x)
+    poisoned.hasCanonicalHealth = true;    // only ever set by UpdateTierMetrics (RPC)
+    SystemHealthMonitor::SetMetricsForTesting(poisoned);
+
+    const int baseRatio = 200; // 200%
+    // Supply the deterministic block-price health in the HEALTHY band (1.0x).
+    const int blockPriceHealth = 30000; // 300% -> healthy (1.0x multiplier)
+
+    // With the fix ApplyDCA trusts the supplied health (1.0x) regardless of the
+    // poisoned cache: 200% * 1.0x = 200%. Before the fix it returned INT_MAX
+    // (failed closed) because supplied 300% != cached 115%.
+    const int effective = DynamicCollateralAdjustment::ApplyDCA(baseRatio, blockPriceHealth);
+    BOOST_CHECK_EQUAL(effective, 200);
+    BOOST_CHECK(effective != std::numeric_limits<int>::max());
+
+    // And a node that never served the RPC (clean cache) computes the same value
+    // for the same supplied health -> deterministic across nodes.
+    SystemHealthMonitor::ResetMetrics();
+    const int effectiveClean = DynamicCollateralAdjustment::ApplyDCA(baseRatio, blockPriceHealth);
+    BOOST_CHECK_EQUAL(effectiveClean, effective);
+
+    SystemHealthMonitor::ResetMetrics();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

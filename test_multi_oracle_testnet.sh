@@ -3499,6 +3499,7 @@ if [ "$ALICE_RESTORED_DD" = "$ALICE_DD_BEFORE_EXPORT" ] || [ "$((ALICE_RESTORED_
     echo -e "${GREEN}*** WALLET RESTORE TEST PASSED! ***${NC}"
 else
     echo -e "${RED}*** WALLET RESTORE TEST FAILED! ***${NC}"
+    FAILED_TESTS=$((FAILED_TESTS + 1))
 fi
 echo "=================================================="
 echo ""
@@ -3833,6 +3834,7 @@ if [ "$BOB_RESTORE_PASS" = true ]; then
     echo -e "${GREEN}*** BOB WALLET RESTORE TEST PASSED! ***${NC}"
 else
     echo -e "${RED}*** BOB WALLET RESTORE TEST FAILED! ***${NC}"
+    FAILED_TESTS=$((FAILED_TESTS + 1))
 fi
 echo "======================================================="
 echo ""
@@ -3994,6 +3996,7 @@ if [ "$BOB_LIVE_DD" = "$BOB_RESTORED_LIVE_DD" ]; then
     echo -e "  ${GREEN}[MATCH]${NC} Both wallets have the same DD balance!"
 else
     echo -e "  ${RED}[MISMATCH]${NC} Balances differ! bob=$BOB_LIVE_DD, bob_restored=$BOB_RESTORED_LIVE_DD"
+    FAILED_TESTS=$((FAILED_TESTS + 1))
 fi
 echo ""
 BOB_LIVE_POS=$($BOB_CLI -rpcwallet=bob listdigidollarpositions 2>/dev/null | jq 'length')

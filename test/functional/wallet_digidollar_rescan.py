@@ -15,7 +15,8 @@ Test coverage:
 2. Partial rescan (from specific height) finds positions in scanned range
 3. Rescan after position data loss reconstructs from blockchain
 4. DD balance accuracy is maintained after rescan
-5. Rescan progress is properly reported
+5. Descriptor restore preserves per-output DD receive history
+6. Rescan progress is properly reported
 """
 
 from decimal import Decimal
@@ -81,6 +82,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
         self.test_rescan_partial_range()
         self.test_rescan_after_position_removal()
         self.test_rescan_balance_accuracy()
+        self.test_descriptor_restore_preserves_receive_history()
         self.test_rescan_progress_reporting()
 
         self.log.info("=== All DigiDollar Rescan Tests Passed! ===")
@@ -366,9 +368,203 @@ class DigiDollarRescanTest(DigiByteTestFramework):
 
         self.log.info("  SUCCESS: DD balance accurate after rescan with transfers")
 
+    def test_descriptor_restore_preserves_receive_history(self):
+        """Test descriptor restore preserves per-output DD receive history."""
+        self.log.info("Test 5: Testing descriptor restore preserves DD receive history...")
+
+        self.log.info("  Creating isolated source wallet for spent self-fragment history")
+        self.nodes[1].createwallet(
+            wallet_name="dd_receive_history_source",
+            disable_private_keys=False,
+            blank=False,
+            descriptors=True,
+        )
+        source = self.nodes[1].get_wallet_rpc("dd_receive_history_source")
+
+        source_fund_addr = source.getnewaddress("", "bech32")
+        self.nodes[0].sendtoaddress(source_fund_addr, 10000)
+        for _ in range(25):
+            self.nodes[0].sendtoaddress(source.getnewaddress("", "bech32"), 1)
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        self.refresh_oracle_quotes()
+        mint = source.mintdigidollar(10000, 2)
+        assert "txid" in mint
+        self.generate(self.nodes[1], 2)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: source.gettransaction(mint["txid"])["confirmations"] > 0)
+        assert_equal(Decimal(source.getdigidollarbalance()["total"]), Decimal(10000))
+
+        fragment_addresses = [
+            source.getdigidollaraddress(f"spent-fragment-{i}") for i in range(20)
+        ]
+        fragment_amounts = {addr: 500 for addr in fragment_addresses}
+        fragment = source.sendmanydigidollar(
+            "",
+            fragment_amounts,
+            "spent self-fragment restore-history regression",
+        )
+        fragment_txid = fragment["txid"]
+        assert_equal(fragment["total_amount"], 10000)
+        self.generate(self.nodes[1], 1)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: source.gettransaction(fragment_txid)["confirmations"] > 0)
+        assert_equal(Decimal(source.getdigidollarbalance()["total"]), Decimal(10000))
+
+        spend_to = self.nodes[0].getdigidollaraddress("spent-fragment-destination")
+        spend_txids = []
+        for _ in range(20):
+            spend = source.senddigidollar(spend_to, 500)
+            spend_txids.append(spend["txid"])
+        self.generate(self.nodes[1], 2)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        for txid in spend_txids:
+            self.wait_until(lambda txid=txid: source.gettransaction(txid)["confirmations"] > 0)
+        assert_equal(Decimal(source.getdigidollarbalance()["total"]), Decimal(0))
+
+        original_fragment_rows = [
+            tx for tx in source.listdigidollartxs(200, 0, "", "receive")
+            if tx["txid"] == fragment_txid
+        ]
+        assert_equal(len(original_fragment_rows), len(fragment_addresses))
+        assert_equal(
+            sorted((tx["address"], tx["amount"]) for tx in original_fragment_rows),
+            sorted((addr, Decimal(500)) for addr in fragment_addresses),
+        )
+
+        descriptors = source.listdescriptors(True)["descriptors"]
+        self.nodes[1].createwallet(
+            wallet_name="dd_spent_receive_history_restored",
+            disable_private_keys=False,
+            blank=True,
+            descriptors=True,
+        )
+        restored_spent = self.nodes[1].get_wallet_rpc("dd_spent_receive_history_restored")
+
+        imports = []
+        for desc in descriptors:
+            req = {
+                "desc": desc["desc"],
+                "timestamp": 0,
+                "active": desc.get("active", False),
+                "internal": desc.get("internal", False),
+            }
+            if "range" in desc:
+                req["range"] = desc["range"]
+            imports.append(req)
+
+        import_result = restored_spent.importdescriptors(imports)
+        assert_equal(
+            sum(1 for item in import_result if item.get("success", False)),
+            len(imports),
+        )
+        restored_spent.rescanblockchain()
+
+        restored_fragment_rows = [
+            tx for tx in restored_spent.listdigidollartxs(200, 0, "", "receive")
+            if tx["txid"] == fragment_txid
+        ]
+        assert_equal(len(restored_fragment_rows), len(original_fragment_rows))
+        assert_equal(
+            sorted((tx["address"], tx["amount"]) for tx in restored_fragment_rows),
+            sorted((tx["address"], tx["amount"]) for tx in original_fragment_rows),
+        )
+
+        try:
+            self.nodes[1].unloadwallet("dd_spent_receive_history_restored")
+            self.nodes[1].unloadwallet("dd_receive_history_source")
+        except Exception:
+            pass
+
+        self.log.info("  Spent self-fragment receive history restored")
+
+        receiver_addresses = [self.nodes[1].getdigidollaraddress() for _ in range(5)]
+        amounts = {addr: 200 for addr in receiver_addresses}
+
+        sender_before = Decimal(self.nodes[0].getdigidollarbalance()["total"])
+        receiver_before = Decimal(self.nodes[1].getdigidollarbalance()["total"])
+
+        self.refresh_oracle_quotes()
+        result = self.nodes[0].sendmanydigidollar(
+            "",
+            amounts,
+            "descriptor restore receive history regression",
+        )
+        txid = result["txid"]
+        assert_equal(result["total_amount"], 1000)
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        assert_equal(
+            Decimal(self.nodes[0].getdigidollarbalance()["total"]),
+            sender_before - Decimal(1000),
+        )
+        assert_equal(
+            Decimal(self.nodes[1].getdigidollarbalance()["total"]),
+            receiver_before + Decimal(1000),
+        )
+
+        original_rows = [
+            tx for tx in self.nodes[1].listdigidollartxs(100, 0, "", "receive")
+            if tx["txid"] == txid
+        ]
+        assert_equal(len(original_rows), len(receiver_addresses))
+        assert_equal(sum(tx["amount"] for tx in original_rows), Decimal(1000))
+
+        descriptors = self.nodes[1].listdescriptors(True)["descriptors"]
+        self.nodes[1].createwallet(
+            wallet_name="dd_receive_history_restored",
+            disable_private_keys=False,
+            blank=True,
+            descriptors=True,
+        )
+        restored = self.nodes[1].get_wallet_rpc("dd_receive_history_restored")
+
+        imports = []
+        for desc in descriptors:
+            req = {
+                "desc": desc["desc"],
+                "timestamp": 0,
+                "active": desc.get("active", False),
+                "internal": desc.get("internal", False),
+            }
+            if "range" in desc:
+                req["range"] = desc["range"]
+            imports.append(req)
+
+        import_result = restored.importdescriptors(imports)
+        assert_equal(
+            sum(1 for item in import_result if item.get("success", False)),
+            len(imports),
+        )
+
+        rescan_result = restored.rescanblockchain()
+        self.log.info(f"  Restored wallet rescan completed: {rescan_result}")
+
+        restored_rows = [
+            tx for tx in restored.listdigidollartxs(100, 0, "", "receive")
+            if tx["txid"] == txid
+        ]
+        assert_equal(len(restored_rows), len(original_rows))
+        assert_equal(
+            sorted((tx["address"], tx["amount"]) for tx in restored_rows),
+            sorted((tx["address"], tx["amount"]) for tx in original_rows),
+        )
+
+        try:
+            self.nodes[1].unloadwallet("dd_receive_history_restored")
+        except Exception:
+            pass
+
+        self.log.info("  SUCCESS: Descriptor restore preserved DD receive history")
+
     def test_rescan_progress_reporting(self):
         """Test rescan progress reporting via getwalletinfo."""
-        self.log.info("Test 5: Testing rescan progress reporting...")
+        self.log.info("Test 6: Testing rescan progress reporting...")
 
         # Mine some blocks to ensure rescan takes measurable time
         self.generate(self.nodes[0], 50)

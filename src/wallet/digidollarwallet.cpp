@@ -802,16 +802,14 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
         return true;
     }
 
-    // WALLET RESTORE FIX: After descriptor import, dd_address_keys is empty.
-    // DD addresses are created by taking a wallet key and applying TapTweak(nullptr).
-    // The wallet has the base keys (from descriptors), but not the DD-tweaked versions.
+    // WALLET RESTORE FIX: After descriptor import, dd_address_keys may be
+    // only partially rebuilt. DD addresses are created by taking a wallet key
+    // and applying TapTweak(nullptr). The wallet has the base keys from
+    // descriptors, but not necessarily every DD-tweaked output cached yet.
     // Try to find a wallet key that, when DD-tweaked, matches this output key.
-    //
-    // This is computationally intensive but only needed during rescan when
-    // dd_address_keys hasn't been rebuilt yet.
-    if (m_wallet && dd_address_keys.empty() && dd_crypted_address_keys.empty()) {
-        LogPrintf("DigiDollar: IsDDOutputMine: dd_address_keys empty, trying descriptor key derivation for TARGET output_key=%s\n",
-                  HexStr(output_key_bytes));
+    if (m_wallet) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine: trying descriptor key derivation for output_key=%s\n",
+                 HexStr(output_key_bytes));
 
         LOCK(m_wallet->cs_wallet);
 
@@ -844,7 +842,7 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
                 // Check if THIS script has our target output_key (direct match - no tweak needed)
                 if (std::equal(output_key_bytes.begin(), output_key_bytes.end(), script_output_key.begin())) {
                     found_target_in_scripts = true;
-                    LogPrintf("DigiDollar: IsDDOutputMine - TARGET output_key FOUND directly in descriptor script!\n");
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - output_key found directly in descriptor script\n");
 
                     // Get signing provider with keys for this script
                     auto provider = desc_spk->GetSigningProviderWithKeys(script);
@@ -858,7 +856,7 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
                                     CKey internal_key;
                                     if (provider->GetKeyByXOnly(spenddata.internal_key, internal_key)) {
                                         // Store the internal key for this DD output
-                                        LogPrintf("DigiDollar: IsDDOutputMine - Direct match! Storing internal_key for DD output\n");
+                                        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - direct descriptor match, storing internal key\n");
                                         const_cast<DigiDollarWallet*>(this)->StoreAddressKey(output_key, internal_key);
                                         return true;
                                     }
@@ -866,7 +864,7 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
                             }
                         }
                     }
-                    LogPrintf("DigiDollar: IsDDOutputMine - TARGET found but couldn't extract key!\n");
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - descriptor script matched but key extraction failed\n");
                 }
 
                 // Get signing provider with keys for this script
@@ -907,25 +905,25 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
 
                 // Debug: Log first few computed DD output keys
                 if (key_count <= 3) {
-                    LogPrintf("DigiDollar: IsDDOutputMine - key %d: internal=%s, pubkey=%s, dd_tweaked=%s\n",
-                              key_count,
-                              HexStr(Span<const unsigned char>(spenddata.internal_key.begin(), spenddata.internal_key.end())),
-                              HexStr(Span<const unsigned char>(test_xonly.begin(), test_xonly.end())),
-                              tweaked ? HexStr(Span<const unsigned char>(tweaked->first.begin(), tweaked->first.end())) : "FAILED");
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - key %d: internal=%s, pubkey=%s, dd_tweaked=%s\n",
+                             key_count,
+                             HexStr(Span<const unsigned char>(spenddata.internal_key.begin(), spenddata.internal_key.end())),
+                             HexStr(Span<const unsigned char>(test_xonly.begin(), test_xonly.end())),
+                             tweaked ? HexStr(Span<const unsigned char>(tweaked->first.begin(), tweaked->first.end())) : "FAILED");
                 }
 
                 if (tweaked && std::equal(output_key_bytes.begin(), output_key_bytes.end(),
                                          tweaked->first.begin())) {
                     // Found a match! Cache it in dd_address_keys for future lookups
-                    LogPrintf("DigiDollar: IsDDOutputMine - Found key via descriptor scan (DD tweak match), caching in dd_address_keys\n");
+                    LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - found key via descriptor scan, caching DD address key\n");
                     const_cast<DigiDollarWallet*>(this)->StoreAddressKey(output_key, test_key);
                     return true;
                 }
             }
         }
 
-        LogPrintf("DigiDollar: IsDDOutputMine - No match found. Stats: spk_mans=%d, p2tr_scripts=%d, providers=%d, spenddata=%d, keys=%d, target_in_scripts=%d\n",
-                  spk_man_count, p2tr_script_count, provider_count, spenddata_count, key_count, found_target_in_scripts);
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - no match found. Stats: spk_mans=%d, p2tr_scripts=%d, providers=%d, spenddata=%d, keys=%d, target_in_scripts=%d\n",
+                 spk_man_count, p2tr_script_count, provider_count, spenddata_count, key_count, found_target_in_scripts);
     }
 
     return false;
@@ -1906,7 +1904,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
             }
         }
 
-        auto is_local_dd_output = [this](const CTxOut& txout) {
+        auto is_local_dd_output = [this](const CTxOut& txout, const uint256& txid) {
             if (!IsStandardDDTokenOutput(txout)) return false;
 
             std::array<unsigned char, 32> output_key;
@@ -1914,7 +1912,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
             const bool is_mine = m_wallet->IsMine(txout.scriptPubKey);
             const bool has_plain_key = dd_address_keys.find(output_key) != dd_address_keys.end();
             const bool has_crypted_key = dd_crypted_address_keys.find(output_key) != dd_crypted_address_keys.end();
-            return is_mine || has_plain_key || has_crypted_key;
+            return is_mine || has_plain_key || has_crypted_key || IsDDOutputMine(txout, txid);
         };
 
         auto append_local_output_rows = [&](const DDTransaction& base_tx,
@@ -1925,6 +1923,8 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
             const std::vector<CAmount> dd_amounts = ExtractDDMetadataAmounts(tx, tx_type);
             if (dd_amounts.empty()) return;
 
+            uint256 base_txid;
+            base_txid.SetHex(base_tx.txid);
             size_t dd_output_index = 0;
             for (const CTxOut& txout : tx.vout) {
                 if (!IsStandardDDTokenOutput(txout)) continue;
@@ -1932,7 +1932,7 @@ std::vector<DDTransaction> DigiDollarWallet::GetDDTransactionHistory() const {
                 const size_t amount_index = dd_output_index++;
                 if (amount_index >= dd_amounts.size()) continue;
                 if (amount_index >= max_dd_outputs) continue;
-                if (!is_local_dd_output(txout)) continue;
+                if (!is_local_dd_output(txout, base_txid)) continue;
 
                 CTxDestination dest;
                 std::string dd_address;
@@ -2804,47 +2804,74 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                   tx.GetHash().GetHex().substr(0, 16).c_str(), is_our_send ? 1 : 0, static_cast<long long>(total_dd_sent));
 
         if (is_our_send) {
-            // Extract DD amounts from OP_RETURN to determine transfer amount
-            CAmount transfer_amount = 0;
+            // Reconstruct the aggregate send amount recorded by the live send
+            // path. DD metadata amounts are ordered to match DD outputs:
+            // recipients first, optional change last.
+            struct RestoredTransferOutput {
+                CAmount amount;
+                bool is_ours;
+                std::string address;
+            };
+            std::vector<RestoredTransferOutput> dd_outputs;
+            const std::vector<CAmount> dd_amounts = ExtractDDMetadataAmounts(tx, DD_TX_TRANSFER);
+            dd_outputs.reserve(dd_amounts.size());
+
+            size_t dd_output_index = 0;
             for (const CTxOut& txout : tx.vout) {
-                if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
-                    const CScript& script = txout.scriptPubKey;
-                    auto pc = script.begin();
-                    opcodetype opcode;
-                    std::vector<unsigned char> data;
+                if (!IsStandardDDTokenOutput(txout)) {
+                    continue;
+                }
 
-                    // Skip OP_RETURN, DD marker, and tx type
-                    if (!script.GetOp(pc, opcode, data)) continue;  // OP_RETURN
-                    if (!script.GetOp(pc, opcode, data)) continue;  // "DD"
-                    if (!script.GetOp(pc, opcode, data)) continue;  // txType
+                const CAmount amount = dd_output_index < dd_amounts.size() ? dd_amounts[dd_output_index] : 0;
+                ++dd_output_index;
+                if (amount <= 0) {
+                    continue;
+                }
 
-                    // First DD amount in TRANSFER is the recipient amount
-                    if (script.GetOp(pc, opcode, data)) {
-                        try {
-                            CScriptNum amtNum(data, false);
-                            transfer_amount = amtNum.GetInt64();
-                        } catch (const scriptnum_error&) {}
-                    }
-                    break;
+                CTxDestination dest;
+                std::string output_address;
+                if (ExtractDestination(txout.scriptPubKey, dest)) {
+                    output_address = DigiDollar::EncodeDigiDollarAddress(dest, Params());
+                }
+
+                dd_outputs.push_back({amount, IsDDOutputMine(txout, tx.GetHash()), output_address});
+            }
+
+            CAmount transfer_amount = 0;
+            size_t restored_recipient_outputs = 0;
+            size_t last_non_wallet_output = std::numeric_limits<size_t>::max();
+            bool all_outputs_are_ours = !dd_outputs.empty();
+            for (size_t i = 0; i < dd_outputs.size(); ++i) {
+                all_outputs_are_ours = all_outputs_are_ours && dd_outputs[i].is_ours;
+                if (!dd_outputs[i].is_ours) {
+                    last_non_wallet_output = i;
                 }
             }
 
-            // Find recipient address from first DD output (P2TR with value=0) that's NOT ours
-            for (size_t i = 0; i < tx.vout.size(); i++) {
-                const CTxOut& txout = tx.vout[i];
-                if (txout.nValue == 0 &&
-                    txout.scriptPubKey.size() == 34 &&
-                    txout.scriptPubKey[0] == OP_1) {
-                    // Check if this is NOT our output (recipient's output)
-                    // Use IsDDOutputMine for proper descriptor wallet support
-                    if (!IsDDOutputMine(txout, tx.GetHash())) {
-                        CTxDestination dest;
-                        if (ExtractDestination(txout.scriptPubKey, dest)) {
-                            recipient_address = EncodeDestination(dest);
-                        }
-                        break;  // First non-owned DD output is recipient
-                    }
+            if (all_outputs_are_ours) {
+                restored_recipient_outputs = dd_outputs.size();
+            } else if (last_non_wallet_output != std::numeric_limits<size_t>::max()) {
+                // Include all outputs through the last known external recipient.
+                // Any later wallet-owned output is the best on-chain change
+                // candidate during restore.
+                restored_recipient_outputs = last_non_wallet_output + 1;
+            } else if (!dd_amounts.empty()) {
+                // Defensive fallback for malformed or non-standard historical
+                // wallet rows: preserve legacy first-recipient behavior.
+                transfer_amount = dd_amounts.front();
+                restored_recipient_outputs = 1;
+            }
+
+            if (transfer_amount == 0 && restored_recipient_outputs > 0) {
+                for (size_t i = 0; i < restored_recipient_outputs && i < dd_outputs.size(); ++i) {
+                    transfer_amount += dd_outputs[i].amount;
                 }
+            }
+
+            if (restored_recipient_outputs == 1 && !dd_outputs.empty()) {
+                recipient_address = dd_outputs.front().address;
+            } else if (restored_recipient_outputs > 1) {
+                recipient_address = "multiple";
             }
 
             // Check if this transaction already exists in history

@@ -23,7 +23,7 @@ The DigiDollar V1 stack on `feature/digidollar-v1` is feature-complete; remainin
 - **Network-Wide Tracking** — `SystemHealthMonitor::ScanUTXOSet` plus incremental `OnMintConnected/OnRedeemConnected` hooks (`src/digidollar/health.cpp`); `DigiDollarStatsIndex` provides per-block aggregates (`src/index/digidollarstatsindex.{cpp,h}`).
 - **Protection Systems** — DCA (`src/consensus/dca.cpp`), ERR (`src/consensus/err.cpp`) and Volatility (`src/consensus/volatility.cpp`) all production-wired. ERR enforces extra DD burn (no DGB haircut) via integer `__int128` math.
 - **Canonical Lock Tiers** — Mint OP_RETURNs must declare tier 0-9. Validation accepts only the claimed canonical tier window `[tier_blocks, tier_blocks + 100]`, so under-locked/custom terms are rejected while delayed mining remains valid.
-- **OP_CHECKPRICE production wiring** — Script interpreter consults the live consensus price via `g_get_oracle_consensus_price` and fails closed when no price is available; there is no production mock fallback (`src/script/interpreter.cpp:436-746`).
+- **OP_CHECKPRICE reserved opcode** — `OP_CHECKPRICE` is reserved and deterministically disabled; the interpreter consumes its operand and pushes false instead of reading node-local oracle state (`src/script/interpreter.cpp:708-730`).
 - **MuSig2 V1 oracle path only** — Block validation rejects pre-V1 (legacy) oracle bundles in coinbase once DigiDollar is active (`src/validation.cpp:185-217`); mempool acceptance requires a recent valid MuSig2 oracle quote (`src/validation.cpp:224-283`).
 - **Mining graceful degradation** — DD txs that fail validation are stripped from `mapModifiedTx` rather than blocking block assembly (`src/node/miner.cpp:707-744`).
 - **Comprehensive Testing** — Unit tests under `src/test/digidollar_*` and `src/test/rh*`/`src/test/oracle_*`/`src/test/musig2_*`; functional tests under `test/functional/digidollar_*.py` and `test/functional/wallet_digidollar_*.py`. See `REPO_MAP_DIGIDOLLAR.md` for the full inventory.
@@ -63,7 +63,7 @@ The DigiDollar system is split across these directories:
 
 ### 1.3 Phasing
 
-Phase 1 (data structures, P2TR scripts, DD addresses, transaction versioning) and Phase 2 (mint/transfer/redeem core operations) are complete. The current branch (`feature/digidollar-v1`) lands the V1 production gates: live MuSig2 oracle bundles, OP_CHECKPRICE wired to consensus, confirmed-only DD chaining, integer-only DCA/ERR math, and the supply alert (no hard cap).
+Phase 1 (data structures, P2TR scripts, DD addresses, transaction versioning) and Phase 2 (mint/transfer/redeem core operations) are complete. The current branch (`feature/digidollar-v1`) lands the V1 production gates: live MuSig2 oracle bundles, reserved/disabled `OP_CHECKPRICE`, confirmed-only DD chaining, integer-only DCA/ERR math, and the supply alert (no hard cap).
 
 ---
 
@@ -572,12 +572,12 @@ DigiDollar consensus consumes consensus prices from the oracle subsystem; the fu
 **Price format.** Micro-USD per DGB (1,000,000 = $1.00). DD amounts are stored in cents (100 = $1.00 USD). Conversions for system health use `priceMillicents = priceMicroUSD / 10` (`src/consensus/dca.cpp:242`).
 
 **Where DigiDollar reads the price.**
-- `src/script/interpreter.cpp` — `OP_CHECKPRICE` consults the live consensus price via the global `g_get_oracle_consensus_price` function pointer (commit `f77678cd0f`). When unbound (e.g. `libdigibyteconsensus.so` standalone build) or when no consensus price is available, the opcode pushes false; there is no production mock fallback.
+- `src/script/interpreter.cpp` — `OP_CHECKPRICE` is reserved and deterministically disabled. It consumes its operand and pushes false; it does not consult `g_get_oracle_consensus_price` or any other node-local oracle cache.
 - `src/digidollar/validation.cpp` — `ValidateMintTransaction()` requires `ctx.oraclePriceMicroUSD > 0` (rejects with `bad-oracle-price` otherwise) and `ShouldBlockMintingDuringERR()` calls `EmergencyRedemptionRatio::ShouldBlockMinting()` which pulls the oracle price from `MockOracleManager` on regtest and `OracleBundleManager::GetLatestPrice()` elsewhere, failing closed when the price is unavailable.
 - `src/validation.cpp:185-283` — Block validation rejects coinbase oracle bundles that fail extraction with `bad-oracle-malformed` once `IsDigiDollarEnabled` is true (the canonical reason for raw v0x01/v0x02 wire payloads, since `ExtractOracleBundle` short-circuits at `src/oracle/bundle_manager.cpp:1000-1057`). The `bad-oracle-legacy` reason is kept as a defense-in-depth gate for hypothetical bundles that parse successfully but report a non-MuSig2 `version`. Mempool acceptance requires a recent valid MuSig2 oracle quote (`HasRecentValidMuSig2OracleQuote`).
 - `src/digidollar/health.cpp` — `SystemHealthMonitor` caches the last oracle price (`SystemMetrics::lastOraclePrice`) and feeds DCA/ERR.
 
-**Mock oracle (regtest only).** `MockOracleManager` (`src/oracle/mock_oracle.cpp`) is a regtest helper used by `setmockoracleprice`/`enablemockoracle`/`simulatepricevolatility` RPCs and by `EmergencyRedemptionRatio::ShouldBlockMinting()` when running on regtest. It is *not* a production fallback for any consensus path; mainnet/testnet OP_CHECKPRICE and `ShouldBlockMinting` consult the real `OracleBundleManager`.
+**Mock oracle (regtest only).** `MockOracleManager` (`src/oracle/mock_oracle.cpp`) is a regtest helper used by `setmockoracleprice`/`enablemockoracle`/`simulatepricevolatility` RPCs and by `EmergencyRedemptionRatio::ShouldBlockMinting()` when running on regtest. It is *not* a production fallback for any consensus path; mainnet/testnet `ShouldBlockMinting` consults the real `OracleBundleManager`, while `OP_CHECKPRICE` is reserved and deterministically disabled.
 
 **Oracle quote requirement at mempool admission.** Mainnet/testnet nodes refuse to admit DigiDollar transactions when no recent valid MuSig2 oracle quote is available (`HasRecentValidMuSig2OracleQuote`, commit `81bf974f40`); reorg-resurrected DD transactions are likewise removed if no quote is available (`src/validation.cpp:504-509`).
 
@@ -1424,7 +1424,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 ### 12.1 External Dependencies
 
 #### **Oracle Price Integration**
-- **Current**: 6 active exchange API fetchers (libcurl). `MockOracleManager` is a regtest helper for test scenarios; `OP_CHECKPRICE` no longer falls back to mock prices in production (it consults live oracle consensus via `g_get_oracle_consensus_price` and fails closed when none is available — commit `f77678cd0f`).
+- **Current**: 6 active exchange API fetchers (libcurl). `MockOracleManager` is a regtest helper for test scenarios; `OP_CHECKPRICE` is reserved and deterministically disabled, so no production script path can read mock or live node-local prices.
 - **Exchange APIs**: Binance, KuCoin, Gate.io, HTX (Huobi), Crypto.com, CoinGecko (Coinbase, Kraken, CoinMarketCap removed: DGB not tradeable / paid-key incompatible with decentralized design)
 - **Status**: ✅ Real API implementation exists (conditional on HAVE_LIBCURL); regtest mock available for scripted tests
 - **Remaining**: Mainnet oracle operator deployment and end-to-end testnet verification
@@ -1506,7 +1506,7 @@ The V1 branch (`feature/digidollar-v1`) closed a series of consensus and policy 
 
 | Area | Behavior | Reference |
 |------|----------|-----------|
-| OP_CHECKPRICE | Wired to live consensus price via `g_get_oracle_consensus_price`; no production mock fallback. Standalone `libdigibyteconsensus.so` build leaves the hook null, which fails closed. | `f77678cd0f` (`src/script/interpreter.cpp:436-746`) |
+| OP_CHECKPRICE | Reserved and deterministically disabled; consumes one operand and pushes false. It does not read `g_get_oracle_consensus_price` or production mock state. | `b9ddae031e` / `3668971ab2` (`src/script/interpreter.cpp:708-730`) |
 | MuSig2 V1 only | Coinbase oracle bundles in DigiDollar-active blocks must carry the V1 MuSig2 v0x03 format. Raw v0x01/v0x02 OP_RETURN payloads fail extraction (`src/oracle/bundle_manager.cpp:1000-1057`) and surface as `bad-oracle-malformed`; the `bad-oracle-legacy` branch is kept as defense-in-depth for bundles that parse but report a non-MuSig2 version. Mempool acceptance requires a recent valid MuSig2 quote. | `f2bb0a19a4`, `bbb85cf363` (`src/validation.cpp:185-283`) |
 | Mainnet/testnet validator parity | The mainnet oracle-validation short-circuit was removed; both networks honor the same V1 oracle-bundle gates. | `f0d9a7b2c7` |
 | DCA / health overflow | DCA and health math use signed `__int128` throughout to prevent collateral × price overflow. | `9cca6970ae` |
@@ -1707,7 +1707,7 @@ test/functional/digidollar_basic.py
 | Oracle price required | `bad-oracle-price` rejection in mint validation when `ctx.oraclePriceMicroUSD <= 0` | `src/digidollar/validation.cpp:1147-1153` |
 | Pre-mutation volatility freeze | `WouldCandidateFreezeMinting` checked before `RecordPrice`; rejected mints can't poison history | `src/digidollar/validation.cpp:2671-2678, 2730-2737` |
 | Mainnet/testnet validator parity | Mainnet short-circuit removed; both networks honor identical V1 oracle-bundle gates | `src/validation.cpp:185-283` |
-| `OP_CHECKPRICE` no production mock | Interpreter calls `g_get_oracle_consensus_price`; null hook or zero price pushes false | `src/script/interpreter.cpp:436-746` |
+| `OP_CHECKPRICE` reserved/disabled | Interpreter consumes one operand and pushes false; no live or mock price lookup | `src/script/interpreter.cpp:708-730` |
 | DD amount in cents (100 = $1) | Stored amounts in cents; oracle prices in micro-USD; conversion `priceMillicents = priceMicroUSD / 10` for health math | `src/consensus/digidollar.h:70-73`, `src/consensus/dca.cpp:239-242` |
 | Transaction types fixed at 4 | `DD_TX_NONE=0, DD_TX_MINT=1, DD_TX_TRANSFER=2, DD_TX_REDEEM=3, DD_TX_MAX=4` | `src/primitives/transaction.h:38-44` |
 | Redemption paths fixed at 2 | `RedemptionPath { PATH_NORMAL=0, PATH_ERR=1 }` | `src/digidollar/digidollar.h:70-73` |

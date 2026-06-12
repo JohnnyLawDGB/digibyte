@@ -441,7 +441,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - `FilterOutliers()` uses a percentage-threshold rule (10% deviation from median by default); `CalculateConsensusPrice` in `bundle_manager.cpp` is the IQR-based deterministic-consensus path used at validation time.
 
 ### src/oracle/mock_oracle.h
-- `MockOracleManager` (class, singleton) → regtest helper for scripted price tests. **Not a production fallback for `OP_CHECKPRICE`**: as of commit `f77678cd0f` the script interpreter consults the live oracle consensus price via `g_get_oracle_consensus_price` and fails closed when no consensus is available.
+- `MockOracleManager` (class, singleton) → regtest helper for scripted price tests. `OP_CHECKPRICE` is reserved and deterministically disabled, so production script validation never reads mock oracle state.
   - `GetInstance()` → singleton access
   - `GetCurrentPrice()` → returns mockPriceMicroUSD (micro-USD)
   - `SetMockPrice(price_micro_usd)` → sets mock price
@@ -455,7 +455,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 ### src/oracle/mock_oracle.cpp
 - Deterministic regtest helper. Test keys derived from `SHA256("digibyte_regtest_oracle_N")` (N=0..6); matching pubkeys are pushed into `consensus.vOraclePublicKeys` in `chainparams.cpp:1131-1138`.
 - Builds bundles that satisfy the regtest 4-of-7 quorum (`consensus.nOracleConsensusRequired`).
-- Used only by regtest. Production `OP_CHECKPRICE` reaches the live oracle consensus via `g_get_oracle_consensus_price` and never falls back to `MockOracleManager` (commit `f77678cd0f`).
+- Used only by regtest. Production `OP_CHECKPRICE` is reserved and deterministically disabled; it never falls back to `MockOracleManager` or live node-local oracle state.
 
 ### src/oracle/node.h
 - `OracleNode` (class) → oracle node daemon: price fetching, signing, broadcasting
@@ -1046,7 +1046,7 @@ present in the tree but not compiled into the current unit-test binary.
 | `rh50_oracle_keyset_alignment_tests.cpp` | RH-50: oracle keyset alignment invariant — vOracleNodes ↔ vOraclePublicKeys slot 0-34 ordering |
 | `rh51_checkphase3_v1_split_tests.cpp` | RH-51: regtest activation-gate asymmetry hardening (regtest/mainnet divergence at heights 0–649) |
 | `rh52_bip34_scriptnum_escape_tests.cpp` | RH-52: BIP34 coinbase-height CScriptNum escape in oracle validators (Wave-1 PoC; fixed in `2b37384e79`) |
-| `rh53_op_checkprice_mock_weaponization_tests.cpp` | RH-53: OP_CHECKPRICE mock-price weaponization regression (Wave-2 PoC; live oracle wired in `f77678cd0f`) |
+| `rh53_op_checkprice_mock_weaponization_tests.cpp` | RH-53: OP_CHECKPRICE mock-price weaponization regression; current code keeps `OP_CHECKPRICE` reserved and deterministically disabled |
 | `rh54_op_oracle_opsuccess_tests.cpp` | RH-54: OP_ORACLE incorrectly classified OP_SUCCESS in Tapscript (Wave-2 PoC; fixed in `20d56c34da`) |
 | `rh55_musig2_partial_sig_unverified_aggregation_tests.cpp` | RH-55: MuSig2 partial-sig aggregation accepted unverified scalars (Wave-3 PoC; fixed in `986eca83ce`) |
 | `rh56_oversized_bitmap_message_inflation_tests.cpp` | RH-56: oversized participation-bitmap inflates `bundle.messages` before consensus (Wave-4 PoC) |

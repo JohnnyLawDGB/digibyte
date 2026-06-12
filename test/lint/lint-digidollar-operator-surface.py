@@ -67,15 +67,33 @@ FORBIDDEN = {
     "DIGIDOLLAR_EXPLAINER.md": [
         "slots 0-16 consensus-active",
         "requires 9 BIP-340 Schnorr signatures",
+        "require 9 MuSig2 Schnorr signatures",
+        "OP_CHECKPRICE consults the live consensus price",
+        "Live `g_get_oracle_consensus_price`",
         "ORACLE_CONSENSUS_REQUIRED=9",
     ],
     "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
         "slots 0–16",
+        "OP_CHECKPRICE` consults the live oracle consensus price",
+        "`g_get_oracle_consensus_price` — fails closed",
         "oraclehb` heartbeats are the current telemetry exception",
         "Signed oracle version heartbeats are the current exception",
         "ORACLEHEARTBEAT` is not guarded",
     ],
+    "DIGIDOLLAR_ARCHITECTURE.md": [
+        "OP_CHECKPRICE production wiring",
+        "OP_CHECKPRICE wired to consensus",
+        "OP_CHECKPRICE` consults the live consensus price",
+        "mainnet/testnet OP_CHECKPRICE and `ShouldBlockMinting` consult",
+        "it consults live oracle consensus",
+        "Wired to live consensus price via `g_get_oracle_consensus_price`",
+        "Interpreter calls `g_get_oracle_consensus_price`",
+    ],
     "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
+        "OP_CHECKPRICE` consults the live oracle consensus price",
+        "DigiDollar minting/redemption logic and `OP_CHECKPRICE` consult",
+        "OP_CHECKPRICE has no mock fallback",
+        "OP_CHECKPRICE` consults `g_get_oracle_consensus_price`",
         "one oracle relay handler that does not currently share",
         "heartbeat is authenticated telemetry without that height",
         "oraclehb` is signed/rate-limited telemetry without the same height gate",
@@ -85,6 +103,9 @@ FORBIDDEN = {
         "current code does not put the same height gate",
     ],
     "REPO_MAP_DIGIDOLLAR.md": [
+        "Not a production fallback for `OP_CHECKPRICE`",
+        "Production `OP_CHECKPRICE` reaches the live oracle consensus",
+        "live oracle wired in",
         "currently has no height gate",
         "slot 0–16 ordering",
     ],
@@ -153,14 +174,20 @@ REQUIRED = {
     "DIGIDOLLAR_EXPLAINER.md": [
         "35 active oracle slots",
         "requires 7 BIP-340 Schnorr signatures",
+        "`OP_CHECKPRICE` is reserved and deterministically disabled",
         "ORACLE_CONSENSUS_REQUIRED=7",
     ],
     "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
         "slots 0-34",
+        "`OP_CHECKPRICE` is reserved and deterministically disabled",
         "including signed `oraclehb` heartbeats",
         "uses `IsOracleP2PActive`",
     ],
+    "DIGIDOLLAR_ARCHITECTURE.md": [
+        "`OP_CHECKPRICE` is reserved and deterministically disabled",
+    ],
     "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
+        "`OP_CHECKPRICE` is reserved and deterministically disabled",
         "including `oraclehb`, share the `IsOracleP2PActive` gate",
         "35 active slots",
         "Replaced by 7-signature mainnet/testnet MuSig2",
@@ -170,6 +197,7 @@ REQUIRED = {
         "IsOracleP2PActive",
     ],
     "REPO_MAP_DIGIDOLLAR.md": [
+        "`OP_CHECKPRICE` is reserved and deterministically disabled",
         "all use `IsOracleP2PActive`",
         "slot 0-34 ordering",
     ],

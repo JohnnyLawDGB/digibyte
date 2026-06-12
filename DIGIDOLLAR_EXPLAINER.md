@@ -218,7 +218,7 @@ Prevents transactions from being mined until specified block height
 ### Core Script Functions
 
 #### Multi-Sig Oracle Validation
-Mainnet/testnet require 9 MuSig2 Schnorr signatures from the configured active oracle keyset; regtest uses 4-of-7. `OP_CHECKPRICE` consults the live consensus price via `g_get_oracle_consensus_price` and fails closed when no price is available — there is no production fallback to a mock value.
+Mainnet/testnet require 7 BIP-340 Schnorr signatures from the configured 35-slot active oracle keyset; regtest uses 4-of-7. `OP_CHECKPRICE` is reserved and deterministically disabled; it consumes its operand and pushes false rather than reading node-local oracle state.
 
 #### Taproot Script Paths
 Multiple redemption conditions in a single P2TR output
@@ -414,7 +414,7 @@ The V1 branch closes the consensus and policy gaps that the previous draft of th
 
 | Subsystem | Source | Status |
 |-----------|--------|--------|
-| OP_CHECKPRICE production wiring | `src/script/interpreter.cpp:436-746` | Live `g_get_oracle_consensus_price`; fails closed on missing price |
+| OP_CHECKPRICE reserved opcode | `src/script/interpreter.cpp:436-746` | `OP_CHECKPRICE` is reserved and deterministically disabled; it does not read `g_get_oracle_consensus_price` |
 | MuSig2-only oracle bundles | `src/validation.cpp:185-283` | Pre-V1 (legacy) bundles rejected; mempool requires recent valid MuSig2 quote |
 | Mainnet/testnet validator parity | `src/validation.cpp` | Mainnet short-circuit removed (commit `f0d9a7b2c7`) |
 | DCA/ERR integer math | `src/consensus/dca.cpp`, `src/consensus/err.cpp` | `__int128` ceiling arithmetic; `ApplyDCA` fails closed on stale health |

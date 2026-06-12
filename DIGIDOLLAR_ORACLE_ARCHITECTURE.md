@@ -7,7 +7,7 @@
 > - Mainnet and testnet validate identically. The previous mainnet short-circuit in `OracleDataValidator::ValidateBlockOracleData` was removed (commit `f0d9a7b2c7`); both networks honor the same Phase 3 gates.
 > - Only MuSig2 v0x03 oracle bundles are accepted on-chain (commits `bbb85cf363`, `fa29405adc`, `f2bb0a19a4`). Raw v0x01/v0x02 OP_RETURN payloads short-circuit inside `OracleBundleManager::ExtractOracleBundle`, so `OracleDataValidator::ValidateBlockOracleData` emits `bad-oracle-malformed`. The `bad-oracle-legacy` branch only fires when extraction succeeds with a non-MuSig2 version, which is structurally unreachable for current v0x03 wire payloads — it is kept as a defense-in-depth gate.
 > - DD mint/redeem blocks must include exactly one valid v0x03 bundle in the coinbase, or they are rejected with `bad-oracle-missing` / `bad-oracle-malformed` / `bad-oracle-multiple-outputs`. Transfer-only and non-DD blocks may omit oracle data; if any block includes oracle data, it must still be valid v0x03.
-> - `OP_CHECKPRICE` consults the live oracle consensus price via `g_get_oracle_consensus_price` (`src/script/interpreter.cpp:725`). It fails closed when the price is zero or unavailable; there is no mock fallback in production (commit `f77678cd0f`).
+> - `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-730`). It consumes one operand and pushes false rather than reading node-local oracle state.
 > - `nDigiDollarMuSig2Height = 0` on mainnet, testnet, and regtest. MuSig2 is the only on-chain bundle format from the moment DigiDollar is BIP9-active.
 
 > **Sections that survived from earlier doc revisions (Phase One single-oracle, Phase Two roadmap, "MAINNET DISABLED" warnings, the Section 14 roadmap) describe a code path that no longer exists.** Treat the V1 invariants above as authoritative; flagged sections are kept only for historical context.
@@ -49,9 +49,9 @@
 
 ### 1.1 What is the Oracle System?
 
-The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. Operator nodes aggregate DGB/USD prices from six exchanges, attest to a median, and run a MuSig2 round to produce a single 64-byte BIP-340 Schnorr signature. The miner embeds that aggregate signature plus a participation bitmap into the coinbase as a v0x03 OP_ORACLE bundle. Every full node validates the bundle on `CheckBlock`, and the median price flows into a height-keyed cache that DigiDollar minting/redemption logic and `OP_CHECKPRICE` consult.
+The Oracle System provides **decentralized price feeds** for the DigiByte blockchain, enabling DigiDollar's collateralized stablecoin functionality. Operator nodes aggregate DGB/USD prices from six exchanges, attest to a median, and run a MuSig2 round to produce a single 64-byte BIP-340 Schnorr signature. The miner embeds that aggregate signature plus a participation bitmap into the coinbase as a v0x03 OP_ORACLE bundle. Every full node validates the bundle on `CheckBlock`, and the median price flows into a height-keyed cache that DigiDollar minting/redemption logic consults.
 
-**Real-World Analogy:** A multisignature appraiser cooperative — no single appraiser can move the price, and the chain only accepts an appraisal that 9 configured active members signed.
+**Real-World Analogy:** A multisignature appraiser cooperative — no single appraiser can move the price, and the chain only accepts an appraisal that at least 7 configured active members signed.
 
 ### 1.2 V1 Design Philosophy
 
@@ -66,7 +66,7 @@ V1 ships with:
 
 **Trade-offs (still relevant in V1):**
 - ✅ Compact on-chain footprint (86-byte minimum v0x03 data; 90 bytes on the 35-slot mainnet/testnet bitmap)
-- ✅ Constant-size signature whether 9 or 17 oracles participate
+- ✅ Constant-size signature whether 7 or all 35 active oracles participate
 - ✅ Same validator code on mainnet and testnet
 - ⚠️ MuSig2 requires two interactive rounds (nonce + partial sig) per epoch
 - ⚠️ Quorum failure means the next price-dependent DD mint/redeem block must wait — mining graceful degradation strips those txs and continues; DD transfer-only and non-DD blocks are unaffected (commits `6b5ff516c3`, `1e08bd811f`).
@@ -117,7 +117,7 @@ V1 ships with:
 ### 2.2 For Developers: Integration Points
 
 ```cpp
-// 1. Live oracle consensus price (used by OP_CHECKPRICE)
+// 1. Live oracle consensus price (used by DD mint/redeem validation)
 //    Implemented in src/script/interpreter.cpp:725
 //    Hook is registered by node init; CAmount{0} when no consensus.
 const CAmount oraclePrice = g_get_oracle_consensus_price
@@ -146,8 +146,8 @@ Core implementation:
 │                                          ValidateBlockOracleData, ValidateMuSig2Bundle, price cache
 ├── src/oracle/exchange.{h,cpp}            6 active fetchers (Binance, KuCoin, Gate.io, HTX,
 │                                          Crypto.com, CoinGecko); MultiExchangeAggregator
-├── src/oracle/mock_oracle.{h,cpp}         Regtest helper; OP_CHECKPRICE has no mock fallback in
-│                                          production (commit f77678cd0f) — fails closed
+├── src/oracle/mock_oracle.{h,cpp}         Regtest helper; `OP_CHECKPRICE` is reserved and
+│                                          deterministically disabled, so it never reads mock state
 ├── src/oracle/musig2_aggregator.{h,cpp}   secp256k1 MuSig2 key aggregation + bitmap encode/decode
 ├── src/oracle/musig2_session.{h,cpp}      Per-epoch session (state machine, nonce + partial-sig)
 ├── src/oracle/musig2_session_manager.{h,cpp}  Per-epoch session lifecycle (create/lookup/prune)
@@ -157,7 +157,7 @@ Core implementation:
 ├── src/oracle/musig2_session_mining.h     Helpers for miner template path
 ├── src/oracle/signing_orchestrator.{h,cpp}    CValidationInterface; drives MuSig2 round 1/2
 ├── src/oracle/node.{h,cpp}                Oracle daemon entry, lifecycle
-├── src/script/interpreter.{h,cpp}         g_get_oracle_consensus_price hook for OP_CHECKPRICE
+├── src/script/interpreter.{h,cpp}         Reserved/disabled OP_CHECKPRICE behavior
 ├── src/validation.cpp                     CheckBlock → ValidateBlockOracleData; ConnectBlock price
 │                                          cache; UpdatePriceCache gated on BIP9 DEPLOYMENT_DIGIDOLLAR
 ├── src/net_processing.cpp                 P2P handlers (~5440–6340), including heartbeat, are gated
@@ -1971,7 +1971,7 @@ There is no longer a separate "activate Phase Two on testnet" step — testnet/r
 - Validator: single code path for mainnet/testnet/regtest in `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2139`)
 - P2P handlers: 9 message types in `src/protocol.cpp:53-62`; price/consensus/MuSig2/getoracles handlers, including `oraclehb`, share the `IsOracleP2PActive` gate in `src/net_processing.cpp` ~5440–6340, and `oraclebundle` is accepted-and-dropped.
 - BIP9: bit 23, mainnet start `2026-06-01`, mainnet timeout `2027-06-01`, mainnet `min_activation_height=23627520`, mainnet window 40320 / threshold 28224 (70%); testnet26 start at genesis, `min_activation_height=600`, window 200, threshold 140 (70%); regtest `ALWAYS_ACTIVE`
-- `OP_CHECKPRICE` consults `g_get_oracle_consensus_price` (`src/script/interpreter.cpp:725`); fails closed when price ≤ 0
+- `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-730`); it consumes one operand and pushes false without reading oracle state
 - 6 active exchange fetchers initialized in `MultiExchangeAggregator::InitializeFetchers` (`src/oracle/exchange.cpp:1042-1071`); 5 fetcher classes still compile but are NOT initialized (Coinbase, Kraken, Messari, Bittrex, Poloniex); CoinMarketCap removed entirely. `FetchAllPrices()` iterates the initialized fetchers sequentially.
 - `min_required_sources = 2` is the `MultiExchangeAggregator` header default (`src/oracle/exchange.h:235`); the production caller `OracleNode::FetchMedianPrice` raises the floor to 3 via `SetMinRequiredSources(3)` (`src/oracle/node.cpp:450`), so the live oracle daemon publishes only when >=3 of the 6 fetchers respond. Outlier filtering removes prices more than 10% from the median and aggregation requires the source floor before and after filtering.
 
@@ -2004,4 +2004,4 @@ These items appeared in earlier revisions of this document. They are recorded he
 | Empty `schnorr_sig` bypasses verification in P2P | Bound to chainparams pubkey then verified in `src/net_processing.cpp:5462-5491`; v0x03 on-chain bundle uses an aggregate signature that is always required |
 | Phase One single oracle on testnet/regtest | Replaced by 7-signature mainnet/testnet MuSig2 / 4-of-7 regtest MuSig2 |
 | `sendoracleprice` RPC | Removed |
-| Mock prices reachable from `OP_CHECKPRICE` | Removed (commit `f77678cd0f`); `g_get_oracle_consensus_price` is the only source, fails closed |
+| Mock prices reachable from `OP_CHECKPRICE` | Removed; `OP_CHECKPRICE` is reserved and deterministically disabled, so neither mock nor live node-local prices are read |

@@ -26,10 +26,8 @@ public:
     }
 };
 
-// RAII helper: install an oracle-price hook for tests that exercise
-// OP_CHECKPRICE with a specific expected price. Replaces the historical
-// static GetMockOraclePrice() shortcut — the interpreter now consults
-// g_get_oracle_consensus_price, and tests must register their own hook.
+// RAII helper: install an oracle-price hook as a regression canary. The
+// production OP_CHECKPRICE path is reserved/disabled and must ignore the hook.
 class ScopedOpcodeOraclePrice
 {
 public:
@@ -193,8 +191,8 @@ BOOST_AUTO_TEST_CASE(op_ddverify_insufficient_stack)
 // Test OP_CHECKPRICE basic functionality
 BOOST_AUTO_TEST_CASE(op_checkprice_basic)
 {
-    // Post-fix: interpreter consults g_get_oracle_consensus_price. Install
-    // a scoped hook returning 100000 to preserve the original test intent.
+    // Install a scoped hook returning the witness price; OP_CHECKPRICE must
+    // still push false because the opcode is reserved/disabled.
     ScopedOpcodeOraclePrice oracle(100000);
 
     std::vector<std::vector<unsigned char>> stack;

@@ -97,7 +97,7 @@ The roster is the list of oracle public keys known by consensus parameters.
 
 The current V1 shape is:
 
-- Testnet/mainnet V1 target: 21 oracle public keys, 7 required signatures.
+- Testnet/mainnet V1 target: 35 oracle public keys, 7 required signatures.
 - Regtest: 7 oracle public keys, 4 required signatures.
 
 Changing the roster or threshold is a consensus-sensitive change. Do not do it casually.
@@ -652,12 +652,12 @@ The on-chain bundle format is unchanged by RC38.
 +------------+---------------+-------------------------------+
 ```
 
-Example shape for the current 21-oracle active roster:
+Example shape for the current 35-oracle active roster:
 
 ```text
 version       = 03
-bitmap_len    = 03
-bitmap        = 3 bytes, enough for oracle IDs 0..20
+bitmap_len    = 05
+bitmap        = 5 bytes, enough for oracle IDs 0..34
 epoch         = current oracle epoch
 price         = DGB/USD in micro-USD
 timestamp     = oracle consensus timestamp

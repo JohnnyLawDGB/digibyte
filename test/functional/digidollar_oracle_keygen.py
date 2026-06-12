@@ -50,6 +50,8 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         watch_wallet = node.get_wallet_rpc("oracle_watchonly")
         assert_equal(watch_wallet.getwalletinfo()["private_keys_enabled"], False)
         assert_raises_rpc_error(-4, "Private keys are disabled", watch_wallet.createoraclekey, 0)
+        assert_raises_rpc_error(-4, "Private keys are disabled", watch_wallet.importoracleprivkey, 0, "00" * 32)
+        assert_raises_rpc_error(-4, "Private keys are disabled", watch_wallet.exportoracleprivkey, 0)
 
         # --- Test 1: createoraclekey 0 succeeds ---
         self.log.info("Test: createoraclekey 0 should succeed")
@@ -78,6 +80,34 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
         # --- Test 5: duplicate createoraclekey 0 should fail ---
         self.log.info("Test: createoraclekey 0 again should fail (key exists)")
         assert_raises_rpc_error(None, "already exists", wallet.createoraclekey, 0)
+
+        # --- Test 5b: export/import oracle private key for wallet recovery ---
+        self.log.info("Test: exportoracleprivkey/importoracleprivkey should round-trip oracle 0")
+        exported = wallet.exportoracleprivkey(0)
+        assert_equal(exported["oracle_id"], 0)
+        assert_equal(exported["pubkey"], pubkey)
+        assert_equal(exported["pubkey_xonly"], pubkey_xonly)
+        assert_equal(len(exported["private_key"]), 64)
+        assert re.fullmatch(r'[0-9a-f]{64}', exported["private_key"])
+        assert_equal(exported["wallet_name"], "oracle_test")
+
+        node.createwallet("oracle_imported")
+        import_wallet = node.get_wallet_rpc("oracle_imported")
+        imported = import_wallet.importoracleprivkey(0, exported["private_key"])
+        assert_equal(imported["oracle_id"], 0)
+        assert_equal(imported["stored_in_wallet"], True)
+        assert_equal(imported["replaced"], False)
+        assert_equal(imported["pubkey"], pubkey)
+        assert_equal(imported["pubkey_xonly"], pubkey_xonly)
+        assert_equal(imported["wallet_name"], "oracle_imported")
+
+        imported_export = import_wallet.exportoracleprivkey(0)
+        assert_equal(imported_export["private_key"], exported["private_key"])
+        assert_equal(imported_export["pubkey"], pubkey)
+        assert_raises_rpc_error(-4, "already has an oracle key", import_wallet.importoracleprivkey, 0, exported["private_key"])
+        replaced = import_wallet.importoracleprivkey(0, exported["private_key"], True)
+        assert_equal(replaced["replaced"], True)
+        assert_equal(replaced["pubkey"], pubkey)
 
         # --- Test 6: createoraclekey 1 succeeds with different key ---
         self.log.info("Test: createoraclekey 1 should succeed with different pubkey")
@@ -179,6 +209,21 @@ class DigiDollarOracleKeygenTest(DigiByteTestFramework):
             assert_equal(unlocked_start["success"], False)
             assert "not authorized" in unlocked_start["message"].lower() or "mismatch" in unlocked_start["message"].lower()
             assert "createoraclekey" not in unlocked_start["message"].lower()
+
+        self.log.info("Test: encrypted wallet export/import requires unlock")
+        node.createwallet("encrypted_oracle_import")
+        encrypted_import = node.get_wallet_rpc("encrypted_oracle_import")
+        encrypted_import.encryptwallet("oracle-import-passphrase")
+        assert_raises_rpc_error(-13, "walletpassphrase", encrypted_import.importoracleprivkey, 3, exported["private_key"])
+        encrypted_import.walletpassphrase("oracle-import-passphrase", 600)
+        encrypted_import_result = encrypted_import.importoracleprivkey(3, exported["private_key"])
+        assert_equal(encrypted_import_result["oracle_id"], 3)
+        assert_equal(encrypted_import_result["stored_in_wallet"], True)
+        encrypted_import.walletlock()
+        assert_raises_rpc_error(-13, "walletpassphrase", encrypted_import.exportoracleprivkey, 3)
+        encrypted_import.walletpassphrase("oracle-import-passphrase", 600)
+        encrypted_import_export = encrypted_import.exportoracleprivkey(3)
+        assert_equal(encrypted_import_export["private_key"], exported["private_key"])
 
         # --- Test 7: createoraclekey 35 should fail (max oracle_id is 34) ---
         self.log.info("Test: createoraclekey 35 should fail (invalid oracle_id)")

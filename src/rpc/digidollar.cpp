@@ -142,6 +142,38 @@ namespace {
         return true;
     }
 
+    uint32_t ParseConfiguredOracleId(const JSONRPCRequest& request, size_t param_index)
+    {
+        const int oracle_id_signed = request.params[param_index].getInt<int>();
+        if (oracle_id_signed < 0 || oracle_id_signed >= ORACLE_TOTAL_COUNT) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                strprintf("Invalid oracle ID %d. Must be between 0 and %d",
+                          oracle_id_signed, ORACLE_TOTAL_COUNT - 1));
+        }
+        if (Params().GetOracleNode(static_cast<uint32_t>(oracle_id_signed)) == nullptr) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                strprintf("Oracle ID %d not found in chain parameters", oracle_id_signed));
+        }
+        return static_cast<uint32_t>(oracle_id_signed);
+    }
+
+    void EnsureOracleWalletCanUsePrivateKeys(const wallet::CWallet& wallet)
+    {
+        if (wallet.IsWalletFlagSet(wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Error: Private keys are disabled for this wallet");
+        }
+    }
+
+    void EnsureOracleWalletUnlocked(const wallet::CWallet& wallet, const std::string& action)
+    {
+        if (wallet.IsLocked()) {
+            throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
+                strprintf("DigiDollar oracle key %s requires the wallet to be unlocked. "
+                          "Error: Please enter the wallet passphrase with walletpassphrase first.",
+                          action));
+        }
+    }
+
     bool OraclePubKeyMatchesChainparams(uint32_t oracle_id, const CPubKey& pubkey, std::string& message_out)
     {
         const OracleNodeInfo* oracle_config = Params().GetOracleNode(oracle_id);
@@ -5402,6 +5434,154 @@ RPCHelpMan createoraclekey()
                 "Run 'startoracle %u' only after DigiDollar is active and your key is added to chainparams.",
                 oracle_id));
 
+            return result;
+        },
+    };
+}
+
+RPCHelpMan exportoracleprivkey()
+{
+    return RPCHelpMan{"exportoracleprivkey",
+                "\nExport a wallet-stored DigiDollar oracle private key as 32-byte hex.\n"
+                "This is local wallet key management and is allowed before DigiDollar activation.\n"
+                "The returned private_key is sensitive oracle signing material; store it offline and never share it.\n",
+                {
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID slot (0-34) to export"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID the key belongs to"},
+                        {RPCResult::Type::STR_HEX, "private_key", "Sensitive 32-byte oracle private key hex"},
+                        {RPCResult::Type::STR_HEX, "pubkey", "Compressed public key (33-byte, 02/03 prefix)"},
+                        {RPCResult::Type::STR_HEX, "pubkey_xonly", "X-only public key (32-byte, no prefix)"},
+                        {RPCResult::Type::BOOL, "authorized", "Whether the key currently matches chainparams for this oracle ID"},
+                        {RPCResult::Type::STR, "wallet_name", "Wallet the key was exported from"},
+                        {RPCResult::Type::STR, "warning", "Secret-handling warning"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("exportoracleprivkey", "5") +
+                    HelpExampleRpc("exportoracleprivkey", "5")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded. A descriptor wallet is required.");
+            }
+
+            EnsureOracleWalletCanUsePrivateKeys(*pwallet);
+            const uint32_t oracle_id = ParseConfiguredOracleId(request, 0);
+
+            if (!pwallet->HasOracleKey(oracle_id)) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Wallet '%s' has no stored oracle private key for oracle ID %u",
+                              pwallet->GetName(), oracle_id));
+            }
+            EnsureOracleWalletUnlocked(*pwallet, "export");
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
+            CKey key;
+            if (!pwallet->GetOracleKey(oracle_id, key)) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Wallet '%s' has a stored oracle key for oracle ID %u, but the private key could not be loaded",
+                              pwallet->GetName(), oracle_id));
+            }
+
+            const CPubKey pubkey = key.GetPubKey();
+            const XOnlyPubKey xonly(pubkey);
+            const OracleNodeInfo* oracle_config = Params().GetOracleNode(oracle_id);
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("oracle_id", static_cast<int>(oracle_id));
+            result.pushKV("private_key", HexStr(Span<const unsigned char>(key.begin(), key.end())));
+            result.pushKV("pubkey", HexStr(pubkey));
+            result.pushKV("pubkey_xonly", HexStr(xonly));
+            result.pushKV("authorized", oracle_config && pubkey == oracle_config->pubkey);
+            result.pushKV("wallet_name", pwallet->GetName());
+            result.pushKV("warning", "This is sensitive oracle signing key material. Store it offline and never share it.");
+            return result;
+        },
+    };
+}
+
+RPCHelpMan importoracleprivkey()
+{
+    return RPCHelpMan{"importoracleprivkey",
+                "\nImport a DigiDollar oracle private key into the loaded wallet.\n"
+                "This stores the key for later startoracle use, but does not start an oracle, sign prices, or relay data.\n"
+                "The private key must be the 32-byte hex value returned by exportoracleprivkey.\n",
+                {
+                    {"oracle_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "Oracle ID slot (0-34) to import for"},
+                    {"private_key", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "Sensitive 32-byte oracle private key hex"},
+                    {"replace", RPCArg::Type::BOOL, RPCArg::Default{false}, "Replace an existing wallet-stored oracle key for this oracle_id"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "oracle_id", "Oracle ID the key was imported for"},
+                        {RPCResult::Type::STR_HEX, "pubkey", "Compressed public key (33-byte, 02/03 prefix)"},
+                        {RPCResult::Type::STR_HEX, "pubkey_xonly", "X-only public key (32-byte, no prefix)"},
+                        {RPCResult::Type::BOOL, "stored_in_wallet", "Whether key was stored in wallet"},
+                        {RPCResult::Type::BOOL, "replaced", "Whether an existing key was replaced"},
+                        {RPCResult::Type::BOOL, "authorized", "Whether the key currently matches chainparams for this oracle ID"},
+                        {RPCResult::Type::STR, "wallet_name", "Wallet the key was imported into"},
+                        {RPCResult::Type::STR, "message", "Status message"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("importoracleprivkey", "5 \"001122...\"") +
+                    HelpExampleRpc("importoracleprivkey", "5, \"001122...\", true")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::shared_ptr<wallet::CWallet> pwallet = wallet::GetWalletForJSONRPCRequest(request);
+            if (!pwallet) {
+                throw JSONRPCError(RPC_WALLET_NOT_FOUND, "No wallet is loaded. A descriptor wallet is required.");
+            }
+
+            EnsureOracleWalletCanUsePrivateKeys(*pwallet);
+            const uint32_t oracle_id = ParseConfiguredOracleId(request, 0);
+            const bool replace = OptionalParamIsSet(request, 2) ? request.params[2].get_bool() : false;
+
+            CKey key;
+            std::string parse_error;
+            if (!TryParseOraclePrivateKey(request.params[1].get_str(), key, parse_error)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY,
+                    strprintf("Oracle private key is invalid: %s", parse_error));
+            }
+
+            const bool had_existing_key = pwallet->HasOracleKey(oracle_id);
+            if (had_existing_key && !replace) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Wallet '%s' already has an oracle key for oracle ID %u; pass replace=true to overwrite it",
+                              pwallet->GetName(), oracle_id));
+            }
+
+            EnsureOracleWalletUnlocked(*pwallet, "import");
+            wallet::EnsureWalletIsUnlocked(*pwallet);
+
+            if (!pwallet->StoreOracleKey(oracle_id, key)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Failed to store oracle key in wallet database");
+            }
+
+            const CPubKey pubkey = key.GetPubKey();
+            const XOnlyPubKey xonly(pubkey);
+            const OracleNodeInfo* oracle_config = Params().GetOracleNode(oracle_id);
+            const bool authorized = oracle_config && pubkey == oracle_config->pubkey;
+
+            UniValue result(UniValue::VOBJ);
+            result.pushKV("oracle_id", static_cast<int>(oracle_id));
+            result.pushKV("pubkey", HexStr(pubkey));
+            result.pushKV("pubkey_xonly", HexStr(xonly));
+            result.pushKV("stored_in_wallet", true);
+            result.pushKV("replaced", had_existing_key);
+            result.pushKV("authorized", authorized);
+            result.pushKV("wallet_name", pwallet->GetName());
+            result.pushKV("message", authorized
+                ? "Oracle key imported and matches the current chainparams slot."
+                : "Oracle key imported. It is stored for this slot but does not currently match chainparams; startoracle will not run until the public key is authorized for this oracle ID.");
             return result;
         },
     };

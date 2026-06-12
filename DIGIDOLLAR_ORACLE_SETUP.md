@@ -104,13 +104,17 @@ digibyte-cli -testnet createwallet "oracle"
 # 3. Generate your oracle key (one-time only)
 digibyte-cli -testnet -rpcwallet=oracle createoraclekey <your_oracle_id>
 
-# 4. Send your pubkey (66-char hex starting with 02/03) to the maintainer
+# 4. Optional: export an offline recovery copy of your oracle private key
+#    This prints sensitive signing material. Run only on a trusted local machine.
+digibyte-cli -testnet -rpcwallet=oracle exportoracleprivkey <your_oracle_id>
+
+# 5. Send your pubkey (66-char hex starting with 02/03) to the maintainer
 #    NEVER share your private key.
 
-# 5. After the maintainer ships a release with your key, start your oracle:
+# 6. After the maintainer ships a release with your key, start your oracle:
 digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
 
-# 6. Verify
+# 7. Verify
 digibyte-cli -testnet getoracles true
 ```
 
@@ -152,6 +156,22 @@ digibyte-cli -testnet getoracles true
 ### Decommissioning retired testnets
 
 If you are still running the retired `testnet25` chain (port **12032**, data dir `~/.digibyte/testnet25/`), `testnet24` chain (port **12031**, data dir `~/.digibyte/testnet24/`), `testnet23` chain (port **12030**, data dir `~/.digibyte/testnet23/`), or older `testnet21` chain (port **12035**, data dir `~/.digibyte/testnet21/`), migration to current `testnet26` (port **12033**, data dir `~/.digibyte/testnet26/`) is a **fresh chain**: do **not** copy old `blocks/` or `chainstate/`. Migrate only the wallet that holds your oracle key, then follow the New Oracle Setup steps above against the fresh testnet26 directory.
+
+### Restoring an oracle key into a fresh wallet
+
+Use this only when normal wallet restore is not available or you need to move an assigned oracle key into a new wallet:
+
+```bash
+digibyte-cli -testnet createwallet "oracle"
+
+# If the wallet is encrypted, unlock it before importing:
+# digibyte-cli -testnet -rpcwallet=oracle walletpassphrase "<passphrase>" 600
+
+digibyte-cli -testnet -rpcwallet=oracle importoracleprivkey <your_oracle_id> <private_key_hex>
+digibyte-cli -testnet -rpcwallet=oracle startoracle <your_oracle_id>
+```
+
+`importoracleprivkey` rejects an existing key unless you pass `true` for the optional `replace` argument. The RPC returns `authorized=false` when the imported key does not match the current chainparams slot; in that case the key is stored, but `startoracle` will not run until the public key is authorized for that oracle ID.
 
 ---
 
@@ -220,7 +240,7 @@ removed / paid API key required).
 
 | Parameter | Testnet | Regtest | Mainnet |
 |-----------|---------|---------|---------|
-| Active Oracles (`nOraclePubkeyCount`) | 21 | 7 | 21 |
+| Active Oracles (`nOraclePubkeyCount`) | 35 | 7 | 35 |
 | Reserved slots (`nOracleTotalOracles`) | 35 | 7 | 35 |
 | Consensus Required (`nOracleConsensusRequired`) | 7 | 4-of-7 | 7 |
 | Activation Height (`nDDActivationHeight`) | 600 | 650 | BIP9 (23,627,520) |
@@ -271,6 +291,8 @@ digibyte-cli -testnet getoraclepubkey <oracle_id>
 |---------|----------|
 | `"No wallet is loaded"` | Run `loadwallet "oracle"` first, then add `-rpcwallet=oracle` to commands |
 | `"Oracle key already exists"` | Key is already in your wallet — no need to recreate |
+| Need to move a key into a fresh wallet | Use `exportoracleprivkey` from the source wallet and `importoracleprivkey` into the new wallet; unlock encrypted wallets first |
+| `"already has an oracle key"` during import | The wallet already has a key for that oracle ID; verify the existing key or pass `true` as the `replace` argument |
 | `"Oracle ID not found in chain parameters"` | Your key isn't in chainparams yet — wait for next release |
 | `"Oracle not configured"` | Run `createoraclekey` first (new operators) or `loadwallet` (existing) |
 | Oracle not running after restart | Since RC25 the wallet auto-starts the oracle (`CWallet::TryAutoStartOracles`); if it doesn't, run `loadwallet` + `walletpassphrase` (if encrypted) + `startoracle` |
@@ -290,6 +312,24 @@ Generate an oracle Schnorr keypair and store it in your wallet. One-time only.
 digibyte-cli -testnet -rpcwallet=oracle createoraclekey <oracle_id>
 ```
 Returns `pubkey` (33-byte compressed) and `pubkey_xonly` (32-byte x-only). Send the `pubkey` to the maintainer. Rejects if a key already exists for that ID.
+
+#### `exportoracleprivkey` *(wallet RPC)*
+Export a wallet-stored oracle private key as 32-byte hex for backup or migration. The wallet must be unlocked if encrypted.
+
+```
+digibyte-cli -testnet -rpcwallet=oracle exportoracleprivkey <oracle_id>
+```
+
+The returned `private_key` is sensitive oracle signing material. Store it offline and never share it with the maintainer or other operators.
+
+#### `importoracleprivkey` *(wallet RPC)*
+Import a wallet-stored oracle private key into the loaded wallet. The wallet must be unlocked if encrypted.
+
+```
+digibyte-cli -testnet -rpcwallet=oracle importoracleprivkey <oracle_id> <private_key_hex> [replace]
+```
+
+The optional `replace` argument defaults to `false`. Importing a key that does not match the current chainparams slot succeeds but returns `authorized=false`; the key is stored for recovery, but `startoracle` will refuse to run until that public key is authorized for the oracle ID.
 
 #### `startoracle` *(wallet RPC)*
 Start the oracle price feed thread. Loads the private key from your wallet.

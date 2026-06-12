@@ -347,6 +347,9 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "importdigidollaraddress", 3, "p2sh" },
     // DigiDollar oracle RPC commands
     { "createoraclekey", 0, "oracle_id" },
+    { "exportoracleprivkey", 0, "oracle_id" },
+    { "importoracleprivkey", 0, "oracle_id" },
+    { "importoracleprivkey", 2, "replace" },
     { "startoracle", 0, "oracle_id" },
     { "stoporacle", 0, "oracle_id" },
     { "getoracles", 0, "active_only" },

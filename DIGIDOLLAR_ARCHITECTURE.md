@@ -1171,7 +1171,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 | | `simulatepricevolatility` | ✅ Complete | Test volatility protection |
 | | `enablemockoracle` | ✅ Complete | Enable/disable mock oracle |
 
-**Wallet-Layer Commands (13 in `/src/wallet/rpc/wallet.cpp`, require wallet context):**
+**Wallet-Layer Commands (17 in `/src/wallet/rpc/wallet.cpp`, require wallet context):**
 
 | Command | Status | Notes |
 |---------|--------|-------|
@@ -1185,8 +1185,12 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 | `listdigidollaraddresses` | ✅ Complete | List all DD addresses in wallet |
 | `getredemptioninfo` | ✅ Complete | Redemption details for a position |
 | `listdigidollartxs` | ✅ Complete | List DD transaction history |
+| `listdigidollarunspent` | ✅ Complete | List spendable DD UTXOs for coin control |
+| `listdigidollarutxos` | ✅ Complete | Alias for DD UTXO listing |
 | `validateddaddress` | ✅ Complete | Validate DD address format |
 | `createoraclekey` | ✅ Complete | Generate oracle signing key pair |
+| `exportoracleprivkey` | ✅ Complete | Export wallet-stored oracle private key for backup/migration |
+| `importoracleprivkey` | ✅ Complete | Import wallet-stored oracle private key for recovery/migration |
 | `startoracle` | ✅ Complete | Start local oracle participant from wallet key |
 
 **Important Notes:**
@@ -1711,4 +1715,4 @@ test/functional/digidollar_basic.py
 
 ---
 
-*Document last validated 2026-05-20 against the source on `feature/digidollar-v1`. RPC commands: 32 registered total (17 registered in `RegisterDigiDollarRPCCommands` at `src/rpc/digidollar.cpp:5570`, 15 in `GetWalletRPCCommands` at `src/wallet/rpc/wallet.cpp:888`, including `sendmanydigidollar`, `listdigidollarunspent`, and `listdigidollarutxos`); 31 are activation-gated and `getdigidollardeploymentinfo` remains the intentional ungated deployment/status probe. Oracle aggregation: 6 active exchange fetchers via libcurl (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko). `MockOracleManager` is a regtest helper only; `OP_CHECKPRICE` consults live oracle consensus and fails closed when no price is available (commit `f77678cd0f`). DigiDollar transfers/redeems are confirmed-only (commit `0b4959f563`). `sendoracleprice` RPC was removed as a fake-price-injection vulnerability and `submitoracleprice` does not exist anywhere in the source tree. Pre-V1 oracle bundle versions are rejected at block validation once DigiDollar is active (commit `f2bb0a19a4`).*
+*Document last validated 2026-06-12 against the source on `feature/digidollar-v1`. RPC commands: 34 registered total (17 registered in `RegisterDigiDollarRPCCommands` at `src/rpc/digidollar.cpp`, 17 in `GetWalletRPCCommands` at `src/wallet/rpc/wallet.cpp`, including `sendmanydigidollar`, `listdigidollarunspent`, `listdigidollarutxos`, `exportoracleprivkey`, and `importoracleprivkey`). DD price/position/transaction/oracle-operation RPCs are activation-gated; `getdigidollardeploymentinfo` and wallet-local oracle key-management RPCs (`createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`) remain usable before activation. Oracle aggregation: 6 active exchange fetchers via libcurl (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko). `MockOracleManager` is a regtest helper only. DigiDollar transfers/redeems are confirmed-only (commit `0b4959f563`). `sendoracleprice` RPC was removed as a fake-price-injection vulnerability and `submitoracleprice` does not exist anywhere in the source tree. Pre-V1 oracle bundle versions are rejected at block validation once DigiDollar is active (commit `f2bb0a19a4`).*

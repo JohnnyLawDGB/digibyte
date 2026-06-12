@@ -450,7 +450,7 @@ Non-DD-aware wallets can safely ignore these — they behave as Tapscript OP_SUC
 
 ### Wallet RPCs (require loaded wallet)
 
-Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DD block at lines 962–976):
+Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888`:
 
 | Command | Description |
 |---------|-------------|
@@ -468,6 +468,8 @@ Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DD bl
 | `redeemdigidollar <position_id> <cents>` | Redeem DD → unlock DGB collateral |
 | `validateddaddress <address>` | Validate a DD address |
 | `createoraclekey <oracle_id>` | Wallet-scoped oracle key generation |
+| `exportoracleprivkey <oracle_id>` | Export a wallet-stored oracle private key for backup/migration |
+| `importoracleprivkey <oracle_id> <private_key_hex> [replace]` | Import a wallet-stored oracle private key for recovery/migration |
 | `startoracle <oracle_id> [private_key_hex]` | Start local oracle from a wallet-stored or supplied key |
 
 ### Information RPCs (no wallet needed)

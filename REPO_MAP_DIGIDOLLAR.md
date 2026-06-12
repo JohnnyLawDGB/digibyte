@@ -606,6 +606,8 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `getprotectionstatus()` → returns DCA/ERR/volatility protection status
 - **Oracle:**
   - `createoraclekey()` → generates oracle signing key pair
+  - `exportoracleprivkey()` → exports a wallet-stored oracle private key for backup/migration
+  - `importoracleprivkey()` → imports a wallet-stored oracle private key for recovery/migration
   - `startoracle()` → starts oracle node with given key
 - `RegisterDigiDollarRPCCommands(t)` → registers 17 commands with the RPC table (4 system-monitoring, 1 unsupported address-validation/import stub, 1 utility, 1 oracle price, 1 protection-status, 1 multi-oracle price, 4 oracle management, 4 mock oracle for regtest only). Wallet-context DD/oracle commands are registered separately via `GetWalletRPCCommands()` in `src/wallet/rpc/wallet.cpp`.
 
@@ -618,7 +620,7 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
 - ⚠️ **NOT registered** anywhere in the build. `GetDigiDollarTransactionRPCCommands()` is defined but never called. The active versions of all callable RPCs live in `src/rpc/digidollar.cpp` (`RegisterDigiDollarRPCCommands`) and `src/wallet/rpc/wallet.cpp` (`GetWalletRPCCommands`). Treat this file as legacy until removed or rewired.
 
 ### src/wallet/rpc/wallet.cpp *(DigiDollar/oracle wallet-context registrations)*
-- `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` registers 15 wallet-context commands at lines 962–976: `mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `listdigidollarunspent`, `listdigidollarutxos`, `validateddaddress`, `createoraclekey`, `startoracle`. These require a loaded wallet because they read DD owner/address keys (`StoreOwnerKey`/`GetOwnerKey`), DD UTXO wallet state, or oracle private keys (`StoreOracleKey`/`GetOracleKey`).
+- `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` registers 17 wallet-context commands: `mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `listdigidollarunspent`, `listdigidollarutxos`, `validateddaddress`, `createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`, `startoracle`. These require a loaded wallet because they read DD owner/address keys (`StoreOwnerKey`/`GetOwnerKey`), DD UTXO wallet state, or oracle private keys (`StoreOracleKey`/`GetOracleKey`).
 
 ---
 
@@ -869,7 +871,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ DD-aware `lockunspent` protection (prevents unlocking DD collateral/token UTXOs via RPC)
 
 ### src/wallet/rpc/wallet.cpp
-- ⚠️ Registers the 15 wallet-context DD/oracle RPC commands in the wallet RPC table, including `sendmanydigidollar`, `listdigidollarunspent`, and `listdigidollarutxos`
+- ⚠️ Registers the 17 wallet-context DD/oracle RPC commands in the wallet RPC table, including `sendmanydigidollar`, `listdigidollarunspent`, `listdigidollarutxos`, `exportoracleprivkey`, and `importoracleprivkey`
 
 ### src/wallet/scriptpubkeyman.h
 - ⚠️ Forward declaration of DD key management interface
@@ -998,7 +1000,7 @@ present in the tree but not compiled into the current unit-test binary.
 | `oracle_p2p_tests.cpp` | Oracle P2P message validation, rate limiting, DOS protection |
 | `oracle_phase2_tests.cpp` | Legacy Phase 2 / MuSig2 oracle validation regressions: on-chain format, signature hash changes, multi-oracle Schnorr consensus |
 | `redteam_phase2_audit_tests.cpp` | **RED HORNET legacy Phase 2** exploit regressions: Schnorr sig bypass, selective price inclusion, consensus fork vectors, oracle identity attacks, signature replay, version downgrade, IQR outlier gaming, consensus price determinism |
-| `oracle_rpc_tests.cpp` | Oracle RPC commands: getoracleprice, createoraclekey, startoracle |
+| `oracle_rpc_tests.cpp` | Oracle RPC commands: getoracleprice, createoraclekey, export/import oracle private key, startoracle |
 | `oracle_wallet_key_tests.cpp` | Oracle key generation, storage, validation against chainparams |
 | `oracle_bundle_timing_tests.cpp` | Oracle bundle timing edge cases and epoch boundary behavior |
 | `oracle_price_feed_rh09_tests.cpp` | RH-09 oracle price feed attack vectors and edge cases |

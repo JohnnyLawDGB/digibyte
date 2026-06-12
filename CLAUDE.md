@@ -40,7 +40,7 @@ src/primitives/      # oracle.h (price message + bundle types)
 src/rpc/             # digidollar.cpp (17 base RPCs); digidollar_transactions.cpp is
                      # legacy / unregistered
 src/wallet/          # digidollarwallet.{cpp,h}, ddcoincontrol.h; wallet/rpc/wallet.cpp
-                     # registers 15 wallet-context DD/oracle RPCs
+                     # registers 17 wallet-context DD/oracle RPCs
 src/qt/              # DD tab + widgets/dialogs: digidollar{tab,mintwidget,sendwidget,
                      # receivewidget,redeemwidget,overviewwidget,positionswidget,
                      # transactionswidget,coincontroldialog,receiverequest},
@@ -141,13 +141,15 @@ LOCK_TIER_OPRETURN    = stored explicitly in mint OP_RETURN; consensus rejects
 | Qt | `DigiDollarTab` activation overlay; widgets check `isVisible()` before polling | `src/qt/digidollartab.cpp` |
 | Price cache | `UpdatePriceCache` gated on `DEPLOYMENT_DIGIDOLLAR` | `src/validation.cpp` (rh61 fix) |
 
-## RPC surface (32 commands)
+## RPC surface (34 commands)
 
 17 commands registered via `RegisterDigiDollarRPCCommands()` in `src/rpc/digidollar.cpp:5570`:
 `getdigidollarstats`, `getdcamultiplier`, `calculatecollateralrequirement`, `getdigidollardeploymentinfo`, `importdigidollaraddress`, `estimatecollateral`, `getoracleprice`, `getalloracleprices`, `getprotectionstatus`, `getoracles`, `listoracle`, `stoporacle`, `getoraclepubkey`, `setmockoracleprice` (regtest), `getmockoracleprice` (regtest), `simulatepricevolatility` (regtest), `enablemockoracle` (regtest).
 
-15 wallet-context commands registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888` (DigiDollar block at lines 962–976):
-`mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `listdigidollarunspent`, `listdigidollarutxos`, `validateddaddress`, `createoraclekey`, `startoracle`.
+17 wallet-context commands registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888`:
+`mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `listdigidollarunspent`, `listdigidollarutxos`, `validateddaddress`, `createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`, `startoracle`.
+
+`createoraclekey`, `exportoracleprivkey`, and `importoracleprivkey` are local wallet key-management RPCs and are intentionally usable before DigiDollar activation. They do not start an oracle, sign prices, relay oracle data, or change consensus state. `startoracle` and the price/DD operational RPCs remain activation-gated.
 
 `sendoracleprice` and `submitoracleprice` are intentionally **absent** from the registration tables: `sendoracleprice` was removed as a fake-price-injection vulnerability, and `submitoracleprice` does not exist anywhere in the source tree. Oracle prices come exclusively from live exchange aggregation.
 

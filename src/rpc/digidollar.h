@@ -42,6 +42,8 @@ RPCHelpMan getprotectionstatus();
 
 // Oracle key management
 RPCHelpMan createoraclekey();
+RPCHelpMan exportoracleprivkey();
+RPCHelpMan importoracleprivkey();
 RPCHelpMan startoracle();
 
 // Register all DigiDollar RPC commands

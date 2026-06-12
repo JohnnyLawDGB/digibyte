@@ -53,7 +53,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - **What happens:** Nothing. DigiDollar deployment exists in the code but signaling hasn't begun.
 - **Miner behavior:** Miners don't need to do anything. Block versions don't include bit 23.
 - **User experience:** DigiDollar tab visible in Qt but shows "DigiDollar is not yet active on this blockchain" with current BIP9 status.
-- **RPC behavior:** All DD/oracle RPCs (17 base + 15 wallet-context) return error: "DigiDollar is not yet active on this blockchain"
+- **RPC behavior:** DD price/position/transaction/oracle-operation RPCs return error: "DigiDollar is not yet active on this blockchain". Local wallet oracle key-management RPCs (`createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`) remain available so operators can prepare or recover keys before activation.
 - **P2P behavior:** Oracle price/bundle/consensus/attestation/MuSig2 nonce/context/partial-sig/getoracles messages, including signed `oraclehb` heartbeats, are silently dropped until `IsOracleP2PActive` returns true.
 - **Consensus:** DD transactions rejected with "digidollar-not-active". DD opcodes are not dispatched with DigiDollar semantics until `SCRIPT_VERIFY_DIGIDOLLAR` is set.
 
@@ -72,7 +72,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 ### Phase 4: ACTIVE (block 600+ on testnet)
 - **What happens:** DigiDollar is fully operational. MuSig2 oracle bundles are required in DD mint/redeem blocks; DD transfer-only and ordinary DGB blocks can omit the coinbase oracle bundle.
-- **RPC behavior:** DD/oracle RPCs become functional (17 base in `src/rpc/digidollar.cpp`, 15 wallet-context in `src/wallet/rpc/wallet.cpp`).
+- **RPC behavior:** DD/oracle RPCs become functional (17 base in `src/rpc/digidollar.cpp`, 17 wallet-context in `src/wallet/rpc/wallet.cpp`).
 - **P2P behavior:** Oracle messages (`oracleprice`, `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles`) are processed, relayed, and validated according to the table below. Legacy `oraclebundle` messages are accepted on-wire but explicitly dropped — V1 carries the bundle on-chain in the coinbase, not via the bundle gossip message.
 - **Consensus:** DD transactions are validated. DD opcodes are enforced via `SCRIPT_VERIFY_DIGIDOLLAR` (set in script flags when `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` returns true).
 - **Qt behavior:** Activation overlay disappears. Full DD tab (overview, send, receive, mint, redeem, positions, transactions) becomes accessible.
@@ -86,7 +86,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 ## What Gets Gated (Complete List)
 
-### RPC Commands (all gated by `IsDigiDollarEnabled`)
+### RPC Commands
 
 The DigiDollar/oracle RPC surface is split between the node-context registration in `src/rpc/digidollar.cpp` (registered via `RegisterDigiDollarRPCCommands`) and the wallet-context registration in `src/wallet/rpc/wallet.cpp` (added inside `GetWalletRPCCommands`).
 
@@ -95,12 +95,14 @@ The DigiDollar/oracle RPC surface is split between the node-context registration
 - `getoracleprice`, `getalloracleprices`, `getprotectionstatus`, `getoracles`, `listoracle`, `stoporacle`, `getoraclepubkey`
 - Regtest helpers: `setmockoracleprice`, `getmockoracleprice`, `simulatepricevolatility`, `enablemockoracle`
 
-**Wallet-context (15, added in `src/wallet/rpc/wallet.cpp:888`, DigiDollar block at lines 962–976):**
-`mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `listdigidollarunspent`, `listdigidollarutxos`, `validateddaddress`, `createoraclekey`, `startoracle`.
+**Wallet-context (17, added in `src/wallet/rpc/wallet.cpp:888`):**
+`mintdigidollar`, `senddigidollar`, `sendmanydigidollar`, `redeemdigidollar`, `listdigidollarpositions`, `listdigidollaraddresses`, `getredemptioninfo`, `getdigidollarbalance`, `getdigidollaraddress`, `listdigidollartxs`, `listdigidollarunspent`, `listdigidollarutxos`, `validateddaddress`, `createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`, `startoracle`.
+
+`createoraclekey`, `exportoracleprivkey`, and `importoracleprivkey` are not activation-gated because they only manage wallet-local oracle signing keys. They do not start an oracle or publish prices. `startoracle` remains activation-gated.
 
 **Removed / never present:** `sendoracleprice` was deleted as a fake-price-injection vulnerability; `submitoracleprice` does not exist anywhere in the source tree. Oracle prices come exclusively from live exchange aggregation aggregated under MuSig2. `src/rpc/digidollar_transactions.cpp` declares `getdigidollarinfo`, `transferdigidollar`, `createrawddtransaction`, and `listredeemablepositions`, but the file is **not registered** anywhere — treat it as legacy/unused.
 
-**Gate pattern:** Each DD/oracle RPC calls `DigiDollar::IsDigiDollarEnabled(tip, chainman)` near the top of its handler. That helper checks the BIP9 `DEPLOYMENT_DIGIDOLLAR` state via `DeploymentActiveAfter()`.
+**Gate pattern:** DD price/position/transaction/oracle-operation RPCs call `DigiDollar::IsDigiDollarEnabled(tip, chainman)` near the top of their handler. That helper checks the BIP9 `DEPLOYMENT_DIGIDOLLAR` state via `DeploymentActiveAfter()`. Local wallet key-management RPCs (`createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`) and the deployment-status probe are intentionally usable before activation.
 
 ### P2P Message Handlers
 
@@ -184,7 +186,8 @@ During STARTED/LOCKED_IN, blocks should have version `0x20800004` or similar (wi
 ### Manual Testing Checklist
 
 Before activation (any block < 600):
-- [ ] All DD/oracle RPCs return "DigiDollar is not yet active on this blockchain"
+- [ ] DD price/position/transaction/oracle-operation RPCs return "DigiDollar is not yet active on this blockchain"
+- [ ] Local oracle key-management RPCs (`createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`) remain usable for pre-activation operator setup/recovery
 - [ ] `getdeploymentinfo` shows correct BIP9 state
 - [ ] Qt DD tab shows activation overlay
 - [ ] No oracle messages processed (check debug.log; `IsOracleActive` returns false)

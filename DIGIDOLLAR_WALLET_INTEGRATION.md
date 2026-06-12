@@ -438,11 +438,13 @@ If your wallet parses raw transactions, here's how to identify DD transactions:
 |--------|-----|---------|
 | `OP_DIGIDOLLAR` | `0xbb` | Marks DD outputs (Tapscript OP_SUCCESSx slot pre-activation) |
 | `OP_DDVERIFY` | `0xbc` | Verify DD conditions (Tapscript OP_SUCCESSx slot pre-activation) |
-| `OP_CHECKPRICE` | `0xbd` | Oracle price verification — wired to live consensus price (no mock fallback in production) |
+| `OP_CHECKPRICE` | `0xbd` | Reserved and deterministically disabled; consumes one operand and pushes false |
 | `OP_CHECKCOLLATERAL` | `0xbe` | Collateral ratio check |
 | `OP_ORACLE` | `0xbf` | Coinbase oracle bundle marker (Tapscript OP_SUCCESSx slot pre-activation) |
 
 Non-DD-aware wallets can safely ignore these — they behave as Tapscript OP_SUCCESSx (BIP-342) until `SCRIPT_VERIFY_DIGIDOLLAR` is set, which only happens after BIP9 `DEPLOYMENT_DIGIDOLLAR` is ACTIVE.
+
+`OP_CHECKPRICE` is reserved and deterministically disabled; mint/redeem validation reads authenticated coinbase oracle bundles and the oracle price cache instead of a script-local price opcode. Oracle P2P messages, including `ORACLEHEARTBEAT` use `IsOracleP2PActive`.
 
 ---
 
@@ -450,7 +452,7 @@ Non-DD-aware wallets can safely ignore these — they behave as Tapscript OP_SUC
 
 ### Wallet RPCs (require loaded wallet)
 
-Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888`:
+Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp`:
 
 | Command | Description |
 |---------|-------------|
@@ -474,7 +476,7 @@ Registered in `GetWalletRPCCommands()` at `src/wallet/rpc/wallet.cpp:888`:
 
 ### Information RPCs (no wallet needed)
 
-Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp:5570`:
+Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp`:
 
 | Command | Description |
 |---------|-------------|

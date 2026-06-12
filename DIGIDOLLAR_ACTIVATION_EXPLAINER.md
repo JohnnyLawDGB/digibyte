@@ -257,7 +257,7 @@ A practical implication: there is no period in which the oracle P2P surface is l
 | BIP9 state machine | `src/versionbits.cpp` | `ThresholdConditionChecker` |
 | Deployment info | `src/deploymentinfo.cpp` | `VersionBitsDeploymentInfo[]` |
 | RPC activation gate | `src/rpc/digidollar.cpp` | `IsDigiDollarEnabled()` check in each RPC |
-| P2P activation gate | `src/net_processing.cpp` | `IsOracleActive()` in `ORACLEPRICE`/`ORACLEBUNDLE`/`ORACLECONSENSUS`/`ORACLEATTESTATION`/`ORACLEMUSIGNONCE`/`ORACLEMUSIGCONTEXT`/`ORACLEMUSIGPARTIALSIG`/`GETORACLES`; `ORACLEHEARTBEAT` is authenticated/rate-limited but currently not height-gated |
+| P2P activation gate | `src/net_processing.cpp` | `IsOracleP2PActive()` in `ORACLEPRICE`/`ORACLEBUNDLE`/`ORACLECONSENSUS`/`ORACLEATTESTATION`/`ORACLEMUSIGNONCE`/`ORACLEMUSIGCONTEXT`/`ORACLEMUSIGPARTIALSIG`/`GETORACLES`/`ORACLEHEARTBEAT` |
 | Mempool gate | `src/validation.cpp:976-989` | `IsDigiDollarEnabled()` in `AcceptToMemoryPool`; recent MuSig2 quote required for DD txs |
 | Block validation gate | `src/validation.cpp:2808-2850` | `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` in `ConnectBlock` |
 | Script flags | `src/validation.cpp:2759-2792` | `SCRIPT_VERIFY_DIGIDOLLAR` flag |

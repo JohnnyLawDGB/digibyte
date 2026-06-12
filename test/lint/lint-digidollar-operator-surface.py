@@ -84,6 +84,12 @@ FORBIDDEN = {
         "oraclehb` heartbeats are the current telemetry exception",
         "Signed oracle version heartbeats are the current exception",
         "ORACLEHEARTBEAT` is not guarded",
+        "`ORACLEHEARTBEAT` is authenticated/rate-limited but currently not height-gated",
+    ],
+    "DIGIDOLLAR_WALLET_INTEGRATION.md": [
+        "wired to live consensus price",
+        "no mock fallback in production",
+        "currently not height-gated",
     ],
     "DIGIDOLLAR_ARCHITECTURE.md": [
         "Live-oracle consensus price",
@@ -195,6 +201,10 @@ REQUIRED = {
         "`OP_CHECKPRICE` is reserved and deterministically disabled",
         "including signed `oraclehb` heartbeats",
         "uses `IsOracleP2PActive`",
+    ],
+    "DIGIDOLLAR_WALLET_INTEGRATION.md": [
+        "`OP_CHECKPRICE` is reserved and deterministically disabled",
+        "`ORACLEHEARTBEAT` use `IsOracleP2PActive`",
     ],
     "DIGIDOLLAR_ARCHITECTURE.md": [
         "`OP_CHECKPRICE` is reserved and deterministically disabled",

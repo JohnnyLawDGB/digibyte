@@ -58,12 +58,11 @@ The old key does not need to sign its own replacement. That is what solves lost 
 The current implementation is static and chainparams-driven:
 
 - `src/kernel/chainparams.cpp`
-  - Mainnet has 35 reserved oracle slots, 17 active pubkeys, and 9 required MuSig2 signers.
-  - Testnet currently has 35 reserved oracle slots, 18 active pubkeys, and 9 required MuSig2 signers.
+  - Mainnet and testnet have 35 reserved oracle slots, 35 active pubkeys, and 7 required MuSig2 signers.
   - Regtest has 7 oracle slots and 4 required signers.
 - `src/consensus/params.h`
   - `nOraclePubkeyCount` defines how many oracle IDs are consensus-active.
-  - `nOracleTotalOracles` is used as the reserved bitmap/slot count. The current comment calls it "active," but mainnet/testnet use 35 total slots while only the first 17/18 are active today.
+  - `nOracleTotalOracles` is used as the reserved bitmap/slot count. Mainnet/testnet currently use all 35 slots as active signers.
   - `nOracleConsensusRequired` defines the MuSig2 price bundle threshold.
   - `vOraclePublicKeys` contains the hardcoded x-only public keys.
 - `src/oracle/bundle_manager.cpp`

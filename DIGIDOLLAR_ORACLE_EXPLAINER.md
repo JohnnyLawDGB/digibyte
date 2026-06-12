@@ -148,7 +148,7 @@ DigiDollar and the oracle validator activate together:
 | Network | DigiDollar activation | Oracle activation | MuSig2 height |
 |---------|-----------------------|-------------------|---------------|
 | Mainnet | BIP9 bit 23, min height 23,627,520 | same trigger | 0 |
-| Testnet25 | height 600 / BIP9 active | same trigger | 0 |
+| Testnet26 | height 600 / BIP9 active | same trigger | 0 |
 | Regtest | BIP9 `ALWAYS_ACTIVE`; DD/oracle P2P height gates 650 by default, or the direct `-digidollaractivationheight=N` override | same height trigger | 0 |
 
 Before activation, DD-looking data does not trigger V1 consensus rules. After

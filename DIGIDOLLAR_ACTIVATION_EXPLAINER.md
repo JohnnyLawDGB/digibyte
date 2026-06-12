@@ -244,7 +244,7 @@ Both heights are intentionally aligned in `src/kernel/chainparams.cpp`:
 | Network | `nDDActivationHeight` | `nOracleActivationHeight` | `nDigiDollarMuSig2Height` |
 |---------|-----------------------|---------------------------|---------------------------|
 | Mainnet | `23627520` | `consensus.nDDActivationHeight` (i.e. `23627520`) | `0` (MuSig2 active immediately when DD is BIP9-active) |
-| Testnet25 | `600` | `600` | `0` |
+| Testnet26 | `600` | `600` | `0` |
 | Regtest | `650` (line 1112) | `650` (line 1115) | `0` (line 1119) |
 
 A practical implication: there is no period in which the oracle P2P surface is live but DD itself is not, and there is no period in which DD is active but MuSig2 v0x03 is not yet the on-chain bundle format — the three heights collapse to one event per network. Documents that say "mainnet `nOracleActivationHeight = 3000000`" are stale; that earlier staging configuration was removed before V1 launch.

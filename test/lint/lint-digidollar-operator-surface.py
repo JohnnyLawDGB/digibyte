@@ -78,6 +78,7 @@ FORBIDDEN = {
         "ORACLE_CONSENSUS_REQUIRED=9",
     ],
     "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
+        "Testnet25 | `600`",
         "slots 0–16",
         "OP_CHECKPRICE` consults the live oracle consensus price",
         "`g_get_oracle_consensus_price` — fails closed",
@@ -90,6 +91,13 @@ FORBIDDEN = {
         "wired to live consensus price",
         "no mock fallback in production",
         "currently not height-gated",
+    ],
+    "DIGIDOLLAR_ORACLE_EXPLAINER.md": [
+        "Testnet25 | height 600",
+    ],
+    "ROSTER_PLAN.md": [
+        "Mainnet has 35 reserved oracle slots, 17 active pubkeys, and 9 required MuSig2 signers",
+        "Testnet currently has 35 reserved oracle slots, 18 active pubkeys, and 9 required MuSig2 signers",
     ],
     "DIGIDOLLAR_ARCHITECTURE.md": [
         "Live-oracle consensus price",
@@ -197,6 +205,7 @@ REQUIRED = {
         "ORACLE_CONSENSUS_REQUIRED=7",
     ],
     "DIGIDOLLAR_ACTIVATION_EXPLAINER.md": [
+        "Testnet26 | `600`",
         "slots 0-34",
         "`OP_CHECKPRICE` is reserved and deterministically disabled",
         "including signed `oraclehb` heartbeats",
@@ -205,6 +214,12 @@ REQUIRED = {
     "DIGIDOLLAR_WALLET_INTEGRATION.md": [
         "`OP_CHECKPRICE` is reserved and deterministically disabled",
         "`ORACLEHEARTBEAT` use `IsOracleP2PActive`",
+    ],
+    "DIGIDOLLAR_ORACLE_EXPLAINER.md": [
+        "Testnet26 | height 600",
+    ],
+    "ROSTER_PLAN.md": [
+        "Mainnet and testnet have 35 reserved oracle slots, 35 active pubkeys, and 7 required MuSig2 signers",
     ],
     "DIGIDOLLAR_ARCHITECTURE.md": [
         "`OP_CHECKPRICE` is reserved and deterministically disabled",

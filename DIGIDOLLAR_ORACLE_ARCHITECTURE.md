@@ -117,19 +117,14 @@ V1 ships with:
 ### 2.2 For Developers: Integration Points
 
 ```cpp
-// 1. Live oracle consensus price (used by DD mint/redeem validation)
-//    Implemented in src/script/interpreter.cpp:725
-//    Hook is registered by node init; CAmount{0} when no consensus.
-const CAmount oraclePrice = g_get_oracle_consensus_price
-                                ? g_get_oracle_consensus_price()
-                                : CAmount{0};
-
-// 2. Bundle manager price cache (height-keyed)
+// 1. Bundle manager price cache (height-keyed)
+//    Used by DD mint/redeem validation after an authenticated coinbase
+//    oracle bundle has been accepted for the block.
 OracleBundleManager& manager = OracleBundleManager::GetInstance();
 CAmount price_micro_usd  = manager.GetLatestPrice();
 CAmount historical_price = manager.GetOraclePriceForHeight(block_height);
 
-// 3. Quorum / activation queries
+// 2. Quorum / activation queries
 bool quorum  = OracleBundleManager::HasMuSig2Quorum(bundle, params);
 bool enabled = Consensus::IsOracleActive(params, height);
 ```
@@ -165,8 +160,9 @@ Core implementation:
 │                                          verified with chainparams pubkey replacement before
 │                                          signature verification
 ├── src/rpc/digidollar.cpp                 17 node-context RPCs; sendoracleprice REMOVED
-├── src/wallet/rpc/wallet.cpp              15 wallet-context DD/oracle RPCs (createoraclekey,
-│                                          startoracle, mintdigidollar, etc.)
+├── src/wallet/rpc/wallet.cpp              17 wallet-context DD/oracle RPCs (createoraclekey,
+│                                          exportoracleprivkey, importoracleprivkey, startoracle,
+│                                          mintdigidollar, etc.)
 └── src/kernel/chainparams.cpp             vOracleNodes (35 mainnet/testnet active slots,
                                            7 regtest), vOraclePublicKeys
                                            (35 active mainnet/testnet, 7 regtest), nDDActivationHeight,

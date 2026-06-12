@@ -695,12 +695,12 @@ enum class SigVersion {
 ```cpp
 OP_DIGIDOLLAR = 0xbb,       // DD output / payload marker (Tapscript OP_SUCCESSx slot)
 OP_DDVERIFY = 0xbc,         // Verify DD conditions     (Tapscript OP_SUCCESSx slot)
-OP_CHECKPRICE = 0xbd,       // Live-oracle consensus price (Tapscript OP_SUCCESSx slot)
+OP_CHECKPRICE = 0xbd,       // Reserved/disabled price check (Tapscript OP_SUCCESSx slot)
 OP_CHECKCOLLATERAL = 0xbe,  // Verify collateral ratio   (Tapscript OP_SUCCESSx slot)
 OP_ORACLE = 0xbf            // Coinbase oracle bundle marker (Tapscript OP_SUCCESSx slot)
 ```
 
-`MAX_OPCODE` is now `OP_ORACLE` (`script.h:220`). These opcodes consume BIP-342 OP_SUCCESSx slots (script.h's `OP_NOP10` is `0xb9`, not `0xb8`); they behave as OP_SUCCESSx until `SCRIPT_VERIFY_DIGIDOLLAR` is set, at which point the interpreter dispatches them via `IsDigiDollarOpcode` / `IsOpSuccessForFlags` (`src/script/interpreter.cpp:439-453`) and the per-opcode handlers (around lines 660-754). `OP_CHECKPRICE` consults the live oracle consensus price hook (`g_get_oracle_consensus_price`) — there is no mock fallback in the production path.
+`MAX_OPCODE` is now `OP_ORACLE` (`script.h:220`). These opcodes consume BIP-342 OP_SUCCESSx slots (script.h's `OP_NOP10` is `0xb9`, not `0xb8`); they behave as OP_SUCCESSx until `SCRIPT_VERIFY_DIGIDOLLAR` is set, at which point the interpreter dispatches them via `IsDigiDollarOpcode` / `IsOpSuccessForFlags` (`src/script/interpreter.cpp:439-453`) and the per-opcode handlers (around lines 660-754). `OP_CHECKPRICE` is reserved and deterministically disabled; when reached under DigiDollar script flags it consumes its operand and pushes false instead of consulting node-local oracle state.
 
 ### 8.5 Taproot Support
 
@@ -1291,7 +1291,7 @@ ValidateBundle(bundle, height, params)
 
 **File:** `src/oracle/mock_oracle.cpp`
 
-Mock prices are only available on regtest under the `OracleManagerInterface` shim. Mock-related RPCs (`setmockoracleprice`, `getmockoracleprice`, `simulatepricevolatility`, `enablemockoracle`) are gated to regtest in `src/rpc/digidollar.cpp`. `OP_CHECKPRICE` does not consult the mock manager in production — it requires a live oracle consensus price (commit `f77678cd0f`).
+Mock prices are only available on regtest under the `OracleManagerInterface` shim. Mock-related RPCs (`setmockoracleprice`, `getmockoracleprice`, `simulatepricevolatility`, `enablemockoracle`) are gated to regtest in `src/rpc/digidollar.cpp`. `OP_CHECKPRICE` is reserved and deterministically disabled, so it does not read either mock prices or live node-local oracle state.
 
 ### 13.9 Mining Graceful Degradation (DD txs)
 

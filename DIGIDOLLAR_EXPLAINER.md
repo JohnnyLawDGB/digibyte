@@ -9,7 +9,7 @@ DigiDollar is a decentralized USD-denominated token design native to DigiByte's 
 ### Key Points
 - **DGB becomes the strategic reserve asset** (21B max supply, ~1.94 per person on Earth at 8.1B population)
 - **Everything happens inside DigiByte Core wallet** — you never give up control of your private keys
-- **Status (V1, `feature/digidollar-v1`)**: Testnet25 activates at height 600 after BIP9 signaling; mainnet activation gate is configured for height 23,627,520 (start time 2026-06-01) — see `DIGIDOLLAR_ARCHITECTURE.md` for details
+- **Status (V1, `feature/digidollar-v1`)**: Testnet26 activates at height 600 after BIP9 signaling; mainnet activation gate is configured for height 23,627,520 (start time 2026-06-01) — see `DIGIDOLLAR_ARCHITECTURE.md` for details
 
 ---
 
@@ -162,7 +162,7 @@ Supply chain, gaming, and other wallet-native payment flows can be explored on t
 
 DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet — users maintain complete control of their private keys throughout the entire process.
 
-**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time is pending; mainnet remains gated by the configured start time, minimum height, threshold, current testnet26/RC44 validation, and mainnet oracle-operator deployment. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
+**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time has passed, but mainnet activation remains gated by the configured minimum height, threshold, current testnet26/RC44 validation, and mainnet oracle-operator deployment. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
 
 ### Core Technologies
 

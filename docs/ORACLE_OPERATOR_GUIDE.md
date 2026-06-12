@@ -9,9 +9,10 @@ DigiDollar requires oracle operators to provide real-time DGB/USD price feeds. O
 
 1. Run a current DigiByte Core release (RC44 is the current testnet26 release candidate at the time of writing) and create a descriptor wallet
 2. Run `createoraclekey` to generate their oracle keypair inside the wallet
-3. Send their **public key only** to the DigiByte Core maintainer
-4. The maintainer adds their key to `chainparams.cpp` and ships a new release
-5. The operator runs `startoracle` — the wallet provides the private key automatically
+3. Export an offline recovery copy with `exportoracleprivkey` after unlocking encrypted wallets with `walletpassphrase`
+4. Send their **public key only** to the DigiByte Core maintainer
+5. The maintainer adds their key to `chainparams.cpp` and ships a new release
+6. The operator runs `startoracle` — the wallet provides the private key automatically
 
 For current testnet release/migration mechanics (testnet26, P2P port 12033, RPC port 14026) and retired testnet decommissioning notes, follow `DIGIDOLLAR_ORACLE_SETUP.md`.
 
@@ -68,7 +69,23 @@ Mainnet and testnet chainparams allocate 35 oracle slots (IDs 0–34), and all 3
 - The **compressed public key** (33 bytes, 02/03 prefix) was returned for you to share
 - The **x-only public key** (32 bytes, for Schnorr) was also returned
 
-### Step 4: Send Your Public Key to the Maintainer
+### Step 4: Export an Offline Recovery Copy
+
+Back up the wallet with `backupwallet` and also store one offline copy of the oracle private key:
+
+```bash
+./src/digibyte-cli -testnet -rpcwallet=oracle exportoracleprivkey 0
+```
+
+If the wallet is encrypted, unlock it first:
+
+```bash
+./src/digibyte-cli -testnet -rpcwallet=oracle walletpassphrase "<passphrase>" 60
+```
+
+`exportoracleprivkey` returns sensitive signing material. Store it offline, keep it out of chat, and do not use it as a `startoracle` argument. To restore onto a replacement wallet, load or create the wallet, unlock it if encrypted, then use `importoracleprivkey <oracle_id> <private_key_hex> [replace]`. Importing stores the key for later `startoracle`; it does not start an oracle, sign prices, relay messages, or change consensus state.
+
+### Step 5: Send Your Public Key to the Maintainer
 
 Send **only these two things**:
 1. Your **pubkey** from the output above (66-char hex starting with `02` or `03`)
@@ -76,11 +93,11 @@ Send **only these two things**:
 
 **⚠️ NEVER share your private key. It stays in your wallet.**
 
-### Step 5: Wait for Updated Release
+### Step 6: Wait for Updated Release
 
 The maintainer adds your key to `chainparams.cpp` and releases an updated binary.
 
-### Step 6: Download the Updated Binary and Start Your Oracle
+### Step 7: Download the Updated Binary and Start Your Oracle
 
 ```bash
 # Start the node
@@ -106,7 +123,7 @@ Do not paste oracle private keys into shell commands. Use the wallet-stored key
 created by `createoraclekey`; it keeps the secret out of shell history and
 process listings.
 
-### Step 7: Verify Your Oracle is Running
+### Step 8: Verify Your Oracle is Running
 
 ```bash
 # Check oracle status
@@ -199,7 +216,8 @@ A single broken endpoint (bad URL or quota-blocked) is non-fatal; the round logs
 If the wallet DB is unreadable, the oracle key is gone. There is no on-chain way to rotate keys without a chainparams update.
 
 - Restore the wallet from `backupwallet` if one exists; the `oraclekey` record carries the private key.
-- Otherwise, run `createoraclekey <id>` to generate a new key, send the new pubkey to the maintainer, and wait for the next release before resuming as that slot. Until the chainparams update ships, the slot stays inactive.
+- If you exported the private key, create or load a replacement wallet, unlock it with `walletpassphrase` if encrypted, then run `importoracleprivkey <oracle_id> <private_key_hex> [replace]`. Start the oracle only after the imported public key matches the slot configured in chainparams.
+- If no wallet backup or private-key export exists, run `createoraclekey <id>` to generate a new key, send the new pubkey to the maintainer, and wait for the next release before resuming as that slot. Until the chainparams update ships, the slot stays inactive.
 
 ---
 
@@ -259,6 +277,8 @@ To confirm a slot is in the active quorum at runtime, call
 | Command | Description |
 |---------|-------------|
 | `createoraclekey <oracle_id>` | Generate oracle keypair in wallet (wallet-context RPC) |
+| `exportoracleprivkey <oracle_id>` | Export an offline recovery copy of a wallet-stored oracle private key; encrypted wallets require `walletpassphrase` first |
+| `importoracleprivkey <oracle_id> <private_key_hex> [replace]` | Import a recovery key into the wallet for later `startoracle`; rejects existing keys unless `replace=true` |
 | `startoracle <id>` | Start oracle from the key stored by `createoraclekey` (wallet-context RPC) |
 | `stoporacle <id>` | Stop oracle price thread |
 | `getoraclepubkey <id>` | Check oracle key and status |
@@ -273,12 +293,11 @@ To confirm a slot is in the active quorum at runtime, call
 
 | Component | File | Key Lines |
 |-----------|------|-----------|
-| `createoraclekey` RPC | `src/rpc/digidollar.cpp` | line 4821 |
-| `startoracle` RPC (wallet loading) | `src/rpc/digidollar.cpp` | line 4959 |
-| Wallet RPC registration (`createoraclekey`, `startoracle`) | `src/wallet/rpc/wallet.cpp` | lines 975–976 |
-| Base RPC registration (other oracle commands) | `src/rpc/digidollar.cpp` | `RegisterDigiDollarRPCCommands` line 5570 |
-| Wallet DB storage | `src/wallet/walletdb.cpp` | `WriteOracleKey` line 778, `ReadOracleKey` line 793 |
-| CWallet key methods | `src/wallet/wallet.cpp` | `StoreOracleKey` line 4705, `GetOracleKey` line 4728 |
+| Oracle key RPCs (`createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`, `startoracle`) | `src/rpc/digidollar.cpp` | RPC helpman definitions |
+| Wallet RPC registration | `src/wallet/rpc/wallet.cpp` | `commands` table under DigiDollar/oracle wallet commands |
+| Base RPC registration (other oracle commands) | `src/rpc/digidollar.cpp` | `RegisterDigiDollarRPCCommands` |
+| Wallet DB storage | `src/wallet/walletdb.cpp` | `WriteOracleKey`, `ReadOracleKey` |
+| CWallet key methods | `src/wallet/wallet.cpp` | `StoreOracleKey`, `GetOracleKey` |
 | OracleNodeInfo struct | `src/primitives/oracle.h` | OracleNodeInfo |
 | chainparams oracle slots | `src/kernel/chainparams.cpp` | `InitializeOracleNodes()`, `vOraclePublicKeys` |
 | Unit tests | `src/test/oracle_wallet_key_tests.cpp` | Wallet key generation / persistence |

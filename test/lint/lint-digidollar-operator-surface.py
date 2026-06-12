@@ -23,6 +23,9 @@ FORBIDDEN = {
     ],
     "docs/ORACLE_OPERATOR_GUIDE.md": [
         "raw_hex_private_key",
+        "line 4821",
+        "line 4959",
+        "lines 975–976",
     ],
     "src/rpc/digidollar.cpp": [
         "Provide private_key parameter",
@@ -65,6 +68,8 @@ FORBIDDEN = {
         "< 650",
     ],
     "DIGIDOLLAR_EXPLAINER.md": [
+        "Testnet25 activates",
+        "June 1, 2026 BIP9 start time is pending",
         "slots 0-16 consensus-active",
         "requires 9 BIP-340 Schnorr signatures",
         "require 9 MuSig2 Schnorr signatures",
@@ -81,15 +86,21 @@ FORBIDDEN = {
         "ORACLEHEARTBEAT` is not guarded",
     ],
     "DIGIDOLLAR_ARCHITECTURE.md": [
+        "Live-oracle consensus price",
         "OP_CHECKPRICE production wiring",
         "OP_CHECKPRICE wired to consensus",
         "OP_CHECKPRICE` consults the live consensus price",
+        "OP_CHECKPRICE` consults the live oracle consensus price hook",
         "mainnet/testnet OP_CHECKPRICE and `ShouldBlockMinting` consult",
         "it consults live oracle consensus",
+        "it requires a live oracle consensus price",
         "Wired to live consensus price via `g_get_oracle_consensus_price`",
         "Interpreter calls `g_get_oracle_consensus_price`",
+        "g_get_oracle_consensus_price",
     ],
     "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
+        "g_get_oracle_consensus_price",
+        "15 wallet-context DD/oracle RPCs",
         "OP_CHECKPRICE` consults the live oracle consensus price",
         "DigiDollar minting/redemption logic and `OP_CHECKPRICE` consult",
         "OP_CHECKPRICE has no mock fallback",
@@ -172,6 +183,8 @@ REQUIRED = {
         "Activates at Block 600",
     ],
     "DIGIDOLLAR_EXPLAINER.md": [
+        "testnet26",
+        "mainnet activation remains gated",
         "35 active oracle slots",
         "requires 7 BIP-340 Schnorr signatures",
         "`OP_CHECKPRICE` is reserved and deterministically disabled",
@@ -188,6 +201,7 @@ REQUIRED = {
     ],
     "DIGIDOLLAR_ORACLE_ARCHITECTURE.md": [
         "`OP_CHECKPRICE` is reserved and deterministically disabled",
+        "17 wallet-context DD/oracle RPCs",
         "including `oraclehb`, share the `IsOracleP2PActive` gate",
         "35 active slots",
         "Replaced by 7-signature mainnet/testnet MuSig2",
@@ -211,6 +225,11 @@ REQUIRED = {
         "chmod 600 \"$CONFIG_FILE\"",
         "ACTUAL_GENESIS=\\$(\\$CLI getblockhash 0 2>/dev/null || true)",
         "listoracle",
+    ],
+    "docs/ORACLE_OPERATOR_GUIDE.md": [
+        "exportoracleprivkey <oracle_id>",
+        "importoracleprivkey <oracle_id> <private_key_hex> [replace]",
+        "walletpassphrase",
     ],
     "test_multi_oracle_testnet.sh": [
         "WARN_TESTS=0",

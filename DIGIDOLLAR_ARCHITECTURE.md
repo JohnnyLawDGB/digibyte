@@ -572,7 +572,7 @@ DigiDollar consensus consumes consensus prices from the oracle subsystem; the fu
 **Price format.** Micro-USD per DGB (1,000,000 = $1.00). DD amounts are stored in cents (100 = $1.00 USD). Conversions for system health use `priceMillicents = priceMicroUSD / 10` (`src/consensus/dca.cpp:242`).
 
 **Where DigiDollar reads the price.**
-- `src/script/interpreter.cpp` — `OP_CHECKPRICE` is reserved and deterministically disabled. It consumes its operand and pushes false; it does not consult `g_get_oracle_consensus_price` or any other node-local oracle cache.
+- `src/script/interpreter.cpp` — `OP_CHECKPRICE` is reserved and deterministically disabled. It consumes its operand and pushes false; it does not consult any node-local oracle cache.
 - `src/digidollar/validation.cpp` — `ValidateMintTransaction()` requires `ctx.oraclePriceMicroUSD > 0` (rejects with `bad-oracle-price` otherwise) and `ShouldBlockMintingDuringERR()` calls `EmergencyRedemptionRatio::ShouldBlockMinting()` which pulls the oracle price from `MockOracleManager` on regtest and `OracleBundleManager::GetLatestPrice()` elsewhere, failing closed when the price is unavailable.
 - `src/validation.cpp:185-283` — Block validation rejects coinbase oracle bundles that fail extraction with `bad-oracle-malformed` once `IsDigiDollarEnabled` is true (the canonical reason for raw v0x01/v0x02 wire payloads, since `ExtractOracleBundle` short-circuits at `src/oracle/bundle_manager.cpp:1000-1057`). The `bad-oracle-legacy` reason is kept as a defense-in-depth gate for hypothetical bundles that parse successfully but report a non-MuSig2 `version`. Mempool acceptance requires a recent valid MuSig2 oracle quote (`HasRecentValidMuSig2OracleQuote`).
 - `src/digidollar/health.cpp` — `SystemHealthMonitor` caches the last oracle price (`SystemMetrics::lastOraclePrice`) and feeds DCA/ERR.
@@ -1506,7 +1506,7 @@ The V1 branch (`feature/digidollar-v1`) closed a series of consensus and policy 
 
 | Area | Behavior | Reference |
 |------|----------|-----------|
-| OP_CHECKPRICE | Reserved and deterministically disabled; consumes one operand and pushes false. It does not read `g_get_oracle_consensus_price` or production mock state. | `b9ddae031e` / `3668971ab2` (`src/script/interpreter.cpp:708-730`) |
+| OP_CHECKPRICE | Reserved and deterministically disabled; consumes one operand and pushes false. It does not read live oracle state or production mock state. | `b9ddae031e` / `3668971ab2` (`src/script/interpreter.cpp:708-730`) |
 | MuSig2 V1 only | Coinbase oracle bundles in DigiDollar-active blocks must carry the V1 MuSig2 v0x03 format. Raw v0x01/v0x02 OP_RETURN payloads fail extraction (`src/oracle/bundle_manager.cpp:1000-1057`) and surface as `bad-oracle-malformed`; the `bad-oracle-legacy` branch is kept as defense-in-depth for bundles that parse but report a non-MuSig2 version. Mempool acceptance requires a recent valid MuSig2 quote. | `f2bb0a19a4`, `bbb85cf363` (`src/validation.cpp:185-283`) |
 | Mainnet/testnet validator parity | The mainnet oracle-validation short-circuit was removed; both networks honor the same V1 oracle-bundle gates. | `f0d9a7b2c7` |
 | DCA / health overflow | DCA and health math use signed `__int128` throughout to prevent collateral × price overflow. | `9cca6970ae` |

@@ -90,6 +90,7 @@ private Q_SLOTS:
     void overviewRecentTransactionsSendShowsNegativeSign();
     void transactionsWidgetShowsRpcHistorySignsAndFields();
     void positionsWidgetLockTierColumnFitsLongestLabel();
+    void positionsWidgetSortingKeepsHealthAndActionsOnSameRow();
     void positionsWidgetInitialLoadNotThrottled();
     void positionsWidgetHealthUsesMicroUsdOraclePrice();
     void positionsWidgetDisablesRedeemForPrivateKeyDisabledWallet();
@@ -103,6 +104,7 @@ private Q_SLOTS:
     void redeemWidgetRefreshesWhenWalletUnlocks();
     void redeemWidgetButtonStateReady();
     void positionsWidgetLockedTooltipShowsRemainingBlocksAndTime();
+    void positionsWidgetPendingMintButtonNotRedeemed();
     void positionsWidgetPendingRedeemButtonNotRedeemed();
     void redeemWidgetKeepsTimelockedPositionDisabled();
     void mintDigiDollarRejectsPrivateKeyDisabledWallet();

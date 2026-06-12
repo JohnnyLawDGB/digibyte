@@ -1688,11 +1688,37 @@ void DigiDollarWidgetTests::positionsWidgetLockedTooltipShowsRemainingBlocksAndT
         false,
         false,
         false,
+        false,
         95);
     QVERIFY(redeemButton != nullptr);
     QCOMPARE(redeemButton->text(), QString("Locked"));
-    QVERIFY(redeemButton->toolTip().contains("Time remaining: 23m"));
+    QVERIFY(redeemButton->toolTip().contains("Time remaining: 24m"));
     QVERIFY(redeemButton->toolTip().contains("Blocks remaining: 95"));
+}
+
+void DigiDollarWidgetTests::positionsWidgetPendingMintButtonNotRedeemed()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    DigiDollarPositionsWidget positionsWidget;
+    QPushButton* redeemButton = positionsWidget.createRedeemButton(
+        QString::fromStdString(uint256::ONE.GetHex()),
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        0);
+    QVERIFY(redeemButton != nullptr);
+    QCOMPARE(redeemButton->text(), QString("Confirming"));
+    QVERIFY(!redeemButton->isEnabled());
+    QVERIFY(redeemButton->toolTip().contains("pending confirmation"));
+    QVERIFY(!redeemButton->toolTip().contains("already been redeemed"));
 }
 
 void DigiDollarWidgetTests::positionsWidgetPendingRedeemButtonNotRedeemed()
@@ -1706,6 +1732,7 @@ void DigiDollarWidgetTests::positionsWidgetPendingRedeemButtonNotRedeemed()
     DigiDollarPositionsWidget positionsWidget;
     QPushButton* redeemButton = positionsWidget.createRedeemButton(
         QString::fromStdString(uint256::ONE.GetHex()),
+        false,
         true,
         false,
         false,
@@ -4618,6 +4645,60 @@ void DigiDollarWidgetTests::positionsWidgetLockTierColumnFitsLongestLabel()
                         .arg(actualWidth)
                         .arg(requiredWidth)
                         .arg(QStringLiteral("10 years"))));
+}
+
+void DigiDollarWidgetTests::positionsWidgetSortingKeepsHealthAndActionsOnSameRow()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    DigiDollarPositionsWidget positionsWidget;
+    QTableWidget* table = positionsWidget.findChild<QTableWidget*>("positionsTable");
+    QVERIFY(table != nullptr);
+
+    const auto makePosition = [](const QString& suffix, double ddMinted, double health) {
+        DigiDollarPosition position{};
+        position.positionId = QStringLiteral("00000000000000000000000000000000000000000000000000000000000000%1").arg(suffix);
+        position.ddMinted = ddMinted;
+        position.dgbCollateral = 1000.0 + ddMinted;
+        position.lockTier = 1;
+        position.unlockHeight = 2000;
+        position.blocksRemaining = 40;
+        position.health = health;
+        position.canRedeem = false;
+        position.isPendingRedeem = false;
+        position.isRedeemed = false;
+        position.mintTime = 1000 + static_cast<int64_t>(ddMinted);
+        return position;
+    };
+
+    positionsWidget.m_positions.clear();
+    positionsWidget.m_positions.append(makePosition(QStringLiteral("03"), 300.0, 130.0));
+    positionsWidget.m_positions.append(makePosition(QStringLiteral("01"), 100.0, 110.0));
+    positionsWidget.m_positions.append(makePosition(QStringLiteral("02"), 200.0, 120.0));
+
+    table->setSortingEnabled(true);
+    table->sortByColumn(DigiDollarPositionsWidget::COL_DD_MINTED, Qt::AscendingOrder);
+    positionsWidget.populatePositionsTable();
+    QCOMPARE(table->rowCount(), 3);
+
+    for (int row = 0; row < table->rowCount(); ++row) {
+        QTableWidgetItem* idItem = table->item(row, DigiDollarPositionsWidget::COL_POSITION_ID);
+        QVERIFY2(idItem != nullptr, qPrintable(QString("row %1 lost its Vault ID item").arg(row)));
+
+        QWidget* healthWidget = table->cellWidget(row, DigiDollarPositionsWidget::COL_HEALTH);
+        QVERIFY2(healthWidget != nullptr, qPrintable(QString("row %1 lost its Health widget").arg(row)));
+        QProgressBar* healthBar = healthWidget->findChild<QProgressBar*>();
+        QVERIFY2(healthBar != nullptr, qPrintable(QString("row %1 Health widget has no progress bar").arg(row)));
+
+        QPushButton* actionButton = qobject_cast<QPushButton*>(
+            table->cellWidget(row, DigiDollarPositionsWidget::COL_ACTIONS));
+        QVERIFY2(actionButton != nullptr, qPrintable(QString("row %1 lost its Actions button").arg(row)));
+        QCOMPARE(actionButton->property("positionId").toString(), idItem->text());
+    }
 }
 
 void DigiDollarWidgetTests::darkThemePeerDetailWidgetHasExplicitRule()

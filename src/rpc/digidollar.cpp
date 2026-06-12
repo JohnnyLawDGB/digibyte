@@ -1603,8 +1603,10 @@ RPCHelpMan mintdigidollar()
 
             // Commit through the wallet-owned relay path exactly once so the
             // wallet state transition and mempool submission stay in sync.
-            // When wallet broadcasting is disabled, this creates a local
-            // template without marking a live DD position.
+            // If wallet broadcasting is disabled (for example -blocksonly
+            // soft-sets -walletbroadcast=0), CommitTransaction still records a
+            // wallet-local transaction. Keep DD metadata for that local tx so
+            // RPC/Qt can show it as confirming instead of losing the vault.
             std::string commit_error;
             bool commit_success = false;
             {
@@ -1620,13 +1622,19 @@ RPCHelpMan mintdigidollar()
                 throw JSONRPCError(RPC_TRANSACTION_REJECTED,
                     strprintf("Mint transaction rejected by mempool: %s", commit_error));
             }
+            if (!commit_success) {
+                throw JSONRPCError(RPC_WALLET_ERROR,
+                    strprintf("Mint transaction was not committed to the wallet: %s", commit_error));
+            }
 
             // Calculate unlock height using consensus function (handles tier 0 special case)
             int64_t lockBlocks = DigiDollar::LockDaysToBlocks(lockDays);
             int unlockHeight = mintHeight + lockBlocks + DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
 
-            // CRITICAL FIX: Persist DD position to DigiDollarWallet
-            if (should_broadcast && dd_wallet) {
+            // CRITICAL FIX: Persist DD position to DigiDollarWallet after the
+            // wallet accepts the transaction, even when the mint is local-only
+            // and waiting for manual broadcast/rebroadcast.
+            if (commit_success && dd_wallet) {
                 WalletCollateralPosition position;
                 position.dd_timelock_id = positionId;
                 position.dgb_collateral = result.collateralRequired;
@@ -1659,8 +1667,8 @@ RPCHelpMan mintdigidollar()
                 LogPrintf("DigiDollar RPC: Added position %s with %d DD cents, stored owner key, and tracked DD UTXO at vout %u\n",
                          position.dd_timelock_id.ToString(), ddAmount, ddOutpoint.n);
             } else {
-                LogPrintf("DigiDollar RPC: DD position not persisted (broadcast=%d, ddwallet=%d)\n",
-                          should_broadcast ? 1 : 0, dd_wallet ? 1 : 0);
+                LogPrintf("DigiDollar RPC: DD position not persisted (committed=%d, broadcast=%d, ddwallet=%d)\n",
+                          commit_success ? 1 : 0, should_broadcast ? 1 : 0, dd_wallet ? 1 : 0);
             }
 
             const int baseRatio = DigiDollar::GetCollateralRatioForLockTime(

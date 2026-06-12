@@ -34,6 +34,7 @@ struct DigiDollarPosition {
     int blocksRemaining;
     double health;
     bool canRedeem;
+    bool isPendingMint;
     bool isPendingRedeem;
     bool isRedeemed;
     int64_t mintTime;      // Unix timestamp of mint transaction
@@ -89,7 +90,7 @@ private:
     void addPositionToTable(const DigiDollarPosition& position, int row);
     // Wallet-state badges keep matured vaults from looking redeemable when
     // this wallet cannot currently sign.
-    QPushButton* createRedeemButton(const QString& positionId, bool isPendingRedeem, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining);
+    QPushButton* createRedeemButton(const QString& positionId, bool isPendingMint, bool isPendingRedeem, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining);
 
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;

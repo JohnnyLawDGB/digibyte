@@ -498,6 +498,40 @@ BOOST_AUTO_TEST_CASE(w17_02_unconfirmed_only_balance_is_zero)
     BOOST_CHECK_EQUAL(dd_wallet.GetPendingDDBalance(), dd_amount);
 }
 
+BOOST_AUTO_TEST_CASE(w17_02b_wallet_local_dd_utxo_is_pending_not_spendable)
+{
+    DigiDollarWallet dd_wallet(&m_wallet);
+
+    CTransactionRef tx = MakeMintLikeTx();
+    const COutPoint dd_outpoint(tx->GetHash(), 1);
+    const CAmount dd_amount = 12500; // $125.00
+
+    // A wallet-local mint created while wallet broadcast is disabled is stored
+    // as non-abandoned TxStateInactive, not TxStateInMempool. It is still a
+    // pending local mint from the UI/RPC point of view, but must not be
+    // selectable as spendable DD until it confirms.
+    {
+        LOCK(m_wallet.cs_wallet);
+        m_wallet.AddToWallet(tx, TxStateInactive{/*abandoned=*/false});
+    }
+    dd_wallet.AddDDUTXO(dd_outpoint, dd_amount);
+
+    BOOST_CHECK_EQUAL(dd_wallet.GetTotalDDBalance(), 0);
+    BOOST_CHECK(dd_wallet.GetDDUTXOs().empty());
+    BOOST_CHECK_EQUAL(dd_wallet.GetPendingDDBalance(), dd_amount);
+
+    // An abandoned local transaction must not appear in pending display.
+    CTransactionRef abandoned_tx = MakeMintLikeTx();
+    const COutPoint abandoned_outpoint(abandoned_tx->GetHash(), 1);
+    {
+        LOCK(m_wallet.cs_wallet);
+        m_wallet.AddToWallet(abandoned_tx, TxStateInactive{/*abandoned=*/true});
+    }
+    dd_wallet.RemoveDDUTXO(dd_outpoint);
+    dd_wallet.AddDDUTXO(abandoned_outpoint, dd_amount);
+    BOOST_CHECK_EQUAL(dd_wallet.GetPendingDDBalance(), 0);
+}
+
 // =============================================================================
 // W17-03: Confirming an unconfirmed DD UTXO promotes it to spendable balance
 // =============================================================================

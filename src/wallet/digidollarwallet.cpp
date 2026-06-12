@@ -3850,7 +3850,7 @@ CAmount DigiDollarWallet::GetPendingDDBalance() const {
 
             LOCK(m_wallet->cs_wallet);
             const wallet::CWalletTx* wtx = m_wallet->GetWalletTx(outpoint.hash);
-            if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) == 0 && wtx->InMempool()) {
+            if (wtx && m_wallet->GetTxDepthInMainChain(*wtx) == 0 && wtx->isUnconfirmed()) {
                 pending += dd_amount;
                 LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: GetPendingDDBalance counting unconfirmed DD UTXO %s:%u (%lld cents)\n",
                          outpoint.hash.ToString(), outpoint.n, static_cast<long long>(dd_amount));
@@ -4395,7 +4395,23 @@ size_t DigiDollarWallet::ValidatePositionStates()
         }
 
         const bool wallet_spent = m_wallet->IsSpent(collateral_outpoint);
-        if (coin.IsSpent() || wallet_spent) {
+        const auto mint_tx_it = m_wallet->mapWallet.find(id);
+        const bool mint_unconfirmed =
+            mint_tx_it != m_wallet->mapWallet.end() &&
+            mint_tx_it->second.tx &&
+            mint_tx_it->second.isUnconfirmed();
+
+        if (mint_unconfirmed && coin.IsSpent() && !wallet_spent) {
+            // The mint is still unconfirmed. It may be in the mempool, or it
+            // may be wallet-local only (for example when -blocksonly prevented
+            // relay). In either case, the collateral outpoint is not guaranteed
+            // to appear in the chain/mempool UTXO view yet. Do not mark the
+            // vault inactive; UI/RPC callers should treat it as confirming, not
+            // redeemed.
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "DigiDollar: ValidatePositionStates - Position %s mint still unconfirmed; keeping active\n",
+                     id.GetHex());
+        } else if (coin.IsSpent() || wallet_spent) {
             // Collateral is NOT in the UTXO set or is reserved by a wallet
             // mempool spend, so the position is not currently spendable.
             if (it->second.is_active) {
@@ -4499,7 +4515,23 @@ size_t DigiDollarWallet::ReconcilePositionStates()
             auto coin_it = coins_to_check.find(collateral_outpoint);
             const bool coin_spent = coin_it == coins_to_check.end() || coin_it->second.IsSpent();
             const bool wallet_spent = m_wallet->IsSpent(collateral_outpoint);
-            if (coin_spent || wallet_spent) {
+            const auto mint_tx_it = m_wallet->mapWallet.find(id);
+            const bool mint_unconfirmed =
+                mint_tx_it != m_wallet->mapWallet.end() &&
+                mint_tx_it->second.tx &&
+                mint_tx_it->second.isUnconfirmed();
+
+            if (mint_unconfirmed && coin_spent && !wallet_spent) {
+                // The mint is still unconfirmed. It may be in the mempool, or it
+                // may be wallet-local only (for example when -blocksonly prevented
+                // relay). In either case, the collateral outpoint is not guaranteed
+                // to appear in the chain/mempool UTXO view yet. Do not mark the
+                // vault inactive; the Qt vault tab will display it as Confirming
+                // until it confirms.
+                LogPrint(BCLog::DIGIDOLLAR,
+                         "DigiDollar: ReconcilePositionStates - Position %s mint still unconfirmed; keeping active\n",
+                         id.GetHex());
+            } else if (coin_spent || wallet_spent) {
                 if (it->second.is_active) {
                     it->second.is_active = false;
                     LogPrintf("DigiDollar: ReconcilePositionStates - Position %s collateral spent or pending spend, marking inactive\n",

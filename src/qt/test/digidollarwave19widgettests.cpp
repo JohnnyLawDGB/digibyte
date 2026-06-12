@@ -423,7 +423,10 @@ void DigiDollarWave19WidgetTests::positionsWidgetTierZeroTooltipIsCanonical()
     QCOMPARE(table->rowCount(), 1);
     QTableWidgetItem* tierItem = table->item(0, DigiDollarPositionsWidget::COL_LOCK_TIER);
     QVERIFY(tierItem != nullptr);
-    QCOMPARE(tierItem->text(), QString("1 hour"));
+    QCOMPARE(tierItem->text(), QString("1 hour + 100 block buffer"));
+    QVERIFY2(tierItem->toolTip().contains("100-block confirmation buffer"),
+             qPrintable(QString("tier 0 tooltip must explain the confirmation buffer, got '%1'")
+                            .arg(tierItem->toolTip())));
     QVERIFY2(!tierItem->toolTip().contains("test", Qt::CaseInsensitive),
              qPrintable(QString("DD-FA-DOC-034: tier 0 tooltip must not call "
                                 "the canonical 1-hour tier test-only, got '%1'")

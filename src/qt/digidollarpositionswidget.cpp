@@ -18,6 +18,7 @@
 #include <chainparams.h>
 #include <shutdown.h>
 #include <algorithm>
+#include <cmath>
 
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -376,7 +377,7 @@ void DigiDollarPositionsWidget::showContextMenu(const QPoint& point)
         // Lock Tier table column above.
         QString lockPeriodName;
         switch(position.lockTier) {
-            case 0: lockPeriodName = tr("1 hour"); break;
+            case 0: lockPeriodName = tr("1 hour + 100 block buffer"); break;
             case 1: lockPeriodName = tr("30 days"); break;
             case 2: lockPeriodName = tr("3 months"); break;
             case 3: lockPeriodName = tr("6 months"); break;
@@ -517,10 +518,33 @@ void DigiDollarPositionsWidget::loadPositionsFromWallet()
         // Private-key-disabled/watch-only wallets may observe vaults but cannot unlock them.
         pos.canRedeem = walletCanSign && (pos.blocksRemaining == 0) && wp.is_active;
 
+        // A freshly-created mint can be known to the wallet before the collateral
+        // outpoint is confirmed in the UTXO set. During that window the wallet
+        // reconciliation layer may mark the position inactive because the coin
+        // lookup returns spent/missing, but that is NOT a redeemed vault. Surface
+        // it as confirming until the mint has at least one confirmation.
+        pos.isPendingMint = false;
+        try {
+            interfaces::WalletTxStatus status;
+            interfaces::WalletOrderForm orderForm;
+            bool inMempool = false;
+            int numBlocks = 0;
+            interfaces::WalletTx details = m_walletModel->wallet().getWalletTxDetails(
+                wp.dd_timelock_id, status, orderForm, inMempool, numBlocks);
+            if (details.tx && !status.is_abandoned && !status.is_in_main_chain && status.depth_in_main_chain == 0) {
+                // Wallet-local mints may not be in the mempool yet (for example
+                // when relay is disabled with -blocksonly), but they are still
+                // unconfirmed vaults, not redeemed vaults.
+                pos.isPendingMint = true;
+            }
+        } catch (...) {
+            pos.isPendingMint = false;
+        }
+
         // A wallet marks the position inactive as soon as a redemption spend is
         // created. Keep unconfirmed spends visually pending until they confirm.
-        pos.isPendingRedeem = !wp.is_active && pendingRedeemPositions.count(wp.dd_timelock_id) > 0;
-        pos.isRedeemed = !wp.is_active && !pos.isPendingRedeem;
+        pos.isPendingRedeem = !pos.isPendingMint && !wp.is_active && pendingRedeemPositions.count(wp.dd_timelock_id) > 0;
+        pos.isRedeemed = !pos.isPendingMint && !wp.is_active && !pos.isPendingRedeem;
 
         // Get the mint transaction timestamp from the wallet
         pos.mintTime = 0;  // Default to 0 (will show current time if not found)
@@ -557,11 +581,18 @@ void DigiDollarPositionsWidget::populatePositionsTable()
     // Hide status label when we have positions
     m_statusLabel->hide();
 
-    // Add positions to table
+    // Populate with sorting disabled. QTableWidget can move rows while items
+    // are inserted when sorting is active; if that happens before the Health
+    // and Actions cell widgets are attached, widgets land on the wrong row or
+    // disappear. Re-enable the user's previous sorting state after the rows are
+    // complete.
+    const bool sortingWasEnabled = m_positionsTable->isSortingEnabled();
+    m_positionsTable->setSortingEnabled(false);
     m_positionsTable->setRowCount(m_positions.size());
     for (int i = 0; i < m_positions.size(); ++i) {
         addPositionToTable(m_positions[i], i);
     }
+    m_positionsTable->setSortingEnabled(sortingWasEnabled);
 
     // Resize table to fit content
     m_positionsTable->resizeRowsToContents();
@@ -638,9 +669,11 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
         lockDate = QDateTime::currentDateTime().addSecs(-elapsedSeconds);
     }
 
-    // Calculate estimated lock height for tooltip
-    int lockTierBlocks = getLockTierBlocks(position.lockTier);
-    int64_t lockHeight = position.unlockHeight - lockTierBlocks;
+        // Calculate estimated mint height for tooltip. unlockHeight includes
+        // the canonical lock period plus the 100-block confirmation buffer.
+        int lockTierBlocks = getLockTierBlocks(position.lockTier);
+        const int bufferBlocks = DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS;
+        int64_t lockHeight = position.unlockHeight - lockTierBlocks - bufferBlocks;
 
     QString lockDateStr = lockDate.toString("yyyy-MM-dd");
     QTableWidgetItem* lockDateItem = new QTableWidgetItem(lockDateStr);
@@ -668,8 +701,8 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     QString lockPeriodTooltip;
     switch(position.lockTier) {
         case 0:
-            lockPeriodName = tr("1 hour");
-            lockPeriodTooltip = tr("1 hour time lock (1000% collateral)");
+            lockPeriodName = tr("1 hour + 100 block buffer");
+            lockPeriodTooltip = tr("1 hour time lock plus 100-block confirmation buffer (1000% collateral)");
             break;
         case 1:
             lockPeriodName = tr("30 days");
@@ -716,7 +749,13 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
         const int64_t lock_blocks = DigiDollar::LockDaysToBlocks(lock_days);
         const int ratio = DigiDollar::GetCollateralRatioForLockTime(lock_blocks, Params().GetDigiDollarParams());
         if (ratio > 0) {
-            lockPeriodTooltip = tr("%1 time lock (%2% collateral)").arg(lockPeriodName).arg(ratio);
+            if (position.lockTier == 0) {
+                lockPeriodTooltip = tr("1 hour time lock plus %1-block confirmation buffer (%2% collateral)")
+                                        .arg(DigiDollar::MINT_LOCK_CONFIRMATION_BUFFER_BLOCKS)
+                                        .arg(ratio);
+            } else {
+                lockPeriodTooltip = tr("%1 time lock (%2% collateral)").arg(lockPeriodName).arg(ratio);
+            }
         }
     }
 
@@ -735,7 +774,9 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
 
     // Time Remaining - always show actual time remaining
     QString timeText;
-    if (position.isPendingRedeem) {
+    if (position.isPendingMint) {
+        timeText = tr("Confirming");
+    } else if (position.isPendingRedeem) {
         timeText = tr("Pending");
     } else if (position.isRedeemed) {
         timeText = tr("Redeemed");
@@ -750,7 +791,14 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     timeItem->setTextAlignment(Qt::AlignCenter);
 
     // Apply styling based on status
-    if (position.isPendingRedeem) {
+    if (position.isPendingMint) {
+        QString pendingColor = isDarkTheme ? "#ffb74d" : "#856404";
+        QString pendingBg = isDarkTheme ? "#4a3a1f" : "#fff3cd";
+        timeItem->setForeground(QBrush(QColor(pendingColor)));
+        timeItem->setBackground(QBrush(QColor(pendingBg)));
+        timeItem->setFont(QFont(timeItem->font().family(), timeItem->font().pointSize(), QFont::Bold));
+        timeItem->setToolTip(tr("Mint transaction is pending confirmation; this vault is not redeemed"));
+    } else if (position.isPendingRedeem) {
         QString pendingColor = isDarkTheme ? "#ffb74d" : "#856404";
         QString pendingBg = isDarkTheme ? "#4a3a1f" : "#fff3cd";
         timeItem->setForeground(QBrush(QColor(pendingColor)));
@@ -796,13 +844,14 @@ void DigiDollarPositionsWidget::addPositionToTable(const DigiDollarPosition& pos
     const bool isWalletLocked =
         m_walletModel ? m_walletModel->getEncryptionStatus() == WalletModel::Locked : false;
     QPushButton* redeemButton = createRedeemButton(
-        position.positionId, position.isPendingRedeem, position.isRedeemed, position.canRedeem, isWatchOnly, isWalletLocked, position.blocksRemaining);
+        position.positionId, position.isPendingMint, position.isPendingRedeem, position.isRedeemed, position.canRedeem, isWatchOnly, isWalletLocked, position.blocksRemaining);
     m_positionsTable->setCellWidget(row, COL_ACTIONS, redeemButton);
 }
 
-QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isPendingRedeem, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining)
+QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positionId, bool isPendingMint, bool isPendingRedeem, bool isRedeemed, bool canRedeem, bool isWatchOnly, bool isWalletLocked, int blocksRemaining)
 {
     // Set button text based on status (priority order):
+    // - "Confirming" if the mint transaction is unconfirmed
     // - "Pending" if a redeem transaction is unconfirmed
     // - "Redeemed" if already redeemed (with strikethrough)
     // - "Watch-Only" if the wallet has private keys disabled and so cannot
@@ -811,7 +860,9 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
     // - "Redeem" if can redeem now (green, clickable)
     // - "Locked" if vault hasn't matured yet (grayed out)
     QString buttonText;
-    if (isPendingRedeem) {
+    if (isPendingMint) {
+        buttonText = tr("Confirming");
+    } else if (isPendingRedeem) {
         buttonText = tr("Pending");
     } else if (isRedeemed) {
         buttonText = tr("Redeemed");
@@ -837,7 +888,25 @@ QPushButton* DigiDollarPositionsWidget::createRedeemButton(const QString& positi
     QString buttonStyle;
     QString tooltip;
 
-    if (isPendingRedeem) {
+    if (isPendingMint) {
+        QString pendingBg = isDarkTheme ? "#5a4520" : "#fff3cd";
+        QString pendingText = isDarkTheme ? "#ffcf7a" : "#856404";
+        buttonStyle = QString(
+            "QPushButton { "
+            "  background-color: %1; "
+            "  color: %2; "
+            "  border: 1px solid %2; "
+            "  border-radius: 5px; "
+            "  padding: 6px 8px; "
+            "  font-weight: 600; "
+            "  font-size: 10px; "
+            "  min-width: 60px; "
+            "}")
+            .arg(pendingBg)
+            .arg(pendingText);
+        tooltip = tr("Mint transaction pending confirmation\nThis vault is not redeemed; it will become locked once the mint confirms.");
+        button->setEnabled(false);
+    } else if (isPendingRedeem) {
         QString pendingBg = isDarkTheme ? "#5a4520" : "#fff3cd";
         QString pendingText = isDarkTheme ? "#ffcf7a" : "#856404";
         buttonStyle = QString(
@@ -1092,18 +1161,27 @@ QString DigiDollarPositionsWidget::formatBlockTime(int blocks) const
 {
     if (blocks <= 0) return tr("Expired");
 
-    // Estimate time remaining (15 seconds per block)
+    // Estimate time remaining (15 seconds per block). Round up to avoid showing
+    // "1h 0m" when the actual remaining block count is slightly above one hour
+    // (for example the 100-block mint confirmation buffer).
     int totalSeconds = blocks * 15;
     int days = totalSeconds / (24 * 3600);
     int hours = (totalSeconds % (24 * 3600)) / 3600;
     int minutes = (totalSeconds % 3600) / 60;
 
     if (days > 0) {
-        return QString("%1d %2h").arg(days).arg(hours);
+        if (hours > 0) {
+            return QString("%1d %2h").arg(days).arg(hours);
+        }
+        return QString("%1d").arg(days);
     } else if (hours > 0) {
-        return QString("%1h %2m").arg(hours).arg(minutes);
+        if (minutes > 0) {
+            return QString("%1h %2m").arg(hours).arg(minutes);
+        }
+        return QString("%1h").arg(hours);
     } else {
-        return QString("%1m").arg(minutes);
+        const int roundedMinutes = std::max(1, static_cast<int>(std::ceil(totalSeconds / 60.0)));
+        return QString("%1m").arg(roundedMinutes);
     }
 }
 

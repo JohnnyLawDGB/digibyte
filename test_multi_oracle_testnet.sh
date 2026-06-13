@@ -3729,28 +3729,28 @@ fi
 echo ""
 echo "Verifying DD transaction history categories..."
 
-if [ "$BOB_RESTORED_MINT_COUNT" -ge "$BOB_MINT_COUNT_BEFORE" ] 2>/dev/null; then
+if [ "$BOB_RESTORED_MINT_COUNT" = "$BOB_MINT_COUNT_BEFORE" ]; then
     print_status "ok" "MINT transactions restored! ($BOB_RESTORED_MINT_COUNT)"
 else
-    print_status "fail" "MINT transactions missing! Original: $BOB_MINT_COUNT_BEFORE, Restored: $BOB_RESTORED_MINT_COUNT"
+    print_status "fail" "MINT transaction count differs! Original: $BOB_MINT_COUNT_BEFORE, Restored: $BOB_RESTORED_MINT_COUNT"
 fi
 
-if [ "$BOB_RESTORED_SEND_COUNT" -ge "$BOB_SEND_COUNT_BEFORE" ] 2>/dev/null; then
+if [ "$BOB_RESTORED_SEND_COUNT" = "$BOB_SEND_COUNT_BEFORE" ]; then
     print_status "ok" "SEND transactions restored! ($BOB_RESTORED_SEND_COUNT)"
 else
-    print_status "warn" "SEND transactions differ! Original: $BOB_SEND_COUNT_BEFORE, Restored: $BOB_RESTORED_SEND_COUNT"
+    print_status "fail" "SEND transaction count differs! Original: $BOB_SEND_COUNT_BEFORE, Restored: $BOB_RESTORED_SEND_COUNT"
 fi
 
-if [ "$BOB_RESTORED_RECEIVE_COUNT" -ge "$BOB_RECEIVE_COUNT_BEFORE" ] 2>/dev/null; then
+if [ "$BOB_RESTORED_RECEIVE_COUNT" = "$BOB_RECEIVE_COUNT_BEFORE" ]; then
     print_status "ok" "RECEIVE transactions restored! ($BOB_RESTORED_RECEIVE_COUNT)"
 else
-    print_status "warn" "RECEIVE transactions differ! Original: $BOB_RECEIVE_COUNT_BEFORE, Restored: $BOB_RESTORED_RECEIVE_COUNT"
+    print_status "fail" "RECEIVE transaction count differs! Original: $BOB_RECEIVE_COUNT_BEFORE, Restored: $BOB_RESTORED_RECEIVE_COUNT"
 fi
 
-if [ "$BOB_RESTORED_REDEEM_COUNT" -ge "$BOB_REDEEM_COUNT_BEFORE" ] 2>/dev/null; then
+if [ "$BOB_RESTORED_REDEEM_COUNT" = "$BOB_REDEEM_COUNT_BEFORE" ]; then
     print_status "ok" "REDEEM transactions restored! ($BOB_RESTORED_REDEEM_COUNT)"
 else
-    print_status "fail" "REDEEM transactions missing! Original: $BOB_REDEEM_COUNT_BEFORE, Restored: $BOB_RESTORED_REDEEM_COUNT"
+    print_status "fail" "REDEEM transaction count differs! Original: $BOB_REDEEM_COUNT_BEFORE, Restored: $BOB_RESTORED_REDEEM_COUNT"
 fi
 
 # Verify DGB balance matches
@@ -3827,6 +3827,21 @@ if [ "$BOB_RESTORED_POSITIONS" != "$BOB_POSITIONS_BEFORE_EXPORT" ]; then
     BOB_RESTORE_PASS=false
 fi
 if [ "$BOB_RESTORED_INACTIVE_POSITIONS" != "$BOB_INACTIVE_POSITIONS_BEFORE" ]; then
+    BOB_RESTORE_PASS=false
+fi
+if [ "$BOB_RESTORED_TOTAL_TXS" != "$BOB_TOTAL_TXS_BEFORE" ]; then
+    BOB_RESTORE_PASS=false
+fi
+if [ "$BOB_RESTORED_MINT_COUNT" != "$BOB_MINT_COUNT_BEFORE" ]; then
+    BOB_RESTORE_PASS=false
+fi
+if [ "$BOB_RESTORED_SEND_COUNT" != "$BOB_SEND_COUNT_BEFORE" ]; then
+    BOB_RESTORE_PASS=false
+fi
+if [ "$BOB_RESTORED_RECEIVE_COUNT" != "$BOB_RECEIVE_COUNT_BEFORE" ]; then
+    BOB_RESTORE_PASS=false
+fi
+if [ "$BOB_RESTORED_REDEEM_COUNT" != "$BOB_REDEEM_COUNT_BEFORE" ]; then
     BOB_RESTORE_PASS=false
 fi
 

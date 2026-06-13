@@ -3018,6 +3018,15 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                         LogPrintf("DigiDollar: Restored RECEIVED DD UTXO %s:%zu from rescan (DD: %lld)\n",
                                   tx.GetHash().GetHex(), i, static_cast<long long>(received_dd));
 
+                        // Outgoing DD transfers may create wallet-owned change outputs. Those
+                        // must rebuild as UTXOs, but the live send path does not record them
+                        // as receive history.
+                        if (is_our_send) {
+                            LogPrintf("DigiDollar: Restored outgoing DD change UTXO %s:%zu without receive history\n",
+                                      tx.GetHash().GetHex(), i);
+                            continue;
+                        }
+
                         // Also add receive transaction to history if not already there
                         std::string txid_str = tx.GetHash().GetHex();
                         bool already_exists = false;

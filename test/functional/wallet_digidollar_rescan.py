@@ -372,6 +372,89 @@ class DigiDollarRescanTest(DigiByteTestFramework):
         """Test descriptor restore preserves per-output DD receive history."""
         self.log.info("Test 5: Testing descriptor restore preserves DD receive history...")
 
+        self.log.info("  Creating isolated source wallet for outgoing-change history")
+        self.nodes[1].createwallet(
+            wallet_name="dd_change_history_source",
+            disable_private_keys=False,
+            blank=False,
+            descriptors=True,
+        )
+        change_source = self.nodes[1].get_wallet_rpc("dd_change_history_source")
+
+        change_fund_addr = change_source.getnewaddress("", "bech32")
+        self.nodes[0].sendtoaddress(change_fund_addr, 10000)
+        for _ in range(25):
+            self.nodes[0].sendtoaddress(change_source.getnewaddress("", "bech32"), 1)
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        self.refresh_oracle_quotes()
+        change_mint = change_source.mintdigidollar(10000, 2)
+        assert "txid" in change_mint
+        self.generate(self.nodes[1], 2)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: change_source.gettransaction(change_mint["txid"])["confirmations"] > 0)
+        assert_equal(Decimal(change_source.getdigidollarbalance()["total"]), Decimal(10000))
+
+        external_addr = self.nodes[0].getdigidollaraddress("restore-change-destination")
+        outgoing = change_source.senddigidollar(external_addr, 1000)
+        outgoing_txid = outgoing["txid"]
+        self.generate(self.nodes[1], 2)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: change_source.gettransaction(outgoing_txid)["confirmations"] > 0)
+        assert_equal(Decimal(change_source.getdigidollarbalance()["total"]), Decimal(9000))
+
+        original_change_receives = [
+            tx for tx in change_source.listdigidollartxs(100, 0, "", "receive")
+            if tx["txid"] == outgoing_txid
+        ]
+        assert_equal(len(original_change_receives), 0)
+
+        change_descriptors = change_source.listdescriptors(True)["descriptors"]
+        self.nodes[1].createwallet(
+            wallet_name="dd_change_history_restored",
+            disable_private_keys=False,
+            blank=True,
+            descriptors=True,
+        )
+        restored_change = self.nodes[1].get_wallet_rpc("dd_change_history_restored")
+
+        change_imports = []
+        for desc in change_descriptors:
+            req = {
+                "desc": desc["desc"],
+                "timestamp": 0,
+                "active": desc.get("active", False),
+                "internal": desc.get("internal", False),
+            }
+            if "range" in desc:
+                req["range"] = desc["range"]
+            change_imports.append(req)
+
+        change_import_result = restored_change.importdescriptors(change_imports)
+        assert_equal(
+            sum(1 for item in change_import_result if item.get("success", False)),
+            len(change_imports),
+        )
+        restored_change.rescanblockchain()
+        assert_equal(Decimal(restored_change.getdigidollarbalance()["total"]), Decimal(9000))
+
+        restored_change_receives = [
+            tx for tx in restored_change.listdigidollartxs(100, 0, "", "receive")
+            if tx["txid"] == outgoing_txid
+        ]
+        assert_equal(len(restored_change_receives), len(original_change_receives))
+
+        try:
+            self.nodes[1].unloadwallet("dd_change_history_restored")
+            self.nodes[1].unloadwallet("dd_change_history_source")
+        except Exception:
+            pass
+
+        self.log.info("  Outgoing DD change is not restored as receive history")
+
         self.log.info("  Creating isolated source wallet for spent self-fragment history")
         self.nodes[1].createwallet(
             wallet_name="dd_receive_history_source",

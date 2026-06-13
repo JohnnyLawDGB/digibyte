@@ -455,6 +455,166 @@ class DigiDollarRescanTest(DigiByteTestFramework):
 
         self.log.info("  Outgoing DD change is not restored as receive history")
 
+        self.log.info("  Creating isolated source wallet for redeem-change restore history")
+        self.nodes[1].createwallet(
+            wallet_name="dd_redeem_change_history_source",
+            disable_private_keys=False,
+            blank=False,
+            descriptors=True,
+        )
+        redeem_change_source = self.nodes[1].get_wallet_rpc("dd_redeem_change_history_source")
+
+        redeem_change_fund_addr = redeem_change_source.getnewaddress("", "bech32")
+        self.nodes[0].sendtoaddress(redeem_change_fund_addr, 50000)
+        for _ in range(35):
+            self.nodes[0].sendtoaddress(redeem_change_source.getnewaddress("", "bech32"), 1)
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        self.refresh_oracle_quotes()
+        small_mint = redeem_change_source.mintdigidollar(10000, 0)
+        large_mint = redeem_change_source.mintdigidollar(15000, 0)
+        small_position_id = small_mint["position_id"]
+        self.generate(self.nodes[1], 350)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.refresh_oracle_quotes()
+        assert_equal(Decimal(redeem_change_source.getdigidollarbalance()["total"]), Decimal(25000))
+
+        away_tx = redeem_change_source.senddigidollar(self.nodes[0].getdigidollaraddress("redeem-change-away"), 10000)
+        self.generate(self.nodes[1], 1)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: redeem_change_source.gettransaction(away_tx["txid"])["confirmations"] > 0)
+        assert_equal(Decimal(redeem_change_source.getdigidollarbalance()["total"]), Decimal(15000))
+
+        redeem_change = redeem_change_source.redeemdigidollar(small_position_id, 10000)
+        redeem_change_txid = redeem_change["txid"]
+        self.generate(self.nodes[1], 1)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: redeem_change_source.gettransaction(redeem_change_txid)["confirmations"] > 0)
+        assert_equal(Decimal(redeem_change_source.getdigidollarbalance()["total"]), Decimal(5000))
+
+        original_redeem_change_rows = [
+            tx for tx in redeem_change_source.listdigidollartxs(200, 0)
+            if tx["txid"] == redeem_change_txid
+        ]
+        original_redeems = [tx for tx in original_redeem_change_rows if tx["category"] == "redeem"]
+        original_redeem_changes = [tx for tx in original_redeem_change_rows if tx["category"] == "redeem_change"]
+        original_redeem_receives = [tx for tx in original_redeem_change_rows if tx["category"] == "receive"]
+        assert_equal(len(original_redeems), 1)
+        assert_equal(original_redeems[0]["amount"], Decimal(-10000))
+        assert_equal(len(original_redeem_changes), 1)
+        assert_equal(original_redeem_changes[0]["amount"], Decimal(5000))
+        assert_equal(len(original_redeem_receives), 0)
+
+        redeem_change_fragment_addresses = [
+            redeem_change_source.getdigidollaraddress(f"redeem-change-fragment-{i}") for i in range(4)
+        ]
+        redeem_change_fragment = redeem_change_source.sendmanydigidollar(
+            "",
+            {addr: 500 for addr in redeem_change_fragment_addresses},
+            "redeem-change self-fragment restore-history regression",
+        )
+        redeem_change_fragment_txid = redeem_change_fragment["txid"]
+        assert_equal(redeem_change_fragment["total_amount"], 2000)
+        self.generate(self.nodes[1], 1)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: redeem_change_source.gettransaction(redeem_change_fragment_txid)["confirmations"] > 0)
+        assert_equal(Decimal(redeem_change_source.getdigidollarbalance()["total"]), Decimal(5000))
+
+        original_redeem_change_fragment_receives = [
+            tx for tx in redeem_change_source.listdigidollartxs(200, 0, "", "receive")
+            if tx["txid"] == redeem_change_fragment_txid
+        ]
+        assert_equal(len(original_redeem_change_fragment_receives), len(redeem_change_fragment_addresses))
+        assert_equal(
+            sorted((tx["address"], tx["amount"]) for tx in original_redeem_change_fragment_receives),
+            sorted((addr, Decimal(500)) for addr in redeem_change_fragment_addresses),
+        )
+
+        original_redeem_change_fragment_sends = [
+            tx for tx in redeem_change_source.listdigidollartxs(200, 0, "", "send")
+            if tx["txid"] == redeem_change_fragment_txid
+        ]
+        assert_equal(len(original_redeem_change_fragment_sends), 1)
+        assert_equal(abs(original_redeem_change_fragment_sends[0]["amount"]), Decimal(2000))
+
+        redeem_change_descriptors = redeem_change_source.listdescriptors(True)["descriptors"]
+        self.nodes[1].createwallet(
+            wallet_name="dd_redeem_change_history_restored",
+            disable_private_keys=False,
+            blank=True,
+            descriptors=True,
+        )
+        restored_redeem_change = self.nodes[1].get_wallet_rpc("dd_redeem_change_history_restored")
+
+        redeem_change_imports = []
+        for desc in redeem_change_descriptors:
+            req = {
+                "desc": desc["desc"],
+                "timestamp": 0,
+                "active": desc.get("active", False),
+                "internal": desc.get("internal", False),
+            }
+            if "range" in desc:
+                req["range"] = desc["range"]
+            redeem_change_imports.append(req)
+
+        redeem_change_import_result = restored_redeem_change.importdescriptors(redeem_change_imports)
+        assert_equal(
+            sum(1 for item in redeem_change_import_result if item.get("success", False)),
+            len(redeem_change_imports),
+        )
+        restored_redeem_change.rescanblockchain()
+        assert_equal(Decimal(restored_redeem_change.getdigidollarbalance()["total"]), Decimal(5000))
+
+        restored_redeem_change_rows = [
+            tx for tx in restored_redeem_change.listdigidollartxs(200, 0)
+            if tx["txid"] == redeem_change_txid
+        ]
+        restored_redeems = [tx for tx in restored_redeem_change_rows if tx["category"] == "redeem"]
+        restored_redeem_changes = [tx for tx in restored_redeem_change_rows if tx["category"] == "redeem_change"]
+        restored_redeem_receives = [tx for tx in restored_redeem_change_rows if tx["category"] == "receive"]
+        assert_equal(len(restored_redeems), 1)
+        assert_equal(restored_redeems[0]["amount"], Decimal(-10000))
+        assert_equal(len(restored_redeem_changes), 1)
+        assert_equal(restored_redeem_changes[0]["amount"], Decimal(5000))
+        assert_equal(len(restored_redeem_receives), 0)
+
+        restored_redeem_change_fragment_receives = [
+            tx for tx in restored_redeem_change.listdigidollartxs(200, 0, "", "receive")
+            if tx["txid"] == redeem_change_fragment_txid
+        ]
+        assert_equal(
+            len(restored_redeem_change_fragment_receives),
+            len(original_redeem_change_fragment_receives),
+        )
+        assert_equal(
+            sorted((tx["address"], tx["amount"]) for tx in restored_redeem_change_fragment_receives),
+            sorted((tx["address"], tx["amount"]) for tx in original_redeem_change_fragment_receives),
+        )
+
+        restored_redeem_change_fragment_sends = [
+            tx for tx in restored_redeem_change.listdigidollartxs(200, 0, "", "send")
+            if tx["txid"] == redeem_change_fragment_txid
+        ]
+        assert_equal(len(restored_redeem_change_fragment_sends), 1)
+        assert_equal(
+            abs(restored_redeem_change_fragment_sends[0]["amount"]),
+            abs(original_redeem_change_fragment_sends[0]["amount"]),
+        )
+
+        try:
+            self.nodes[1].unloadwallet("dd_redeem_change_history_restored")
+            self.nodes[1].unloadwallet("dd_redeem_change_history_source")
+        except Exception:
+            pass
+
+        self.log.info("  Redeem DD change UTXO and history restored")
+
         self.log.info("  Creating isolated source wallet for spent self-fragment history")
         self.nodes[1].createwallet(
             wallet_name="dd_receive_history_source",
@@ -564,6 +724,122 @@ class DigiDollarRescanTest(DigiByteTestFramework):
             pass
 
         self.log.info("  Spent self-fragment receive history restored")
+
+        self.log.info("  Creating isolated source wallet for self-fragment-with-change history")
+        self.nodes[1].createwallet(
+            wallet_name="dd_self_change_history_source",
+            disable_private_keys=False,
+            blank=False,
+            descriptors=True,
+        )
+        self_change_source = self.nodes[1].get_wallet_rpc("dd_self_change_history_source")
+
+        self_change_fund_addr = self_change_source.getnewaddress("", "bech32")
+        self.nodes[0].sendtoaddress(self_change_fund_addr, 10000)
+        for _ in range(25):
+            self.nodes[0].sendtoaddress(self_change_source.getnewaddress("", "bech32"), 1)
+        self.generate(self.nodes[0], 2)
+        self.sync_all()
+
+        self.refresh_oracle_quotes()
+        self_change_mint = self_change_source.mintdigidollar(18000, 2)
+        assert "txid" in self_change_mint
+        self.generate(self.nodes[1], 2)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: self_change_source.gettransaction(self_change_mint["txid"])["confirmations"] > 0)
+        assert_equal(Decimal(self_change_source.getdigidollarbalance()["total"]), Decimal(18000))
+
+        self_change_addresses = [
+            self_change_source.getdigidollaraddress(f"self-change-fragment-{i}") for i in range(20)
+        ]
+        self_change_amounts = {addr: 500 for addr in self_change_addresses}
+        self_change_fragment = self_change_source.sendmanydigidollar(
+            "",
+            self_change_amounts,
+            "self-fragment restore-history change regression",
+        )
+        self_change_txid = self_change_fragment["txid"]
+        assert_equal(self_change_fragment["total_amount"], 10000)
+        self.generate(self.nodes[1], 1)
+        self.sync_all()
+        self.nodes[1].syncwithvalidationinterfacequeue()
+        self.wait_until(lambda: self_change_source.gettransaction(self_change_txid)["confirmations"] > 0)
+        assert_equal(Decimal(self_change_source.getdigidollarbalance()["total"]), Decimal(18000))
+
+        original_self_change_receives = [
+            tx for tx in self_change_source.listdigidollartxs(200, 0, "", "receive")
+            if tx["txid"] == self_change_txid
+        ]
+        assert_equal(len(original_self_change_receives), len(self_change_addresses))
+        assert_equal(
+            sorted((tx["address"], tx["amount"]) for tx in original_self_change_receives),
+            sorted((addr, Decimal(500)) for addr in self_change_addresses),
+        )
+
+        original_self_change_sends = [
+            tx for tx in self_change_source.listdigidollartxs(200, 0, "", "send")
+            if tx["txid"] == self_change_txid
+        ]
+        assert_equal(len(original_self_change_sends), 1)
+        assert_equal(abs(original_self_change_sends[0]["amount"]), Decimal(10000))
+
+        self_change_descriptors = self_change_source.listdescriptors(True)["descriptors"]
+        self.nodes[1].createwallet(
+            wallet_name="dd_self_change_history_restored",
+            disable_private_keys=False,
+            blank=True,
+            descriptors=True,
+        )
+        restored_self_change = self.nodes[1].get_wallet_rpc("dd_self_change_history_restored")
+
+        self_change_imports = []
+        for desc in self_change_descriptors:
+            req = {
+                "desc": desc["desc"],
+                "timestamp": 0,
+                "active": desc.get("active", False),
+                "internal": desc.get("internal", False),
+            }
+            if "range" in desc:
+                req["range"] = desc["range"]
+            self_change_imports.append(req)
+
+        self_change_import_result = restored_self_change.importdescriptors(self_change_imports)
+        assert_equal(
+            sum(1 for item in self_change_import_result if item.get("success", False)),
+            len(self_change_imports),
+        )
+        restored_self_change.rescanblockchain()
+        assert_equal(Decimal(restored_self_change.getdigidollarbalance()["total"]), Decimal(18000))
+
+        restored_self_change_receives = [
+            tx for tx in restored_self_change.listdigidollartxs(200, 0, "", "receive")
+            if tx["txid"] == self_change_txid
+        ]
+        assert_equal(len(restored_self_change_receives), len(original_self_change_receives))
+        assert_equal(
+            sorted((tx["address"], tx["amount"]) for tx in restored_self_change_receives),
+            sorted((tx["address"], tx["amount"]) for tx in original_self_change_receives),
+        )
+
+        restored_self_change_sends = [
+            tx for tx in restored_self_change.listdigidollartxs(200, 0, "", "send")
+            if tx["txid"] == self_change_txid
+        ]
+        assert_equal(len(restored_self_change_sends), 1)
+        assert_equal(
+            abs(restored_self_change_sends[0]["amount"]),
+            abs(original_self_change_sends[0]["amount"]),
+        )
+
+        try:
+            self.nodes[1].unloadwallet("dd_self_change_history_restored")
+            self.nodes[1].unloadwallet("dd_self_change_history_source")
+        except Exception:
+            pass
+
+        self.log.info("  Self-fragment DD change is not restored as receive history")
 
         receiver_addresses = [self.nodes[1].getdigidollaraddress() for _ in range(5)]
         amounts = {addr: 200 for addr in receiver_addresses}

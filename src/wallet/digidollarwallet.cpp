@@ -2755,6 +2755,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
         bool is_our_send = false;
         CAmount total_dd_sent = 0;
         std::string recipient_address;
+        std::vector<CScript> spent_dd_input_scripts;
 
         for (const CTxIn& txin : tx.vin) {
             // Create COutPoint first - use the COutPoint overload of IsDDOutputMine
@@ -2773,6 +2774,15 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 is_our_send = true;
                 LogPrintf("DigiDollar: TRANSFER - IsDDOutputMine returned true for input %s:%u, is_our_send=true\n",
                           spent_outpoint.hash.GetHex(), spent_outpoint.n);
+
+                auto spent_tx_it = m_wallet->mapWallet.find(spent_outpoint.hash);
+                if (spent_tx_it != m_wallet->mapWallet.end() && spent_tx_it->second.tx &&
+                    spent_outpoint.n < spent_tx_it->second.tx->vout.size()) {
+                    const CTxOut& spent_txout = spent_tx_it->second.tx->vout[spent_outpoint.n];
+                    if (IsStandardDDTokenOutput(spent_txout)) {
+                        spent_dd_input_scripts.push_back(spent_txout.scriptPubKey);
+                    }
+                }
 
                 // Look up the DD amount from our tracking
                 auto dd_it = dd_utxos.find(spent_outpoint);
@@ -2811,6 +2821,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 CAmount amount;
                 bool is_ours;
                 std::string address;
+                CScript script_pub_key;
             };
             std::vector<RestoredTransferOutput> dd_outputs;
             const std::vector<CAmount> dd_amounts = ExtractDDMetadataAmounts(tx, DD_TX_TRANSFER);
@@ -2834,7 +2845,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                     output_address = DigiDollar::EncodeDigiDollarAddress(dest, Params());
                 }
 
-                dd_outputs.push_back({amount, IsDDOutputMine(txout, tx.GetHash()), output_address});
+                dd_outputs.push_back({amount, IsDDOutputMine(txout, tx.GetHash()), output_address, txout.scriptPubKey});
             }
 
             CAmount transfer_amount = 0;
@@ -2848,8 +2859,48 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 }
             }
 
+            auto final_output_looks_like_change = [&]() {
+                if (dd_outputs.size() <= 1 || total_dd_sent <= 0) return false;
+
+                const RestoredTransferOutput& last_output = dd_outputs.back();
+                if (last_output.amount <= 0 || last_output.amount >= total_dd_sent) return false;
+
+                CAmount recipient_prefix = 0;
+                CAmount max_prior_output = 0;
+                bool all_prior_positive = true;
+                bool last_amount_matches_prior = false;
+                for (size_t i = 0; i + 1 < dd_outputs.size(); ++i) {
+                    const CAmount amount = dd_outputs[i].amount;
+                    all_prior_positive = all_prior_positive && amount > 0;
+                    max_prior_output = std::max(max_prior_output, amount);
+                    last_amount_matches_prior = last_amount_matches_prior || amount == last_output.amount;
+                    recipient_prefix += amount;
+                }
+                if (recipient_prefix <= 0 || recipient_prefix != total_dd_sent - last_output.amount) {
+                    return false;
+                }
+
+                const bool matches_spent_input_script = std::any_of(
+                    spent_dd_input_scripts.begin(), spent_dd_input_scripts.end(),
+                    [&](const CScript& spent_script) { return spent_script == last_output.script_pub_key; });
+                if (matches_spent_input_script) {
+                    return true;
+                }
+
+                // If the previous wallet transaction is not available during a
+                // restore, keep this fallback narrow: local sendmany change is
+                // appended after recipient outputs and is larger than every
+                // equal-sized self-fragment output in the observed RC44 case.
+                return all_prior_positive && !last_amount_matches_prior && last_output.amount > max_prior_output;
+            };
+
             if (all_outputs_are_ours) {
                 restored_recipient_outputs = dd_outputs.size();
+                if (final_output_looks_like_change()) {
+                    restored_recipient_outputs = dd_outputs.size() - 1;
+                    LogPrintf("DigiDollar: TRANSFER restore inferred final DD output as change for tx %s\n",
+                              tx.GetHash().GetHex());
+                }
             } else if (last_non_wallet_output != std::numeric_limits<size_t>::max()) {
                 // Include all outputs through the last known external recipient.
                 // Any later wallet-owned output is the best on-chain change
@@ -3081,17 +3132,127 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
 
         LOCK(m_wallet->cs_wallet);
 
+        CAmount redeem_spent_dd_total = 0;
+        auto redeemed_position_it = collateral_positions.end();
+        for (const CTxIn& txin : tx.vin) {
+            auto it = collateral_positions.find(txin.prevout.hash);
+            if (it == collateral_positions.end()) {
+                continue;
+            }
+
+            COutPoint collateral_outpoint(txin.prevout.hash, 0);
+            auto tx_it = m_wallet->mapWallet.find(txin.prevout.hash);
+            if (tx_it != m_wallet->mapWallet.end() && tx_it->second.tx) {
+                MintOutputIndexes mint_outputs;
+                if (FindMintOutputIndexes(*tx_it->second.tx, mint_outputs)) {
+                    collateral_outpoint = COutPoint(txin.prevout.hash, mint_outputs.collateral_index);
+                }
+            }
+            if (txin.prevout == collateral_outpoint) {
+                redeemed_position_it = it;
+                break;
+            }
+        }
+
+        const bool redeems_our_position = redeemed_position_it != collateral_positions.end();
+        CKey redeemed_owner_key;
+        const bool have_redeemed_owner_key = redeems_our_position &&
+                                             GetOwnerKey(redeemed_position_it->first, redeemed_owner_key);
+
         // First, remove any DD UTXOs that were spent in this REDEEM transaction
         for (const CTxIn& txin : tx.vin) {
             COutPoint spent_outpoint(txin.prevout.hash, txin.prevout.n);
             auto dd_it = dd_utxos.find(spent_outpoint);
             if (dd_it != dd_utxos.end()) {
+                redeem_spent_dd_total += dd_it->second;
                 LogPrintf("DigiDollar: Removing spent DD UTXO %s:%u during REDEEM rescan (was %lld cents)\n",
                           txin.prevout.hash.GetHex(), txin.prevout.n, static_cast<long long>(dd_it->second));
                 dd_utxos.erase(dd_it);
 
                 wallet::WalletBatch batch(m_wallet->GetDatabase());
                 batch.EraseDDUTXO(spent_outpoint);
+            }
+        }
+
+        const std::vector<CAmount> redeem_change_amounts = ExtractDDMetadataAmounts(tx, DD_TX_REDEEM);
+        CAmount redeem_change_total = 0;
+        for (CAmount change_amount : redeem_change_amounts) {
+            redeem_change_total += change_amount;
+        }
+
+        if (!redeem_change_amounts.empty()) {
+            auto redeem_change_output_is_ours = [&](const CTxOut& txout, CKey& change_owner_key, bool& have_change_owner_key) {
+                have_change_owner_key = false;
+                if (!IsStandardDDTokenOutput(txout)) {
+                    return false;
+                }
+
+                std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
+                if (have_redeemed_owner_key) {
+                    XOnlyPubKey owner_xonly(redeemed_owner_key.GetPubKey());
+                    auto tweaked = owner_xonly.CreateTapTweak(nullptr);
+                    if (tweaked && std::equal(output_key_bytes.begin(), output_key_bytes.end(), tweaked->first.begin())) {
+                        change_owner_key = redeemed_owner_key;
+                        have_change_owner_key = true;
+                        return true;
+                    }
+
+                    LogPrintf("DigiDollar: REDEEM rescan owner key for position %s did not match DD change output in tx %s; trying descriptor ownership\n",
+                              redeemed_position_it->first.GetHex(), tx.GetHash().GetHex());
+                }
+
+                if (IsDDOutputMine(txout, tx.GetHash())) {
+                    if (GetDDOutputSpendingKey(txout, change_owner_key)) {
+                        have_change_owner_key = true;
+                    }
+                    return true;
+                }
+
+                if (redeems_our_position && GetDDOutputSpendingKey(txout, change_owner_key)) {
+                    have_change_owner_key = true;
+                    return true;
+                }
+
+                if (redeems_our_position) {
+                    LogPrintf("DigiDollar: REDEEM rescan could not prove DD change output ownership in tx %s\n",
+                              tx.GetHash().GetHex());
+                }
+
+                return false;
+            };
+
+            size_t dd_output_index = 0;
+            for (size_t i = 0; i < tx.vout.size(); ++i) {
+                const CTxOut& txout = tx.vout[i];
+                if (!IsStandardDDTokenOutput(txout)) {
+                    continue;
+                }
+
+                if (dd_output_index >= redeem_change_amounts.size()) {
+                    break;
+                }
+                const CAmount change_amount = redeem_change_amounts[dd_output_index++];
+                CKey change_owner_key;
+                bool have_change_owner_key = false;
+                if (change_amount <= 0 || !redeem_change_output_is_ours(txout, change_owner_key, have_change_owner_key)) {
+                    continue;
+                }
+
+                COutPoint change_outpoint(tx.GetHash(), i);
+                dd_utxos[change_outpoint] = change_amount;
+                if (have_change_owner_key) {
+                    StoreOwnerKey(tx.GetHash(), change_owner_key);
+                }
+                DigiDollar::RegisterScriptMetadata(txout.scriptPubKey,
+                                                   DigiDollar::ScriptType::DD_TOKEN_OUTPUT,
+                                                   change_amount,
+                                                   0);
+
+                wallet::WalletBatch batch(m_wallet->GetDatabase());
+                batch.WriteDDUTXO(change_outpoint, change_amount);
+
+                LogPrintf("DigiDollar: Restored REDEEM DD change UTXO %s:%zu during rescan (DD: %lld)\n",
+                          tx.GetHash().GetHex(), i, static_cast<long long>(change_amount));
             }
         }
 
@@ -3114,28 +3275,9 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 it->second.is_active = false;
                 UpdatePositionStatus(it->first, false);
 
-                // Extract DD amount from OP_RETURN for transaction history
-                CAmount redeemed_dd = 0;
-                for (const CTxOut& txout : tx.vout) {
-                    if (txout.scriptPubKey.IsUnspendable() && txout.scriptPubKey.size() > 0) {
-                        const CScript& script = txout.scriptPubKey;
-                        auto pc = script.begin();
-                        opcodetype opcode;
-                        std::vector<unsigned char> data;
-
-                        if (!script.GetOp(pc, opcode, data)) continue;  // OP_RETURN
-                        if (!script.GetOp(pc, opcode, data)) continue;  // "DD"
-                        if (!script.GetOp(pc, opcode, data)) continue;  // txType
-
-                        // Next is the DD amount
-                        if (script.GetOp(pc, opcode, data) && !data.empty()) {
-                            try {
-                                CScriptNum amount(data, true);
-                                redeemed_dd = amount.GetInt64();
-                            } catch (...) {}
-                        }
-                        break;
-                    }
+                CAmount restored_redeemed_dd = it->second.dd_minted;
+                if (redeem_spent_dd_total > redeem_change_total) {
+                    restored_redeemed_dd = redeem_spent_dd_total - redeem_change_total;
                 }
 
                 // Add REDEEM transaction to history
@@ -3151,7 +3293,7 @@ void DigiDollarWallet::ProcessDDTxForRescan(const CTransactionRef& ptx, int bloc
                 if (!already_exists) {
                     DDTransaction ddtx;
                     ddtx.txid = txid_str;
-                    ddtx.amount = redeemed_dd > 0 ? redeemed_dd : it->second.dd_minted;
+                    ddtx.amount = restored_redeemed_dd;
                     // Get timestamp from block time (mapWallet may not be populated during rescan)
                     int64_t block_time = 0;
                     if (block_height >= 0) {

@@ -1328,27 +1328,43 @@ echo "Mining blocks one-at-a-time to allow MuSig2 P2P nonce exchange..."
 MUSIG_SUCCESS=false
 MUSIG_START_HEIGHT=$($BOB_CLI getblockcount 2>/dev/null || echo 0)
 MUSIG_LOG_MARK=$(wc -l < "$BOB_DATADIR/$TESTNET_SUBDIR/debug.log" 2>/dev/null || echo 0)
-for i in {1..15}; do
-    $BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
-    sleep 3  # Give P2P time to propagate nonces between nodes
 
+check_current_tip_for_musig_bundle() {
     MUSIG_BLOCK_HASH=$($BOB_CLI getbestblockhash 2>/dev/null || echo "")
     MUSIG_BLOCK_JSON=""
     MUSIG_ORACLE_HEX=""
     MUSIG_ORACLE_LEN_BYTES=0
+    MUSIG_BLOCK_HEIGHT="unknown"
+
     if [ -n "$MUSIG_BLOCK_HASH" ]; then
         MUSIG_BLOCK_JSON=$($BOB_CLI getblock "$MUSIG_BLOCK_HASH" 2 2>/dev/null || echo "")
+        MUSIG_BLOCK_HEIGHT=$(echo "$MUSIG_BLOCK_JSON" | jq -r '.height // "unknown"' 2>/dev/null || echo "unknown")
         MUSIG_ORACLE_HEX=$(echo "$MUSIG_BLOCK_JSON" | jq -r '[.tx[].vout[].scriptPubKey.hex // empty | select(startswith("6abf"))][0] // ""' 2>/dev/null || echo "")
         if [ -n "$MUSIG_ORACLE_HEX" ]; then
             MUSIG_ORACLE_LEN_BYTES=$(( ${#MUSIG_ORACLE_HEX} / 2 ))
         fi
     fi
 
+    [[ "$MUSIG_ORACLE_HEX" == 6abf0103* && "$MUSIG_ORACLE_LEN_BYTES" -gt 60 ]]
+}
+
+if check_current_tip_for_musig_bundle; then
+    MUSIG_SUCCESS=true
+    print_status "ok" "Fresh MuSig2 v0x03 bundle already on current tip $MUSIG_BLOCK_HEIGHT (size=$MUSIG_ORACLE_LEN_BYTES bytes)"
+fi
+
+for i in {1..15}; do
+    if [ "$MUSIG_SUCCESS" = "true" ]; then
+        break
+    fi
+
+    $BOB_CLI generatetoaddress 1 "$BOB_ADDR" 2000000000 "sha256d" > /dev/null 2>&1
+    sleep 3  # Give P2P time to propagate nonces between nodes
+
     # Require a fresh on-chain v0x03 bundle, not a stale debug.log line from
     # earlier setup mining.
-    if [[ "$MUSIG_ORACLE_HEX" == 6abf0103* && "$MUSIG_ORACLE_LEN_BYTES" -gt 60 ]]; then
+    if check_current_tip_for_musig_bundle; then
         MUSIG_SUCCESS=true
-        MUSIG_BLOCK_HEIGHT=$(echo "$MUSIG_BLOCK_JSON" | jq -r '.height // "unknown"' 2>/dev/null || echo "unknown")
         print_status "ok" "Fresh MuSig2 v0x03 bundle mined at height $MUSIG_BLOCK_HEIGHT (size=$MUSIG_ORACLE_LEN_BYTES bytes)"
         break
     fi

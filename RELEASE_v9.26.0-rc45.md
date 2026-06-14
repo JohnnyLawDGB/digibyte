@@ -110,18 +110,22 @@ Minimum RC45 operator checklist:
 
 ## Validation Status
 
-RC45 validation started on June 13, 2026 from `feature/digidollar-v1` at commit `5a7b1e90623fb5d76e222c9cf58287dd2b1b3642`.
+RC45 code validation completed on June 13, 2026 from `feature/digidollar-v1` at code commit `5a7b1e90623fb5d76e222c9cf58287dd2b1b3642`. Later release-note-only commits do not change consensus, wallet, RPC, Qt, or test behavior.
 
 | Gate | Status |
 | --- | --- |
-| Build: `make -C src -j$(nproc) digibyted digibyte-cli digibyte-wallet test/test_digibyte qt/test/test_digibyte-qt` | PASS |
+| Build targets: `digibyted`, `qt/digibyte-qt`, `test/test_digibyte`, `test/fuzz/fuzz`, `qt/test/test_digibyte-qt` | PASS |
 | Unit tests: `./src/test/test_digibyte --show_progress` | PASS, 3398 Boost test cases |
-| Qt tests: `QT_QPA_PLATFORM=offscreen ./src/qt/test/test_digibyte-qt` | PASS, 121 passed / 0 failed / 6 expected visual-QA skips |
-| Functional tests: `python3 test/functional/test_runner.py --jobs=4` | RUNNING |
-| Extended functional tests: `./test/functional/test_runner.py --jobs=4 --extended` | PENDING |
-| Whitespace check: `git diff --check` | PENDING |
+| Qt tests: `QT_QPA_PLATFORM=offscreen ./src/qt/test/test_digibyte-qt -platform offscreen` | PASS, 121 passed / 0 failed / 3 expected visual-QA skips |
+| Functional tests: `python3 test/functional/test_runner.py --jobs=4` | PASS, 376 entries, 17 expected skips, runtime 688s |
+| Multi-oracle E2E: `./test_multi_oracle_testnet.sh` | PASS, 430 checks passed, 0 failed, 0 warnings |
+| Restored wallet DD history check | PASS, Bob original/restored both `82` rows: `mint:20`, `send:26`, `receive:22`, `redeem:12` |
+| Focused rescan regression: `python3 test/functional/wallet_digidollar_rescan.py` | PASS |
+| Selected DD/oracle/MuSig fuzz stdin smokes | PASS |
+| DigiDollar operator-surface lint: `python3 test/lint/lint-digidollar-operator-surface.py` | PASS |
+| Whitespace check: `git diff --check` | PASS |
 
-Validation logs are being written under `/tmp/digibyte-rc45/`.
+Primary multi-oracle E2E log: `/tmp/digidollar_debug_logs/test_run_20260612_230833.log`.
 
 ---
 
@@ -146,3 +150,4 @@ Validation logs are being written under `/tmp/digibyte-rc45/`.
 - `87561e21fd` digidollar: keep restored change out of receive history
 - `aed6bb6045` test: detect existing musig bundle in e2e
 - `5a7b1e9062` digidollar: restore DD change history on rescan
+- `c1e94d2696` release: add RC45 release notes

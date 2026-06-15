@@ -7830,10 +7830,21 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
     }
 
     try {
-        // First, extract DD amounts from OP_RETURN (same logic as DetectIncomingDDOutputs)
         std::vector<CAmount> dd_amounts;
         int txType = static_cast<int>(GetDigiDollarTxType(*tx));
 
+        // Skip mint transactions and redemption change for history insertion.
+        // Mint history is recorded by AddCollateralPosition(); redemption history by
+        // redeemdigidollar (DD change synthesized as redeem_change in
+        // GetDDTransactionHistory()). Do this BEFORE parsing OP_RETURN amounts: a MINT's
+        // OP_RETURN ends with a 32-byte owner pubkey push, and the amount loop below
+        // builds CScriptNum(push, 8) over every trailing push -- 32 > 8 threw
+        // "script number overflow" on every mint (caught below, but noisy and fragile).
+        if (txType == DD_TX_MINT || txType == DD_TX_REDEEM) {
+            return;
+        }
+
+        // Extract DD amounts from OP_RETURN (same logic as DetectIncomingDDOutputs)
         for (const auto& vout : tx->vout) {
             if (vout.scriptPubKey.size() > 0 && vout.scriptPubKey[0] == OP_RETURN) {
                 CScript::const_iterator pc = vout.scriptPubKey.begin();
@@ -7852,22 +7863,16 @@ void DigiDollarWallet::ProcessIncomingTransaction(const CTransactionRef& tx, con
                 CScriptNum txTypeNum(data, true);
                 if (txTypeNum.getint() != txType) break;
 
-                // Extract DD amounts
+                // Extract DD amounts. Amount pushes are <= 8 bytes; guard the size so a
+                // malformed/oversized push can never throw "script number overflow".
                 while (vout.scriptPubKey.GetOp(pc, opcode, data)) {
-                    if (data.size() > 0) {
+                    if (data.size() > 0 && data.size() <= 8) {
                         CScriptNum amount(data, true, 8);  // 8-byte max for large DD amounts
                         dd_amounts.push_back(amount.GetInt64());
                     }
                 }
                 break;
             }
-        }
-
-        // Skip mint transactions and redemption change for history insertion.
-        // Redemption history is recorded by redeemdigidollar; any DD change is
-        // synthesized as redeem_change in GetDDTransactionHistory().
-        if (txType == DD_TX_MINT || txType == DD_TX_REDEEM) {
-            return;
         }
 
         if (dd_amounts.empty()) {

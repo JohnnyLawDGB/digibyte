@@ -824,6 +824,78 @@ void DigiDollarWidgetTests::staleMintUnlockHeightCacheRepairsFromOpReturn()
     MockOracleManager::GetInstance().Reset();
 }
 
+void DigiDollarWidgetTests::qtFailedMintAbandonsRejectedDraft()
+{
+#ifdef Q_OS_MACOS
+    if (QApplication::platformName() == "minimal") {
+        QWARN("Skipping DigiDollarWidgetTests on mac build with 'minimal' platform set due to Qt bugs.");
+        return;
+    }
+#endif
+    // Regression (shenger RC45 report): a Qt DigiDollar mint whose
+    // CommitTransaction() is rejected by mempool policy (e.g. too-long-mempool-chain)
+    // must NOT leave the rejected mint draft behind as a live (non-abandoned) wallet
+    // transaction. The generic wallet history model decodes ANY DD-shaped wallet tx
+    // into "DigiDollar Collateral Lock / Transfer" rows, so a lingering draft surfaces
+    // phantom DD activity even though no vault position was created. The RPC mint path
+    // (rpc/digidollar.cpp) already abandons rejected mints; the Qt path must match.
+    //
+    // A high -minrelaytxfee makes the mempool reject the mint's fixed fee (0.1 DGB
+    // MIN_DD_TX_FEE) as below the relay floor, deterministically forcing the mint's
+    // CommitTransaction() to fail at broadcast. (DD mints are exempt from the
+    // max-tx-fee check in BroadcastTransaction(), so that knob cannot be used here.)
+    TestChain100Setup test{ChainType::REGTEST, {"-minrelaytxfee=1"}};
+    for (int i = 0; i < 5; ++i) {
+        test.CreateAndProcessBlock({}, GetScriptForRawPubKey(test.coinbaseKey.GetPubKey()));
+    }
+    auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
+    test.m_node.wallet_loader = wallet_loader.get();
+    m_node.setContext(&test.m_node);
+
+    MockOracleManager::GetInstance().SetEnabled(true);
+    MockOracleManager::GetInstance().SetMockPrice(500000);
+
+    CreateAndProcessOracleQuoteBlock(test, 500000);
+    std::shared_ptr<wallet::CWallet> wallet = wallet::CreateSyncedWallet(
+        *test.m_node.chain,
+        WITH_LOCK(Assert(test.m_node.chainman)->GetMutex(), return test.m_node.chainman->ActiveChain()),
+        test.coinbaseKey);
+    wallet->SetBroadcastTransactions(true);
+    wallet->EnsureDDWallet();
+
+    DigiDollarMiniGUI mini_gui(m_node);
+    mini_gui.initModelForWallet(m_node, wallet);
+    mini_gui.walletModel->pollBalanceChanged();
+
+    WalletModel::DigiDollarMintResult result = mini_gui.walletModel->mintDigiDollar(10000, 0);
+
+    // The mint must report failure (not OK).
+    QVERIFY2(result.status != WalletModel::OK,
+             "mint unexpectedly succeeded despite a forced commit rejection");
+
+    // No vault position may be created for a rejected mint.
+    DigiDollarWallet* dd_wallet = wallet->GetDDWallet();
+    QVERIFY(dd_wallet != nullptr);
+    QCOMPARE(dd_wallet->GetDDTimeLocks(/*active_only=*/false).size(), static_cast<size_t>(0));
+
+    // Crucially: no rejected mint draft may linger as a live (non-abandoned) wallet
+    // transaction that generic history would render as phantom DigiDollar activity.
+    size_t lingering_mint_drafts = 0;
+    {
+        LOCK(wallet->cs_wallet);
+        for (const auto& entry : wallet->mapWallet) {
+            const wallet::CWalletTx& wtx = entry.second;
+            if (wtx.isAbandoned()) continue;
+            if (GetDigiDollarTxType(*wtx.tx) == DigiDollarTxType::DD_TX_MINT) {
+                ++lingering_mint_drafts;
+            }
+        }
+    }
+    QCOMPARE(lingering_mint_drafts, static_cast<size_t>(0));
+
+    MockOracleManager::GetInstance().Reset();
+}
+
 void DigiDollarWidgetTests::sendWidgetTests()
 {
 #ifdef Q_OS_MACOS

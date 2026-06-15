@@ -30,6 +30,7 @@ private Q_SLOTS:
     void mintWidgetCollateralMatchesBuilderSafetyMargin();
     void qtMintStoresDescriptorRecoverableOwnerKey();
     void staleMintUnlockHeightCacheRepairsFromOpReturn();
+    void qtFailedMintAbandonsRejectedDraft();
     void sendWidgetTests();
     void sendSuccessDialogDoesNotPromiseNextBlockConfirmation();
     void sendWidgetCoinControlLabelsMirrorDgb();

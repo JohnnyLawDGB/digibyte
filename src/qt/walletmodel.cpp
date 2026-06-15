@@ -1133,6 +1133,16 @@ WalletModel::DigiDollarMintResult WalletModel::mintDigiDollar(CAmount ddAmount, 
         }
         if (!commit_success) {
             LogPrintf("DigiDollar Qt: ERROR - Failed to commit transaction: %s\n", commit_error);
+            // CommitTransaction() adds the tx to the wallet as inactive BEFORE relay and
+            // leaves it there when relay fails. A rejected mint must not linger as a
+            // non-abandoned wallet tx: the generic history model decodes any DD-shaped tx
+            // into "DigiDollar Collateral Lock / Transfer" rows, surfacing phantom DD
+            // activity even though no vault position was created. Abandon it, mirroring
+            // the RPC mint path (rpc/digidollar.cpp) and CommitDDTransaction().
+            if (pWallet->TransactionCanBeAbandoned(txId)) {
+                pWallet->AbandonTransaction(txId);
+                LogPrintf("DigiDollar Qt: Abandoned rejected local mint tx %s\n", txId.GetHex());
+            }
             return DigiDollarMintResult(TransactionCreationFailed, "", "",
                 QString("Failed to broadcast transaction: %1").arg(QString::fromStdString(commit_error)));
         }

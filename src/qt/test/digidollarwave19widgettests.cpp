@@ -520,6 +520,27 @@ void DigiDollarWave19WidgetTests::sendAmountValidatorUsesCentsPrecisionAndBounds
     QCOMPARE(validator.validate(oldMax, pos), QValidator::Invalid);
 }
 
+void DigiDollarWave19WidgetTests::mintWidgetUsdEquivalentUsesCentsPrecision()
+{
+    if (MaybeSkipMacMinimal()) return;
+
+    DigiDollarMintWidget mintWidget;
+    QLineEdit* amountEdit = mintWidget.findChild<QLineEdit*>("amountEdit");
+    QVERIFY(amountEdit != nullptr);
+    QLabel* usdValue = mintWidget.findChild<QLabel*>("usdValueValue");
+    QVERIFY(usdValue != nullptr);
+
+    QCOMPARE(usdValue->text(), QStringLiteral("0.00 $USD"));
+
+    amountEdit->setText(QStringLiteral("100"));
+    QCoreApplication::processEvents();
+    QCOMPARE(usdValue->text(), QStringLiteral("100.00 $USD"));
+
+    amountEdit->setText(QStringLiteral("100.1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(usdValue->text(), QStringLiteral("100.10 $USD"));
+}
+
 void DigiDollarWave19WidgetTests::positionsWidgetMissingOracleHealthIsUnavailable()
 {
     if (MaybeSkipMacMinimal()) return;

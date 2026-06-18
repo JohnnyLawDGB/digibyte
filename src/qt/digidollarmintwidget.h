@@ -82,6 +82,7 @@ private:
     QString formatDDAmount(double amount) const;
     QString formatDGBAmount(double amount) const;
     QString formatUSDAmount(double amount) const;
+    QString formatDigiDollarUSDEquivalent(double amount) const;
     QString formatRatio(double ratio) const;
     /** Mask a formatted string by replacing digits with '#' */
     QString maskValue(const QString& value) const;

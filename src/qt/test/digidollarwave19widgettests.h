@@ -36,6 +36,7 @@ private Q_SLOTS:
     void overviewWidgetUsesProtocolAcronymTooltips();
     void walletModelAndSendValidatorRejectCrossNetworkDDAddresses();
     void sendAmountValidatorUsesCentsPrecisionAndBounds();
+    void mintWidgetUsdEquivalentUsesCentsPrecision();
     void positionsWidgetMissingOracleHealthIsUnavailable();
     // DD-FA-TEST-028: transactions widget filter coverage
     void transactionsWidgetTypeFilterFiltersRows();

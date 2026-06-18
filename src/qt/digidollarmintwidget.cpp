@@ -542,11 +542,11 @@ void DigiDollarMintWidget::onAmountChanged()
     if (!amountText.isEmpty()) {
         m_mintAmount = amountText.toDouble();
         double usdValue = m_mintAmount * 1.0; // DD should be pegged to $1
-        m_usdValueValue->setText(formatUSDAmount(usdValue));
+        m_usdValueValue->setText(formatDigiDollarUSDEquivalent(usdValue));
         updateUSDEquivalent();
     } else {
         m_mintAmount = 0.0;
-        m_usdValueValue->setText("$0.00");
+        m_usdValueValue->setText(formatDigiDollarUSDEquivalent(0));
         updateUSDEquivalent();
     }
 
@@ -1007,6 +1007,11 @@ QString DigiDollarMintWidget::formatUSDAmount(double amount) const
     return QString::number(amount, 'f', 6) + " $USD";
 }
 
+QString DigiDollarMintWidget::formatDigiDollarUSDEquivalent(double amount) const
+{
+    return QString::number(amount, 'f', 2) + " $USD";
+}
+
 QString DigiDollarMintWidget::formatRatio(double ratio) const
 {
     return QString::number(ratio, 'f', 0) + "%";
@@ -1132,7 +1137,7 @@ void DigiDollarMintWidget::setPrivacy(bool privacy)
     updateBalance();
     updateCollateralCalculation();
     if (m_privacy) {
-        m_usdValueValue->setText(maskValue(formatUSDAmount(0)));
+        m_usdValueValue->setText(maskValue(formatDigiDollarUSDEquivalent(0)));
         m_oraclePriceValue->setText(maskValue(formatUSDAmount(0) + "/DGB"));
     } else {
         updateOraclePrice();

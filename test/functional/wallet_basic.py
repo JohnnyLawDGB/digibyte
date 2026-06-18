@@ -287,7 +287,7 @@ class WalletTest(DigiByteTestFramework):
         assert_equal(self.nodes[0].getreceivedbyaddress(a1), expected_bal)
 
         self.log.info("Test sendmany with fee_rate param (explicit fee rate in sat/vB)")
-        fee_rate_sat_vb = 10000
+        fee_rate_sat_vb = 100
         fee_rate_dgb_kvb = fee_rate_sat_vb * 1e3 / 1e8
         explicit_fee_rate_dgb_kvb = Decimal(fee_rate_dgb_kvb) / 1000
 
@@ -313,13 +313,13 @@ class WalletTest(DigiByteTestFramework):
         assert_raises_rpc_error(-8, "Unknown named parameter feeRate", self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=1, feeRate=1)
 
         # Test setting explicit fee rate just below the minimum.
-        self.log.info("Test sendmany raises 'fee rate too low' if fee_rate of 0.99999999 is passed")
-        assert_raises_rpc_error(-6, "Fee rate (0.999 sat/vB) is lower than the minimum fee rate setting (10000.000 sat/vB)",
-            self.nodes[2].sendmany, amounts={address: 10}, fee_rate=0.999)
+        self.log.info("Test sendmany raises 'fee rate too low' if fee_rate of 99.999 is passed")
+        assert_raises_rpc_error(-6, "Fee rate (99.999 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)",
+            self.nodes[2].sendmany, amounts={address: 10}, fee_rate=99.999)
 
         self.log.info("Test sendmany raises if an invalid fee_rate is passed")
         # Test fee_rate with zero values.
-        msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (10000.000 sat/vB)"
+        msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)"
         for zero_value in [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]:
             assert_raises_rpc_error(-6, msg, self.nodes[2].sendmany, amounts={address: 1}, fee_rate=zero_value)
         msg = "Invalid amount"
@@ -506,7 +506,7 @@ class WalletTest(DigiByteTestFramework):
             assert prebalance > 2
             address = self.nodes[1].getnewaddress()
             amount = 3
-            fee_rate_sat_vb = 10000
+            fee_rate_sat_vb = 100
             fee_rate_dgb_kvb = fee_rate_sat_vb * 1e3 / 1e8
             # Test passing fee_rate as an integer
             txid = self.nodes[2].sendtoaddress(address=address, amount=amount, fee_rate=fee_rate_sat_vb)
@@ -518,7 +518,7 @@ class WalletTest(DigiByteTestFramework):
 
             prebalance = self.nodes[2].getbalance()
             amount = Decimal("0.001")
-            # DigiByte: Use higher fee rate due to minimum fee requirement
+            # DigiByte: Use a non-minimum fee rate for explicit-fee coverage.
             fee_rate_sat_vb = 12300
             fee_rate_dgb_kvb = fee_rate_sat_vb * 1e3 / 1e8
             # Test passing fee_rate as a string
@@ -530,13 +530,13 @@ class WalletTest(DigiByteTestFramework):
             assert_fee_amount(fee, tx_size, Decimal(fee_rate_dgb_kvb))
 
             # Test setting explicit fee rate just below the minimum.
-            self.log.info("Test sendtoaddress raises 'fee rate too low' if fee_rate of 0.99999999 is passed")
-            assert_raises_rpc_error(-6, "Fee rate (0.999 sat/vB) is lower than the minimum fee rate setting (10000.000 sat/vB)",
-                self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=0.999)
+            self.log.info("Test sendtoaddress raises 'fee rate too low' if fee_rate of 99.999 is passed")
+            assert_raises_rpc_error(-6, "Fee rate (99.999 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)",
+                self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=99.999)
 
             self.log.info("Test sendtoaddress raises if an invalid fee_rate is passed")
             # Test fee_rate with zero values.
-            msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (10000.000 sat/vB)"
+            msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)"
             for zero_value in [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]:
                 assert_raises_rpc_error(-6, msg, self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=zero_value)
             msg = "Invalid amount"

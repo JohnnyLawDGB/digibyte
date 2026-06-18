@@ -43,7 +43,7 @@ FORBIDDEN = {
         "How The 9 Oracles Are Selected",
         "If fewer than 9 valid testnet/mainnet V1 oracles are online and fresh",
     ],
-    "WALLET_MIGRATION_GUIDE.md": [
+    "digidollar/WALLET_MIGRATION_GUIDE.md": [
         "future testnet resets",
         "17-oracle list",
         "**rc30 (current)**",
@@ -99,7 +99,7 @@ FORBIDDEN = {
     "DIGIDOLLAR_ORACLE_EXPLAINER.md": [
         "Testnet25 | height 600",
     ],
-    "ROSTER_PLAN.md": [
+    "digidollar/ROSTER_PLAN.md": [
         "Mainnet has 35 reserved oracle slots, 17 active pubkeys, and 9 required MuSig2 signers",
         "Testnet currently has 35 reserved oracle slots, 18 active pubkeys, and 9 required MuSig2 signers",
     ],
@@ -180,7 +180,7 @@ REQUIRED = {
         "getoraclesigners",
         "listoracle",
     ],
-    "WALLET_MIGRATION_GUIDE.md": [
+    "digidollar/WALLET_MIGRATION_GUIDE.md": [
         "ARCHIVED RC30-ONLY",
         "Do not use this guide for RC44/testnet26",
         "DIGIDOLLAR_ORACLE_SETUP.md",
@@ -225,7 +225,7 @@ REQUIRED = {
     "DIGIDOLLAR_ORACLE_EXPLAINER.md": [
         "Testnet26 | height 600",
     ],
-    "ROSTER_PLAN.md": [
+    "digidollar/ROSTER_PLAN.md": [
         "Mainnet and testnet have 35 reserved oracle slots, 35 active pubkeys, and 7 required MuSig2 signers",
     ],
     "DIGIDOLLAR_ARCHITECTURE.md": [

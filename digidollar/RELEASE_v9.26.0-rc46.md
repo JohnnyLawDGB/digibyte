@@ -209,8 +209,9 @@ Known validation for the RC46 code line:
 | Rejected Qt mint fix validation from commit `670c7c6c72` | PASS: unit suite, Qt suite, DigiDollar functional suite, and wallet functional suite reported green |
 | RC46 in-tree Qt compile smoke: `make -C src -j$(nproc) qt/digibyte-qt` | PASS |
 | RC46 local testnet26 Qt/oracle smoke | PASS: `src/qt/digibyte-qt -testnet` runs on testnet26 and reports synced chain state locally |
-| Operator surface lint after docs alignment | PASS expected; run again before tag if docs change |
-| `git diff --check` after final RC46 release-note prep | Required before tagging/publishing |
+| RC46 offscreen Qt test suite | PASS: 102 passed, 0 failed, 3 skipped |
+| Operator surface lint after docs alignment | PASS |
+| `git diff --check` after final RC46 release-note prep | PASS |
 
 Recommended final release gate before publishing binaries:
 
@@ -234,6 +235,9 @@ git diff --check
 - `bfb2c27315` docs: align DigiDollar oracle operator surface
 - `2d96fa2068` audit: update Red Hornet final DigiDollar report
 - `8c6e0a4e35` qt: format DigiDollar mint USD preview as cents
+- `86abab4980` release: add v9.26.0-rc46 notes
+- `1458d36e3b` cleanup: move prior release notes into `digidollar/`
+- `d21c688c67` cleanup: move DigiDollar planning/migration docs and remove stale RC41/bug-hunt scratch files
 
 ---
 

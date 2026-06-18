@@ -83,6 +83,7 @@ class DigiDollarRescanTest(DigiByteTestFramework):
         self.test_rescan_after_position_removal()
         self.test_rescan_balance_accuracy()
         self.test_descriptor_restore_preserves_receive_history()
+        self.test_bounded_rescan_skips_full_dd_scan()
         self.test_rescan_progress_reporting()
 
         self.log.info("=== All DigiDollar Rescan Tests Passed! ===")
@@ -921,9 +922,38 @@ class DigiDollarRescanTest(DigiByteTestFramework):
 
         self.log.info("  SUCCESS: Descriptor restore preserved DD receive history")
 
+    def test_bounded_rescan_skips_full_dd_scan(self):
+        """Test that a height-bounded rescan does not run a full DD UTXO rebuild."""
+        self.log.info("Test 6: Testing bounded rescan avoids full DigiDollar scan...")
+
+        self.nodes[0].createwallet(
+            wallet_name="bounded_rescan",
+            descriptors=True,
+            blank=True
+        )
+        bounded_wallet = self.nodes[0].get_wallet_rpc("bounded_rescan")
+        tip = self.nodes[0].getblockcount()
+
+        with self.nodes[0].assert_debug_log(
+            expected_msgs=[],
+            unexpected_msgs=["DigiDollar: Running post-rescan position validation"],
+            timeout=1):
+            rescan_result = bounded_wallet.rescanblockchain(tip, tip)
+
+        assert_equal(rescan_result["start_height"], tip)
+        assert_equal(rescan_result["stop_height"], tip)
+
+        with self.nodes[0].assert_debug_log(
+            expected_msgs=["DigiDollar: Running post-rescan position validation"],
+            unexpected_msgs=[],
+            timeout=5):
+            bounded_wallet.rescanblockchain()
+
+        self.log.info("  SUCCESS: Bounded rescan skipped full DigiDollar scan")
+
     def test_rescan_progress_reporting(self):
         """Test rescan progress reporting via getwalletinfo."""
-        self.log.info("Test 6: Testing rescan progress reporting...")
+        self.log.info("Test 7: Testing rescan progress reporting...")
 
         # Mine some blocks to ensure rescan takes measurable time
         self.generate(self.nodes[0], 50)

@@ -277,15 +277,18 @@ BOOST_AUTO_TEST_CASE(rh08_03_watch_only_output_excluded_from_dd_ownership)
     XOnlyPubKey xonly(random_key.GetPubKey());
 
     CScript p2tr_script;
-    p2tr_script << OP_1;
-    p2tr_script.insert(p2tr_script.end(), xonly.begin(), xonly.end());
+    p2tr_script << OP_1 << std::vector<unsigned char>(xonly.begin(), xonly.end());
 
     CTxOut dd_output(0, p2tr_script);
 
     // This output is NOT in our wallet at all — IsDDOutputMine should return false
     uint256 fake_txid;
     GetRandBytes(fake_txid);
+    BOOST_CHECK_EQUAL(dd_wallet.GetCachedForeignDDOutputCount(), 0u);
     BOOST_CHECK(!dd_wallet.IsDDOutputMine(dd_output, fake_txid));
+    BOOST_CHECK_EQUAL(dd_wallet.GetCachedForeignDDOutputCount(), 1u);
+    BOOST_CHECK(!dd_wallet.IsDDOutputMine(dd_output, fake_txid));
+    BOOST_CHECK_EQUAL(dd_wallet.GetCachedForeignDDOutputCount(), 1u);
 
     // Verify the function checks ISMINE_SPENDABLE (code inspection confirms this,
     // but this test ensures the behavior holds)

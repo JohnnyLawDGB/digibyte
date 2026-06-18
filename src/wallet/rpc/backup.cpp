@@ -19,6 +19,7 @@
 #include <util/time.h>
 #include <util/translation.h>
 #include <wallet/rpc/util.h>
+#include <wallet/digidollarwallet.h>
 #include <wallet/wallet.h>
 
 #include <cstdint>
@@ -1221,6 +1222,9 @@ static UniValue ProcessImport(CWallet& wallet, const UniValue& data, const int64
         }
 
         result.pushKV("success", UniValue(true));
+        if (auto* dd_wallet = wallet.GetDDWallet()) {
+            dd_wallet->ClearDDOwnershipCache();
+        }
     } catch (const UniValue& e) {
         result.pushKV("success", UniValue(false));
         result.pushKV("error", e);
@@ -1580,6 +1584,9 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
         }
 
         result.pushKV("success", UniValue(true));
+        if (auto* dd_wallet = wallet.GetDDWallet()) {
+            dd_wallet->ClearDDOwnershipCache();
+        }
     } catch (const UniValue& e) {
         result.pushKV("success", UniValue(false));
         result.pushKV("error", e);

@@ -14,6 +14,7 @@
 #include <digidollar/txbuilder.h>
 #include <base58.h>
 
+#include <array>
 #include <set>
 #include <string>
 #include <utility>
@@ -194,6 +195,10 @@ private:
     // Maps output_key_bytes -> (pubkey, encrypted_secret)
     std::map<std::array<unsigned char, 32>, std::pair<CPubKey, std::vector<unsigned char>>> dd_crypted_address_keys GUARDED_BY(cs_dd_wallet);
 
+    // Ephemeral cache for DD output keys that failed descriptor ownership recovery.
+    // This prevents repeated wallet-wide P2TR descriptor scans on UI/history refreshes.
+    mutable std::set<std::array<unsigned char, 32>> dd_foreign_output_keys GUARDED_BY(cs_dd_wallet);
+
     // Pointer to wallet for UTXO access
     wallet::CWallet* m_wallet{nullptr};
 
@@ -314,6 +319,7 @@ public:
     bool IsDDOutputMine(const CTxOut& txout, const uint256& txid) const;
     bool IsMyDDAddress(const std::string& addrStr) const;
     std::vector<std::string> GetKnownDDAddresses() const;
+    void ClearDDOwnershipCache();
 
     /**
      * Check if a DD output belongs to this wallet using COutPoint
@@ -791,6 +797,7 @@ public:
     void AddMockPosition(const uint256& id, CAmount dd, CAmount dgb, uint32_t tier, int64_t height);
     size_t GetBalanceCount() const;
     size_t GetPositionCount() const;
+    size_t GetCachedForeignDDOutputCount() const;
 
     /**
      * Check if an outpoint is locked by DigiDollar (either collateral or DD token).

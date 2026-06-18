@@ -594,6 +594,7 @@ bool DigiDollarWallet::EncryptDDKeys(const wallet::CKeyingMaterial& vMasterKey, 
     // Clear plaintext keys from memory — they are now encrypted
     dd_owner_keys.clear();
     dd_address_keys.clear();
+    dd_foreign_output_keys.clear();
 
     LogPrintf("DigiDollarWallet: Successfully encrypted %zu owner keys and %zu address keys\n",
               dd_crypted_owner_keys.size(), dd_crypted_address_keys.size());
@@ -605,6 +606,7 @@ void DigiDollarWallet::StoreAddressKey(const XOnlyPubKey& output_key, const CKey
     LOCK(cs_dd_wallet);
     std::array<unsigned char, 32> key_bytes;
     std::copy(output_key.begin(), output_key.end(), key_bytes.begin());
+    dd_foreign_output_keys.erase(key_bytes);
 
     LogPrintf("DigiDollarWallet: Storing DD address key for output key %s\n",
               HexStr(output_key));
@@ -664,6 +666,7 @@ size_t DigiDollarWallet::LoadDDAddressKeys()
     // Clear in-memory maps before loading
     dd_address_keys.clear();
     dd_crypted_address_keys.clear();
+    dd_foreign_output_keys.clear();
 
     // Iterate through database to find DD address keys (both plaintext and encrypted)
     std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
@@ -748,6 +751,8 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
     // Extract the P2TR output key from the scriptPubKey
     // P2TR scripts are: OP_1 <32-byte-output-key>
     std::vector<unsigned char> output_key_bytes(txout.scriptPubKey.begin() + 2, txout.scriptPubKey.end());
+    std::array<unsigned char, 32> output_key_array;
+    std::copy(output_key_bytes.begin(), output_key_bytes.end(), output_key_array.begin());
 
     // Check dd_owner_keys - first try the specific txid, then check ALL owner keys
     // This is needed because TRANSFER change outputs use the owner key from the original
@@ -800,6 +805,12 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
     CKey address_key;
     if (GetAddressKey(output_key, address_key)) {
         return true;
+    }
+
+    if (dd_foreign_output_keys.count(output_key_array) > 0) {
+        LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - cached foreign output_key=%s\n",
+                 HexStr(output_key_bytes));
+        return false;
     }
 
     // WALLET RESTORE FIX: After descriptor import, dd_address_keys may be
@@ -924,6 +935,7 @@ bool DigiDollarWallet::IsDDOutputMine(const CTxOut& txout, const uint256& txid) 
 
         LogPrint(BCLog::DIGIDOLLAR, "DigiDollar: IsDDOutputMine - no match found. Stats: spk_mans=%d, p2tr_scripts=%d, providers=%d, spenddata=%d, keys=%d, target_in_scripts=%d\n",
                  spk_man_count, p2tr_script_count, provider_count, spenddata_count, key_count, found_target_in_scripts);
+        dd_foreign_output_keys.insert(output_key_array);
     }
 
     return false;
@@ -1013,6 +1025,7 @@ std::vector<std::string> DigiDollarWallet::GetKnownDDAddresses() const
 void DigiDollarWallet::StoreOwnerKey(const uint256& dd_timelock_id, const CKey& key)
 {
     LOCK(cs_dd_wallet);
+    dd_foreign_output_keys.clear();
 
     LogPrintf("DigiDollarWallet: Storing DD owner key for timelock %s\n",
               dd_timelock_id.ToString());
@@ -1072,6 +1085,7 @@ size_t DigiDollarWallet::LoadDDOwnerKeys()
     // Clear in-memory maps before loading
     dd_owner_keys.clear();
     dd_crypted_owner_keys.clear();
+    dd_foreign_output_keys.clear();
 
     // Iterate through database to find DD owner keys (both plaintext and encrypted)
     std::unique_ptr<wallet::DatabaseCursor> cursor = batch.GetNewCursor();
@@ -1352,6 +1366,18 @@ size_t DigiDollarWallet::GetPositionCount() const
 {
     LOCK(cs_dd_wallet);
     return collateral_positions.size();
+}
+
+size_t DigiDollarWallet::GetCachedForeignDDOutputCount() const
+{
+    LOCK(cs_dd_wallet);
+    return dd_foreign_output_keys.size();
+}
+
+void DigiDollarWallet::ClearDDOwnershipCache()
+{
+    LOCK(cs_dd_wallet);
+    dd_foreign_output_keys.clear();
 }
 
 bool DigiDollarWallet::IsLockedByDD(const COutPoint& outpoint) const
@@ -4281,6 +4307,7 @@ size_t DigiDollarWallet::ScanForDDUTXOs() {
         // Clear existing tracking data for fresh scan
         dd_balances.clear();
         dd_utxos.clear();  // Clear UTXO tracking for fresh scan
+        dd_foreign_output_keys.clear();
         total_dd_balance = 0;
 
         size_t dd_utxo_count = 0;
@@ -5850,6 +5877,7 @@ void DigiDollarWallet::ClearWalletData() {
     dd_address_keys.clear();
     dd_crypted_owner_keys.clear();
     dd_crypted_address_keys.clear();
+    dd_foreign_output_keys.clear();
 
     // Also clear legacy mock data
     ClearMockData();

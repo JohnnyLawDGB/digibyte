@@ -12,7 +12,7 @@ Release: https://github.com/DigiByte-Core/digibyte/releases/tag/v9.26.0-rc46
 
 RC46 does **not** reset public DigiDollar testnet.
 
-RC44 created the fresh public `testnet26` chain and finalized the 35-slot / 7-signature MuSig2 oracle roster. RC45 hardened wallet recovery, oracle key export/import, OP_CHECKPRICE disablement, and DigiDollar health reconstruction. RC46 keeps that same network and tightens the last wallet/Qt failure-reporting issue, operator documentation, multi-oracle harness behavior, and final audit reporting before using this build for:
+RC44 created the fresh public `testnet26` chain and finalized the 35-slot / 7-signature MuSig2 oracle roster. RC45 hardened wallet recovery, oracle key export/import, OP_CHECKPRICE disablement, and DigiDollar health reconstruction. RC46 keeps that same network and tightens the last wallet/Qt failure-reporting issue, wallet rescan/import behavior, DigiDollar history performance, fee safety checks, operator documentation, multi-oracle harness behavior, and final audit reporting before using this build for:
 
 1. generating final mainnet oracle public keys, and
 2. running the final public `testnet26` validation pass.
@@ -33,6 +33,11 @@ What changed from RC45:
 - DigiDollar wallet OP_RETURN parsing now skips mint/redeem metadata before amount parsing and ignores oversized pushes, preventing noisy `script number overflow` exceptions from mint owner-pubkey pushes.
 - A Qt regression test now forces a rejected mint and verifies no non-abandoned DD mint draft remains in the wallet.
 - The Qt mint tab now formats the DigiDollar USD-equivalent preview as cents (`100.00 $USD`) instead of oracle-price precision (`100.000000 $USD`), while leaving oracle DGB/USD price formatting unchanged.
+- Bounded wallet rescans now stay bounded for DigiDollar instead of triggering a full DigiDollar UTXO scan after the requested block range completes.
+- Descriptor imports now fail fast if a wallet rescan is already running, instead of silently waiting behind the active scan and looking like a slow import.
+- DigiDollar wallet ownership checks now cache foreign-output misses, avoiding repeated full descriptor/Taproot scans during Qt DigiDollar tab refreshes and history rebuilds.
+- `sendall` now rejects very large automatic sweep fees unless the caller explicitly chooses the fee behavior with `fee_rate` or `send_max`.
+- DigiByte's intended `0.1 DGB/kB` default minimum transaction fee remains in place, and DigiDollar redemptions now enforce the `0.1 DGB` anti-spam fee floor.
 - The multi-oracle testnet harness now performs stronger preflight/runtime checks and fails harder on bad oracle state instead of letting partial runs look healthy.
 - Operator-facing docs were aligned around the supported wallet-stored oracle-key flow: `createoraclekey`, optional `exportoracleprivkey`, `importoracleprivkey` for recovery only, and `startoracle` without private-key handling.
 - The final Red Hornet DigiDollar audit ledger/report was added for launch-readiness tracking.
@@ -51,6 +56,7 @@ What did not change:
 - Oracle bundle format remains `v0x03`.
 - Mainnet DigiDollar activation status does not change in RC46.
 - DigiDollar economic rules, ERR policy, DCA policy, address formats, and wallet database format do not change.
+- DigiByte's default minimum wallet fee policy does not change; the RC46 fee work preserves the `0.1 DGB/kB` floor and adds safer guardrails around expensive automatic sweeps.
 
 ---
 
@@ -58,11 +64,11 @@ What did not change:
 
 RC46 is the final release-test candidate before the intended formal DigiDollar mainnet release path.
 
-The main user-facing fix is straightforward: if a Qt DigiDollar mint is rejected before relay/confirmation, the rejected local draft is abandoned immediately and does not appear as confusing phantom DigiDollar activity. The underlying DigiDollar vault state was already safe; this fixes wallet history and Qt presentation so failed local attempts do not look like real DD locks/transfers.
+The main user-facing fixes are straightforward: failed Qt mints no longer leave phantom DigiDollar rows, DigiDollar tab/history refreshes no longer repeat expensive ownership scans, bounded rescans stay bounded, and automatic DGB sweeps refuse unusually large implicit fees unless the caller opts in.
 
 The main operator-facing purpose is just as important: RC46 is the build oracle operators should use to generate their final **mainnet** oracle public keys. Those keys will be collected, reviewed, added to chainparams, and used for the coordinated mainnet activation release. RC46 itself does not activate DigiDollar on mainnet.
 
-RC46 is not a network reset and not an economic redesign.
+RC46 is not a network reset and not an economic redesign. The intended DigiByte fee floor remains `0.1 DGB/kB`, and DigiDollar redemptions keep the `0.1 DGB` anti-spam fee requirement.
 
 ---
 
@@ -73,6 +79,11 @@ RC46 is not a network reset and not an economic redesign.
 - OP_RETURN parser hardening: MINT/REDEEM metadata is skipped before amount parsing and oversized pushes are ignored.
 - Regression coverage: new Qt tests verify rejected mints do not leave non-abandoned DD drafts behind and mint USD preview formatting stays at cents precision.
 - Qt mint UI polish: DigiDollar mint USD-equivalent preview now matches dollar/cents display expectations.
+- Bounded rescan fix: `rescanblockchain <start> <stop>` no longer pays a full DigiDollar scan afterward.
+- Import/rescan fix: descriptor imports fail fast while a wallet scan is already active.
+- Qt performance fix: DigiDollar history ownership checks cache foreign-output misses to avoid repeated full descriptor scans.
+- Fee safety: automatic high-fee `sendall` sweeps are blocked unless explicitly requested.
+- DD fee policy: DigiDollar redemptions enforce the `0.1 DGB` anti-spam fee floor while preserving the normal DigiByte fee floor.
 - Multi-oracle harness hardening: final public testnet runs now fail more clearly on bad setup/state.
 - Operator docs: oracle setup docs now emphasize wallet-stored keys and safer recovery/export guidance.
 - Audit record: final Red Hornet launch report and ledger added for release-readiness tracking.
@@ -199,7 +210,7 @@ Older operator notes that mention `testnet25`, port `12032`, incomplete oracle p
 
 ## Validation Status
 
-RC46 carries forward the full RC45 validation baseline and adds the post-RC45 wallet/Qt rejected-mint fix, multi-oracle harness hardening, operator-doc lint alignment, and final audit report updates.
+RC46 carries forward the full RC45 validation baseline and adds the post-RC45 wallet/Qt rejected-mint fix, bounded-rescan/import fixes, DigiDollar history performance fix, fee safety hardening, multi-oracle harness hardening, operator-doc lint alignment, and final audit report updates.
 
 Known validation for the RC46 code line:
 
@@ -211,6 +222,11 @@ Known validation for the RC46 code line:
 | RC46 local testnet26 Qt/oracle smoke | PASS: `src/qt/digibyte-qt -testnet` runs on testnet26 and reports synced chain state locally |
 | RC46 offscreen Qt test suite | PASS: 102 passed, 0 failed, 3 skipped |
 | Operator surface lint after docs alignment | PASS |
+| Final build gate: `make -C src -j$(nproc) digibyted test/test_digibyte test/fuzz/fuzz qt/test/test_digibyte-qt` | PASS |
+| Final unit suite: `./src/test/test_digibyte --show_progress` | PASS |
+| Final functional suite: `test/functional/test_runner.py --jobs=4` | PASS: full runner passed |
+| Final Qt suite: `src/qt/test/test_digibyte-qt -platform offscreen` | PASS |
+| Final multi-oracle testnet harness: `./test_multi_oracle_testnet.sh` | PASS: 434 passed, 0 failed |
 | `git diff --check` after final RC46 release-note prep | PASS |
 
 Recommended final release gate before publishing binaries:
@@ -229,6 +245,13 @@ git diff --check
 
 ## Commits Since RC45
 
+- `873d6d068b` wallet: restore DigiByte fee floor and harden DD redemption fees
+- `a557a74611` wallet: cache foreign DigiDollar output misses
+- `14231a49f3` wallet: keep bounded rescans bounded for DigiDollar
+- `8abd912ef3` wallet: fail descriptor imports before scan waits
+- `9c6d0560eb` wallet: guard automatic sendall sweep fees
+- `3d017c312e` wallet: align default min tx fee with relay (superseded by `873d6d068b`; final RC46 keeps the intended `0.1 DGB/kB` floor)
+- `421dec56b1` release: finalize v9.26.0-rc46 notes
 - `670c7c6c72` wallet/qt: clean up rejected DigiDollar mint, harden DD OP_RETURN parse
 - `c7b8f8c174` release: bump version to v9.26.0-rc46
 - `ea00d6009d` test: harden DigiDollar multi-oracle harness
@@ -268,6 +291,22 @@ The new Qt regression `qtFailedMintAbandonsRejectedDraft` forces a mint commit r
 The mint tab no longer reuses the six-decimal oracle-price formatter for the pegged DigiDollar USD-equivalent preview. A 100 DD mint now displays as `100.00 $USD`, and 100.1 DD displays as `100.10 $USD`, matching send-tab cents behavior while preserving six-decimal precision for live oracle prices such as DGB/USD.
 
 A Qt regression test, `mintWidgetUsdEquivalentUsesCentsPrecision`, covers the zero, whole-dollar, and single-decimal display cases.
+
+### Rescan and descriptor import fixes
+
+Bounded rescans now keep DigiDollar work scoped to the requested range. A successful bounded `rescanblockchain <start> <stop>` reconciles position state without launching a full DigiDollar UTXO scan.
+
+Descriptor imports now reserve the wallet rescan slot before waiting for chain sync. If another rescan is already running, `importdescriptors` returns the existing wallet-rescanning error quickly instead of blocking behind the active scan.
+
+### DigiDollar history performance
+
+DigiDollar ownership checks now cache known foreign Taproot output keys. This avoids repeatedly scanning every descriptor/Taproot script for the same non-wallet DigiDollar output during Qt tab changes, recent-transaction refreshes, and transaction-history rebuilds. The cache is cleared when wallet ownership inputs change.
+
+### Fee safety
+
+RC46 preserves DigiByte's intended default minimum wallet fee policy: `0.1 DGB/kB`.
+
+The new fee work adds guardrails instead of lowering that floor. Automatic `sendall` sweeps without an explicit fee choice now reject unusually large implicit fees, and DigiDollar redemptions enforce the `0.1 DGB` absolute anti-spam fee floor.
 
 ### Multi-oracle harness hardening
 

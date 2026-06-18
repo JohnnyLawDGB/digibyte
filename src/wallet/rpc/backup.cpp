@@ -1646,10 +1646,6 @@ RPCHelpMan importdescriptors()
     if (!pwallet) return UniValue::VNULL;
     CWallet& wallet{*pwallet};
 
-    // Make sure the results are valid at least up to the most recent block
-    // the user could have gotten from another RPC command prior to now
-    wallet.BlockUntilSyncedToCurrentChain();
-
     //  Make sure wallet is a descriptor wallet
     if (!pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
         throw JSONRPCError(RPC_WALLET_ERROR, "importdescriptors is not available for non-descriptor wallets");
@@ -1659,6 +1655,12 @@ RPCHelpMan importdescriptors()
     if (!reserver.reserve(/*with_passphrase=*/true)) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");
     }
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now. Reserve
+    // the rescan slot first so overlapping imports fail before this wait can
+    // block behind scan-related wallet notifications.
+    wallet.BlockUntilSyncedToCurrentChain();
 
     // Ensure that the wallet is not locked for the remainder of this RPC, as
     // the passphrase is used to top up the keypool.

@@ -115,7 +115,7 @@ static const CAmount DEFAULT_FALLBACK_FEE = 1000000; // 0.01 DGB/kb, moderate va
 //! -discardfee default
 static const CAmount DEFAULT_DISCARD_FEE = 10000;
 //! -mintxfee default
-static const CAmount DEFAULT_TRANSACTION_MINFEE = 100000;
+static const CAmount DEFAULT_TRANSACTION_MINFEE = 10000000;
 //! -consolidatefeerate default
 static const CAmount DEFAULT_CONSOLIDATE_FEERATE{10000}; // 10 sat/vbyte
 /**

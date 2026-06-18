@@ -380,10 +380,39 @@ BOOST_AUTO_TEST_CASE(redeem_transaction_basic)
     BOOST_CHECK(result.tx.vin.size() > 0);
     BOOST_CHECK(result.tx.vout.size() >= 1); // DGB output
     BOOST_CHECK_EQUAL(result.tx.nLockTime, redeemParams.unlockHeight);
+    BOOST_CHECK_EQUAL(result.totalFees, COIN / 10);
 
     // Check transaction type
     BOOST_CHECK(result.tx.IsDigiDollar());
     BOOST_CHECK(::GetDigiDollarTxType(CTransaction(result.tx)) == ::DD_TX_REDEEM);
+}
+
+BOOST_AUTO_TEST_CASE(redeem_transaction_requires_fee_inputs)
+{
+    const CChainParams& params = Params();
+    int height = 1000;
+    CAmount price = 10000; // $0.01 per DGB (10,000 micro-USD)
+
+    TestRedeemTxBuilder builder(params, height, price);
+
+    TxBuilderRedeemParams redeemParams;
+    uint256 collateralHash;
+    collateralHash.SetHex("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    redeemParams.collateralOutpoint = COutPoint(collateralHash, 0);
+    redeemParams.ddToRedeem = 10000;
+    redeemParams.path = RedemptionPath::NORMAL;
+    redeemParams.ownerKey = CreateTestKey();
+    redeemParams.feeRate = 100000;
+    redeemParams.ddUtxos = CreateTestUTXOs(1);
+    redeemParams.collateralAmount = 30000000000;
+    redeemParams.ddMinted = 10000;
+    redeemParams.unlockHeight = 500;
+    redeemParams.ddAmounts = {10000};
+
+    TxBuilderResult result = builder.BuildRedemptionTransaction(redeemParams);
+
+    BOOST_CHECK(!result.success);
+    BOOST_CHECK(result.error.find("Insufficient fee inputs") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_CASE(redeem_transaction_rejects_zero_prequeried_dd_minted)

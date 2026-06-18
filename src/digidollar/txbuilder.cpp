@@ -1282,29 +1282,33 @@ TxBuilderResult RedeemTxBuilder::BuildRedemptionTransaction(const TxBuilderRedee
     tx.nLockTime = position.unlockHeight;
     LogPrintf("DigiDollar: Set tx.nLockTime = %d (unlockHeight)\n", position.unlockHeight);
 
-    // Calculate actual fees
-    result.totalFees = CalculateFee(tx, params.feeRate);
-
-    // CRITICAL: Ensure fee meets DigiByte minimum relay fee (100,000 sat/kB)
-    // For a typical redemption tx (~400 vB), minimum is ~40,000 sats
-    // Add safety margin to ensure relay acceptance
-    CAmount minRelayFee = 50000; // 0.0005 DGB minimum to ensure acceptance
-    if (result.totalFees < minRelayFee) {
-        LogPrintf("DigiDollar: Calculated fee (%d sats) below minimum relay fee, using %d sats\n",
-                  result.totalFees, minRelayFee);
-        result.totalFees = minRelayFee;
+    // Calculate actual fees. DigiDollar redemptions must pay the absolute DD
+    // fee floor, independent of transaction size, to preserve the anti-spam
+    // policy used by mint and transfer builders.
+    CAmount calculatedFee = CalculateFee(tx, params.feeRate);
+    result.totalFees = std::max<CAmount>(calculatedFee, MIN_DD_TX_FEE);
+    if (result.totalFees > calculatedFee) {
+        LogPrintf("DigiDollar: Calculated redemption fee (%d sats) below DD minimum fee, using %d sats\n",
+                  calculatedFee, result.totalFees);
     }
 
     LogPrintf("DigiDollar: Calculated fees: %d sats (fee inputs: %d sats)\n", result.totalFees, totalFeeIn);
 
+    if (totalFeeIn <= 0) {
+        result.error = "Insufficient fee inputs for DD redemption fee";
+        LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+        return result;
+    }
+
+    CAmount feeChange = totalFeeIn - result.totalFees;
+    if (feeChange < 0) {
+        result.error = "Insufficient fee inputs for DD redemption fee";
+        LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
+        return result;
+    }
+
     // Add fee change output if needed
     if (totalFeeIn > 0) {
-        CAmount feeChange = totalFeeIn - result.totalFees;
-        if (feeChange < 0) {
-            result.error = "Insufficient fee inputs for calculated fee";
-            LogPrintf("DigiDollar: BuildRedemptionTransaction FAILED - %s\n", result.error);
-            return result;
-        }
 
         if (feeChange >= DUST_THRESHOLD) {
             // CRITICAL FIX: Use separate destination for DGB change

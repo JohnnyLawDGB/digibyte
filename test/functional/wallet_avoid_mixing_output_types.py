@@ -132,7 +132,7 @@ class AddressInputTypeGrouping(DigiByteTestFramework):
         self.skip_if_no_sqlite()
 
     def make_payment(self, A, B, v, addr_type):
-        fee_rate = random.randint(10000, 20000)  # Deliberately high fee-rate stress range.
+        fee_rate = random.randint(10000, 20000)  # DigiByte minimum is 10000 sat/vB
         self.log.debug(f"Making payment of {v} DGB at fee_rate {fee_rate}")
         tx = B.sendtoaddress(
             address=A.getnewaddress(address_type=addr_type),

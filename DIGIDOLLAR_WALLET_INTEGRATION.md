@@ -489,7 +489,7 @@ Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp`:
 | `getoracles [active_only] [blocks]` | Oracle roster and local/remote status |
 | `listoracle` | Local oracle status |
 | `stoporacle <oracle_id>` | Stop a local oracle |
-| `getoraclepubkey <oracle_id>` | Local oracle public key/status after `startoracle` |
+| `getoraclepubkey <oracle_id>` | Local oracle public key/status; wallet RPC paths can show the stored key before `startoracle` |
 | `calculatecollateralrequirement <cents> <lock_days> [oracle_price_micro_usd]` | Calculate needed collateral by lock days (NOT tier) |
 | `estimatecollateral <cents> <tier> [oracle_price_micro_usd]` | Estimate collateral; both `cents` and `tier` are required |
 | `importdigidollaraddress <address> [label]` | Validate a DD address and return the V1 unsupported/no-op warning; it does not import, mutate wallet state, or rescan |

@@ -348,7 +348,9 @@ digibyte-cli -testnet stoporacle <oracle_id>
 ```
 
 #### `getoraclepubkey`
-Get an oracle's public key and running status. Oracle must be initialized via `startoracle` first.
+Get an oracle's public key and running status. When called through a wallet RPC
+path, this can show the wallet-stored oracle key before `startoracle`; in that
+case `is_running` is `false` until the oracle runtime is started.
 
 ```
 digibyte-cli -testnet getoraclepubkey <oracle_id>

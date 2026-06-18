@@ -23,7 +23,7 @@ If you are not a programmer, read:
 
 - "The Short Version"
 - "What Problem The Oracle Solves"
-- "How The 9 Oracles Are Selected"
+- "How Oracle Signers Are Selected"
 - "What Happens When Oracles Go Offline"
 - "Why The Bundle Is Safe To Trust"
 
@@ -340,7 +340,7 @@ Once enough valid nonces exist, the node can select the threshold signing set.
 
 RC38 keeps the signed nonce messages as evidence. A later context proposal includes the nonce evidence for the signing set, so a node can reconstruct the exact nonce set before it signs.
 
-## How The 9 Oracles Are Selected
+## How Oracle Signers Are Selected
 
 No central node picks the signers.
 
@@ -692,7 +692,7 @@ The system is designed to fail closed and recover.
 
 ### If fewer than threshold oracles are available
 
-If fewer than 9 valid testnet/mainnet V1 oracles are online and fresh:
+If fewer than 7 valid testnet/mainnet V1 oracles are online and fresh:
 
 - No valid MuSig2 aggregate bundle can be produced.
 - Minting that needs a fresh price pauses.

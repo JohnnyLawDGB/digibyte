@@ -1181,8 +1181,8 @@ Aggregate Schnorr signature + participation bitmap → Coinbase OP_RETURN
 
 | Network | DD activation (`nDDActivationHeight`) | Oracle activation (`nOracleActivationHeight`) | MuSig2 (`nDigiDollarMuSig2Height`) | On-chain quorum |
 |---------|--------------------------------------|----------------------------------------------|-----------------------------------|-----------------|
-| Mainnet | 23,627,520 | 23,627,520 (= DD) | 0 | 7 signatures from 21 configured active keys in a 35-slot roster |
-| Testnet26 | 600 | 600 (= DD) | 0 | 7 signatures from 21 configured active keys in a 35-slot roster |
+| Mainnet | 23,627,520 | 23,627,520 (= DD) | 0 | 7 signatures from 35 configured active keys |
+| Testnet26 | 600 | 600 (= DD) | 0 | 7 signatures from 35 configured active keys |
 | Regtest | 650 | 650 (= DD) | 0 | 4-of-7 |
 
 `nDigiDollarMuSig2Height = 0` on all networks (`src/kernel/chainparams.cpp:314,576,1119`), so once DigiDollar is active the only accepted on-chain bundle format is MuSig2 v0x03. The legacy `nDigiDollarPhase2Height` / `nDigiDollarPhase3Height` fields no longer exist.

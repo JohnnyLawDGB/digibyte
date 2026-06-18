@@ -40,6 +40,8 @@ FORBIDDEN = {
     "ORACLE_BUNDLE_EXPLAINER.md": [
         "getoracleinfo",
         "listoraclekeys",
+        "How The 9 Oracles Are Selected",
+        "If fewer than 9 valid testnet/mainnet V1 oracles are online and fresh",
     ],
     "WALLET_MIGRATION_GUIDE.md": [
         "future testnet resets",
@@ -56,6 +58,7 @@ FORBIDDEN = {
     ],
     "DIGIDOLLAR_ORACLE_SETUP.md": [
         "startoracle <oracle_id> [private_key_hex]",
+        "Oracle must be initialized via `startoracle` first",
     ],
     "digidollar/DIGIDOLLAR_TESTNET_BEGINNERS_GUIDE.md": [
         "17 configured oracle slots",
@@ -91,6 +94,7 @@ FORBIDDEN = {
         "wired to live consensus price",
         "no mock fallback in production",
         "currently not height-gated",
+        "Local oracle public key/status after `startoracle`",
     ],
     "DIGIDOLLAR_ORACLE_EXPLAINER.md": [
         "Testnet25 | height 600",
@@ -123,6 +127,9 @@ FORBIDDEN = {
         "heartbeat is authenticated telemetry without that height",
         "oraclehb` is signed/rate-limited telemetry without the same height gate",
         "Replaced by 9-signature mainnet/testnet MuSig2",
+    ],
+    "ARCHITECTURE.md": [
+        "21 configured active keys",
     ],
     "CLAUDE.md": [
         "current code does not put the same height gate",

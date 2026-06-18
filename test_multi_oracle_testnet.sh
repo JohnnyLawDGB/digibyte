@@ -22,12 +22,12 @@
 # - 8 wallet nodes (Bob, Alice, Charlie, Dave, Eve, Frank, Grace, Heidi)
 # - 24 active oracles distributed across 8 nodes (slots 0-23)
 # - 7-of-35 consensus threshold; 24 of 35 reserved slots actively sign
-# - Bob mints $100 at tier 0, then $110 at tier 0 and tiers 1-8 = 10 mints total
+# - Bob mints $100 at tier 0, then $110 at tier 0 and tiers 1-9 = 11 mints total
 # - Mine past tier 0 lock (240 blocks)
 # - Bob redeems 2x tier 0 mints successfully
 # - Test partial redemption (should FAIL)
-# - Alice mints $100 at tier 3 (180 days) and tier 5 (3 years)
-# - Charlie mints $100 at tier 7 (7 years) and tier 8 (10 years)
+# - Alice mints $100 at tier 3 (180 days) and tier 5 (2 years)
+# - Charlie mints $100 at tier 7 (5 years) and tier 8 (7 years)
 # - Comprehensive transfer chain: Bob->Alice($55), Alice->Charlie($22), Charlie->Bob($10), Bob->Charlie($5)
 # - Full balance verification at EVERY step
 # - Transaction confirmation verification
@@ -126,7 +126,9 @@ CHARLIE_PORT=12030
 CHARLIE_RPC=14030
 DAVE_PORT=12034
 DAVE_RPC=14034
-EVE_PORT=12033
+# Keep the local mini-testnet off the public testnet26 default port (12033) so
+# this harness can run while a normal testnet node is open.
+EVE_PORT=12036
 EVE_RPC=14033
 FRANK_PORT=12035
 FRANK_RPC=14035
@@ -256,6 +258,61 @@ require_rpc_ready() {
         print_status "fail" "$fail_message"
         exit 1
     fi
+}
+
+port_is_listening() {
+    local port=$1
+    python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+for host, family in (("127.0.0.1", socket.AF_INET), ("::1", socket.AF_INET6)):
+    with socket.socket(family, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.2)
+        if sock.connect_ex((host, port)) == 0:
+            sys.exit(0)
+
+sys.exit(1)
+PY
+}
+
+check_minitestnet_ports() {
+    local labels=(
+        "Bob P2P" "Bob RPC"
+        "Alice P2P" "Alice RPC"
+        "Charlie P2P" "Charlie RPC"
+        "Dave P2P" "Dave RPC"
+        "Eve P2P" "Eve RPC"
+        "Frank P2P" "Frank RPC"
+        "Grace P2P" "Grace RPC"
+        "Heidi P2P" "Heidi RPC"
+    )
+    local ports=(
+        "$BOB_PORT" "$BOB_RPC"
+        "$ALICE_PORT" "$ALICE_RPC"
+        "$CHARLIE_PORT" "$CHARLIE_RPC"
+        "$DAVE_PORT" "$DAVE_RPC"
+        "$EVE_PORT" "$EVE_RPC"
+        "$FRANK_PORT" "$FRANK_RPC"
+        "$GRACE_PORT" "$GRACE_RPC"
+        "$HEIDI_PORT" "$HEIDI_RPC"
+    )
+    local failed=0
+
+    for i in "${!ports[@]}"; do
+        if port_is_listening "${ports[$i]}"; then
+            print_status "fail" "${labels[$i]} port ${ports[$i]} is already in use"
+            failed=1
+        fi
+    done
+
+    if [ "$failed" -ne 0 ]; then
+        echo "Mini-testnet ports must be free before this harness starts."
+        return 1
+    fi
+
+    print_status "ok" "Mini-testnet TCP ports are free"
 }
 
 # Get balances safely
@@ -843,7 +900,7 @@ stop_existing_harness_processes() {
 
 trap cleanup_qt_nodes EXIT
 
-# Tier descriptions (9 tiers: 0-8)
+# Tier descriptions (10 tiers: 0-9)
 get_tier_description() {
     local tier=$1
     # Must match consensus/digidollar.h collateralRatios
@@ -853,10 +910,11 @@ get_tier_description() {
         2) echo "90 days" ;;
         3) echo "180 days" ;;
         4) echo "1 year" ;;
-        5) echo "3 years" ;;
-        6) echo "5 years" ;;
-        7) echo "7 years" ;;
-        8) echo "10 years" ;;
+        5) echo "2 years" ;;
+        6) echo "3 years" ;;
+        7) echo "5 years" ;;
+        8) echo "7 years" ;;
+        9) echo "10 years" ;;
         *) echo "unknown" ;;
     esac
 }
@@ -871,6 +929,7 @@ print_header "Step 1: Cleaning environment"
 # Kill only prior local mini-testnet processes that used this harness's
 # temporary datadirs. Do not stop unrelated public testnet26 operators.
 stop_existing_harness_processes
+check_minitestnet_ports
 
 # Clean up ALL test data directories to prevent stale wallet data issues
 echo "Removing old test data directories (8 nodes)..."
@@ -1259,7 +1318,7 @@ HEIGHT_8B=$($BOB_CLI getblockcount)
 echo "Current height: $HEIGHT_8B (BIP9 activates at 600)"
 
 # Verify BIP9 is active
-DD_STATUS=$($BOB_CLI getdigidollardeploymentinfo 2>/dev/null | jq -r '.deployments.digidollar.status // "unknown"' 2>/dev/null || echo "unknown")
+DD_STATUS=$($BOB_CLI getdigidollardeploymentinfo 2>/dev/null | jq -r '.status // .deployments.digidollar.status // "unknown"' 2>/dev/null || echo "unknown")
 echo "DigiDollar BIP9 status: $DD_STATUS"
 
 start_all_oracles
@@ -1397,12 +1456,12 @@ EXPECT_CHARLIE_DD=0
 verify_all_balances "Initial State (No DD Minted)"
 
 # ====================================================================================
-# Step 10: BOB MINTS DD AT EVERY TIER (0-8) - First mint $100, rest $110 for DD change test
+# Step 10: BOB MINTS DD AT EVERY TIER (0-9) - First mint $100, rest $110 for DD change test
 # ====================================================================================
-print_header "Step 10: Bob Mints DD at ALL Collateral Tiers (0-8)"
+print_header "Step 10: Bob Mints DD at ALL Collateral Tiers (0-9)"
 echo ""
 echo "Bob will mint \$100 (first tier 0) and \$110 (all others) to test DD change."
-echo "Total: \$100 + 9x\$110 = \$1090 (109000 cents)"
+echo "Total: \$100 + 10x\$110 = \$1200 (120000 cents)"
 echo ""
 
 ORACLE_PRICE=$($BOB_CLI getoracleprice 2>/dev/null | jq -r '.price_usd')
@@ -1446,8 +1505,8 @@ else
     exit 1
 fi
 
-# Now mint at tiers 1-8 (9 tiers total: 0-8) - Using $110 to test DD change scenario
-for tier in 1 2 3 4 5 6 7 8; do
+# Now mint at tiers 1-9 (10 tiers total: 0-9) - Using $110 to test DD change scenario
+for tier in 1 2 3 4 5 6 7 8 9; do
     print_subheader "Tier $tier - $(get_tier_description $tier)"
     echo "Refreshing oracle prices before mint..."
     refresh_oracle_prices
@@ -1473,11 +1532,11 @@ done
 sync_all_nodes
 assert_no_pending_positions "$BOB_CLI" "bob" "Bob"
 
-# Bob should have 1 x 10000 + 9 x 11000 = 109000 DD
+# Bob should have 1 x 10000 + 10 x 11000 = 120000 DD
 echo ""
-echo "Bob completed 10 mints (tier0 \$100, tier0 \$110, tiers 1-8 \$110 each)"
+echo "Bob completed 11 mints (tier0 \$100, tier0 \$110, tiers 1-9 \$110 each)"
 echo "Expected Bob DD: $EXPECT_BOB_DD cents (\$$(echo "scale=2; $EXPECT_BOB_DD / 100" | bc))"
-verify_all_balances "After Bob's 10 Mints (\$1090 total)"
+verify_all_balances "After Bob's 11 Mints (\$1200 total)"
 list_dd_positions "$BOB_CLI" "bob" "Bob"
 
 # ====================================================================================
@@ -1958,9 +2017,9 @@ EXPECT_CHARLIE_DD=$((EXPECT_CHARLIE_DD + 10000))
 verify_all_balances "After rapid 20x 5 DD send batch"
 
 # ====================================================================================
-# Step 16: Alice Mints $100 at Tier 3 (90 days)
+# Step 16: Alice Mints $100 at Tier 3 (180 days)
 # ====================================================================================
-print_header "Step 16: Alice Mints \$100 at Tier 3 (90 days)"
+print_header "Step 16: Alice Mints \$100 at Tier 3 (180 days)"
 
 ALICE_DGB=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
 echo "Alice's DGB balance: $ALICE_DGB DGB"
@@ -1988,9 +2047,9 @@ fi
 sync_all_nodes
 
 # ====================================================================================
-# Step 17: Alice Mints $100 at Tier 5 (1 year)
+# Step 17: Alice Mints $100 at Tier 5 (2 years)
 # ====================================================================================
-print_header "Step 17: Alice Mints \$100 at Tier 5 (1 year)"
+print_header "Step 17: Alice Mints \$100 at Tier 5 (2 years)"
 
 ALICE_DGB=$($ALICE_CLI -rpcwallet=alice getbalance 2>/dev/null || echo "0")
 echo "Alice's DGB balance: $ALICE_DGB DGB"
@@ -2036,9 +2095,9 @@ verify_all_balances "After Alice's 2 Mints (Tier 3 + Tier 5)"
 list_dd_positions "$ALICE_CLI" "alice" "Alice"
 
 # ====================================================================================
-# Step 18: Charlie Mints $100 at Tier 7 (3 years)
+# Step 18: Charlie Mints $100 at Tier 7 (5 years)
 # ====================================================================================
-print_header "Step 18: Charlie Mints \$100 at Tier 7 (3 years)"
+print_header "Step 18: Charlie Mints \$100 at Tier 7 (5 years)"
 
 CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
 echo "Charlie's DGB balance: $CHARLIE_DGB DGB"
@@ -2066,9 +2125,9 @@ fi
 sync_all_nodes
 
 # ====================================================================================
-# Step 19: Charlie Mints $100 at Tier 8 (10 years)
+# Step 19: Charlie Mints $100 at Tier 8 (7 years)
 # ====================================================================================
-print_header "Step 19: Charlie Mints \$100 at Tier 8 (10 years)"
+print_header "Step 19: Charlie Mints \$100 at Tier 8 (7 years)"
 
 CHARLIE_DGB=$($CHARLIE_CLI -rpcwallet=charlie getbalance 2>/dev/null || echo "0")
 echo "Charlie's DGB balance: $CHARLIE_DGB DGB"
@@ -2165,7 +2224,7 @@ verify_all_balances "After DD Transfers (Bob -> Alice/Charlie)"
 # Step 21: Alice's Early Redemption Test (Tier 3 - should FAIL)
 # ====================================================================================
 print_header "Step 21: Alice's Early Redemption Test (should FAIL)"
-echo "Alice's tier 3 vault is locked for 90 days - should be rejected..."
+echo "Alice's tier 3 vault is locked for 180 days - should be rejected..."
 
 CURRENT_HEIGHT=$($BOB_CLI getblockcount)
 echo "Current height: $CURRENT_HEIGHT"
@@ -2196,7 +2255,7 @@ fi
 # Step 22: Charlie's Early Redemption Test (Tier 8 - should FAIL)
 # ====================================================================================
 print_header "Step 22: Charlie's Early Redemption Test (should FAIL)"
-echo "Charlie's tier 8 vault is locked for 10 years - should be rejected..."
+echo "Charlie's tier 8 vault is locked for 7 years - should be rejected..."
 
 if [ -n "$CHARLIE_TIER8_TX" ]; then
     set +e
@@ -2374,10 +2433,10 @@ echo ""
 echo "==================== FINAL SUMMARY ===================="
 echo ""
 echo "MINT SUMMARY:"
-echo "  Bob:     10 mints (tier0 \$100, tier0 \$110, tiers 1-8 \$110 each) = \$1090"
+echo "  Bob:     11 mints (tier0 \$100, tier0 \$110, tiers 1-9 \$110 each) = \$1200"
 echo "  Alice:   2 mints (tier 3 + tier 5) = \$200"
 echo "  Charlie: 2 mints (tier 7 + tier 8) = \$200"
-echo "  TOTAL MINTED: \$1490 (149000 cents)"
+echo "  TOTAL MINTED: \$1600 (160000 cents)"
 echo ""
 echo "REDEMPTION SUMMARY:"
 echo "  Bob:     2 tier 0 redemptions = \$210 burned (\$100 + \$110)"
@@ -3917,7 +3976,7 @@ fi
 
 echo ""
 echo "TEST COVERAGE:"
-echo "  [x] All collateral tiers (0-8) mint successfully"
+echo "  [x] All collateral tiers (0-9) mint successfully"
 echo "  [x] Tier 0 positions unlock after 240 blocks"
 echo "  [x] Partial redemption correctly rejected"
 echo "  [x] Early redemption correctly rejected"

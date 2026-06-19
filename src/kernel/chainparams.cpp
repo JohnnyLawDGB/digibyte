@@ -349,7 +349,7 @@ public:
         consensus.vOraclePublicKeys.push_back("649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47");  // 17: digibyte-maxi (RC42)
         consensus.vOraclePublicKeys.push_back("45f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89");  // 18: Anthony
         consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
-        consensus.vOraclePublicKeys.push_back("018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c");  // 20: Camden
+        consensus.vOraclePublicKeys.push_back("0a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1");  // 20: Camden (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86");  // 21: Twoface123
         consensus.vOraclePublicKeys.push_back("9241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef");  // 22: LivingTheLife
         consensus.vOraclePublicKeys.push_back("b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d");  // 23: ChozenOne43
@@ -401,7 +401,7 @@ private:
             {17, ParsePubKey("03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47"), "oracle18.digidollar.org:12024", true},  // digibyte-maxi (RC42)
             {18, ParsePubKey("0345f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89"), "oracle19.digidollar.org:12024", true},  // Anthony
             {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digidollar.org:12024", true},  // mbah_jambon
-            {20, ParsePubKey("03018c81746d6ddc326c993d9f2e7f2015554e97a261f3b5fe637ac5098f421a4c"), "oracle21.digidollar.org:12024", true},  // Camden
+            {20, ParsePubKey("030a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1"), "oracle21.digidollar.org:12024", true},  // Camden (mainnet RC46 key)
             {21,  ParsePubKey("03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86"), "oracle22.digidollar.org:12024", true},  // Twoface123
             {22,  ParsePubKey("039241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef"), "oracle23.digidollar.org:12024", true},  // LivingTheLife
             {23,  ParsePubKey("03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d"), "oracle24.digidollar.org:12024", true},  // ChozenOne43

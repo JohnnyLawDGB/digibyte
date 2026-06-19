@@ -336,7 +336,7 @@ public:
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // 5: Ycagel
         consensus.vOraclePublicKeys.push_back("b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488");  // 6: Aussie (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e");  // 7: LookInto (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // 8: JohnnyLawDGB
+        consensus.vOraclePublicKeys.push_back("99a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374");  // 8: JohnnyLawDGB (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
         consensus.vOraclePublicKeys.push_back("4ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08");  // 11: hallvardo (RC31 rotated key)
@@ -385,7 +385,7 @@ private:
             {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digidollar.org:12024", true},
             {6,  ParsePubKey("03b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488"), "oracle7.digidollar.org:12024", true},  // Aussie (mainnet RC46 key)
             {7,  ParsePubKey("02d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e"), "oracle8.digidollar.org:12024", true},  // LookInto (mainnet RC46 key)
-            {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digidollar.org:12024", true},
+            {8,  ParsePubKey("0299a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374"), "oracle9.digidollar.org:12024", true},  // JohnnyLawDGB (mainnet RC46 key)
             {9,  ParsePubKey("03d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "oracle10.digidollar.org:12024", true},
 
             // Oracle 10-16: Keep the first 17 slots aligned with the active roster.

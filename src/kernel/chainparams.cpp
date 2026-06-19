@@ -334,7 +334,7 @@ public:
         consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // 3: DanGB
         consensus.vOraclePublicKeys.push_back("d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261");  // 4: Shenger (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // 5: Ycagel
-        consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // 6: Aussie
+        consensus.vOraclePublicKeys.push_back("b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488");  // 6: Aussie (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e");  // 7: LookInto (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // 8: JohnnyLawDGB
         consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
@@ -383,7 +383,7 @@ private:
             {3,  ParsePubKey("02546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digidollar.org:12024", true},
             {4,  ParsePubKey("02d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261"), "oracle5.digidollar.org:12024", true},  // Shenger (mainnet RC46 key)
             {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digidollar.org:12024", true},
-            {6,  ParsePubKey("027a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digidollar.org:12024", true},
+            {6,  ParsePubKey("03b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488"), "oracle7.digidollar.org:12024", true},  // Aussie (mainnet RC46 key)
             {7,  ParsePubKey("02d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e"), "oracle8.digidollar.org:12024", true},  // LookInto (mainnet RC46 key)
             {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digidollar.org:12024", true},
             {9,  ParsePubKey("03d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "oracle10.digidollar.org:12024", true},

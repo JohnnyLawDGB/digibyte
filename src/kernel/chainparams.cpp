@@ -351,7 +351,7 @@ public:
         consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
         consensus.vOraclePublicKeys.push_back("0a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1");  // 20: Camden (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86");  // 21: Twoface123
-        consensus.vOraclePublicKeys.push_back("9241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef");  // 22: LivingTheLife
+        consensus.vOraclePublicKeys.push_back("deec78492920e9010c3015c50bacbcc158272a941220bdf74208f4796d962542");  // 22: LivingTheLife (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d");  // 23: ChozenOne43
         consensus.vOraclePublicKeys.push_back("926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e");  // 24: ckunchained
         consensus.vOraclePublicKeys.push_back("d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee");  // 25: JMag (mainnet RC46 key)
@@ -403,7 +403,7 @@ private:
             {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digidollar.org:12024", true},  // mbah_jambon
             {20, ParsePubKey("030a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1"), "oracle21.digidollar.org:12024", true},  // Camden (mainnet RC46 key)
             {21,  ParsePubKey("03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86"), "oracle22.digidollar.org:12024", true},  // Twoface123
-            {22,  ParsePubKey("039241688b464c3f03f957cd85a3d1d6a760963be3707a16805b8064a8740e07ef"), "oracle23.digidollar.org:12024", true},  // LivingTheLife
+            {22,  ParsePubKey("02deec78492920e9010c3015c50bacbcc158272a941220bdf74208f4796d962542"), "oracle23.digidollar.org:12024", true},  // LivingTheLife (mainnet RC46 key)
             {23,  ParsePubKey("03b6302e3cc8ee6d474c3c0078c25b87ce708757e2a81e8f4f01975dc4b25e0f6d"), "oracle24.digidollar.org:12024", true},  // ChozenOne43
             {24,  ParsePubKey("03926ed40635d294a554ec046a96d3fa58587521385c7df58ff21ede12a31add0e"), "oracle25.digidollar.org:12024", true},  // ckunchained
             {25,  ParsePubKey("03d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee"), "oracle26.digidollar.org:12024", true},  // JMag (mainnet RC46 key)

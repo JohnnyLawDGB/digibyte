@@ -346,7 +346,7 @@ public:
         consensus.vOraclePublicKeys.push_back("4b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec");  // 14: Neel (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
         consensus.vOraclePublicKeys.push_back("943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf");  // 16: GTO90 (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47");  // 17: digibyte-maxi (RC42)
+        consensus.vOraclePublicKeys.push_back("9d83219cf9056854da1f56fbf1d792ef14b1853ec027cd9c0a51465e2ec2afaa");  // 17: digibyte-maxi (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("45f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89");  // 18: Anthony
         consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
         consensus.vOraclePublicKeys.push_back("0a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1");  // 20: Camden (mainnet RC46 key)
@@ -398,7 +398,7 @@ private:
             {16, ParsePubKey("03943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf"), "oracle17.digidollar.org:12024", true},  // GTO90 (mainnet RC46 key)
 
             // Oracle 17-34: Active launch roster additions.
-            {17, ParsePubKey("03649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47"), "oracle18.digidollar.org:12024", true},  // digibyte-maxi (RC42)
+            {17, ParsePubKey("039d83219cf9056854da1f56fbf1d792ef14b1853ec027cd9c0a51465e2ec2afaa"), "oracle18.digidollar.org:12024", true},  // digibyte-maxi (mainnet RC46 key)
             {18, ParsePubKey("0345f8cb22dfde6aff8f18552c338256e0df551ca2df007f6449d6da1dbb7f4d89"), "oracle19.digidollar.org:12024", true},  // Anthony
             {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digidollar.org:12024", true},  // mbah_jambon
             {20, ParsePubKey("030a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1"), "oracle21.digidollar.org:12024", true},  // Camden (mainnet RC46 key)

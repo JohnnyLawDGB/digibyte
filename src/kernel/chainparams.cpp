@@ -343,7 +343,7 @@ public:
         // Slot 12: DaPunzy real key — operator-supplied and live at oracle_id=12.
         consensus.vOraclePublicKeys.push_back("75d7494b55ebc3874450954ac5caca402bbd068467a89d48fe877f3e2d09eda9");  // 12: DaPunzy (RC31 rotated key)
         consensus.vOraclePublicKeys.push_back("4770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573");  // 13: DigiByteForce (RC31 rotated key)
-        consensus.vOraclePublicKeys.push_back("f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2");  // 14: Neel (RC30)
+        consensus.vOraclePublicKeys.push_back("4b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec");  // 14: Neel (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
         consensus.vOraclePublicKeys.push_back("943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf");  // 16: GTO90 (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("649d750bcad5b42b3dd0f11c8d98d62ed5afd515cd986663f81c35f086e58d47");  // 17: digibyte-maxi (RC42)
@@ -393,7 +393,7 @@ private:
             {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digidollar.org:12024", true},
             {12, ParsePubKey("0375d7494b55ebc3874450954ac5caca402bbd068467a89d48fe877f3e2d09eda9"), "oracle13.digidollar.org:12024", true},  // DaPunzy (key rotated for RC31)
             {13, ParsePubKey("024770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573"), "oracle14.digidollar.org:12024", true},  // DigiByteForce (key rotated for RC31)
-            {14, ParsePubKey("02f3ab098eb0ceff8259c280cf5a3682e78b298dc300e26cdb4694d8efcd6a11a2"), "oracle15.digidollar.org:12024", true},
+            {14, ParsePubKey("034b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec"), "oracle15.digidollar.org:12024", true},  // Neel (mainnet RC46 key)
             {15, ParsePubKey("02447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digidollar.org:12024", true},
             {16, ParsePubKey("03943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf"), "oracle17.digidollar.org:12024", true},  // GTO90 (mainnet RC46 key)
 

@@ -335,7 +335,7 @@ public:
         consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // 4: Shenger
         consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // 5: Ycagel
         consensus.vOraclePublicKeys.push_back("7a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51");  // 6: Aussie
-        consensus.vOraclePublicKeys.push_back("2d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09");  // 7: LookInto
+        consensus.vOraclePublicKeys.push_back("d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e");  // 7: LookInto (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("89d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250");  // 8: JohnnyLawDGB
         consensus.vOraclePublicKeys.push_back("d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484");  // 9: Ogilvie
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
@@ -384,7 +384,7 @@ private:
             {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digidollar.org:12024", true},
             {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digidollar.org:12024", true},
             {6,  ParsePubKey("027a858e055099e4a9cf8273e9171da148d4fd00afd4376b60dc1cd09974731b51"), "oracle7.digidollar.org:12024", true},
-            {7,  ParsePubKey("022d8c9f054d7087e263016c0800ad1c2f8106859e772766b9f8179042d1792a09"), "oracle8.digidollar.org:12024", true},
+            {7,  ParsePubKey("02d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e"), "oracle8.digidollar.org:12024", true},  // LookInto (mainnet RC46 key)
             {8,  ParsePubKey("0389d5c588c8e0d311028f2f7e0db6df1a9fb0319c5e3b2cfc32efaee86538d250"), "oracle9.digidollar.org:12024", true},
             {9,  ParsePubKey("03d2f9b0e00ed2fb0a93d04f12eb250b4adf2e4ac8335692c7942e4cba6e462484"), "oracle10.digidollar.org:12024", true},
 

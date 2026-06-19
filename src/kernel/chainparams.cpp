@@ -329,7 +329,7 @@ public:
         // All 35 RC44 operator keys are configured for the launch roster.
         consensus.vOraclePublicKeys.clear();
         consensus.vOraclePublicKeys.push_back("e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7");  // 0: Jared
-        consensus.vOraclePublicKeys.push_back("3dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990");  // 1: Green Candle
+        consensus.vOraclePublicKeys.push_back("615653c7883eadb97f5625b0e7fecc960094b9d33a1e281c3a6dfbaa47d529ef");  // 1: Green Candle (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c");  // 2: Bastian
         consensus.vOraclePublicKeys.push_back("546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c");  // 3: DanGB
         consensus.vOraclePublicKeys.push_back("9cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f");  // 4: Shenger
@@ -378,7 +378,7 @@ private:
             // Oracle 0-9: Active MuSig2 operator set. Slots 0-16 must stay aligned
             // with consensus.vOraclePublicKeys for MuSig2 bitmap/quorum validation.
             {0,  ParsePubKey("03e1dce189a530c1fb39dcd9282cf5f9de0e4eb257344be9fd94ce27c06005e8c7"), "oracle1.digibyte.io:12024", true},
-            {1,  ParsePubKey("023dfb7a36ab40fa6fbc69b4b499eaa17bfa1958aa89ec248efc24b4c18694f990"), "oracle2.digidollar.org:12024", true},
+            {1,  ParsePubKey("02615653c7883eadb97f5625b0e7fecc960094b9d33a1e281c3a6dfbaa47d529ef"), "oracle2.digidollar.org:12024", true},  // Green Candle (mainnet RC46 key)
             {2,  ParsePubKey("02172755a320cec96c981d46c86d79a03578d73406a25e89d8edc616a8f361cb5c"), "oracle3.digidollar.org:12024", true},
             {3,  ParsePubKey("02546c07ee9d21640c4b4e96e6954bd49c3ab5bcf36c6a512603ebf75f8609da0c"), "oracle4.digidollar.org:12024", true},
             {4,  ParsePubKey("039cef021f841794c1afc4e84d678f3c70dbe3a972330b2b6329852898443deb4f"), "oracle5.digidollar.org:12024", true},

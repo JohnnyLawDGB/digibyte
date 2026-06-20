@@ -333,7 +333,7 @@ public:
         consensus.vOraclePublicKeys.push_back("842d9481a07d949a60b526cea8d315db24f467f33901c1e73875f378bb40c75d");  // 2: Bastian (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("ddb1e57cc9691d4f4aef18b7b46a7240170f73307037822444b4a76327f6d27e");  // 3: DanGB (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261");  // 4: Shenger (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("85016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7");  // 5: Ycagel
+        consensus.vOraclePublicKeys.push_back("5e80419393fad8ff0426bd32bde8ccc6570b024a9138660f3fae5ecd60bc195a");  // 5: Ycagel (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488");  // 6: Aussie (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e");  // 7: LookInto (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("99a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374");  // 8: JohnnyLawDGB (mainnet RC46 key)
@@ -382,7 +382,7 @@ private:
             {2,  ParsePubKey("02842d9481a07d949a60b526cea8d315db24f467f33901c1e73875f378bb40c75d"), "oracle3.digidollar.org:12024", true},  // Bastian (mainnet RC46 key)
             {3,  ParsePubKey("03ddb1e57cc9691d4f4aef18b7b46a7240170f73307037822444b4a76327f6d27e"), "oracle4.digidollar.org:12024", true},  // DanGB (mainnet RC46 key)
             {4,  ParsePubKey("02d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261"), "oracle5.digidollar.org:12024", true},  // Shenger (mainnet RC46 key)
-            {5,  ParsePubKey("0285016758856ed27388501a54031fa3a678df705bf811fb8bc9abd2d7cfb6d9f7"), "oracle6.digidollar.org:12024", true},
+            {5,  ParsePubKey("035e80419393fad8ff0426bd32bde8ccc6570b024a9138660f3fae5ecd60bc195a"), "oracle6.digidollar.org:12024", true},  // Ycagel (mainnet RC46 key)
             {6,  ParsePubKey("03b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488"), "oracle7.digidollar.org:12024", true},  // Aussie (mainnet RC46 key)
             {7,  ParsePubKey("02d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e"), "oracle8.digidollar.org:12024", true},  // LookInto (mainnet RC46 key)
             {8,  ParsePubKey("0299a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374"), "oracle9.digidollar.org:12024", true},  // JohnnyLawDGB (mainnet RC46 key)

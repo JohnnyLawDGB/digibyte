@@ -348,7 +348,7 @@ public:
         consensus.vOraclePublicKeys.push_back("943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf");  // 16: GTO90 (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("9d83219cf9056854da1f56fbf1d792ef14b1853ec027cd9c0a51465e2ec2afaa");  // 17: digibyte-maxi (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("e2fa8be3480929a59fb93b284e49f4b74bfb52ffed3934de751bdb1c33c54e6e");  // 18: Anthony (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("1758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42");  // 19: mbah_jambon
+        consensus.vOraclePublicKeys.push_back("507a43d15e0b6c149dd1835347879a1b723bdbecb4cc8afe124c52df37212295");  // 19: mbah_jambon (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("0a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1");  // 20: Camden (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86");  // 21: Twoface123
         consensus.vOraclePublicKeys.push_back("deec78492920e9010c3015c50bacbcc158272a941220bdf74208f4796d962542");  // 22: LivingTheLife (mainnet RC46 key)
@@ -400,7 +400,7 @@ private:
             // Oracle 17-34: Active launch roster additions.
             {17, ParsePubKey("039d83219cf9056854da1f56fbf1d792ef14b1853ec027cd9c0a51465e2ec2afaa"), "oracle18.digidollar.org:12024", true},  // digibyte-maxi (mainnet RC46 key)
             {18, ParsePubKey("03e2fa8be3480929a59fb93b284e49f4b74bfb52ffed3934de751bdb1c33c54e6e"), "oracle19.digidollar.org:12024", true},  // Anthony (mainnet RC46 key)
-            {19, ParsePubKey("031758a6d7f1f87c95d1a4a38415608d41463a504ea28da7c6129e2a9d654add42"), "oracle20.digidollar.org:12024", true},  // mbah_jambon
+            {19, ParsePubKey("02507a43d15e0b6c149dd1835347879a1b723bdbecb4cc8afe124c52df37212295"), "oracle20.digidollar.org:12024", true},  // mbah_jambon (mainnet RC46 key)
             {20, ParsePubKey("030a0b22a5a283adf24ee554dbd040ce8635caaf0183cbebf111465ab1f51675c1"), "oracle21.digidollar.org:12024", true},  // Camden (mainnet RC46 key)
             {21,  ParsePubKey("03d8165aa05b045de2a9b979b23a63cca1fec865784d12ab6f3f1bca8a90f3dd86"), "oracle22.digidollar.org:12024", true},  // Twoface123
             {22,  ParsePubKey("02deec78492920e9010c3015c50bacbcc158272a941220bdf74208f4796d962542"), "oracle23.digidollar.org:12024", true},  // LivingTheLife (mainnet RC46 key)

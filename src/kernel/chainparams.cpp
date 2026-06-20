@@ -363,7 +363,7 @@ public:
         consensus.vOraclePublicKeys.push_back("e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba");  // 31: Peer2Peer / DigiRoos
         consensus.vOraclePublicKeys.push_back("5878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8");  // 32: 3DogsKanab
         consensus.vOraclePublicKeys.push_back("2218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c");  // 33: LiberatedLark (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87");  // 34: Manu_DGB_oracle
+        consensus.vOraclePublicKeys.push_back("8e6bc5e7addbf15369c87cd194cc63590c710b8d5c9e592d52ea13ce03927446");  // 34: Manu_DGB_oracle (mainnet RC46 key)
 
         LogPrintf("Oracle: Mainnet MuSig2 oracle bundles active at block %d, %d-of-%d quorum\n",
                  consensus.nDigiDollarMuSig2Height, consensus.nOracleConsensusRequired,
@@ -416,7 +416,7 @@ private:
             {31,  ParsePubKey("02e96759ba5c67df6fc5cfc86977389d08fa31b4b297586f13d43bdd1569b459ba"), "oracle32.digidollar.org:12024", true},   // Peer2Peer / DigiRoos
             {32,  ParsePubKey("035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8"), "oracle33.digidollar.org:12024", true},   // 3DogsKanab
             {33,  ParsePubKey("032218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c"), "oracle34.digidollar.org:12024", true},   // LiberatedLark (mainnet RC46 key)
-            {34,  ParsePubKey("03d8fe0cd773604fa78fb1cef7d1e88a05c2473961178e40a4ac3c9aeeb4cbca87"), "oracle35.digidollar.org:12024", true}    // Manu_DGB_oracle
+            {34,  ParsePubKey("038e6bc5e7addbf15369c87cd194cc63590c710b8d5c9e592d52ea13ce03927446"), "oracle35.digidollar.org:12024", true}    // Manu_DGB_oracle (mainnet RC46 key)
         };
     }
 };

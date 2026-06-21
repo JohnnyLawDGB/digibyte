@@ -341,7 +341,7 @@ public:
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
         consensus.vOraclePublicKeys.push_back("4ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08");  // 11: hallvardo (RC31 rotated key)
         // Slot 12: DaPunzy real key — operator-supplied and live at oracle_id=12.
-        consensus.vOraclePublicKeys.push_back("75d7494b55ebc3874450954ac5caca402bbd068467a89d48fe877f3e2d09eda9");  // 12: DaPunzy (RC31 rotated key)
+        consensus.vOraclePublicKeys.push_back("2c4422fb8e5eac5d27423272d35abe6cff0acb19ab051e51204e3392365c18f3");  // 12: DaPunzy (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("4770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573");  // 13: DigiByteForce (RC31 rotated key)
         consensus.vOraclePublicKeys.push_back("4b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec");  // 14: Neel (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
@@ -391,7 +391,7 @@ private:
             // Oracle 10-16: Keep the first 17 slots aligned with the active roster.
             {10, ParsePubKey("02028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c"), "oracle11.digidollar.org:12024", true},
             {11, ParsePubKey("024ef063a67b35295e9eaaa9251bc7f0effbceaedc8e9bc92504b0da832744ca08"), "oracle12.digidollar.org:12024", true},
-            {12, ParsePubKey("0375d7494b55ebc3874450954ac5caca402bbd068467a89d48fe877f3e2d09eda9"), "oracle13.digidollar.org:12024", true},  // DaPunzy (key rotated for RC31)
+            {12, ParsePubKey("032c4422fb8e5eac5d27423272d35abe6cff0acb19ab051e51204e3392365c18f3"), "oracle13.digidollar.org:12024", true},  // DaPunzy (mainnet RC46 key)
             {13, ParsePubKey("024770d416e5f751ff310fa8e35cd48d9709ee539cbaa07c67dbf52503518cc573"), "oracle14.digidollar.org:12024", true},  // DigiByteForce (key rotated for RC31)
             {14, ParsePubKey("034b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec"), "oracle15.digidollar.org:12024", true},  // Neel (mainnet RC46 key)
             {15, ParsePubKey("02447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digidollar.org:12024", true},

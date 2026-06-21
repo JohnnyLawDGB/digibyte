@@ -361,7 +361,7 @@ public:
         consensus.vOraclePublicKeys.push_back("1ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d");  // 29: medgboracle3452 (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61");  // 30: Scott K / DigibyteDaily
         consensus.vOraclePublicKeys.push_back("a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284");  // 31: Peer2Peer / DigiRoos (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("5878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8");  // 32: 3DogsKanab
+        consensus.vOraclePublicKeys.push_back("451f9d309a35d1eeefdc2bdacadb0d3dd88c50c51dce54317de6ae6bceb49370");  // 32: 3DogsKanab (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("2218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c");  // 33: LiberatedLark (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("8e6bc5e7addbf15369c87cd194cc63590c710b8d5c9e592d52ea13ce03927446");  // 34: Manu_DGB_oracle (mainnet RC46 key)
 
@@ -414,7 +414,7 @@ private:
             {29,  ParsePubKey("021ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d"), "oracle30.digidollar.org:12024", true},   // medgboracle3452 (mainnet RC46 key)
             {30,  ParsePubKey("03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61"), "oracle31.digidollar.org:12024", true},   // Scott K / DigibyteDaily
             {31,  ParsePubKey("03a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284"), "oracle32.digidollar.org:12024", true},   // Peer2Peer / DigiRoos (mainnet RC46 key)
-            {32,  ParsePubKey("035878eb72be3710d8c3f9585e27374011a476378f5ea7f3ab2f2830ab052ec5f8"), "oracle33.digidollar.org:12024", true},   // 3DogsKanab
+            {32,  ParsePubKey("03451f9d309a35d1eeefdc2bdacadb0d3dd88c50c51dce54317de6ae6bceb49370"), "oracle33.digidollar.org:12024", true},   // 3DogsKanab (mainnet RC46 key)
             {33,  ParsePubKey("032218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c"), "oracle34.digidollar.org:12024", true},   // LiberatedLark (mainnet RC46 key)
             {34,  ParsePubKey("038e6bc5e7addbf15369c87cd194cc63590c710b8d5c9e592d52ea13ce03927446"), "oracle35.digidollar.org:12024", true}    // Manu_DGB_oracle (mainnet RC46 key)
         };

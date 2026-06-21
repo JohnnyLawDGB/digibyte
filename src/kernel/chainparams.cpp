@@ -335,7 +335,7 @@ public:
         consensus.vOraclePublicKeys.push_back("d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261");  // 4: Shenger (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("5e80419393fad8ff0426bd32bde8ccc6570b024a9138660f3fae5ecd60bc195a");  // 5: Ycagel (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488");  // 6: Aussie (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e");  // 7: LookInto (mainnet RC46 key)
+        consensus.vOraclePublicKeys.push_back("d15eb49e30bedecbf37f5863d266ea6ca19e81863f4df268d717c62013741f79");  // 7: LookInto (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("99a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374");  // 8: JohnnyLawDGB (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("20bcc8be5f739f826c771f86f45eda0b5b50d11d8f8832c92ed626a65c44c4f2");  // 9: Ogilvie (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("028a52c7a3e8f22c44e356dcda43a0e24ed5e8e284c53c902599f0947763113c");  // 10: ChopperBrian
@@ -384,7 +384,7 @@ private:
             {4,  ParsePubKey("02d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261"), "oracle5.digidollar.org:12024", true},  // Shenger (mainnet RC46 key)
             {5,  ParsePubKey("035e80419393fad8ff0426bd32bde8ccc6570b024a9138660f3fae5ecd60bc195a"), "oracle6.digidollar.org:12024", true},  // Ycagel (mainnet RC46 key)
             {6,  ParsePubKey("03b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488"), "oracle7.digidollar.org:12024", true},  // Aussie (mainnet RC46 key)
-            {7,  ParsePubKey("02d8df2ad73df369b7b6074f043b508e727315a2464290406b5e2f7fda10337f3e"), "oracle8.digidollar.org:12024", true},  // LookInto (mainnet RC46 key)
+            {7,  ParsePubKey("03d15eb49e30bedecbf37f5863d266ea6ca19e81863f4df268d717c62013741f79"), "oracle8.digidollar.org:12024", true},  // LookInto (mainnet RC46 key)
             {8,  ParsePubKey("0299a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374"), "oracle9.digidollar.org:12024", true},  // JohnnyLawDGB (mainnet RC46 key)
             {9,  ParsePubKey("0220bcc8be5f739f826c771f86f45eda0b5b50d11d8f8832c92ed626a65c44c4f2"), "oracle10.digidollar.org:12024", true},  // Ogilvie (mainnet RC46 key)
 

@@ -359,7 +359,7 @@ public:
         consensus.vOraclePublicKeys.push_back("557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894");  // 27: DennisPitallano
         consensus.vOraclePublicKeys.push_back("532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef");  // 28: DigiHash Mining Pool
         consensus.vOraclePublicKeys.push_back("1ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d");  // 29: medgboracle3452 (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61");  // 30: Scott K / DigibyteDaily
+        consensus.vOraclePublicKeys.push_back("17aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67");  // 30: DigibyteDaily (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284");  // 31: Peer2Peer / DigiRoos (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("451f9d309a35d1eeefdc2bdacadb0d3dd88c50c51dce54317de6ae6bceb49370");  // 32: 3DogsKanab (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("2218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c");  // 33: LiberatedLark (mainnet RC46 key)
@@ -412,7 +412,7 @@ private:
             {27,  ParsePubKey("02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894"), "oracle28.digidollar.org:12024", true},   // DennisPitallano
             {28,  ParsePubKey("03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef"), "oracle29.digidollar.org:12024", true},   // DigiHash Mining Pool
             {29,  ParsePubKey("021ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d"), "oracle30.digidollar.org:12024", true},   // medgboracle3452 (mainnet RC46 key)
-            {30,  ParsePubKey("03603a0175197a1fe28859c71c69fd0081710c5569fceceaa96ce7de386d3ebf61"), "oracle31.digidollar.org:12024", true},   // Scott K / DigibyteDaily
+            {30,  ParsePubKey("0317aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67"), "oracle31.digidollar.org:12024", true},   // DigibyteDaily (mainnet RC46 key)
             {31,  ParsePubKey("03a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284"), "oracle32.digidollar.org:12024", true},   // Peer2Peer / DigiRoos (mainnet RC46 key)
             {32,  ParsePubKey("03451f9d309a35d1eeefdc2bdacadb0d3dd88c50c51dce54317de6ae6bceb49370"), "oracle33.digidollar.org:12024", true},   // 3DogsKanab (mainnet RC46 key)
             {33,  ParsePubKey("032218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c"), "oracle34.digidollar.org:12024", true},   // LiberatedLark (mainnet RC46 key)

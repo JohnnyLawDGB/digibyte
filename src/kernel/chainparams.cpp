@@ -356,7 +356,7 @@ public:
         consensus.vOraclePublicKeys.push_back("39543917295ddbba5bf3fa1198f3d7f63321364192f5839e9699a6f50572b68a");  // 24: ckunchained (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee");  // 25: JMag (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
-        consensus.vOraclePublicKeys.push_back("557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894");  // 27: DennisPitallano
+        consensus.vOraclePublicKeys.push_back("80f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563");  // 27: DennisPitallano (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef");  // 28: DigiHash Mining Pool
         consensus.vOraclePublicKeys.push_back("1ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d");  // 29: medgboracle3452 (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("17aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67");  // 30: DigibyteDaily (mainnet RC46 key)
@@ -409,7 +409,7 @@ private:
             {25,  ParsePubKey("03d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee"), "oracle26.digidollar.org:12024", true},  // JMag (mainnet RC46 key)
 
             {26,  ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digidollar.org:12024", true},   // HashedMax
-            {27,  ParsePubKey("02557029e2419af54984f3f2fb600004c0a6f8573dac5730cfaab2048c80ba6894"), "oracle28.digidollar.org:12024", true},   // DennisPitallano
+            {27,  ParsePubKey("0380f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563"), "oracle28.digidollar.org:12024", true},   // DennisPitallano (mainnet RC46 key)
             {28,  ParsePubKey("03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef"), "oracle29.digidollar.org:12024", true},   // DigiHash Mining Pool
             {29,  ParsePubKey("021ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d"), "oracle30.digidollar.org:12024", true},   // medgboracle3452 (mainnet RC46 key)
             {30,  ParsePubKey("0317aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67"), "oracle31.digidollar.org:12024", true},   // DigibyteDaily (mainnet RC46 key)

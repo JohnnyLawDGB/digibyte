@@ -57,24 +57,27 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
 {
     SelectParams(ChainType::MAIN);
     const auto& params = Params().GetConsensus();
-    // Mainnet uses MuSig2 immediately on top of 7-signature oracle consensus.
-    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
+    // Mainnet activates MuSig2 alongside DigiDollar/oracle consensus.
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, params.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 23627520);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)
 {
     SelectParams(ChainType::TESTNET);
     const auto& params = Params().GetConsensus();
-    // Testnet also switches immediately to MuSig2 (7 signatures).
-    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
+    // Testnet activates MuSig2 alongside DigiDollar/oracle consensus.
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, params.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 600);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    // Regtest now uses MuSig2 immediately, too.
-    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
+    // Regtest activates MuSig2 alongside DigiDollar/oracle consensus.
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, params.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 650);
 }
 
 // ============================================================================
@@ -314,16 +317,17 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
 // PART 3: Phase Transition Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_phase2_and_phase3_can_be_active_together_on_regtest)
+BOOST_AUTO_TEST_CASE(test_oracle_and_musig2_activate_together_on_regtest)
 {
-    // With RC27 cleanup, regtest also has immediate Phase 3 activation.
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
+    BOOST_CHECK_EQUAL(params.nOracleActivationHeight, params.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, params.nDDActivationHeight);
+    BOOST_CHECK(!Consensus::IsOracleActive(params, params.nDDActivationHeight - 1));
+    BOOST_CHECK(!Consensus::IsMuSig2Active(params, params.nDDActivationHeight - 1));
+    BOOST_CHECK(!params.IsMuSig2OracleActive(0));
     BOOST_CHECK(Consensus::IsOracleActive(params, params.nDDActivationHeight));
     BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight));
-    BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight - 1));
-    BOOST_CHECK(params.IsMuSig2OracleActive(0));
-    BOOST_CHECK(!params.IsMuSig2OracleActive(-1));
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_active_after_height)
@@ -414,18 +418,19 @@ BOOST_AUTO_TEST_CASE(test_off_by_one_activation)
 // PART 6: Cross-Network Consistency
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_regtest_earliest_activation)
+BOOST_AUTO_TEST_CASE(test_musig2_matches_digidollar_activation_on_all_networks)
 {
     SelectParams(ChainType::REGTEST);
-    int32_t regtest = Params().GetConsensus().nDigiDollarMuSig2Height;
+    const auto& regtest_params = Params().GetConsensus();
+    BOOST_CHECK_EQUAL(regtest_params.nDigiDollarMuSig2Height, regtest_params.nDDActivationHeight);
+
     SelectParams(ChainType::TESTNET);
-    int32_t testnet = Params().GetConsensus().nDigiDollarMuSig2Height;
+    const auto& testnet_params = Params().GetConsensus();
+    BOOST_CHECK_EQUAL(testnet_params.nDigiDollarMuSig2Height, testnet_params.nDDActivationHeight);
+
     SelectParams(ChainType::MAIN);
-    int32_t mainnet = Params().GetConsensus().nDigiDollarMuSig2Height;
-    // All RC27 networks should use MuSig2 immediately.
-    BOOST_CHECK_EQUAL(regtest, 0);
-    BOOST_CHECK_EQUAL(testnet, 0);
-    BOOST_CHECK_EQUAL(mainnet, 0);
+    const auto& mainnet_params = Params().GetConsensus();
+    BOOST_CHECK_EQUAL(mainnet_params.nDigiDollarMuSig2Height, mainnet_params.nDDActivationHeight);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

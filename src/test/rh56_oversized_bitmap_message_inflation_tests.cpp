@@ -219,10 +219,11 @@ BOOST_AUTO_TEST_CASE(rh56_validator_rejects_oversized_bitmap_defense)
     bundle.aggregate_sig.assign(64, 0x22);
     bundle.median_price_micro_usd = 100000ULL;
     bundle.timestamp = 1700000000;
-    bundle.epoch = 0;
+    const int active_height = params.nDigiDollarMuSig2Height;
+    bundle.epoch = GetCurrentEpoch(active_height);
 
     std::string error;
-    bool ok = OracleBundleManager::ValidateMuSig2Bundle(bundle, /*block_height=*/0, params, error);
+    bool ok = OracleBundleManager::ValidateMuSig2Bundle(bundle, active_height, params, error);
 
     BOOST_CHECK_MESSAGE(!ok,
         "Defender-path sanity: consensus MUST reject the 32-byte oversized "

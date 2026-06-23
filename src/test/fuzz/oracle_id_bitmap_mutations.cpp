@@ -195,10 +195,11 @@ void RunMutationsForChain(FuzzedDataProvider& fdp, ChainType chain)
 
         // ValidateMuSig2Bundle will compute the current epoch from the
         // block height and reject if bundle.epoch doesn't match, so use
-        // a height of 0 and assert the function returns false (we don't
-        // have a valid signature).
+        // the MuSig2 activation height and assert the function returns
+        // false when no valid signature/epoch is present.
         std::string err;
-        const bool ok = OracleBundleManager::ValidateMuSig2Bundle(bundle, /*block_height=*/0, params, err);
+        const int active_height = params.nDigiDollarMuSig2Height;
+        const bool ok = OracleBundleManager::ValidateMuSig2Bundle(bundle, active_height, params, err);
         if (!ok) {
             assert(!err.empty());
         }

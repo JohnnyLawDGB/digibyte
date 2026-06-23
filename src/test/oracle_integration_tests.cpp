@@ -45,17 +45,14 @@ using node::CBlockTemplate;
 BOOST_FIXTURE_TEST_SUITE(oracle_integration_tests, TestChain100Setup)
 
 namespace {
-/** Phase 2 integration tests require Phase 3 to NOT be active from genesis,
- *  because they construct v0x02 bundles that are rejected by block validation
- *  when Phase 3 is active. Skip when nDigiDollarMuSig2Height == 0. */
+/** These legacy integration tests construct single-oracle/v0x02 bundles.
+ *  DigiDollar V1 has no legacy bundle mode: MuSig2 v0x03 activates alongside
+ *  DigiDollar/oracle consensus, so these tests remain documentation-only until
+ *  rewritten against a complete MuSig2 signing session. */
 bool SkipPhase2Test()
 {
-    const auto& params = Params().GetConsensus();
-    if (params.nDigiDollarMuSig2Height <= 0) {
-        BOOST_TEST_MESSAGE("SKIPPED: Phase 3 active from genesis — Phase 2 integration test not applicable");
-        return true;
-    }
-    return false;
+    BOOST_TEST_MESSAGE("SKIPPED: legacy Phase One/Two integration test not applicable to V1 MuSig2-only consensus");
+    return true;
 }
 } // namespace
 

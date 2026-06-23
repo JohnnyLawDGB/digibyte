@@ -1,6 +1,6 @@
 # DigiDollar Oracle Setup Guide
 
-*The single source of truth for oracle operator setup — multi-oracle MuSig2 (V1/Phase 3 always-on; `nDigiDollarMuSig2Height = 0` on every network).*
+*The single source of truth for oracle operator setup — multi-oracle MuSig2 (V1/Phase 3 activates alongside DigiDollar; `nDigiDollarMuSig2Height = nDDActivationHeight` on every network).*
 
 ---
 
@@ -248,7 +248,7 @@ removed / paid API key required).
 | Price Update Interval (`nDDOracleUpdateInterval`) | 2 blocks | 1 block | 4 blocks |
 | Bundle/MuSig2 Epoch (`nOracleEpochLength`) | 40 blocks | 40 blocks | 40 blocks |
 | Oracle Broadcast Interval | 60 seconds | 60 seconds | 60 seconds |
-| MuSig2 Always-On (`nDigiDollarMuSig2Height`) | 0 | 0 | 0 |
+| MuSig2 Activation (`nDigiDollarMuSig2Height`) | 600 | 650 | 23,627,520 |
 
 Values verified against `src/kernel/chainparams.cpp`. Mainnet and testnet have
 35 `vOracleNodes` metadata entries and slots 0-34 are in

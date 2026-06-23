@@ -102,12 +102,13 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         info = node.getdigidollardeploymentinfo()
         assert_equal(info["min_activation_height"], BIP9_MIN_ACTIVATION)
         assert_equal(info["oracle_activation_height"], BIP9_MIN_ACTIVATION)
-        assert_equal(info["musig2_format_activation_height"], 0)
+        assert_equal(info["musig2_format_activation_height"], BIP9_MIN_ACTIVATION)
         self.log.info(
-            "  %s: min_activation_height=%d oracle_activation_height=%d",
+            "  %s: min_activation_height=%d oracle_activation_height=%d musig2_height=%d",
             label,
             info["min_activation_height"],
             info["oracle_activation_height"],
+            info["musig2_format_activation_height"],
         )
 
     def assert_state(self, node, expected_status, *, enabled, label):

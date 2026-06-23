@@ -14864,7 +14864,7 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
     // ORACLE_MAX_AGE_SECONDS stale purge. P2P oracle broadcasts replace stale
     // entries via oracle_id key.
     //
-    // RC27 NOTE: With Phase 3 (MuSig2) active from genesis on regtest,
+    // With Phase 3 (MuSig2) active at the tested post-activation height,
     // AddOracleBundleToBlock now takes the MuSig2 path which requires a complete
     // signing session rather than individual Phase 2 messages. This test validates
     // that pending Phase 2 messages persist (the original design property), while
@@ -14889,9 +14889,9 @@ BOOST_AUTO_TEST_CASE(redteam_t8_02f_pending_messages_clear_after_bundle_creation
 
     BOOST_CHECK_EQUAL(manager.GetPendingMessageCount(), 1);
 
-    // With Phase 3 active (regtest nDigiDollarMuSig2Height=0), AddOracleBundleToBlock
-    // takes the MuSig2 path. Without a complete MuSig2 session, bundle creation
-    // returns false — this is correct behavior (no session = no bundle).
+    // With Phase 3 active at this regtest height, AddOracleBundleToBlock takes
+    // the MuSig2 path. Without a complete MuSig2 session, bundle creation returns
+    // false — this is correct behavior (no session = no bundle).
     CMutableTransaction coinbase;
     coinbase.vin.resize(1);
     coinbase.vin[0].prevout.SetNull();

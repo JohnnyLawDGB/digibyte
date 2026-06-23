@@ -76,7 +76,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 - **P2P behavior:** Oracle messages (`oracleprice`, `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles`) are processed, relayed, and validated according to the table below. Legacy `oraclebundle` messages are accepted on-wire but explicitly dropped — V1 carries the bundle on-chain in the coinbase, not via the bundle gossip message.
 - **Consensus:** DD transactions are validated. DD opcodes are enforced via `SCRIPT_VERIFY_DIGIDOLLAR` (set in script flags when `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` returns true).
 - **Qt behavior:** Activation overlay disappears. Full DD tab (overview, send, receive, mint, redeem, positions, transactions) becomes accessible.
-- **Oracle behavior:** Authorized oracle operators (slots 0-34 in `consensus.vOraclePublicKeys`, mainnet/testnet) can start their daemon, broadcast off-chain attestations and version heartbeats, participate in MuSig2 nonce/context/partial-sig rounds, and aggregate into the v0x03 on-chain bundle that miners embed in the coinbase for price-dependent DD blocks. `nDigiDollarMuSig2Height = 0` on every network — MuSig2 v0x03 is the only accepted on-chain format from the moment DigiDollar is BIP9-active.
+- **Oracle behavior:** Authorized oracle operators (slots 0-34 in `consensus.vOraclePublicKeys`, mainnet/testnet) can start their daemon, broadcast off-chain attestations and version heartbeats, participate in MuSig2 nonce/context/partial-sig rounds, and aggregate into the v0x03 on-chain bundle that miners embed in the coinbase for price-dependent DD blocks. `nDigiDollarMuSig2Height` is aligned with `nDDActivationHeight` on every network — MuSig2 v0x03 is the only accepted on-chain format from the moment DigiDollar/oracle consensus activates.
 
 > **Activation boundary nuance (1-block off-by-one).** `getdeploymentinfo` exposes a BIP9 view (`bip9.status = active`) that flips at the period boundary block — i.e. the block whose `pindexPrev->nHeight + 1 == min_activation_height`. The height-based gate `Consensus::IsOracleActive(params, height) == (height >= nOracleActivationHeight)` flips one block later, at `height == min_activation_height` itself. There is therefore a single-block window where `bip9.status` reports `active` but `IsOracleActive(tip)` is still `false`. This is harmless on production because `IsDigiDollarEnabled(prev_block)` already returns true at the period boundary and the miner refuses price-dependent DD mint/redeem templates without a valid v0x03 bundle. DD transfer-only blocks do not need a block oracle price. Boundary tests should use the height-based predicate (`IsOracleActive`/`IsDigiDollarEnabled`) rather than `getdeploymentinfo.bip9.status` when they need the consensus-rule moment, and Wave 12's `DD-FA-SEC-010` fix in `SpendsDigiDollarCollateralVault` deliberately uses `min(nDDActivationHeight, BIP9 min_activation_height)` for the same reason.
 
@@ -243,9 +243,9 @@ Both heights are intentionally aligned in `src/kernel/chainparams.cpp`:
 
 | Network | `nDDActivationHeight` | `nOracleActivationHeight` | `nDigiDollarMuSig2Height` |
 |---------|-----------------------|---------------------------|---------------------------|
-| Mainnet | `23627520` | `consensus.nDDActivationHeight` (i.e. `23627520`) | `0` (MuSig2 active immediately when DD is BIP9-active) |
-| Testnet26 | `600` | `600` | `0` |
-| Regtest | `650` (line 1112) | `650` (line 1115) | `0` (line 1119) |
+| Mainnet | `23627520` | `consensus.nDDActivationHeight` (i.e. `23627520`) | `consensus.nDDActivationHeight` (i.e. `23627520`) |
+| Testnet26 | `600` | `600` | `600` |
+| Regtest | `650` | `650` | `650` |
 
 A practical implication: there is no period in which the oracle P2P surface is live but DD itself is not, and there is no period in which DD is active but MuSig2 v0x03 is not yet the on-chain bundle format — the three heights collapse to one event per network. Documents that say "mainnet `nOracleActivationHeight = 3000000`" are stale; that earlier staging configuration was removed before V1 launch.
 

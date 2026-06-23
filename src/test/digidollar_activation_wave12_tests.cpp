@@ -422,7 +422,7 @@ BOOST_AUTO_TEST_CASE(wave12_height_gates_off_by_one_regtest)
     BOOST_CHECK(Consensus::IsOracleActive(params, params.nDDActivationHeight));
     BOOST_CHECK(Consensus::IsOracleActive(params, params.nDDActivationHeight + 1));
 
-    BOOST_CHECK(Consensus::IsMuSig2Active(params, 0));
+    BOOST_CHECK(!Consensus::IsMuSig2Active(params, params.nDDActivationHeight - 1));
     BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight));
     BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight + 100));
 }
@@ -713,9 +713,9 @@ BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
         int oracle_height;
         int musig2_height;
     } cases[] = {
-        {ChainType::REGTEST, 650, 650, 0},
-        {ChainType::TESTNET, 600, 600, 0},
-        {ChainType::MAIN, 23627520, 23627520, 0},
+        {ChainType::REGTEST, 650, 650, 650},
+        {ChainType::TESTNET, 600, 600, 600},
+        {ChainType::MAIN, 23627520, 23627520, 23627520},
     };
 
     for (const auto& c : cases) {

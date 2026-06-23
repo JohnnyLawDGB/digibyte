@@ -8,7 +8,7 @@
 > - Only MuSig2 v0x03 oracle bundles are accepted on-chain (commits `bbb85cf363`, `fa29405adc`, `f2bb0a19a4`). Raw v0x01/v0x02 OP_RETURN payloads short-circuit inside `OracleBundleManager::ExtractOracleBundle`, so `OracleDataValidator::ValidateBlockOracleData` emits `bad-oracle-malformed`. The `bad-oracle-legacy` branch only fires when extraction succeeds with a non-MuSig2 version, which is structurally unreachable for current v0x03 wire payloads — it is kept as a defense-in-depth gate.
 > - DD mint/redeem blocks must include exactly one valid v0x03 bundle in the coinbase, or they are rejected with `bad-oracle-missing` / `bad-oracle-malformed` / `bad-oracle-multiple-outputs`. Transfer-only and non-DD blocks may omit oracle data; if any block includes oracle data, it must still be valid v0x03.
 > - `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-730`). It consumes one operand and pushes false rather than reading node-local oracle state.
-> - `nDigiDollarMuSig2Height = 0` on mainnet, testnet, and regtest. MuSig2 is the only on-chain bundle format from the moment DigiDollar is BIP9-active.
+> - `nDigiDollarMuSig2Height` is aligned with `nDDActivationHeight` on mainnet, testnet, and regtest. MuSig2 is the only on-chain bundle format from the moment DigiDollar/oracle consensus activates.
 
 > **Sections that survived from earlier doc revisions (Phase One single-oracle, Phase Two roadmap, "MAINNET DISABLED" warnings, the Section 14 roadmap) describe a code path that no longer exists.** Treat the V1 invariants above as authoritative; flagged sections are kept only for historical context.
 
@@ -1850,24 +1850,24 @@ int nDigiDollarMuSig2Height{std::numeric_limits<int>::max()};
 // Mainnet override (src/kernel/chainparams.cpp):
 consensus.nDDActivationHeight        = 23627520;                       // BIP9 min_activation_height
 consensus.nOracleActivationHeight    = consensus.nDDActivationHeight;  // 23627520
-consensus.nDigiDollarMuSig2Height    = 0;
+consensus.nDigiDollarMuSig2Height    = consensus.nDDActivationHeight;
 consensus.nOracleRequiredMessages    = 7;     // off-chain quorum input to MuSig2
 consensus.nOracleTotalOracles        = 35;
-consensus.nOraclePubkeyCount         = 21;
+consensus.nOraclePubkeyCount         = 35;
 consensus.nOracleConsensusRequired   = 7;     // on-chain MuSig2 threshold
 
 // Testnet override:
 consensus.nDDActivationHeight        = 600;
 consensus.nOracleActivationHeight    = 600;
-consensus.nDigiDollarMuSig2Height    = 0;
+consensus.nDigiDollarMuSig2Height    = consensus.nDDActivationHeight;
 consensus.nOracleTotalOracles        = 35;
-consensus.nOraclePubkeyCount         = 21;
+consensus.nOraclePubkeyCount         = 35;
 consensus.nOracleConsensusRequired   = 7;
 
 // Regtest override (chainparams.cpp:1112-1119):
 consensus.nDDActivationHeight        = 650;
 consensus.nOracleActivationHeight    = 650;
-consensus.nDigiDollarMuSig2Height    = 0;
+consensus.nDigiDollarMuSig2Height    = consensus.nDDActivationHeight;
 consensus.nOraclePubkeyCount         = 7;
 consensus.nOracleConsensusRequired   = 4;
 ```
@@ -1876,9 +1876,9 @@ consensus.nOracleConsensusRequired   = 4;
 
 | Network | On-chain quorum | Oracles configured | `nDDActivationHeight` | `nOracleActivationHeight` | `nDigiDollarMuSig2Height` |
 |---------|-----------------|--------------------|-----------------------|---------------------------|---------------------------|
-| Mainnet | 7 signatures from active keyset | 35 in `vOracleNodes` and `vOraclePublicKeys` (slots 0-34 active) | 23 627 520 | 23 627 520 | 0 |
-| Testnet26 | 7 signatures from active keyset | 35 in `vOracleNodes` and `vOraclePublicKeys` (slots 0-34 active) | 600 | 600 | 0 |
-| Regtest | 4-of-7 MuSig2 | 7 in `vOracleNodes` (all in `vOraclePublicKeys`) | 650 | 650 | 0 |
+| Mainnet | 7 signatures from active keyset | 35 in `vOracleNodes` and `vOraclePublicKeys` (slots 0-34 active) | 23 627 520 | 23 627 520 | 23 627 520 |
+| Testnet26 | 7 signatures from active keyset | 35 in `vOracleNodes` and `vOraclePublicKeys` (slots 0-34 active) | 600 | 600 | 600 |
+| Regtest | 4-of-7 MuSig2 | 7 in `vOracleNodes` (all in `vOraclePublicKeys`) | 650 | 650 | 650 |
 
 There is no longer a "mainnet validation bypass" — mainnet runs the same validator and the same MuSig2 verification path as testnet and regtest.
 
@@ -1938,7 +1938,7 @@ int OracleBundleManager::GetRequiredConsensus(
     int block_height, const Consensus::Params& params);
 ```
 
-Earlier "Phase One" / "Phase Two" branch helpers (`ValidatePhaseOneBundle`, `ValidatePhaseTwoBundle`) and the `nDigiDollarPhase2Height` parameter are gone in V1. The corresponding gate is `nDigiDollarMuSig2Height` (set to 0 on every network), and the only on-chain bundle format is v0x03.
+Earlier "Phase One" / "Phase Two" branch helpers (`ValidatePhaseOneBundle`, `ValidatePhaseTwoBundle`) and the `nDigiDollarPhase2Height` parameter are gone in V1. The corresponding gate is `nDigiDollarMuSig2Height` (aligned with `nDDActivationHeight` on every network), and the only on-chain bundle format is v0x03 once DigiDollar/oracle consensus is active.
 
 **IQR Outlier Filtering** (used by `CalculateConsensusPrice` over off-chain attestations):
 ```
@@ -1952,7 +1952,7 @@ Reject prices outside [lower_bound, upper_bound]
 
 ### 14.5 (Removed)
 
-There is no longer a separate "activate Phase Two on testnet" step — testnet/regtest already activate together with DigiDollar at their `nDDActivationHeight`, and `nDigiDollarMuSig2Height = 0` everywhere means the v0x03 format applies from the first DD-active block.
+There is no longer a separate "activate Phase Two on testnet" step — testnet/regtest already activate oracle consensus and MuSig2 together with DigiDollar at their `nDDActivationHeight`, so the v0x03 format applies from the first DD-active block.
 
 ---
 

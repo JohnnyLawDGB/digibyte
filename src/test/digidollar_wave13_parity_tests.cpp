@@ -199,10 +199,12 @@ struct Wave13ParitySetup : public TestChain100Setup {
     {
         for (int i = 0; i < 2500; ++i) {
             const bool active = WITH_LOCK(cs_main, return DigiDollar::IsDigiDollarEnabled(m_node.chainman->ActiveChain().Tip(), *m_node.chainman));
-            if (active) return;
+            const int next_height = NextBlockHeight();
+            const bool musig2_ready = Params().GetConsensus().IsMuSig2OracleActive(next_height);
+            if (active && musig2_ready) return;
             mineBlocks(1);
         }
-        BOOST_FAIL("DigiDollar deployment did not activate in time");
+        BOOST_FAIL("DigiDollar/MuSig2 activation did not activate in time");
     }
 
     int NextBlockHeight() const

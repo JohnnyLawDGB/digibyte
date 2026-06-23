@@ -48,12 +48,8 @@ BOOST_FIXTURE_TEST_SUITE(oracle_miner_tests, TestChain100Setup)
 namespace {
 bool SkipPhase2MinerTest()
 {
-    const auto& params = Params().GetConsensus();
-    if (params.nDigiDollarMuSig2Height <= 0) {
-        BOOST_TEST_MESSAGE("SKIPPED: Phase 3 active from genesis — Phase 2 miner test not applicable");
-        return true;
-    }
-    return false;
+    BOOST_TEST_MESSAGE("SKIPPED: legacy Phase One/Two miner tests construct single-oracle/v0x02 bundles; V1 has no legacy bundle mode, and MuSig2 activates alongside DigiDollar.");
+    return true;
 }
 } // namespace
 
@@ -353,11 +349,6 @@ BOOST_AUTO_TEST_CASE(create_new_block_includes_oracle_bundle)
 BOOST_AUTO_TEST_CASE(create_new_block_no_oracle_if_unavailable)
 {
     if (SkipPhase2MinerTest()) return;
-    // Ensure no oracle messages are pending
-    OracleBundleManager& manager = OracleBundleManager::GetInstance();
-    // Clear any existing messages (if Clear() method exists)
-    // manager.Clear();  // May not exist yet
-
     // Create new block without any oracle data
     CScript scriptPubKey = CScript() << OP_TRUE;
     std::unique_ptr<CBlockTemplate> pblocktemplate =

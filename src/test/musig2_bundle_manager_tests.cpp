@@ -240,9 +240,11 @@ BOOST_AUTO_TEST_CASE(validate_v03_rejects_signed_out_of_range_price)
     BOOST_REQUIRE_EQUAL(params.nOracleRequiredMessages, 4);
     BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 7);
 
+    const int active_height = params.nDigiDollarMuSig2Height;
+
     COracleBundle bundle;
     bundle.version = 3;
-    bundle.epoch = GetCurrentEpoch(/*block_height=*/0);
+    bundle.epoch = GetCurrentEpoch(active_height);
     bundle.median_price_micro_usd = 0;
     bundle.timestamp = 1700000000;
 
@@ -250,7 +252,7 @@ BOOST_AUTO_TEST_CASE(validate_v03_rejects_signed_out_of_range_price)
     BOOST_REQUIRE(SignRegtestV03Bundle(bundle, oracle_ids));
 
     std::string error;
-    BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, /*block_height=*/0, params, error));
+    BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, active_height, params, error));
     BOOST_CHECK(error.find("price") != std::string::npos);
 }
 
@@ -260,9 +262,11 @@ BOOST_AUTO_TEST_CASE(validate_v03_rejects_unused_bitmap_bits)
     BOOST_REQUIRE_EQUAL(params.nOracleRequiredMessages, 4);
     BOOST_REQUIRE_EQUAL(params.nOracleTotalOracles, 7);
 
+    const int active_height = params.nDigiDollarMuSig2Height;
+
     COracleBundle bundle;
     bundle.version = 3;
-    bundle.epoch = GetCurrentEpoch(/*block_height=*/0);
+    bundle.epoch = GetCurrentEpoch(active_height);
     bundle.median_price_micro_usd = 51000;
     bundle.timestamp = 1700000000;
 
@@ -276,7 +280,7 @@ BOOST_AUTO_TEST_CASE(validate_v03_rejects_unused_bitmap_bits)
     bundle.participation_bitmap[0] |= 0x80;
 
     std::string error;
-    BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, /*block_height=*/0, params, error));
+    BOOST_CHECK(!OracleBundleManager::ValidateMuSig2Bundle(bundle, active_height, params, error));
     BOOST_CHECK(error.find("bitmap") != std::string::npos);
 }
 

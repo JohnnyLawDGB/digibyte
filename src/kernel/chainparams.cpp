@@ -344,7 +344,7 @@ public:
         consensus.vOraclePublicKeys.push_back("2c4422fb8e5eac5d27423272d35abe6cff0acb19ab051e51204e3392365c18f3");  // 12: DaPunzy (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("58889fb092fdf366004032d3af7cc35fddd951eb8413409699e879f795111a0e");  // 13: DigiByte_FORCE (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("4b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec");  // 14: Neel (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6");  // 15: DigiSwarm (RC30)
+        consensus.vOraclePublicKeys.push_back("0f809ccbeea32bcca9c817dbf674e38e2fbc234f4462b88612876287489197a9");  // 15: DigiSwarm (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf");  // 16: GTO90 (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("9d83219cf9056854da1f56fbf1d792ef14b1853ec027cd9c0a51465e2ec2afaa");  // 17: digibyte-maxi (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("e2fa8be3480929a59fb93b284e49f4b74bfb52ffed3934de751bdb1c33c54e6e");  // 18: Anthony (mainnet RC46 key)
@@ -394,7 +394,7 @@ private:
             {12, ParsePubKey("032c4422fb8e5eac5d27423272d35abe6cff0acb19ab051e51204e3392365c18f3"), "oracle13.digidollar.org:12024", true},  // DaPunzy (mainnet RC46 key)
             {13, ParsePubKey("0258889fb092fdf366004032d3af7cc35fddd951eb8413409699e879f795111a0e"), "oracle14.digidollar.org:12024", true},  // DigiByte_FORCE (mainnet RC46 key)
             {14, ParsePubKey("034b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec"), "oracle15.digidollar.org:12024", true},  // Neel (mainnet RC46 key)
-            {15, ParsePubKey("02447153bcec341f2dad94541104f4e8c0a8b19e342dada1b2204ae56cf2b960a6"), "oracle16.digidollar.org:12024", true},
+            {15, ParsePubKey("030f809ccbeea32bcca9c817dbf674e38e2fbc234f4462b88612876287489197a9"), "oracle16.digidollar.org:12024", true},  // DigiSwarm (mainnet RC46 key)
             {16, ParsePubKey("03943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf"), "oracle17.digidollar.org:12024", true},  // GTO90 (mainnet RC46 key)
 
             // Oracle 17-34: Active launch roster additions.

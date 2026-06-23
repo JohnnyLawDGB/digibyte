@@ -633,12 +633,10 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
         BOOST_CHECK(endpoints.find(oracle.endpoint) == endpoints.end());
         endpoints.insert(oracle.endpoint);
 
-        // Check endpoint format - must contain "oracle" and have a valid host:port format
-        // Phase One uses oracle1.digibyte.io:12028 for testing
-        // Production will use oracle1.digidollar.org:9001-9035
-        BOOST_CHECK(oracle.endpoint.find("oracle") != std::string::npos);
+        // Check endpoint format - valid host:port under the approved oracle domains.
+        // Operator-owned endpoints do not need to use an "oracleN" hostname prefix.
 
-        // Check for valid domain (either digidollar.org or digibyte.io for Phase One)
+        // Check for valid domain (either digidollar.org or digibyte.io)
         bool valid_domain = oracle.endpoint.find(".digidollar.org:") != std::string::npos ||
                            oracle.endpoint.find(".digibyte.io:") != std::string::npos;
         BOOST_CHECK(valid_domain);

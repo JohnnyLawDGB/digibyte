@@ -357,7 +357,7 @@ public:
         consensus.vOraclePublicKeys.push_back("d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee");  // 25: JMag (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("36031b96a287f671172106f2d62cbeec0e547d31b591169ebbe9ddef7277e5b9");  // 26: HashedMax (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("80f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563");  // 27: DennisPitallano (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef");  // 28: DigiHash Mining Pool
+        consensus.vOraclePublicKeys.push_back("810ab54165a93b0d219494da9a7830ef245f49696662ddc49644d25b081c79d3");  // 28: DigiHash Mining Pool (mainnet key)
         consensus.vOraclePublicKeys.push_back("1ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d");  // 29: medgboracle3452 (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("17aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67");  // 30: DigibyteDaily (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284");  // 31: Peer2Peer / DigiRoos (mainnet RC46 key)
@@ -410,7 +410,7 @@ private:
 
             {26,  ParsePubKey("0336031b96a287f671172106f2d62cbeec0e547d31b591169ebbe9ddef7277e5b9"), "oracle27.digidollar.org:12024", true},   // HashedMax (mainnet RC46 key)
             {27,  ParsePubKey("0380f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563"), "oracle28.digidollar.org:12024", true},   // DennisPitallano (mainnet RC46 key)
-            {28,  ParsePubKey("03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef"), "oracle29.digidollar.org:12024", true},   // DigiHash Mining Pool
+            {28,  ParsePubKey("03810ab54165a93b0d219494da9a7830ef245f49696662ddc49644d25b081c79d3"), "digihash.digibyte.io:12024", true},   // DigiHash Mining Pool (mainnet key)
             {29,  ParsePubKey("021ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d"), "oracle30.digidollar.org:12024", true},   // medgboracle3452 (mainnet RC46 key)
             {30,  ParsePubKey("0317aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67"), "oracle31.digidollar.org:12024", true},   // DigibyteDaily (mainnet RC46 key)
             {31,  ParsePubKey("03a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284"), "oracle32.digidollar.org:12024", true},   // Peer2Peer / DigiRoos (mainnet RC46 key)

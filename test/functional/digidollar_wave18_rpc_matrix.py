@@ -83,8 +83,8 @@ class DigiDollarWave18RpcMatrixTest(DigiByteTestFramework):
                 pass
 
     def _ensure_dd_active(self):
-        # Regtest: nDigiDollarMuSig2Height = 650. Mine past it to leave the
-        # gating tests below in the ACTIVE state for read RPCs.
+        # Regtest DD/oracle height gates default to 650. Mine past them to
+        # leave the gating tests below in the ACTIVE state for read RPCs.
         info = self.nodes[0].getdigidollardeploymentinfo()
         if not info["enabled"]:
             self.nodes[0].generate(660)

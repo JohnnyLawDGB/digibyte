@@ -1226,7 +1226,14 @@ public:
         consensus.nOracleEpochLength = 40;         // 10 minutes (40 blocks * 15 seconds)
         consensus.nOracleRequiredMessages = 4;     // 4-of-7 off-chain price quorum (matches testnet)
         consensus.nOracleTotalOracles = 7;         // 7 active oracles (matches testnet)
-        consensus.nDigiDollarMuSig2Height = consensus.nDDActivationHeight;  // MuSig2 activates alongside DigiDollar
+        // MuSig2 must follow the effective DigiDollar activation boundary.
+        // Default regtest is BIP9 ALWAYS_ACTIVE with min_activation_height=0,
+        // while nDDActivationHeight remains 650 for height-gated P2P/oracle
+        // tests. Using the raw height here leaves DD active before v0x03
+        // quotes validate, breaking every regtest DD mint path.
+        consensus.nDigiDollarMuSig2Height = std::min(
+            consensus.nDDActivationHeight,
+            consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height);
 
         // MuSig2 oracle configuration — 4-of-7 quorum (lower for testing)
         consensus.nOraclePubkeyCount = 7;

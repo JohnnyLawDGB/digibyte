@@ -409,20 +409,28 @@ BOOST_AUTO_TEST_CASE(wave12_bip9_off_by_one_boundary)
 // PART 2 — Height-gate predicates (oracle/MuSig2)
 // =============================================================================
 
-// At nDDActivationHeight - 1, Consensus::IsOracleActive and IsMuSig2Active are
-// false; at nDDActivationHeight they are true; off-by-one in either direction
-// is asserted explicitly.
+// Regtest intentionally has two activation surfaces:
+//   - oracle P2P/height gate remains at nDDActivationHeight=650
+//   - MuSig2 follows the effective DigiDollar BIP9 boundary, which is 0 for
+//     default ALWAYS_ACTIVE regtest
+// Off-by-one in either direction is asserted explicitly.
 BOOST_AUTO_TEST_CASE(wave12_height_gates_off_by_one_regtest)
 {
     const Consensus::Params& params = Params().GetConsensus();
     BOOST_REQUIRE_EQUAL(params.nDDActivationHeight, 650);
     BOOST_REQUIRE_EQUAL(params.nOracleActivationHeight, params.nDDActivationHeight);
+    BOOST_REQUIRE_EQUAL(
+        params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
+        Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    BOOST_REQUIRE_EQUAL(params.nDigiDollarMuSig2Height, 0);
 
     BOOST_CHECK(!Consensus::IsOracleActive(params, params.nDDActivationHeight - 1));
     BOOST_CHECK(Consensus::IsOracleActive(params, params.nDDActivationHeight));
     BOOST_CHECK(Consensus::IsOracleActive(params, params.nDDActivationHeight + 1));
 
-    BOOST_CHECK(!Consensus::IsMuSig2Active(params, params.nDDActivationHeight - 1));
+    BOOST_CHECK(!Consensus::IsMuSig2Active(params, params.nDigiDollarMuSig2Height - 1));
+    BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDigiDollarMuSig2Height));
+    BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight - 1));
     BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight));
     BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight + 100));
 }
@@ -700,11 +708,11 @@ BOOST_AUTO_TEST_CASE(wave12_postactivation_dd_marker_no_bundle_rejected_for_orac
 // PART 8 — Mainnet/testnet activation parameter sanity (no consensus split)
 // =============================================================================
 
-// Pin the chainparams so that nDDActivationHeight,
-// nOracleActivationHeight, and nDigiDollarMuSig2Height collapse to the same
-// trigger on every network. CLAUDE.md and DIGIDOLLAR_ACTIVATION_EXPLAINER.md
-// both rely on this property; a future re-tuning that forgets to keep them in
-// sync would silently create a consensus-split window.
+// Pin the chainparams so that MuSig2 follows the effective DigiDollar
+// activation boundary on every network. On mainnet/testnet that is the same
+// numeric height as nDDActivationHeight; default regtest is special because
+// DigiDollar BIP9 is ALWAYS_ACTIVE at height 0 while the oracle P2P height gate
+// remains at 650 for local testing.
 BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
 {
     struct Expected {
@@ -713,7 +721,7 @@ BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
         int oracle_height;
         int musig2_height;
     } cases[] = {
-        {ChainType::REGTEST, 650, 650, 650},
+        {ChainType::REGTEST, 650, 650, 0},
         {ChainType::TESTNET, 600, 600, 600},
         {ChainType::MAIN, 23627520, 23627520, 23627520},
     };
@@ -728,9 +736,19 @@ BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
         BOOST_CHECK_EQUAL(p.nDDActivationHeight, c.dd_height);
         BOOST_CHECK_EQUAL(p.nOracleActivationHeight, c.oracle_height);
         BOOST_CHECK_EQUAL(p.nDigiDollarMuSig2Height, c.musig2_height);
-        // Oracle height never lives below DD height — that would create a
-        // window where MuSig2 enforcement runs before DigiDollar consensus.
+        // Oracle P2P height never lives below the DD height gate; otherwise
+        // the oracle message surface could open before the static DD gate.
         BOOST_CHECK_GE(p.nOracleActivationHeight, p.nDDActivationHeight);
+        if (c.chain == ChainType::REGTEST) {
+            BOOST_CHECK_EQUAL(
+                p.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
+                Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+            BOOST_CHECK_EQUAL(
+                p.nDigiDollarMuSig2Height,
+                p.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height);
+        } else {
+            BOOST_CHECK_EQUAL(p.nDigiDollarMuSig2Height, p.nDDActivationHeight);
+        }
     }
 
     // Restore regtest at the end of the case so the suite fixture's

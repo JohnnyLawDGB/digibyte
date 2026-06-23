@@ -75,9 +75,36 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_regtest)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
-    // Regtest activates MuSig2 alongside DigiDollar/oracle consensus.
-    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, params.nDDActivationHeight);
-    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 650);
+    const auto& dd_deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    // Default regtest uses BIP9 ALWAYS_ACTIVE for DigiDollar, so MuSig2 must
+    // be valid at the same effective boundary. Leaving MuSig2 at the raw
+    // nDDActivationHeight=650 makes DD active before v0x03 quotes validate.
+    BOOST_CHECK_EQUAL(dd_deployment.nStartTime, Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    BOOST_CHECK_EQUAL(dd_deployment.min_activation_height, 0);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, dd_deployment.min_activation_height);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 0);
+}
+
+BOOST_AUTO_TEST_CASE(test_regtest_digidollaractivationheight_moves_musig2_with_digidollar)
+{
+    CChainParams::RegTestOptions opts;
+    opts.digidollar_activation_height = 432;
+    opts.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = {
+        0,
+        Consensus::BIP9Deployment::NO_TIMEOUT,
+        432,
+    };
+
+    const auto chainparams = CChainParams::RegTest(opts);
+    const auto& params = chainparams->GetConsensus();
+    const auto& dd_deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+
+    BOOST_CHECK_EQUAL(params.nDDActivationHeight, 432);
+    BOOST_CHECK_EQUAL(params.nOracleActivationHeight, 432);
+    BOOST_CHECK_EQUAL(dd_deployment.min_activation_height, 432);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 432);
+    BOOST_CHECK(!params.IsMuSig2OracleActive(431));
+    BOOST_CHECK(params.IsMuSig2OracleActive(432));
 }
 
 // ============================================================================
@@ -317,15 +344,18 @@ BOOST_AUTO_TEST_CASE(testnet_active_roster_tail_slots_are_active)
 // PART 3: Phase Transition Tests
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(test_oracle_and_musig2_activate_together_on_regtest)
+BOOST_AUTO_TEST_CASE(test_regtest_musig2_tracks_effective_digidollar_activation)
 {
     SelectParams(ChainType::REGTEST);
     const auto& params = Params().GetConsensus();
+    const auto& dd_deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+
     BOOST_CHECK_EQUAL(params.nOracleActivationHeight, params.nDDActivationHeight);
-    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, params.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(dd_deployment.nStartTime, Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, dd_deployment.min_activation_height);
     BOOST_CHECK(!Consensus::IsOracleActive(params, params.nDDActivationHeight - 1));
-    BOOST_CHECK(!Consensus::IsMuSig2Active(params, params.nDDActivationHeight - 1));
-    BOOST_CHECK(!params.IsMuSig2OracleActive(0));
+    BOOST_CHECK(!params.IsMuSig2OracleActive(params.nDigiDollarMuSig2Height - 1));
+    BOOST_CHECK(params.IsMuSig2OracleActive(params.nDigiDollarMuSig2Height));
     BOOST_CHECK(Consensus::IsOracleActive(params, params.nDDActivationHeight));
     BOOST_CHECK(Consensus::IsMuSig2Active(params, params.nDDActivationHeight));
 }
@@ -422,7 +452,8 @@ BOOST_AUTO_TEST_CASE(test_musig2_matches_digidollar_activation_on_all_networks)
 {
     SelectParams(ChainType::REGTEST);
     const auto& regtest_params = Params().GetConsensus();
-    BOOST_CHECK_EQUAL(regtest_params.nDigiDollarMuSig2Height, regtest_params.nDDActivationHeight);
+    const auto& regtest_deployment = regtest_params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    BOOST_CHECK_EQUAL(regtest_params.nDigiDollarMuSig2Height, regtest_deployment.min_activation_height);
 
     SelectParams(ChainType::TESTNET);
     const auto& testnet_params = Params().GetConsensus();

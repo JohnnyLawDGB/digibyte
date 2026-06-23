@@ -113,9 +113,11 @@ class DigiDollarRPCDeploymentTest(DigiByteTestFramework):
             assert field in result, f"Missing '{field}' field — operator cannot see oracle roster shape"
             assert isinstance(result[field], int), f"'{field}' should be integer"
 
-        # Regtest keeps mandatory oracle/DD/MuSig2 activation aligned at height 650.
+        # Default regtest keeps oracle/DD height gates at 650, but DigiDollar
+        # BIP9 is ALWAYS_ACTIVE from height 0. MuSig2 follows that effective
+        # DigiDollar boundary so v0x03 quotes are valid whenever DD is active.
         assert_equal(result["oracle_activation_height"], 650)
-        assert_equal(result["musig2_format_activation_height"], 650)
+        assert_equal(result["musig2_format_activation_height"], 0)
         # Regtest 4-of-7 quorum.
         assert_equal(result["oracle_pubkey_count"], 7)
         assert_equal(result["oracle_consensus_required"], 4)

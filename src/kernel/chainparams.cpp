@@ -355,7 +355,7 @@ public:
         consensus.vOraclePublicKeys.push_back("5b25677c412923376670284021ed9e99b53ebee6f4e3ef6123e742fb020e1f48");  // 23: ChozenOne43 (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("39543917295ddbba5bf3fa1198f3d7f63321364192f5839e9699a6f50572b68a");  // 24: ckunchained (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee");  // 25: JMag (mainnet RC46 key)
-        consensus.vOraclePublicKeys.push_back("8adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8");  // 26: HashedMax
+        consensus.vOraclePublicKeys.push_back("36031b96a287f671172106f2d62cbeec0e547d31b591169ebbe9ddef7277e5b9");  // 26: HashedMax (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("80f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563");  // 27: DennisPitallano (mainnet RC46 key)
         consensus.vOraclePublicKeys.push_back("532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef");  // 28: DigiHash Mining Pool
         consensus.vOraclePublicKeys.push_back("1ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d");  // 29: medgboracle3452 (mainnet RC46 key)
@@ -408,7 +408,7 @@ private:
             {24,  ParsePubKey("0339543917295ddbba5bf3fa1198f3d7f63321364192f5839e9699a6f50572b68a"), "oracle25.digidollar.org:12024", true},  // ckunchained (mainnet RC46 key)
             {25,  ParsePubKey("03d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee"), "oracle26.digidollar.org:12024", true},  // JMag (mainnet RC46 key)
 
-            {26,  ParsePubKey("038adf7df5fcd114178643f16aa0e3be8fa1e221ca421479e48c0bd04f2561d3a8"), "oracle27.digidollar.org:12024", true},   // HashedMax
+            {26,  ParsePubKey("0336031b96a287f671172106f2d62cbeec0e547d31b591169ebbe9ddef7277e5b9"), "oracle27.digidollar.org:12024", true},   // HashedMax (mainnet RC46 key)
             {27,  ParsePubKey("0380f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563"), "oracle28.digidollar.org:12024", true},   // DennisPitallano (mainnet RC46 key)
             {28,  ParsePubKey("03532efd6277226f38903401ec8317ba7cc8f13eb48dc8cb1e102fdc23488d7cef"), "oracle29.digidollar.org:12024", true},   // DigiHash Mining Pool
             {29,  ParsePubKey("021ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d"), "oracle30.digidollar.org:12024", true},   // medgboracle3452 (mainnet RC46 key)

@@ -57,7 +57,26 @@ static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
     // std::cout << "Block 1,430,000 reward: " << reward1430000 << " (" << reward1430000 / COIN << " DGB)" << std::endl;
     
     // Block 1,430,000 should have reward of 2157/2 = 1078.5 DGB
+    BOOST_CHECK(reward1429999 > reward1430000);
     BOOST_CHECK_EQUAL(reward1430000, 107850000000);
+}
+
+static void TestMainnetPreBlockSubsidySchedule(const Consensus::Params& consensusParams)
+{
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(0, consensusParams), 72000 * COIN);
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(66, consensusParams), 72000 * COIN);
+
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(67, consensusParams), CAmount{796000000000});
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(76, consensusParams), CAmount{796000000000});
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(77, consensusParams), CAmount{792020000000});
+
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(200, consensusParams), CAmount{243441000000});
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(279, consensusParams), CAmount{243441000000});
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(280, consensusParams), CAmount{241006590000});
+
+    BOOST_CHECK_EQUAL(GetBlockSubsidy(400, consensusParams), CAmount{107850000000});
+    BOOST_CHECK(GetBlockSubsidy(77, consensusParams) > GetBlockSubsidy(200, consensusParams));
+    BOOST_CHECK(GetBlockSubsidy(280, consensusParams) > GetBlockSubsidy(400, consensusParams));
 }
 
 static void TestBlockSubsidyHalvings(int nSubsidyHalvingInterval)
@@ -77,7 +96,7 @@ static void TestBlockSubsidyHalvings(int nSubsidyHalvingInterval)
 BOOST_AUTO_TEST_CASE(block_subsidy_test)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
-    TestBlockSubsidyHalvings(chainParams->GetConsensus()); // As in main
+    TestMainnetPreBlockSubsidySchedule(chainParams->GetConsensus());
     TestBlockSubsidyHalvings(150); // As in regtest
     TestBlockSubsidyHalvings(1000); // Just another interval
 }

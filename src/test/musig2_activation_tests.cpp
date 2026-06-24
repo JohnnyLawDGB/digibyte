@@ -59,7 +59,7 @@ BOOST_AUTO_TEST_CASE(test_phase3_activation_mainnet)
     const auto& params = Params().GetConsensus();
     // Mainnet activates MuSig2 alongside DigiDollar/oracle consensus.
     BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, params.nDDActivationHeight);
-    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 23627520);
+    BOOST_CHECK_EQUAL(params.nDigiDollarMuSig2Height, 600);
 }
 
 BOOST_AUTO_TEST_CASE(test_phase3_activation_testnet)

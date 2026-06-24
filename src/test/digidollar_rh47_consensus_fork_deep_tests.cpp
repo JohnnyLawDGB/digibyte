@@ -356,13 +356,13 @@ BOOST_AUTO_TEST_CASE(rh47_04a_bip9_state_machine_irreversibility)
     BOOST_TEST_MESSAGE("  LOCKED_IN → ACTIVE is irreversible (no hysteresis)");
     BOOST_TEST_MESSAGE("  Threshold attack (signal then drop) is ineffective");
     BOOST_TEST_MESSAGE("  Once locked in, activation occurs at min_activation_height");
-    BOOST_TEST_MESSAGE("  Mainnet min_activation_height=23627520 (aligned to window)");
+    BOOST_TEST_MESSAGE("  Mainnet PRE min_activation_height=600 (aligned to window)");
 }
 
 BOOST_AUTO_TEST_CASE(rh47_04b_activation_window_alignment)
 {
-    // Mainnet: min_activation_height = 23627520 = 586 * 40320
-    // nMinerConfirmationWindow = 40320 on DGB mainnet
+    // Mainnet PRE: min_activation_height = 600 = 6 * 100
+    // nMinerConfirmationWindow = 100 on the side-mainnet rehearsal build
     //
     // If min_activation_height is NOT aligned to the window, a node
     // could disagree on the exact activation block within a window.
@@ -371,8 +371,8 @@ BOOST_AUTO_TEST_CASE(rh47_04b_activation_window_alignment)
 
     // Verify alignment for all network types
     // Mainnet values (hardcoded check)
-    int mainnet_min_height = 23627520;
-    int mainnet_window = 40320;
+    int mainnet_min_height = 600;
+    int mainnet_window = 100;
     BOOST_CHECK_EQUAL(mainnet_min_height % mainnet_window, 0);
 
     // Testnet values

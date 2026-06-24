@@ -12,6 +12,8 @@
 #include <boost/test/unit_test.hpp>
 #include <primitives/block.h> // For GetVersionForAlgo
 
+#include <algorithm>
+
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 
 /* Test calculation of next difficulty target with no constraints applying */
@@ -120,13 +122,15 @@ BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_zero_target)
 BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
-    std::vector<CBlockIndex> blocks(10000);
+    const int block_count = std::min<int>(10000, chainParams->GetConsensus().multiAlgoDiffChangeTarget);
+    BOOST_REQUIRE_GT(block_count, 0);
+    std::vector<CBlockIndex> blocks(block_count);
 
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < block_count; i++) {
         blocks[i].pprev = i ? &blocks[i - 1] : nullptr;
         blocks[i].nHeight = i;
         // DigiByte: Set appropriate version for multi-algo
-        if (i < 145000) {
+        if (i < chainParams->GetConsensus().multiAlgoDiffChangeTarget) {
             blocks[i].nVersion = 1; // Pre-multi-algo
         } else {
             // Cycle through algorithms for testing
@@ -155,15 +159,15 @@ BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
     }
 
     for (int j = 0; j < 1000; j++) {
-        CBlockIndex *p1 = &blocks[InsecureRandRange(10000)];
-        CBlockIndex *p2 = &blocks[InsecureRandRange(10000)];
-        CBlockIndex *p3 = &blocks[InsecureRandRange(10000)];
+        CBlockIndex *p1 = &blocks[InsecureRandRange(block_count)];
+        CBlockIndex *p2 = &blocks[InsecureRandRange(block_count)];
+        CBlockIndex *p3 = &blocks[InsecureRandRange(block_count)];
 
         int64_t tdiff = GetBlockProofEquivalentTime(*p1, *p2, *p3, chainParams->GetConsensus());
         BOOST_CHECK_EQUAL(tdiff, p1->GetBlockTime() - p2->GetBlockTime());
     }
 
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < block_count; ++i) {
         delete blocks[i].phashBlock;
     }
 }

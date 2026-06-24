@@ -13924,9 +13924,9 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     int64_t mainnet_timeout = deployment.nTimeout;
     int mainnet_min_activation = deployment.min_activation_height;
 
-    BOOST_CHECK_EQUAL(mainnet_start, 1780272000);   // June 1, 2026
-    BOOST_CHECK_EQUAL(mainnet_timeout, 1811808000); // June 1, 2027
-    BOOST_CHECK_EQUAL(mainnet_min_activation, 23627520);
+    BOOST_CHECK_EQUAL(mainnet_start, 1389388394);   // PRE starts from mainnet genesis time
+    BOOST_CHECK_EQUAL(mainnet_timeout, 1830297600); // Jan 1, 2028
+    BOOST_CHECK_EQUAL(mainnet_min_activation, 600);
     BOOST_CHECK_EQUAL(mainnet_min_activation, mainnet.nDDActivationHeight);
     BOOST_CHECK_EQUAL(mainnet.nOracleActivationHeight, mainnet.nDDActivationHeight);
 
@@ -13934,9 +13934,8 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     double threshold_pct = (double)mainnet_threshold / mainnet_window * 100.0;
     BOOST_CHECK_CLOSE(threshold_pct, 70.0, 0.01);
 
-    // Verify window is 1 week (40320 blocks × 15s = 604800s = 7 days)
-    int expected_blocks_per_week = 7 * 24 * 60 * 60 / 15;
-    BOOST_CHECK_EQUAL(mainnet_window, expected_blocks_per_week);
+    BOOST_CHECK_EQUAL(mainnet_window, 100);
+    BOOST_CHECK_EQUAL(mainnet_threshold, 70);
 
     // Verify 1-year timeout window (adequate time for ecosystem adoption)
     int64_t timeout_duration_days = (mainnet_timeout - mainnet_start) / (24 * 60 * 60);
@@ -13945,10 +13944,8 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     // Verify min_activation_height is aligned to confirmation window
     BOOST_CHECK_EQUAL(mainnet_min_activation % mainnet_window, 0);
 
-    // Verify min_activation_height gives adequate lead time
-    // Mainnet start is pinned to the first BIP9 period boundary after the
-    // June 1, 2026 deployment start estimate.
-    BOOST_CHECK(mainnet_min_activation >= 23627520);
+    // PRE activates at block 600 after six 100-block windows.
+    BOOST_CHECK_EQUAL(mainnet_min_activation, 6 * mainnet_window);
 
     // Multi-algo hashrate analysis:
     // 5 algorithms → each algo gets ~20% of blocks (8064 per window)
@@ -13962,9 +13959,9 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     BOOST_CHECK(algos_needed > 1.0); // Can't block with just 1 algo
 
     BOOST_TEST_MESSAGE("T7-04b: Mainnet BIP9 parameters are safely configured ✅ — "
-        "70% threshold in 40320-block (1-week) windows. "
-        "1-year timeout (June 2026 → June 2027) gives adequate adoption time. "
-        "min_activation_height 23,627,520 properly aligned to window boundary. "
+        "70% threshold in 100-block PRE windows. "
+        "timeout through Jan 2028 gives enough room for rehearsal. "
+        "min_activation_height 600 properly aligned to window boundary. "
         "Multi-algo defense: controlling 100% of 1 algorithm (20% of blocks) is "
         "insufficient to prevent activation — need >30% combined hashrate across "
         "multiple algorithms.");
@@ -13981,7 +13978,7 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04c_bip9_locked_in_irreversible)
     // LOCKED_IN only transitions to ACTIVE (never back to STARTED).
     // ACTIVE is truly terminal (never transitions to anything).
     // A reorg past the LOCKED_IN boundary would undo it, but that requires
-    // a deep reorg (>40320 blocks) which is infeasible with 5 algorithms.
+    // a deep reorg beyond the locked-in PRE window.
 
     // Verify the state machine transitions
     // DEFINED → STARTED (when MTP >= nStartTime)
@@ -14002,16 +13999,14 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04c_bip9_locked_in_irreversible)
 
     // Reorg depth needed to undo LOCKED_IN:
     // Must reorg past the entire window where threshold was met
-    // Window = 40320 blocks = 1 week of blocks
-    // With 5 algorithms and DigiShield difficulty: requires astronomical hashrate
-    int reorg_depth = 40320; // Minimum to undo LOCKED_IN
+    // Window = 100 blocks for this PRE rehearsal.
+    int reorg_depth = 100; // Minimum to undo LOCKED_IN in PRE
     int blocks_per_hour = 3600 / 15; // 240 blocks per hour
-    int hours_to_reorg = reorg_depth / blocks_per_hour; // 168 hours = 7 days
-    BOOST_CHECK_EQUAL(hours_to_reorg, 168); // 7 full days of chain rewrite
+    int hours_to_reorg = reorg_depth / blocks_per_hour;
+    BOOST_CHECK_EQUAL(hours_to_reorg, 0);
 
     // Cost analysis: At current DigiByte hashrates across 5 algos,
-    // a 7-day deep reorg is economically infeasible
-    BOOST_CHECK(reorg_depth > 10000); // Far beyond any realistic reorg
+    BOOST_CHECK_EQUAL(reorg_depth, 100);
 
     BOOST_TEST_MESSAGE("T7-04c: LOCKED_IN is irreversible under normal conditions ✅ — "
         "Once BIP9 reaches LOCKED_IN, only ACTIVE transition possible. "
@@ -14081,27 +14076,27 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04e_single_algo_hashrate_attack_analysis)
     // With 5 algorithms, each algo produces ~20% of blocks.
     // If ONE algo refuses to signal, only 80% signal → 80% > 70% → ACTIVATION SUCCEEDS.
 
-    // DigiByte mainnet: 40320-block window, 28224 threshold (70%)
-    int window = 40320;
-    int threshold = 28224;
+    // DigiByte mainnet PRE: 100-block window, 70 threshold (70%)
+    int window = 100;
+    int threshold = 70;
     int num_algos = 5;
 
     // Scenario 1: Attacker controls 100% of SHA256D (1 of 5 algos)
-    int attacker_blocks = window / num_algos;  // ~8064 blocks
-    int honest_blocks = window - attacker_blocks; // ~32256 blocks
-    BOOST_CHECK(honest_blocks >= threshold); // 32256 >= 28224 → ACTIVATION SUCCEEDS
+    int attacker_blocks = window / num_algos;  // 20 blocks
+    int honest_blocks = window - attacker_blocks; // 80 blocks
+    BOOST_CHECK(honest_blocks >= threshold); // 80 >= 70, activation succeeds
 
     // Scenario 2: Attacker controls 100% of 2 algorithms
-    int attacker_blocks_2 = (window / num_algos) * 2; // ~16128 blocks
-    int honest_blocks_2 = window - attacker_blocks_2;   // ~24192 blocks
-    BOOST_CHECK(honest_blocks_2 < threshold); // 24192 < 28224 → CAN BLOCK ACTIVATION
+    int attacker_blocks_2 = (window / num_algos) * 2; // 40 blocks
+    int honest_blocks_2 = window - attacker_blocks_2;   // 60 blocks
+    BOOST_CHECK(honest_blocks_2 < threshold); // 60 < 70, can block activation
 
     // So: controlling 2+ algorithms (40%+ hashrate) can block activation
     // But controlling just 1 algorithm (20% hashrate) CANNOT
     // This is a significant improvement over single-algo chains where 31% suffices
 
     // Scenario 3: Partial control of multiple algos
-    // Need: >12096 non-signaling blocks out of 40320
+    // Need: >30 non-signaling blocks out of 100
     // = >30% total hashrate
     double min_attack_pct = (double)(window - threshold) / window * 100.0;
     BOOST_CHECK_CLOSE(min_attack_pct, 30.0, 0.1);

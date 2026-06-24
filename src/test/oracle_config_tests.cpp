@@ -328,20 +328,20 @@ BOOST_AUTO_TEST_CASE(phase_one_consensus_one_of_one)
 }
 
 /**
- * Test: Phase One No Mainnet Activation
+ * Test: Mainnet PRE Activation
  *
- * Verifies that the oracle system is DISABLED on mainnet during Phase One.
- * Mainnet activation should be set to a very high block height or disabled.
+ * Verifies that the temporary mainnet PRE rehearsal activates with the
+ * compressed DigiDollar schedule.
  */
-BOOST_AUTO_TEST_CASE(phase_one_no_mainnet_activation)
+BOOST_AUTO_TEST_CASE(mainnet_pre_activation)
 {
     SelectParams(ChainType::MAIN);
     const Consensus::Params& consensus = Params().GetConsensus();
     const CChainParams& params = Params();
 
-    // Mainnet oracle should never activate in Phase One
-    // Activation height should be very far in the future
-    BOOST_CHECK(consensus.nDDActivationHeight > 20000000);  // Beyond current chain height
+    BOOST_CHECK_EQUAL(consensus.nDDActivationHeight, 600);
+    BOOST_CHECK_EQUAL(consensus.nOracleActivationHeight, 600);
+    BOOST_CHECK_EQUAL(consensus.nDigiDollarMuSig2Height, 600);
 
     // Verify mainnet has 35 oracle slots configured for future use.
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
@@ -367,20 +367,20 @@ BOOST_AUTO_TEST_CASE(phase_one_no_mainnet_activation)
     // BOOST_CHECK(consensus.vOraclePublicKeys.empty() || !consensus.fOracleEnabled);
 }
 
-BOOST_AUTO_TEST_CASE(mainnet_oracle_endpoints_use_mainnet_p2p_port)
+BOOST_AUTO_TEST_CASE(mainnet_pre_oracle_endpoints_use_pre_p2p_port)
 {
     SelectParams(ChainType::MAIN);
     const CChainParams& params = Params();
     const std::vector<OracleNodeInfo>& oracle_nodes = params.GetOracleNodes();
 
-    BOOST_REQUIRE_EQUAL(params.GetDefaultPort(), 12024);
+    BOOST_REQUIRE_EQUAL(params.GetDefaultPort(), 12046);
     BOOST_REQUIRE_EQUAL(oracle_nodes.size(), 35U);
 
     for (const auto& oracle : oracle_nodes) {
         BOOST_CHECK_MESSAGE(oracle.endpoint.size() >= 6 &&
-                            oracle.endpoint.rfind(":12024") == oracle.endpoint.size() - 6,
+                            oracle.endpoint.rfind(":12046") == oracle.endpoint.size() - 6,
             "Mainnet oracle endpoint for slot " << oracle.id <<
-            " must use mainnet P2P port 12024, got " << oracle.endpoint);
+            " must use PRE P2P port 12046, got " << oracle.endpoint);
     }
 
     SelectParams(ChainType::MAIN);

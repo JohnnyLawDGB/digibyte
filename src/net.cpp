@@ -81,6 +81,24 @@ static constexpr int DNSSEEDS_DELAY_PEER_THRESHOLD = 1000; // "many" vs "few" pe
 /** The default timeframe for -maxuploadtarget. 1 day. */
 static constexpr std::chrono::seconds MAX_UPLOAD_TIMEFRAME{60 * 60 * 24};
 
+static constexpr uint16_t DIGIBYTE_MAINNET_PUBLIC_PORT{12024};
+static constexpr uint16_t DIGIBYTE_MAINNET_PRE_PORT{12046};
+
+static bool IsMainnetPreParams(const CChainParams& params)
+{
+    return params.GetChainType() == ChainType::MAIN && params.GetDefaultPort() == DIGIBYTE_MAINNET_PRE_PORT;
+}
+
+static bool IsBlockedMainnetPreDestination(const CChainParams& params, const char* pszDest, const CAddress& addr)
+{
+    if (!IsMainnetPreParams(params)) return false;
+    if (pszDest == nullptr) return addr.GetPort() == DIGIBYTE_MAINNET_PUBLIC_PORT;
+
+    uint16_t port{0};
+    std::string host;
+    return SplitHostPort(std::string{pszDest}, port, host) && port == DIGIBYTE_MAINNET_PUBLIC_PORT;
+}
+
 // A random time period (0 to 1 seconds) is added to feeler connections to prevent synchronization.
 static constexpr auto FEELER_SLEEP_WINDOW{1s};
 
@@ -2881,6 +2899,11 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         return;
     }
     if (!fNetworkActive) {
+        return;
+    }
+    if (IsBlockedMainnetPreDestination(m_params, pszDest, addrConnect)) {
+        LogPrintf("Mainnet PRE: refusing outbound connection to public mainnet port 12024 (%s)\n",
+                  pszDest ? pszDest : addrConnect.ToStringAddrPort());
         return;
     }
     if (!pszDest) {

@@ -157,7 +157,11 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 // Check if this is mainnet by comparing genesis block hash
                 const bool isMainnet = (consensusParams.hashGenesisBlock == uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496"));
 
-                if (isMainnet) {
+                const bool isMainnetPre = isMainnet &&
+                    consensusParams.nDDActivationHeight == 600 &&
+                    consensusParams.nMinerConfirmationWindow == 100;
+
+                if (isMainnet && !isMainnetPre) {
                     // Only check proof of work for genesis block and checkpoints to speed up loading
                     // This dramatically improves wallet startup time by skipping PoW checks for ~21M blocks
                     // while still validating critical blocks (genesis + checkpoints)

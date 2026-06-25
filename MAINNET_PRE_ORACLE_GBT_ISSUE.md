@@ -2,6 +2,10 @@
 
 Date: 2026-06-25
 
+Update: this file documents the first PRE oracle/GBT issue investigation. A
+broader summary covering the later external miner and pool findings is now in
+`DIGIDOLLAR_MINING_ISSUES_SUMMARY.md`.
+
 ## SHORT ANSWER
 
 In the committed `v9.26.1-pre` mainnet-PRE code at `HEAD=e382064d6a`,

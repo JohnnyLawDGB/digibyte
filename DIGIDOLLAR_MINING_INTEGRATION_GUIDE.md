@@ -1,17 +1,26 @@
 # DigiDollar Mining Integration Guide
 
-This guide explains how CPU miners, solo miners, Stratum pools, and DigiHashV2
-should mine DigiDollar-aware DigiByte blocks.
+This guide is primarily for mining pool operators and pool software developers
+adding DigiDollar support to Stratum, getblocktemplate, or DigiHash-style pool
+software. It also includes a CPU-mining section because the same GBT rules apply
+to solo miners.
+
+It is written for both human operators and AI coding agents. Terms like MUST,
+MUST NOT, and SHOULD are intentional implementation requirements. Do not treat
+them as optional wording when changing mining code.
 
 The short version:
 
 - Old miners can keep mining normal DigiByte blocks safely.
-- DigiDollar-aware miners and pools must explicitly request the
+- DigiDollar-aware pools and miners MUST explicitly request the
   `digidollar-oracle` getblocktemplate rule.
-- When Core returns `default_oracle_commitment`, the miner or pool must copy it
-  into the coinbase as a zero-value output.
+- When Core returns `default_oracle_commitment`, the pool or miner MUST copy it
+  into the coinbase as an exact zero-value output.
+- Pools MUST NOT invent an oracle commitment when Core does not provide one.
 - Pools do not need oracle private keys. They only need an upgraded DigiByte
   node that can provide a fresh oracle-aware block template.
+- Downstream ASIC/GPU miners do not need to understand DigiDollar if the pool
+  builds the coinbase correctly.
 
 Validated locally against:
 
@@ -25,13 +34,54 @@ Validated locally against:
 - DigiHashV2 coin config opt-in:
   `coins/digibyte.{sha256,scrypt,skein,qubit,odo}.json`
 
+## 0. Pool-First Integration Contract
+
+Any pool implementation that wants to mine DigiDollar mints/redeems correctly
+must satisfy this contract.
+
+1. Request DigiDollar-aware GBT from the upstream DigiByte node.
+
+   ```json
+   {"rules":["segwit","digidollar-oracle"]}
+   ```
+
+2. Pass the correct DigiByte algo for the template.
+
+   Direct Core RPC form:
+
+   ```text
+   getblocktemplate(template_request, "scrypt")
+   getblocktemplate(template_request, "sha256d")
+   getblocktemplate(template_request, "skein")
+   getblocktemplate(template_request, "qubit")
+   getblocktemplate(template_request, "odo")
+   ```
+
+   One-daemon-per-algo deployments are also valid when each daemon has the
+   correct `algo=<algo>` configured.
+
+3. If the template contains `default_oracle_commitment`, add that exact script
+   to the generated coinbase as a zero-value output.
+
+4. If the template does not contain `default_oracle_commitment`, do not create
+   one. Mine the normal template or wait for the next template.
+
+5. Use template `txid` values for merkle leaves when they are present. Use raw
+   transaction `data` in the final serialized block.
+
+6. Submit the full block with the preserved oracle commitment.
+
+For AI agents implementing this in a new pool: add tests for every MUST above
+before changing production mining code. The minimum test list is in
+[TDD Requirements](#9-tdd-requirements).
+
 ## 1. What Changed
 
 DigiDollar mint and redeem transactions require a fresh oracle price. The
 oracle price is committed into the block coinbase through an `OP_ORACLE`
 commitment output.
 
-That means a block producer must do two things:
+That means a block producer, and especially a pool server, must do two things:
 
 1. Ask DigiByte Core for a DigiDollar-aware block template.
 2. Preserve the oracle commitment in the coinbase when Core provides it.
@@ -75,7 +125,7 @@ Core advertises this in the returned `rules` array as:
 "!digidollar-oracle"
 ```
 
-The `!` means the miner must understand and preserve that rule.
+The `!` means the miner or pool must understand and preserve that rule.
 
 ## 2. Direct Core GBT Calls
 
@@ -105,9 +155,9 @@ When oracle data is ready, the response should include:
 "default_oracle_commitment": "<hex script>"
 ```
 
-That hex is the exact scriptPubKey for a zero-value coinbase output. Do not
-decode and rebuild it unless your code already has a safe script parser. The
-simple and correct behavior is to copy it exactly.
+That hex is the exact scriptPubKey for a zero-value coinbase output. Pool code
+SHOULD copy it exactly as script bytes. Do not decode and rebuild it unless your
+code already has a safe script parser.
 
 If `default_oracle_commitment` is absent:
 
@@ -115,18 +165,19 @@ If `default_oracle_commitment` is absent:
 - Do not force mint/redeem transactions into the block.
 - Mine the returned template as a normal block, or wait for the next template.
 
-Core is responsible for excluding oracle-priced DigiDollar transactions when a
-fresh bundle is not ready.
+Core is responsible for excluding oracle-priced DigiDollar transactions from GBT
+when a fresh bundle is not ready. Pool software MUST NOT override that decision
+by forcing mint/redeem transactions into a no-oracle template.
 
 ## 3. Coinbase Requirements
 
-A DigiDollar-aware miner or pool that builds its own coinbase must preserve
+A DigiDollar-aware pool or miner that builds its own coinbase must preserve
 these template commitments:
 
 - `default_witness_commitment`, when present
 - `default_oracle_commitment`, when present
 
-Each commitment must be included as a zero-value coinbase output.
+Each commitment MUST be included as a zero-value coinbase output.
 
 Pseudo-code:
 
@@ -142,10 +193,12 @@ if template.default_oracle_commitment exists:
     outputs.append(value=0, scriptPubKey=hex_to_bytes(template.default_oracle_commitment))
 ```
 
-Output order is less important than preserving the exact scripts, but do not
-drop either commitment.
+Do not drop either commitment. If the template ever provides a complete
+`coinbasetxn`, preserve it according to normal BIP22 rules instead of rebuilding
+it casually. DigiDollar-aware DigiByte Core templates are designed for
+miner-built coinbases using `coinbasevalue` plus explicit commitment fields.
 
-The pool must also build the merkle root correctly:
+The pool MUST also build the merkle root correctly:
 
 - Use each template transaction's `txid` for the merkle leaf when `txid` is
   provided.
@@ -211,11 +264,11 @@ A Stratum pool has two sides:
 - Upstream side: pool asks DigiByte Core for work through GBT.
 - Downstream side: miners connect to the pool using Stratum.
 
-Most ASIC/GPU miners do not need to know about DigiDollar. The pool server must
+Most ASIC/GPU miners do not need to know about DigiDollar. The pool server MUST
 know about DigiDollar because the pool server builds the coinbase and the block
 template.
 
-Required upstream GBT behavior:
+Required upstream GBT behavior from the pool to DigiByte Core:
 
 ```json
 {
@@ -238,7 +291,7 @@ Another valid deployment pattern is one daemon per algo with `algo=<algo>` in
 each daemon's `digibyte.conf`. In that setup the pool can call GBT without the
 second algo argument because each daemon already defaults to the correct algo.
 
-Required coinbase behavior:
+Required pool coinbase behavior:
 
 - Add pool payout output.
 - Preserve witness commitment if present.
@@ -246,13 +299,14 @@ Required coinbase behavior:
 - Add normal pool recipients/fees as before.
 - Submit the final serialized block with `submitblock`.
 
-Do not require every downstream miner to upgrade. The pool controls the coinbase
-and GBT request; downstream ASIC/GPU miners only need valid Stratum jobs for
-their algo.
+Do not require every downstream miner to upgrade. The pool controls the upstream
+GBT request and the coinbase. Downstream ASIC/GPU miners only need valid Stratum
+jobs for their algo.
 
 ## 6. node-stratum-pool Pattern
 
-The patched node-stratum-pool implementation uses a strict boolean coin config:
+The patched node-stratum-pool implementation is the reference pool pattern in
+this repository set. It uses a strict boolean coin config:
 
 ```json
 "digidollar": true
@@ -437,7 +491,79 @@ If no oracle bundle is ready:
 - mint/redeem transactions that need a fresh price should not appear
 - normal DigiByte mining can continue
 
-## 9. TDD Requirements
+## 9. Code Validation Evidence
+
+The integration contract above is backed by focused tests in the current code.
+Use these when auditing or porting the logic to another pool.
+
+### DigiByte Core
+
+Command:
+
+```bash
+test/functional/digidollar_gbt_optin.py
+test/functional/digidollar_oracle_gbt_stale_cache.py
+```
+
+What these prove:
+
+- Legacy GBT requests with `["segwit"]` do not receive
+  `default_oracle_commitment`.
+- Legacy GBT requests do not receive oracle-priced mint/redeem transactions.
+- DigiDollar-aware GBT requests with `["segwit","digidollar-oracle"]` receive
+  `default_oracle_commitment` when a fresh oracle bundle is ready.
+- DigiDollar-aware GBT includes pending mint/redeem transactions only when the
+  oracle commitment is valid.
+- Stale oracle commitments are not reused.
+- Legacy and DigiDollar-aware GBT templates are cached separately.
+
+### cpuminer-multi
+
+Command:
+
+```bash
+python3 tests/test_gbt_regressions.py
+```
+
+What this proves:
+
+- `--digidollar` requests `["segwit","digidollar-oracle"]`.
+- Normal cpuminer mode keeps legacy `["segwit"]` behavior.
+- Miner-built coinbases preserve `default_oracle_commitment`.
+- BIP34 coinbase height encoding is minimal and valid.
+- Merkle leaves use template `txid` when provided.
+
+### node-stratum-pool
+
+Command:
+
+```bash
+node lib/test.js
+```
+
+What this proves:
+
+- `coin.digidollar === true` requests `["segwit","digidollar-oracle"]`.
+- Missing, false, or string `"true"` does not opt in.
+- `default_oracle_commitment` is copied into coinbase exactly once.
+- The oracle output is zero value.
+- The pool does not invent an oracle output when GBT does not provide one.
+
+### DigiHashV2
+
+Command:
+
+```bash
+node test/digidollar-coin-config-smoke.test.js
+```
+
+What this proves:
+
+- All five DigiByte mainnet coin configs opt in with `digidollar: true`.
+- Unrelated example coin configs do not opt in accidentally.
+- DigiHashV2's config layer is ready to drive the patched stratum-pool logic.
+
+## 10. TDD Requirements
 
 Minimum tests for a correct integration:
 
@@ -474,7 +600,7 @@ Minimum tests for a correct integration:
 7. Non-DigiDollar coin safety test
    - Verify unrelated coin configs do not request `digidollar-oracle`.
 
-## 10. Common Failure Modes
+## 11. Common Failure Modes
 
 ### Miner Does Not Ask For `digidollar-oracle`
 
@@ -528,7 +654,7 @@ Fix:
 - Reinstall dependencies.
 - Re-run the pool's DigiDollar GBT and coinbase tests.
 
-## 11. Plain-English Summary
+## 12. Plain-English Summary
 
 DigiDollar mining does not require every miner on the network to be an oracle.
 It also does not require every old miner to upgrade immediately.

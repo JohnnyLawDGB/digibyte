@@ -33,6 +33,7 @@ CPUMINER_BIN="${CPUMINER_BIN:-$HOME/Code/cpuminer-multi/cpuminer}"
 CPUMINER_THREADS="${CPUMINER_THREADS:-$(command -v nproc >/dev/null && nproc || printf '4')}"
 CPUMINER_BLOCK_TIMEOUT="${CPUMINER_BLOCK_TIMEOUT:-900}"
 USE_CPUMINER="${USE_CPUMINER:-0}"
+CPUMINER_DIGIDOLLAR="${CPUMINER_DIGIDOLLAR:-1}"
 CORE_RACE_TRIES="${CORE_RACE_TRIES:-50000}"
 CORE_RACE_TRIES_SCRYPT="${CORE_RACE_TRIES_SCRYPT:-50000}"
 CORE_RACE_TRIES_SHA256D="${CORE_RACE_TRIES_SHA256D:-500000}"
@@ -454,6 +455,12 @@ miner_node_for_algo() {
     esac
 }
 
+cpuminer_digidollar_args() {
+    if [ "$CPUMINER_DIGIDOLLAR" = "1" ]; then
+        printf '%s\n' '--digidollar'
+    fi
+}
+
 mine_one_block_with_cpuminer() {
     local miner_addr="$1"
     local old_height="$2"
@@ -478,6 +485,7 @@ mine_one_block_with_cpuminer() {
         --no-getwork \
         --no-longpoll \
         --no-color \
+        $(cpuminer_digidollar_args) \
         --threads="$CPUMINER_THREADS" \
         > "$log_file" 2>&1 &
     pid="$!"
@@ -795,6 +803,7 @@ run_self_tests() {
     assert_equal "$CORE_RACE_TRIES_GROESTL" "$(core_race_tries_for_algo groestl)" "groestl try window"
     assert_equal "$CORE_RACE_TRIES_ODO" "$(core_race_tries_for_algo odo)" "odo try window"
     assert_equal "$CORE_RACE_TRIES_SCRYPT" "$(core_race_tries_for_algo scrypt)" "scrypt try window"
+    assert_equal "--digidollar" "$(cpuminer_digidollar_args)" "cpuminer DD-aware GBT flag"
     log "SELF_TEST=1: schedule and mining-window checks passed"
 }
 

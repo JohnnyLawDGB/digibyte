@@ -73,7 +73,7 @@ must satisfy this contract.
 
 For AI agents implementing this in a new pool: add tests for every MUST above
 before changing production mining code. The minimum test list is in
-[TDD Requirements](#9-tdd-requirements).
+[TDD Requirements](#10-tdd-requirements).
 
 ## 1. What Changed
 

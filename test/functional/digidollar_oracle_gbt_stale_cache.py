@@ -6,7 +6,6 @@
 
 import time
 
-from test_framework.blocktools import NORMAL_GBT_REQUEST_PARAMS
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import (
     assert_equal,
@@ -18,6 +17,7 @@ ACTIVATION_HEIGHT = 200
 REGTEST_CONFIRMATION_WINDOW = 144
 ORACLE_MAX_AGE_SECONDS = 3600
 ORACLE_PRICE_MICRO_USD = 500_000
+DD_AWARE_GBT_REQUEST_PARAMS = {"rules": ["segwit", "digidollar-oracle"]}
 
 
 class DigiDollarOracleGBTStaleCacheTest(DigiByteTestFramework):
@@ -65,17 +65,17 @@ class DigiDollarOracleGBTStaleCacheTest(DigiByteTestFramework):
         mint = node.mintdigidollar(100_000, 0)
         dd_txid = mint["txid"]
 
-        fresh_template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+        fresh_template = node.getblocktemplate(DD_AWARE_GBT_REQUEST_PARAMS)
         assert dd_txid in self.template_txids(fresh_template)
         assert "default_oracle_commitment" in fresh_template
-        assert "coinbasetxn" in fresh_template
+        assert "coinbasetxn" not in fresh_template
 
         self.log.info("Age the cached template past the oracle freshness window without changing tip or mempool")
         future_time = int(time.time()) + ORACLE_MAX_AGE_SECONDS + 120
         node.enablemockoracle(False)
         node.setmocktime(future_time)
 
-        stale_template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+        stale_template = node.getblocktemplate(DD_AWARE_GBT_REQUEST_PARAMS)
         assert_equal(stale_template["previousblockhash"], fresh_template["previousblockhash"])
         assert_greater_than(stale_template["curtime"] - fresh_template["curtime"], ORACLE_MAX_AGE_SECONDS)
 

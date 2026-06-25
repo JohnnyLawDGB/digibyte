@@ -164,11 +164,15 @@ public:
         // Configuration parameters for the block size
         size_t nBlockMaxWeight{DEFAULT_BLOCK_MAX_WEIGHT};
         CFeeRate blockMinFeeRate{DEFAULT_BLOCK_MIN_TX_FEE};
+        // External legacy GBT callers can opt out of oracle-priced DD work.
+        bool include_oracle_priced_digidollar_txs{true};
+        bool include_oracle_bundle{true};
         // Whether to call TestBlockValidity() at the end of CreateNewBlock().
         bool test_block_validity{true};
         // Test hook executed immediately before TestBlockValidity().
         std::function<void()> on_before_test_block_validity{};
     };
+    static Options DefaultOptions();
 
     explicit BlockAssembler(Chainstate& chainstate, const CTxMemPool* mempool);
     explicit BlockAssembler(Chainstate& chainstate, const CTxMemPool* mempool, const Options& options);

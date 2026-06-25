@@ -131,7 +131,7 @@ void ApplyArgsManOptions(const ArgsManager& args, BlockAssembler::Options& optio
         if (const auto parsed{ParseMoney(*blockmintxfee)}) options.blockMinFeeRate = CFeeRate{*parsed};
     }
 }
-static BlockAssembler::Options ConfiguredOptions()
+BlockAssembler::Options BlockAssembler::DefaultOptions()
 {
     BlockAssembler::Options options;
     ApplyArgsManOptions(gArgs, options);
@@ -139,7 +139,7 @@ static BlockAssembler::Options ConfiguredOptions()
 }
 
 BlockAssembler::BlockAssembler(Chainstate& chainstate, const CTxMemPool* mempool)
-    : BlockAssembler(chainstate, mempool, ConfiguredOptions()) {}
+    : BlockAssembler(chainstate, mempool, DefaultOptions()) {}
 
 void BlockAssembler::resetBlock()
 {
@@ -265,6 +265,13 @@ bool BlockAssembler::ValidateDDForBlockInclusion(const CTransaction& tx, const C
     }
 
     const bool needs_oracle_price = TransactionNeedsOraclePriceForMiner(tx);
+    if (needs_oracle_price && !m_options.include_oracle_priced_digidollar_txs) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "CreateNewBlock(): skipping oracle-priced DD tx %s because the mining policy did not opt into DigiDollar oracle commitments\n",
+                 tx.GetHash().ToString());
+        return false;
+    }
+
     if (!needs_oracle_price) {
         DigiDollar::ValidationContext dd_context(
             block_height,
@@ -523,7 +530,8 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     // Stamp a fresh MuSig2 oracle bundle when available after DigiDollar activation.
     // Price-dependent DD operations (mint/redeem) require it. Price-independent
     // DD transfers do not; they must keep flowing during oracle outages.
-    if (DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman)) {
+    if (m_options.include_oracle_bundle &&
+        DigiDollar::IsDigiDollarEnabled(pindexPrev, m_chainstate.m_chainman)) {
         OracleBundleManager& oracle_manager = OracleBundleManager::GetInstance();
         const bool block_needs_oracle_price = BlockNeedsOraclePriceForMiner(*pblock);
         if (oracle_manager.AddOracleBundleToBlock(*pblock, nHeight)) {

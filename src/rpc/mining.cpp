@@ -55,6 +55,8 @@ using node::UpdateTime;
 // DigiByte: Default mining algorithm
 extern int miningAlgo;
 
+static const std::string DIGIDOLLAR_ORACLE_GBT_RULE{"digidollar-oracle"};
+
 static bool BlockTemplateHasExpiredOracleCommitment(const CBlock& block)
 {
     if (block.vtx.empty() || !block.vtx[0] || !block.vtx[0]->IsCoinBase()) {
@@ -934,11 +936,14 @@ static RPCHelpMan getblocktemplate()
         throw JSONRPCError(RPC_INVALID_PARAMETER, "getblocktemplate must be called with the segwit rule set (call with {\"rules\": [\"segwit\"]})");
     }
 
+    const bool client_supports_digidollar_oracle = setClientRules.count(DIGIDOLLAR_ORACLE_GBT_RULE) != 0;
+
     // Update block
     static CBlockIndex* pindexPrev;
     static int64_t time_start;
     static std::unique_ptr<CBlockTemplate> pblocktemplate;
     static int lastAlgo;  // DigiByte: Track algorithm changes
+    static bool lastDigiDollarOracleAware;
     auto rebuild_template = [&]() {
         // Clear pindexPrev so future calls make a new block, despite any failures from here on
         pindexPrev = nullptr;
@@ -948,10 +953,14 @@ static RPCHelpMan getblocktemplate()
         CBlockIndex* pindexPrevNew = active_chain.Tip();
         time_start = GetTime();
         lastAlgo = algo;  // DigiByte: Store current algorithm
+        lastDigiDollarOracleAware = client_supports_digidollar_oracle;
 
         // Create new block
         CScript scriptDummy = CScript() << OP_TRUE;
-        pblocktemplate = BlockAssembler{active_chainstate, &mempool}.CreateNewBlock(scriptDummy, algo);
+        auto options{BlockAssembler::DefaultOptions()};
+        options.include_oracle_priced_digidollar_txs = client_supports_digidollar_oracle;
+        options.include_oracle_bundle = client_supports_digidollar_oracle;
+        pblocktemplate = BlockAssembler{active_chainstate, &mempool, options}.CreateNewBlock(scriptDummy, algo);
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 
@@ -961,7 +970,8 @@ static RPCHelpMan getblocktemplate()
 
     if (pindexPrev != active_chain.Tip() ||
         (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5) ||
-        algo != lastAlgo)  // DigiByte: Regenerate template if algorithm changed
+        algo != lastAlgo ||
+        client_supports_digidollar_oracle != lastDigiDollarOracleAware)
     {
         rebuild_template();
     }
@@ -1037,6 +1047,16 @@ static RPCHelpMan getblocktemplate()
     UniValue result(UniValue::VOBJ);
     result.pushKV("capabilities", aCaps);
 
+    bool has_oracle_commitment = false;
+    for (const auto& out : pblock->vtx[0]->vout) {
+        if (out.scriptPubKey.size() >= 2 &&
+            out.scriptPubKey[0] == OP_RETURN &&
+            out.scriptPubKey[1] == OP_ORACLE) {
+            has_oracle_commitment = true;
+            break;
+        }
+    }
+
     UniValue aRules(UniValue::VARR);
     aRules.push_back("csv");
     if (!fPreSegWit) aRules.push_back("!segwit");
@@ -1044,6 +1064,9 @@ static RPCHelpMan getblocktemplate()
         // indicate to miner that they must understand signet rules
         // when attempting to mine with this template
         aRules.push_back("!signet");
+    }
+    if (has_oracle_commitment) {
+        aRules.push_back(strprintf("!%s", DIGIDOLLAR_ORACLE_GBT_RULE));
     }
 
     UniValue vbavailable(UniValue::VOBJ);
@@ -1094,30 +1117,6 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("transactions", transactions);
     result.pushKV("coinbaseaux", aux);
-
-    // Serve full pre-built coinbase transaction when oracle data is present.
-    // Serialized WITHOUT witness so miners compute the correct txid for the
-    // merkle root. The witness nonce is re-added by UpdateUncommittedBlockStructures
-    // when the block is submitted. This ensures MuSig2 oracle bundle data reaches
-    // mined blocks without requiring
-    // any mining software changes — miners that support coinbasetxn (BIP 22)
-    // use it as-is instead of building their own coinbase.
-    {
-        bool has_oracle = false;
-        for (const auto& out : pblock->vtx[0]->vout) {
-            if (out.scriptPubKey.size() >= 2 &&
-                out.scriptPubKey[0] == OP_RETURN &&
-                out.scriptPubKey[1] == OP_ORACLE) {
-                has_oracle = true;
-                break;
-            }
-        }
-        if (has_oracle) {
-            UniValue coinbasetxn(UniValue::VOBJ);
-            coinbasetxn.pushKV("data", EncodeHexTx(*pblock->vtx[0], SERIALIZE_TRANSACTION_NO_WITNESS));
-            result.pushKV("coinbasetxn", coinbasetxn);
-        }
-    }
 
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     result.pushKV("longpollid", active_chain.Tip()->GetBlockHash().GetHex() + ToString(nTransactionsUpdatedLast));

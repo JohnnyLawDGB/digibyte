@@ -297,6 +297,7 @@ BASE_SCRIPTS = [
     'digidollar_oracle_signers.py',
     'digidollar_listoracle_schema.py',
     'digidollar_oracle_keygen.py',
+    'digidollar_gbt_optin.py',
     'digidollar_oracle_gbt_stale_cache.py',
     'digidollar_oracle_reorg_cache.py',
     'digidollar_oracle_rpc_staleness.py',

@@ -34,6 +34,35 @@ Validated locally against:
 - DigiHashV2 coin config opt-in:
   `coins/digibyte.{sha256,scrypt,skein,qubit,odo}.json`
 
+## Public Code Examples
+
+Use these repos as the working examples for DigiDollar-aware mining support.
+They are listed here so pool operators and AI coding agents can compare their
+own code against known-good implementations instead of guessing from the GBT
+description alone.
+
+| Component | Purpose | Reference |
+| --- | --- | --- |
+| `cpuminer-multi` | Solo CPU mining against Core GBT. Shows `--digidollar`, the `digidollar-oracle` rules request, and coinbase preservation of `default_oracle_commitment`. | https://github.com/JaredTate/cpuminer-multi/tree/8cfa8609e467c7d37f588246332065e1460612a6 |
+| `node-stratum-pool` | Pool-server reference for Stratum mining. Shows strict `coin.digidollar === true` opt-in, DigiDollar-aware GBT requests, and oracle commitment output construction. | https://github.com/JaredTate/node-stratum-pool/tree/433d38ad5a20a6cdae95457eb8a76820e4a28c95 |
+| `digihashv2` | DigiHash-style pool configuration example. Shows five DigiByte mainnet algo coin configs with `digidollar: true`. | https://github.com/JaredTate/digihashv2/tree/90be40bcc6a906c5519938c1f961ac3d4c860ba5 |
+
+Important files to review:
+
+- cpuminer: `cpu-miner.c`, `README.md`,
+  `tests/test_gbt_regressions.py`
+- node-stratum-pool: `lib/pool.js`, `lib/transactions.js`,
+  `lib/test.js`
+- DigiHashV2: `coins/digibyte.sha256.json`,
+  `coins/digibyte.scrypt.json`, `coins/digibyte.skein.json`,
+  `coins/digibyte.qubit.json`, `coins/digibyte.odo.json`,
+  `test/digidollar-coin-config-smoke.test.js`
+
+For a release, do not only copy the config flag. Verify the installed pool
+dependency actually resolves to a patched `node-stratum-pool` that supports
+`default_oracle_commitment`. A DigiHashV2 config with `digidollar: true` is not
+enough if `node-stratum-pool` is still pinned to an older commit.
+
 ## 0. Pool-First Integration Contract
 
 Any pool implementation that wants to mine DigiDollar mints/redeems correctly

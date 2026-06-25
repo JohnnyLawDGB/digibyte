@@ -217,7 +217,10 @@ Pool and miner software requirements:
 - Preserve `default_witness_commitment` and `default_oracle_commitment` as zero-value coinbase outputs when they are present.
 - Do not include DigiDollar mint/redeem transactions from outside the returned template when Core did not provide `default_oracle_commitment`.
 - Downstream ASIC/GPU workers do not need oracle private keys. The pool server or solo miner builds the correct coinbase from Core's template.
-- See `DIGIDOLLAR_MINING_INTEGRATION_GUIDE.md` for pool, Stratum, cpuminer, and DigiHash integration rules.
+- See `DIGIDOLLAR_MINING_INTEGRATION_GUIDE.md` for pool, Stratum, cpuminer, DigiHashV2, and node-stratum-pool integration rules, including public reference-code links to:
+  - `https://github.com/JaredTate/cpuminer-multi`
+  - `https://github.com/JaredTate/node-stratum-pool`
+  - `https://github.com/JaredTate/digihashv2`
 
 This keeps fork risk low: old miners continue producing valid normal blocks, while upgraded DigiDollar-aware miners and pools have a deterministic path to mine mints/redeems with the correct oracle bundle.
 
@@ -319,7 +322,7 @@ Known local validation for the PRE code line:
 | CPU mining rehearsal | PASS: separate CPU miners proved sha256d, scrypt, Groestl/Myriad-Groestl, skein, and qubit block production before the Odocrypt gate; post-Odo mining continued to activation |
 | DigiDollar GBT opt-in | PASS: `test/functional/digidollar_gbt_optin.py` proves legacy GBT stays safe while DigiDollar-aware GBT returns `default_oracle_commitment` and includes oracle-priced DD work |
 | Stale oracle GBT cache | PASS: `test/functional/digidollar_oracle_gbt_stale_cache.py` proves stale oracle-bearing templates are rebuilt and stale mint/redeem work is stripped when no fresh bundle is available |
-| Mining integration guide | PASS: `DIGIDOLLAR_MINING_INTEGRATION_GUIDE.md` documents the pool/cpuminer/GBT requirements for preserving `default_oracle_commitment` |
+| Mining integration guide | PASS: `DIGIDOLLAR_MINING_INTEGRATION_GUIDE.md` documents the pool/cpuminer/GBT requirements for preserving `default_oracle_commitment` and links the public cpuminer, node-stratum-pool, and DigiHashV2 reference repos |
 | DigiDollar BIP9 live state | PASS: observed `started`, `locked_in`, and `active`; live PRE chain reached height 605 with `enabled=true`, `status=active`, 35 oracle slots, and 7-signature quorum |
 | DigiSwarm oracle wallet | PASS/PENDING: wallet loaded, configured, and authorized for slot 15 with the expected mainnet key; runtime start is pending wallet unlock with `walletpassphrase` |
 

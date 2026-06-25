@@ -6,15 +6,20 @@
 
 #include <chainparams.h>
 #include <crypto/sha256.h>
+#include <hash.h>
+#include <oracle/bundle_manager.h>
 #include <oracle/musig2_aggregator.h>
 #include <oracle/musig2_messages.h>
 #include <oracle/signing_orchestrator.h>
 #include <primitives/block.h>
 #include <primitives/oracle.h>
 #include <test/util/setup_common.h>
+#include <util/time.h>
 
 #include <secp256k1.h>
 #include <secp256k1_musig.h>
+
+#include <algorithm>
 
 BOOST_FIXTURE_TEST_SUITE(musig2_signing_orchestration_tests, RegTestingSetup)
 
@@ -48,6 +53,54 @@ static uint256 UniqueMusigTestHash(uint64_t value)
         hash.begin()[i] = static_cast<unsigned char>((value >> (8 * i)) & 0xff);
     }
     return hash;
+}
+
+static std::vector<uint8_t> SortMusigTestIdsBySeed(std::vector<uint8_t> ids,
+                                                   int32_t epoch,
+                                                   const uint256& seed)
+{
+    std::sort(ids.begin(), ids.end(), [&](uint8_t a, uint8_t b) {
+        const uint256 score_a = GetOracleEpochSelectionHash(epoch, a, seed);
+        const uint256 score_b = GetOracleEpochSelectionHash(epoch, b, seed);
+        if (score_a == score_b) return a < b;
+        return score_a < score_b;
+    });
+    return ids;
+}
+
+static uint256 ComputeMusigTestQuoteSetHash(int32_t epoch,
+                                            const std::vector<COraclePriceMessage>& messages)
+{
+    std::vector<COraclePriceMessage> sorted = messages;
+    std::sort(sorted.begin(), sorted.end(), [](const COraclePriceMessage& a,
+                                               const COraclePriceMessage& b) {
+        return a.oracle_id < b.oracle_id;
+    });
+
+    CHashWriter hasher(0);
+    hasher << std::string("DigiDollar/MuSig2QuoteSet/v1");
+    hasher << Params().GetConsensus().hashGenesisBlock;
+    hasher << epoch;
+    for (const COraclePriceMessage& msg : sorted) {
+        hasher << msg.oracle_id;
+        hasher << msg.price_micro_usd;
+        hasher << msg.timestamp;
+        hasher << msg.oracle_pubkey;
+        hasher << msg.schnorr_sig;
+    }
+    return hasher.GetHash();
+}
+
+static COraclePriceMessage MakeSignedMusigPriceEvidence(uint8_t oracle_id,
+                                                        uint64_t price,
+                                                        int64_t timestamp)
+{
+    CKey key = GetRegtestMusigOracleKey(oracle_id);
+    COraclePriceMessage msg(oracle_id, price, timestamp);
+    msg.oracle_pubkey = XOnlyPubKey(key.GetPubKey());
+    BOOST_REQUIRE(msg.SignAttestation(key));
+    BOOST_REQUIRE(msg.VerifyAttestation());
+    return msg;
 }
 
 static OracleMusigNonceMsg MakeSignedMusigNonceMsg(int32_t epoch, uint8_t oracle_id)
@@ -163,6 +216,152 @@ static std::vector<OracleMusigPartialSigMsg> MakeThresholdPartialSigMessages(
 
     secp256k1_context_destroy(ctx);
     return partials;
+}
+
+struct PassiveMuSig2Transcript {
+    std::vector<OracleMusigNonceMsg> nonce_msgs;
+    OracleMusigContextMsg context_msg;
+    std::vector<OracleMusigPartialSigMsg> partial_sig_msgs;
+    uint64_t price{0};
+    int64_t timestamp{0};
+    int32_t tick_height{0};
+};
+
+static PassiveMuSig2Transcript MakePassiveThresholdTranscript(int32_t epoch)
+{
+    const uint8_t threshold = static_cast<uint8_t>(Params().GetConsensus().nOracleConsensusRequired);
+    const int32_t epoch_length = Params().GetConsensus().nDDOracleEpochBlocks;
+    const uint256 seed = Params().GetConsensus().hashGenesisBlock;
+    const uint64_t price = 50000;
+    const int64_t timestamp = GetTime();
+
+    std::vector<uint8_t> all_ids = GetActiveOracleIdsForMusigTest();
+    BOOST_REQUIRE_GE(all_ids.size(), threshold);
+    std::vector<uint8_t> participant_ids = SortMusigTestIdsBySeed(all_ids, epoch, seed);
+    participant_ids.resize(threshold);
+
+    MuSig2OracleAggregator aggregator;
+    secp256k1_xonly_pubkey full_agg_pk;
+    secp256k1_musig_keyagg_cache full_keyagg_cache;
+    BOOST_REQUIRE(aggregator.ComputeAggregatePubkey(all_ids, full_agg_pk, full_keyagg_cache));
+
+    secp256k1_xonly_pubkey participant_agg_pk;
+    secp256k1_musig_keyagg_cache participant_keyagg_cache;
+    BOOST_REQUIRE(aggregator.ComputeAggregatePubkey(participant_ids,
+                                                    participant_agg_pk,
+                                                    participant_keyagg_cache));
+
+    MuSig2SigningSession signing_session(epoch, threshold);
+    signing_session.SetEpochSelectionSeed(seed);
+
+    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    BOOST_REQUIRE(ctx);
+
+    std::vector<OracleMusigNonceMsg> nonce_msgs;
+    nonce_msgs.reserve(participant_ids.size());
+    for (uint8_t oracle_id : participant_ids) {
+        CKey key = GetRegtestMusigOracleKey(oracle_id);
+        CPubKey pubkey = key.GetPubKey();
+
+        secp256k1_pubkey secp_pubkey;
+        BOOST_REQUIRE(secp256k1_ec_pubkey_parse(ctx, &secp_pubkey, pubkey.data(), pubkey.size()));
+
+        secp256k1_musig_pubnonce pubnonce;
+        BOOST_REQUIRE(signing_session.GenerateNonce(oracle_id,
+                                                    key,
+                                                    secp_pubkey,
+                                                    full_keyagg_cache,
+                                                    pubnonce));
+        BOOST_REQUIRE(signing_session.AddPubnonce(oracle_id, pubnonce));
+
+        OracleMusigNonceMsg msg;
+        msg.epoch = epoch;
+        msg.attempt_id = static_cast<uint8_t>(signing_session.GetAttemptId());
+        msg.oracle_id = oracle_id;
+        msg.pubnonce.resize(66);
+        BOOST_REQUIRE(secp256k1_musig_pubnonce_serialize(ctx, msg.pubnonce.data(), &pubnonce));
+        BOOST_REQUIRE(msg.Sign(key));
+        nonce_msgs.push_back(std::move(msg));
+    }
+
+    BOOST_REQUIRE_EQUAL(signing_session.GetState(), MuSig2SessionState::NONCES_COMPLETE);
+
+    std::vector<COraclePriceMessage> price_evidence;
+    price_evidence.reserve(participant_ids.size());
+    for (uint8_t oracle_id : participant_ids) {
+        price_evidence.push_back(MakeSignedMusigPriceEvidence(oracle_id, price, timestamp));
+    }
+
+    COracleBundle evidence_bundle;
+    evidence_bundle.messages = price_evidence;
+    const CAmount consensus_price =
+        OracleBundleManager::CalculateConsensusPrice(evidence_bundle, Params().GetConsensus());
+    BOOST_REQUIRE_EQUAL(consensus_price, static_cast<CAmount>(price));
+
+    unsigned char msg32[32];
+    OracleSigningOrchestrator::ComputeOracleMessageHash(epoch, price, timestamp, msg32);
+
+    uint256 nonce_set_hash;
+    uint256 context_id;
+    BOOST_REQUIRE(signing_session.ComputeContextIdForParticipants(participant_ids,
+                                                                  msg32,
+                                                                  nonce_set_hash,
+                                                                  context_id));
+
+    const uint8_t proposer_id = SortMusigTestIdsBySeed(all_ids, epoch, seed).front();
+    OracleMusigContextMsg context_msg;
+    context_msg.epoch = epoch;
+    context_msg.attempt_id = static_cast<uint8_t>(signing_session.GetAttemptId());
+    context_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+    context_msg.epoch_selection_seed = seed;
+    context_msg.proposer_id = proposer_id;
+    context_msg.participant_ids = participant_ids;
+    context_msg.nonce_set_hash = nonce_set_hash;
+    context_msg.quote_set_hash = ComputeMusigTestQuoteSetHash(epoch, price_evidence);
+    context_msg.consensus_price = price;
+    context_msg.consensus_timestamp = timestamp;
+    context_msg.session_context_id = context_id;
+    context_msg.nonce_evidence = nonce_msgs;
+    context_msg.price_evidence = price_evidence;
+    BOOST_REQUIRE(context_msg.Sign(GetRegtestMusigOracleKey(proposer_id)));
+    BOOST_REQUIRE(context_msg.IsValid());
+
+    signing_session.SetSignedValues(price, timestamp);
+    BOOST_REQUIRE(signing_session.TrimNoncesToParticipants(participant_ids));
+    signing_session.SetKeyAggCache(participant_keyagg_cache);
+    BOOST_REQUIRE(signing_session.AggregateNonces(msg32));
+    BOOST_REQUIRE(context_id == signing_session.GetSessionContextId());
+
+    std::vector<OracleMusigPartialSigMsg> partials;
+    partials.reserve(participant_ids.size());
+    for (uint8_t oracle_id : participant_ids) {
+        CKey key = GetRegtestMusigOracleKey(oracle_id);
+
+        secp256k1_musig_partial_sig partial_sig;
+        BOOST_REQUIRE(signing_session.CreatePartialSignature(oracle_id, key, partial_sig));
+
+        OracleMusigPartialSigMsg msg;
+        msg.epoch = epoch;
+        msg.attempt_id = static_cast<uint8_t>(signing_session.GetAttemptId());
+        msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+        msg.session_context_id = context_id;
+        msg.oracle_id = oracle_id;
+        msg.partial_sig.resize(32);
+        BOOST_REQUIRE(secp256k1_musig_partial_sig_serialize(ctx, msg.partial_sig.data(), &partial_sig));
+        BOOST_REQUIRE(msg.Sign(key));
+        partials.push_back(std::move(msg));
+    }
+
+    secp256k1_context_destroy(ctx);
+
+    PassiveMuSig2Transcript transcript;
+    transcript.nonce_msgs = std::move(nonce_msgs);
+    transcript.context_msg = std::move(context_msg);
+    transcript.partial_sig_msgs = std::move(partials);
+    transcript.price = price;
+    transcript.timestamp = timestamp;
+    transcript.tick_height = epoch * epoch_length + 2;
+    return transcript;
 }
 
 static OracleMusigPartialSigMsg MakeSignedGarbagePartialSigMsg(int32_t epoch,
@@ -415,6 +614,51 @@ BOOST_AUTO_TEST_CASE(early_partial_sigs_replay_when_session_enters_signing)
                                          signed_timestamp));
     BOOST_CHECK_EQUAL(signed_price, price);
     BOOST_CHECK_EQUAL(signed_timestamp, timestamp);
+}
+
+BOOST_AUTO_TEST_CASE(passive_non_oracle_template_node_selects_remote_context_and_completes)
+{
+    OracleSigningOrchestrator orch;
+
+    const int32_t epoch = 47;
+    PassiveMuSig2Transcript transcript = MakePassiveThresholdTranscript(epoch);
+
+    for (const OracleMusigNonceMsg& msg : transcript.nonce_msgs) {
+        orch.IngestRemoteNonce(msg);
+    }
+
+    MuSig2SigningSession* session = orch.GetOrCreateSigningSession(epoch, transcript.tick_height);
+    BOOST_REQUIRE(session != nullptr);
+    BOOST_REQUIRE_EQUAL(session->GetState(), MuSig2SessionState::NONCES_COMPLETE);
+    BOOST_REQUIRE_EQUAL(session->GetPartialSigCount(), 0U);
+
+    orch.IngestRemoteContext(transcript.context_msg);
+    BOOST_REQUIRE_EQUAL(orch.GetPendingContextProposalCountForTesting(epoch), 1U);
+
+    for (const OracleMusigPartialSigMsg& msg : transcript.partial_sig_msgs) {
+        orch.IngestRemotePartialSig(msg);
+    }
+    BOOST_REQUIRE_EQUAL(session->GetState(), MuSig2SessionState::NONCES_COMPLETE);
+    BOOST_REQUIRE_EQUAL(session->GetPartialSigCount(), 0U);
+
+    std::shared_ptr<const CBlock> empty_block;
+    orch.OnBlockConnected(empty_block, transcript.tick_height);
+
+    BOOST_CHECK_EQUAL(session->GetState(), MuSig2SessionState::COMPLETE);
+
+    std::vector<unsigned char> aggregate_sig;
+    std::vector<unsigned char> participation_bitmap;
+    uint64_t signed_price = 0;
+    int64_t signed_timestamp = 0;
+    BOOST_REQUIRE(orch.GetCompletedSession(epoch,
+                                           aggregate_sig,
+                                           participation_bitmap,
+                                           signed_price,
+                                           signed_timestamp));
+    BOOST_CHECK_EQUAL(aggregate_sig.size(), 64U);
+    BOOST_CHECK(!participation_bitmap.empty());
+    BOOST_CHECK_EQUAL(signed_price, transcript.price);
+    BOOST_CHECK_EQUAL(signed_timestamp, transcript.timestamp);
 }
 
 BOOST_AUTO_TEST_CASE(early_partial_buffer_dedups_by_oracle_before_capacity)

@@ -1211,7 +1211,13 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
     state = session->GetState();
 
     // ── Step 2: converge on one context, then selected local oracles sign it ──
-    if (is_oracle && state == MuSig2SessionState::NONCES_COMPLETE) {
+    //
+    // Context convergence must run on every node that may build block
+    // templates. Only local context proposal/signature creation requires a
+    // local oracle key. Passive template nodes still need to select the
+    // authenticated remote context, enter SIGNING, replay remote partial sigs,
+    // and expose the completed session to generatetoaddress/getblocktemplate.
+    if (state == MuSig2SessionState::NONCES_COMPLETE) {
         if (epoch > current_epoch && !HasSelectionSeedForEpoch(epoch)) {
             LogPrint(BCLog::DIGIDOLLAR,
                      "Oracle: Step 2 waiting for epoch selection seed epoch=%d h=%d\n",
@@ -1231,14 +1237,16 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
             SelectReadyContextProposal(epoch, block_height, *session);
 
         if (!chosen_context) {
-            std::optional<OracleMusigContextMsg> local_context =
-                BuildLocalContextProposal(epoch, block_height, *session);
-            if (local_context) {
-                BroadcastMusigContext(*local_context);
-                LogPrintf("Oracle: Broadcast MuSig2 context proposal epoch=%d proposer=%u context=%s\n",
-                         epoch, local_context->proposer_id,
-                         local_context->session_context_id.ToString());
-                return;
+            if (is_oracle) {
+                std::optional<OracleMusigContextMsg> local_context =
+                    BuildLocalContextProposal(epoch, block_height, *session);
+                if (local_context) {
+                    BroadcastMusigContext(*local_context);
+                    LogPrintf("Oracle: Broadcast MuSig2 context proposal epoch=%d proposer=%u context=%s\n",
+                             epoch, local_context->proposer_id,
+                             local_context->session_context_id.ToString());
+                    return;
+                }
             }
         }
 
@@ -1285,54 +1293,60 @@ void OracleSigningOrchestrator::TickEpochSession(int32_t epoch, int32_t block_he
                     return;
                 }
 
-                OracleManager& om = OracleManager::GetInstance();
-                const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
-                secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+                if (!is_oracle) {
+                    LogPrintf("Oracle: Passive MuSig2 context selected for epoch %d context=%s\n",
+                             epoch, session_context.ToString());
+                } else {
+                    OracleManager& om = OracleManager::GetInstance();
+                    const std::vector<uint32_t> local_ids = om.GetActiveOracleIds();
+                    secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
-                for (uint32_t oid : local_ids) {
-                    uint8_t oid8 = static_cast<uint8_t>(oid);
-                    if (m_partialsig_broadcast_tracker[epoch].count(oid8)) continue;
+                    for (uint32_t oid : local_ids) {
+                        uint8_t oid8 = static_cast<uint8_t>(oid);
+                        if (m_partialsig_broadcast_tracker[epoch].count(oid8)) continue;
 
-                    OracleNode* onode = om.GetOracleNode(oid);
-                    if (!onode) continue;
-                    CKey key = onode->GetOraclePrivateKey();
-                    if (!key.IsValid()) continue;
+                        OracleNode* onode = om.GetOracleNode(oid);
+                        if (!onode) continue;
+                        CKey key = onode->GetOraclePrivateKey();
+                        if (!key.IsValid()) continue;
 
-                    if (std::find(participant_ids.begin(), participant_ids.end(), oid8) == participant_ids.end()) {
-                        continue;
-                    }
+                        if (std::find(participant_ids.begin(), participant_ids.end(), oid8) == participant_ids.end()) {
+                            continue;
+                        }
 
-                    secp256k1_musig_partial_sig partial_sig;
-                    if (session->CreatePartialSignature(oid8, key, partial_sig)) {
-                        session->AddPartialSignature(oid8, partial_sig);
+                        secp256k1_musig_partial_sig partial_sig;
+                        if (session->CreatePartialSignature(oid8, key, partial_sig)) {
+                            session->AddPartialSignature(oid8, partial_sig);
 
-                        unsigned char ser_psig[32];
-                        if (secp256k1_musig_partial_sig_serialize(ctx, ser_psig, &partial_sig)) {
-                            OracleMusigPartialSigMsg psig_msg;
-                            psig_msg.epoch = epoch;
-                            psig_msg.attempt_id = static_cast<uint8_t>(session->GetAttemptId());
-                            psig_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
-                            psig_msg.session_context_id = session_context;
-                            psig_msg.oracle_id = oid8;
-                            psig_msg.partial_sig.assign(ser_psig, ser_psig + 32);
+                            unsigned char ser_psig[32];
+                            if (secp256k1_musig_partial_sig_serialize(ctx, ser_psig, &partial_sig)) {
+                                OracleMusigPartialSigMsg psig_msg;
+                                psig_msg.epoch = epoch;
+                                psig_msg.attempt_id = static_cast<uint8_t>(session->GetAttemptId());
+                                psig_msg.context_version = ORACLE_MUSIG2_SESSION_CONTEXT_VERSION;
+                                psig_msg.session_context_id = session_context;
+                                psig_msg.oracle_id = oid8;
+                                psig_msg.partial_sig.assign(ser_psig, ser_psig + 32);
 
-                            // RC30: sign the partial-sig message so peers accept it
-                            // (same pattern as nonce_msg — RH-24 auth requirement).
-                            if (!psig_msg.Sign(key)) {
-                                LogPrintf("Oracle: Sign() failed for MuSig2 partial sig oracle=%d epoch=%d\n",
-                                         oid8, epoch);
+                                // RC30: sign the partial-sig message so peers accept it
+                                // (same pattern as nonce_msg — RH-24 auth requirement).
+                                if (!psig_msg.Sign(key)) {
+                                    LogPrintf("Oracle: Sign() failed for MuSig2 partial sig oracle=%d epoch=%d\n",
+                                             oid8, epoch);
+                                    continue;
+                                }
+
+                                BroadcastMusigPartialSig(psig_msg);
+                                m_partialsig_broadcast_tracker[epoch].insert(oid8);
+
+                                LogPrintf("Oracle: Broadcast partial sig for epoch %d (oracle_id=%d)\n",
+                                         epoch, oid8);
                                 continue;
                             }
-
-                            BroadcastMusigPartialSig(psig_msg);
-                            m_partialsig_broadcast_tracker[epoch].insert(oid8);
-
-                            LogPrintf("Oracle: Broadcast partial sig for epoch %d (oracle_id=%d)\n",
-                                     epoch, oid8);
                         }
                     }
+                    secp256k1_context_destroy(ctx);
                 }
-                secp256k1_context_destroy(ctx);
             }
         }
     }

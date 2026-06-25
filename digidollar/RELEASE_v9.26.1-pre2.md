@@ -16,6 +16,13 @@ Release tag: `v9.26.1-pre2` (PRE/oracle rehearsal only)
 
 `v9.26.1-pre2` replaces the first PRE rehearsal tag for the current oracle test release. It keeps the same isolated mainnet-PRE network contract while carrying the latest DigiDollar mining/template fixes and updated wallet branding for this second PRE build.
 
+Mining fix summary:
+
+- Non-oracle miners can include DigiDollar oracle price bundles when they use the upgraded DigiDollar-aware block-template path. They do not need oracle private keys.
+- Legacy miners can still mine valid normal DGB blocks. They just will not receive oracle-priced DigiDollar mint/redeem work unless they opt in to the new GBT rule.
+- CPU mining was updated so patched `cpuminer` can request DigiDollar-aware templates with `--digidollar` and preserve the oracle commitment in the coinbase.
+- Pool/miner software should request `getblocktemplate` with `{"rules":["segwit","digidollar-oracle"]}` and copy `default_oracle_commitment` exactly when Core returns it.
+
 ## Required PRE Configuration
 
 Run this build with a fresh PRE data directory. Put `digibyte.conf` in that fresh data directory, not in an existing normal mainnet `~/.digibyte` directory. The node will still report `chain=main`, but this build stores its chain data under the `mainnet-pre` network subdirectory.
@@ -169,6 +176,50 @@ This is intentionally fast. It is designed to prove activation behavior, not to 
 - DigiDollar BIP9 uses a 100-block window, 70-block threshold, and minimum activation height `600`.
 - DigiDollar, oracle runtime, and MuSig2 oracle bundle format all activate together at height `600`.
 - The final 35-slot mainnet oracle roster is configured on PRE port `12046`.
+- `getblocktemplate` now has a DigiDollar-aware path using the `digidollar-oracle` rule so non-oracle miners and pools can safely receive oracle commitments and price-dependent DigiDollar mint/redeem transactions.
+- Legacy `getblocktemplate` callers remain safe: they do not receive `default_oracle_commitment` and they do not receive oracle-priced DigiDollar mint/redeem work they cannot mine correctly.
+- Block assembly now checks the same completed MuSig2 session source used to stamp the coinbase oracle bundle, so a miner node can include valid price bundles without being one of the signing oracle wallets.
+- Stale oracle-bearing GBT templates are rebuilt instead of being reused after the oracle price ages out.
+- The PRE CPU-mining harness can pass `--digidollar` to patched `cpuminer`, allowing CPU miners to preserve `default_oracle_commitment` while mining the normal DigiByte proof-of-work algos.
+
+---
+
+## DigiDollar Mining Fixes In Pre2
+
+The first PRE rehearsal proved oracle signing could complete, but mining needed a clearer handoff between Core, CPU miners, and pool software.
+
+The core issue was simple: DigiDollar mint and redeem transactions need a fresh MuSig2 oracle price bundle in the block coinbase. A miner that builds a block without that bundle can still mine a valid normal DGB block, but it cannot correctly confirm price-dependent DigiDollar mint/redeem transactions.
+
+`v9.26.1-pre2` fixes that flow without requiring every miner to become an oracle.
+
+Mining now has two explicit paths:
+
+| Miner path | Request | Result |
+| --- | --- | --- |
+| Legacy GBT | `{"rules":["segwit"]}` | Mines valid normal DigiByte blocks. Does not receive oracle-priced DigiDollar mint/redeem transactions or `default_oracle_commitment`. |
+| DigiDollar-aware GBT | `{"rules":["segwit","digidollar-oracle"]}` | Receives `default_oracle_commitment` when a fresh bundle is available and can include DigiDollar mint/redeem work that depends on that price. |
+
+When Core returns `default_oracle_commitment`, miner or pool software must copy that script exactly into the coinbase as a zero-value output. Do not invent an oracle commitment if Core does not provide one.
+
+What was fixed:
+
+- Non-oracle miners can mine blocks with oracle price bundles if their upgraded node has the completed MuSig2 bundle at template time.
+- `getblocktemplate` advertises DigiDollar-aware work with `!digidollar-oracle` in `rules` and exposes the exact `default_oracle_commitment` script to preserve.
+- GBT caches separate legacy templates from DigiDollar-aware templates so legacy miners do not accidentally receive work they cannot assemble correctly.
+- GBT rebuilds stale oracle-bearing templates after the bundle freshness window moves forward, preventing stale price commitments from being reused.
+- Block assembly removes price-dependent mint/redeem transactions when no fresh oracle bundle is available instead of creating an invalid block.
+- Price-independent DigiDollar transfers can still flow without an oracle price bundle.
+- Patched `cpuminer` can be run with `--digidollar` so solo CPU mining requests the DigiDollar-aware GBT rule and preserves the returned oracle commitment.
+
+Pool and miner software requirements:
+
+- Use `{"rules":["segwit","digidollar-oracle"]}` for DigiDollar-aware GBT.
+- Preserve `default_witness_commitment` and `default_oracle_commitment` as zero-value coinbase outputs when they are present.
+- Do not include DigiDollar mint/redeem transactions from outside the returned template when Core did not provide `default_oracle_commitment`.
+- Downstream ASIC/GPU workers do not need oracle private keys. The pool server or solo miner builds the correct coinbase from Core's template.
+- See `DIGIDOLLAR_MINING_INTEGRATION_GUIDE.md` for pool, Stratum, cpuminer, and DigiHash integration rules.
+
+This keeps fork risk low: old miners continue producing valid normal blocks, while upgraded DigiDollar-aware miners and pools have a deterministic path to mine mints/redeems with the correct oracle bundle.
 
 ---
 
@@ -266,6 +317,9 @@ Known local validation for the PRE code line:
 | Fuzz target smoke run | PASS on local PRE branch before release-note drafting |
 | Five-node Qt PRE rehearsal | PASS: five Qt nodes running from isolated temp datadirs, synced together, with localhost-only peers |
 | CPU mining rehearsal | PASS: separate CPU miners proved sha256d, scrypt, Groestl/Myriad-Groestl, skein, and qubit block production before the Odocrypt gate; post-Odo mining continued to activation |
+| DigiDollar GBT opt-in | PASS: `test/functional/digidollar_gbt_optin.py` proves legacy GBT stays safe while DigiDollar-aware GBT returns `default_oracle_commitment` and includes oracle-priced DD work |
+| Stale oracle GBT cache | PASS: `test/functional/digidollar_oracle_gbt_stale_cache.py` proves stale oracle-bearing templates are rebuilt and stale mint/redeem work is stripped when no fresh bundle is available |
+| Mining integration guide | PASS: `DIGIDOLLAR_MINING_INTEGRATION_GUIDE.md` documents the pool/cpuminer/GBT requirements for preserving `default_oracle_commitment` |
 | DigiDollar BIP9 live state | PASS: observed `started`, `locked_in`, and `active`; live PRE chain reached height 605 with `enabled=true`, `status=active`, 35 oracle slots, and 7-signature quorum |
 | DigiSwarm oracle wallet | PASS/PENDING: wallet loaded, configured, and authorized for slot 15 with the expected mainnet key; runtime start is pending wallet unlock with `walletpassphrase` |
 

@@ -723,7 +723,7 @@ BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
     } cases[] = {
         {ChainType::REGTEST, 650, 650, 0},
         {ChainType::TESTNET, 600, 600, 600},
-        {ChainType::MAIN, 600, 600, 600},
+        {ChainType::MAIN, 23627520, 23627520, 23627520},
     };
 
     for (const auto& c : cases) {

@@ -95,13 +95,12 @@ public:
         consensus.script_flag_exceptions.emplace( // Taproot exception
             uint256S("0x0000000000000000000f14c35b2d841e986ab5441de8c585d5ffe55ea1e395ad"), SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS);
 
-        // PRE mainnet rehearsal keeps the real mainnet identity but compresses
-        // buried deployments so the side chain reaches modern rules quickly.
-        consensus.BIP34Hash = uint256{};
-        consensus.BIP34Height = consensus.BIP65Height = consensus.BIP66Height = 1;
-        consensus.CSVHeight = 1;
-        consensus.SegwitHeight = 0;
-        consensus.MinBIP9WarningHeight = 0;
+        // BIP34, BIP65 and BIP66, CSV and Segwit were activated simultaneously
+        // DEPLOYMENT_NVERSIONBIPS, DEPLOYMENT_CSV, DEPLOYMENT_SEGWIT
+        consensus.BIP34Hash = uint256S("0xadd8ca420f557f62377ec2be6e6f47b96cf2e68160d58aeb7b73433de834cca0");
+        consensus.BIP34Height = consensus.BIP65Height = consensus.BIP66Height = 4394880; // add8ca420f557f62377ec2be6e6f47b96cf2e68160d58aeb7b73433de834cca0
+        consensus.CSVHeight = consensus.SegwitHeight = 4394880;
+        consensus.MinBIP9WarningHeight = 483840; // segwit activation height + miner confirmation window
         consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
         consensus.initialTarget[ALGO_ODO] = ArithToUint256(~arith_uint256(0) >> 40); // 256 difficulty
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -112,31 +111,31 @@ public:
         consensus.fRbfEnabled = false;
 
         // DigiByte Specific Consensus Code
-        consensus.nOdoShapechangeInterval = 1*24*60*60; // 1 day for PRE Odo rehearsal
-        consensus.nRuleChangeActivationThreshold = 70; // 70% of 100 blocks
-        consensus.nMinerConfirmationWindow = 100; // Fast PRE BIP9 signaling window
+        consensus.nOdoShapechangeInterval = 10*24*60*60; // 10 days
+        consensus.nRuleChangeActivationThreshold = 28224; // 28224 - 70% of 40320 blocks
+        consensus.nMinerConfirmationWindow = 40320; // nPowTargetTimespan / nPowTargetSpacing 40320 blocks main net - 1 week
 
-        // PRE reaches all historical hard-fork eras before DigiDollar at block 600.
-        consensus.MinBIP9WarningHeight = 0;
+        // Need to make sure we ignore activation warnings below Odo activation height, also ignores Segwit activation
+        consensus.MinBIP9WarningHeight = 9152640; // Odo height + miner confirmation window
 
-        // Compressed DigiByte hard-fork heights for mainnet PRE rehearsal.
-        consensus.multiAlgoDiffChangeTarget = 100;
-        consensus.alwaysUpdateDiffChangeTarget = 200;
-        consensus.workComputationChangeTarget = 400;
-        consensus.algoSwapChangeTarget = 490;
-        consensus.OdoHeight = 500;
-        consensus.ReserveAlgoBitsHeight = 450;
+        // DigiByte Hard Fork Block Heights
+        consensus.multiAlgoDiffChangeTarget = 145000; // Block 145,000 MultiAlgo Hard Fork
+        consensus.alwaysUpdateDiffChangeTarget = 400000; // Block 400,000 MultiShield Hard Fork
+        consensus.workComputationChangeTarget = 1430000; // Block 1,430,000 DigiSpeed Hard Fork
+        consensus.algoSwapChangeTarget = 9100000; // Block 9,100,000 Odo PoW Hard Fork
+        consensus.OdoHeight = 9112320; // 906b712a7b1f54f10b0faf86111e832ddb7b8ce86ac71a4edd2c61e5ccfe9428
+        consensus.ReserveAlgoBitsHeight = 8547840; // d2c03966aeef35f739b222c8332b68df2676204d49c390b3a2544b967c46163f
 
         // DigiByte-specific difficulty adjustment parameters
         consensus.nTargetTimespan = 0.10 * 24 * 60 * 60; // 2.4 hours
         consensus.nTargetSpacing = 60; // 60 seconds
         consensus.nInterval = consensus.nTargetTimespan / consensus.nTargetSpacing;
-        consensus.nDiffChangeTarget = 67; // Compressed DigiShield boundary
+        consensus.nDiffChangeTarget = 67200; // DigiShield Hard Fork Block BIP34Height 67,200
 
         // Old 1% monthly DGB Reward before 15 second block change
-        consensus.patchBlockRewardDuration = 10; // PRE compressed reward-era boundary
+        consensus.patchBlockRewardDuration = 10080; //10080; - No longer used
         //4 blocks per min, x60 minutes x 24hours x 14 days = 80,160 blocks for 0.5% reduction in DGB reward supply - No longer used
-        consensus.patchBlockRewardDuration2 = 80; // PRE compressed reward-era boundary
+        consensus.patchBlockRewardDuration2 = 80160; //80160;
         consensus.nTargetTimespanRe = 1*60; // 60 Seconds
         consensus.nTargetSpacingRe = 1*60; // 60 seconds
         consensus.nIntervalRe = consensus.nTargetTimespanRe / consensus.nTargetSpacingRe; // 1 block
@@ -170,21 +169,21 @@ public:
 
         // Deployment of Taproot (BIPs 340-342)
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1736510438; // 10th January 2025
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1799582438; // 10th January 2027
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
 
         // Deployment of DigiDollar stablecoin features
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1389388394; // mainnet genesis timestamp
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1830297600; // Jan 1, 2028
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 600;
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1780272000; // June 1, 2026
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1811808000; // June 1, 2027
+        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 23627520; // Aligned to confirmation window (586 * 40320)
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x00");
 
         // By default assume that the signatures in ancestors of this block are valid block 21,700,000.
-        consensus.defaultAssumeValid = uint256{};
+        consensus.defaultAssumeValid = uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80"); // Block 21,700,000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -195,7 +194,7 @@ public:
         pchMessageStart[1] = 0xc3;
         pchMessageStart[2] = 0xb6;
         pchMessageStart[3] = 0xda;
-        nDefaultPort = 12046;
+        nDefaultPort = 12024;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 32;
         m_assumed_chain_state_size = 1;
@@ -213,8 +212,15 @@ public:
         // When adding a new MAINNET Seed Server URL below, please include the name of the person in charge of it
         // and their Github handle so they can be contacted in an emergency.
 
-        // PRE side-mainnet must not discover public mainnet peers automatically.
-        vSeeds.clear();
+        // DigiByte MAINNET DNS Seed Server:
+        vSeeds.emplace_back("seed.digibyte.io"); // Jared Tate @JaredTate
+        vSeeds.emplace_back("seed.diginode.tools"); // Olly Stedall @saltedlolly
+        vSeeds.emplace_back("seed.digibyteblockchain.org"); // John Song @j50ng
+        vSeeds.emplace_back("eu.digibyteseed.com"); // Jan De Jong @jongjan88
+        vSeeds.emplace_back("seed.digibyte.link"); // Bastian Driessen @bastiandriessen
+        vSeeds.emplace_back("seed.quakeguy.com"); // Paul Morgan Quakeitup @SnKQuaKe
+        vSeeds.emplace_back("seed.aroundtheblock.app"); // Mark McNiel @JohnnyLawDGB
+        vSeeds.emplace_back("seed.digibyte.services"); // Craig Donnachie @cdonnachie
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,30);
         base58Prefixes[SCRIPT_ADDRESS_OLD] = std::vector<unsigned char>(1,5);
@@ -226,23 +232,64 @@ public:
 
         bech32_hrp = "dgb";
 
-        vFixedSeeds.clear();
+        vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_main), std::end(chainparams_seed_main));
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
         checkpointData = {
             {
-                {0, uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496")},
+                {     0, uint256S("0x7497ea1b465eb39f1c8f507bc877078fe016d6fcb6dfad3a64c98dcc6e1e8496")},
+                {  5000, uint256S("0x95753d284404118788a799ac754a3fdb5d817f5bd73a78697dfe40985c085596")},
+                { 10000, uint256S("0x12f90b8744f3b965e107ad9fd8b33ba6d95a91882fbc4b5f8588d70d494bed88")},
+                { 12000, uint256S("0xa1266acba91dc3d5737d9e8c6e21b7a91901f7f4c48082ce3d84dd394a13e415")},
+                { 14300, uint256S("0x24f665d71b0c6c88f6f72a863e9f1ba8e835cc52d13ad895dc5426021c7d2c48")},
+                { 30000, uint256S("0x17c69ef6b403571b1bd333c91fbe116e451ba8281be12aa6bafb0486764bb315")},
+                { 60000, uint256S("0x57b2c612b60462a3d6c388c8b30a68cb6f7e2034eea962b12b7ef506454fa2c1")},
+                {110000, uint256S("0xab2da24656493015f2fd288994661e1cc657d90aa34c755514af044aaaf1569d")},
+                {141100, uint256S("0x145c2cb5239a4e019c730ce8468d927a3955529c2bae077850783da97ddbca05")},
+                {141656, uint256S("0x683d27720429f28bcfa22d8385b7a06f307c8fd918d49215148fbd41a0dda595")},
+                {245000, uint256S("0x852c475c605e1f20bbe60219c811abaeef08bf0d4ff87eef59200fd7a7567fa7")},
+                {302000, uint256S("0xfb6d14ac5e0208f00d941db1fcbfe050f093cfd0c05ed151c809e4428bc14286")},
+                {331000, uint256S("0xbd1a1d002750e1648746eb29c78d30fa1043c8b6f89d82924c4488be06fa3d19")},
+                {360000, uint256S("0x8fee7e3f6c38dccd3047a3e4667c63406f835c2890024030a2ab2dc6dba7c912")},
+                {400100, uint256S("0x82325a97cd97ac14b0a57408f881b1a9fc40174f8430a4580429499ac5d153c8")},
+                {521000, uint256S("0xd23fd1e1f994c0586d761b71bb3530e9ab45bd0fabda3a5a2e394f3dc4d9bb04")},
+                {1380000, uint256S("0x00000000000001969b1e5836dd8bf6a001d96f4a16d336e09405b62b29feead6")},
+                {2000000, uint256S("0x10f522ec60d8af2e2cbd9e2268260c33fb8bbf9cd9f176b4fddcae7493c6791d")},
+                {3500000, uint256S("0xbece76f2a3f53637e2ea84837a45a6ffdc0c86372ab4701c3146094f65832c80")},
+                {5000000, uint256S("0x1dd2fdf6416343688eed463a7bc70b298a4f872e941e36f85cda0915d6488e25")},
+                {6500000, uint256S("0xb168b7f70cbfd2e5fea07da55d9fa90dc7c65599ceb2700efe04ee6c45692e52")},
+                {8000000, uint256S("0x1af919cb004bb05c369a862cb5ded70aaa123d0eac2432ceec859f6f42880660")},
+                {9500000, uint256S("0x5b0351361414e520e9132ba6c5c4926d6f9ee55c41b77fffce3a16ea15d4a1be")},
+                {11000000, uint256S("0x0f4ad10ae49b504246c0175f6cbab9b0f91b6568a88931e6341a83a731701054")},
+                {12500000, uint256S("0x697a015b62140c9549fbc8d8b3c1d027626b2f94d337db32115e429fbf233ed7")},
+                {14000000, uint256S("0xa33861c857eed46191cf6cdaf81693e0dfcd00b3a11133821b0c73fe1d7769d9")},
+                {15500000, uint256S("0x000000000000000439d5c66b2fb3ec50f50a68b65f5790d338150b63488de645")},
+                {17000000, uint256S("0xf167688cc0102743b135499ed9f9eff9c5bad096203150e438be0a6e783d5587")},
+                {18500000, uint256S("0x745dc7b89208de482071a3a8d13eb5596d55bedc4f5ba2fa74cbea9ecf91169e")},
+                {20000000, uint256S("0xf530a66ba6fe93e647f7d88a9b3f22bfe8c2c2ab1ec1b0286286f86b82d6a10f")},
+                {21000000, uint256S("0x0000000000000001cb40d3be76bf601d98555a069669d963060d633ea3a140e8")},
+                {21700000, uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80")},
             }
         };
 
-        m_assumeutxo_data = {};
+        m_assumeutxo_data = {
+            {
+                .height = 21'700'000,
+                .hash_serialized = AssumeutxoHash{uint256S("0x0000000000000000000000000000000000000000000000000000000000000000")}, // TODO: Calculate actual UTXO set hash
+                .nChainTx = 0, // TODO: Calculate actual total transaction count
+                .blockhash = uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80")
+            },
+        };
 
         chainTxData = ChainTxData{
-            .nTime    = 1389388394,
-            .nTxCount = 1,
-            .dTxRate  = 0.0,
+            // DigiByte: Data from DigiByte blockchain
+            // DigiByte has ~15 second blocks vs Bitcoin's ~10 minutes (40x faster)
+            // As of block 16,500,000 (July 2024)
+            .nTime    = 1720000000,  // Approximate July 2024 timestamp
+            .nTxCount = 25000000,    // Approximate total DigiByte transactions
+            .dTxRate  = 0.15,        // ~0.15 tx/sec for DigiByte (much lower than Bitcoin due to less usage)
         };
 
         // DigiDollar consensus parameters (mainnet)
@@ -257,7 +304,7 @@ public:
         // Mainnet-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 40;       // Rotate oracle signing epochs every 40 blocks (~10 minutes)
         consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)
-        consensus.nDDActivationHeight = 600;   // PRE DigiDollar activation height
+        consensus.nDDActivationHeight = 23627520;   // DigiDollar activation height — aligned with BIP9 min_activation_height
         // Enforce the $100 minimum on mainnet as soon as DigiDollar activates.
         digidollarParams.minMintAmountActivationHeight = consensus.nDDActivationHeight;
 
@@ -330,46 +377,46 @@ private:
         vOracleNodes = {
             // Oracle 0-9: Active MuSig2 operator set. Slots 0-16 must stay aligned
             // with consensus.vOraclePublicKeys for MuSig2 bitmap/quorum validation.
-            {0,  ParsePubKey("0345c1c7aeb4559f1b79629e0de36fb101cf279a07c5853e305240233e6945882e"), "oracle1.digibyte.io:12046", true},  // DigiByte.Io Oracle (mainnet RC46 key)
-            {1,  ParsePubKey("02615653c7883eadb97f5625b0e7fecc960094b9d33a1e281c3a6dfbaa47d529ef"), "oracle2.digidollar.org:12046", true},  // Green Candle (mainnet RC46 key)
-            {2,  ParsePubKey("02842d9481a07d949a60b526cea8d315db24f467f33901c1e73875f378bb40c75d"), "oracle3.digidollar.org:12046", true},  // Bastian (mainnet RC46 key)
-            {3,  ParsePubKey("03ddb1e57cc9691d4f4aef18b7b46a7240170f73307037822444b4a76327f6d27e"), "oracle4.digidollar.org:12046", true},  // DanGB (mainnet RC46 key)
-            {4,  ParsePubKey("02d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261"), "oracle5.digidollar.org:12046", true},  // Shenger (mainnet RC46 key)
-            {5,  ParsePubKey("035e80419393fad8ff0426bd32bde8ccc6570b024a9138660f3fae5ecd60bc195a"), "oracle6.digidollar.org:12046", true},  // Ycagel (mainnet RC46 key)
-            {6,  ParsePubKey("03b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488"), "oracle7.digidollar.org:12046", true},  // Aussie (mainnet RC46 key)
-            {7,  ParsePubKey("03d15eb49e30bedecbf37f5863d266ea6ca19e81863f4df268d717c62013741f79"), "oracle8.digidollar.org:12046", true},  // LookInto (mainnet RC46 key)
-            {8,  ParsePubKey("0299a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374"), "oracle9.digidollar.org:12046", true},  // JohnnyLawDGB (mainnet RC46 key)
-            {9,  ParsePubKey("0220bcc8be5f739f826c771f86f45eda0b5b50d11d8f8832c92ed626a65c44c4f2"), "oracle10.digidollar.org:12046", true},  // Ogilvie (mainnet RC46 key)
+            {0,  ParsePubKey("0345c1c7aeb4559f1b79629e0de36fb101cf279a07c5853e305240233e6945882e"), "oracle1.digibyte.io:12024", true},  // DigiByte.Io Oracle (mainnet RC46 key)
+            {1,  ParsePubKey("02615653c7883eadb97f5625b0e7fecc960094b9d33a1e281c3a6dfbaa47d529ef"), "oracle2.digidollar.org:12024", true},  // Green Candle (mainnet RC46 key)
+            {2,  ParsePubKey("02842d9481a07d949a60b526cea8d315db24f467f33901c1e73875f378bb40c75d"), "oracle3.digidollar.org:12024", true},  // Bastian (mainnet RC46 key)
+            {3,  ParsePubKey("03ddb1e57cc9691d4f4aef18b7b46a7240170f73307037822444b4a76327f6d27e"), "oracle4.digidollar.org:12024", true},  // DanGB (mainnet RC46 key)
+            {4,  ParsePubKey("02d4199fb00150d02ffae0b1b3fed207a08029c91a1d044fbc27125ac8f6d45261"), "oracle5.digidollar.org:12024", true},  // Shenger (mainnet RC46 key)
+            {5,  ParsePubKey("035e80419393fad8ff0426bd32bde8ccc6570b024a9138660f3fae5ecd60bc195a"), "oracle6.digidollar.org:12024", true},  // Ycagel (mainnet RC46 key)
+            {6,  ParsePubKey("03b9a11dde09f69e864223615daecf4e0829b6e2f5e417f50f8cfd74d0a6181488"), "oracle7.digidollar.org:12024", true},  // Aussie (mainnet RC46 key)
+            {7,  ParsePubKey("03d15eb49e30bedecbf37f5863d266ea6ca19e81863f4df268d717c62013741f79"), "oracle8.digidollar.org:12024", true},  // LookInto (mainnet RC46 key)
+            {8,  ParsePubKey("0299a8442a35abaac5b9c4922e0754d0de6c8ed9d946a1ad9690b62f89a791b374"), "oracle9.digidollar.org:12024", true},  // JohnnyLawDGB (mainnet RC46 key)
+            {9,  ParsePubKey("0220bcc8be5f739f826c771f86f45eda0b5b50d11d8f8832c92ed626a65c44c4f2"), "oracle10.digidollar.org:12024", true},  // Ogilvie (mainnet RC46 key)
 
             // Oracle 10-16: Keep the first 17 slots aligned with the active roster.
-            {10, ParsePubKey("02b710dfc3a74137a0d9f3e26d3fd5091ba9ce29b990e12920ac1101b001e23858"), "oracle11.digidollar.org:12046", true},  // ChopperBrian (mainnet RC46 key)
-            {11, ParsePubKey("03b9ca28f68bbe4f0b6f93c08b184e81e11b754906f2426739a1cfee48508276ca"), "oracle12.digidollar.org:12046", true},  // Crypto Corner Shop (mainnet RC46 key)
-            {12, ParsePubKey("032c4422fb8e5eac5d27423272d35abe6cff0acb19ab051e51204e3392365c18f3"), "oracle13.digidollar.org:12046", true},  // DaPunzy (mainnet RC46 key)
-            {13, ParsePubKey("0258889fb092fdf366004032d3af7cc35fddd951eb8413409699e879f795111a0e"), "oracle14.digidollar.org:12046", true},  // DigiByte_FORCE (mainnet RC46 key)
-            {14, ParsePubKey("034b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec"), "oracle15.digidollar.org:12046", true},  // Neel (mainnet RC46 key)
-            {15, ParsePubKey("030f809ccbeea32bcca9c817dbf674e38e2fbc234f4462b88612876287489197a9"), "oracle16.digidollar.org:12046", true},  // DigiSwarm (mainnet RC46 key)
-            {16, ParsePubKey("03943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf"), "oracle17.digidollar.org:12046", true},  // GTO90 (mainnet RC46 key)
+            {10, ParsePubKey("02b710dfc3a74137a0d9f3e26d3fd5091ba9ce29b990e12920ac1101b001e23858"), "oracle11.digidollar.org:12024", true},  // ChopperBrian (mainnet RC46 key)
+            {11, ParsePubKey("03b9ca28f68bbe4f0b6f93c08b184e81e11b754906f2426739a1cfee48508276ca"), "oracle12.digidollar.org:12024", true},  // Crypto Corner Shop (mainnet RC46 key)
+            {12, ParsePubKey("032c4422fb8e5eac5d27423272d35abe6cff0acb19ab051e51204e3392365c18f3"), "oracle13.digidollar.org:12024", true},  // DaPunzy (mainnet RC46 key)
+            {13, ParsePubKey("0258889fb092fdf366004032d3af7cc35fddd951eb8413409699e879f795111a0e"), "oracle14.digidollar.org:12024", true},  // DigiByte_FORCE (mainnet RC46 key)
+            {14, ParsePubKey("034b013d2203e06461187604992333b367db165f0e79905c0974ba8a554bc69fec"), "oracle15.digidollar.org:12024", true},  // Neel (mainnet RC46 key)
+            {15, ParsePubKey("030f809ccbeea32bcca9c817dbf674e38e2fbc234f4462b88612876287489197a9"), "oracle16.digidollar.org:12024", true},  // DigiSwarm (mainnet RC46 key)
+            {16, ParsePubKey("03943744e1635c2871db786b2ef98d3d5007b2d1f8bb622b44a99b31fbe63cc5bf"), "oracle17.digidollar.org:12024", true},  // GTO90 (mainnet RC46 key)
 
             // Oracle 17-34: Active launch roster additions.
-            {17, ParsePubKey("039d83219cf9056854da1f56fbf1d792ef14b1853ec027cd9c0a51465e2ec2afaa"), "oracle18.digidollar.org:12046", true},  // digibyte-maxi (mainnet RC46 key)
-            {18, ParsePubKey("03e2fa8be3480929a59fb93b284e49f4b74bfb52ffed3934de751bdb1c33c54e6e"), "oracle19.digidollar.org:12046", true},  // Anthony (mainnet RC46 key)
-            {19, ParsePubKey("02507a43d15e0b6c149dd1835347879a1b723bdbecb4cc8afe124c52df37212295"), "oracle20.digidollar.org:12046", true},  // mbah_jambon (mainnet RC46 key)
-            {20, ParsePubKey("021bf934b18dd8bab94cec0dfc127f293afd542b8042df60a439affd5e64831285"), "oracle21.digidollar.org:12046", true},  // Camden (mainnet RC46 key)
-            {21,  ParsePubKey("0275481d5d543b27e298ba726674730d11d5bc1139f13205957b20d9936225ea38"), "oracle22.digidollar.org:12046", true},  // Twoface123 (mainnet RC46 key)
-            {22,  ParsePubKey("02deec78492920e9010c3015c50bacbcc158272a941220bdf74208f4796d962542"), "oracle23.digidollar.org:12046", true},  // LivingTheLife (mainnet RC46 key)
-            {23,  ParsePubKey("025b25677c412923376670284021ed9e99b53ebee6f4e3ef6123e742fb020e1f48"), "oracle24.digidollar.org:12046", true},  // ChozenOne43 (mainnet RC46 key)
-            {24,  ParsePubKey("0339543917295ddbba5bf3fa1198f3d7f63321364192f5839e9699a6f50572b68a"), "oracle25.digidollar.org:12046", true},  // ckunchained (mainnet RC46 key)
-            {25,  ParsePubKey("03d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee"), "oracle26.digidollar.org:12046", true},  // JMag (mainnet RC46 key)
+            {17, ParsePubKey("039d83219cf9056854da1f56fbf1d792ef14b1853ec027cd9c0a51465e2ec2afaa"), "oracle18.digidollar.org:12024", true},  // digibyte-maxi (mainnet RC46 key)
+            {18, ParsePubKey("03e2fa8be3480929a59fb93b284e49f4b74bfb52ffed3934de751bdb1c33c54e6e"), "oracle19.digidollar.org:12024", true},  // Anthony (mainnet RC46 key)
+            {19, ParsePubKey("02507a43d15e0b6c149dd1835347879a1b723bdbecb4cc8afe124c52df37212295"), "oracle20.digidollar.org:12024", true},  // mbah_jambon (mainnet RC46 key)
+            {20, ParsePubKey("021bf934b18dd8bab94cec0dfc127f293afd542b8042df60a439affd5e64831285"), "oracle21.digidollar.org:12024", true},  // Camden (mainnet RC46 key)
+            {21,  ParsePubKey("0275481d5d543b27e298ba726674730d11d5bc1139f13205957b20d9936225ea38"), "oracle22.digidollar.org:12024", true},  // Twoface123 (mainnet RC46 key)
+            {22,  ParsePubKey("02deec78492920e9010c3015c50bacbcc158272a941220bdf74208f4796d962542"), "oracle23.digidollar.org:12024", true},  // LivingTheLife (mainnet RC46 key)
+            {23,  ParsePubKey("025b25677c412923376670284021ed9e99b53ebee6f4e3ef6123e742fb020e1f48"), "oracle24.digidollar.org:12024", true},  // ChozenOne43 (mainnet RC46 key)
+            {24,  ParsePubKey("0339543917295ddbba5bf3fa1198f3d7f63321364192f5839e9699a6f50572b68a"), "oracle25.digidollar.org:12024", true},  // ckunchained (mainnet RC46 key)
+            {25,  ParsePubKey("03d476d0565e20ca0901c1b61a0aee36e3a6544346df48bdf45447ea051827ddee"), "oracle26.digidollar.org:12024", true},  // JMag (mainnet RC46 key)
 
-            {26,  ParsePubKey("0336031b96a287f671172106f2d62cbeec0e547d31b591169ebbe9ddef7277e5b9"), "oracle27.digidollar.org:12046", true},   // HashedMax (mainnet RC46 key)
-            {27,  ParsePubKey("0380f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563"), "oracle28.digidollar.org:12046", true},   // DennisPitallano (mainnet RC46 key)
-            {28,  ParsePubKey("03810ab54165a93b0d219494da9a7830ef245f49696662ddc49644d25b081c79d3"), "digihash.digibyte.io:12046", true},   // DigiHash Mining Pool (mainnet key)
-            {29,  ParsePubKey("021ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d"), "oracle30.digidollar.org:12046", true},   // medgboracle3452 (mainnet RC46 key)
-            {30,  ParsePubKey("0317aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67"), "oracle31.digidollar.org:12046", true},   // DigibyteDaily (mainnet RC46 key)
-            {31,  ParsePubKey("03a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284"), "oracle32.digidollar.org:12046", true},   // Peer2Peer / DigiRoos (mainnet RC46 key)
-            {32,  ParsePubKey("03451f9d309a35d1eeefdc2bdacadb0d3dd88c50c51dce54317de6ae6bceb49370"), "oracle33.digidollar.org:12046", true},   // 3DogsKanab (mainnet RC46 key)
-            {33,  ParsePubKey("032218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c"), "oracle34.digidollar.org:12046", true},   // LiberatedLark (mainnet RC46 key)
-            {34,  ParsePubKey("038e6bc5e7addbf15369c87cd194cc63590c710b8d5c9e592d52ea13ce03927446"), "oracle35.digidollar.org:12046", true}    // Manu_DGB_oracle (mainnet RC46 key)
+            {26,  ParsePubKey("0336031b96a287f671172106f2d62cbeec0e547d31b591169ebbe9ddef7277e5b9"), "oracle27.digidollar.org:12024", true},   // HashedMax (mainnet RC46 key)
+            {27,  ParsePubKey("0380f5bdf4f359c7daccfa8156d9569f8b48e36619feadb38adb5292a93c877563"), "oracle28.digidollar.org:12024", true},   // DennisPitallano (mainnet RC46 key)
+            {28,  ParsePubKey("03810ab54165a93b0d219494da9a7830ef245f49696662ddc49644d25b081c79d3"), "digihash.digibyte.io:12024", true},   // DigiHash Mining Pool (mainnet key)
+            {29,  ParsePubKey("021ff6510c5c34604fdde76b866656f40a966e04fbabf27589155b754033139d3d"), "oracle30.digidollar.org:12024", true},   // medgboracle3452 (mainnet RC46 key)
+            {30,  ParsePubKey("0317aaa874bc5d71a1f9f2e0b54ca9188cabd732fe9776530aa79e7ac2dc0f0b67"), "oracle31.digidollar.org:12024", true},   // DigibyteDaily (mainnet RC46 key)
+            {31,  ParsePubKey("03a59c6d65b529fe956704ea6199a55dc1363f4fd4b79d56903f2d1737c7b09284"), "oracle32.digidollar.org:12024", true},   // Peer2Peer / DigiRoos (mainnet RC46 key)
+            {32,  ParsePubKey("03451f9d309a35d1eeefdc2bdacadb0d3dd88c50c51dce54317de6ae6bceb49370"), "oracle33.digidollar.org:12024", true},   // 3DogsKanab (mainnet RC46 key)
+            {33,  ParsePubKey("032218c8607635c1f4d71d5497a9d395404fe3c01adf58f92432fbc84b3849534c"), "oracle34.digidollar.org:12024", true},   // LiberatedLark (mainnet RC46 key)
+            {34,  ParsePubKey("038e6bc5e7addbf15369c87cd194cc63590c710b8d5c9e592d52ea13ce03927446"), "oracle35.digidollar.org:12024", true}    // Manu_DGB_oracle (mainnet RC46 key)
         };
     }
 };

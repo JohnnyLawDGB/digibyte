@@ -648,9 +648,8 @@ BOOST_AUTO_TEST_CASE(chainparams_oracle_endpoint_uniqueness)
         std::string port_str = oracle.endpoint.substr(colon_pos + 1);
         int port = std::stoi(port_str);
 
-        // Valid port ranges: 9001-9035 for digidollar.org, 12024-12033 for
-        // public DigiByte networks, or 12046 for temporary mainnet PRE.
-        bool valid_port = (port >= 9001 && port <= 9035) || (port >= 12024 && port <= 12033) || port == 12046;
+        // Valid port ranges: 9001-9035 for digidollar.org, or 12024-12033 for digibyte.io (testnet P2P ports)
+        bool valid_port = (port >= 9001 && port <= 9035) || (port >= 12024 && port <= 12033);
         BOOST_CHECK(valid_port);
     }
 }

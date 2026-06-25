@@ -1032,15 +1032,11 @@ BOOST_AUTO_TEST_CASE(util_ReadWriteSettings)
 
     // Test error logging, and remove previously written setting.
     {
-        fs::path settings_path;
-        BOOST_REQUIRE(args1.GetSettingsPath(&settings_path));
-        fs::remove(settings_path);
-        fs::create_directory(settings_path);
-        std::vector<std::string> errors;
-        BOOST_CHECK(!args2.WriteSettingsFile(&errors));
-        BOOST_REQUIRE_EQUAL(errors.size(), 1);
-        BOOST_CHECK_NE(errors[0].find("Failed renaming settings file"), std::string::npos);
-        fs::remove(settings_path);
+        ASSERT_DEBUG_LOG("Failed renaming settings file");
+        fs::remove(args1.GetDataDirBase() / "settings.json");
+        fs::create_directory(args1.GetDataDirBase() / "settings.json");
+        args2.WriteSettingsFile();
+        fs::remove(args1.GetDataDirBase() / "settings.json");
     }
 }
 

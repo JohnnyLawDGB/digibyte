@@ -6,7 +6,7 @@
 
 ## What Is DigiDollar?
 
-DigiDollar is a decentralized USD stablecoin built natively into DigiByte Core. Each DD = $1 USD, backed by DGB collateral locked in time-locked on-chain vaults. It uses the same blockchain, same nodes, same infrastructure — just new transaction types and a dedicated address format.
+DigiDollar is a decentralized USD-denominated stablecoin system built natively into DigiByte Core. Each DD is designed to track $1.00 USD through over-collateralized DGB vaults, live oracle pricing, DCA, ERR, and volatility protections. It uses the same blockchain, same nodes, same infrastructure — just new transaction types and a dedicated address format.
 
 If you already run a DigiByte node, you're most of the way there.
 
@@ -17,8 +17,8 @@ If you already run a DigiByte node, you're most of the way there.
 | Feature | Detail |
 |---------|--------|
 | Asset type | Native UTXO on DigiByte blockchain |
-| Value | 1 DD = $1.00 USD |
-| Amount unit in RPC | **USD cents** (10000 = $100.00) |
+| Value | USD-denominated; designed to track $1.00 |
+| Amount unit in RPC | **Integer USD cents for integration code** (10000 = $100.00) |
 | Address format | `DD...` (mainnet), `TD...` (testnet), `RD...` (regtest) — Base58Check P2TR with 2-byte version prefix |
 | Transaction fees | Paid in **DGB** (not DD) |
 | Minimum fee | 0.1 DGB for transfer builders; mint and redeem builders enforce DGB fee floors in their txbuilder paths |
@@ -26,7 +26,7 @@ If you already run a DigiByte node, you're most of the way there.
 | Block time | 15 seconds (same as DGB) |
 | Confirmations | Same security model as DGB |
 | Backend required | DigiByte Core v9.26.0+ with DigiDollar built in; features remain BIP9-gated until activation |
-| Wallet | Descriptor wallet recommended; private keys must be enabled to spend received DD |
+| Wallet | Spend-capable descriptor wallet required for generated deposit addresses and withdrawals |
 
 ---
 
@@ -52,6 +52,8 @@ rpcpassword=yourpassword
 
 That's it. Your existing DGB infrastructure stays the same — DD runs alongside it.
 
+`txindex=1` is not optional for DD chains because validation and wallet recovery need creating-transaction metadata. Before activation, `getdigidollardeploymentinfo` remains available, but DD address, balance, history, send, mint, redeem, and running-oracle RPCs are gated.
+
 ---
 
 ## 2. Wallet Setup
@@ -60,9 +62,11 @@ You'll need a wallet that holds both DGB and DD:
 - **DGB** — for paying transaction fees on DD sends
 - **DD** — for processing customer withdrawals
 
+Use a descriptor wallet with private keys enabled for hot-wallet custody. A watch-only/private-key-disabled wallet can monitor state if it already has the right descriptors, but it cannot create DD deposit addresses with `getdigidollaraddress` or sign withdrawals. `importdigidollaraddress` is only a validation/no-op stub in V1; it does not import, mutate wallet state, or rescan.
+
 ```bash
-# Create a wallet (or use your existing one)
-digibyte-cli createwallet "exchange-hot"
+# Create a spend-capable descriptor wallet (or use an existing one)
+digibyte-cli createwallet "exchange-hot" false false "" false true
 
 # Verify DD is active
 digibyte-cli getdigidollardeploymentinfo
@@ -77,16 +81,20 @@ Generate a unique DD address for each customer, just like you do for DGB:
 
 ```bash
 digibyte-cli getdigidollaraddress
-# Returns: "DD1q..."  (mainnet)
-# Returns: "TD1q..."  (testnet)
+# Returns a Base58Check DD/TD/RD address for the current network
 ```
 
-**Important:** DD addresses are NOT the same as DGB addresses. They use a different prefix (`DD/TD/RD`) and are P2TR (Taproot) encoded. Validate the prefix before accepting user input.
+**Important:** DD addresses are NOT the same as DGB addresses. They are Base58Check strings beginning with `DD`, `TD`, or `RD`, wrapping a 32-byte Taproot output key with a 2-byte DigiDollar version prefix. Do not treat them as Bech32/Bech32m, and do not validate by prefix alone. Use `validateddaddress` and reject wrong-network, checksum-invalid, whitespace-padded, or malformed input.
 
-**List all generated DD addresses:**
+**List DD addresses:**
 ```bash
 digibyte-cli listdigidollaraddresses
+
+# Include generated but still-empty addresses:
+digibyte-cli listdigidollaraddresses false 0 true
 ```
+
+`listdigidollaraddresses` hides generated zero-balance addresses by default. Keep your own customer-to-address mapping when you allocate deposit addresses.
 
 ---
 
@@ -115,6 +123,8 @@ digibyte-cli listdigidollartxs 100 0 "" "receive"
 ```
 
 **Match deposits to customers** by the `address` field (the unique DD address you generated for them).
+
+Track `txid`, `vout`, `blockhash`, `blockheight`, `confirmations`, `in_mempool`, and `wallet_state` from `listdigidollartxs`. Credit only after your confirmation threshold. If a credited transaction becomes `conflicted`/`abandoned`, loses confirmations, or reappears with a different `blockhash`, hold or reverse the credit and rescan affected customer balances.
 
 **Check a specific address balance:**
 ```bash
@@ -149,7 +159,7 @@ digibyte-cli senddigidollar "DDcustomerAddress..." 25000
   "txid": "ghi789...",
   "to_address": "DDcustomerAddress...",
   "amount": 25000,
-  "status": "sent",
+  "status": "success",
   "fee_paid": "0.10000000",
   "inputs_used": 2,
   "change_amount": 25000
@@ -170,6 +180,8 @@ digibyte-cli getbalance
 - Per-output dust floor: $1 (100 cents) — see `src/consensus/digidollar.h:73`
 - Maximum single transfer: **$100,000** (10,000,000 cents) per `maxMintAmount`-aligned policy in `src/consensus/digidollar.h:72`
 - DD inputs must be **confirmed** (≥1 confirmation) before they can be re-spent. As of RC32 the wallet does not chain unconfirmed DigiDollar UTXOs, and consensus rejects DD transfer/redeem inputs that resolve from `MEMPOOL_HEIGHT` (commit `0b4959f563`). Plan withdrawal cadence around the 15-second block time, or batch with `sendmanydigidollar`.
+- Integration code should pass integer cents with no decimal point. The send/redeem RPCs accept decimal-dollar input for CLI compatibility, so `25000` means $250.00 but `25000.00` means $25,000.00.
+- DD transfer withdrawals do not need a fresh oracle quote for mempool admission. Mint and redeem paths require recent valid MuSig2 oracle data; transfer-only exchange withdrawals are price-independent, but still require confirmed DD and DGB fee inputs.
 
 ### Batch withdrawals
 
@@ -179,7 +191,7 @@ digibyte-cli getbalance
 digibyte-cli sendmanydigidollar "" '{"DDcust1...":12500,"DDcust2...":7500}'
 ```
 
-The first argument is the required `sendmany` compatibility dummy string. Use integer cents in integration code to avoid decimal display/rounding ambiguity.
+The first argument is the required `sendmany` compatibility dummy string. Use integer cents in integration code to avoid decimal display/rounding ambiguity. Large batches are limited by standard OP_RETURN relay size because one amount is committed for every DD output plus possible change; split large withdrawals and handle the RPC's "Too many DigiDollar recipients" error.
 
 ---
 
@@ -188,10 +200,13 @@ The first argument is the required `sendmany` compatibility dummy string. Use in
 ### Hot Wallet Balances
 
 ```bash
-# DD balance (confirmed + unconfirmed)
+# DD balance (confirmed only by default)
 digibyte-cli getdigidollarbalance
-# Returns: { "confirmed": 500000, "unconfirmed": 25000, "total": 525000 }
+# Returns: { "confirmed": 500000, "unconfirmed": 0, "total": 500000 }
 # (amounts in cents — 500000 = $5,000.00)
+
+# Include trusted mempool DD for monitoring only:
+digibyte-cli getdigidollarbalance "" 0
 
 # DGB balance (for fees)
 digibyte-cli getbalance
@@ -236,7 +251,7 @@ Returns system-wide metrics:
 - **Total collateral** — all DGB locked as backing
 - **System health ratio** — collateral value / DD supply (should be >100%)
 
-This is useful for risk monitoring. If system health drops significantly, new minting gets more expensive (Dynamic Collateral Adjustment / DCA) and the Emergency Redemption Ratio (ERR) may activate (`src/consensus/err.cpp`).
+This is useful for risk monitoring. It is not a customer-deposit index. For custody, use wallet-local `listdigidollartxs`, `getdigidollarbalance`, and `listdigidollarunspent`, or build a raw indexer using the parsing rules below. If system health drops significantly, new minting gets more expensive (Dynamic Collateral Adjustment / DCA) and the Emergency Redemption Ratio (ERR) may activate (`src/consensus/err.cpp`).
 
 ---
 
@@ -257,11 +272,15 @@ If your backend processes raw transactions:
   3 = REDEEM
 ```
 
-**Find DD amount in OP_RETURN:**
-- Look for output with: `OP_RETURN "DD" <type> <amount_cents> <lockHeight>`
-- Amount is an integer in USD cents
+**Parse the DD OP_RETURN by transaction type:**
+- Mint: `OP_RETURN "DD" 1 <dd_amount_cents> <unlock_height> <lock_tier> <owner_xonly_pubkey_32b>`
+- Transfer: `OP_RETURN "DD" 2 <amount1> <amount2> ...`; assign amounts to zero-value DD P2TR outputs in output order, including change
+- Redeem: `OP_RETURN "DD" 3 <dd_change_amount>` only when DD change exists; full redemption may have no DD OP_RETURN
+- All DD amounts are integer cents
 
 **DD outputs have 0-satoshi value** — the DD amount is encoded in the script/OP_RETURN, not in `nValue`. Don't filter these out as dust!
+
+For exchange deposits and withdrawals, prefer the wallet RPCs unless you are deliberately building an independent indexer. The wallet already maps DD output amounts, ownership, confirmation depth, mempool state, and reorg status.
 
 ---
 
@@ -282,6 +301,7 @@ If your backend processes raw transactions:
 | **System status** | `getdigidollardeploymentinfo` | Verify DD is active |
 | **Network health** | `getdigidollarstats` | Monitor collateral health |
 | **Oracle price** | `getoracleprice` | Current DGB/USD |
+| **Oracle signers** | `getoraclesigners [blocks]` | Recent on-chain MuSig2 signer audit |
 
 ### RPCs You Probably DON'T Need
 
@@ -341,11 +361,12 @@ Exchanges typically handle deposits and withdrawals — not minting or redeeming
 
 | Pitfall | Solution |
 |---------|----------|
-| Sending to a DGB address instead of DD | Validate `DD/TD/RD` prefix before processing |
+| Sending to a DGB address instead of DD | Use `validateddaddress`; prefix-only checks are not enough |
 | Running out of DGB for fees | Monitor DGB balance, auto-top-up from exchange reserves |
 | Filtering out 0-sat outputs as dust | DD token outputs are 0-sat by design — don't discard them |
-| Using wrong amount units | RPC uses **cents** not dollars (multiply by 100) |
+| Using wrong amount units | Backend code should send integer cents; any decimal point is interpreted as dollars |
 | Not checking activation status | Call `getdigidollardeploymentinfo` — DD RPCs error before activation |
+| Crediting deposits without reorg checks | Track `blockhash`, confirmations, `in_mempool`, and `wallet_state`; reverse or hold credits on conflicts |
 | Ignoring system health | Monitor `getdigidollarstats` — ERR state affects the broader ecosystem |
 
 ---
@@ -386,15 +407,9 @@ The current public testnet in this source tree is **testnet26**. DigiDollar acti
 
 ---
 
-## 14. Mainnet Timeline
+## 14. Mainnet Activation
 
-| Milestone | Date |
-|-----------|------|
-| Testnet | Current source tree uses testnet26; activation is BIP9-gated at/after block 600 |
-| BIP9 signaling window opens | June 1, 2026 |
-| BIP9 signaling window closes | June 1, 2027 |
-| Minimum activation height | 23,627,520 |
-| Activation requirement | 70% of miners signal over 40,320 blocks (~1 week) |
+Activation parameters are branch/network-specific. This source tree currently includes a PRE/rehearsal mainnet configuration for isolated oracle testing, so do not publish a production mainnet date or height from this branch. Use `getdigidollardeploymentinfo` on the target release and network as the source of truth for status, window size, threshold, timeout, and minimum activation height.
 
 ---
 

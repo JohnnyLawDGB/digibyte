@@ -756,7 +756,8 @@ class DigiDollarOracleTest(DigiByteTestFramework):
                     if "Method not found" in str(e):
                         self.log.info(f"submitoraclemessage() RPC not implemented (MOCK oracle): {e}")
                         break
-                    pass  # Rate limiting may reject some
+                    # Rate limiting may reject some messages; continue counting accepted messages.
+                    continue
 
             # Should accept some but not all (due to rate limiting)
             if accepted_count > 0:
@@ -1052,17 +1053,17 @@ class DigiDollarOracleTest(DigiByteTestFramework):
             performance_tests = [
                 {
                     'name': 'response_time',
-                    'test': lambda: self._measure_oracle_response_time(),
+                    'test': self._measure_oracle_response_time,
                     'threshold': 1000  # 1 second max
                 },
                 {
                     'name': 'throughput',
-                    'test': lambda: self._measure_oracle_throughput(),
+                    'test': self._measure_oracle_throughput,
                     'threshold': 10  # 10 operations per second min
                 },
                 {
                     'name': 'consensus_time',
-                    'test': lambda: self._measure_consensus_time(),
+                    'test': self._measure_consensus_time,
                     'threshold': 5000  # 5 seconds max
                 }
             ]
@@ -1118,7 +1119,8 @@ class DigiDollarOracleTest(DigiByteTestFramework):
                 self.nodes[0].getoracleprice()
                 operations += 1
             except Exception:
-                pass
+                # Some mock oracle configurations can reject price reads while starting up.
+                continue
 
         end_time = time.time()
         duration = end_time - start_time
@@ -1152,7 +1154,8 @@ class DigiDollarOracleTest(DigiByteTestFramework):
                     consensus_achieved = True
                     break
             except Exception:
-                pass
+                # Consensus may not be observable until the next mock-price update is mined.
+                continue
             time.sleep(0.1)
 
         end_time = time.time()

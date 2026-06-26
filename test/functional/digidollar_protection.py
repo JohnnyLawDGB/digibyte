@@ -346,8 +346,7 @@ class DigiDollarProtectionTest(DigiByteTestFramework):
                 self.sync_all()
             except Exception as e:
                 self.log.info(f"Block generation blocked during ERR test (expected): {e}")
-                # Continue testing even if block generation fails
-                pass
+                # Continue testing even if block generation fails.
 
             # Check ERR status after each price drop
             protection_status = self.nodes[0].getprotectionstatus()

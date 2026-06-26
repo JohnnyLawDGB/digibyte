@@ -267,7 +267,9 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
 
         peer.send_and_ping(msg)
         # Allow node 0's relay to fan out to node 1.
-        self.sync_all(self.nodes[:2])
+        active_nodes = self.nodes[:2]
+        self.sync_blocks(active_nodes)
+        self.sync_mempools(active_nodes)
         time.sleep(1)
 
         bundle_after = self.nodes[1].getalloracleprices(20)["oracles"]

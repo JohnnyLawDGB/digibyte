@@ -83,12 +83,13 @@ double GetDifficulty(const CBlockIndex* tip, const CBlockIndex* blockindex, int 
             nBits = powLimit;
         else
         {
-            blockindex = GetLastBlockIndexForAlgo(tip, Params().GetConsensus(), algo);
+            // Use fast O(1) lookup instead of O(n) chain walking for RPC performance
+            blockindex = GetLastBlockIndexForAlgoFast(tip, Params().GetConsensus(), algo);
             if (blockindex == nullptr)
                 nBits = powLimit;
             else
                 nBits = blockindex->nBits;
-        }  
+        }
     }
     else
         nBits = blockindex->nBits;

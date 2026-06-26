@@ -557,7 +557,7 @@ static RPCHelpMan getmininginfo()
     const Consensus::Params& consensusParams = chainman.GetParams().GetConsensus();
     
     // Add current difficulty (for current mining algorithm)
-    obj.pushKV("difficulty",       (double)GetDifficulty(tip));
+    obj.pushKV("difficulty",       (double)GetDifficulty(tip, nullptr, miningAlgo));
     
     // Add difficulties for all algorithms
     UniValue difficulties(UniValue::VOBJ);

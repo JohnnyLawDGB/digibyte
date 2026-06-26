@@ -98,10 +98,9 @@ BASE_SCRIPTS = [
     'digidollar_listunspent.py --descriptors',
     
     # DigiByte: DISABLED TESTS
-    # The following tests are disabled because they require MultiAlgo PoW adaptation:
+    # The following test is disabled because it requires MultiAlgo PoW adaptation:
     # - feature_assumevalid.py (line 141)
-    # - feature_assumeutxo.py (line 357)
-    # These tests need DigiByte-specific snapshot hashes and PoW validation logic
+    # This test needs DigiByte-specific equivalent-work handling for assumevalid.
     
     # DigiByte: Multi-Algorithm Mining Tests
     'feature_digibyte_multialgo_mining.py',
@@ -444,8 +443,7 @@ BASE_SCRIPTS = [
     'wallet_coinbase_category.py --descriptors',
     'feature_filelock.py',
     'feature_loadblock.py',
-    # DigiByte: Disabled - requires MultiAlgo PoW adaptation for DGB specifics
-    # 'feature_assumeutxo.py',
+    'feature_assumeutxo.py',
     'p2p_dos_header_tree.py',
     'p2p_add_connections.py',
     'feature_bind_port_discover.py',

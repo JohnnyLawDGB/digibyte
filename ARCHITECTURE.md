@@ -1,5 +1,5 @@
 # DigiByte Blockchain Architecture
-**DigiByte v9.26 (Based on Bitcoin Core v26.2)**
+**DigiByte Core v9.26.2 (Based on Bitcoin Core v26.2)**
 *Comprehensive Technical Documentation*
 *Last Updated: 2026-05-20*
 *Validation Status: Spot-validated against live `feature/digidollar-v1` code surfaces listed in Appendix D*
@@ -243,7 +243,7 @@ struct Params {
     // DigiDollar / Oracle
     int nDDActivationHeight{0};                                            // BIP9 alignment height
     int nOracleActivationHeight{std::numeric_limits<int>::max()};          // Live-feed activation height
-    int nOracleEpochLength{40};                                            // Blocks per oracle epoch (~10 minutes)
+    int nOracleEpochLength{1440};                                          // Blocks per oracle epoch (default: 1440 = 24 hours)
     int nOracleRequiredMessages{1};                                        // Off-chain quorum threshold
     int nOracleTotalOracles{1};                                            // Total reserved oracle slots
     std::vector<std::string> vOraclePublicKeys;                            // Hardcoded XOnlyPubKeys (hex)
@@ -661,7 +661,7 @@ bool EvalScript(
 
 ### 8.2 Signature Versions
 
-**File:** `src/script/interpreter.h` (lines 191-197)
+**File:** `src/script/interpreter.h` (lines 210-216)
 
 ```cpp
 enum class SigVersion {
@@ -686,7 +686,7 @@ enum class SigVersion {
 | `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` | BIP112 CSV |
 | `SCRIPT_VERIFY_WITNESS` | BIP141 SegWit |
 | `SCRIPT_VERIFY_TAPROOT` | BIP341/342 Taproot |
-| `SCRIPT_VERIFY_DIGIDOLLAR` | DigiDollar opcodes (`OP_DIGIDOLLAR`/`OP_DDVERIFY`/`OP_CHECKPRICE`/`OP_CHECKCOLLATERAL`/`OP_ORACLE`); set in `GetBlockScriptFlags()` (`validation.cpp:2747, 2787-2789`) only when BIP9 `DEPLOYMENT_DIGIDOLLAR` is active. |
+| `SCRIPT_VERIFY_DIGIDOLLAR` | DigiDollar opcodes (`OP_DIGIDOLLAR`/`OP_DDVERIFY`/`OP_CHECKPRICE`/`OP_CHECKCOLLATERAL`/`OP_ORACLE`); set in `GetBlockScriptFlags()` (`validation.cpp:2755, 2796-2797`) only when BIP9 `DEPLOYMENT_DIGIDOLLAR` is active. |
 
 ### 8.4 DigiDollar Opcodes
 
@@ -1426,7 +1426,7 @@ make check
 
 ### Validation Date: 2026-05-20
 
-This architecture document has been spot-validated against the active DigiByte v9.26 codebase on `feature/digidollar-v1` across the major subsystems. Generated/build trees (`.deps`, `.libs`, `*.o`, `*.lo`, Qt `moc_*.cpp`, Qt `forms/ui_*.h`) were ignored.
+This architecture document has been spot-validated against the active DigiByte Core v9.26.2 codebase on `feature/digidollar-v1` across the major subsystems. Generated/build trees (`.deps`, `.libs`, `*.o`, `*.lo`, Qt `moc_*.cpp`, Qt `forms/ui_*.h`) were ignored.
 
 ### Validation Summary
 
@@ -1461,7 +1461,7 @@ This architecture document has been spot-validated against the active DigiByte v
 | OdoHeight | 9,112,320 | kernel/chainparams.cpp:126 |
 | DD_TX_VERSION | 0x0D1D0770 | primitives/transaction.h:47 |
 | OP_DIGIDOLLAR..OP_ORACLE | 0xbb..0xbf | script/script.h:210-214 |
-| DEPLOYMENT_DIGIDOLLAR bit | 23 | kernel/chainparams.cpp:177,491,863,993 |
+| DEPLOYMENT_DIGIDOLLAR bit | 23 | kernel/chainparams.cpp:177,517,969,1099 |
 | nDigiDollarMuSig2Height | equals effective DigiDollar activation boundary (mainnet 23,627,520; testnet26 600; default regtest 0) | kernel/chainparams.cpp |
 
 ### Verified Algorithm Implementations
@@ -1509,5 +1509,5 @@ This document is consistent with:
 ---
 
 *Document Version: 2.1*
-*Generated from DigiByte v9.26 codebase analysis (`feature/digidollar-v1`)*
+*Generated from DigiByte Core v9.26.2 codebase analysis (`feature/digidollar-v1`)*
 *Updated: 2026-05-20*

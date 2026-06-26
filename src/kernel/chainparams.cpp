@@ -180,10 +180,10 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 23627520; // Aligned to confirmation window (586 * 40320)
 
         // The best chain should have at least this much work.
-        consensus.nMinimumChainWork = uint256S("0x00");
+        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000001cae290ed41eb2efd4804c");
 
-        // By default assume that the signatures in ancestors of this block are valid block 21,700,000.
-        consensus.defaultAssumeValid = uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80"); // Block 21,700,000
+        // By default assume that the signatures in ancestors of this block are valid block 23,500,000.
+        consensus.defaultAssumeValid = uint256S("0xade47d5ccbb92cb1d965b97a187bdbf65bf74be6a3709cb6a01339f8c2856deb"); // Block 23,500,000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -267,25 +267,22 @@ public:
                 {20000000, uint256S("0xf530a66ba6fe93e647f7d88a9b3f22bfe8c2c2ab1ec1b0286286f86b82d6a10f")},
                 {21000000, uint256S("0x0000000000000001cb40d3be76bf601d98555a069669d963060d633ea3a140e8")},
                 {21700000, uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80")},
+                {23500000, uint256S("0xade47d5ccbb92cb1d965b97a187bdbf65bf74be6a3709cb6a01339f8c2856deb")},
             }
         };
 
-        m_assumeutxo_data = {
-            {
-                .height = 21'700'000,
-                .hash_serialized = AssumeutxoHash{uint256S("0x0000000000000000000000000000000000000000000000000000000000000000")}, // TODO: Calculate actual UTXO set hash
-                .nChainTx = 0, // TODO: Calculate actual total transaction count
-                .blockhash = uint256S("0x457f6864b52e5076a433afe3c28e3ae0bbeeaba9036a782ddb691242326fcb80")
-            },
-        };
+        // No mainnet AssumeUTXO snapshot is committed for v9.26.2. Keep this
+        // empty until a real serialized UTXO hash and transaction count are
+        // generated for a release snapshot.
+        m_assumeutxo_data.clear();
 
         chainTxData = ChainTxData{
             // DigiByte: Data from DigiByte blockchain
             // DigiByte has ~15 second blocks vs Bitcoin's ~10 minutes (40x faster)
-            // As of block 16,500,000 (July 2024)
-            .nTime    = 1720000000,  // Approximate July 2024 timestamp
-            .nTxCount = 25000000,    // Approximate total DigiByte transactions
-            .dTxRate  = 0.15,        // ~0.15 tx/sec for DigiByte (much lower than Bitcoin due to less usage)
+            // As of block 23,500,000.
+            .nTime    = 1778906996,
+            .nTxCount = 53488713,
+            .dTxRate  = 0.09148870167189133,
         };
 
         // DigiDollar consensus parameters (mainnet)

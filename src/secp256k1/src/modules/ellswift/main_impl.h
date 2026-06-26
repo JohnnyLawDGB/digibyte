@@ -586,7 +586,7 @@ int secp256k1_ellswift_xdh(const secp256k1_context *ctx, unsigned char *output, 
     secp256k1_fe_clear(&px);
     secp256k1_scalar_clear(&s);
 
-    return !!ret & !overflow;
+    return (ret != 0) & (overflow == 0);
 }
 
 #endif

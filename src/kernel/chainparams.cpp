@@ -215,12 +215,8 @@ public:
         // DigiByte MAINNET DNS Seed Server:
         vSeeds.emplace_back("seed.digibyte.io"); // Jared Tate @JaredTate
         vSeeds.emplace_back("seed.diginode.tools"); // Olly Stedall @saltedlolly
-        vSeeds.emplace_back("seed.digibyteblockchain.org"); // John Song @j50ng
-        vSeeds.emplace_back("eu.digibyteseed.com"); // Jan De Jong @jongjan88
         vSeeds.emplace_back("seed.digibyte.link"); // Bastian Driessen @bastiandriessen
-        vSeeds.emplace_back("seed.quakeguy.com"); // Paul Morgan Quakeitup @SnKQuaKe
         vSeeds.emplace_back("seed.aroundtheblock.app"); // Mark McNiel @JohnnyLawDGB
-        vSeeds.emplace_back("seed.digibyte.services"); // Craig Donnachie @cdonnachie
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,30);
         base58Prefixes[SCRIPT_ADDRESS_OLD] = std::vector<unsigned char>(1,5);

@@ -1171,9 +1171,9 @@ public:
                 // For use by test/functional/feature_assumeutxo.py
                 // DigiByte regtest values at height 299
                 .height = 299,
-                .hash_serialized = AssumeutxoHash{uint256S("0x0c3eb8c1b150495afa0aa96879243937ae989b45b9f8cd14947f5eec8ba7a103")}, // TODO: Generate actual UTXO hash
+                .hash_serialized = AssumeutxoHash{uint256S("0x0c3eb8c1b150495afa0aa96879243937ae989b45b9f8cd14947f5eec8ba7a103")},
                 .nChainTx = 300,
-                .blockhash = uint256S("0x2294ffc34eb5504fd3a497ea00b0acc5cf54bad0d17d48e0fc3463ddbae016ca")
+                .blockhash = uint256S("0x2819b3447826b563a8b7cae4e4bcc0c35845149fcd2b99089c0e664c07bc6cfe")
             },
         };
 

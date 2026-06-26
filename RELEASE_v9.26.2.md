@@ -123,6 +123,17 @@ Mainnet oracle parameters:
 | Oracle update interval | `4` blocks |
 | Active price sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com |
 
+Oracle peer seeding is operational, not consensus. The release consensus depends
+on the 35 hardcoded oracle public keys and valid 7-of-35 MuSig2 bundles; it does
+not depend on 35 public oracle DNS endpoints being live. For launch, oracle
+operators should connect to the public v9.26.2 mainnet oracle seed peers we have
+online, and more can be added later:
+
+```ini
+addnode=oracle1.digibyte.io:12024
+addnode=digihash.digibyte.io:12024
+```
+
 Legacy fake-price RPCs and legacy oracle bundle paths are not part of mainnet
 V1. Do not use old documentation that references `sendoracleprice`,
 `submitoracleprice`, production mock-price controls, or legacy v0x01/v0x02

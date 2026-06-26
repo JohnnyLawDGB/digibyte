@@ -124,28 +124,25 @@ Validation completed after the code changes:
   assumption, but only hours of DigiByte-equivalent work at 15-second spacing.
   Porting it correctly is a separate test-maintenance task.
 
-Important oracle-endpoint decision left open:
+Oracle peer-seeding decision:
 
 - The 35 oracle public keys, 35 active oracle slots, and 7-of-35 MuSig2 quorum
   must stay intact.
-- Only `oracle1.digibyte.io` and `digihash.digibyte.io` resolved during the
-  local DNS check. `digihash.digibyte.io:12024` accepted TCP from this host.
-  `oracle1.digibyte.io` resolved, but the TCP check did not complete from this
-  host during the audit.
-- The current tests require 35 unique oracle endpoint strings under approved
-  oracle domains. Collapsing all 35 slots to only two endpoint strings would
-  fail that coverage and misrepresent the per-slot operator metadata.
-- If the release wants to replace the non-resolving `oracleN.digidollar.org`
-  names, the clean path is to provide 35 unique resolving endpoint names under
-  the approved domain plan, or intentionally change the endpoint metadata design
-  and tests in a separate commit.
+- The release does not need 35 live oracle DNS endpoints for consensus. The
+  35-slot endpoint list is roster/status metadata; oracle security comes from
+  the hardcoded public keys and MuSig2 bundle validation.
+- For launch operations, oracle operators should use the two public v9.26.2
+  mainnet oracle seed peers we have now:
+  `oracle1.digibyte.io:12024` and `digihash.digibyte.io:12024`.
+- A third, fourth, and fifth stable public seed peer would be useful for
+  redundancy, but this is operational bootstrap redundancy, not consensus.
 
 ## Release Housekeeping Status
 
-### 1. Remaining: Verify And Fix Mainnet Oracle DNS
+### 1. Remaining: Verify Mainnet Oracle Seed Peers
 
-Code currently defines 35 active mainnet oracle endpoints, all using port
-`12024`.
+Code currently defines 35 active mainnet oracle slots and endpoint strings, all
+using port `12024`. Those endpoint strings are not consensus trust anchors.
 
 Local DNS verification found only these oracle hostnames resolving:
 
@@ -167,9 +164,12 @@ public keys and MuSig2 signature validation, not by trusting DNS hostnames.
 
 Tasks:
 
-- Create or correct DNS records for every configured mainnet oracle endpoint.
-- Confirm each hostname resolves from outside the local network.
-- Confirm each oracle host accepts inbound DigiByte P2P traffic on port `12024`.
+- Confirm `oracle1.digibyte.io` and `digihash.digibyte.io` resolve from outside
+  the local network.
+- Confirm both public oracle seed peers accept inbound DigiByte P2P traffic on
+  port `12024`.
+- Add one to three more stable public v9.26.2 mainnet peers if community hosts
+  volunteer them.
 - Confirm the running oracle node for each slot uses the pubkey assigned to that
   slot.
 - Run a mainnet smoke check after DNS is fixed:
@@ -178,9 +178,9 @@ Tasks:
 
 Why this matters:
 
-The code-side 35-slot roster is internally consistent, but the network cannot
-reach most configured oracle hostnames until DNS and inbound port routing are
-actually live.
+The code-side 35-slot roster is internally consistent. Oracle operators still
+need a few reliable public peers so their nodes can find each other and relay
+oracle traffic cleanly through activation.
 
 ### 2. Completed: DNS Seed Cleanup And Fixed-Seed Check
 
@@ -426,10 +426,11 @@ normal mainnet network identity restored, stale DNS seeds pruned, fresh
 mainnet chain safety metadata added, Taproot verified active, and DigiDollar,
 oracle validation, and MuSig2 activation aligned.
 
-The highest-risk remaining release blocker is operational oracle/bootstrap
+The highest-risk remaining release item is operational oracle/bootstrap
 connectivity: the 35 oracle public keys and 7-of-35 quorum are correct in code,
-but the public endpoint DNS/port plan still needs a final decision and live
-verification. Formal public docs are being handled by the separate docs team.
+and the launch plan is to use DigiByte.io and DigiHash as public v9.26.2
+mainnet oracle seed peers while asking for one to three more for redundancy.
+Formal public docs are being handled by the separate docs team.
 
 ## Dev Chat Post Draft
 
@@ -469,14 +470,15 @@ work completed in this pass:
 
 Remaining item:
 
-1. Clarify oracle/bootstrap connectivity.
+1. Verify oracle/bootstrap connectivity.
    Oracle hostnames are not consensus trust anchors. The actual oracle security
    comes from the hardcoded oracle public keys and 7-of-35 MuSig2 validation.
    The hostnames are only bootstrap/status/operator metadata.
 
    For the formal release we only need stable public bootstrap/connectivity for
-   DigiHash and DigiByte.io style nodes. Those should accept normal mainnet P2P
-   on TCP `12024` before we put them in operator instructions.
+   DigiHash and DigiByte.io style nodes, with one to three more useful but not
+   consensus-required. Those seed peers should accept normal mainnet P2P on TCP
+   `12024` before we put them in operator instructions.
 
 2. Run final release gates after the remaining release decisions.
    Once oracle endpoint/docs decisions are finalized, we need the full unit

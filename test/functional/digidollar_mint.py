@@ -229,39 +229,48 @@ class DigiDollarMintTest(DigiByteTestFramework):
         """Test mint validation rules and limits."""
         self.log.info("Testing mint validation rules...")
 
-        # Test minimum mint amount
-        try:
-            with assert_raises_rpc_error(None, ""):  # Any error code
-                self.nodes[0].mintdigidollar(9999, 4)  # Below $100 minimum (9999 cents = $99.99), tier 4
-        except Exception as e:
-            self.log.info(f"Minimum validation: {e}")
+        # Regtest lowers the consensus minimum to 1 cent so tests can cover
+        # tiny DD positions without huge collateral requirements.
+        assert_raises_rpc_error(
+            -8,
+            "DigiDollar amount must be positive",
+            self.nodes[0].mintdigidollar,
+            0,
+            4,
+        )
 
-        # Test maximum mint amount
-        try:
-            with assert_raises_rpc_error(None, ""):  # Any error code
-                self.nodes[0].mintdigidollar(10000100, 4)  # Above $100k maximum (10000100 cents = $100,001.00), tier 4
-        except Exception as e:
-            self.log.info(f"Maximum validation: {e}")
+        # Regtest caps mints at $1,000 (100,000 cents).
+        assert_raises_rpc_error(
+            -8,
+            "Maximum mint amount is $1000 (100000 cents)",
+            self.nodes[0].mintdigidollar,
+            100001,
+            4,
+        )
 
         # Test invalid tiers
         invalid_tiers = [-1, 10, 100]  # Negative and above max tier 9
 
         for invalid_tier in invalid_tiers:
-            try:
-                with assert_raises_rpc_error(None, ""):  # Any error code
-                    self.nodes[0].mintdigidollar(100000, invalid_tier)  # $1000.00 in cents
-            except Exception as e:
-                self.log.info(f"Invalid tier {invalid_tier} validation: {e}")
+            assert_raises_rpc_error(
+                -8,
+                "Lock tier must be between 0 and 9",
+                self.nodes[0].mintdigidollar,
+                100000,
+                invalid_tier,
+            )
 
         # Test insufficient balance
         # Create a new node with minimal balance
         insufficient_balance_node = self.nodes[2]
 
-        try:
-            with assert_raises_rpc_error(None, ""):  # Any error code
-                insufficient_balance_node.mintdigidollar(100000, 4)  # $1000.00 in cents, tier 4
-        except Exception as e:
-            self.log.info(f"Insufficient balance validation: {e}")
+        assert_raises_rpc_error(
+            -6,
+            "No available UTXOs for collateral",
+            insufficient_balance_node.mintdigidollar,
+            100000,
+            4,
+        )
 
         # Test valid regtest amounts at boundaries
         valid_amounts = [1, 100000]  # Min and max valid regtest amounts in cents ($0.01, $1000.00)
@@ -311,13 +320,13 @@ class DigiDollarMintTest(DigiByteTestFramework):
         ]
 
         for params in invalid_params:
-            try:
-                with assert_raises_rpc_error(-32602, ""):
-                    self.nodes[0].mintdigidollar(params["amount"], params["tier"])
-            except Exception as e:
-                # Some invalid parameters might raise different errors
-                # This is acceptable as long as they don't crash the node
-                self.log.info(f"Parameter validation caught: {e}")
+            assert_raises_rpc_error(
+                -8,
+                "DigiDollar amount must be positive",
+                self.nodes[0].mintdigidollar,
+                params["amount"],
+                params["tier"],
+            )
 
         # Test oracle price validation
         # Set invalid oracle price and verify it's handled

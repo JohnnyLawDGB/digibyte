@@ -104,8 +104,8 @@ Validation completed after the code changes:
 - Full unit test suite:
   `./src/test/test_digibyte --show_progress` passed `3401` test cases
 - Full functional suite:
-  `test/functional/test_runner.py --jobs=8` passed all `377` listed entries
-  with expected skips; runtime `391s`
+  `test/functional/test_runner.py --jobs=8` passed all `378` listed entries
+  with expected skips; runtime `398s`
 - Fuzz smoke with an empty input file passed for:
   `dd_txbuilder_validate_mint_params`, `dd_txbuilder_mint`,
   `dd_txbuilder_redeem`, `oracle_bundle_v03_roundtrip`,

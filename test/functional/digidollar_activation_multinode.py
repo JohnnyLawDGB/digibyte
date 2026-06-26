@@ -79,7 +79,7 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         ]
         self.extra_args = [list(common), list(common), list(common)]
 
-    def setup_network(self):
+    def setup_network(self, split=False):
         # Set up nodes 0 and 1 with a P2P link; do NOT start node 2 — we
         # intentionally leave it offline until each Phase-4/5/6 sub-test
         # boots it from a wiped datadir.

@@ -73,7 +73,7 @@ class DigiDollarMempoolMinerParityTest(DigiByteTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
-    def setup_network(self):
+    def setup_network(self, split=False):
         self.setup_nodes()
         self.connect_nodes(0, 1)
 

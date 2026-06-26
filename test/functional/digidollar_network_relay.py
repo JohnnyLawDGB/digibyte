@@ -66,7 +66,7 @@ class DigiDollarNetworkRelayTest(DigiByteTestFramework):
         self.sync_mempools(sync_nodes)
         return block_hashes
 
-    def setup_network(self):
+    def setup_network(self, split=False):
         """Setup network topology for relay testing."""
         self.setup_nodes()
 

@@ -72,7 +72,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 ### Phase 4: ACTIVE (block 600+ on testnet)
 - **What happens:** DigiDollar is fully operational. MuSig2 oracle bundles are required in DD mint/redeem blocks; DD transfer-only and ordinary DGB blocks can omit the coinbase oracle bundle.
-- **RPC behavior:** DD/oracle RPCs become functional (17 base in `src/rpc/digidollar.cpp`, 17 wallet-context in `src/wallet/rpc/wallet.cpp`).
+- **RPC behavior:** DD/oracle RPCs become functional (18 base in `src/rpc/digidollar.cpp`, 17 wallet-context in `src/wallet/rpc/wallet.cpp`).
 - **P2P behavior:** Oracle messages (`oracleprice`, `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles`) are processed, relayed, and validated according to the table below. Legacy `oraclebundle` messages are accepted on-wire but explicitly dropped — V1 carries the bundle on-chain in the coinbase, not via the bundle gossip message.
 - **Consensus:** DD transactions are validated. DD opcodes are enforced via `SCRIPT_VERIFY_DIGIDOLLAR` (set in script flags when `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` returns true).
 - **Qt behavior:** Activation overlay disappears. Full DD tab (overview, send, receive, mint, redeem, positions, transactions) becomes accessible.
@@ -80,7 +80,7 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 > **Activation boundary nuance (1-block off-by-one).** `getdeploymentinfo` exposes a BIP9 view (`bip9.status = active`) that flips at the period boundary block — i.e. the block whose `pindexPrev->nHeight + 1 == min_activation_height`. The height-based gate `Consensus::IsOracleActive(params, height) == (height >= nOracleActivationHeight)` flips one block later, at `height == min_activation_height` itself. There is therefore a single-block window where `bip9.status` reports `active` but `IsOracleActive(tip)` is still `false`. This is harmless on production because `IsDigiDollarEnabled(prev_block)` already returns true at the period boundary and the miner refuses price-dependent DD mint/redeem templates without a valid v0x03 bundle. DD transfer-only blocks do not need a block oracle price. Boundary tests should use the height-based predicate (`IsOracleActive`/`IsDigiDollarEnabled`) rather than `getdeploymentinfo.bip9.status` when they need the consensus-rule moment, and Wave 12's `DD-FA-SEC-010` fix in `SpendsDigiDollarCollateralVault` deliberately uses `min(nDDActivationHeight, BIP9 min_activation_height)` for the same reason.
 
-> **Regtest activation knobs.** The direct `-digidollaractivationheight=N` regtest knob defined in `src/chainparams.cpp:99-109` now retargets both BIP9 `min_activation_height` and the static DD/oracle height gates (`nDDActivationHeight` / `nOracleActivationHeight`) in `src/kernel/chainparams.cpp:1116-1119`. Generic `-vbparams=digidollar:start:timeout:minheight` still overrides BIP9 only; because MuSig2 follows the effective DigiDollar BIP9 boundary, a BIP9-only test override can move MuSig2 validation without moving the static DD/oracle P2P gates. Default regtest remains intentionally special: BIP9 is `ALWAYS_ACTIVE` with `min_activation_height=0`, while the DD/oracle P2P height gates default to `650` for local testing. `nDigiDollarMuSig2Height` follows the effective BIP9 boundary (`0`) so v0x03 quotes are valid whenever DigiDollar is active. Startup oracle-price reconstruction follows the BIP9 predicate used by block connection, so BIP9-active default-regtest blocks below 650 are not skipped during restart/reindex cache rebuilds.
+> **Regtest activation knobs.** The direct `-digidollaractivationheight=N` regtest knob defined in `src/chainparams.cpp:102-109` now retargets both BIP9 `min_activation_height` and the static DD/oracle height gates (`nDDActivationHeight` / `nOracleActivationHeight`) in `src/kernel/chainparams.cpp:1222-1225`. Generic `-vbparams=digidollar:start:timeout:minheight` still overrides BIP9 only; because MuSig2 follows the effective DigiDollar BIP9 boundary, a BIP9-only test override can move MuSig2 validation without moving the static DD/oracle P2P gates. Default regtest remains intentionally special: BIP9 is `ALWAYS_ACTIVE` with `min_activation_height=0`, while the DD/oracle P2P height gates default to `650` for local testing. `nDigiDollarMuSig2Height` follows the effective BIP9 boundary (`0`) so v0x03 quotes are valid whenever DigiDollar is active. Startup oracle-price reconstruction follows the BIP9 predicate used by block connection, so BIP9-active default-regtest blocks below 650 are not skipped during restart/reindex cache rebuilds.
 
 ---
 
@@ -90,9 +90,9 @@ DEFINED ──→ STARTED ──→ LOCKED_IN ──→ ACTIVE
 
 The DigiDollar/oracle RPC surface is split between the node-context registration in `src/rpc/digidollar.cpp` (registered via `RegisterDigiDollarRPCCommands`) and the wallet-context registration in `src/wallet/rpc/wallet.cpp` (added inside `GetWalletRPCCommands`).
 
-**Node-context (17, registered in `src/rpc/digidollar.cpp:5570`):**
+**Node-context (18, registered in `src/rpc/digidollar.cpp:6266`):**
 - `getdigidollarstats`, `getdcamultiplier`, `calculatecollateralrequirement`, `getdigidollardeploymentinfo`, `importdigidollaraddress`, `estimatecollateral`
-- `getoracleprice`, `getalloracleprices`, `getprotectionstatus`, `getoracles`, `listoracle`, `stoporacle`, `getoraclepubkey`
+- `getoracleprice`, `getalloracleprices`, `getprotectionstatus`, `getoracles`, `getoraclesigners`, `listoracle`, `stoporacle`, `getoraclepubkey`
 - Regtest helpers: `setmockoracleprice`, `getmockoracleprice`, `simulatepricevolatility`, `enablemockoracle`
 
 **Wallet-context (17, added in `src/wallet/rpc/wallet.cpp:888`):**
@@ -110,15 +110,15 @@ The DigiDollar/oracle RPC surface is split between the node-context registration
 
 | Wire command (`src/protocol.cpp`) | C++ constant | Handler in `src/net_processing.cpp` | Notes |
 |-----------------------------------|--------------|-------------------------------------|-------|
-| `oracleprice` | `NetMsgType::ORACLEPRICE` | line 5440 | Off-chain oracle attestation (input to MuSig2) |
-| `oraclebundle` | `NetMsgType::ORACLEBUNDLE` | line 5607 | **Accepted on the wire but always dropped** — V1 puts the bundle on-chain in the coinbase, not via gossip |
-| `oracleconsns` | `NetMsgType::ORACLECONSENSUS` | line 5624 | Off-chain consensus proposal driving MuSig2 |
-| `oracleattest` | `NetMsgType::ORACLEATTESTATION` | line 5743 | Per-oracle attestation supporting a consensus proposal |
-| `oramusnonce` | `NetMsgType::ORACLEMUSIGNONCE` | line 5847 | MuSig2 round-1 public nonces |
-| `oramusigctx` | `NetMsgType::ORACLEMUSIGCONTEXT` | line 5960 | MuSig2 context proposal fixing participant/nonce/quote set before partial signatures |
-| `oramusigpsig` | `NetMsgType::ORACLEMUSIGPARTIALSIG` | line 6054 | MuSig2 round-2 partial signatures bound to a session context |
-| `oraclehb` | `NetMsgType::ORACLEHEARTBEAT` | line 6166 | Signed oracle software/protocol heartbeat; telemetry, not a price input |
-| `getoracles` | `NetMsgType::GETORACLES` | line 6249 | Pull request for missing oracle messages; replies with fresh `oracleprice` messages and recent `oraclehb` heartbeats |
+| `oracleprice` | `NetMsgType::ORACLEPRICE` | line 5452 | Off-chain oracle attestation (input to MuSig2) |
+| `oraclebundle` | `NetMsgType::ORACLEBUNDLE` | line 5619 | **Accepted on the wire but always dropped** — V1 puts the bundle on-chain in the coinbase, not via gossip |
+| `oracleconsns` | `NetMsgType::ORACLECONSENSUS` | line 5636 | Off-chain consensus proposal driving MuSig2 |
+| `oracleattest` | `NetMsgType::ORACLEATTESTATION` | line 5755 | Per-oracle attestation supporting a consensus proposal |
+| `oramusnonce` | `NetMsgType::ORACLEMUSIGNONCE` | line 5859 | MuSig2 round-1 public nonces |
+| `oramusigctx` | `NetMsgType::ORACLEMUSIGCONTEXT` | line 5971 | MuSig2 context proposal fixing participant/nonce/quote set before partial signatures |
+| `oramusigpsig` | `NetMsgType::ORACLEMUSIGPARTIALSIG` | line 6064 | MuSig2 round-2 partial signatures bound to a session context |
+| `oraclehb` | `NetMsgType::ORACLEHEARTBEAT` | line 6175 | Signed oracle software/protocol heartbeat; telemetry, not a price input |
+| `getoracles` | `NetMsgType::GETORACLES` | line 6262 | Pull request for missing oracle messages; replies with fresh `oracleprice` messages and recent `oraclehb` heartbeats |
 
 **Note:** The price/consensus/MuSig2/getoracles gates use `Consensus::IsOracleActive(params, ActiveChain().Height())`, which is `nHeight >= params.nOracleActivationHeight`. On mainnet and testnet `nOracleActivationHeight` equals `nDDActivationHeight` and the BIP9 `min_activation_height`; on default regtest BIP9 is `ALWAYS_ACTIVE` at min height 0 while the P2P height gates default to 650. A peer sending gated oracle messages before the height gate is silently ignored — no ban, no misbehaviour penalty — just dropped at the start of each handler.
 
@@ -129,8 +129,8 @@ The DigiDollar/oracle RPC surface is split between the node-context registration
 ### Consensus Validation (all BIP9-gated)
 
 1. **Mempool acceptance** (`src/validation.cpp:976-989`): `DigiDollar::HasDigiDollarMarker(tx)` + `IsDigiDollarEnabled()` → rejects DD TXs with `TX_CONSENSUS "digidollar-not-active"`. After activation, mempool acceptance also requires that an oracle quote is available for any DD transaction (commit `81bf974f40`).
-2. **Block validation** (`src/validation.cpp:2808-2850`): `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` during `ConnectBlock()` delegates to `DeploymentActiveAfter(index.pprev, ...)`, so the candidate block is judged using the previous block's BIP9 state. Blocks containing DD TXs before activation are rejected. After activation, `ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2139`) requires DD mint/redeem blocks to carry exactly one v0x03 MuSig2 oracle bundle in the coinbase. DD transfer-only and non-DD blocks may omit oracle data; if any block includes one it must still be a valid v0x03 bundle (commit `1e08bd811f`).
-3. **Script verification** (`validation.cpp` script-flag setup): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true, so the Tapscript OP_SUCCESSx-class DD opcodes are not interpreted as DigiDollar operations before activation. Once active, `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-730`): it consumes one stack item and pushes false rather than reading node-local oracle state.
+2. **Block validation** (`src/validation.cpp:2816-2854`): `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` during `ConnectBlock()` delegates to `DeploymentActiveAfter(index.pprev, ...)`, so the candidate block is judged using the previous block's BIP9 state. Blocks containing DD TXs before activation are rejected. After activation, `ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2151`) requires DD mint/redeem blocks to carry exactly one v0x03 MuSig2 oracle bundle in the coinbase. DD transfer-only and non-DD blocks may omit oracle data; if any block includes one it must still be a valid v0x03 bundle (commit `1e08bd811f`).
+3. **Script verification** (`validation.cpp` script-flag setup): `SCRIPT_VERIFY_DIGIDOLLAR` flag only set when `DeploymentActiveAt()` returns true, so the Tapscript OP_SUCCESSx-class DD opcodes are not interpreted as DigiDollar operations before activation. Once active, `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-735`): it consumes one stack item and pushes false rather than reading node-local oracle state.
 4. **Mining graceful degradation** (`src/node/miner.cpp`, commit `6b5ff516c3`): `CreateNewBlock` strips price-dependent DD mint/redeem txs when no valid oracle bundle is available rather than aborting block assembly. Transfer-only DD txs are validated with oracle-price validation skipped because they do not need a block oracle price. The block is still produced; rejected DD txs remain in the mempool until either they confirm in a later attempt or are evicted.
 
 Historical validation, IBD, and reorg handling follow the same predicates. `ValidateBlockOracleData()` returns true before the historical activation state, startup price-cache reconstruction only loads blocks that are BIP9-active for their historical context, IBD/catch-up skips oracle-dependent DD validation where the code cannot safely re-evaluate old wall-clock freshness with current state, and `DisconnectBlock()` removes the connected block's price-cache entry during reorg.
@@ -254,16 +254,16 @@ A practical implication: there is no period in which the oracle P2P surface is l
 | Component | File | Function |
 |-----------|------|----------|
 | BIP9 deployment params | `src/kernel/chainparams.cpp` | `vDeployments[DEPLOYMENT_DIGIDOLLAR]` |
-| BIP9 state machine | `src/versionbits.cpp` | `ThresholdConditionChecker` |
+| BIP9 state machine | `src/versionbits.cpp` | `AbstractThresholdConditionChecker` / `VersionBitsConditionChecker` |
 | Deployment info | `src/deploymentinfo.cpp` | `VersionBitsDeploymentInfo[]` |
 | RPC activation gate | `src/rpc/digidollar.cpp` | `IsDigiDollarEnabled()` check in each RPC |
 | P2P activation gate | `src/net_processing.cpp` | `IsOracleP2PActive()` in `ORACLEPRICE`/`ORACLEBUNDLE`/`ORACLECONSENSUS`/`ORACLEATTESTATION`/`ORACLEMUSIGNONCE`/`ORACLEMUSIGCONTEXT`/`ORACLEMUSIGPARTIALSIG`/`GETORACLES`/`ORACLEHEARTBEAT` |
 | Mempool gate | `src/validation.cpp:976-989` | `IsDigiDollarEnabled()` in `AcceptToMemoryPool`; recent MuSig2 quote required for DD txs |
-| Block validation gate | `src/validation.cpp:2808-2850` | `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` in `ConnectBlock` |
-| Script flags | `src/validation.cpp:2759-2792` | `SCRIPT_VERIFY_DIGIDOLLAR` flag |
+| Block validation gate | `src/validation.cpp:2816-2854` | `DeploymentActiveAt(DEPLOYMENT_DIGIDOLLAR)` in `ConnectBlock` |
+| Script flags | `src/validation.cpp:2755-2798` | `SCRIPT_VERIFY_DIGIDOLLAR` flag (set in `GetBlockScriptFlags`) |
 | Qt activation overlay | `src/qt/digidollartab.cpp` | `checkActivationStatus()` timer |
 | Qt widget polling guard | `src/qt/digidollar*widget.cpp` | `if (!isVisible()) return;` |
 | Oracle height gate | `src/consensus/params.h:243-245` | `IsOracleActive()` |
 | DD enabled check | `src/digidollar/digidollar.cpp` | `IsDigiDollarEnabled()` |
 | Oracle bundle V1 enforcement | `src/oracle/bundle_manager.cpp` (`ValidateBlockOracleData`, `ExtractOracleBundle`, `CreateOracleScript`) | Raw v0x01/v0x02 OP_RETURN payloads short-circuit in `ExtractOracleBundle` (returns false), surfaced by the validator as `bad-oracle-malformed`. Only v0x03 MuSig2 bundles are accepted; the `bad-oracle-legacy` branch is defense-in-depth |
-| Reserved `OP_CHECKPRICE` behavior | `src/script/interpreter.cpp:708-730` | `OP_CHECKPRICE` is reserved and deterministically disabled; the old `g_get_oracle_consensus_price` hook remains only for tests |
+| Reserved `OP_CHECKPRICE` behavior | `src/script/interpreter.cpp:708-735` | `OP_CHECKPRICE` is reserved and deterministically disabled; the old `g_get_oracle_consensus_price` hook remains only for tests |

@@ -25,14 +25,14 @@ If you already run a DigiByte node, you're most of the way there.
 | Fee unit | DGB/kB (DigiByte uses kB, not vB) |
 | Block time | 15 seconds (same as DGB) |
 | Confirmations | Same security model as DGB |
-| Backend required | DigiByte Core v9.26.0+ with DigiDollar built in; features remain BIP9-gated until activation |
+| Backend required | DigiByte Core v9.26.2+ with DigiDollar built in; features remain BIP9-gated until activation |
 | Wallet | Spend-capable descriptor wallet required for generated deposit addresses and withdrawals |
 
 ---
 
 ## 1. Node Setup
 
-Upgrade your existing DigiByte node to v9.26.0+ and enable DigiDollar:
+Upgrade your existing DigiByte node to v9.26.2+ and enable DigiDollar:
 
 ```ini
 # digibyte.conf
@@ -179,7 +179,7 @@ digibyte-cli getbalance
 
 - Per-output dust floor: $1 (100 cents) — see `src/consensus/digidollar.h:73`
 - Maximum single transfer: **$100,000** (10,000,000 cents) per `maxMintAmount`-aligned policy in `src/consensus/digidollar.h:72`
-- DD inputs must be **confirmed** (≥1 confirmation) before they can be re-spent. As of RC32 the wallet does not chain unconfirmed DigiDollar UTXOs, and consensus rejects DD transfer/redeem inputs that resolve from `MEMPOOL_HEIGHT` (commit `0b4959f563`). Plan withdrawal cadence around the 15-second block time, or batch with `sendmanydigidollar`.
+- DD inputs must be **confirmed** (≥1 confirmation) before they can be re-spent. The wallet does not chain unconfirmed DigiDollar UTXOs, and consensus rejects DD transfer/redeem inputs that resolve from `MEMPOOL_HEIGHT` (commit `0b4959f563`). Plan withdrawal cadence around the 15-second block time, or batch with `sendmanydigidollar`.
 - Integration code should pass integer cents with no decimal point. The send/redeem RPCs accept decimal-dollar input for CLI compatibility, so `25000` means $250.00 but `25000.00` means $25,000.00.
 - DD transfer withdrawals do not need a fresh oracle quote for mempool admission. Mint and redeem paths require recent valid MuSig2 oracle data; transfer-only exchange withdrawals are price-independent, but still require confirmed DD and DGB fee inputs.
 
@@ -233,9 +233,9 @@ digibyte-cli getoracleprice
 **Oracle details:**
 - 35 active oracle slots on testnet/mainnet, 7 MuSig2 signatures required
 - 4-of-7 MuSig2 on regtest
-- Active price sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 feeders, registered in `src/oracle/exchange.cpp:1042-1071`)
-- Median-based aggregation with median-distance outlier rejection (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`); the live oracle daemon (`OracleNode::FetchMedianPrice` in `src/oracle/node.cpp:445-450`) requires **3** valid exchange responses before publishing, even though the aggregator's library default is 2 (`src/oracle/exchange.h:235`)
-- Coinbase/Kraken/Messari are *not* used: DGB is unlisted on those venues and Messari now requires a paid API key (see the in-source comment at `src/oracle/exchange.cpp:1009-1012`)
+- Active price sources: Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 feeders, registered in `src/oracle/exchange.cpp:1092-1097`)
+- Median-based aggregation with median-distance outlier rejection (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1225`); the live oracle daemon (`OracleNode::FetchMedianPrice` in `src/oracle/node.cpp:445-450`) requires **3** valid exchange responses before publishing, even though the aggregator's library default is 2 (`src/oracle/exchange.h:235`)
+- Coinbase/Kraken/Messari are *not* used: DGB is unlisted on those venues and Messari now requires a paid API key (see the in-source comment at `src/oracle/exchange.cpp:1087-1089`)
 - Oracle prices are derived **only** from live exchange aggregation; the `sendoracleprice` RPC was intentionally removed as a fake-price-injection vector
 
 ---
@@ -332,7 +332,7 @@ Exchanges typically handle deposits and withdrawals — not minting or redeeming
 │                │                             │
 │     ┌──────────▼──────────┐                 │
 │     │  DigiByte Core Node  │                 │
-│     │  v9.26.0+            │                 │
+│     │  v9.26.2+            │                 │
 │     │  digidollar=1        │                 │
 │     └──────────────────────┘                 │
 │                                             │
@@ -377,7 +377,7 @@ The current public testnet in this source tree is **testnet26**. DigiDollar acti
 
 ### Testnet Quick Start
 
-1. **Download** the latest DigiByte Core v9.26.0 RC build from this branch
+1. **Download** the latest DigiByte Core v9.26.2 release build from this branch
 2. **Configure:**
    ```ini
    testnet=1
@@ -409,7 +409,7 @@ The current public testnet in this source tree is **testnet26**. DigiDollar acti
 
 ## 14. Mainnet Activation
 
-Activation parameters are branch/network-specific. This source tree currently includes a PRE/rehearsal mainnet configuration for isolated oracle testing, so do not publish a production mainnet date or height from this branch. Use `getdigidollardeploymentinfo` on the target release and network as the source of truth for status, window size, threshold, timeout, and minimum activation height.
+Activation parameters are branch/network-specific. On mainnet, DigiDollar is gated by BIP9 bit 23 with a start time of 2026-06-01, a 40,320-block signaling window, a 70% threshold (28,224 of 40,320), and a minimum activation height of 23,627,520 (`src/kernel/chainparams.cpp:177-180,307`). Always confirm the live state by calling `getdigidollardeploymentinfo` on the target release and network as the source of truth for status, window size, threshold, timeout, and minimum activation height.
 
 ---
 

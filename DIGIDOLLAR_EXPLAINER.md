@@ -1,6 +1,6 @@
 # DigiDollar - Decentralized USD Stablecoin on DigiByte
-*Updated: 2026-05-21*
-*Document Version: 4.0 — RC41 launch-parameter alignment*
+*Updated: 2026-06-25*
+*DigiByte Core v9.26.2 — DigiDollar V1 launch-parameter alignment*
 
 ## Overview
 
@@ -27,7 +27,7 @@ Unlike traditional stablecoins backed by bank accounts, DigiDollar is designed t
 
 **Most importantly**: Everything happens directly in your DigiByte Core wallet - you never give up control of your private keys or trust a third party.
 
-**Transaction Limits**: Minimum mint $100, maximum $100,000 per transaction (testnet: $10,000 max). Minimum output $1.
+**Transaction Limits**: Minimum mint $100, maximum $100,000 per transaction (mainnet and testnet26; regtest is capped at $1,000 for testing). Minimum output $1.
 
 ### Key Benefits
 
@@ -162,7 +162,7 @@ Supply chain, gaming, and other wallet-native payment flows can be explored on t
 
 DigiDollar is built natively on a UTXO (Unspent Transaction Output) blockchain. All operations occur directly in DigiByte Core wallet — users maintain complete control of their private keys throughout the entire process.
 
-**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time has passed, but mainnet activation remains gated by the configured minimum height, threshold, current testnet26/RC44 validation, and mainnet oracle-operator deployment. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
+**Implementation Status (V1, `feature/digidollar-v1`)**: Core transaction system, MAST collateral, DCA/ERR/Volatility protections, network-wide UTXO scanning, MuSig2 oracle bundles, Qt GUI, and RPC surface are feature-complete. The June 1, 2026 BIP9 start time has passed, but mainnet activation remains gated by the configured minimum height, threshold, continued testnet26 validation, and mainnet oracle-operator deployment. See `DIGIDOLLAR_ARCHITECTURE.md` for the complete code-to-spec mapping.
 
 ### Core Technologies
 
@@ -383,23 +383,23 @@ digibyte-cli -rpcwallet=restored rescanblockchain
 
 ## Implementation Status & Code Alignment
 
-**Last Verified**: 2026-05-20
+**Last Verified**: 2026-06-25
 
 | Feature | Document Spec | Code Reference |
 |---------|---------------|----------------|
 | 2 MAST Paths | Normal + ERR only | `src/digidollar/scripts.cpp:117-177` |
 | Emergency oracle override | Removed | Comment at `src/digidollar/scripts.cpp:85-86` records removal |
-| Partial redemption | Rejected at consensus | `src/digidollar/validation.cpp:2512-2519` (`bad-collateral-release-partial-burn`) |
-| Non-DD spend of collateral vault | Rejected at consensus | `src/digidollar/validation.cpp:2631-2655` (`bad-collateral-spend-missing-dd-burn`) |
+| Partial redemption | Rejected at consensus | `src/digidollar/validation.cpp:2534` (`bad-collateral-release-partial-burn`) |
+| Non-DD spend of collateral vault | Rejected at consensus | `src/digidollar/validation.cpp:2653,2671` (`bad-collateral-spend-missing-dd-burn`) |
 | ERR semantics | 100% collateral, MORE DD burned | `src/consensus/err.cpp:100-149` (`__int128` ceiling math) |
 | Minting blocked during ERR | Yes; also blocked when oracle absent | `src/consensus/err.cpp:417-469` |
 | Both MAST paths require CLTV | Both leaves prefix-match `<lockHeight> OP_CLTV OP_DROP` | `src/digidollar/scripts.cpp:73-99` |
 | Lock tiers | 10 tiers (1h, 30d, 90d, 180d, 1y, 2y, 3y, 5y, 7y, 10y) | `src/consensus/digidollar.h:57-68` |
-| Custom durations rejected | Mint validation enforces canonical tier windows: `[tier_blocks, tier_blocks + 100]` | `src/digidollar/validation.cpp:1325-1366, 1574-1593` |
-| DCA tiers | 1.00 / 1.25 / 1.50 / 2.00 (≥150 / 120-149 / 110-119 / <110) | `src/consensus/dca.cpp:51-57` (HEALTH_TIERS) and `src/consensus/digidollar.h:87-92` (dcaLevels) |
+| Custom durations rejected | Mint validation enforces canonical tier windows: `[tier_blocks, tier_blocks + 100]` | `src/digidollar/validation.cpp:1354-1384` (`bad-mint-lock-tier-duration`) |
+| DCA tiers | 1.00 / 1.25 / 1.50 / 2.00 (≥150 / 120-149 / 110-119 / <110) | `src/consensus/dca.cpp:53-59` (HEALTH_TIERS) and `src/consensus/digidollar.h:94-99` (dcaLevels) |
 | ERR ratios | 0.95 / 0.90 / 0.85 / 0.80 | `src/consensus/err.cpp:53-58` (ERR_TIERS) |
 | Oracle config | 35 active slots, 7 signatures required (mainnet/testnet); 4-of-7 regtest | `src/kernel/chainparams.cpp` (`nOracleTotalOracles`, `nOracleRequiredMessages`, `nOracleConsensusRequired`) |
-| Cooldown period | 8640 blocks (~36h) | `src/consensus/volatility.h:63` (`COOLDOWN_BLOCKS`) |
+| Cooldown period | 8640 blocks (~36h) | `src/consensus/volatility.h:74` (`COOLDOWN_BLOCKS`) |
 | DD amount unit | Cents (100 = $1.00) | `src/consensus/digidollar.h:70-73`, `src/digidollar/digidollar.h` |
 | Oracle price unit | Micro-USD (1,000,000 = $1.00) | `src/oracle/bundle_manager.*`, `src/script/interpreter.cpp` |
 | DD supply alert | Monitoring only — no hard cap | `src/digidollar/health.h:83` (`ALERT_DD_SUPPLY`) |
@@ -418,8 +418,8 @@ The V1 branch closes the consensus and policy gaps that the previous draft of th
 | MuSig2-only oracle bundles | `src/validation.cpp:185-283` | Pre-V1 (legacy) bundles rejected; mempool requires recent valid MuSig2 quote |
 | Mainnet/testnet validator parity | `src/validation.cpp` | Mainnet short-circuit removed (commit `f0d9a7b2c7`) |
 | DCA/ERR integer math | `src/consensus/dca.cpp`, `src/consensus/err.cpp` | `__int128` ceiling arithmetic; `ApplyDCA` fails closed on stale health |
-| Confirmed-only DD chaining | `src/digidollar/validation.cpp:1425, 1564` | `MEMPOOL_HEIGHT` DD inputs rejected (commit `0b4959f563`) |
-| Mining graceful degradation | `src/node/miner.cpp:707-744` | Failing DD txs are stripped from `mapModifiedTx`; assembler continues |
+| Confirmed-only DD chaining | `src/digidollar/validation.cpp:1810, 1954` | `MEMPOOL_HEIGHT` DD inputs rejected (commit `0b4959f563`) |
+| Mining graceful degradation | `src/node/miner.cpp:857-859` | Failing DD txs (`ValidateDDForBlockInclusion`) are added to `failedTx` and skipped; assembler continues |
 | DD supply alert (not a cap) | `src/digidollar/health.h:83` | Monitoring threshold only |
 
 **Where this leaves operators**:

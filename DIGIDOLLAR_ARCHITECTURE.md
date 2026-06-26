@@ -1,5 +1,5 @@
 # DigiDollar Implementation Architecture
-**DigiByte v9.26 - Current Implementation Status**
+**DigiByte v9.26.2 - Current Implementation Status**
 *Updated: 2026-05-20*
 *Implementation Status: V1 / `feature/digidollar-v1`*
 *Document Version: 6.8 - Validated against codebase*
@@ -19,11 +19,11 @@ The DigiDollar V1 stack on `feature/digidollar-v1` is feature-complete; remainin
 
 - **Address System** — DD/TD/RD addresses live on mainnet/testnet/regtest (`src/base58.{h,cpp}`).
 - **Minting / Transferring / Redeeming** — Full P2TR pipeline (`src/digidollar/txbuilder.cpp`, `src/digidollar/validation.cpp`).
-- **Confirmed-only DD chaining** — Consensus refuses `MEMPOOL_HEIGHT` DD inputs for transfers and redeems (`src/digidollar/validation.cpp:1425, 1564`).
+- **Confirmed-only DD chaining** — Consensus refuses `MEMPOOL_HEIGHT` DD inputs for transfers and redeems (`src/digidollar/validation.cpp:1811, 1955`).
 - **Network-Wide Tracking** — `SystemHealthMonitor::ScanUTXOSet` plus incremental `OnMintConnected/OnRedeemConnected` hooks (`src/digidollar/health.cpp`); `DigiDollarStatsIndex` provides per-block aggregates (`src/index/digidollarstatsindex.{cpp,h}`).
 - **Protection Systems** — DCA (`src/consensus/dca.cpp`), ERR (`src/consensus/err.cpp`) and Volatility (`src/consensus/volatility.cpp`) all production-wired. ERR enforces extra DD burn (no DGB haircut) via integer `__int128` math.
 - **Canonical Lock Tiers** — Mint OP_RETURNs must declare tier 0-9. Validation accepts only the claimed canonical tier window `[tier_blocks, tier_blocks + 100]`, so under-locked/custom terms are rejected while delayed mining remains valid.
-- **OP_CHECKPRICE reserved opcode** — `OP_CHECKPRICE` is reserved and deterministically disabled; the interpreter consumes its operand and pushes false instead of reading node-local oracle state (`src/script/interpreter.cpp:708-730`).
+- **OP_CHECKPRICE reserved opcode** — `OP_CHECKPRICE` is reserved and deterministically disabled; the interpreter consumes its operand and pushes false instead of reading node-local oracle state (`src/script/interpreter.cpp:708-735`).
 - **MuSig2 V1 oracle path only** — Block validation rejects pre-V1 (legacy) oracle bundles in coinbase once DigiDollar is active (`src/validation.cpp:185-217`); mempool acceptance requires a recent valid MuSig2 oracle quote (`src/validation.cpp:224-283`).
 - **Mining graceful degradation** — DD txs that fail validation are stripped from `mapModifiedTx` rather than blocking block assembly (`src/node/miner.cpp:707-744`).
 - **Comprehensive Testing** — Unit tests under `src/test/digidollar_*` and `src/test/rh*`/`src/test/oracle_*`/`src/test/musig2_*`; functional tests under `test/functional/digidollar_*.py` and `test/functional/wallet_digidollar_*.py`. See `REPO_MAP_DIGIDOLLAR.md` for the full inventory.
@@ -569,17 +569,17 @@ flowchart TD
 
 DigiDollar consensus consumes consensus prices from the oracle subsystem; the full oracle architecture (exchange aggregation, MuSig2 ceremony, P2P relay) lives in `DIGIDOLLAR_ORACLE_ARCHITECTURE.md`. This section only catalogs how the protocol layer touches it.
 
-**Price format.** Micro-USD per DGB (1,000,000 = $1.00). DD amounts are stored in cents (100 = $1.00 USD). Conversions for system health use `priceMillicents = priceMicroUSD / 10` (`src/consensus/dca.cpp:242`).
+**Price format.** Micro-USD per DGB (1,000,000 = $1.00). DD amounts are stored in cents (100 = $1.00 USD). Conversions for system health use `priceMillicents = priceMicroUSD / 10` (`src/consensus/dca.cpp:243`).
 
 **Where DigiDollar reads the price.**
 - `src/script/interpreter.cpp` — `OP_CHECKPRICE` is reserved and deterministically disabled. It consumes its operand and pushes false; it does not consult any node-local oracle cache.
 - `src/digidollar/validation.cpp` — `ValidateMintTransaction()` requires `ctx.oraclePriceMicroUSD > 0` (rejects with `bad-oracle-price` otherwise) and `ShouldBlockMintingDuringERR()` calls `EmergencyRedemptionRatio::ShouldBlockMinting()` which pulls the oracle price from `MockOracleManager` on regtest and `OracleBundleManager::GetLatestPrice()` elsewhere, failing closed when the price is unavailable.
-- `src/validation.cpp:185-283` — Block validation rejects coinbase oracle bundles that fail extraction with `bad-oracle-malformed` once `IsDigiDollarEnabled` is true (the canonical reason for raw v0x01/v0x02 wire payloads, since `ExtractOracleBundle` short-circuits at `src/oracle/bundle_manager.cpp:1000-1057`). The `bad-oracle-legacy` reason is kept as a defense-in-depth gate for hypothetical bundles that parse successfully but report a non-MuSig2 `version`. Mempool acceptance requires a recent valid MuSig2 oracle quote (`HasRecentValidMuSig2OracleQuote`).
+- `src/validation.cpp:185-283` — Block validation rejects coinbase oracle bundles that fail extraction with `bad-oracle-malformed` once `IsDigiDollarEnabled` is true (the canonical reason for raw v0x01/v0x02 wire payloads, since `ExtractOracleBundle` short-circuits at `src/oracle/bundle_manager.cpp:1065-1069`). The `bad-oracle-legacy` reason is kept as a defense-in-depth gate for hypothetical bundles that parse successfully but report a non-MuSig2 `version`. Mempool acceptance requires a recent valid MuSig2 oracle quote (`HasRecentValidMuSig2OracleQuote`).
 - `src/digidollar/health.cpp` — `SystemHealthMonitor` caches the last oracle price (`SystemMetrics::lastOraclePrice`) and feeds DCA/ERR.
 
 **Mock oracle (regtest only).** `MockOracleManager` (`src/oracle/mock_oracle.cpp`) is a regtest helper used by `setmockoracleprice`/`enablemockoracle`/`simulatepricevolatility` RPCs and by `EmergencyRedemptionRatio::ShouldBlockMinting()` when running on regtest. It is *not* a production fallback for any consensus path; mainnet/testnet `ShouldBlockMinting` consults the real `OracleBundleManager`, while `OP_CHECKPRICE` is reserved and deterministically disabled.
 
-**Oracle quote requirement at mempool admission.** Mainnet/testnet nodes refuse to admit DigiDollar transactions when no recent valid MuSig2 oracle quote is available (`HasRecentValidMuSig2OracleQuote`, commit `81bf974f40`); reorg-resurrected DD transactions are likewise removed if no quote is available (`src/validation.cpp:504-509`).
+**Oracle quote requirement at mempool admission.** Mainnet/testnet nodes refuse to admit DigiDollar transactions when no recent valid MuSig2 oracle quote is available (`HasRecentValidMuSig2OracleQuote`, commit `81bf974f40`); reorg-resurrected DD transactions are likewise removed if no quote is available (`src/validation.cpp:601-602`).
 
 ---
 
@@ -611,7 +611,7 @@ int health = DCA::DynamicCollateralAdjustment::CalculateSystemHealth(
     totalCollateral, totalDDSupply, oraclePriceMillicents);
 ```
 
-**DCA tiers (HEALTH_TIERS in src/consensus/dca.cpp:51-57):**
+**DCA tiers (HEALTH_TIERS in src/consensus/dca.cpp:53-59):**
 
 | Health | Multiplier | Basis Points | Status |
 |--------|-----------|--------------|--------|
@@ -656,9 +656,9 @@ CAmount EmergencyRedemptionRatio::GetRequiredDDBurn(CAmount originalDDMinted, in
 | 85–90% | 8500 | 1.176× |
 | <85% | 8000 | 1.250× |
 
-**Mint blocking.** `ShouldBlockMinting(oraclePriceOverride)` blocks new mints whenever ERR is active OR no oracle price is available; it fails closed during oracle outages so health uncertainty cannot allow new DD issuance (commit `8bbbfedf70`). Block validation enforces this independently of the local mempool sync flag (`src/digidollar/validation.cpp:2236-2241`).
+**Mint blocking.** `ShouldBlockMinting(oraclePriceOverride)` blocks new mints whenever ERR is active OR no oracle price is available; it fails closed during oracle outages so health uncertainty cannot allow new DD issuance (commit `8bbbfedf70`). Block validation enforces this independently of the local mempool sync flag (`src/digidollar/validation.cpp:2683-2685`, `ShouldBlockMintingDuringERR` at `3004-3007`).
 
-**Mint-time burn enforcement.** `ValidateCollateralReleaseAmount()` (`src/digidollar/validation.cpp:2299+`) requires the redeemer to burn at least `requiredDDBurn` and to release the FULL locked collateral; partial-burn releases are rejected as `bad-collateral-release-partial-burn`. Non-DD transactions that try to spend a registered collateral vault are rejected with `bad-collateral-spend-missing-dd-burn` (commit `46cf97e804`).
+**Mint-time burn enforcement.** `ValidateCollateralReleaseAmount()` (`src/digidollar/validation.cpp:2316+`) requires the redeemer to burn at least `requiredDDBurn` and to release the FULL locked collateral; partial-burn releases are rejected as `bad-collateral-release-partial-burn`. Non-DD transactions that try to spend a registered collateral vault are rejected with `bad-collateral-spend-missing-dd-burn` (commit `46cf97e804`).
 
 #### **Layer 4: Volatility Protection**
 **Status: ✅ FULLY IMPLEMENTED AND PRODUCTION-READY** (`/src/consensus/volatility.cpp`)
@@ -694,7 +694,7 @@ class VolatilityMonitor {
 ### 7.3 Network-Wide Tracking System
 
 #### **CRITICAL FEATURE: Blockchain-Wide UTXO Scanning**
-**Status: ✅ FULLY IMPLEMENTED AND TESTED** (`/src/digidollar/health.cpp:299`)
+**Status: ✅ FULLY IMPLEMENTED AND TESTED** (`/src/digidollar/health.cpp:307`)
 
 This is a **major implementation** that was completely missing from the architecture document.
 
@@ -757,7 +757,7 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view,
 **Integration Points:**
 
 1. **RPC Command**: `getdigidollarstats` calls `ScanUTXOSet()` with chainstate access (full re-scan; expensive).
-2. **Incremental hooks**: `OnMintConnected`/`OnRedeemConnected` (`src/digidollar/health.h:191-205`) update `s_currentMetrics` in O(1) under `cs_main` whenever a DD tx is connected during normal block processing; the symmetric `OnMintDisconnected`/`OnRedeemDisconnected` reverse the update on reorg.
+2. **Incremental hooks**: `OnMintConnected`/`OnRedeemConnected` (`src/digidollar/health.h:222-248`) update `s_currentMetrics` in O(1) under `cs_main` whenever a DD tx is connected during normal block processing; the symmetric `OnMintDisconnected`/`OnRedeemDisconnected` reverse the update on reorg.
 3. **Block-level index**: `DigiDollarStatsIndex` (`src/index/digidollarstatsindex.{h,cpp}`) persists per-height totals (`total_dd_supply`, `total_collateral`, `vault_count`) so historical lookups don't require a re-scan.
 4. **Qt GUI**: Overview widget displays network totals via RPC.
 5. **Protection Systems**: DCA/ERR read the cached `SystemMetrics` (commit `2de69c94d9`) so health comes from one canonical source.
@@ -900,7 +900,7 @@ class DigiDollarTab : public QWidget {
 
 DigiDollar uses HD (Hierarchical Deterministic) key derivation from the wallet's seed for all DigiDollar operations. This enables wallet restore via descriptors.
 
-**Implementation Location**: `src/wallet/wallet.cpp:2679-2768` (`CWallet::GetHDKeyForDigiDollar`). Callers: `src/rpc/digidollar.cpp:1113` (`mintdigidollar` RPC), `src/rpc/digidollar.cpp:2436` (`getdigidollaraddress` RPC), `src/qt/walletmodel.cpp:887` (Qt mint flow).
+**Implementation Location**: `src/wallet/wallet.cpp:2741-2836` (`CWallet::GetHDKeyForDigiDollar`). Callers: `src/rpc/digidollar.cpp:1439` (`mintdigidollar` RPC), `src/rpc/digidollar.cpp:2845` (`getdigidollaraddress` RPC), `src/qt/walletmodel.cpp:892` (Qt mint flow).
 
 ### 8.5.2 GetHDKeyForDigiDollar() Function
 
@@ -920,15 +920,15 @@ CKey CWallet::GetHDKeyForDigiDollar(const std::string& label)
 
 **Key Design Decisions:**
 - **Uses `GetSigningProviderWithKeys()`**: critical for Taproot — `GetSolvingProvider()` returns keys without private-key access, causing signing failures.
-- **No random-key or legacy-wallet fallback in V1.** Earlier revisions of this section described a `MakeNewKey(true)` fallback for legacy wallets; current code rejects non-descriptor wallets before any legacy key extraction (`src/wallet/wallet.cpp:2683-2767`). On any failure path the helper returns an invalid `CKey` and the calling RPC throws `RPC_WALLET_ERROR "DigiDollar mint requires a descriptor/bech32m HD wallet with private keys enabled"` (`src/rpc/digidollar.cpp:1114-1116`). The Qt mint flow surfaces the same error to the user (`src/qt/walletmodel.cpp:889-891`). DigiDollar mint therefore requires a descriptor/bech32m HD wallet with private keys; non-HD/legacy/private-keys-disabled wallets fail clearly without minting.
+- **No random-key or legacy-wallet fallback in V1.** Earlier revisions of this section described a `MakeNewKey(true)` fallback for legacy wallets; current code rejects non-descriptor wallets before any legacy key extraction (`src/wallet/wallet.cpp:2757-2759`). On any failure path the helper returns an invalid `CKey` and the calling RPC throws `RPC_WALLET_ERROR "DigiDollar mint requires a descriptor/bech32m HD wallet with private keys enabled"` (`src/rpc/digidollar.cpp:1441`). The Qt mint flow surfaces the same error to the user (`src/qt/walletmodel.cpp:894-896`). DigiDollar mint therefore requires a descriptor/bech32m HD wallet with private keys; non-HD/legacy/private-keys-disabled wallets fail clearly without minting.
 - **Database persistence**: keys stored via `StoreOwnerKey()` and `StoreAddressKey()` *before* the mint transaction is broadcast (commit `1e95478b7e`), so a crash between broadcast and persistence cannot lose the owner key.
 
 ### 8.5.3 Usage in DigiDollar Operations
 
 | Operation | Label | Called From |
 |-----------|-------|-------------|
-| Mint DigiDollars | `"dd-owner"` | `mintdigidollar` RPC (`src/rpc/digidollar.cpp:1113`) and Qt mint (`src/qt/walletmodel.cpp:887`) |
-| Generate DD Address | `"dd-address"` | `getdigidollaraddress` RPC (`src/rpc/digidollar.cpp:2436`) |
+| Mint DigiDollars | `"dd-owner"` | `mintdigidollar` RPC (`src/rpc/digidollar.cpp:1439`) and Qt mint (`src/qt/walletmodel.cpp:892`) |
+| Generate DD Address | `"dd-address"` | `getdigidollaraddress` RPC (`src/rpc/digidollar.cpp:2845`) |
 
 **Note**: `redeemdigidollar` RPC does not call `GetHDKeyForDigiDollar()` — it uses stored owner keys from the position database. The label `"dd-redeem"` is NOT used anywhere in the codebase; only `"dd-owner"` and `"dd-address"` are used.
 
@@ -1141,10 +1141,10 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 
 ### 10.1 Complete Command Implementation
 
-#### **30 Total RPC Commands (17 Node-Context + 13 Wallet-Context)** (`/src/rpc/digidollar.cpp` + `/src/wallet/rpc/wallet.cpp`)
+#### **35 Total RPC Commands (18 Node-Context + 17 Wallet-Context)** (`/src/rpc/digidollar.cpp` + `/src/wallet/rpc/wallet.cpp`)
 **Status: ✅ 90% Complete**
 
-**All RPC Commands defined in `/src/rpc/digidollar.cpp` (17 registered directly, others via wallet-layer):**
+**All RPC Commands defined in `/src/rpc/digidollar.cpp` (18 registered directly, others via wallet-layer):**
 
 | Category | Command | Status | Notes |
 |----------|---------|--------|-------|
@@ -1162,6 +1162,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 | | `getalloracleprices` | ✅ Complete | Returns all oracle price data |
 | | `sendoracleprice` | ❌ Removed | Removed — security vulnerability (fake price injection) |
 | | `getoracles` | ✅ Complete | Shows configured oracle nodes |
+| | `getoraclesigners` | ✅ Complete | Lists oracle signers for a block (not activation-gated) |
 | | `listoracle` | ✅ Complete | List oracle details |
 | | `stoporacle` | ✅ Complete | Stop local oracle participant |
 | | `getoraclepubkey` | ✅ Complete | Get oracle public key by ID |
@@ -1506,20 +1507,20 @@ The V1 branch (`feature/digidollar-v1`) closed a series of consensus and policy 
 
 | Area | Behavior | Reference |
 |------|----------|-----------|
-| OP_CHECKPRICE | Reserved and deterministically disabled; consumes one operand and pushes false. It does not read live oracle state or production mock state. | `b9ddae031e` / `3668971ab2` (`src/script/interpreter.cpp:708-730`) |
-| MuSig2 V1 only | Coinbase oracle bundles in DigiDollar-active blocks must carry the V1 MuSig2 v0x03 format. Raw v0x01/v0x02 OP_RETURN payloads fail extraction (`src/oracle/bundle_manager.cpp:1000-1057`) and surface as `bad-oracle-malformed`; the `bad-oracle-legacy` branch is kept as defense-in-depth for bundles that parse but report a non-MuSig2 version. Mempool acceptance requires a recent valid MuSig2 quote. | `f2bb0a19a4`, `bbb85cf363` (`src/validation.cpp:185-283`) |
+| OP_CHECKPRICE | Reserved and deterministically disabled; consumes one operand and pushes false. It does not read live oracle state or production mock state. | `b9ddae031e` / `3668971ab2` (`src/script/interpreter.cpp:708-735`) |
+| MuSig2 V1 only | Coinbase oracle bundles in DigiDollar-active blocks must carry the V1 MuSig2 v0x03 format. Raw v0x01/v0x02 OP_RETURN payloads fail extraction (`src/oracle/bundle_manager.cpp:1065-1069`) and surface as `bad-oracle-malformed`; the `bad-oracle-legacy` branch is kept as defense-in-depth for bundles that parse but report a non-MuSig2 version. Mempool acceptance requires a recent valid MuSig2 quote. | `f2bb0a19a4`, `bbb85cf363` (`src/validation.cpp:185-283`) |
 | Mainnet/testnet validator parity | The mainnet oracle-validation short-circuit was removed; both networks honor the same V1 oracle-bundle gates. | `f0d9a7b2c7` |
 | DCA / health overflow | DCA and health math use signed `__int128` throughout to prevent collateral × price overflow. | `9cca6970ae` |
 | ERR burn math | Required burn = `ceil(originalDD * 10000 / ratioBps)` in `__int128`; `GetAdjustedRedemption` is a deprecated identity passthrough. | `55926c372a` |
 | Collateral spend rule | Non-DD spends of registered collateral vaults are rejected as `bad-collateral-spend-missing-dd-burn`. | `46cf97e804` |
 | Confirmed-only DD chaining | Consensus refuses DD inputs at `MEMPOOL_HEIGHT` for transfers and redeems. | `0b4959f563` |
 | Pre-mutation volatility check | `WouldCandidateFreezeMinting()` runs before any mutation so a rejected mint cannot poison volatility history. | `03f4af47a7` |
-| Missing system health fail-closed | Mint validation requires deterministic system health and rejects with `bad-system-health` otherwise. | `8bbbfedf70` (`src/digidollar/validation.cpp:1204-1209`) |
+| Missing system health fail-closed | Mint validation requires deterministic system health and rejects with `bad-system-health` otherwise. | `8bbbfedf70` (`src/digidollar/validation.cpp:1581-1584`) |
 | Mempool oracle quote | DD mempool acceptance requires a recent valid MuSig2 oracle quote; without one, DD txs are rejected and reorg-resurrected DD txs are removed. | `81bf974f40` |
 | Mining graceful degradation | DD txs failing validation are skipped during package selection and price-dependent DD txs are removed before retrying block validity when no valid oracle bundle is ready. | `6b5ff516c3` (`src/node/miner.cpp:523-538, 561-584, 849-864`) |
-| Lock tier canonical window | Custom/under-locked durations are rejected; mint OP_RETURN must record the canonical tier and the remaining lock blocks must be in `[tier_blocks, tier_blocks + 100]`. | `e1dd69f99b`, `11728a6980` (`src/digidollar/validation.cpp:1325-1366, 1574-1593`) |
+| Lock tier canonical window | Custom/under-locked durations are rejected; mint OP_RETURN must record the canonical tier and the remaining lock blocks must be in `[tier_blocks, tier_blocks + 100]`. | `e1dd69f99b`, `11728a6980` (`src/digidollar/validation.cpp:1342-1397, 1603-1611`) |
 | DD supply alert (not a cap) | `AlertThresholds::ALERT_DD_SUPPLY = 100M DD` is a monitoring threshold, not a hard cap; `MAX_DIGIDOLLAR` is a per-output serialization bound. | `99b1f79480` (`src/digidollar/health.h:83`) |
-| Coinbase price-cache poisoning | Coinbase oracle-price extraction is gated on `DEPLOYMENT_DIGIDOLLAR`, and global `UpdatePriceCache` mutation is deferred until after block checks succeed, so a coinbase OP_ORACLE cannot poison the price cache pre-activation or from an invalid block. | rh61 (`src/validation.cpp:3064-3094, 3365-3372`) |
+| Coinbase price-cache poisoning | Coinbase oracle-price extraction is gated on `DEPLOYMENT_DIGIDOLLAR`, and global `UpdatePriceCache` mutation is deferred until after block checks succeed, so a coinbase OP_ORACLE cannot poison the price cache pre-activation or from an invalid block. | rh61 (`src/validation.cpp:3077-3099, 3373-3380`) |
 | Single source of system health | DCA/ERR consume `SystemHealthMonitor::GetCachedMetrics()`; stale callers fail closed in `ApplyDCA`. | `2de69c94d9` |
 
 ## 15. Known Open Items
@@ -1700,19 +1701,19 @@ test/functional/digidollar_basic.py
 | Both MAST leaves require CLTV expiry | Both scripts begin with `<lockHeight> OP_CHECKLOCKTIMEVERIFY OP_DROP` | `src/digidollar/scripts.cpp:73-99` |
 | ERR increases DD burn; collateral return is full | `GetRequiredDDBurn` uses `__int128` ceiling math; `GetAdjustedRedemption` is deprecated identity passthrough | `src/consensus/err.cpp:100-149` |
 | Mint blocked while ERR active or oracle missing | `EmergencyRedemptionRatio::ShouldBlockMinting` fails closed on missing oracle | `src/consensus/err.cpp:417-469` |
-| Partial redemption rejected | `bad-collateral-release-partial-burn` raised when `ddBurned < requiredDDBurn` | `src/digidollar/validation.cpp:2512-2519` |
+| Partial redemption rejected | `bad-collateral-release-partial-burn` raised when `ddBurned < requiredDDBurn` | `src/digidollar/validation.cpp:2529-2536` |
 | Non-DD spends of registered collateral rejected | `bad-collateral-spend-missing-dd-burn` in `ValidateDigiDollarTransaction` | `src/digidollar/validation.cpp:2631-2655` |
-| Confirmed-only DD chaining | DD inputs at `MEMPOOL_HEIGHT` rejected as `dd-input-amounts-unknown` | `src/digidollar/validation.cpp:1425, 1564` |
-| Lock tier canonical window on mint | `bad-mint-lock-tier` for tier outside 0–9; `bad-mint-lock-tier-duration` if remaining lock blocks are outside `[canonical_blocks, canonical_blocks + 100]`; `bad-mint-lock-period` if not in `collateralRatios` | `src/digidollar/validation.cpp:1325-1366, 1574-1593` |
+| Confirmed-only DD chaining | DD inputs at `MEMPOOL_HEIGHT` rejected as `dd-input-amounts-unknown` | `src/digidollar/validation.cpp:1811, 1955` |
+| Lock tier canonical window on mint | `bad-mint-lock-tier` for tier outside 0–9; `bad-mint-lock-tier-duration` if remaining lock blocks are outside `[canonical_blocks, canonical_blocks + 100]`; `bad-mint-lock-period` if not in `collateralRatios` | `src/digidollar/validation.cpp:1342-1397, 1603-1611` |
 | Oracle price required | `bad-oracle-price` rejection in mint validation when `ctx.oraclePriceMicroUSD <= 0` | `src/digidollar/validation.cpp:1147-1153` |
-| Pre-mutation volatility freeze | `WouldCandidateFreezeMinting` checked before `RecordPrice`; rejected mints can't poison history | `src/digidollar/validation.cpp:2671-2678, 2730-2737` |
+| Pre-mutation volatility freeze | `WouldCandidateFreezeMinting` checked before `RecordPrice`; rejected mints can't poison history | `src/digidollar/validation.cpp:2688-2689, 2753` |
 | Mainnet/testnet validator parity | Mainnet short-circuit removed; both networks honor identical V1 oracle-bundle gates | `src/validation.cpp:185-283` |
-| `OP_CHECKPRICE` reserved/disabled | Interpreter consumes one operand and pushes false; no live or mock price lookup | `src/script/interpreter.cpp:708-730` |
-| DD amount in cents (100 = $1) | Stored amounts in cents; oracle prices in micro-USD; conversion `priceMillicents = priceMicroUSD / 10` for health math | `src/consensus/digidollar.h:70-73`, `src/consensus/dca.cpp:239-242` |
+| `OP_CHECKPRICE` reserved/disabled | Interpreter consumes one operand and pushes false; no live or mock price lookup | `src/script/interpreter.cpp:708-735` |
+| DD amount in cents (100 = $1) | Stored amounts in cents; oracle prices in micro-USD; conversion `priceMillicents = priceMicroUSD / 10` for health math | `src/consensus/digidollar.h:70-73`, `src/consensus/dca.cpp:239-243` |
 | Transaction types fixed at 4 | `DD_TX_NONE=0, DD_TX_MINT=1, DD_TX_TRANSFER=2, DD_TX_REDEEM=3, DD_TX_MAX=4` | `src/primitives/transaction.h:38-44` |
 | Redemption paths fixed at 2 | `RedemptionPath { PATH_NORMAL=0, PATH_ERR=1 }` | `src/digidollar/digidollar.h:70-73` |
 | DD supply alert (not cap) | `AlertThresholds::ALERT_DD_SUPPLY = 100M DD` is monitoring threshold; `MAX_DIGIDOLLAR` is per-output bound | `src/digidollar/health.h:83`, `src/digidollar/digidollar.h:19` |
 
 ---
 
-*Document last validated 2026-06-12 against the source on `feature/digidollar-v1`. RPC commands: 34 registered total (17 registered in `RegisterDigiDollarRPCCommands` at `src/rpc/digidollar.cpp`, 17 in `GetWalletRPCCommands` at `src/wallet/rpc/wallet.cpp`, including `sendmanydigidollar`, `listdigidollarunspent`, `listdigidollarutxos`, `exportoracleprivkey`, and `importoracleprivkey`). DD price/position/transaction/oracle-operation RPCs are activation-gated; `getdigidollardeploymentinfo` and wallet-local oracle key-management RPCs (`createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`) remain usable before activation. Oracle aggregation: 6 active exchange fetchers via libcurl (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko). `MockOracleManager` is a regtest helper only. DigiDollar transfers/redeems are confirmed-only (commit `0b4959f563`). `sendoracleprice` RPC was removed as a fake-price-injection vulnerability and `submitoracleprice` does not exist anywhere in the source tree. Pre-V1 oracle bundle versions are rejected at block validation once DigiDollar is active (commit `f2bb0a19a4`).*
+*Document last validated 2026-06-25 against the source on `feature/digidollar-v1`. RPC commands: 35 registered total (18 registered in `RegisterDigiDollarRPCCommands` at `src/rpc/digidollar.cpp`, 17 in `GetWalletRPCCommands` at `src/wallet/rpc/wallet.cpp`, including `sendmanydigidollar`, `listdigidollarunspent`, `listdigidollarutxos`, `exportoracleprivkey`, and `importoracleprivkey`). DD price/position/transaction/oracle-operation RPCs are activation-gated; `getdigidollardeploymentinfo` and wallet-local oracle key-management RPCs (`createoraclekey`, `exportoracleprivkey`, `importoracleprivkey`) remain usable before activation. Oracle aggregation: 6 active exchange fetchers via libcurl (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko). `MockOracleManager` is a regtest helper only. DigiDollar transfers/redeems are confirmed-only (commit `0b4959f563`). `sendoracleprice` RPC was removed as a fake-price-injection vulnerability and `submitoracleprice` does not exist anywhere in the source tree. Pre-V1 oracle bundle versions are rejected at block validation once DigiDollar is active (commit `f2bb0a19a4`).*

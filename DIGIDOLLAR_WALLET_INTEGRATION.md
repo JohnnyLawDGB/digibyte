@@ -24,14 +24,14 @@ There are only 4 operations: **Mint**, **Transfer**, **Redeem**, and regular DGB
 | Signing | Schnorr (BIP-340) for DD inputs, ECDSA/Schnorr for DGB fee inputs |
 | Wallet type | Descriptor/bech32m HD wallet required for DigiDollar V1 mint/address creation; legacy wallets are unsupported |
 | Confirmations | Same as DGB — 15-second blocks |
-| Backend | Requires DigiByte Core v9.26.0+ with DigiDollar built in; features remain BIP9-gated until activation |
+| Backend | Requires DigiByte Core v9.26.2+ with DigiDollar built in; features remain BIP9-gated until activation |
 
 ---
 
 ## 1. Prerequisites
 
 Your wallet must:
-- Run DigiByte Core v9.26.0 or later (with DigiDollar consensus rules)
+- Run DigiByte Core v9.26.2 or later (with DigiDollar consensus rules)
 - Set `digidollar=1` in `digibyte.conf`
 - Set `txindex=1`; startup enforces this on mainnet/testnet DigiDollar chains and on regtest when DD testing is enabled
 - Wait for BIP9 activation (DigiDollar features are disabled until activation; status is exposed via `getdigidollardeploymentinfo`)
@@ -224,7 +224,7 @@ digibyte-cli senddigidollar "DDrecipientAddress..." 5000 "Payment for services"
 - DigiByte uses **DGB/kB** for fee rates (not DGB/vB). The default DD fee rate is 35,000,000 sat/kB (≈0.35 DGB/kB), which yields ≈0.1 DGB on a typical ~300-vB tx
 - Maximum single transfer: **$100,000** (10,000,000 cents)
 - DD change is automatically returned to your wallet
-- Transfers are **confirmed-only** as of RC32: a DD UTXO must have at least one confirmation before it can be spent in a subsequent transfer or redeem. Consensus refuses to resolve DD amounts from `MEMPOOL_HEIGHT` inputs for transfer/redeem, and the wallet no longer chains unconfirmed DigiDollar outputs (commit `0b4959f563`). Plan throughput around the 15-second block time, or batch with `sendmanydigidollar`.
+- Transfers are **confirmed-only**: a DD UTXO must have at least one confirmation before it can be spent in a subsequent transfer or redeem. Consensus refuses to resolve DD amounts from `MEMPOOL_HEIGHT` inputs for transfer/redeem, and the wallet no longer chains unconfirmed DigiDollar outputs (commit `0b4959f563`). Plan throughput around the 15-second block time, or batch with `sendmanydigidollar`.
 - Advanced wallet coin control can pass `selected_inputs` matching `listdigidollarunspent` rows. The deprecated `fee_rate` argument on send/redeem RPCs is ignored by the fixed DD fee policy.
 
 ### Sending to many recipients in one transaction
@@ -360,8 +360,8 @@ Taproot spending key from the imported descriptors when available.
 ### Recovering from a lost wallet file
 
 If the wallet file is lost but the BIP39 seed / extended private key is
-preserved, re-derive the descriptors with `derivedescriptors` (or your
-wallet stack's seed-restore tool), import them with
+preserved, re-derive the descriptors with your wallet stack's seed-restore
+tool, import them with
 `importdescriptors`, and `rescanblockchain` from genesis. Active and redeemed
 DD position state is reconstructed from chain data, and spend keys are cached
 only when the imported descriptors can prove ownership of the DD output.
@@ -519,13 +519,13 @@ Registered in `RegisterDigiDollarRPCCommands()` at `src/rpc/digidollar.cpp`:
 
 ### Qt GUI integration
 
-DigiByte Core ships a DD lifecycle tab plus Qt widgets/dialogs/helpers: `digidollartab`, `digidollaroverviewwidget`, `digidollarsendwidget`, `digidollarreceivewidget`, `digidollarmintwidget`, `digidollarredeemwidget`, `digidollarpositionswidget`, `digidollartransactionswidget`, `digidollarcoincontroldialog`, `digidollarreceiverequest`, `ddaddressbookpage`, and `digidollar_qt_translate`. `DigiDollarTab` exposes the tabs `DD Overview`, `Send DD`, `Receive DD`, `Mint DD`, `Redeem DD`, `DD Vault`, and `DD Transactions`, with an activation overlay until BIP9 activates. The Qt mint flow derives an HD owner key and persists it before broadcasting (commit `1e95478b7e`), so an HD wallet with private keys enabled is required. See `REPO_MAP_DIGIDOLLAR.md` (Qt GUI section) for individual widget responsibilities.
+DigiByte Core ships a DD lifecycle tab plus Qt widgets/dialogs/helpers: `digidollartab`, `digidollaroverviewwidget`, `digidollarsendwidget`, `digidollarreceivewidget`, `digidollarmintwidget`, `digidollarredeemwidget`, `digidollarpositionswidget`, `digidollartransactionswidget`, `digidollarcoincontroldialog`, `digidollarreceiverequest`, `ddaddressbookpage`, and `digidollar_qt_translate`. `DigiDollarTab` exposes the tabs `$DD Overview`, `Send $DD`, `Receive $DD`, `Mint $DD`, `Redeem $DD`, `$DD Vault`, and `$DD Transactions`, with an activation overlay until BIP9 activates. The Qt mint flow derives an HD owner key and persists it before broadcasting (commit `1e95478b7e`), so an HD wallet with private keys enabled is required. See `REPO_MAP_DIGIDOLLAR.md` (Qt GUI section) for individual widget responsibilities.
 
 #### Qt mint reject-reason translation (`DD-FA-DOC-010`)
 
 The Qt mint widget broadcasts the assembled mint transaction directly through `node().broadcastTransaction` rather than through the `mintdigidollar` RPC. As a result the Wave 6 RPC pre-check that translates Emergency Redemption Ratio (ERR) state into a friendly RPC error does **not** run on the Qt code path: the widget's owner-key derivation, two-step confirmation dialogs, and HD wallet flow are all driven before broadcast, and the consensus reject reason (`minting-blocked-during-err`, `bad-tx-no-musig2-quote`, `volatility-freeze`, `bad-mint-lock-tier-duration`, `bad-oracle-price`, `bad-mint-collateral`) reaches the user only when mempool refuses the transaction.
 
-Starting with v9.26.0-rc34 (`DD-FA-FUNC-032`), the mint widget routes the broadcast reason through `qt/digidollar_qt_translate.h::TranslateMintRejectReasonForUser` before display. Known DD/oracle reject tokens are rewritten with a plain-English explanation and a remediation hint (e.g. `minting-blocked-during-err` is shown as "DigiDollar minting is paused because the system is in Emergency Redemption Ratio (ERR) recovery mode."). Unknown reasons pass through unchanged so operators retain forensic detail. The translator is unit-tested by `src/test/digidollar_qt_translate_tests.cpp` and is buildable without enabling Qt.
+In v9.26.2 (`DD-FA-FUNC-032`), the mint widget routes the broadcast reason through `qt/digidollar_qt_translate.h::TranslateMintRejectReasonForUser` before display. Known DD/oracle reject tokens are rewritten with a plain-English explanation and a remediation hint (e.g. `minting-blocked-during-err` is shown as "DigiDollar minting is paused because the system is in Emergency Redemption Ratio (ERR) recovery mode."). Unknown reasons pass through unchanged so operators retain forensic detail. The translator is unit-tested by `src/test/digidollar_qt_translate_tests.cpp` and is buildable without enabling Qt.
 
 For wallet integrators that bypass the Qt widget and submit raw mint transactions via `sendrawtransaction`, the canonical consensus reject tokens above are stable and may be matched directly by RPC consumers; see `src/digidollar/validation.cpp` (`ValidateDigiDollarTransaction`) for the authoritative list.
 
@@ -537,7 +537,7 @@ The current public testnet in this source tree is **testnet26**. DigiDollar acti
 
 ### Quick Setup
 
-1. Download the latest DigiByte Core v9.26.0 RC build from this branch
+1. Download the latest DigiByte Core v9.26.2 build from this branch
 2. Configure for testnet:
    ```ini
    testnet=1
@@ -561,13 +561,13 @@ The current public testnet in this source tree is **testnet26**. DigiDollar acti
 | P2P Port | 12033 (set in `src/kernel/chainparams.cpp`) |
 | DD Address Prefix | `TD` |
 | Oracle Consensus | 35 active slots, 7 signatures required |
-| Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders, see `src/oracle/exchange.cpp:1042-1071`) |
-| Outlier filter | Median-distance: prices ≥ `outlier_threshold × median` are dropped (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1192`) |
+| Exchange Sources | Binance, CoinGecko, KuCoin, Gate.io, HTX, Crypto.com (6 active feeders, see `src/oracle/exchange.cpp:1092-1097`) |
+| Outlier filter | Median-distance: a price is dropped when its distance from the median exceeds `outlier_threshold × median` (`MultiExchangeAggregator::FilterOutliers` at `src/oracle/exchange.cpp:1225`) |
 | Activation | BIP9 bit 23, min activation height 600; check `getdigidollardeploymentinfo` for current status |
 
 ### Mainnet Activation
 
-Activation parameters are branch/network-specific. This source tree currently includes a PRE/rehearsal mainnet configuration for isolated oracle testing, so do not publish a production mainnet date or height from this branch. Use `getdigidollardeploymentinfo` on the target release and network as the source of truth for status, window size, threshold, timeout, and minimum activation height.
+Mainnet activation is BIP9-gated on bit 23 (`src/kernel/chainparams.cpp:177-180`): signaling starts 2026-06-01 (`nStartTime=1780272000`), times out 2027-06-01 (`nTimeout=1811808000`), uses a 40,320-block confirmation window with a 70% threshold (28,224 blocks), and the minimum activation height is 23,627,520. Use `getdigidollardeploymentinfo` on the target release and network as the runtime source of truth for status, window size, threshold, timeout, and minimum activation height.
 
 ---
 

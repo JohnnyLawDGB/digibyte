@@ -17,7 +17,7 @@ ARCHITECTURE.md tells you *what to look for*. REPO_MAP.md tells you *exactly whe
 
 ## DigiByte Repo Structure
 
-DigiByte is a Bitcoin Core fork with **DigiDollar** (algorithmic stablecoin) built on top. This means two distinct layers need two separate repo maps:
+DigiByte is a Bitcoin Core fork with **DigiDollar** (over-collateralized USD-pegged stablecoin) built on top. This means two distinct layers need two separate repo maps:
 
 ```
 digibyte/
@@ -137,7 +137,7 @@ This catches files like `src/kernel/chainparams.cpp`, `src/primitives/transactio
 ## REPO_MAP.md Format
 
 ```markdown
-# REPO_MAP.md — DigiByte Core v9.26
+# REPO_MAP.md — DigiByte Core v9.26.2
 
 *Generated: YYYY-MM-DD*
 
@@ -257,7 +257,7 @@ If you add, remove, or rename files or functions, update the affected REPO_MAP.m
 ## DigiByte-Specific Tips
 
 - **5 Mining Algorithms:** SHA-256d, Scrypt, Skein, Qubit, and either Groestl before Odo activation or Odocrypt after `OdoHeight = 9,112,320`. Difficulty adjustment is via MultiShield/DigiSpeed and parameters in `src/kernel/chainparams.cpp`.
-- **DigiDollar activation:** Gated by BIP9 bit 23 (`Consensus::DEPLOYMENT_DIGIDOLLAR`). Per-network heights in `src/kernel/chainparams.cpp`: mainnet `nDDActivationHeight = 23627520`, testnet26 `= 600` (port 12033; reset genesis timestamp 1780156800), regtest BIP9 `ALWAYS_ACTIVE` with DD/oracle/MuSig2 height gates defaulting to 650. `nDigiDollarMuSig2Height` equals `nDDActivationHeight` on every chain — MuSig2 v0x03 oracle bundles are required as soon as DigiDollar activates.
-- **Oracle integration:** `src/primitives/oracle.h` defines structures, `src/oracle/` has the network/MuSig2 layer, and `src/consensus/{dca,err,volatility}.cpp` contain protection rules. Live consensus price reaches the script interpreter via the `g_get_oracle_consensus_price` hook (`src/script/interpreter.cpp`).
+- **DigiDollar activation:** Gated by BIP9 bit 23 (`Consensus::DEPLOYMENT_DIGIDOLLAR`). Per-network heights in `src/kernel/chainparams.cpp`: mainnet `nDDActivationHeight = 23627520`, testnet26 `= 600` (port 12033; reset genesis timestamp 1780156800), regtest BIP9 `ALWAYS_ACTIVE` with DD/oracle height gates defaulting to 650. `nDigiDollarMuSig2Height` equals `nDDActivationHeight` on mainnet and testnet26 (`chainparams.cpp:316,688`); on regtest it is `std::min(nDDActivationHeight, DEPLOYMENT_DIGIDOLLAR.min_activation_height)` = `0` while ALWAYS_ACTIVE (`chainparams.cpp:1234-1236`). MuSig2 v0x03 oracle bundles are required as soon as DigiDollar activates.
+- **Oracle integration:** `src/primitives/oracle.h` defines structures, `src/oracle/` has the network/MuSig2 layer, and `src/consensus/{dca,err,volatility}.cpp` contain protection rules. The `g_get_oracle_consensus_price` hook exists in `src/script/interpreter.cpp` but is left null in production (`src/init.cpp:282`); `OP_CHECKPRICE` is deterministically disabled (DD-FINAL-005) and no longer consults it — it consumes its operand and pushes FALSE (`src/script/interpreter.cpp:708-735`).
 - **BIP324 V2 P2P transport:** Implemented in `src/bip324.cpp`/`src/net.cpp`; opt in with `-v2transport=1`.
 - **Bitcoin lineage:** Most of `src/` is inherited from Bitcoin Core v26.2. When writing descriptions, note DigiByte-specific modifications vs inherited Bitcoin code; the historical reference trees are in `digibyte-v8.22.2/` and `bitcoin-v26.2-for-digibyte/` (do **not** index those).

@@ -1,4 +1,4 @@
-# REPO_MAP.md — DigiByte Core v9.26
+# REPO_MAP.md — DigiByte Core v9.26.2
 
 *Last validated: 2026-05-20 against `feature/digidollar-v1`*
 
@@ -126,8 +126,8 @@
 - `CCheckQueueControl<T>` (class) → RAII controller that submits script checks and waits for all workers to complete
 
 ### src/clientversion.cpp / .h
-- `FormatFullVersion()` → returns version string like "v9.26.0"
-- `FormatSubVersion()` → returns P2P sub-version string like "/DigiByte:9.26.0/"
+- `FormatFullVersion()` → returns version string like "v9.26.2"
+- `FormatSubVersion()` → returns P2P sub-version string like "/DigiByte:9.26.2/"
 - `CLIENT_VERSION` → integer encoding of major.minor.build version
 
 ### src/coins.cpp / .h
@@ -606,7 +606,7 @@
 - `CBlockUndo` (class) → undo data for an entire block: all CTxUndo entries (excluding coinbase)
 
 ### src/validation.cpp / .h
-- ⚠️ ~7050 lines. DigiDollar/oracle-aware: activation gating via `DigiDollar::IsDigiDollarEnabled`, `Consensus::IsOracleActive`, MuSig2 v0x03 bundle extraction in `ConnectBlock` (~lines 3084-3098), `SCRIPT_VERIFY_DIGIDOLLAR` flag set when `DEPLOYMENT_DIGIDOLLAR` is active (`GetBlockScriptFlags`, lines 2747 and 2787-2789), and incremental DD supply tracking via `DigiDollar::SystemHealthMonitor::OnMint{Connected,Disconnected}` / `OnRedeem{Connected,Disconnected}`.
+- ⚠️ ~7060 lines. DigiDollar/oracle-aware: activation gating via `DigiDollar::IsDigiDollarEnabled`, `Consensus::IsOracleActive`, MuSig2 v0x03 bundle extraction in `ConnectBlock` (~lines 3099-3108), `SCRIPT_VERIFY_DIGIDOLLAR` flag set when `DEPLOYMENT_DIGIDOLLAR` is active (`GetBlockScriptFlags` at line 2755, flag set at lines 2795-2798), and incremental DD supply tracking via `DigiDollar::SystemHealthMonitor::OnMint{Connected,Disconnected}` / `OnRedeem{Connected,Disconnected}`.
 - `Chainstate` (class) → manages a single validated chain state (UTXO set + block index)
   - `ActivateBestChain()` → selects and activates the best valid chain tip, connecting new blocks
   - `ConnectTip()` → connects a single new block to the chain tip, executing all transactions

@@ -2,8 +2,8 @@
 
 Audit date: 2026-06-25
 
-Scope: formal v9.26.2 DigiDollar mainnet release readiness. This document is an
-audit task list only. It does not apply any fixes.
+Scope: formal v9.26.2 DigiDollar mainnet release readiness. This document now
+tracks both the original audit findings and the housekeeping execution status.
 
 ## Confirmed In Code
 
@@ -112,6 +112,17 @@ Validation completed after the code changes:
   `oracle_bundle_validation`, `oracle_musig2_bundle`,
   `oracle_p2p_wire_messages`, `oracle_validate_block_data`, and
   `fuzz_block_algo_routing_phase2a`
+- Commit `07a63a9586` (`test: refresh regtest assumeutxo vector`) refreshed the
+  regtest height-299 AssumeUTXO vector and updated `feature_assumeutxo.py` to
+  match the deterministic DigiByte regtest snapshot it builds.
+- Commit `1fec3a51f9` (`test: restore assumeutxo functional coverage`) restored
+  `feature_assumeutxo.py` to the default functional runner.
+- `test/functional/feature_assumeutxo.py` passed directly.
+- `test/functional/test_runner.py feature_assumeutxo.py --jobs=1` passed.
+- `feature_assumevalid.py` remains intentionally disabled. The current test
+  buries the invalid block by 2100 blocks, which is Bitcoin's two-week-work
+  assumption, but only hours of DigiByte-equivalent work at 15-second spacing.
+  Porting it correctly is a separate test-maintenance task.
 
 Important oracle-endpoint decision left open:
 
@@ -129,9 +140,9 @@ Important oracle-endpoint decision left open:
   the approved domain plan, or intentionally change the endpoint metadata design
   and tests in a separate commit.
 
-## Must Do Before Formal Mainnet Release
+## Release Housekeeping Status
 
-### 1. Verify And Fix Mainnet Oracle DNS
+### 1. Remaining: Verify And Fix Mainnet Oracle DNS
 
 Code currently defines 35 active mainnet oracle endpoints, all using port
 `12024`.
@@ -171,20 +182,16 @@ The code-side 35-slot roster is internally consistent, but the network cannot
 reach most configured oracle hostnames until DNS and inbound port routing are
 actually live.
 
-### 2. Verify DNS Seeds And Regenerate Fixed Seeds
+### 2. Completed: DNS Seed Cleanup And Fixed-Seed Check
 
-Mainnet currently lists eight DNS seeds in `src/kernel/chainparams.cpp`.
+Mainnet previously listed eight DNS seeds in `src/kernel/chainparams.cpp`.
+Commit `88b7ad81cd` removed the four domains that did not resolve locally.
+The formal v9.26.2 mainnet source now retains these four DNS seeds:
 
-Local DNS verification results:
-
-- Resolved: `seed.digibyte.io`
-- Resolved: `seed.diginode.tools`
-- Resolved: `seed.digibyte.link`
-- Resolved: `seed.aroundtheblock.app`
-- Did not resolve locally: `seed.digibyteblockchain.org`
-- Did not resolve locally: `eu.digibyteseed.com`
-- Did not resolve locally: `seed.quakeguy.com`
-- Did not resolve locally: `seed.digibyte.services`
+- `seed.digibyte.io`
+- `seed.diginode.tools`
+- `seed.digibyte.link`
+- `seed.aroundtheblock.app`
 
 Local TCP reachability on port `12024` during the re-check:
 
@@ -198,42 +205,33 @@ Current removal candidates because they did not resolve locally:
 - `seed.quakeguy.com`
 - `seed.digibyte.services`
 
-Tasks:
+Completed:
 
-- Re-check all eight DNS seeds from more than one network.
-- Remove or replace seeds that are no longer maintained.
-- Confirm any retained seed returns reachable DigiByte mainnet nodes on port
-  `12024`.
-- Regenerate `src/chainparamsseeds.h` after seed verification.
-- Review `contrib/seeds/makeseeds.py`; its user-agent filter appears older than
-  the v9.26.2 user agent and should be checked before regenerating seeds.
+- The four non-resolving domains were removed from mainnet chainparams.
+- The retained seed domains returned reachable sampled mainnet peers on TCP
+  `12024` during the local audit.
+- `contrib/seeds/makeseeds.py` now accepts v9.26.x user agents.
+- Regenerating `src/chainparamsseeds.h` from the current seed files produced no
+  diff, so the fixed-seed byte list did not need a source change.
 
 Why this matters:
 
 The release should not depend on stale seed infrastructure. New mainnet users
 need reliable initial peers after installing v9.26.2.
 
-### 3. Add A Fresh Mainnet Checkpoint And Refresh Chain Safety Metadata
+### 3. Completed: Add Fresh Mainnet Checkpoint And Refresh Chain Safety Metadata
 
-Current mainnet release metadata needs a formal refresh before tagging:
+Commit `47b9ea3481` refreshed mainnet chain safety metadata from the synced
+local v9.26.2 Qt node at block `23,500,000`.
 
-- `nMinimumChainWork` is still `0x00`.
-- `defaultAssumeValid` points at block `21700000`.
-- The last hardcoded checkpoint is block `21700000`.
-- `chainTxData` is approximate and dated around July 2024.
-- Mainnet `m_assumeutxo_data` still has placeholder zero values.
+Completed:
 
-Tasks:
-
-- Use at least two trusted, independently synced mainnet nodes to select a new
-  finalized checkpoint height and hash.
-- Add the new checkpoint to `checkpointData`.
-- Update `defaultAssumeValid` to the selected block.
-- Calculate and set a real `nMinimumChainWork`.
-- Refresh `chainTxData` time, transaction count, and transaction rate.
-- Either fill mainnet AssumeUTXO data with real values or remove/disable the
-  placeholder entry so it is not mistaken for usable release data.
-- Run a verification sync with `-assumevalid=0` after the metadata is updated.
+- Added checkpoint height `23,500,000`.
+- Updated `defaultAssumeValid` to block `23,500,000`.
+- Set `nMinimumChainWork` from that block's chainwork.
+- Refreshed `chainTxData` from `getchaintxstats`.
+- Removed the placeholder mainnet AssumeUTXO entry because it had zero values
+  and was not a real release snapshot.
 
 Why this matters:
 
@@ -241,18 +239,16 @@ This is normal release housekeeping, but it matters more for DigiDollar because
 activation and oracle validation depend on nodes being cleanly synced on the
 same mainnet chain.
 
-### 4. Confirm Taproot Is Active On Live Mainnet
+### 4. Completed: Confirm Taproot Is Active On Live Mainnet
 
 DigiDollar V1 uses P2TR vault scripts. The code has a separate Taproot BIP9
 deployment and DigiDollar activation assumes Taproot script support is available
 before DigiDollar activates.
 
-Tasks:
+Completed:
 
-- Check live mainnet deployment state with a synced node.
-- Confirm Taproot is `active` before publishing final DigiDollar activation
-  instructions.
-- If Taproot is not active, stop and re-evaluate the formal activation plan.
+- The synced local mainnet v9.26.2 Qt node reported Taproot `active`.
+- Taproot was active since height `21,168,000`.
 
 Why this matters:
 
@@ -339,9 +335,10 @@ Why this matters:
 Unregistered tests create false confidence. Backup test artifacts can also break
 future test discovery or duplicate-suite cleanup.
 
-### 8. Run Full Final Release Gates After Housekeeping Fixes
+### 8. Run Full Final Release Gates After Remaining Release Decisions
 
-After the above items are fixed, run the full release validation pass.
+After the remaining oracle endpoint and release-document decisions are fixed,
+run one final release validation pass.
 
 Required gates:
 
@@ -424,16 +421,15 @@ Tasks:
 
 ## Summary
 
-The formal v9.26.2 source tree appears to have the main PRE rehearsal reversion
-done correctly: normal mainnet network identity is restored, historical DigiByte
-fork heights are intact, and DigiDollar/oracle/MuSig2 activation are aligned.
+The formal v9.26.2 source tree now has the main PRE rehearsal reversion done,
+normal mainnet network identity restored, stale DNS seeds pruned, fresh
+mainnet chain safety metadata added, Taproot verified active, and DigiDollar,
+oracle validation, and MuSig2 activation aligned.
 
-The highest-risk release blockers are operational and release-maintenance items:
-mainnet oracle/bootstrap connectivity needs final confirmation, several DNS
-seeds need removal or replacement, and chain safety metadata needs a fresh
-checkpoint/minimum-chainwork refresh. Taproot is considered active per release
-coordination, and formal public docs are being handled by the separate docs
-team.
+The highest-risk remaining release blocker is operational oracle/bootstrap
+connectivity: the 35 oracle public keys and 7-of-35 quorum are correct in code,
+but the public endpoint DNS/port plan still needs a final decision and live
+verification. Formal public docs are being handled by the separate docs team.
 
 ## Dev Chat Post Draft
 
@@ -447,28 +443,33 @@ fork heights are still intact. DigiDollar, oracle validation, and MuSig2 are
 all aligned at the same mainnet activation height in chainparams.
 
 Taproot is already active, and the release/docs team is handling the formal
-public release notes and integration docs separately. The remaining housekeeping
-work on the core release side is mostly normal mainnet release maintenance:
+public release notes and integration docs separately. The core housekeeping
+work completed in this pass:
 
-1. Add a fresh mainnet checkpoint and refresh chain metadata.
-   We need an updated checkpoint, updated `defaultAssumeValid`, real
-   `nMinimumChainWork` instead of `0x00`, refreshed `chainTxData`, and a final
-   decision on the placeholder mainnet AssumeUTXO entry.
+1. Fresh mainnet checkpoint and chain metadata are updated.
+   We added block `23,500,000` as the current checkpoint, updated
+   `defaultAssumeValid`, set real `nMinimumChainWork`, refreshed
+   `chainTxData`, and removed the placeholder mainnet AssumeUTXO entry.
 
-2. Clean up mainnet DNS seeds.
+2. Mainnet DNS seeds are cleaned up.
    The seeds that resolved and returned reachable sampled mainnet peers were:
    `seed.digibyte.io`, `seed.diginode.tools`, `seed.digibyte.link`, and
    `seed.aroundtheblock.app`.
 
-   The seed domains that did not resolve locally and should be removed or
-   replaced are: `seed.digibyteblockchain.org`, `eu.digibyteseed.com`,
+   The seed domains that did not resolve locally were removed:
+   `seed.digibyteblockchain.org`, `eu.digibyteseed.com`,
    `seed.quakeguy.com`, and `seed.digibyte.services`.
 
-   After final seed decisions, we should regenerate `src/chainparamsseeds.h`
-   and review the seed generation user-agent filter so it matches current
-   DigiByte versions.
+   `src/chainparamsseeds.h` was regenerated from the current seed files and had
+   no diff. The seed-generation user-agent filter now accepts v9.26.x nodes.
 
-3. Clarify oracle/bootstrap connectivity.
+3. Regtest AssumeUTXO coverage is restored.
+   The stale regtest AssumeUTXO vector was updated and `feature_assumeutxo.py`
+   is back in the default functional runner.
+
+Remaining item:
+
+1. Clarify oracle/bootstrap connectivity.
    Oracle hostnames are not consensus trust anchors. The actual oracle security
    comes from the hardcoded oracle public keys and 7-of-35 MuSig2 validation.
    The hostnames are only bootstrap/status/operator metadata.
@@ -477,8 +478,8 @@ work on the core release side is mostly normal mainnet release maintenance:
    DigiHash and DigiByte.io style nodes. Those should accept normal mainnet P2P
    on TCP `12024` before we put them in operator instructions.
 
-4. Run final release gates after the cleanup.
-   Once checkpoint metadata and seeds are cleaned up, we need the full unit
+2. Run final release gates after the remaining release decisions.
+   Once oracle endpoint/docs decisions are finalized, we need the full unit
    suite, full functional suite with `test/functional/test_runner.py --jobs=8`,
    relevant fuzz build/smoke coverage, Qt launch/version verification, and a
    final mainnet startup smoke check.

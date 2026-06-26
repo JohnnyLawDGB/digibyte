@@ -782,7 +782,7 @@ The bundle only becomes useful when enough independent oracle keys signed the sa
 
 ## What RC38 Hardens
 
-RC38 kept the on-chain v0x03 format and the then-current 9-of-17 V1 model. Current RC44 chainparams use 7-of-35 on mainnet/testnet. The RC38 hardening still matters because it made the off-chain signing path converge after restarts, timing drift, partial outages, and mixed message arrival order.
+RC38 kept the on-chain v0x03 format and the then-current 9-of-17 V1 model. Current chainparams use 7-of-35 on mainnet/testnet. The RC38 hardening still matters because it made the off-chain signing path converge after restarts, timing drift, partial outages, and mixed message arrival order.
 
 ### Problem
 
@@ -848,7 +848,7 @@ This works for testnet and mainnet because the bundle is validated from the bloc
 
 ### Existing testnet
 
-RC38 does not reset testnet24 and does not change the v0x03 bundle format.
+RC38 does not reset testnet26 and does not change the v0x03 bundle format.
 
 Oracle nodes running RC38 need the attempt-aware, evidence-bound context proposal messages for live signing. Mixed oracle versions may gossip prices and nonces, but they will not reliably converge on the RC38 signing context.
 
@@ -992,7 +992,7 @@ For oracle operators:
 7. Confirm partial signature messages include the current attempt and a non-null session context.
 8. Confirm v0x03 bundles appear after activation.
 9. Confirm getoracleprice returns a nonzero validated chain price.
-9. Do not use mock prices on production-style testnet or mainnet.
+10. Do not use mock prices on production-style testnet or mainnet.
 ```
 
 Useful RPCs:

@@ -1,5 +1,5 @@
 # DigiDollar Oracle System - Complete Architecture Documentation
-**DigiByte v9.26 — DigiDollar V1 Oracle Network (MuSig2-only)**
+**DigiByte v9.26.2 — DigiDollar V1 Oracle Network (MuSig2-only)**
 *Updated: 2026-04-30*
 *Document Version: 8.0 — Re-validated against `feature/digidollar-v1` branch*
 
@@ -7,7 +7,7 @@
 > - Mainnet and testnet validate identically. The previous mainnet short-circuit in `OracleDataValidator::ValidateBlockOracleData` was removed (commit `f0d9a7b2c7`); both networks honor the same Phase 3 gates.
 > - Only MuSig2 v0x03 oracle bundles are accepted on-chain (commits `bbb85cf363`, `fa29405adc`, `f2bb0a19a4`). Raw v0x01/v0x02 OP_RETURN payloads short-circuit inside `OracleBundleManager::ExtractOracleBundle`, so `OracleDataValidator::ValidateBlockOracleData` emits `bad-oracle-malformed`. The `bad-oracle-legacy` branch only fires when extraction succeeds with a non-MuSig2 version, which is structurally unreachable for current v0x03 wire payloads — it is kept as a defense-in-depth gate.
 > - DD mint/redeem blocks must include exactly one valid v0x03 bundle in the coinbase, or they are rejected with `bad-oracle-missing` / `bad-oracle-malformed` / `bad-oracle-multiple-outputs`. Transfer-only and non-DD blocks may omit oracle data; if any block includes oracle data, it must still be valid v0x03.
-> - `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-730`). It consumes one operand and pushes false rather than reading node-local oracle state.
+> - `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-735`). It consumes one operand and pushes false rather than reading node-local oracle state.
 > - `nDigiDollarMuSig2Height` is aligned with the effective DigiDollar activation boundary. MuSig2 is the only on-chain bundle format from the moment DigiDollar/oracle consensus activates.
 
 > **Sections that survived from earlier doc revisions (Phase One single-oracle, Phase Two roadmap, "MAINNET DISABLED" warnings, the Section 14 roadmap) describe a code path that no longer exists.** Treat the V1 invariants above as authoritative; flagged sections are kept only for historical context.
@@ -60,7 +60,7 @@ The Oracle System provides **decentralized price feeds** for the DigiByte blockc
 V1 ships with:
 - **Threshold MuSig2 quorum**: 7 signatures from the configured 35-active mainnet/testnet keyset, 4-of-7 regtest. The aggregate signature is verified by every full node against the on-chain participation bitmap.
 - **One on-chain format**: v0x03 (`bitmap_len + bitmap + epoch + price + timestamp + 64-byte aggregate sig`). Legacy v0x01 (single-message compact) and v0x02 (multi-message with per-oracle sigs) are explicitly rejected at extraction and validation time.
-- **Six working exchange fetchers** (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko — see `src/oracle/exchange.cpp:1042-1071`). The classes for Coinbase, Kraken, Messari, Bittrex, Poloniex still compile but are **not** initialized into `MultiExchangeAggregator::fetchers`. CoinMarketCap was removed entirely. The current fetch loop is sequential, then filtered by a 10% median-deviation outlier rule.
+- **Six working exchange fetchers** (Binance, KuCoin, Gate.io, HTX, Crypto.com, CoinGecko — see `src/oracle/exchange.cpp:1092-1097`). The classes for Coinbase, Kraken, Messari, Bittrex, Poloniex still compile but are **not** initialized into `MultiExchangeAggregator::fetchers`. CoinMarketCap was removed entirely. The current fetch loop is sequential, then filtered by a 10% median-deviation outlier rule.
 - **Block-cadence validation** aligned with DigiByte's 15-second block target;
   operator exchange fetch/broadcast loops run on the code's 60-second timer.
 
@@ -76,11 +76,11 @@ V1 ships with:
 **V1 surface — code as shipped on `feature/digidollar-v1`:**
 
 - ✅ OP_ORACLE opcode (0xbf) wired through script flag `SCRIPT_VERIFY_DIGIDOLLAR`
-- ✅ MuSig2 v0x03 on-chain format only — `OracleBundleManager::CreateOracleScript` produces v0x03 (`src/oracle/bundle_manager.cpp:877-925`); `ExtractOracleBundle` rejects v0x01/v0x02 (`src/oracle/bundle_manager.cpp:1000-1057`)
+- ✅ MuSig2 v0x03 on-chain format only — `OracleBundleManager::CreateOracleScript` produces v0x03 (`src/oracle/bundle_manager.cpp:889-925`); `ExtractOracleBundle` rejects v0x01/v0x02 (`src/oracle/bundle_manager.cpp:1065-1068`)
 - ✅ 35 active slots (35 active oracle slots) with a 7-signature mainnet/testnet quorum
-- ✅ Single validator path on mainnet and testnet (`OracleDataValidator::ValidateBlockOracleData`, `src/oracle/bundle_manager.cpp:2139`) — the prior mainnet short-circuit is gone
+- ✅ Single validator path on mainnet and testnet (`OracleDataValidator::ValidateBlockOracleData`, `src/oracle/bundle_manager.cpp:2151`) — the prior mainnet short-circuit is gone
 - ✅ P2P message surface: `oracleprice`, `oraclebundle` (received-and-dropped), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles` (`src/protocol.cpp:53-62`, handlers in `src/net_processing.cpp` 5440–6340). All oracle P2P handlers, including `oraclehb`, share the `IsOracleP2PActive` gate.
-- ✅ Six initialized exchange fetchers (`src/oracle/exchange.cpp:1042-1071`)
+- ✅ Six initialized exchange fetchers (`src/oracle/exchange.cpp:1092-1097`)
 - ✅ Block-validated price cache, gated by BIP9 `DEPLOYMENT_DIGIDOLLAR` (`src/validation.cpp:3064-3094, 3365-3372`)
 - ✅ BIP-340 Schnorr verification at every relay hop, with bound-from-chainparams pubkey replacement before verification (`src/net_processing.cpp:5462-5491`) so an attacker cannot ship their own pubkey alongside a forged signature
 
@@ -153,13 +153,14 @@ Core implementation:
 ├── src/oracle/signing_orchestrator.{h,cpp}    CValidationInterface; drives MuSig2 round 1/2
 ├── src/oracle/node.{h,cpp}                Oracle daemon entry, lifecycle
 ├── src/script/interpreter.{h,cpp}         Reserved/disabled OP_CHECKPRICE behavior
-├── src/validation.cpp                     CheckBlock → ValidateBlockOracleData; ConnectBlock price
-│                                          cache; UpdatePriceCache gated on BIP9 DEPLOYMENT_DIGIDOLLAR
+├── src/validation.cpp                     ConnectBlock → ValidateBlockOracleData (right after
+│                                          CheckBlock); ConnectBlock price cache; UpdatePriceCache
+│                                          gated on BIP9 DEPLOYMENT_DIGIDOLLAR
 ├── src/net_processing.cpp                 P2P handlers (~5440–6340), including heartbeat, are gated
 │                                          by IsOracleP2PActive, rate-limited, roster-limited, and
 │                                          verified with chainparams pubkey replacement before
 │                                          signature verification
-├── src/rpc/digidollar.cpp                 17 node-context RPCs; sendoracleprice REMOVED
+├── src/rpc/digidollar.cpp                 18 node-context RPCs; sendoracleprice REMOVED
 ├── src/wallet/rpc/wallet.cpp              17 wallet-context DD/oracle RPCs (createoraclekey,
 │                                          exportoracleprivkey, importoracleprivkey, startoracle,
 │                                          mintdigidollar, etc.)
@@ -483,7 +484,7 @@ public:
 
 | Field | Size | Type | Range/Constraint | Purpose |
 |-------|------|------|------------------|---------|
-| **oracle_id** | 4 bytes | uint32_t | 0-29 (Phase One: always 0) | Identifies oracle node |
+| **oracle_id** | 4 bytes | uint32_t | 0-34 (`< ORACLE_TOTAL_COUNT` = 35) | Identifies oracle node |
 | **price_micro_usd** | 8 bytes | uint64_t | 100 - 100,000,000 ($0.0001-$100.00) | DGB price in micro-USD (1,000,000 = $1.00) |
 | **timestamp** | 8 bytes | int64_t | Unix timestamp, ≤1 hour old | Message creation time |
 | **block_height** | 4 bytes | int32_t | Current chain height | Context for message |
@@ -660,7 +661,7 @@ SERIALIZE_METHODS(COraclePriceMessage, obj) {
 
 #### 4.1.6 Validation Rules (`IsValid()`)
 
-**Complete Validation Logic** (src/primitives/oracle.cpp:30-61):
+**Complete Validation Logic** (src/primitives/oracle.cpp:30-49):
 
 ```cpp
 bool COraclePriceMessage::IsValid(int64_t reference_time) const
@@ -680,20 +681,10 @@ bool COraclePriceMessage::IsValid(int64_t reference_time) const
     // Not too old (1 hour maximum age)
     if (timestamp < current_time - ORACLE_MAX_AGE_SECONDS) return false;
 
-    // 3. SCHNORR SIGNATURE VERIFICATION (optional for compact format)
-    // ⚠️ SECURITY ISSUE: Empty signature BYPASSES all verification
-    if (!schnorr_sig.empty()) {
-        // Try the compact attestation hash first (signs only oracle_id + price + timestamp)
-        if (VerifyAttestation()) {
-            return true;
-        }
-        // Fall back to legacy full-field verification (includes block_height + nonce)
-        return Verify();
-    }
-
-    // ⚠️ WARNING: If schnorr_sig is empty, message passes validation!
-    // Compact format: Trust based on chainparams oracle pubkey (verified at extraction)
-    return true;
+    // 3. SIGNATURE VERIFICATION (mandatory — fail closed)
+    // V1 does not accept unsigned compact oracle messages: an empty or invalid
+    // schnorr_sig makes VerifyAttestation() return false, so IsValid() returns false.
+    return VerifyAttestation();
 }
 ```
 
@@ -705,10 +696,10 @@ bool COraclePriceMessage::IsValid(int64_t reference_time) const
 | Price maximum | ≤ 100,000,000 micro-USD ($100.00) | `return false` (uses ORACLE_MAX_PRICE_MICRO_USD) |
 | Future timestamp | ≤ now + 60s | `return false` |
 | Old timestamp | ≥ now - 3600s | `return false` |
-| Signature | Valid BIP-340 (if present) | ⚠️ **Bypassed if empty** |
+| Signature | Valid BIP-340 attestation, always required | `return false` if `VerifyAttestation()` fails (empty sig fails closed) |
 
-> **⚠️ Security Note**: If `schnorr_sig` is empty, signature verification is completely skipped.
-> This means an attacker could submit unsigned messages that pass `IsValid()` checks.
+> **Note**: V1 fails closed on signatures — `IsValid()` ends in `return VerifyAttestation();`,
+> so an empty or invalid `schnorr_sig` is rejected. The earlier empty-signature bypass is gone.
 
 ### 4.2 COracleBundle - Complete Specification
 
@@ -1395,40 +1386,33 @@ Phase Two / Phase 3 MuSig2 (35 reserved slots, RC41):
 
 ## 5. Block Validation & Consensus Rules
 
-### 5.1 CheckBlock() Integration
+### 5.1 ConnectBlock() Oracle Validation
 
-**Location**: `/home/jared/Code/digibyte/src/validation.cpp` (CheckBlock calls ValidateBlockOracleData at line 4373)
+**Location**: `/home/jared/Code/digibyte/src/validation.cpp` (ConnectBlock calls ValidateBlockOracleData at line 2852, immediately after the CheckBlock call at line 2842)
 
-**Integration Point (line 4373)**:
+**Integration Point (line 2852)**:
 ```cpp
 // Validate oracle data (if present and after activation)
-if (!OracleDataValidator::ValidateBlockOracleData(block, nullptr, consensusParams, state)) {
-    return false; // State already set by ValidateBlockOracleData
+if (!OracleDataValidator::ValidateBlockOracleData(block, pindex->pprev, params.GetConsensus(), state)) {
+    return error("%s: OracleDataValidator::ValidateBlockOracleData: %s", __func__, state.ToString());
 }
 ```
 
 **Execution Position**:
 
 ```
-CheckBlock() Validation Sequence:
-├─► CheckBlockHeader (PoW, timestamp)       [lines 3800-3850]
-├─► Signet block solution (if applicable)   [lines 3852-3890]
-├─► Merkle root validation                  [lines 3892-3920]
-├─► Size limits check                       [lines 3922-3950]
-├─► Coinbase transaction validation         [lines 3952-4000]
-├─► All transaction validation              [lines 4002-4100]
-├─► Signature operation count               [lines 4102-4125]
+Chainstate::ConnectBlock() Validation Sequence:
+├─► CheckBlock(block, state, ...)            [line 2842]
+│     (context-free PoW / merkle / size / coinbase / sigop checks)
 │
-├─► Mark block as checked                   [line 4308]
-│     block.fChecked = true;
-│
-└─► ★ ORACLE VALIDATION ★                   [line 4373]
-      OracleDataValidator::ValidateBlockOracleData()
+└─► ★ ORACLE VALIDATION ★                    [line 2852]
+      OracleDataValidator::ValidateBlockOracleData(block, pindex->pprev, ...)
+      followed by CheckMuSig2OracleBundleVersion(block, pindex->pprev, ...) [line 2856]
 ```
 
 ### 5.2 ValidateBlockOracleData() — V1 Flow
 
-**Location:** `src/oracle/bundle_manager.cpp:2139` (`OracleDataValidator::ValidateBlockOracleData`).
+**Location:** `src/oracle/bundle_manager.cpp:2151` (`OracleDataValidator::ValidateBlockOracleData`).
 
 The validator runs identically on mainnet, testnet, and regtest. The pseudocode below is updated to match V1 — the prior "Phase One" / "Phase Two" multi-branch description and the mainnet short-circuit have been removed from the code (commits `f0d9a7b2c7`, `bbb85cf363`, `fa29405adc`, `f2bb0a19a4`).
 
@@ -1710,7 +1694,7 @@ bool OracleDataValidator::ValidateBlockOracleData(
 | **Timestamp/Epoch** | Bundle epoch and timestamp must be fresh for the block being validated | `src/oracle/bundle_manager.cpp` | `bad-oracle-timestamp` / stale epoch | Block rejected |
 | **Non-DD Blocks** | No oracle bundle required for ordinary DGB blocks | `src/validation.cpp` | N/A | Ordinary blocks remain valid |
 
-### 5.4 ConnectBlock() Integration
+### 5.4 ConnectBlock() Price-Cache Update
 
 **Location**: `/home/jared/Code/digibyte/src/validation.cpp:~2805` (oracle price extraction in ConnectBlock)
 
@@ -1882,7 +1866,7 @@ consensus.nOracleConsensusRequired   = 4;
 
 There is no longer a "mainnet validation bypass" — mainnet runs the same validator and the same MuSig2 verification path as testnet and regtest.
 
-### 14.3 Mainnet/Testnet Oracle Keys (35 Active - RC44 slot order 0-34)
+### 14.3 Mainnet/Testnet Oracle Keys (35 Active - slot order 0-34)
 
 **Location:** `src/kernel/chainparams.cpp` mainnet/testnet `consensus.vOraclePublicKeys.push_back(...)` blocks. The mainnet and testnet rosters share the same active operators/placeholders and slot order for slots 0-34.
 
@@ -1910,7 +1894,7 @@ There is no longer a "mainnet validation bypass" — mainnet runs the same valid
 | 19 | mbah_jambon |
 | 20 | Camden |
 
-Mainnet and testnet26 `vOracleNodes` slots 21-34 are active RC44 consensus
+Mainnet and testnet26 `vOracleNodes` slots 21-34 are active consensus
 metadata and are aligned with `consensus.vOraclePublicKeys`. Slot 28 uses the
 DigiHash Mining Pool key. Slot 31 is assigned to Peer2Peer / DigiRoos but
 remains a placeholder until a valid compressed secp256k1 oracle key is supplied;
@@ -1922,18 +1906,18 @@ because only slots 0-23 have deterministic local private keys there.
 
 ```cpp
 // Live MuSig2 validator (single path for all networks).
-// src/oracle/bundle_manager.cpp:ValidateMuSig2Bundle (~ line 2150-2260)
+// src/oracle/bundle_manager.cpp:ValidateMuSig2Bundle (definition at line 2430)
 bool OracleBundleManager::ValidateMuSig2Bundle(
-    const COracleBundle& bundle, int block_height,
+    const COracleBundle& bundle, int32_t block_height,
     const Consensus::Params& params, std::string& error);
 
 // Off-chain consensus price (deterministic, time-independent).
-// src/oracle/bundle_manager.cpp:CalculateConsensusPrice (~ line 2266+)
+// src/oracle/bundle_manager.cpp:CalculateConsensusPrice (definition at line 2553)
 CAmount OracleBundleManager::CalculateConsensusPrice(
     const COracleBundle& bundle, const Consensus::Params& params);
 
 // Required quorum for a v0x03 bundle (always nOracleConsensusRequired).
-// src/oracle/bundle_manager.cpp:GetRequiredConsensus (~ line 2104+)
+// src/oracle/bundle_manager.cpp:GetRequiredConsensus (definition at line 2371)
 int OracleBundleManager::GetRequiredConsensus(
     int block_height, const Consensus::Params& params);
 ```
@@ -1964,11 +1948,11 @@ There is no longer a separate "activate Phase Two on testnet" step — testnet/r
 **Verified against code:**
 - Price format: micro-USD (`1,000,000 = $1.00 USD`), constants `ORACLE_MIN_PRICE_MICRO_USD=100`, `ORACLE_MAX_PRICE_MICRO_USD=100000000` (`src/primitives/oracle.h:23-24`)
 - v0x03 on-chain payload: `version + bitmap_len + bitmap + epoch + price + timestamp + 64-byte aggregate sig` (`COracleBundle::SerializeV03Data`, `OracleBundleManager::CreateOracleScript`)
-- Validator: single code path for mainnet/testnet/regtest in `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2139`)
+- Validator: single code path for mainnet/testnet/regtest in `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2151`)
 - P2P handlers: 9 message types in `src/protocol.cpp:53-62`; price/consensus/MuSig2/getoracles handlers, including `oraclehb`, share the `IsOracleP2PActive` gate in `src/net_processing.cpp` ~5440–6340, and `oraclebundle` is accepted-and-dropped.
 - BIP9: bit 23, mainnet start `2026-06-01`, mainnet timeout `2027-06-01`, mainnet `min_activation_height=23627520`, mainnet window 40320 / threshold 28224 (70%); testnet26 start at genesis, `min_activation_height=600`, window 200, threshold 140 (70%); regtest `ALWAYS_ACTIVE`
-- `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-730`); it consumes one operand and pushes false without reading oracle state
-- 6 active exchange fetchers initialized in `MultiExchangeAggregator::InitializeFetchers` (`src/oracle/exchange.cpp:1042-1071`); 5 fetcher classes still compile but are NOT initialized (Coinbase, Kraken, Messari, Bittrex, Poloniex); CoinMarketCap removed entirely. `FetchAllPrices()` iterates the initialized fetchers sequentially.
+- `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-735`); it consumes one operand and pushes false without reading oracle state
+- 6 active exchange fetchers initialized in `MultiExchangeAggregator::InitializeFetchers` (`src/oracle/exchange.cpp:1092-1097`); 5 fetcher classes still compile but are NOT initialized (Coinbase, Kraken, Messari, Bittrex, Poloniex); CoinMarketCap removed entirely. `FetchAllPrices()` iterates the initialized fetchers sequentially.
 - `min_required_sources = 2` is the `MultiExchangeAggregator` header default (`src/oracle/exchange.h:235`); the production caller `OracleNode::FetchMedianPrice` raises the floor to 3 via `SetMinRequiredSources(3)` (`src/oracle/node.cpp:450`), so the live oracle daemon publishes only when >=3 of the 6 fetchers respond. Outlier filtering removes prices more than 10% from the median and aggregation requires the source floor before and after filtering.
 
 **Key technical details:**

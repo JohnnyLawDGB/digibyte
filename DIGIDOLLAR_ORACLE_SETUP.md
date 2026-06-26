@@ -1,6 +1,6 @@
 # DigiDollar Oracle Setup Guide
 
-*The single source of truth for oracle operator setup — multi-oracle MuSig2 (V1/Phase 3 activates alongside DigiDollar; `nDigiDollarMuSig2Height = nDDActivationHeight` on every network).*
+*The single source of truth for oracle operator setup — multi-oracle MuSig2 (V1 activates alongside DigiDollar; `nDigiDollarMuSig2Height = nDDActivationHeight` on mainnet and testnet26. On default regtest `nDigiDollarMuSig2Height = std::min(nDDActivationHeight, min_activation_height) = 0`.)*
 
 ---
 
@@ -92,7 +92,7 @@ algo=sha256d
 
 ## New Oracle Setup
 
-For first-time oracle operators. You need an assigned active oracle ID (slot **0–34**) from the maintainer; mainnet and testnet26 both use 35 consensus-active MuSig2 public keys with a 7-signature quorum. Slot ID 35 is outside the configured RC44 roster.
+For first-time oracle operators. You need an assigned active oracle ID (slot **0–34**) from the maintainer; mainnet and testnet26 both use 35 consensus-active MuSig2 public keys with a 7-signature quorum. Slot ID 35 is outside the configured 35-slot roster.
 
 ```bash
 # 1. Start your node
@@ -151,7 +151,7 @@ digibyte-cli -testnet getoracles true
 
 **Qt wallet users:** Start Qt → **File → Open Wallet → oracle**. If the oracle does not come up automatically, open **Console** and run `startoracle <your_oracle_id>`.
 
-> **Auto-start behavior:** since RC25, unencrypted oracle wallets auto-start when the wallet loads (`CWallet::TryAutoStartOracles` in `src/wallet/wallet.cpp:4814`), and encrypted wallets auto-start after `walletpassphrase` unlock. Keep the manual `startoracle` command handy anyway, because it remains the safest fallback if the oracle is not already running.
+> **Auto-start behavior:** since RC25, unencrypted oracle wallets auto-start when the wallet loads (`CWallet::TryAutoStartOracles` in `src/wallet/wallet.cpp:4870`), and encrypted wallets auto-start after `walletpassphrase` unlock. Keep the manual `startoracle` command handy anyway, because it remains the safest fallback if the oracle is not already running.
 
 ### Decommissioning retired testnets
 
@@ -199,7 +199,7 @@ Once running, the oracle automatically:
 
 ### Exchange Sources (no API keys required)
 
-Active feeders, registered in `src/oracle/exchange.cpp:1042-1071`:
+Active feeders, registered in `src/oracle/exchange.cpp:1092-1097`:
 
 - Binance (DGB/USDT plus DGB/BTC × BTC/USDT cross)
 - CoinGecko
@@ -210,7 +210,7 @@ Active feeders, registered in `src/oracle/exchange.cpp:1042-1071`:
 
 The fetcher classes for Coinbase, Kraken, Bittrex, Poloniex, and Messari still
 exist in `src/oracle/exchange.h` but are **not enabled** — the in-source comment
-at `src/oracle/exchange.cpp:1053-1057` documents the reasons (DGB unlisted /
+at `src/oracle/exchange.cpp:1087-1089` documents the reasons (DGB unlisted /
 removed / paid API key required).
 
 ### Price Format
@@ -248,11 +248,11 @@ removed / paid API key required).
 | Price Update Interval (`nDDOracleUpdateInterval`) | 2 blocks | 1 block | 4 blocks |
 | Bundle/MuSig2 Epoch (`nOracleEpochLength`) | 40 blocks | 40 blocks | 40 blocks |
 | Oracle Broadcast Interval | 60 seconds | 60 seconds | 60 seconds |
-| MuSig2 Activation (`nDigiDollarMuSig2Height`) | 600 | 650 | 23,627,520 |
+| MuSig2 Activation (`nDigiDollarMuSig2Height`) | 600 | 0 | 23,627,520 |
 
 Values verified against `src/kernel/chainparams.cpp`. Mainnet and testnet have
 35 `vOracleNodes` metadata entries and slots 0-34 are in
-`consensus.vOraclePublicKeys` for the current RC44 V1 quorum. Slot 28 uses
+`consensus.vOraclePublicKeys` for the current V1 quorum. Slot 28 uses
 the DigiHash Mining Pool key, slot 31 uses the Peer2Peer / DigiRoos key, and
 all 35 configured slots contain valid compressed secp256k1 oracle keys. Regtest
 has 7 active slots.

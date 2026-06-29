@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2022 The Bitcoin Core developers
-// Copyright (c) 2014-2025 The DigiByte Core developers
+// Copyright (c) 2014-2026 The DigiByte Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <chain.h>
@@ -190,9 +190,9 @@ void sanity_check_chainparams(const ArgsManager& args, ChainType chain_type)
 
     // check max target * 4*nPowTargetTimespan doesn't overflow -- see pow.cpp:CalculateNextWorkRequired()
     if (!consensus.fPowNoRetargeting) {
-        // DigiByte: Skip this check for mainnet as DigiByte's powLimit is much larger (>> 20 vs Bitcoin's >> 32)
-        // and uses a different difficulty adjustment mechanism
-        if (chain_type != ChainType::MAIN) {
+        // DigiByte: Skip this check for mainnet and testnet as DigiByte's powLimit is much larger (>> 20 vs Bitcoin's >> 32)
+        // and uses a different difficulty adjustment mechanism (MultiShield with 5 algorithms)
+        if (chain_type != ChainType::MAIN && chain_type != ChainType::TESTNET) {
             arith_uint256 targ_max("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
             targ_max /= consensus.nPowTargetTimespan * 4;
             BOOST_CHECK(UintToArith256(consensus.powLimit) < targ_max);

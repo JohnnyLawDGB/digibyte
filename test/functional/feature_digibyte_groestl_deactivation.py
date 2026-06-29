@@ -9,9 +9,10 @@ fork) must be rejected at block acceptance, not merely refused by the local
 miner. This exercises the submit/validate path with externally-crafted blocks,
 which is the path the local miner does not cover.
 
-On regtest DEPLOYMENT_DIGIDOLLAR is ALWAYS_ACTIVE and Odocrypt activates at
-height 600, so above height 600 Groestl is deactivated and crafted Groestl
-blocks must be rejected; below it Groestl is still active and accepted.
+On regtest the deactivated-algorithm rule is enforced from genesis
+(nGroestlDeactivationHeight = 0) and Odocrypt activates at height 600, so above
+height 600 Groestl is deactivated and crafted Groestl blocks must be rejected;
+below it Groestl is still active and accepted.
 """
 
 from test_framework.test_framework import DigiByteTestFramework

@@ -4798,6 +4798,14 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     // Check proof of work
     const Consensus::Params& consensusParams = chainman.GetConsensus();
     int algo = block.GetAlgo();
+
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_DIGIDOLLAR)) {
+        if (algo == ALGO_UNKNOWN || !IsAlgoActive(pindexPrev, consensusParams, algo)) {
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_ALGO, "bad-algo",
+                                 "block uses a deactivated mining algorithm");
+        }
+    }
+
     unsigned int nBitsExpected = GetNextWorkRequired(pindexPrev, &block, consensusParams, algo);
     
     // Debug logging for early blocks

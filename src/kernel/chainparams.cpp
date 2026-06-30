@@ -311,6 +311,7 @@ public:
             "digihash.digibyte.io:12024",     // DigiHash Mining Pool
             "oracleseed.digibyte.link:12024", // Bastian Driessen
             "digiscope.me:12024",             // DigiScope / JohnnyLawDGB
+            "oracle.dgbmaxi.com:12024",       // digibyte-maxi / Ycagel
         };
 
         // Mainnet-specific oracle and activation settings

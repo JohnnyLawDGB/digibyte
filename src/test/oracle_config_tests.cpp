@@ -400,6 +400,7 @@ BOOST_AUTO_TEST_CASE(mainnet_oracle_seed_peers_include_launch_bootstrap_nodes)
         "digihash.digibyte.io:12024",
         "oracleseed.digibyte.link:12024",
         "digiscope.me:12024",
+        "oracle.dgbmaxi.com:12024",
     };
 
     for (const auto& expected_peer : expected_peers) {

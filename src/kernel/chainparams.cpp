@@ -124,7 +124,7 @@ public:
         consensus.workComputationChangeTarget = 1430000; // Block 1,430,000 DigiSpeed Hard Fork
         consensus.algoSwapChangeTarget = 9100000; // Block 9,100,000 Odo PoW Hard Fork
         consensus.OdoHeight = 9112320; // 906b712a7b1f54f10b0faf86111e832ddb7b8ce86ac71a4edd2c61e5ccfe9428
-        consensus.nGroestlDeactivationHeight = 23782000; // v9.26.2 backstop (~3 days): reject reactivated Groestl / unknown algos
+        consensus.nGroestlDeactivationHeight = 23808000; // v9.26.2 activation (~7 days for miner upgrade): reject reactivated Groestl / unknown algos
         consensus.ReserveAlgoBitsHeight = 8547840; // d2c03966aeef35f739b222c8332b68df2676204d49c390b3a2544b967c46163f
 
         // DigiByte-specific difficulty adjustment parameters

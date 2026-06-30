@@ -310,6 +310,7 @@ public:
             "oracle1.digibyte.io:12024",       // DigiByte.io / Jared Tate
             "digihash.digibyte.io:12024",     // DigiHash Mining Pool
             "oracleseed.digibyte.link:12024", // Bastian Driessen
+            "digiscope.me:12024",             // DigiScope / JohnnyLawDGB
         };
 
         // Mainnet-specific oracle and activation settings

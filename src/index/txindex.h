@@ -6,7 +6,11 @@
 
 #include <index/base.h>
 
-static constexpr bool DEFAULT_TXINDEX{false};
+// DigiByte: txindex defaults to ON. DigiDollar (mint/transfer/redeem scanning,
+// collateral lookups) and the oracle/getrawtransaction RPC surface require a full
+// transaction index, and IsDigiDollarTxIndexRequired() refuses to start without it.
+// Defaulting on avoids a hard startup error for normal DigiDollar users.
+static constexpr bool DEFAULT_TXINDEX{true};
 
 /**
  * TxIndex is used to look up transactions included in the blockchain by hash.

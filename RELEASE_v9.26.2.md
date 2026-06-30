@@ -35,6 +35,102 @@ Mainnet is normal mainnet:
 Do not use the old pre-mainnet test ports, temporary data directories, or
 modified activation settings with this release.
 
+## Critical Consensus Fix: Retired-Algorithm Enforcement (Groestl)
+
+Separately from DigiDollar, v9.26.2 ships an urgent consensus security fix.
+**Every node on the DigiByte network must upgrade to v9.26.2.** This is not
+optional and is independent of whether you use DigiDollar.
+
+### What Happened
+
+DigiByte secures the chain with five mining algorithms (SHA256d, Scrypt, Skein,
+Qubit, Odocrypt). A sixth algorithm, Groestl, was retired in 2019 at the Odocrypt
+fork. The rule that rejected retired-algorithm blocks existed in the v7.17.3-era
+software, but it was accidentally dropped during the v8 Bitcoin Core rebase in
+2021/2022. The function that knew Groestl was retired still existed and was used
+for difficulty and display, but the single line that enforced it when accepting a
+block was gone. Because nobody mined Groestl, its difficulty fell to the lowest
+possible setting and the gap stayed dormant for years.
+
+Starting 2026-06-28 16:40:05 UTC, at block 23,751,096, an actor — using AI to
+analyze DigiByte's consensus rules — reactivated Groestl and began mining a sixth
+algorithm at floor difficulty.
+
+No coins were stolen and no confirmed transactions were reversed. There is no
+evidence of a successful 51% attack, though the cheap mining is consistent with an
+attempt: across every competing branch the network has seen, none ever accumulated
+more total work than the honest chain, and the deepest reorganization of the
+active chain was 4 blocks. The damage was instability and a network split. Block
+times dropped from the 15-second target to roughly 12-13 seconds, and the network
+divided, because v8/v9 software accepted the Groestl blocks while old v7.17.3
+software rejected them and forked onto a separate, slower chain.
+
+### The Fix
+
+v9.26.2 restores retired-algorithm enforcement, the right way:
+
+- Blocks using a retired (Groestl) or unknown mining algorithm are rejected.
+- The rule is enforced in both header validation and block connection, so that
+  `-reindex` and `-reindex-chainstate` also enforce it. A node cannot carry a
+  post-activation retired-algorithm block forward after upgrading.
+- Existing Groestl blocks already buried in the chain are grandfathered (kept).
+  No history is rewritten and no transactions are reversed.
+
+### Mainnet Activation Parameters (Groestl Deactivation)
+
+| Field | Value |
+| --- | --- |
+| Deployment name | `algolock` |
+| Versionbit (readiness signal) | `0` |
+| Signaling start | June 29, 2026 |
+| Activation height (backstop) | `23,808,000` (~7 days after release) |
+| Enforcement | reject retired (Groestl) and unknown algorithms |
+| Existing Groestl blocks | grandfathered below the activation height |
+
+The `algolock` versionbit is a readiness signal that lets miners advertise they
+have upgraded; you can watch adoption with `getdeploymentinfo`. The rule activates
+at block 23,808,000 regardless of signaling, giving the network roughly seven days
+to upgrade before retired-algorithm blocks are rejected.
+
+### All Nodes Must Upgrade
+
+Every full node, miner, pool, exchange, explorer, wallet, and service must upgrade
+to v9.26.2. The majority of mining power is currently on the v8 line. That is fine,
+but all of it must move to v9.26.2 so that the upgraded chain is the strongest
+chain at activation and the network converges back onto a single chain.
+
+### v7.17.3 And Older Nodes Must Reindex On Upgrade
+
+Nodes running the ~7-year-old v7.17.3 line reject every post-Odocrypt Groestl
+block, including the grandfathered blocks the healed chain keeps. They therefore
+cannot follow the unified chain on their own. Operators on v7.17.3 (or older) must:
+
+1. Upgrade to v9.26.2.
+2. Reindex or resync (start with `-reindex`, or perform a fresh sync) so the node
+   accepts the existing chain history and reorganizes onto the correct chain.
+
+Upgrading also provides Taproot, DigiDollar, and every other improvement added
+since v7.17.3.
+
+### Miners And Pools: The 7-Day Window
+
+- Upgrade to v9.26.2 within the ~7-day window before block 23,808,000.
+- Use the block version returned by DigiByte Core and do not strip the `algolock`
+  readiness signal.
+- Once the majority of mining power is upgraded, retired-algorithm blocks are
+  orphaned, the attack ends, and the network heals into one chain.
+- Optional, during the window only: miners who wish to actively push back can point
+  hash power at Groestl themselves. This captures block rewards that would
+  otherwise go to the attacker and drives Groestl difficulty up, removing the
+  cheap-mining advantage. This is secondary to upgrading and keeps block times fast
+  while it lasts; after activation, Groestl is rejected regardless.
+
+Forensic detail (as of this release, mining was still ongoing): the Groestl blocks
+account for roughly 14-15% of all blocks since onset and are paid to two attacker
+payout addresses — `dgb1qy5epvfs535a96tygn945a3a85lauh3ddu9v63y` (coinbase tag
+`SORG`) and `D8S5JWaCrpFsryGG1c9AzWKhbS7e7VZ4r8`. Exchanges and custodians should
+flag deposits originating from these addresses until the network has healed.
+
 ## Who Should Upgrade
 
 All full nodes, miners, mining pools, exchanges, explorers, wallets, service

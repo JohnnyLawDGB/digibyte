@@ -225,6 +225,7 @@ public:
         vSeeds.emplace_back("seed.diginode.tools"); // Olly Stedall @saltedlolly
         vSeeds.emplace_back("seed.digibyte.link"); // Bastian Driessen @bastiandriessen
         vSeeds.emplace_back("seed.aroundtheblock.app"); // Mark McNiel @JohnnyLawDGB
+        vSeeds.emplace_back("seed.tuyul.cc"); // Mbah Jambon @mbah_jambon
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,30);
         base58Prefixes[SCRIPT_ADDRESS_OLD] = std::vector<unsigned char>(1,5);

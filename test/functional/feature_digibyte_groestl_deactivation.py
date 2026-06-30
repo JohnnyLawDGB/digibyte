@@ -70,6 +70,25 @@ class GroestlDeactivationTest(DigiByteTestFramework):
         assert_equal(self.submit_until_pow_ok(node, accepted), None)
         assert_equal(node.getblockcount(), 151)
 
+        # Pin the exact boundary. IsAlgoActive() keys off pindexPrev->nHeight, so the
+        # Groestl block AT the Odocrypt height (600, prev 599 < 600) is still active and
+        # accepted; rejection begins one block later, at height 601 (prev 600). Asserting
+        # only "rejected somewhere above 600" would let an off-by-one in the height math
+        # slip through, so we exercise both edges.
+        self.log.info("At Odocrypt height: Groestl block 600 is still accepted (prev 599 < 600)")
+        self.generatetoaddress(node, ODOCRYPT_HEIGHT - 1 - node.getblockcount(),
+                               self.mining_address, 1000000, "scrypt")
+        assert_equal(node.getblockcount(), ODOCRYPT_HEIGHT - 1)  # tip 599
+        boundary = self.craft(node, BLOCK_VERSION_GROESTL)
+        assert_equal(self.submit_until_pow_ok(node, boundary), None)  # block 600 accepted
+        assert_equal(node.getblockcount(), ODOCRYPT_HEIGHT)
+
+        self.log.info("One past Odocrypt height: the first rejected Groestl block is 601")
+        boundary_tip = node.getbestblockhash()
+        rejected601 = self.craft(node, BLOCK_VERSION_GROESTL)
+        assert_equal(self.submit_until_pow_ok(node, rejected601), "bad-algo")  # block 601 rejected
+        assert_equal(node.getbestblockhash(), boundary_tip)
+
         self.log.info("Above Odocrypt: Groestl is deactivated, crafted Groestl block is rejected")
         self.generatetoaddress(node, ODOCRYPT_HEIGHT + 5 - node.getblockcount(),
                                self.mining_address, 1000000, "scrypt")

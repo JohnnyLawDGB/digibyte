@@ -12,7 +12,13 @@ which is the path the local miner does not cover.
 On regtest the deactivated-algorithm rule is enforced from genesis
 (nGroestlDeactivationHeight = 0) and Odocrypt activates at height 600, so above
 height 600 Groestl is deactivated and crafted Groestl blocks must be rejected;
-below it Groestl is still active and accepted.
+below it Groestl is still active and accepted (grandfathered).
+
+The rule is enforced both in ContextualCheckBlockHeader (header acceptance) and in
+ConnectBlock (connection/replay). The latter is exercised by reindexing: a block
+that was valid when mined (a pre-Odocrypt Groestl block) must survive -reindex and
+-reindex-chainstate, proving the connection-time guard grandfathers by height
+rather than rejecting the algorithm outright.
 """
 
 from test_framework.test_framework import DigiByteTestFramework
@@ -77,6 +83,27 @@ class GroestlDeactivationTest(DigiByteTestFramework):
         control = self.craft(node, BLOCK_VERSION_SHA256D)
         assert_equal(self.submit_until_pow_ok(node, control), None)
         assert node.getbestblockhash() != tip
+
+        self.log.info("Signalling flag: the algolock BIP9 deployment is exposed for tracking")
+        deployments = node.getdeploymentinfo()["deployments"]
+        assert "algolock" in deployments, "algolock deployment must be visible via getdeploymentinfo"
+
+        self.log.info("Reindex-safety: the pre-Odocrypt Groestl block is grandfathered through replay")
+        # The chain contains a Groestl block at height 151 that was valid when mined
+        # (pre-Odocrypt). The ConnectBlock guard must grandfather it by height, so a
+        # full replay must reproduce the exact same tip and height.
+        final_tip = node.getbestblockhash()
+        final_height = node.getblockcount()
+        # Confirm height 151 really is the grandfathered Groestl block.
+        assert_equal(node.getblockheader(node.getblockhash(151))["version"], BLOCK_VERSION_GROESTL)
+
+        self.restart_node(0, extra_args=["-easypow=1", "-reindex=1"])
+        assert_equal(node.getbestblockhash(), final_tip)
+        assert_equal(node.getblockcount(), final_height)
+
+        self.restart_node(0, extra_args=["-easypow=1", "-reindex-chainstate=1"])
+        assert_equal(node.getbestblockhash(), final_tip)
+        assert_equal(node.getblockcount(), final_height)
 
 
 if __name__ == '__main__':

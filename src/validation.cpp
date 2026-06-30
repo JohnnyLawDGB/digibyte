@@ -2849,6 +2849,24 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return error("%s: Consensus::CheckBlock: %s", __func__, state.ToString());
     }
 
+    // Reject blocks mined with a deactivated (e.g. retired Groestl) or unknown
+    // algorithm once ALGOLOCK is in force. This mirrors the ContextualCheckBlockHeader
+    // gate and is repeated here, at connection time, precisely to close the upgrade
+    // gap described above: -reindex-chainstate skips the header check, and a node that
+    // accepted a post-activation deactivated-algo block while running older software
+    // must not carry it forward on replay/reconnection. Blocks below the activation
+    // point are grandfathered identically to the header-path check.
+    if (pindex->pprev) {
+        const Consensus::Params& algo_consensus = params.GetConsensus();
+        const int algo = block.GetAlgo();
+        if ((DeploymentActiveAfter(pindex->pprev, m_chainman, Consensus::DEPLOYMENT_ALGOLOCK) ||
+             pindex->nHeight >= algo_consensus.nGroestlDeactivationHeight) &&
+            (algo == ALGO_UNKNOWN || !IsAlgoActive(pindex->pprev, algo_consensus, algo))) {
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_ALGO, "bad-algo",
+                                 "block uses a deactivated mining algorithm");
+        }
+    }
+
     if (!OracleDataValidator::ValidateBlockOracleData(block, pindex->pprev, params.GetConsensus(), state)) {
         return error("%s: OracleDataValidator::ValidateBlockOracleData: %s", __func__, state.ToString());
     }
@@ -4799,7 +4817,8 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     const Consensus::Params& consensusParams = chainman.GetConsensus();
     int algo = block.GetAlgo();
 
-    if (nHeight >= consensusParams.nGroestlDeactivationHeight) {
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_ALGOLOCK) ||
+        nHeight >= consensusParams.nGroestlDeactivationHeight) {
         if (algo == ALGO_UNKNOWN || !IsAlgoActive(pindexPrev, consensusParams, algo)) {
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_ALGO, "bad-algo",
                                  "block uses a deactivated mining algorithm");

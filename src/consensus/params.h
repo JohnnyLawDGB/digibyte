@@ -41,6 +41,7 @@ enum DeploymentPos : uint16_t {
     DEPLOYMENT_TESTDUMMY,
     DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342)
     DEPLOYMENT_DIGIDOLLAR, // Deployment of DigiDollar stablecoin features
+    DEPLOYMENT_ALGOLOCK, // Reject blocks mined with a deactivated (e.g. retired Groestl) or unknown algorithm
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in deploymentinfo.cpp
     MAX_VERSION_BITS_DEPLOYMENTS
 };

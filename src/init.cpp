@@ -784,6 +784,15 @@ void InitParameterInteraction(ArgsManager& args)
             LogPrintf("%s: parameter interaction: -whitebind set -> setting -listen=1\n", __func__);
     }
 
+    // DigiByte: -txindex defaults on (DigiDollar needs it), but prune is incompatible with
+    // txindex. If the node is pruning and the user did not explicitly choose -txindex, leave
+    // txindex off so the pruned node starts cleanly. An explicit "-prune=N -txindex=1" still
+    // errors in AppInitParameterInteraction.
+    if (args.GetIntArg("-prune", 0) > 0) {
+        if (args.SoftSetBoolArg("-txindex", false))
+            LogPrintf("%s: parameter interaction: -prune set -> setting -txindex=0\n", __func__);
+    }
+
     if (args.IsArgSet("-connect") || args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS) <= 0) {
         // when only connecting to trusted nodes, do not seed via DNS, or listen by default
         if (args.SoftSetBoolArg("-dnsseed", false))

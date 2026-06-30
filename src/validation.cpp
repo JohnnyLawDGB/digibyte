@@ -2863,7 +2863,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              pindex->nHeight >= algo_consensus.nGroestlDeactivationHeight) &&
             (algo == ALGO_UNKNOWN || !IsAlgoActive(pindex->pprev, algo_consensus, algo))) {
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_ALGO, "bad-algo",
-                                 "block uses a deactivated mining algorithm");
+                                 "block uses a deactivated or unknown mining algorithm");
         }
     }
 
@@ -4821,7 +4821,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         nHeight >= consensusParams.nGroestlDeactivationHeight) {
         if (algo == ALGO_UNKNOWN || !IsAlgoActive(pindexPrev, consensusParams, algo)) {
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_ALGO, "bad-algo",
-                                 "block uses a deactivated mining algorithm");
+                                 "block uses a deactivated or unknown mining algorithm");
         }
     }
 

@@ -188,7 +188,13 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0; // may activate as soon as it locks in
 
         // The best chain should have at least this much work.
-        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000001cae290ed41eb2efd4804c");
+        // NOTE: must stay reachable by the headers pre-sync, which measures *contextless*
+        // work (~28% of real chainwork in DigiByte's multi-algo model). The 2026-06-26
+        // refresh set this to a real-chainwork value (~98.68% of tip), which pre-sync can
+        // never reach, breaking fresh-node sync (headers reset loop). Reverted to 0x00
+        // (mainnet's historical value) until pre-sync computes contextual work. See
+        // HEADERS_SYNC_FIX_PLAN.md.
+        consensus.nMinimumChainWork = uint256S("0x00");
 
         // By default assume that the signatures in ancestors of this block are valid block 23,500,000.
         consensus.defaultAssumeValid = uint256S("0xade47d5ccbb92cb1d965b97a187bdbf65bf74be6a3709cb6a01339f8c2856deb"); // Block 23,500,000

@@ -24,6 +24,10 @@ const struct VBDeploymentInfo VersionBitsDeploymentInfo[Consensus::MAX_VERSION_B
         /*.name =*/ "digidollar",
         /*.gbt_force =*/ true,
     },
+    {
+        /*.name =*/ "algolock",
+        /*.gbt_force =*/ true,
+    },
 };
 
 std::string DeploymentName(Consensus::BuriedDeployment dep)

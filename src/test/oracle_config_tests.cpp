@@ -14,6 +14,8 @@
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
 
+#include <algorithm>
+
 BOOST_FIXTURE_TEST_SUITE(oracle_config_tests, BasicTestingSetup)
 
 /**
@@ -384,6 +386,32 @@ BOOST_AUTO_TEST_CASE(mainnet_oracle_endpoints_use_mainnet_p2p_port)
     }
 
     SelectParams(ChainType::MAIN);
+}
+
+BOOST_AUTO_TEST_CASE(mainnet_oracle_seed_peers_include_launch_bootstrap_nodes)
+{
+    SelectParams(ChainType::MAIN);
+    const auto& seed_peers = Params().OracleSeedPeers();
+
+    BOOST_REQUIRE(!seed_peers.empty());
+
+    const std::vector<std::string> expected_peers{
+        "oracle1.digibyte.io:12024",
+        "digihash.digibyte.io:12024",
+        "oracleseed.digibyte.link:12024",
+        "digiscope.me:12024",
+        "oracle.dgbmaxi.com:12024",
+    };
+
+    for (const auto& expected_peer : expected_peers) {
+        BOOST_CHECK_MESSAGE(std::find(seed_peers.begin(), seed_peers.end(), expected_peer) != seed_peers.end(),
+            "Missing mainnet oracle seed peer " << expected_peer);
+    }
+
+    for (const auto& peer : seed_peers) {
+        BOOST_CHECK_MESSAGE(peer.size() >= 6 && peer.rfind(":12024") == peer.size() - 6,
+            "Mainnet oracle seed peer must use P2P port 12024, got " << peer);
+    }
 }
 
 // ============================================================================

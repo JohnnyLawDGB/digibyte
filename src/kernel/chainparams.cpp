@@ -124,6 +124,7 @@ public:
         consensus.workComputationChangeTarget = 1430000; // Block 1,430,000 DigiSpeed Hard Fork
         consensus.algoSwapChangeTarget = 9100000; // Block 9,100,000 Odo PoW Hard Fork
         consensus.OdoHeight = 9112320; // 906b712a7b1f54f10b0faf86111e832ddb7b8ce86ac71a4edd2c61e5ccfe9428
+        consensus.nGroestlDeactivationHeight = 23808000; // v9.26.2 activation (~7 days for miner upgrade): reject reactivated Groestl / unknown algos
         consensus.ReserveAlgoBitsHeight = 8547840; // d2c03966aeef35f739b222c8332b68df2676204d49c390b3a2544b967c46163f
 
         // DigiByte-specific difficulty adjustment parameters
@@ -178,6 +179,13 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1780272000; // June 1, 2026
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1811808000; // June 1, 2027
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 23627520; // Aligned to confirmation window (586 * 40320)
+        // ALGOLOCK: reject reactivated Groestl / unknown-algo blocks. BIP9 bit 0, signalling
+        // starts immediately so miners can lock in early; nGroestlDeactivationHeight is the
+        // mandatory unconditional backstop so activation cannot be vetoed or stalled.
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = 1782691200; // June 29, 2026 (signalling open)
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = 1814227200; // June 29, 2027
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0; // may activate as soon as it locks in
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000001cae290ed41eb2efd4804c");
@@ -217,6 +225,7 @@ public:
         vSeeds.emplace_back("seed.diginode.tools"); // Olly Stedall @saltedlolly
         vSeeds.emplace_back("seed.digibyte.link"); // Bastian Driessen @bastiandriessen
         vSeeds.emplace_back("seed.aroundtheblock.app"); // Mark McNiel @JohnnyLawDGB
+        vSeeds.emplace_back("seed.tuyul.cc"); // Mbah Jambon @mbah_jambon
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,30);
         base58Prefixes[SCRIPT_ADDRESS_OLD] = std::vector<unsigned char>(1,5);
@@ -293,6 +302,18 @@ public:
 
         // Initialize DigiDollar Oracle Nodes (35 active slots)
         InitializeOracleNodes();
+
+        // Public mainnet peers that oracle operators can use to bootstrap
+        // DigiDollar P2P connectivity. These are operational seed peers, not
+        // consensus trust anchors; oracle security comes from the hardcoded
+        // public keys and 7-of-35 MuSig2 validation.
+        vOracleSeedPeers = {
+            "oracle1.digibyte.io:12024",       // DigiByte.io / Jared Tate
+            "digihash.digibyte.io:12024",     // DigiHash Mining Pool
+            "oracleseed.digibyte.link:12024", // Bastian Driessen
+            "digiscope.me:12024",             // DigiScope / JohnnyLawDGB
+            "oracle.dgbmaxi.com:12024",       // digibyte-maxi / Ycagel
+        };
 
         // Mainnet-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 40;       // Rotate oracle signing epochs every 40 blocks (~10 minutes)
@@ -511,6 +532,10 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1780156800; // testnet26 genesis timestamp
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1830297600; // Jan 1, 2028
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 600; // Activation delayed until block 600
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0;
 
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274
@@ -963,6 +988,10 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // No activation delay for ALWAYS_ACTIVE
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0;
 
         // message start is defined as the first 4 bytes of the sha256d of the block script
         HashWriter h{};
@@ -1024,6 +1053,7 @@ public:
         consensus.SegwitHeight = 0; // Always active unless overridden
         consensus.ReserveAlgoBitsHeight = 0; // DigiByte ReserveAlgoBits
         consensus.OdoHeight = 600; // DigiByte Odocrypt height
+        consensus.nGroestlDeactivationHeight = 0; // enforce deactivated-algo rejection from genesis on regtest
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         // Set initial targets for all algorithms (easy difficulty for regtest)
@@ -1093,6 +1123,10 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // No activation delay for ALWAYS_ACTIVE
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0;
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};

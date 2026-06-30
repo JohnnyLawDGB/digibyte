@@ -11,6 +11,7 @@
 
 #include <boost/test/unit_test.hpp>
 #include <primitives/block.h> // For GetVersionForAlgo
+#include <validation.h>       // For IsAlgoActive
 
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 
@@ -292,6 +293,45 @@ BOOST_AUTO_TEST_CASE(digibyte_difficulty_versions_test)
         BOOST_CHECK(bnNew > 0);
         BOOST_CHECK(bnNew <= UintToArith256(params.powLimit));
     }
+}
+
+BOOST_AUTO_TEST_CASE(digibyte_isalgoactive_matrix)
+{
+    // The set of mining algorithms accepted at a given height. Groestl is part of
+    // the original MultiAlgo set but is deactivated at the Odocrypt fork; the
+    // consensus rule rejecting deactivated algorithms relies on this predicate.
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::REGTEST);
+    const auto& params = chainParams->GetConsensus();
+
+    // regtest fork heights: MultiAlgo at 100, Odocrypt/Groestl-swap at 600.
+    auto is_active = [&](int prev_height, int algo) {
+        CBlockIndex prev;
+        prev.nHeight = prev_height;
+        return IsAlgoActive(&prev, params, algo);
+    };
+
+    // Before the MultiAlgo fork: Scrypt only.
+    BOOST_CHECK(is_active(50, ALGO_SCRYPT));
+    for (int algo : {ALGO_SHA256D, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT, ALGO_ODO}) {
+        BOOST_CHECK(!is_active(50, algo));
+    }
+
+    // MultiAlgo era (100..599): five algorithms including Groestl, excluding Odocrypt.
+    for (int algo : {ALGO_SHA256D, ALGO_SCRYPT, ALGO_GROESTL, ALGO_SKEIN, ALGO_QUBIT}) {
+        BOOST_CHECK(is_active(150, algo));
+    }
+    BOOST_CHECK(!is_active(150, ALGO_ODO));
+    BOOST_CHECK(is_active(599, ALGO_GROESTL)); // last block before the swap
+
+    // Odocrypt era (>=600): Groestl is deactivated, Odocrypt is active.
+    BOOST_CHECK(!is_active(600, ALGO_GROESTL));
+    BOOST_CHECK(!is_active(700, ALGO_GROESTL));
+    for (int algo : {ALGO_SHA256D, ALGO_SCRYPT, ALGO_SKEIN, ALGO_QUBIT, ALGO_ODO}) {
+        BOOST_CHECK(is_active(700, algo));
+    }
+
+    // An unknown algorithm is never active.
+    BOOST_CHECK(!is_active(700, ALGO_UNKNOWN));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

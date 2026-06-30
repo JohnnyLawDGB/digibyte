@@ -41,6 +41,7 @@ enum DeploymentPos : uint16_t {
     DEPLOYMENT_TESTDUMMY,
     DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342)
     DEPLOYMENT_DIGIDOLLAR, // Deployment of DigiDollar stablecoin features
+    DEPLOYMENT_ALGOLOCK, // Reject blocks mined with a deactivated (e.g. retired Groestl) or unknown algorithm
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in deploymentinfo.cpp
     MAX_VERSION_BITS_DEPLOYMENTS
 };
@@ -110,6 +111,10 @@ struct Params {
     /**
      * Block height at which Odocrypt got activated */
     int OdoHeight;
+    /**
+     * Block height at which blocks using a deactivated mining algorithm
+     * (e.g. the retired Groestl) or an unknown algorithm are rejected. */
+    int nGroestlDeactivationHeight{std::numeric_limits<int>::max()};
     /** Don't warn about unknown BIP 9 activations below this height.
      * This prevents us from warning about the CSV and segwit activations. */
     int MinBIP9WarningHeight;

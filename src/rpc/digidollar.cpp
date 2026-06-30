@@ -1116,6 +1116,11 @@ static RPCHelpMan getdigidollardeploymentinfo()
                         {RPCResult::Type::NUM, "oracle_pubkey_count", "Number of consensus oracle public keys configured for MuSig2 (nOraclePubkeyCount)"},
                         {RPCResult::Type::NUM, "oracle_consensus_required", "MuSig2 quorum size required to satisfy a v0x03 bundle (nOracleConsensusRequired)"},
                         {RPCResult::Type::NUM, "oracle_total_slots", "Total oracle slots configured in chainparams (vOracleNodes.size); oracle_id values must be below oracle_pubkey_count to vote"},
+                        {RPCResult::Type::ARR, "oracle_seed_peers", "Public mainnet peers operators can use to bootstrap DigiDollar oracle P2P connectivity",
+                            {
+                                {RPCResult::Type::STR, "peer", "Host:port seed peer"},
+                            }
+                        },
                         {RPCResult::Type::OBJ, "musig2_session", "Current MuSig2 signing session status (operator diagnostic)",
                             {
                                 {RPCResult::Type::NUM, "epoch", "Current epoch number (block_height / nDDOracleEpochBlocks)"},
@@ -1202,6 +1207,12 @@ static RPCHelpMan getdigidollardeploymentinfo()
             result.pushKV("oracle_pubkey_count", consensusParams.nOraclePubkeyCount);
             result.pushKV("oracle_consensus_required", consensusParams.nOracleConsensusRequired);
             result.pushKV("oracle_total_slots", static_cast<int>(Params().GetOracleNodes().size()));
+
+            UniValue oracle_seed_peers(UniValue::VARR);
+            for (const auto& peer : Params().OracleSeedPeers()) {
+                oracle_seed_peers.push_back(peer);
+            }
+            result.pushKV("oracle_seed_peers", oracle_seed_peers);
 
             // Wave 10 (Agent C): expose the orchestrator's MuSig2 session
             // status for the current epoch so operators can diagnose stuck

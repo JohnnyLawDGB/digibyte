@@ -302,6 +302,16 @@ public:
         // Initialize DigiDollar Oracle Nodes (35 active slots)
         InitializeOracleNodes();
 
+        // Public mainnet peers that oracle operators can use to bootstrap
+        // DigiDollar P2P connectivity. These are operational seed peers, not
+        // consensus trust anchors; oracle security comes from the hardcoded
+        // public keys and 7-of-35 MuSig2 validation.
+        vOracleSeedPeers = {
+            "oracle1.digibyte.io:12024",       // DigiByte.io / Jared Tate
+            "digihash.digibyte.io:12024",     // DigiHash Mining Pool
+            "oracleseed.digibyte.link:12024", // Bastian Driessen
+        };
+
         // Mainnet-specific oracle and activation settings
         consensus.nDDOracleEpochBlocks = 40;       // Rotate oracle signing epochs every 40 blocks (~10 minutes)
         consensus.nDDOracleUpdateInterval = 4;      // Update price every 4 blocks (~1 minute)

@@ -711,7 +711,9 @@ DigiDollar implements true network-wide tracking by scanning the **entire blockc
 void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view,
                                       CCoinsView* validation_view,
                                       const node::BlockManager* blockman,
-                                      const CTxMemPool* mempool)
+                                      const CTxMemPool* mempool,
+                                      const CChain* chain,
+                                      const Consensus::Params* consensus)
 {
     // Create cursor to iterate ALL UTXOs (similar to gettxoutsetinfo)
     std::unique_ptr<CCoinsViewCursor> pcursor(view->Cursor());
@@ -724,8 +726,14 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view,
         // Find DigiDollar vault outputs (P2TR with value > 0 at output 0)
         if (key.n == 0 && coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
 
-            // Fetch FULL transaction from block storage
-            CTransactionRef tx = node::GetTransaction(nullptr, mempool, txid,
+            // v9.26.4: coins created below the DigiDollar activation floor can
+            // never be DD vaults — skip them (their blocks may be pruned away)
+
+            // Fetch FULL transaction: txindex when available, otherwise read it
+            // straight from the retained block at the coin's height (works on
+            // pruned nodes, which keep every block at/above the DD floor)
+            const CBlockIndex* creating_block = chain ? (*chain)[coin.nHeight] : nullptr;
+            CTransactionRef tx = node::GetTransaction(creating_block, mempool, txid,
                                                      hashBlock, *blockman);
 
             // Validate DD mint structure:

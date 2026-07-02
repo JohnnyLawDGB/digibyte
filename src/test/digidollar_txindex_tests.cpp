@@ -150,4 +150,23 @@ BOOST_AUTO_TEST_CASE(block_db_fallback_correct_amounts)
     BOOST_CHECK_EQUAL(amount, 1200);
 }
 
+BOOST_AUTO_TEST_CASE(dd_chain_prune_does_not_require_txindex)
+{
+    // v9.26.4: a pruned DigiDollar node does not require txindex. DD amount/lock
+    // resolution reads the creating transaction from the retained DigiDollar-era block
+    // window (kept by the "digidollar" prune lock) instead of the transaction index, so
+    // pruning and DigiDollar can coexist. A full node still requires txindex.
+    auto check = [](const CChainParams& params) {
+        ArgsManager args;
+        SetupServerArgs(args);
+        // Full node (no prune): txindex required.
+        BOOST_CHECK(IsDigiDollarTxIndexRequired(params, args));
+        // Pruned node: not required.
+        args.ForceSetArg("-prune", "550");
+        BOOST_CHECK(!IsDigiDollarTxIndexRequired(params, args));
+    };
+    check(*CChainParams::Main());
+    check(*CChainParams::TestNet());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

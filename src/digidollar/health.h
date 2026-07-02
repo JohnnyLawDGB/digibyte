@@ -20,6 +20,11 @@
 class CCoinsView;
 class CTxMemPool;
 class ChainstateManager;
+class CChain;
+
+namespace Consensus {
+    struct Params;
+}
 
 namespace node {
     class BlockManager;
@@ -39,6 +44,8 @@ struct SystemMetrics {
     // Overall system metrics
     CAmount totalDDSupply;      //!< Total DigiDollar in circulation (cents)
     CAmount totalCollateral;    //!< Total DGB locked as collateral
+    int totalActivePositions;   //!< Active vault count; (re)computed by ScanUTXOSet,
+                                //!< not incrementally maintained between scans
     int systemHealth;           //!< Overall collateral ratio (percentage)
     bool hasCanonicalHealth;    //!< True after health was calculated from the current metric snapshot
 
@@ -70,7 +77,8 @@ struct SystemMetrics {
     // Historical tracking
     std::vector<int> healthHistory;  //!< Recent health percentages
 
-    SystemMetrics() : totalDDSupply(0), totalCollateral(0), systemHealth(0), hasCanonicalHealth(false),
+    SystemMetrics() : totalDDSupply(0), totalCollateral(0), totalActivePositions(0),
+                     systemHealth(0), hasCanonicalHealth(false),
                      dcaMultiplier(1.0), errActive(false), volatility(0.0),
                      mintingFrozen(false), activeOracles(0), lastOraclePrice(0),
                      lastOracleUpdate(0) {}
@@ -170,7 +178,7 @@ public:
      * @param blockman BlockManager for accessing full transaction data
      * @param mempool Optional mempool for checking recent transactions
      */
-    static void ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr);
+    static void ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr, const CChain* chain = nullptr, const Consensus::Params* consensus = nullptr);
 
     /**
      * Reconstruct the cached system-health metrics (total DD supply + total

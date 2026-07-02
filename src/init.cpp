@@ -787,10 +787,21 @@ void InitParameterInteraction(ArgsManager& args)
     // DigiByte: -txindex defaults on (DigiDollar needs it), but prune is incompatible with
     // txindex. If the node is pruning and the user did not explicitly choose -txindex, leave
     // txindex off so the pruned node starts cleanly. An explicit "-prune=N -txindex=1" still
-    // errors in AppInitParameterInteraction.
-    if (args.GetIntArg("-prune", 0) > 0) {
+    // errors in AppInitParameterInteraction. Any nonzero -prune counts (including invalid
+    // negative values, so they reach their own error instead of the txindex conflict);
+    // -prune=0 explicitly disables pruning and keeps the txindex default.
+    if (args.GetIntArg("-prune", 0) != 0) {
         if (args.SoftSetBoolArg("-txindex", false))
             LogPrintf("%s: parameter interaction: -prune set -> setting -txindex=0\n", __func__);
+
+        // DigiByte: the DigiDollar stats index (default on) syncs from genesis, so on a
+        // pruned node its initial sync would demand blocks below the prune point and the
+        // generic "index goes beyond pruned data" check would refuse to start. Leave it
+        // off on pruned nodes unless the user explicitly asked for it. getdigidollarstats
+        // still works via its live UTXO-set fallback; only historical per-height stats
+        // queries need the index.
+        if (args.SoftSetBoolArg("-digidollarstatsindex", false))
+            LogPrintf("%s: parameter interaction: -prune set -> setting -digidollarstatsindex=0\n", __func__);
     }
 
     if (args.IsArgSet("-connect") || args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS) <= 0) {
@@ -904,6 +915,14 @@ bool IsRegtestDigiDollarExplicitlyRequested(const ArgsManager& args)
 bool IsDigiDollarTxIndexRequired(const CChainParams& chainparams, const ArgsManager& args)
 {
     if (!HasDigiDollarDeployment(chainparams)) return false;
+
+    // Pruned nodes do not maintain a transaction index (prune is incompatible with
+    // txindex). DigiDollar validation on a pruned node resolves the amount/lock of a
+    // spent DD output by reading the creating transaction from the retained block at the
+    // coin's height (node::GetTransaction's block-db path) instead of the txindex, and
+    // the DigiDollar-era block window is kept by the "digidollar" prune lock. So a pruned
+    // node does not require txindex.
+    if (args.GetIntArg("-prune", 0) > 0) return false;
 
     switch (chainparams.GetChainType()) {
     case ChainType::MAIN:

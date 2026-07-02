@@ -154,6 +154,47 @@ static ChainstateLoadResult CompleteChainstateInitialization(
         };
     }
 
+    // DigiByte: DigiDollar-compatible pruning.
+    //
+    // A DigiDollar output can only be created at or after DigiDollar activation, and
+    // activation cannot happen below the deployment's minimum activation height. So every
+    // block a DigiDollar spend ever needs to read lives in [dd_floor, tip]. On a pruned
+    // node we (1) keep that whole window via a prune lock, so validation can always read a
+    // DD input's creating transaction from the retained block at the coin's height, and
+    // (2) refuse to start if a DD-era block is already missing, rather than validate
+    // DigiDollar with incomplete data. Registered here (cs_main held, tip loaded) before
+    // the first prune/flush can run.
+    {
+        const Consensus::Params& consensus = chainman.GetConsensus();
+        const auto& dd_dep = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+        int dd_floor = 0;
+        if (dd_dep.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
+            dd_dep.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE) {
+            dd_floor = (dd_dep.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE)
+                           ? dd_dep.min_activation_height
+                           : std::min(consensus.nDDActivationHeight, dd_dep.min_activation_height);
+        }
+
+        if (options.prune && dd_floor > 0) {
+            PruneLockInfo dd_lock;
+            dd_lock.height_first = dd_floor;
+            chainman.m_blockman.UpdatePruneLock("digidollar", dd_lock);
+            LogPrintf("DigiDollar: pruning enabled; retaining all blocks at/above height %d (DigiDollar activation floor)\n", dd_floor);
+
+            if (chainman.m_blockman.m_have_pruned) {
+                const CBlockIndex* tip = chainman.ActiveChain().Tip();
+                if (tip && tip->nHeight >= dd_floor) {
+                    const CBlockIndex* floor_block = chainman.ActiveChain()[dd_floor];
+                    if (!floor_block || !chainman.m_blockman.CheckBlockDataAvailability(*tip, *floor_block)) {
+                        return {ChainstateLoadStatus::FAILURE,
+                                _("DigiDollar-era block data is incomplete on this pruned node. "
+                                  "Restart with -reindex to rebuild it (the node will redownload and re-prune).")};
+                    }
+                }
+            }
+        }
+    }
+
     // Now that chainstates are loaded and we're able to flush to
     // disk, rebalance the coins caches to desired levels based
     // on the condition of each chainstate.

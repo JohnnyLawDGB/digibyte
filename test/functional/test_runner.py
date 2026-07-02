@@ -326,6 +326,7 @@ BASE_SCRIPTS = [
     'digidollar_wave26_mixed_node_compat.py',
     'digidollar_wallet_restore_redeem.py',
     'digidollar_watchonly_rescan.py',
+    'feature_digidollar_pruning.py',
     'feature_oracle_p2p.py',
     'wallet_digidollar_active_restore_redeem.py',
     'wallet_digidollar_backup.py',

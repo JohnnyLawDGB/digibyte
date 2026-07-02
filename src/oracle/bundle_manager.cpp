@@ -1831,7 +1831,14 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
 
         CBlock block;
         if (!chainman.m_blockman.ReadBlockFromDisk(block, *block_index)) {
-            LogPrintf("Oracle: Failed to read block at height %d\n", height);
+            // This loop only reaches post-activation blocks (pre-activation heights are
+            // skipped by the header check above), and on a pruned node the reindex guard
+            // in CompleteChainstateInitialization has already confirmed every block in
+            // [DigiDollar floor, tip] is present. So a read failure here is not expected —
+            // flag it loudly rather than silently reconstructing from partial price data.
+            LogPrintf("ERROR: Oracle: failed to read block at height %d during startup price "
+                      "reconstruction. The DigiDollar block window may be incomplete; if this "
+                      "persists, restart with -reindex.\n", height);
             continue;
         }
 

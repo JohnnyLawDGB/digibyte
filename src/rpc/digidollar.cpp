@@ -446,7 +446,8 @@ namespace {
                 node::BlockManager* blockman = &active_chainstate.m_blockman;
                 const CTxMemPool* mempool = node.mempool.get();
                 DigiDollar::SystemHealthMonitor::ScanUTXOSet(
-                    coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+                    coins_view, &active_chainstate.CoinsTip(), blockman, mempool,
+                    &active_chainstate.m_chain, &Params().GetConsensus());
             }
             DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
             totals.total_collateral = metrics.totalCollateral;
@@ -701,7 +702,7 @@ RPCHelpMan getdigidollarstats()
                     // Pass BlockManager for full transaction access
                     // Pass both CoinsDB (for iteration) and CoinsTip (for validation)
                     LogPrintf("DigiDollar: getdigidollarstats - About to call ScanUTXOSet...\n");
-                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool, &active_chainstate.m_chain, &Params().GetConsensus());
                     LogPrintf("DigiDollar: getdigidollarstats - ScanUTXOSet completed\n");
                 }
 
@@ -768,7 +769,8 @@ RPCHelpMan getdigidollarstats()
             // Get active position count from the DigiDollar stats index.
             // The stats index tracks vault_count (incremented on mint,
             // decremented on redeem) so this reflects real network state.
-            // Falls back to 0 if the stats index isn't available yet.
+            // Without the index (e.g. pruned nodes, where it is off), the
+            // UTXO scan performed above in this call counted the live vaults.
             uint64_t activePositions = 0;
             if (g_digidollar_stats_index) {
                 ChainstateManager& chainman = EnsureAnyChainman(request.context);
@@ -780,6 +782,9 @@ RPCHelpMan getdigidollarstats()
                         activePositions = ddstats->vault_count;
                     }
                 }
+            } else {
+                activePositions = static_cast<uint64_t>(std::max(
+                    0, DigiDollar::SystemHealthMonitor::GetSystemMetrics().totalActivePositions));
             }
             result.pushKV("active_positions", static_cast<int64_t>(activePositions));
             int oraclePriceAge = 0;
@@ -4381,7 +4386,7 @@ static RPCHelpMan getprotectionstatus()
                     LOCK(::cs_main);
                     coins_view = &active_chainstate.CoinsDB();
                     blockman = &active_chainstate.m_blockman;
-                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool);
+                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool, &active_chainstate.m_chain, &Params().GetConsensus());
                 }
                 DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
                 totalCollateral = metrics.totalCollateral;

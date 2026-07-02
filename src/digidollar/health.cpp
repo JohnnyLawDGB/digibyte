@@ -304,11 +304,28 @@ void SystemHealthMonitor::Shutdown()
     s_initialized = false;
 }
 
-void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool)
+void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool, const CChain* chain, const Consensus::Params* consensus)
 {
+    // DigiDollar activation floor: a DD vault output can only be created at/after
+    // activation, which cannot happen below the deployment's minimum activation height.
+    // Below the floor there are no DD vaults, so we skip those coins without reading a
+    // block — this is what lets the seed run identically on a pruned node (pre-floor
+    // blocks are gone) and a full node (pre-floor blocks are present but hold no vaults).
+    int dd_floor = 0;
+    if (consensus) {
+        const auto& dd_dep = consensus->vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+        if (dd_dep.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
+            dd_dep.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE) {
+            dd_floor = (dd_dep.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE)
+                           ? dd_dep.min_activation_height
+                           : std::min(consensus->nDDActivationHeight, dd_dep.min_activation_height);
+        }
+    }
+
     // Reset counters
     s_currentMetrics.totalDDSupply = 0;
     s_currentMetrics.totalCollateral = 0;
+    s_currentMetrics.totalActivePositions = 0;
     s_currentMetrics.systemHealth = 0;
     s_currentMetrics.hasCanonicalHealth = false;
 
@@ -379,6 +396,15 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
         // validation does not require it to be vout[0].
         if (coin.out.scriptPubKey.size() == 34 &&
             coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
+
+            // Skip P2TR coins created before the DigiDollar floor — they cannot be DD
+            // vaults, so there is no need to read their (possibly pruned) creating block.
+            if (chain && dd_floor > 0 && static_cast<int>(coin.nHeight) < dd_floor) {
+                processed_txids.insert(txid);
+                pcursor->Next();
+                continue;
+            }
+
             vault_candidates_checked++;
             p2tr_found++;
             LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2TR output with value at %s:%d, fetching full transaction...\n",
@@ -399,9 +425,14 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
             CAmount collateral = 0;
             CAmount ddAmount = 0;
 
-            // Get the full transaction from block storage
+            // Get the full transaction that created this coin. On a full node with a
+            // transaction index GetTransaction finds it via txindex; on a pruned node
+            // (no txindex) we hand it the block index at the coin's creation height so it
+            // reads the creating tx from the retained block instead. Same transaction,
+            // same result — just a different source.
             uint256 hashBlock;
-            CTransactionRef tx = node::GetTransaction(nullptr, mempool, txid, hashBlock, *blockman);
+            const CBlockIndex* creating_block = chain ? (*chain)[coin.nHeight] : nullptr;
+            CTransactionRef tx = node::GetTransaction(creating_block, mempool, txid, hashBlock, *blockman);
 
             if (tx) {
                 if (!DigiDollar::ExtractMintAccountingAmounts(*tx, ddAmount, collateral)) {
@@ -423,6 +454,7 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
             // Add to totals
             s_currentMetrics.totalCollateral += collateral;
             s_currentMetrics.totalDDSupply += ddAmount;
+            s_currentMetrics.totalActivePositions++;
             vaults_found++;
             processed_txids.insert(txid);
 
@@ -489,7 +521,7 @@ void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
     active.ForceFlushStateToDisk();
     {
         LOCK(::cs_main);
-        ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr);
+        ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr, &active.m_chain, &chainman.GetConsensus());
     }
     const SystemMetrics m = GetCachedMetrics();
     LogPrintf("DigiDollar: startup health reconstruction complete - DD supply %s, collateral %s DGB\n",

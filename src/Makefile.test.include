@@ -531,6 +531,7 @@ test_fuzz_fuzz_SOURCES = \
  test/fuzz/digidollar_health.cpp \
  test/fuzz/digidollar_dca_volatility.cpp \
  test/fuzz/digidollar_lock_tier.cpp \
+ test/fuzz/digidollar_prune_blockdb.cpp \
  test/fuzz/digidollar_scripts.cpp \
  test/fuzz/digidollar_wave15_parsers.cpp \
  test/fuzz/oracle_bundle_validation.cpp \

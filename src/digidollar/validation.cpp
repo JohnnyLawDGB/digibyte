@@ -2345,6 +2345,24 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-collateral-release-zero-collateral");
     }
 
+    // A DigiDollar collateral vault can only be created at/after activation, so a coin
+    // below the activation floor is never real collateral regardless of its byte
+    // structure. Reject it here on EVERY node so a pruned node (which cannot read a
+    // pruned pre-floor block to run the structural check below) and a full node reach the
+    // same verdict — otherwise a deliberately pre-planted DD-lookalike coin used as the
+    // redemption's input 0 could split pruned from full nodes. Mirrors the pre-floor gate
+    // in SpendsDigiDollarCollateralVault().
+    const int dd_activation_height = EarliestDigiDollarActivationHeight(ctx);
+    if (dd_activation_height > 0 &&
+        collateralCoin.nHeight < static_cast<uint32_t>(dd_activation_height)) {
+        LogPrintf("DigiDollar: Redemption rejected - input 0 was created below the DigiDollar "
+                  "activation floor (%u < %d) and cannot be collateral\n",
+                  collateralCoin.nHeight, dd_activation_height);
+        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                             "bad-collateral-release-not-vault",
+                             "Redemption input 0 must spend the canonical DigiDollar collateral vault output");
+    }
+
     CTransactionRef collateralPrevTx;
     if (LookupPreviousTransaction(tx.vin[0].prevout, collateralCoin.nHeight, ctx, collateralPrevTx) &&
         !IsMintCollateralOutput(collateralPrevTx, tx.vin[0].prevout.n)) {
@@ -2567,9 +2585,18 @@ bool ValidateCollateralReleaseAmount(const CTransaction& tx,
             // Mint validation permits regular non-P2TR DGB change before/after the
             // collateral, so the collateral is the unique positive P2TR output of a
             // DD mint rather than a fixed vout index.
+            //
+            // Coins created below the activation floor can never be real collateral, so
+            // skip the structural check for them and treat them as ordinary fee inputs.
+            // This keeps a pruned node (which cannot read a pruned pre-floor block for the
+            // lookup below) and a full node in agreement; without it a pre-planted
+            // DD-lookalike fee input would be rejected on full nodes but accepted on pruned
+            // nodes. Mirrors the pre-floor gate in SpendsDigiDollarCollateralVault().
             bool isCollateral = false;
             CTransactionRef prev_tx;
-            if (LookupPreviousTransaction(tx.vin[i].prevout, coin.nHeight, ctx, prev_tx)) {
+            if ((dd_activation_height <= 0 ||
+                 coin.nHeight >= static_cast<uint32_t>(dd_activation_height)) &&
+                LookupPreviousTransaction(tx.vin[i].prevout, coin.nHeight, ctx, prev_tx)) {
                 isCollateral = IsMintCollateralOutput(prev_tx, tx.vin[i].prevout.n);
             }
 

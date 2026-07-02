@@ -11,14 +11,13 @@
 //       transaction out of the retained block via a TxLookupFn callback
 //       (src/digidollar/validation.cpp; wired up in production by
 //       MakeCachedBlockTxLookup in src/validation.cpp).
-//   dd_prune_activation_floor - property fuzz of the shared dd_floor helper
-//       DigiDollar::EarliestActivationFloor (src/consensus/digidollar.cpp),
-//       the single source of truth used by the "digidollar" prune lock in
-//       src/node/chainstate.cpp, the startup guards in
-//       src/digidollar/health.cpp and src/oracle/bundle_manager.cpp, and
-//       validation's EarliestDigiDollarActivationHeight — plus the inline
-//       prune-lock clamp arithmetic used by Chainstate::FlushStateToDisk in
-//       src/validation.cpp (still replicated below; update if it changes).
+//   dd_prune_activation_floor - model-based differential check of the dd_floor
+//       (prune lock) computation in src/node/chainstate.cpp against
+//       EarliestDigiDollarActivationHeight in src/digidollar/validation.cpp,
+//       plus the inline prune-lock clamp arithmetic used by
+//       Chainstate::FlushStateToDisk in src/validation.cpp. Those expressions
+//       are static/inline in production, so they are REPLICATED here verbatim;
+//       if either production expression changes, update the models below
 //       (unit coverage: src/test/digidollar_txindex_tests.cpp and
 //       test/functional/feature_digidollar_pruning.py).
 //   dd_prune_coin_gating - SpendsDigiDollarCollateralVault() /
@@ -205,16 +204,30 @@ DigiDollar::TxLookupFn MakeFuzzedLookup(uint8_t mode, const CTransactionRef& pre
     }
 }
 
-/** Build a Consensus::Params carrying only the fields EarliestActivationFloor reads. */
-Consensus::Params MakeFloorParams(int64_t nStartTime, int64_t nTimeout, int min_activation_height, int nDDActivationHeight)
+// ----------------------------------------------------------------------------
+// Replicas of the static/inline production expressions (see file header).
+// ----------------------------------------------------------------------------
+
+/** Mirrors the dd_floor computation in CompleteChainstateInitialization
+ *  (src/node/chainstate.cpp, "DigiByte: DigiDollar-compatible pruning"). */
+int ChainstateDdFloorModel(int64_t nStartTime, int64_t nTimeout, int min_activation_height, int nDDActivationHeight)
 {
-    Consensus::Params cp{};
-    auto& dep = cp.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    dep.nStartTime = nStartTime;
-    dep.nTimeout = nTimeout;
-    dep.min_activation_height = min_activation_height;
-    cp.nDDActivationHeight = nDDActivationHeight;
-    return cp;
+    int dd_floor = 0;
+    if (nStartTime != NEVER && nTimeout != NEVER) {
+        dd_floor = (nStartTime == ALWAYS)
+                       ? min_activation_height
+                       : std::min(nDDActivationHeight, min_activation_height);
+    }
+    return dd_floor;
+}
+
+/** Mirrors static EarliestDigiDollarActivationHeight (src/digidollar/validation.cpp). */
+int ValidationEarliestFloorModel(int64_t nStartTime, int min_activation_height, int nDDActivationHeight)
+{
+    if (nStartTime == ALWAYS) {
+        return min_activation_height;
+    }
+    return std::min(nDDActivationHeight, min_activation_height);
 }
 
 } // namespace
@@ -294,8 +307,8 @@ FUZZ_TARGET(dd_extract_amount_blockdb, .init = initialize_dd_prune_blockdb)
 // ============================================================================
 // Target 2: dd_prune_activation_floor
 //
-// Property fuzz of the shared activation-floor helper
-// (DigiDollar::EarliestActivationFloor) and the prune-lock clamp arithmetic.
+// Differential/model fuzz of the prune-lock floor computation and the
+// prune-lock clamp arithmetic.
 // ============================================================================
 
 FUZZ_TARGET(dd_prune_activation_floor, .init = initialize_dd_prune_blockdb)
@@ -319,21 +332,20 @@ FUZZ_TARGET(dd_prune_activation_floor, .init = initialize_dd_prune_blockdb)
     const int min_act = fdp.ConsumeBool() ? fdp.PickValueInArray(height_values) : fdp.ConsumeIntegral<int>();
     const int dd_act = fdp.ConsumeBool() ? fdp.PickValueInArray(height_values) : fdp.ConsumeIntegral<int>();
 
-    const Consensus::Params cp = MakeFloorParams(start, timeout, min_act, dd_act);
-    const int dd_floor = DigiDollar::EarliestActivationFloor(cp);
+    const int dd_floor = ChainstateDdFloorModel(start, timeout, min_act, dd_act);
 
     // Deterministic.
-    assert(dd_floor == DigiDollar::EarliestActivationFloor(cp));
+    assert(dd_floor == ChainstateDdFloorModel(start, timeout, min_act, dd_act));
 
     if (start == NEVER || timeout == NEVER) {
         // DD can never activate: no block retention needed, no prune lock.
         assert(dd_floor == 0);
     } else {
-        // Spec check: the floor is the earliest DD-creating height, so the
-        // retained window [dd_floor, tip] covers every block a DD spend can
-        // ever need to read. A higher floor would let pruning delete a
-        // needed block.
-        assert(dd_floor == ((start == ALWAYS) ? min_act : std::min(dd_act, min_act)));
+        // Parity: the prune-lock floor must equal validation's earliest
+        // DD-creating height, so the retained window [dd_floor, tip] covers
+        // every block a DD spend can ever need to read. dd_floor >
+        // earliest-activation would let pruning delete a needed block.
+        assert(dd_floor == ValidationEarliestFloorModel(start, min_act, dd_act));
 
         // The floor never exceeds the BIP9 minimum activation height.
         assert(dd_floor <= min_act);
@@ -345,14 +357,15 @@ FUZZ_TARGET(dd_prune_activation_floor, .init = initialize_dd_prune_blockdb)
         if (min_act > 0 && dd_act > 0) assert(dd_floor > 0);
     }
 
-    // Live-params sanity for the selected chain (regtest here): the shared
-    // helper is what production consumes, so it must be deterministic and
-    // non-negative on real chainparams too.
+    // Live-params parity for the selected chain (regtest here): the two
+    // production expressions must agree on real chainparams as well.
     {
-        const Consensus::Params& cp_live = Params().GetConsensus();
-        const int live_floor = DigiDollar::EarliestActivationFloor(cp_live);
-        assert(live_floor == DigiDollar::EarliestActivationFloor(cp_live));
-        assert(live_floor >= 0);
+        const Consensus::Params& cp = Params().GetConsensus();
+        const auto& dep = cp.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+        if (dep.nStartTime != NEVER && dep.nTimeout != NEVER) {
+            assert(ChainstateDdFloorModel(dep.nStartTime, dep.nTimeout, dep.min_activation_height, cp.nDDActivationHeight) ==
+                   ValidationEarliestFloorModel(dep.nStartTime, dep.min_activation_height, cp.nDDActivationHeight));
+        }
     }
 
     // Prune-lock registration predicate from chainstate.cpp: lock registered
@@ -401,10 +414,11 @@ FUZZ_TARGET(dd_prune_coin_gating, .init = initialize_dd_prune_gating_main)
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
     const CChainParams& chainparams = Params();
     const Consensus::Params& cp = chainparams.GetConsensus();
+    const auto& dep = cp.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
 
     // The production pre-floor skip boundary. On mainnet v9.26.4 this is the
     // DigiDollar activation floor used for the prune lock.
-    const int dd_floor = DigiDollar::EarliestActivationFloor(cp);
+    const int dd_floor = ValidationEarliestFloorModel(dep.nStartTime, dep.min_activation_height, cp.nDDActivationHeight);
     assert(dd_floor == 23'627'520);
 
     // "Creating transaction" served by the fuzzed block-db lookup.

@@ -311,7 +311,16 @@ bool SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
     // Below the floor there are no DD vaults, so we skip those coins without reading a
     // block — this is what lets the seed run identically on a pruned node (pre-floor
     // blocks are gone) and a full node (pre-floor blocks are present but hold no vaults).
-    const int dd_floor = consensus ? DigiDollar::EarliestActivationFloor(*consensus) : 0;
+    int dd_floor = 0;
+    if (consensus) {
+        const auto& dd_dep = consensus->vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+        if (dd_dep.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
+            dd_dep.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE) {
+            dd_floor = (dd_dep.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE)
+                           ? dd_dep.min_activation_height
+                           : std::min(consensus->nDDActivationHeight, dd_dep.min_activation_height);
+        }
+    }
 
     // Reset counters
     s_currentMetrics.totalDDSupply = 0;

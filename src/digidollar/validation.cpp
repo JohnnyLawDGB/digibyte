@@ -69,7 +69,12 @@ static bool IsCanonicalP2TROutput(const CScript& script)
 
 static int EarliestDigiDollarActivationHeight(const ValidationContext& ctx)
 {
-    return DigiDollar::EarliestActivationFloor(ctx.params.GetConsensus());
+    const Consensus::Params& cp = ctx.params.GetConsensus();
+    const auto& deployment = cp.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    if (deployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE) {
+        return deployment.min_activation_height;
+    }
+    return std::min(cp.nDDActivationHeight, deployment.min_activation_height);
 }
 
 static bool CoinHeightMayCreateDigiDollar(const Coin& coin, const ValidationContext& ctx)

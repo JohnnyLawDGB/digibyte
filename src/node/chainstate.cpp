@@ -6,7 +6,6 @@
 #include <arith_uint256.h>
 #include <chain.h>
 #include <coins.h>
-#include <consensus/digidollar.h>
 #include <consensus/params.h>
 #include <logging.h>
 #include <node/blockstorage.h>
@@ -166,7 +165,15 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     // DigiDollar with incomplete data. Registered here (cs_main held, tip loaded) before
     // the first prune/flush can run.
     {
-        const int dd_floor = DigiDollar::EarliestActivationFloor(chainman.GetConsensus());
+        const Consensus::Params& consensus = chainman.GetConsensus();
+        const auto& dd_dep = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+        int dd_floor = 0;
+        if (dd_dep.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
+            dd_dep.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE) {
+            dd_floor = (dd_dep.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE)
+                           ? dd_dep.min_activation_height
+                           : std::min(consensus.nDDActivationHeight, dd_dep.min_activation_height);
+        }
 
         if (options.prune && dd_floor > 0) {
             PruneLockInfo dd_lock;

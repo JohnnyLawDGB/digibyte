@@ -1805,6 +1805,22 @@ bool OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
         return true;
     }
 
+    // DigiDollar activation floor: blocks at/above it are guaranteed retained on a
+    // pruned node (the "digidollar" prune lock). An unreadable block THERE means the
+    // data is damaged and we must fail closed. Below it — or when the floor is 0
+    // (default regtest ALWAYS_ACTIVE, where no retention is guaranteed and no lock is
+    // registered) — a missing block is a legitimate prune/assumeutxo state, not damage.
+    int dd_floor = 0;
+    {
+        const auto& dd_dep = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+        if (dd_dep.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
+            dd_dep.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE) {
+            dd_floor = (dd_dep.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE)
+                           ? dd_dep.min_activation_height
+                           : std::min(consensus.nDDActivationHeight, dd_dep.min_activation_height);
+        }
+    }
+
     // Scan recent blocks for the live oracle cache and enough history to
     // deterministically rebuild volatility state after restart/reindex.
     static constexpr int ORACLE_VALIDITY_BLOCKS = 20;
@@ -1831,18 +1847,24 @@ bool OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
 
         CBlock block;
         if (!chainman.m_blockman.ReadBlockFromDisk(block, *block_index)) {
-            // This loop only reaches post-activation blocks (pre-activation heights are
-            // skipped by the header check above), and on a pruned node the reindex guard
-            // in CompleteChainstateInitialization has already confirmed every block in
-            // [DigiDollar floor, tip] is present. So a read failure here is not expected —
-            // flag it loudly rather than silently reconstructing from partial price data.
-            LogPrintf("ERROR: Oracle: failed to read block at height %d during startup price "
-                      "reconstruction. The DigiDollar block window may be incomplete; "
-                      "restart with -reindex.\n", height);
-            // Fail CLOSED: volatility freeze state reconstructed here is enforced as a
-            // consensus rule post-activation. Refusing to start beats rebuilding it
-            // from partial price history and diverging from the network.
-            return false;
+            if (dd_floor > 0 && height >= dd_floor) {
+                // A block inside the guaranteed-retained DigiDollar window is
+                // unreadable (e.g. a truncated/partially-restored blk file that the
+                // index-flag startup guard cannot see). Fail CLOSED: the volatility
+                // freeze state reconstructed here is enforced as a consensus rule
+                // post-activation, so refusing to start beats rebuilding it from
+                // partial price history and diverging from the network.
+                LogPrintf("ERROR: Oracle: failed to read block at height %d during startup "
+                          "price reconstruction (>= DigiDollar floor %d). Block data is "
+                          "incomplete; restart with -reindex.\n", height, dd_floor);
+                return false;
+            }
+            // Below the floor (or floor 0, e.g. default regtest / assumeutxo gaps)
+            // a missing block is a legitimate prune state, not damage.
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: skipping unreadable pre-floor block at height %d during "
+                     "startup price reconstruction\n", height);
+            continue;
         }
 
         // Extract oracle bundle from coinbase

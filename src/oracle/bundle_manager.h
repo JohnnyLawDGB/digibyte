@@ -213,7 +213,10 @@ public:
 
     //! Load oracle prices from blockchain on startup
     //! Must be called after chainstate is fully loaded
-    static void LoadPricesFromChain(ChainstateManager& chainman);
+    //! Returns false when a post-activation block that should be present could
+    //! not be read (incomplete/damaged block data) — the caller must abort
+    //! startup rather than reconstruct price/volatility state from partial data.
+    static bool LoadPricesFromChain(ChainstateManager& chainman);
     static bool ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const Consensus::Params& params);
 
     //! Clear all state (for testing)

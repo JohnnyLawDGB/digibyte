@@ -12,6 +12,7 @@
 #include <chainparams.h>
 #include <common/args.h>
 #include <consensus/consensus.h>
+#include <consensus/digidollar.h>
 #include <consensus/volatility.h>
 #include <digidollar/digidollar.h>
 #include <kernel/chainparams.h>
@@ -1782,7 +1783,7 @@ void OracleBundleManager::Shutdown()
     }
 }
 
-void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
+bool OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
 {
     OracleBundleManager& manager = GetInstance();
     const Consensus::Params& consensus = Params().GetConsensus();
@@ -1793,7 +1794,7 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     CBlockIndex* pindex = chainman.ActiveChain().Tip();
     if (!pindex) {
         LogPrintf("Oracle: No active chain tip, skipping price loading\n");
-        return;
+        return true;
     }
 
     int tip_height = pindex->nHeight;
@@ -1802,8 +1803,15 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     if (!DigiDollar::IsDigiDollarEnabled(pindex, chainman)) {
         LogPrintf("Oracle: DigiDollar not yet active (BIP9) at height %d, skipping price loading\n",
                  tip_height);
-        return;
+        return true;
     }
+
+    // DigiDollar activation floor: blocks at/above it are guaranteed retained on a
+    // pruned node (the "digidollar" prune lock). An unreadable block THERE means the
+    // data is damaged and we must fail closed. Below it — or when the floor is 0
+    // (default regtest ALWAYS_ACTIVE, where no retention is guaranteed and no lock is
+    // registered) — a missing block is a legitimate prune/assumeutxo state, not damage.
+    const int dd_floor = DigiDollar::EarliestActivationFloor(consensus);
 
     // Scan recent blocks for the live oracle cache and enough history to
     // deterministically rebuild volatility state after restart/reindex.
@@ -1831,7 +1839,23 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
 
         CBlock block;
         if (!chainman.m_blockman.ReadBlockFromDisk(block, *block_index)) {
-            LogPrintf("Oracle: Failed to read block at height %d\n", height);
+            if (dd_floor > 0 && height >= dd_floor) {
+                // A block inside the guaranteed-retained DigiDollar window is
+                // unreadable (e.g. a truncated/partially-restored blk file that the
+                // index-flag startup guard cannot see). Fail CLOSED: the volatility
+                // freeze state reconstructed here is enforced as a consensus rule
+                // post-activation, so refusing to start beats rebuilding it from
+                // partial price history and diverging from the network.
+                LogPrintf("ERROR: Oracle: failed to read block at height %d during startup "
+                          "price reconstruction (>= DigiDollar floor %d). Block data is "
+                          "incomplete; restart with -reindex.\n", height, dd_floor);
+                return false;
+            }
+            // Below the floor (or floor 0, e.g. default regtest / assumeutxo gaps)
+            // a missing block is a legitimate prune state, not damage.
+            LogPrint(BCLog::DIGIDOLLAR,
+                     "Oracle: skipping unreadable pre-floor block at height %d during "
+                     "startup price reconstruction\n", height);
             continue;
         }
 
@@ -1876,6 +1900,7 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     } else {
         LogPrintf("Oracle: No oracle prices found in recent blocks\n");
     }
+    return true;
 }
 
 bool OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const Consensus::Params& params)

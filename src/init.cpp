@@ -787,10 +787,21 @@ void InitParameterInteraction(ArgsManager& args)
     // DigiByte: -txindex defaults on (DigiDollar needs it), but prune is incompatible with
     // txindex. If the node is pruning and the user did not explicitly choose -txindex, leave
     // txindex off so the pruned node starts cleanly. An explicit "-prune=N -txindex=1" still
-    // errors in AppInitParameterInteraction.
-    if (args.GetIntArg("-prune", 0) > 0) {
+    // errors in AppInitParameterInteraction. Any nonzero -prune counts (including invalid
+    // negative values, so they reach their own error instead of the txindex conflict);
+    // -prune=0 explicitly disables pruning and keeps the txindex default.
+    if (args.GetIntArg("-prune", 0) != 0) {
         if (args.SoftSetBoolArg("-txindex", false))
             LogPrintf("%s: parameter interaction: -prune set -> setting -txindex=0\n", __func__);
+
+        // DigiByte: the DigiDollar stats index (default on) syncs from genesis, so on a
+        // pruned node its initial sync would demand blocks below the prune point and the
+        // generic "index goes beyond pruned data" check would refuse to start. Leave it
+        // off on pruned nodes unless the user explicitly asked for it. getdigidollarstats
+        // still works via its live UTXO-set fallback; only historical per-height stats
+        // queries need the index.
+        if (args.SoftSetBoolArg("-digidollarstatsindex", false))
+            LogPrintf("%s: parameter interaction: -prune set -> setting -digidollarstatsindex=0\n", __func__);
     }
 
     if (args.IsArgSet("-connect") || args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS) <= 0) {
@@ -904,6 +915,14 @@ bool IsRegtestDigiDollarExplicitlyRequested(const ArgsManager& args)
 bool IsDigiDollarTxIndexRequired(const CChainParams& chainparams, const ArgsManager& args)
 {
     if (!HasDigiDollarDeployment(chainparams)) return false;
+
+    // Pruned nodes do not maintain a transaction index (prune is incompatible with
+    // txindex). DigiDollar validation on a pruned node resolves the amount/lock of a
+    // spent DD output by reading the creating transaction from the retained block at the
+    // coin's height (node::GetTransaction's block-db path) instead of the txindex, and
+    // the DigiDollar-era block window is kept by the "digidollar" prune lock. So a pruned
+    // node does not require txindex.
+    if (args.GetIntArg("-prune", 0) > 0) return false;
 
     switch (chainparams.GetChainType()) {
     case ChainType::MAIN:
@@ -2200,13 +2219,26 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     g_signing_orchestrator->SetConnman(node.connman.get());
     // Initialize oracle P2P connection for broadcasting
     OracleBundleManager::GetInstance().SetConnman(node.connman.get());
-    // Load oracle prices from blockchain (must be after chainstate is loaded)
-    OracleBundleManager::LoadPricesFromChain(chainman);
+    // Load oracle prices from blockchain (must be after chainstate is loaded).
+    // Fail CLOSED on unreadable post-activation blocks: the reconstructed price
+    // history feeds the consensus volatility freeze, and the reconstructed health
+    // metrics feed consensus DCA/ERR. A truncated/partially-restored block file
+    // passes the index-flag startup guard but must never let the node run
+    // DigiDollar validation on partial data.
+    if (!OracleBundleManager::LoadPricesFromChain(chainman)) {
+        return InitError(_("DigiDollar-era block data is incomplete or unreadable. "
+                           "Restart with -reindex to rebuild it (a pruned node will "
+                           "redownload and re-prune)."));
+    }
     // DD-FINAL-003 / AR-CONSENSUS-1: reconstruct cached system-health metrics
     // (total DD supply + collateral) from the on-chain UTXO set so consensus
     // DCA/ERR health does not depend on process restart history. No-op until
     // DigiDollar is active at the tip.
-    DigiDollar::SystemHealthMonitor::ReconstructFromChain(chainman);
+    if (!DigiDollar::SystemHealthMonitor::ReconstructFromChain(chainman)) {
+        return InitError(_("DigiDollar-era block data is incomplete or unreadable. "
+                           "Restart with -reindex to rebuild it (a pruned node will "
+                           "redownload and re-prune)."));
+    }
 
     // DD-FINAL-005 / AR-0: OP_CHECKPRICE is deterministically DISABLED (it now
     // consumes its witness operand and always pushes vchFalse). The interpreter no

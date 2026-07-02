@@ -5256,6 +5256,84 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06b_fee_input_collateral_masquerade)
     }
 }
 
+// v9.26.4 pruning-parity: a coin created BELOW the DigiDollar activation floor can
+// never be real collateral, so ValidateCollateralReleaseAmount must classify it
+// identically on pruned and full nodes. A full node (txindex) can read a pre-floor
+// block and would otherwise flag a DD-mint-structured pre-floor coin as collateral,
+// while a pruned node (pre-floor block deleted) cannot — a consensus split. The
+// activation-floor gate resolves it: pre-floor input 0 is rejected as not-vault, and a
+// pre-floor DD-structured "fee input" is treated as an ordinary fee input, on EVERY node
+// regardless of whether the creating block is readable.
+BOOST_AUTO_TEST_CASE(redteam_t2_06d_prefloor_collateral_gate_parity)
+{
+    // Regtest params with a real activation floor of 650 (default regtest is
+    // ALWAYS_ACTIVE with min_activation_height 0, which disables the gate).
+    CChainParams::RegTestOptions opts;
+    CChainParams::VersionBitsParameters vb{};
+    vb.start_time = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+    vb.timeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+    vb.min_activation_height = 650;  // EarliestDigiDollarActivationHeight -> 650
+    opts.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = vb;
+    const auto params = CChainParams::RegTest(opts);
+
+    // A DD-mint-structured transaction whose collateral output sits BELOW the floor.
+    CKey collKey; collKey.MakeNewKey(true);
+    XOnlyPubKey xPub(collKey.GetPubKey());
+    CScript p2tr = MakeP2TR(xPub);
+    const CAmount collateral = 200 * COIN;
+    const CAmount originalDD = 10000;
+
+    CMutableTransaction mintTx;
+    mintTx.nVersion = 0x01000770;
+    mintTx.vin.push_back(CTxIn(COutPoint(uint256S("d206b0000000000000000000000000000000000000000000000000000000006d"), 0)));
+    mintTx.vout.push_back(CTxOut(collateral, p2tr));
+    CKey ddKey; ddKey.MakeNewKey(true);
+    mintTx.vout.push_back(CTxOut(0, MakeP2TR(XOnlyPubKey(ddKey.GetPubKey()))));
+    mintTx.vout.push_back(CTxOut(0, MakeDDMintOpReturn(originalDD, 1000, 1, xPub)));
+    CTransactionRef mintRef = MakeTransactionRef(mintTx);
+    const uint256 mintHash = mintRef->GetHash();
+
+    auto lookup = [&](const uint256& txid, uint32_t, CTransactionRef& out) -> bool {
+        if (txid == mintHash) { out = mintRef; return true; }  // full node: lookup succeeds
+        return false;
+    };
+
+    // Redeem spending that pre-floor coin as input 0 (the collateral position).
+    CMutableTransaction rtx;
+    rtx.nVersion = 0x03000770;
+    rtx.nLockTime = 1000;
+    rtx.vin.push_back(CTxIn(COutPoint(mintHash, 0)));
+    rtx.vout.push_back(CTxOut(195 * COIN, MakeP2TR(xPub)));
+    CTransaction redeem(rtx);
+
+    // Case A — collateral coin at height 400 (< floor 650): must be rejected on every
+    // node as not-vault, BEFORE the structural lookup, so pruned==full.
+    {
+        CCoinsView base; CCoinsViewCache coins(&base);
+        coins.AddCoin(COutPoint(mintHash, 0), Coin(CTxOut(collateral, p2tr), 400, false), false);
+        TxValidationState state;
+        DigiDollar::ValidationContext ctx(1000, 500000, 700, *params, &coins, false, lookup);
+        bool ok = DigiDollar::ValidateCollateralReleaseAmount(redeem, ctx, originalDD, state);
+        BOOST_CHECK_MESSAGE(!ok, "pre-floor collateral input must be rejected");
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-collateral-release-not-vault");
+    }
+    // Case B — same coin, but a lookup that FAILS (models a pruned node with the
+    // pre-floor block deleted): must reach the SAME verdict via the floor gate, proving
+    // the outcome does not depend on whether the creating block is readable.
+    {
+        auto failing_lookup = [](const uint256&, uint32_t, CTransactionRef&) -> bool { return false; };
+        CCoinsView base; CCoinsViewCache coins(&base);
+        coins.AddCoin(COutPoint(mintHash, 0), Coin(CTxOut(collateral, p2tr), 400, false), false);
+        TxValidationState state;
+        DigiDollar::ValidationContext ctx(1000, 500000, 700, *params, &coins, false, failing_lookup);
+        bool ok = DigiDollar::ValidateCollateralReleaseAmount(redeem, ctx, originalDD, state);
+        BOOST_CHECK_MESSAGE(!ok, "pruned node (failing lookup) must reach the same reject");
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-collateral-release-not-vault");
+    }
+    BOOST_TEST_MESSAGE("DEFENSE [T2-06d]: pre-floor collateral classification is floor-gated "
+        "and identical whether or not the creating block is readable (pruned==full).");
+}
+
 BOOST_AUTO_TEST_CASE(redteam_t2_06c_collateral_release_fee_tolerance)
 {
     // ATTACK [T2-06c]: Exploit the fee tolerance in collateral release validation.
@@ -10304,7 +10382,7 @@ BOOST_AUTO_TEST_CASE(redteam_t5_06c_scan_utxo_set_race_condition)
     DigiDollar::SystemHealthMonitor::Initialize();
 
     // Now call ScanUTXOSet with null view — this resets metrics to 0
-    DigiDollar::SystemHealthMonitor::ScanUTXOSet(nullptr, nullptr, nullptr, nullptr);
+    DigiDollar::SystemHealthMonitor::ScanUTXOSet(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
     // At this point metrics are reset to 0 (scan found nothing with null view)
     auto metrics = DigiDollar::SystemHealthMonitor::GetCachedMetrics();

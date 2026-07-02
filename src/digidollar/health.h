@@ -20,6 +20,11 @@
 class CCoinsView;
 class CTxMemPool;
 class ChainstateManager;
+class CChain;
+
+namespace Consensus {
+    struct Params;
+}
 
 namespace node {
     class BlockManager;
@@ -39,6 +44,8 @@ struct SystemMetrics {
     // Overall system metrics
     CAmount totalDDSupply;      //!< Total DigiDollar in circulation (cents)
     CAmount totalCollateral;    //!< Total DGB locked as collateral
+    int totalActivePositions;   //!< Active vault count; (re)computed by ScanUTXOSet,
+                                //!< not incrementally maintained between scans
     int systemHealth;           //!< Overall collateral ratio (percentage)
     bool hasCanonicalHealth;    //!< True after health was calculated from the current metric snapshot
 
@@ -70,7 +77,8 @@ struct SystemMetrics {
     // Historical tracking
     std::vector<int> healthHistory;  //!< Recent health percentages
 
-    SystemMetrics() : totalDDSupply(0), totalCollateral(0), systemHealth(0), hasCanonicalHealth(false),
+    SystemMetrics() : totalDDSupply(0), totalCollateral(0), totalActivePositions(0),
+                     systemHealth(0), hasCanonicalHealth(false),
                      dcaMultiplier(1.0), errActive(false), volatility(0.0),
                      mintingFrozen(false), activeOracles(0), lastOraclePrice(0),
                      lastOracleUpdate(0) {}
@@ -170,7 +178,15 @@ public:
      * @param blockman BlockManager for accessing full transaction data
      * @param mempool Optional mempool for checking recent transactions
      */
-    static void ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr);
+    //! Returns false if a DD-era vault's creating transaction could not be read
+    //! (block data incomplete/damaged) — callers seeding consensus-relevant
+    //! state must treat that as fatal (fail closed) rather than accept an
+    //! undercounted supply/collateral baseline.
+    //! mempool/chain/consensus deliberately have no defaults: the pre-floor
+    //! coin skip and the fail-closed check are both gated on a non-null chain,
+    //! so a caller that silently omitted these arguments would revert to the
+    //! old silent-undercount behavior. Every caller must decide explicitly.
+    static bool ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool, const CChain* chain, const Consensus::Params* consensus);
 
     /**
      * Reconstruct the cached system-health metrics (total DD supply + total
@@ -189,7 +205,10 @@ public:
      * full UTXO scan before activation and on non-DD chains).
      * @param chainman Active chainstate manager (after chainstate load)
      */
-    static void ReconstructFromChain(ChainstateManager& chainman);
+    //! Returns false when the seed scan found unreadable DD-era block data
+    //! (see ScanUTXOSet) — the caller must abort startup rather than run
+    //! consensus with an incomplete health baseline.
+    static bool ReconstructFromChain(ChainstateManager& chainman);
 
     /**
      * Get cached metrics without triggering updates

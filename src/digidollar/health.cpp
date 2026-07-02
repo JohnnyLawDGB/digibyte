@@ -304,11 +304,19 @@ void SystemHealthMonitor::Shutdown()
     s_initialized = false;
 }
 
-void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool)
+bool SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool, const CChain* chain, const Consensus::Params* consensus)
 {
+    // DigiDollar activation floor: a DD vault output can only be created at/after
+    // activation, which cannot happen below the deployment's minimum activation height.
+    // Below the floor there are no DD vaults, so we skip those coins without reading a
+    // block — this is what lets the seed run identically on a pruned node (pre-floor
+    // blocks are gone) and a full node (pre-floor blocks are present but hold no vaults).
+    const int dd_floor = consensus ? DigiDollar::EarliestActivationFloor(*consensus) : 0;
+
     // Reset counters
     s_currentMetrics.totalDDSupply = 0;
     s_currentMetrics.totalCollateral = 0;
+    s_currentMetrics.totalActivePositions = 0;
     s_currentMetrics.systemHealth = 0;
     s_currentMetrics.hasCanonicalHealth = false;
 
@@ -322,24 +330,25 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 
     if (!view) {
         LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: No coins view provided\n");
-        return;
+        return true;
     }
 
     if (!blockman) {
         LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: No block manager provided - skipping UTXO scan (unit test mode?)\n");
-        return;
+        return true;
     }
 
     // Create cursor to iterate all UTXOs (similar to gettxoutsetinfo)
     std::unique_ptr<CCoinsViewCursor> pcursor(view->Cursor());
     if (!pcursor) {
         LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Unable to create UTXO cursor\n");
-        return;
+        return true;
     }
 
     LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Starting blockchain-wide UTXO scan with full transaction access\n");
     LogPrintf("DigiDollar: ========== STARTING UTXO SCAN ==========\n");
 
+    bool complete = true;
     size_t vaults_found = 0;
     size_t dd_amount_extracted = 0;
     size_t dd_amount_estimated = 0;
@@ -379,6 +388,15 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
         // validation does not require it to be vout[0].
         if (coin.out.scriptPubKey.size() == 34 &&
             coin.out.scriptPubKey[0] == OP_1 && coin.out.nValue > 0) {
+
+            // Skip P2TR coins created before the DigiDollar floor — they cannot be DD
+            // vaults, so there is no need to read their (possibly pruned) creating block.
+            if (chain && dd_floor > 0 && static_cast<int>(coin.nHeight) < dd_floor) {
+                processed_txids.insert(txid);
+                pcursor->Next();
+                continue;
+            }
+
             vault_candidates_checked++;
             p2tr_found++;
             LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Found P2TR output with value at %s:%d, fetching full transaction...\n",
@@ -399,9 +417,14 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
             CAmount collateral = 0;
             CAmount ddAmount = 0;
 
-            // Get the full transaction from block storage
+            // Get the full transaction that created this coin. On a full node with a
+            // transaction index GetTransaction finds it via txindex; on a pruned node
+            // (no txindex) we hand it the block index at the coin's creation height so it
+            // reads the creating tx from the retained block instead. Same transaction,
+            // same result — just a different source.
             uint256 hashBlock;
-            CTransactionRef tx = node::GetTransaction(nullptr, mempool, txid, hashBlock, *blockman);
+            const CBlockIndex* creating_block = chain ? (*chain)[coin.nHeight] : nullptr;
+            CTransactionRef tx = node::GetTransaction(creating_block, mempool, txid, hashBlock, *blockman);
 
             if (tx) {
                 if (!DigiDollar::ExtractMintAccountingAmounts(*tx, ddAmount, collateral)) {
@@ -413,8 +436,23 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
                 LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Extracted exact DD amount %s from tx %s\n",
                          FormatMoney(ddAmount), txid.ToString());
             } else {
-                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Could not fetch tx %s, skipping unverified DD vault candidate\n",
-                         txid.ToString());
+                // A coin at/above the DigiDollar activation floor sits in a block the
+                // node is REQUIRED to be able to read (retained window on a pruned node,
+                // full history otherwise). Failing to read it means the block data is
+                // damaged (e.g. a truncated/partially-restored blk file that the index
+                // still marks as present). The metrics seeded here feed consensus
+                // DCA/ERR health, so this must fail CLOSED — report incomplete instead
+                // of silently undercounting supply/collateral.
+                if (chain && dd_floor > 0 && static_cast<int>(coin.nHeight) >= dd_floor) {
+                    LogPrintf("ERROR: ScanUTXOSet: could not read the creating transaction of "
+                              "DD vault candidate %s (coin height %u >= DigiDollar floor %d). "
+                              "Block data is incomplete; restart with -reindex.\n",
+                              txid.ToString(), coin.nHeight, dd_floor);
+                    complete = false;
+                } else {
+                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Could not fetch tx %s, skipping unverified DD vault candidate\n",
+                             txid.ToString());
+                }
                 processed_txids.insert(txid);
                 pcursor->Next();
                 continue;
@@ -423,6 +461,7 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
             // Add to totals
             s_currentMetrics.totalCollateral += collateral;
             s_currentMetrics.totalDDSupply += ddAmount;
+            s_currentMetrics.totalActivePositions++;
             vaults_found++;
             processed_txids.insert(txid);
 
@@ -449,9 +488,10 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
     LogPrintf("DigiDollar: Found %zu vaults, Total Collateral: %s DGB, Total DD: %s cents\n",
              vaults_found, FormatMoney(s_currentMetrics.totalCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply));
+    return complete;
 }
 
-void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
+bool SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
 {
     // DD-FINAL-003 / AR-CONSENSUS-1: seed the cached system-health metrics from
     // the on-chain UTXO set at startup so consensus DCA/ERR health is identical
@@ -465,18 +505,18 @@ void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
     if (node::fReindex) {
         LogPrint(BCLog::DIGIDOLLAR,
                  "Health: skipping startup reconstruction during reindex (block replay rebuilds metrics)\n");
-        return;
+        return true;
     }
     const CBlockIndex* tip = WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip());
     if (tip == nullptr) {
-        return;
+        return true;
     }
     // Skip the (potentially expensive) full UTXO scan unless DigiDollar is active
     // at the current tip — pre-activation and non-DD chains have no DD vaults.
     if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
         LogPrint(BCLog::DIGIDOLLAR,
                  "Health: skipping startup reconstruction (DigiDollar not active at tip)\n");
-        return;
+        return true;
     }
 
     // Flush the in-memory coins cache to disk so the CoinsDB cursor below sees
@@ -487,13 +527,15 @@ void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
     // nodes. The reindex path returned above, so by here the datadir is writable.
     Chainstate& active = chainman.ActiveChainstate();
     active.ForceFlushStateToDisk();
+    bool complete;
     {
         LOCK(::cs_main);
-        ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr);
+        complete = ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr, &active.m_chain, &chainman.GetConsensus());
     }
     const SystemMetrics m = GetCachedMetrics();
     LogPrintf("DigiDollar: startup health reconstruction complete - DD supply %s, collateral %s DGB\n",
               FormatMoney(m.totalDDSupply), FormatMoney(m.totalCollateral));
+    return complete;
 }
 
 // ============================================================================

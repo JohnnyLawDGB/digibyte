@@ -178,7 +178,11 @@ public:
      * @param blockman BlockManager for accessing full transaction data
      * @param mempool Optional mempool for checking recent transactions
      */
-    static void ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr, const CChain* chain = nullptr, const Consensus::Params* consensus = nullptr);
+    //! Returns false if a DD-era vault's creating transaction could not be read
+    //! (block data incomplete/damaged) — callers seeding consensus-relevant
+    //! state must treat that as fatal (fail closed) rather than accept an
+    //! undercounted supply/collateral baseline.
+    static bool ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool = nullptr, const CChain* chain = nullptr, const Consensus::Params* consensus = nullptr);
 
     /**
      * Reconstruct the cached system-health metrics (total DD supply + total
@@ -197,7 +201,10 @@ public:
      * full UTXO scan before activation and on non-DD chains).
      * @param chainman Active chainstate manager (after chainstate load)
      */
-    static void ReconstructFromChain(ChainstateManager& chainman);
+    //! Returns false when the seed scan found unreadable DD-era block data
+    //! (see ScanUTXOSet) — the caller must abort startup rather than run
+    //! consensus with an incomplete health baseline.
+    static bool ReconstructFromChain(ChainstateManager& chainman);
 
     /**
      * Get cached metrics without triggering updates

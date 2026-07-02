@@ -207,6 +207,7 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         self.test_f10_full_node_migrates_to_pruned()
         self.test_f9_incomplete_dd_window_guard()
         self.test_f13_unprune_requires_reindex()
+        self.test_f14_truncated_dd_block_file_fails_closed()
 
         self.log.info("DigiDollar-compatible pruning tests PASSED")
 
@@ -678,6 +679,46 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         )
         # Restart normally (still pruned) so teardown is clean.
         self.start_node(1, extra_args=self.extra_args[1])
+
+    # ================================================================== F14
+    def test_f14_truncated_dd_block_file_fails_closed(self):
+        """DD-era block data lost WITHOUT the block index knowing must fail
+        CLOSED at startup.
+
+        Whole-file deletion is already caught by the generic block-db check at
+        index load (every flagged blk file is opened). The sneaky case is a
+        TRUNCATED / partially-restored file: it opens fine, the startup guard's
+        index-flag walk passes, but reads of DigiDollar-era blocks fail. The
+        startup reconstruction paths (oracle price cache + health metrics that
+        feed consensus DCA/ERR) must then refuse to start rather than silently
+        rebuild consensus-relevant state from partial data.
+        """
+        node0, node1 = self.nodes[0], self.nodes[1]
+        self.log.info("F14: truncated DD-era block file refuses to start")
+
+        self.stop_node(1)
+        blk_files = sorted(
+            f for f in os.listdir(node1.blocks_path)
+            if f.startswith("blk") and f.endswith(".dat"))
+        assert len(blk_files) > 3
+        # Truncate everything except the two newest files (keeps the tip region
+        # readable for the shallow startup block verification).
+        for name in blk_files[:-2]:
+            with open(os.path.join(node1.blocks_path, name), "r+b") as f:
+                f.truncate(8)
+
+        node1.assert_start_raises_init_error(
+            extra_args=self.extra_args[1],
+            expected_msg="DigiDollar-era block data is incomplete",
+            match=ErrorMatch.PARTIAL_REGEX,
+        )
+        self.log.info("  startup correctly refused on truncated block data")
+
+        # Recovery: -reindex rebuilds from the network, back to full parity.
+        self.start_node(1, extra_args=self.extra_args[1] + ["-reindex"])
+        self.connect_nodes(0, 1)
+        self.sync_blocks([node0, node1], timeout=240)
+        self.assert_dd_parity("after -reindex recovery from truncated files")
 
 
 if __name__ == "__main__":

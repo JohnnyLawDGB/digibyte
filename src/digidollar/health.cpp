@@ -304,7 +304,7 @@ void SystemHealthMonitor::Shutdown()
     s_initialized = false;
 }
 
-void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool, const CChain* chain, const Consensus::Params* consensus)
+bool SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_view, const node::BlockManager* blockman, const CTxMemPool* mempool, const CChain* chain, const Consensus::Params* consensus)
 {
     // DigiDollar activation floor: a DD vault output can only be created at/after
     // activation, which cannot happen below the deployment's minimum activation height.
@@ -339,24 +339,25 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
 
     if (!view) {
         LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: No coins view provided\n");
-        return;
+        return true;
     }
 
     if (!blockman) {
         LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: No block manager provided - skipping UTXO scan (unit test mode?)\n");
-        return;
+        return true;
     }
 
     // Create cursor to iterate all UTXOs (similar to gettxoutsetinfo)
     std::unique_ptr<CCoinsViewCursor> pcursor(view->Cursor());
     if (!pcursor) {
         LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Unable to create UTXO cursor\n");
-        return;
+        return true;
     }
 
     LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Starting blockchain-wide UTXO scan with full transaction access\n");
     LogPrintf("DigiDollar: ========== STARTING UTXO SCAN ==========\n");
 
+    bool complete = true;
     size_t vaults_found = 0;
     size_t dd_amount_extracted = 0;
     size_t dd_amount_estimated = 0;
@@ -444,8 +445,23 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
                 LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Extracted exact DD amount %s from tx %s\n",
                          FormatMoney(ddAmount), txid.ToString());
             } else {
-                LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Could not fetch tx %s, skipping unverified DD vault candidate\n",
-                         txid.ToString());
+                // A coin at/above the DigiDollar activation floor sits in a block the
+                // node is REQUIRED to be able to read (retained window on a pruned node,
+                // full history otherwise). Failing to read it means the block data is
+                // damaged (e.g. a truncated/partially-restored blk file that the index
+                // still marks as present). The metrics seeded here feed consensus
+                // DCA/ERR health, so this must fail CLOSED — report incomplete instead
+                // of silently undercounting supply/collateral.
+                if (chain && dd_floor > 0 && static_cast<int>(coin.nHeight) >= dd_floor) {
+                    LogPrintf("ERROR: ScanUTXOSet: could not read the creating transaction of "
+                              "DD vault candidate %s (coin height %u >= DigiDollar floor %d). "
+                              "Block data is incomplete; restart with -reindex.\n",
+                              txid.ToString(), coin.nHeight, dd_floor);
+                    complete = false;
+                } else {
+                    LogPrint(BCLog::DIGIDOLLAR, "ScanUTXOSet: Could not fetch tx %s, skipping unverified DD vault candidate\n",
+                             txid.ToString());
+                }
                 processed_txids.insert(txid);
                 pcursor->Next();
                 continue;
@@ -481,9 +497,10 @@ void SystemHealthMonitor::ScanUTXOSet(CCoinsView* view, CCoinsView* validation_v
     LogPrintf("DigiDollar: Found %zu vaults, Total Collateral: %s DGB, Total DD: %s cents\n",
              vaults_found, FormatMoney(s_currentMetrics.totalCollateral),
              FormatMoney(s_currentMetrics.totalDDSupply));
+    return complete;
 }
 
-void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
+bool SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
 {
     // DD-FINAL-003 / AR-CONSENSUS-1: seed the cached system-health metrics from
     // the on-chain UTXO set at startup so consensus DCA/ERR health is identical
@@ -497,18 +514,18 @@ void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
     if (node::fReindex) {
         LogPrint(BCLog::DIGIDOLLAR,
                  "Health: skipping startup reconstruction during reindex (block replay rebuilds metrics)\n");
-        return;
+        return true;
     }
     const CBlockIndex* tip = WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip());
     if (tip == nullptr) {
-        return;
+        return true;
     }
     // Skip the (potentially expensive) full UTXO scan unless DigiDollar is active
     // at the current tip — pre-activation and non-DD chains have no DD vaults.
     if (!DigiDollar::IsDigiDollarEnabled(tip, chainman)) {
         LogPrint(BCLog::DIGIDOLLAR,
                  "Health: skipping startup reconstruction (DigiDollar not active at tip)\n");
-        return;
+        return true;
     }
 
     // Flush the in-memory coins cache to disk so the CoinsDB cursor below sees
@@ -519,13 +536,15 @@ void SystemHealthMonitor::ReconstructFromChain(ChainstateManager& chainman)
     // nodes. The reindex path returned above, so by here the datadir is writable.
     Chainstate& active = chainman.ActiveChainstate();
     active.ForceFlushStateToDisk();
+    bool complete;
     {
         LOCK(::cs_main);
-        ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr, &active.m_chain, &chainman.GetConsensus());
+        complete = ScanUTXOSet(&active.CoinsDB(), &active.CoinsTip(), &active.m_blockman, /*mempool=*/nullptr, &active.m_chain, &chainman.GetConsensus());
     }
     const SystemMetrics m = GetCachedMetrics();
     LogPrintf("DigiDollar: startup health reconstruction complete - DD supply %s, collateral %s DGB\n",
               FormatMoney(m.totalDDSupply), FormatMoney(m.totalCollateral));
+    return complete;
 }
 
 // ============================================================================

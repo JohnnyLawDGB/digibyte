@@ -1782,7 +1782,7 @@ void OracleBundleManager::Shutdown()
     }
 }
 
-void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
+bool OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
 {
     OracleBundleManager& manager = GetInstance();
     const Consensus::Params& consensus = Params().GetConsensus();
@@ -1793,7 +1793,7 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     CBlockIndex* pindex = chainman.ActiveChain().Tip();
     if (!pindex) {
         LogPrintf("Oracle: No active chain tip, skipping price loading\n");
-        return;
+        return true;
     }
 
     int tip_height = pindex->nHeight;
@@ -1802,7 +1802,7 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     if (!DigiDollar::IsDigiDollarEnabled(pindex, chainman)) {
         LogPrintf("Oracle: DigiDollar not yet active (BIP9) at height %d, skipping price loading\n",
                  tip_height);
-        return;
+        return true;
     }
 
     // Scan recent blocks for the live oracle cache and enough history to
@@ -1837,9 +1837,12 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
             // [DigiDollar floor, tip] is present. So a read failure here is not expected —
             // flag it loudly rather than silently reconstructing from partial price data.
             LogPrintf("ERROR: Oracle: failed to read block at height %d during startup price "
-                      "reconstruction. The DigiDollar block window may be incomplete; if this "
-                      "persists, restart with -reindex.\n", height);
-            continue;
+                      "reconstruction. The DigiDollar block window may be incomplete; "
+                      "restart with -reindex.\n", height);
+            // Fail CLOSED: volatility freeze state reconstructed here is enforced as a
+            // consensus rule post-activation. Refusing to start beats rebuilding it
+            // from partial price history and diverging from the network.
+            return false;
         }
 
         // Extract oracle bundle from coinbase
@@ -1883,6 +1886,7 @@ void OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     } else {
         LogPrintf("Oracle: No oracle prices found in recent blocks\n");
     }
+    return true;
 }
 
 bool OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const Consensus::Params& params)

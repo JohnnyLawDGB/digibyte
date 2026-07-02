@@ -2219,13 +2219,26 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     g_signing_orchestrator->SetConnman(node.connman.get());
     // Initialize oracle P2P connection for broadcasting
     OracleBundleManager::GetInstance().SetConnman(node.connman.get());
-    // Load oracle prices from blockchain (must be after chainstate is loaded)
-    OracleBundleManager::LoadPricesFromChain(chainman);
+    // Load oracle prices from blockchain (must be after chainstate is loaded).
+    // Fail CLOSED on unreadable post-activation blocks: the reconstructed price
+    // history feeds the consensus volatility freeze, and the reconstructed health
+    // metrics feed consensus DCA/ERR. A truncated/partially-restored block file
+    // passes the index-flag startup guard but must never let the node run
+    // DigiDollar validation on partial data.
+    if (!OracleBundleManager::LoadPricesFromChain(chainman)) {
+        return InitError(_("DigiDollar-era block data is incomplete or unreadable. "
+                           "Restart with -reindex to rebuild it (a pruned node will "
+                           "redownload and re-prune)."));
+    }
     // DD-FINAL-003 / AR-CONSENSUS-1: reconstruct cached system-health metrics
     // (total DD supply + collateral) from the on-chain UTXO set so consensus
     // DCA/ERR health does not depend on process restart history. No-op until
     // DigiDollar is active at the tip.
-    DigiDollar::SystemHealthMonitor::ReconstructFromChain(chainman);
+    if (!DigiDollar::SystemHealthMonitor::ReconstructFromChain(chainman)) {
+        return InitError(_("DigiDollar-era block data is incomplete or unreadable. "
+                           "Restart with -reindex to rebuild it (a pruned node will "
+                           "redownload and re-prune)."));
+    }
 
     // DD-FINAL-005 / AR-0: OP_CHECKPRICE is deterministically DISABLED (it now
     // consumes its witness operand and always pushes vchFalse). The interpreter no

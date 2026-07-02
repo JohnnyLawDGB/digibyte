@@ -445,9 +445,12 @@ namespace {
                 CCoinsView* coins_view = &active_chainstate.CoinsDB();
                 node::BlockManager* blockman = &active_chainstate.m_blockman;
                 const CTxMemPool* mempool = node.mempool.get();
-                DigiDollar::SystemHealthMonitor::ScanUTXOSet(
-                    coins_view, &active_chainstate.CoinsTip(), blockman, mempool,
-                    &active_chainstate.m_chain, &Params().GetConsensus());
+                if (!DigiDollar::SystemHealthMonitor::ScanUTXOSet(
+                        coins_view, &active_chainstate.CoinsTip(), blockman, mempool,
+                        &active_chainstate.m_chain, &Params().GetConsensus())) {
+                    throw JSONRPCError(RPC_MISC_ERROR,
+                        "DigiDollar-era block data is incomplete or unreadable; restart with -reindex");
+                }
             }
             DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
             totals.total_collateral = metrics.totalCollateral;
@@ -702,7 +705,10 @@ RPCHelpMan getdigidollarstats()
                     // Pass BlockManager for full transaction access
                     // Pass both CoinsDB (for iteration) and CoinsTip (for validation)
                     LogPrintf("DigiDollar: getdigidollarstats - About to call ScanUTXOSet...\n");
-                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool, &active_chainstate.m_chain, &Params().GetConsensus());
+                    if (!DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool, &active_chainstate.m_chain, &Params().GetConsensus())) {
+                        throw JSONRPCError(RPC_MISC_ERROR,
+                            "DigiDollar-era block data is incomplete or unreadable; restart with -reindex");
+                    }
                     LogPrintf("DigiDollar: getdigidollarstats - ScanUTXOSet completed\n");
                 }
 
@@ -4386,7 +4392,10 @@ static RPCHelpMan getprotectionstatus()
                     LOCK(::cs_main);
                     coins_view = &active_chainstate.CoinsDB();
                     blockman = &active_chainstate.m_blockman;
-                    DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool, &active_chainstate.m_chain, &Params().GetConsensus());
+                    if (!DigiDollar::SystemHealthMonitor::ScanUTXOSet(coins_view, &active_chainstate.CoinsTip(), blockman, mempool, &active_chainstate.m_chain, &Params().GetConsensus())) {
+                        throw JSONRPCError(RPC_MISC_ERROR,
+                            "DigiDollar-era block data is incomplete or unreadable; restart with -reindex");
+                    }
                 }
                 DigiDollar::SystemMetrics metrics = DigiDollar::SystemHealthMonitor::GetSystemMetrics();
                 totalCollateral = metrics.totalCollateral;

@@ -77,6 +77,16 @@ Notes and limitations for pruned nodes
   to rescan (standard pruned-node behavior). Wallets created on or after DigiDollar
   activation are entirely within the retained window and rescan normally.
 - Setting `-prune` together with an explicit `-txindex=1` is still rejected, as before.
+- **`-reindex` on a pruned node redownloads from the network.** The node deletes its
+  local block files and rebuilds by re-syncing, so it needs connectivity; pools should
+  keep one archival node (or a datadir snapshot) available.
+- **Damaged block data fails closed.** If DigiDollar-era block data turns out to be
+  unreadable at startup (for example a truncated or partially-restored block file),
+  the node refuses to start and asks for `-reindex` rather than running DigiDollar
+  validation on incomplete data.
+- **Miners: restart after a long outage.** A freshly restarted node correctly holds
+  `getblocktemplate` until it is back in sync. Checking that `getblockchaininfo`
+  reports `headers` == `blocks` before dispatching work is a cheap safety habit.
 
 Credits
 =======

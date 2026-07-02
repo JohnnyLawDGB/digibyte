@@ -202,9 +202,11 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         self.test_f7_prune_lock_is_binding(mint_block_hash)
         self.test_f6_restart_parity()
         self.test_f11_reorg_across_dd_blocks_on_pruned_node()
+        self.test_f12_offline_miner_catches_up()
         self.test_f8_cold_ibd_pruned_node()
         self.test_f10_full_node_migrates_to_pruned()
         self.test_f9_incomplete_dd_window_guard()
+        self.test_f13_unprune_requires_reindex()
 
         self.log.info("DigiDollar-compatible pruning tests PASSED")
 
@@ -483,6 +485,39 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         assert_equal(node1.getblockcount(), tip_height)
         self.assert_dd_parity("after reorg across DD blocks on pruned node")
 
+    # ================================================================== F12
+    def test_f12_offline_miner_catches_up(self):
+        """The offline-miner scenario: a pruned mining node drops offline, mines
+        a short stale chain of its own (including a DigiDollar mint!), while the
+        network advances by MORE blocks than the generic 288-block window. On
+        reconnect it must abandon its stale chain, adopt the network chain, and
+        end in exact DigiDollar parity — never stuck, never on the wrong chain.
+        """
+        node0, node1 = self.nodes[0], self.nodes[1]
+        self.log.info("F12: offline pruned miner reorgs onto the network chain")
+
+        parity_supply = node1.getdigidollarstats()["total_dd_supply"]
+        self.disconnect_nodes(0, 1)
+
+        # Offline: node1 mines its own short chain WITH a DD mint on it.
+        self.set_price(node1)
+        node1.mintdigidollar(MINT_AMOUNT_CENTS, MINT_TIER)
+        self.set_price(node1)
+        self.generate(node1, 2, sync_fun=self.no_op)
+        assert_equal(node1.getdigidollarstats()["total_dd_supply"],
+                     parity_supply + MINT_AMOUNT_CENTS)
+
+        # Meanwhile the network advances well past MIN_BLOCKS_TO_KEEP.
+        self.generate(node0, MIN_BLOCKS_TO_KEEP + 32, sync_fun=self.no_op)
+
+        # Back online: the pruned node must reorg off its stale chain (the
+        # stale mint disappears from consensus totals) and catch up.
+        self.connect_nodes(0, 1)
+        self.sync_blocks([node0, node1], timeout=120)
+        assert_equal(node0.getbestblockhash(), node1.getbestblockhash())
+        assert_equal(node1.getdigidollarstats()["total_dd_supply"], parity_supply)
+        self.assert_dd_parity("after offline miner rejoined the network")
+
     # ================================================================== F8
     def test_f8_cold_ibd_pruned_node(self):
         """A fresh pruned node cold-syncs the entire DD-era chain over P2P.
@@ -622,6 +657,27 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         self.sync_blocks([self.nodes[0], node2], timeout=240)
         self.assert_dd_parity("after -reindex recovery of the damaged node",
                               pruned_node=node2)
+
+    # ================================================================== F13
+    def test_f13_unprune_requires_reindex(self):
+        """A pruned datadir cannot silently become a full node again: starting
+        without -prune must refuse with the standard go-back-to-unpruned error
+        (a pruned DigiDollar node can't sneak around its guards by dropping the
+        prune flag)."""
+        node1 = self.nodes[1]
+        self.log.info("F13: dropping -prune on a pruned datadir requires -reindex")
+
+        no_prune_args = [a for a in self.extra_args[1]
+                         if a not in ("-prune=1", "-fastprune=1")]
+        self.stop_node(1)
+        node1.assert_start_raises_init_error(
+            extra_args=no_prune_args,
+            expected_msg="You need to rebuild the database using -reindex to go "
+                         "back to unpruned mode",
+            match=ErrorMatch.PARTIAL_REGEX,
+        )
+        # Restart normally (still pruned) so teardown is clean.
+        self.start_node(1, extra_args=self.extra_args[1])
 
 
 if __name__ == "__main__":

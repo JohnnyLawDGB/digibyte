@@ -68,6 +68,7 @@ stays funded (regtest coinbase maturity is 100 blocks for coins at height >= 100
 so seeding funds by mining from genesis is the simplest robust approach).
 """
 
+import hashlib
 import os
 
 from test_framework.blocktools import MIN_BLOCKS_TO_KEEP
@@ -202,6 +203,7 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         self.test_f7_prune_lock_is_binding(mint_block_hash)
         self.test_f6_restart_parity()
         self.test_f11_reorg_across_dd_blocks_on_pruned_node()
+        self.test_f15_oracle_runs_on_pruned_node()
         self.test_f12_offline_miner_catches_up()
         self.test_f8_cold_ibd_pruned_node()
         self.test_f10_full_node_migrates_to_pruned()
@@ -485,6 +487,40 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         self.sync_blocks([node0, node1])
         assert_equal(node1.getblockcount(), tip_height)
         self.assert_dd_parity("after reorg across DD blocks on pruned node")
+
+    # ================================================================== F15
+    def test_f15_oracle_runs_on_pruned_node(self):
+        """A pruned node can operate a DigiDollar ORACLE.
+
+        The oracle daemon needs a wallet-held oracle key, live price input and
+        P2P — never the transaction index or pre-activation blocks. node 1's
+        pre-DD history is already pruned away at this point; importing the
+        deterministic regtest oracle key and starting the oracle must work
+        exactly as on a full node.
+        """
+        node1 = self.nodes[1]
+        self.log.info("F15: running an oracle on the pruned node")
+
+        ORACLE_ID = 3
+        privkey_hex = hashlib.sha256(
+            f"digibyte_regtest_oracle_{ORACLE_ID}".encode()).hexdigest()
+        node1.importoracleprivkey(ORACLE_ID, privkey_hex)
+
+        start = node1.startoracle(ORACLE_ID)
+        assert_equal(start["success"], True)
+        assert_equal(start["status"], "running")
+
+        assert_equal(node1.getoraclepubkey(ORACLE_ID)["is_running"], True)
+        lst = node1.listoracle()
+        assert_equal(lst["running"], True)
+        assert_equal(lst["oracle_id"], ORACLE_ID)
+
+        # Stop it again so later phases (restarts, damage scenarios) run on the
+        # same node state as before.
+        node1.stoporacle(ORACLE_ID)
+        assert_equal(node1.listoracle()["running"], False)
+        self.log.info("  oracle started, reported running, and stopped cleanly"
+                      " on the pruned node")
 
     # ================================================================== F12
     def test_f12_offline_miner_catches_up(self):

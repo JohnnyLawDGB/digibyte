@@ -217,7 +217,12 @@ public:
     //! not be read (incomplete/damaged block data) — the caller must abort
     //! startup rather than reconstruct price/volatility state from partial data.
     static bool LoadPricesFromChain(ChainstateManager& chainman);
+    //! Startup price-scan per-block gate = the BIP9 DigiDollar-activation predicate for
+    //! block_index. Production uses the ChainstateManager overload (shared, memoized
+    //! versionbits cache — O(1) amortized, the fix for the ~15-minute startup hang); the
+    //! Consensus::Params overload is the non-memoized path retained for tests/edge callers.
     static bool ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const Consensus::Params& params);
+    static bool ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const ChainstateManager& chainman);
 
     //! Clear all state (for testing)
     void Clear();

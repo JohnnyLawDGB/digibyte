@@ -140,11 +140,12 @@ RPC
   `failed`. Note `activation_height` now reports the exact burial height
   (previously the back-scan reported the first active block of the tip's chain,
   which could differ by one).
-- **`getdeploymentinfo` / `getblockchaininfo`**: the `taproot`, `digidollar`,
-  and `algolock` entries are now rendered as buried deployments —
-  `{"type": "buried", "active": <bool>, "height": <N>}` — with **no `bip9`
-  sub-object**. Anything reading `deployments.digidollar.bip9.status` must
-  switch to `active`/`height`.
+- **`getdeploymentinfo`** (and REST `/deploymentinfo`): the `taproot`,
+  `digidollar`, and `algolock` entries are now rendered as buried
+  deployments — `{"type": "buried", "active": <bool>, "height": <N>}` — with
+  **no `bip9` sub-object**. Anything reading
+  `deployments.digidollar.bip9.status` must switch to `active`/`height`.
+  (`getblockchaininfo` carries no deployment information in this codebase.)
 - **`getblocktemplate`**: `rules` now always contains `"taproot"`,
   `"digidollar"`, and `"algolock"` once active (hardcoded, like `"csv"`; no
   `!` prefix, so clients that do not understand them may safely proceed).
@@ -165,9 +166,11 @@ Command-line options (regtest)
   max(432, N) — e.g. N=650 used to activate at 720. Tests and scripts that
   relied on the old window-boundary timing must be updated.
 - **New: `-testactivationheight=taproot@H` / `digidollar@H` / `algolock@H`**
-  set only the buried deployment height (the static DD/oracle/MuSig2 gates keep
-  their regtest defaults). For DigiDollar, `-digidollaractivationheight` takes
-  precedence when both are given.
+  set only the buried deployment height. For `digidollar@H` the static
+  DD/oracle gates keep their regtest defaults (650), while
+  `nDigiDollarMuSig2Height` is derived as
+  `min(nDDActivationHeight, DigiDollarHeight)` and so follows H below 650.
+  `-digidollaractivationheight` takes precedence when both are given.
 
 
 Credits

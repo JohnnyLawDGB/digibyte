@@ -1150,10 +1150,11 @@ public:
                 consensus.TaprootHeight = int{height};
                 break;
             case Consensus::BuriedDeployment::DEPLOYMENT_DIGIDOLLAR:
-                // Moves ONLY the buried deployment height; the static
-                // DD/oracle/MuSig2 gates keep their defaults. Use
-                // -digidollaractivationheight to move everything together
-                // (it is applied later and takes precedence).
+                // Moves the buried deployment height; the static DD/oracle
+                // gates keep their defaults, but nDigiDollarMuSig2Height is
+                // derived below as min(nDDActivationHeight, DigiDollarHeight)
+                // and so follows this override. Use -digidollaractivationheight
+                // to move everything together (applied later, takes precedence).
                 consensus.DigiDollarHeight = int{height};
                 break;
             case Consensus::BuriedDeployment::DEPLOYMENT_ALGOLOCK:

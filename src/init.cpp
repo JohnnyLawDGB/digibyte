@@ -900,9 +900,9 @@ std::set<BlockFilterType> g_enabled_filter_types;
 
 bool HasDigiDollarDeployment(const CChainParams& chainparams)
 {
-    const auto& dd_deployment = chainparams.GetConsensus().vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    return dd_deployment.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
-           dd_deployment.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE;
+    // DigiDollar is a buried deployment (BIP90); "disabled" is represented by
+    // an activation height of int max (DeploymentEnabled == false).
+    return DeploymentEnabled(chainparams.GetConsensus(), Consensus::DEPLOYMENT_DIGIDOLLAR);
 }
 
 bool IsRegtestDigiDollarExplicitlyRequested(const ArgsManager& args)

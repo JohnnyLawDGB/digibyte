@@ -16,18 +16,6 @@ const struct VBDeploymentInfo VersionBitsDeploymentInfo[Consensus::MAX_VERSION_B
         /*.name =*/ "testdummy",
         /*.gbt_force =*/ true,
     },
-    {
-        /*.name =*/ "taproot",
-        /*.gbt_force =*/ true,
-    },
-    {
-        /*.name =*/ "digidollar",
-        /*.gbt_force =*/ true,
-    },
-    {
-        /*.name =*/ "algolock",
-        /*.gbt_force =*/ true,
-    },
 };
 
 std::string DeploymentName(Consensus::BuriedDeployment dep)
@@ -51,6 +39,12 @@ std::string DeploymentName(Consensus::BuriedDeployment dep)
         return "reserve-algo";
     case Consensus::DEPLOYMENT_ODO:
         return "odo";
+    case Consensus::DEPLOYMENT_TAPROOT:
+        return "taproot";
+    case Consensus::DEPLOYMENT_DIGIDOLLAR:
+        return "digidollar";
+    case Consensus::DEPLOYMENT_ALGOLOCK:
+        return "algolock";
     } // no default case, so the compiler can warn about missing cases
     return "";
 }
@@ -67,6 +61,12 @@ std::optional<Consensus::BuriedDeployment> GetBuriedDeployment(const std::string
         return Consensus::BuriedDeployment::DEPLOYMENT_CLTV;
     } else if (name == "csv") {
         return Consensus::BuriedDeployment::DEPLOYMENT_CSV;
+    } else if (name == "taproot") {
+        return Consensus::BuriedDeployment::DEPLOYMENT_TAPROOT;
+    } else if (name == "digidollar") {
+        return Consensus::BuriedDeployment::DEPLOYMENT_DIGIDOLLAR;
+    } else if (name == "algolock") {
+        return Consensus::BuriedDeployment::DEPLOYMENT_ALGOLOCK;
     }
     return std::nullopt;
 }

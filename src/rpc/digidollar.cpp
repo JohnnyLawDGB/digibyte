@@ -1103,25 +1103,18 @@ static RPCHelpMan calculatecollateralrequirement()
 static RPCHelpMan getdigidollardeploymentinfo()
 {
     return RPCHelpMan{"getdigidollardeploymentinfo",
-                "\nGet DigiDollar BIP9 deployment activation status and information.\n"
-                "Returns detailed information about DigiDollar soft fork deployment status,\n"
-                "including activation state, signaling progress, and timeline.\n",
+                "\nGet DigiDollar deployment activation status and information.\n"
+                "DigiDollar is a buried deployment (BIP90): it activated via BIP9 bit-23\n"
+                "signaling and its activation height is now hardcoded per network\n"
+                "(mainnet 23869440, testnet 600, default regtest 0).\n",
                 {},
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::BOOL, "enabled", "Whether DigiDollar is currently enabled/active"},
-                        {RPCResult::Type::STR, "status", "Deployment status (defined, started, locked_in, active, failed)"},
-                        {RPCResult::Type::NUM, "bit", "Version bit used for BIP9 signaling"},
-                        {RPCResult::Type::NUM, "start_time", "Start time for deployment signaling"},
-                        {RPCResult::Type::NUM, "timeout", "Timeout for deployment"},
-                        {RPCResult::Type::NUM, "min_activation_height", "Minimum activation height"},
-                        {RPCResult::Type::NUM, "activation_height", /*optional=*/true, "Actual activation height (only present when active)"},
-                        {RPCResult::Type::NUM, "blocks_until_timeout", /*optional=*/true, "Blocks remaining until timeout (only during started/locked_in)"},
-                        {RPCResult::Type::NUM, "signaling_blocks", /*optional=*/true, "Blocks signaling support in current period (only during started/locked_in)"},
-                        {RPCResult::Type::NUM, "threshold", /*optional=*/true, "Threshold required for activation (only during started/locked_in)"},
-                        {RPCResult::Type::NUM, "period_blocks", /*optional=*/true, "Number of blocks in signaling period (only during started/locked_in)"},
-                        {RPCResult::Type::NUM, "progress_percent", /*optional=*/true, "Signaling progress as percentage (only during started/locked_in)"},
+                        {RPCResult::Type::STR, "type", "Deployment type (always \"buried\")"},
+                        {RPCResult::Type::STR, "status", "Deployment status (defined before the activation height, active at/after it)"},
+                        {RPCResult::Type::NUM, "activation_height", /*optional=*/true, "Activation height of the buried deployment (omitted if the deployment is disabled on this network)"},
                         {RPCResult::Type::NUM, "oracle_activation_height", "Height at which oracle/DD block rules activate (nOracleActivationHeight)"},
                         {RPCResult::Type::NUM, "musig2_format_activation_height", "Height at which the MuSig2 v0x03 bundle format activates (nDigiDollarMuSig2Height)"},
                         {RPCResult::Type::NUM, "oracle_pubkey_count", "Number of consensus oracle public keys configured for MuSig2 (nOraclePubkeyCount)"},
@@ -1150,9 +1143,8 @@ static RPCHelpMan getdigidollardeploymentinfo()
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
             // NOTE: getdigidollardeploymentinfo is intentionally NOT gated behind
-            // activation. Users need this RPC to monitor BIP9 deployment progress
-            // (DEFINED → STARTED → LOCKED_IN → ACTIVE). Gating it would make it
-            // impossible to check when DigiDollar will activate.
+            // activation. Users need this RPC to check when/whether DigiDollar
+            // activates on their network.
             const ChainstateManager& chainman = EnsureAnyChainman(request.context);
             LOCK(cs_main);
             const Chainstate& active_chainstate = chainman.ActiveChainstate();
@@ -1164,49 +1156,17 @@ static RPCHelpMan getdigidollardeploymentinfo()
             bool enabled = DigiDollar::IsDigiDollarEnabled(tip, chainman);
             result.pushKV("enabled", enabled);
 
-            // Get deployment parameters
+            // DigiDollar is a buried deployment (BIP90): report the hardcoded
+            // activation height instead of BIP9 signaling state. (The
+            // pre-burial back-scan reported the last LOCKED_IN block, one
+            // below the first active block; DeploymentHeight is exact.)
             const Consensus::Params& consensusParams = chainman.GetConsensus();
-            const Consensus::BIP9Deployment& deployment = consensusParams.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+            const int activation_height = consensusParams.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 
-            result.pushKV("bit", deployment.bit);
-            result.pushKV("start_time", deployment.nStartTime);
-            result.pushKV("timeout", deployment.nTimeout);
-            result.pushKV("min_activation_height", deployment.min_activation_height);
-
-            // Get deployment state and statistics
-            ThresholdState state = chainman.m_versionbitscache.State(tip, consensusParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
-
-            const char* status_str = "unknown";
-            switch (state) {
-                case ThresholdState::DEFINED: status_str = "defined"; break;
-                case ThresholdState::STARTED: status_str = "started"; break;
-                case ThresholdState::LOCKED_IN: status_str = "locked_in"; break;
-                case ThresholdState::ACTIVE: status_str = "active"; break;
-                case ThresholdState::FAILED: status_str = "failed"; break;
-            }
-            result.pushKV("status", status_str);
-
-            // Get statistics for signaling progress
-            if (tip && (state == ThresholdState::STARTED || state == ThresholdState::LOCKED_IN)) {
-                BIP9Stats stats = chainman.m_versionbitscache.Statistics(tip, consensusParams, Consensus::DEPLOYMENT_DIGIDOLLAR);
-                result.pushKV("blocks_until_timeout", stats.period - stats.elapsed);
-                result.pushKV("signaling_blocks", stats.count);
-                result.pushKV("threshold", stats.threshold);
-                result.pushKV("period_blocks", stats.period);
-                result.pushKV("progress_percent", stats.threshold > 0 ? (100.0 * stats.count) / stats.threshold : 0.0);
-            }
-
-            // Get activation height if active
-            if (state == ThresholdState::ACTIVE) {
-                // Find the activation height by searching backwards
-                const CBlockIndex* pindex = tip;
-                while (pindex && pindex->pprev) {
-                    if (chainman.m_versionbitscache.State(pindex->pprev, consensusParams, Consensus::DEPLOYMENT_DIGIDOLLAR) != ThresholdState::ACTIVE) {
-                        result.pushKV("activation_height", pindex->nHeight);
-                        break;
-                    }
-                    pindex = pindex->pprev;
-                }
+            result.pushKV("type", "buried");
+            result.pushKV("status", enabled ? "active" : "defined");
+            if (activation_height != std::numeric_limits<int>::max()) {
+                result.pushKV("activation_height", activation_height);
             }
 
             // Wave 12: keep the mandatory oracle/DD activation height distinct

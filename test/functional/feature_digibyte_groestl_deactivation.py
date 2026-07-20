@@ -103,9 +103,11 @@ class GroestlDeactivationTest(DigiByteTestFramework):
         assert_equal(self.submit_until_pow_ok(node, control), None)
         assert node.getbestblockhash() != tip
 
-        self.log.info("Signalling flag: the algolock BIP9 deployment is exposed for tracking")
+        self.log.info("Deployment info: the buried algolock deployment is exposed for tracking")
         deployments = node.getdeploymentinfo()["deployments"]
         assert "algolock" in deployments, "algolock deployment must be visible via getdeploymentinfo"
+        assert_equal(deployments["algolock"]["type"], "buried")
+        assert_equal(deployments["algolock"]["active"], True)
 
         self.log.info("Reindex-safety: the pre-Odocrypt Groestl block is grandfathered through replay")
         # The chain contains a Groestl block at height 151 that was valid when mined

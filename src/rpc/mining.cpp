@@ -1060,6 +1060,12 @@ static RPCHelpMan getblocktemplate()
     UniValue aRules(UniValue::VARR);
     aRules.push_back("csv");
     if (!fPreSegWit) aRules.push_back("!segwit");
+    // Buried deployments (BIP90): keep advertising the rule names GBT clients
+    // saw while these were versionbits deployments (all had gbt_force=true, so
+    // no "!" prefix — clients that don't understand them may safely proceed).
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_TAPROOT)) aRules.push_back("taproot");
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_DIGIDOLLAR)) aRules.push_back("digidollar");
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_ALGOLOCK)) aRules.push_back("algolock");
     if (consensusParams.signet_blocks) {
         // indicate to miner that they must understand signet rules
         // when attempting to mine with this template

@@ -82,7 +82,7 @@ class DigiDollarMempoolMinerParityTest(DigiByteTestFramework):
         for node in self.nodes:
             while True:
                 info = node.getdeploymentinfo()
-                if info["deployments"]["digidollar"]["bip9"]["status"] == "active":
+                if info["deployments"]["digidollar"]["active"]:
                     break
                 current = node.getblockcount()
                 remaining = REGTEST_CONFIRMATION_WINDOW - (current % REGTEST_CONFIRMATION_WINDOW)

@@ -179,10 +179,12 @@ bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const ChainstateManager&
 
 bool IsDigiDollarEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params)
 {
-    // For cases where we only have consensus params and a VersionBitsCache isn't available
-    // We'll need to create a temporary cache - not ideal but needed for some contexts
-    VersionBitsCache cache;
-    return DeploymentActiveAfter(pindexPrev, params, Consensus::DEPLOYMENT_DIGIDOLLAR, cache);
+    // DigiDollar is a buried deployment (BIP90): activation is a fixed height
+    // in chainparams, so both overloads reduce to the same O(1) height
+    // comparison — no versionbits cache involved. This mirrors the buried
+    // DeploymentActiveAfter semantics in deploymentstatus.h exactly.
+    return (pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1) >=
+           params.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 }
 
 } // namespace DigiDollar

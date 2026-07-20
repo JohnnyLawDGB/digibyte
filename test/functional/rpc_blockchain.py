@@ -225,45 +225,9 @@ class BlockchainTest(DigiByteTestFramework):
                 },
                 'active': False
             },
-            'taproot': {
-                'type': 'bip9',
-                'bip9': {
-                    'start_time': -1,
-                    'timeout': 9223372036854775807,
-                    'min_activation_height': 0,
-                    'status': 'active',
-                    'status_next': 'active',
-                    'since': 0,
-                },
-                'height': 0,
-                'active': True
-            },
-            'digidollar': {
-                'type': 'bip9',
-                'bip9': {
-                    'start_time': -1,
-                    'timeout': 9223372036854775807,
-                    'min_activation_height': 0,
-                    'status': 'active',
-                    'status_next': 'active',
-                    'since': 0,
-                },
-                'height': 0,
-                'active': True
-            },
-            'algolock': {
-                'type': 'bip9',
-                'bip9': {
-                    'start_time': -1,
-                    'timeout': 9223372036854775807,
-                    'min_activation_height': 0,
-                    'status': 'active',
-                    'status_next': 'active',
-                    'since': 0,
-                },
-                'height': 0,
-                'active': True
-            }
+            'taproot': {'type': 'buried', 'active': True, 'height': 0},
+            'digidollar': {'type': 'buried', 'active': True, 'height': 0},
+            'algolock': {'type': 'buried', 'active': True, 'height': 0}
           }
         })
 

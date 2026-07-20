@@ -10,17 +10,20 @@
  *   src/oracle/bundle_manager.cpp::OracleDataValidator::ValidateBlockOracleData
  *
  * Context:
- *   On regtest, BIP9 DEPLOYMENT_DIGIDOLLAR is ALWAYS_ACTIVE (min_activation_height=0)
- *   but `nDDActivationHeight = 650`. On mainnet and testnet,
- *   `min_activation_height == nDDActivationHeight` — gates align.
+ *   On regtest, the buried (BIP90) DEPLOYMENT_DIGIDOLLAR height is 0 — active
+ *   from genesis, the old BIP9 ALWAYS_ACTIVE equivalent — but
+ *   `nDDActivationHeight = 650`. On testnet both are 600 — gates align. On
+ *   mainnet the static gate (23,627,520) is a floor below the buried
+ *   activation height (23,869,440), so the height-gate branch is never the
+ *   *less* strict one on a production chain.
  *
  *   Both CheckMuSig2OracleBundleVersion and ValidateBlockOracleData follow a
  *   two-branch pattern:
- *     if (pindex_prev)  -> gate on IsDigiDollarEnabled (BIP9)
+ *     if (pindex_prev)  -> gate on IsDigiDollarEnabled (buried height)
  *     else              -> gate on block_height < nDDActivationHeight
  *
- *   The two gates are synonymous on production chains but diverge on regtest
- *   for heights 0..649. This test documents the gating behavior so it cannot
+ *   The two gates diverge on regtest for heights 0..649 (deployment active,
+ *   height gate closed). This test documents the gating behavior so it cannot
  *   silently drift under future refactors.
  *
  *   Note: this is NOT an exploit. It is a hardening/regression fixture showing
@@ -98,7 +101,7 @@ CBlock MakeRegtestBlock(const CScript& oracle_spk, int32_t height, uint32_t bloc
 
 BOOST_FIXTURE_TEST_SUITE(rh51_checkphase3_v1_split_tests, RegTestingSetup)
 
-// Regtest: BIP9 ALWAYS_ACTIVE vs height-gate @ 650 diverge for blocks 0..649.
+// Regtest: buried height 0 vs height-gate @ 650 diverge for blocks 0..649.
 BOOST_AUTO_TEST_CASE(rh51_sanity_regtest_gates_disagree)
 {
     const Consensus::Params& params = Params().GetConsensus();
@@ -106,7 +109,7 @@ BOOST_AUTO_TEST_CASE(rh51_sanity_regtest_gates_disagree)
         DigiDollar::IsDigiDollarEnabled(/*pindexPrev=*/nullptr, params);
     const int32_t height_gate = params.nDDActivationHeight;
 
-    BOOST_TEST_MESSAGE("  regtest BIP9 active at genesis : " << bip9_active_at_genesis);
+    BOOST_TEST_MESSAGE("  regtest buried DD active at genesis : " << bip9_active_at_genesis);
     BOOST_TEST_MESSAGE("  regtest nDDActivationHeight    : " << height_gate);
     BOOST_TEST_MESSAGE("  regtest deprecated legacy height: " << params.nDDActivationHeight);
 

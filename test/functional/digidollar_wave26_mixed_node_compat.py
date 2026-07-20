@@ -12,9 +12,10 @@ Mixed-node setup
 ================
 
 There is no separate "non-upgraded" binary in the tree (this is the first
-DD-aware release). The test simulates a non-upgraded user by holding one
-node strictly below the BIP9 activation boundary. While that node's tip
-is in LOCKED_IN state:
+DD-aware release). DigiDollar is a buried deployment (BIP90), so the test
+simulates a non-upgraded user by holding one node's tip strictly below the
+buried activation height. While that node's tip is below the boundary
+(enabled=False, status "defined"):
   - `IsDigiDollarEnabled(tip)` returns False on its mempool acceptor.
   - Its DD/oracle RPCs reject with "DigiDollar is not yet active on this
     blockchain".
@@ -25,27 +26,29 @@ is in LOCKED_IN state:
 
 That is the same observable behaviour a binary built before DigiDollar
 ever existed would exhibit on the same chain prefix - DD-aware logic is
-dormant. The purpose of this wave is therefore not to prove the BIP9
-state machine works (that is `digidollar_activation*.py` and Wave 12).
-The purpose is to prove the chain still works for plain DGB users.
+dormant. The purpose of this wave is therefore not to prove the
+activation boundary works (that is `digidollar_activation*.py` and
+Wave 12). The purpose is to prove the chain still works for plain DGB
+users.
 
 Three scenarios
 ===============
 
-1. **Pre-activation parity.** Two LOCKED_IN nodes exchange a regular DGB
-   `sendtoaddress` transaction. The receiver's mempool accepts and the
+1. **Pre-activation parity.** Two below-boundary nodes exchange a regular
+   DGB `sendtoaddress` transaction. The receiver's mempool accepts and the
    block confirming it is valid on both nodes. No oracle data, no DD
    marker, no DD opcodes anywhere. (Mirrors a non-upgraded ↔ non-upgraded
    pair.)
 
-2. **Mixed pair across activation.** Node 0 advances into ACTIVE and
-   begins minting/relaying DD txs. Node 1 (the simulated non-upgraded
-   user) stays at LOCKED_IN by being held offline for the activation
-   block. Once reconnected the link still relays a regular DGB tx that
-   node 1 originates - proving the upgraded peer continues to accept
-   non-DD traffic from a peer that doesn't speak DD-aware mempool
-   semantics. The plain DGB tx confirms in a non-DD block. (Mirrors a
-   non-upgraded sender ↔ upgraded relayer.)
+2. **Mixed pair across activation.** Node 0 advances past the buried
+   activation height (enabled=True) and begins minting/relaying DD txs.
+   Node 1 (the simulated non-upgraded user) stays below the boundary
+   (enabled=False) by being held offline for the activation block. Once
+   reconnected it converges onto node 0's chain, and the link still
+   relays a regular DGB tx that node 1 originates - proving the upgraded
+   peer continues to accept non-DD traffic from a peer that doesn't speak
+   DD-aware mempool semantics. The plain DGB tx confirms in a non-DD
+   block. (Mirrors a non-upgraded sender ↔ upgraded relayer.)
 
 3. **Upgraded ↔ upgraded, no DD activity.** Both nodes are deep into
    ACTIVE state but neither has any DD positions, oracle quotes, or
@@ -73,9 +76,6 @@ because the test purpose is the wallet relay path, not consensus
 validation in isolation.
 """
 
-import os
-import shutil
-
 from decimal import Decimal
 
 from test_framework.test_framework import DigiByteTestFramework
@@ -85,25 +85,25 @@ from test_framework.util import (
 )
 
 
-REGTEST_PERIOD = 144
-# `-digidollaractivationheight=432` -> BIP9 min_activation_height=432.
-# State machine walks DEFINED(0..142) / STARTED(143..286) / LOCKED_IN(287..430)
-# / ACTIVE(431+) on regtest with period=144. The first tip where
-# `State(tip) == ACTIVE` is FIRST_ACTIVE_TIP=431.
-BIP9_MIN_ACTIVATION = 432
-FIRST_ACTIVE_TIP = 431
-LOCKED_IN_BUFFER_TIP = FIRST_ACTIVE_TIP - 5  # safely inside LOCKED_IN window
+# `-digidollaractivationheight=432` buries DigiDollar activation at exactly
+# height 432 (BIP90 — no signaling). The first DD-active block is block 432,
+# so `IsDigiDollarEnabled(tip)` (and the RPC `enabled`/`status`) flips once
+# the tip reaches FIRST_ACTIVE_TIP=431: the *next* block is DD-active.
+ACTIVATION_HEIGHT = 432
+FIRST_ACTIVE_TIP = ACTIVATION_HEIGHT - 1
+PRE_ACTIVATION_BUFFER_TIP = FIRST_ACTIVE_TIP - 5  # safely below the boundary
 ORACLE_PRICE_MICRO_USD = 500000  # $0.50 / DGB
 
 
 class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
     def set_test_params(self):
         # Two nodes: node 0 plays the upgraded peer, node 1 plays the
-        # simulated non-upgraded peer (held at LOCKED_IN until Phase 3).
+        # simulated non-upgraded peer (held below the activation boundary
+        # until Phase 3).
         self.num_nodes = 2
         self.setup_clean_chain = True
         common = [
-            "-digidollaractivationheight={}".format(BIP9_MIN_ACTIVATION),
+            "-digidollaractivationheight={}".format(ACTIVATION_HEIGHT),
             "-dandelion=0",
             "-txindex=1",
         ]
@@ -116,8 +116,8 @@ class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
         self.skip_if_no_wallet()
 
     def setup_network(self):
-        # Both nodes start connected so they share the LOCKED_IN prefix
-        # before Phase 2 isolates node 1 to keep it pre-activation.
+        # Both nodes start connected so they share the pre-activation prefix
+        # before Phase 2 isolates node 1 to keep it below the boundary.
         self.setup_nodes()
         self.connect_nodes(0, 1)
 
@@ -156,7 +156,7 @@ class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
 
     # --------------------------------------------------------------- run_test
     def run_test(self):
-        self.log.info("Phase 1: pre-activation plain DGB tx between two LOCKED_IN nodes")
+        self.log.info("Phase 1: pre-activation plain DGB tx between two below-boundary nodes")
         self.test_pre_activation_dgb()
 
         self.log.info("Phase 2: simulated non-upgraded sender + upgraded relayer")
@@ -169,18 +169,18 @@ class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
 
     # ============================================================== Phase 1
     def test_pre_activation_dgb(self):
-        """Two LOCKED_IN nodes exchange a plain DGB tx and mine a non-DD block."""
-        # Drive both nodes to LOCKED_IN territory but explicitly NOT past the
-        # activation period boundary. Mining 426 blocks puts both tips at
-        # height 426 (well inside LOCKED_IN, comfortably below FIRST_ACTIVE_TIP).
-        target = LOCKED_IN_BUFFER_TIP  # 426
+        """Two below-boundary nodes exchange a plain DGB tx and mine a non-DD block."""
+        # Drive both nodes close to — but explicitly NOT past — the buried
+        # activation boundary. Mining 426 blocks puts both tips at height 426
+        # (comfortably below FIRST_ACTIVE_TIP).
+        target = PRE_ACTIVATION_BUFFER_TIP  # 426
         self.nodes[0].generate(target)
         self.sync_blocks(self.nodes)
 
         for i in range(self.num_nodes):
             assert_equal(self.nodes[i].getblockcount(), target)
             info = self.nodes[i].getdigidollardeploymentinfo()
-            assert_equal(info["status"], "locked_in")
+            assert_equal(info["status"], "defined")
             assert_equal(info["enabled"], False)
 
         # Pre-activation, the DD/oracle RPCs must refuse on both nodes.
@@ -229,25 +229,26 @@ class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
 
     # ============================================================== Phase 2
     def test_mixed_node_dgb_after_activation(self):
-        """Upgraded peer activates DD; the non-upgraded peer is held at LOCKED_IN.
+        """Upgraded peer activates DD; the non-upgraded peer is held below the boundary.
 
-        We disconnect the nodes, push node 0 past activation while keeping
-        node 1 frozen in LOCKED_IN. While node 1 is still LOCKED_IN
-        (DigiDollar BIP9 inactive on its tip - the exact observable state
-        a non-upgraded binary would present on the same chain prefix), it
-        builds and signs a plain DGB transaction using its existing
-        wallet UTXOs. We then deliver that signed tx to the upgraded
-        node 0 directly via `sendrawtransaction` to remove any wallet
-        rebroadcast timing concerns - the question this test answers is
-        whether the upgraded mempool acceptor will *accept* an ordinary
+        We disconnect the nodes, push node 0 past the buried activation
+        height while keeping node 1 frozen below it. While node 1's tip is
+        still below the boundary (DigiDollar inactive on its tip - the
+        exact observable state a non-upgraded binary would present on the
+        same chain prefix), it builds and signs a plain DGB transaction
+        using its existing wallet UTXOs. We then deliver that signed tx to
+        the upgraded node 0 directly via `sendrawtransaction` to remove any
+        wallet rebroadcast timing concerns - the question this test answers
+        is whether the upgraded mempool acceptor will *accept* an ordinary
         DGB tx that originated on a peer that is not DD-aware. The
         delivery path is irrelevant; the acceptance decision is the
-        invariant.
+        invariant. After reconnecting, node 1 converges onto node 0's
+        chain and its own deployment state flips to active.
         """
         # Snapshot tip before isolating node 1. Phase 1 mined one extra block
         # to confirm the plain DGB tx, so the common height is one above the
-        # LOCKED_IN_BUFFER_TIP starting point but still strictly inside the
-        # LOCKED_IN window (FIRST_ACTIVE_TIP - 4).
+        # PRE_ACTIVATION_BUFFER_TIP starting point but still strictly below
+        # the boundary (FIRST_ACTIVE_TIP - 4).
         common_tip = self.nodes[0].getbestblockhash()
         common_height = self.nodes[0].getblockcount()
         assert common_height < FIRST_ACTIVE_TIP, \
@@ -255,22 +256,31 @@ class DigiDollarWave26MixedNodeCompatTest(DigiByteTestFramework):
         for i in range(self.num_nodes):
             assert_equal(self.nodes[i].getbestblockhash(), common_tip)
             info = self.nodes[i].getdigidollardeploymentinfo()
-            assert_equal(info["status"], "locked_in")
+            assert_equal(info["status"], "defined")
 
         # Step A. Disconnect and advance node 0 across the activation
-        # boundary. While node 1 is offline, node 0's tip flips to
-        # State(tip) == ACTIVE on the period boundary block.
+        # boundary. While node 1 is offline, node 0's tip crosses
+        # FIRST_ACTIVE_TIP and its deployment state flips to active.
         self.disconnect_nodes(0, 1)
         self.nodes[0].generate(FIRST_ACTIVE_TIP - common_height + 3)
         info0 = self.nodes[0].getdigidollardeploymentinfo()
         assert_equal(info0["status"], "active")
         assert_equal(info0["enabled"], True)
 
-        # While disconnected, prove node 1 is still LOCKED_IN with the
-        # original tip. Its DD RPCs continue to refuse.
+        # While disconnected, prove node 1 is still below the boundary with
+        # the original tip. Its DD RPCs continue to refuse. The two nodes now
+        # report divergent buried-deployment states from the same params.
         info1 = self.nodes[1].getdigidollardeploymentinfo()
-        assert_equal(info1["status"], "locked_in")
+        assert_equal(info1["status"], "defined")
         assert_equal(info1["enabled"], False)
+        dep0 = self.nodes[0].getdeploymentinfo()["deployments"]["digidollar"]
+        dep1 = self.nodes[1].getdeploymentinfo()["deployments"]["digidollar"]
+        assert_equal(dep0["type"], "buried")
+        assert_equal(dep1["type"], "buried")
+        assert_equal(dep0["height"], ACTIVATION_HEIGHT)
+        assert_equal(dep1["height"], ACTIVATION_HEIGHT)
+        assert_equal(dep0["active"], True)
+        assert_equal(dep1["active"], False)
         try:
             self.nodes[1].mintdigidollar(100000, 4)
             assert False, "non-upgraded node1 should still refuse mintdigidollar"

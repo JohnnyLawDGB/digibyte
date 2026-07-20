@@ -1921,16 +1921,14 @@ bool OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(int height, const
         return DigiDollar::IsDigiDollarEnabled(block_index->pprev, params);
     }
 
-    const auto& deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    const int activation_height = deployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE
-        ? deployment.min_activation_height
-        : std::min(params.nDDActivationHeight, deployment.min_activation_height);
-
-    if (activation_height <= 0) {
+    // DigiDollar is a buried deployment (BIP90): the genesis/null-pprev
+    // fallback reduces to the shared activation-floor helper.
+    const int activation_floor = DigiDollar::EarliestActivationFloor(params);
+    if (activation_floor <= 0) {
         return true;
     }
 
-    return height >= activation_height;
+    return height >= activation_floor;
 }
 
 bool OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const ChainstateManager& chainman)

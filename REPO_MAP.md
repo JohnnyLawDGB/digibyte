@@ -841,14 +841,14 @@
   - `multiAlgoDiffChangeTarget` / `alwaysUpdateDiffChangeTarget` / `workComputationChangeTarget` / `algoSwapChangeTarget` → DigiByte multi-algo / DigiShield / DigiSpeed / Odo activation heights
   - `OdoHeight` / `nOdoShapechangeInterval` → Odocrypt activation height + 10-day key rotation interval
   - `nMinerConfirmationWindow` / `nRuleChangeActivationThreshold` → BIP9 window/threshold
-  - `vDeployments[]` (BIP9): includes `DEPLOYMENT_TESTDUMMY`, `DEPLOYMENT_TAPROOT` (bit 2), and ⚠️ `DEPLOYMENT_DIGIDOLLAR` (bit 23, gates `SCRIPT_VERIFY_DIGIDOLLAR`)
+  - `vDeployments[]` (BIP9): only `DEPLOYMENT_TESTDUMMY` remains since the v9.26.5 burial; Taproot/DigiDollar/AlgoLock are buried heights `TaprootHeight` / ⚠️ `DigiDollarHeight` (gates `SCRIPT_VERIFY_DIGIDOLLAR`) / `AlgoLockHeight`
   - ⚠️ `nDDActivationHeight` / `nOracleActivationHeight` / `nDigiDollarMuSig2Height` → DigiDollar / oracle / MuSig2 v0x03 activation heights
   - ⚠️ `nDDOracleEpochBlocks` / `nDDOracleUpdateInterval` / `nOracleEpochLength` / `nOracleRequiredMessages` / `nOracleTotalOracles` → oracle system parameters
   - ⚠️ `nOraclePubkeyCount` / `nOracleConsensusRequired` → MuSig2 quorum sizing (mainnet/testnet 35 active keys and 7 signatures required)
   - ⚠️ `vOraclePublicKeys` → hardcoded oracle x-only Schnorr keys (slot order matches MuSig2 participation bitmap)
   - ⚠️ `IsMuSig2OracleActive(height)` → inline helper returning `height >= nDigiDollarMuSig2Height`
-- `BuriedDeployment` enum → activation heights for BIP34, BIP65, BIP66, CSV, SegWit, NVERSIONBIPS, RESERVEALGO, Odocrypt
-- `DeploymentPos` enum (`DEPLOYMENT_TESTDUMMY`, `DEPLOYMENT_TAPROOT`, ⚠️ `DEPLOYMENT_DIGIDOLLAR`)
+- `BuriedDeployment` enum → activation heights for BIP34, BIP65, BIP66, CSV, SegWit, NVERSIONBIPS, RESERVEALGO, Odocrypt, and (since the v9.26.5 burial) Taproot, ⚠️ DigiDollar, AlgoLock via `DeploymentHeight()`
+- `DeploymentPos` enum (`DEPLOYMENT_TESTDUMMY` only since the v9.26.5 burial; `DEPLOYMENT_TAPROOT` / ⚠️ `DEPLOYMENT_DIGIDOLLAR` / `DEPLOYMENT_ALGOLOCK` moved to `BuriedDeployment`)
 - `BIP9Deployment` (struct) with `bit`, `nStartTime`, `nTimeout`, `min_activation_height`, `ALWAYS_ACTIVE`/`NEVER_ACTIVE`/`NO_TIMEOUT` sentinels
 - ⚠️ `IsOracleActive(params, height)` → free function returning `height >= params.nOracleActivationHeight`
 - ⚠️ `IsMuSig2Active(params, height)` → wrapper around `Params::IsMuSig2OracleActive`

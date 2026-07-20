@@ -96,17 +96,18 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
         }
     }
 
-    // Handle DigiDollar specific activation height for regtest
-    // Uses real BIP9 signaling (not ALWAYS_ACTIVE) so the deployment goes through
-    // the full DEFINED → STARTED → LOCKED_IN → ACTIVE state machine.
+    // Handle DigiDollar specific activation height for regtest.
+    // DigiDollar is a buried deployment (BIP90): the knob retargets the buried
+    // activation height together with the static DD/oracle/MuSig2 height gates,
+    // so DigiDollar activates at exactly this height. (Pre-burial this knob ran
+    // the real BIP9 state machine, which activated at the first 144-block
+    // window boundary >= max(432, N).)
     if (auto digidollar_height = args.GetIntArg("-digidollaractivationheight")) {
-        CChainParams::VersionBitsParameters vbparams{};
-        vbparams.start_time = 0;  // Epoch 0: start signaling immediately (MTP will exceed this from block 1)
-        vbparams.timeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        vbparams.min_activation_height = *digidollar_height;
-        options.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = vbparams;
-        options.digidollar_activation_height = *digidollar_height;
-        LogPrintf("Setting DigiDollar activation height for regtest to %d (BIP9 signaling mode)\n", *digidollar_height);
+        if (*digidollar_height < 0 || *digidollar_height >= std::numeric_limits<int>::max()) {
+            throw std::runtime_error(strprintf("Invalid height value (%d) for -digidollaractivationheight.", *digidollar_height));
+        }
+        options.digidollar_activation_height = static_cast<int>(*digidollar_height);
+        LogPrintf("Setting DigiDollar activation height for regtest to %d (buried deployment)\n", *digidollar_height);
     }
 }
 

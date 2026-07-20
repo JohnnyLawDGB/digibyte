@@ -39,12 +39,12 @@ This is the granular file index for all DigiDollar and Oracle source code. Read 
   - `GetRequiredDDForRedemption(systemCollateral)` → normal: returns ddMinted; ERR: returns (ddMinted × 100) / systemCollateral
   - `AddRedemptionPath(path)` → adds path to availablePaths if not already present
   - `HasRedemptionPath(path)` → checks if specific redemption path is available
-- `DigiDollar::IsDigiDollarEnabled(pindexPrev, chainman)` → checks BIP9 DEPLOYMENT_DIGIDOLLAR activation via DeploymentActiveAfter
-- `DigiDollar::IsDigiDollarEnabled(pindexPrev, params)` → overload using consensus params + temporary VersionBitsCache
+- `DigiDollar::IsDigiDollarEnabled(pindexPrev, chainman)` → checks buried DEPLOYMENT_DIGIDOLLAR activation via DeploymentActiveAfter (BIP90 since v9.26.5)
+- `DigiDollar::IsDigiDollarEnabled(pindexPrev, params)` → overload using consensus params — pure height compare against `DeploymentHeight(DEPLOYMENT_DIGIDOLLAR)` (no VersionBitsCache since the v9.26.5 burial)
 
 ### src/digidollar/digidollar.cpp
 - Implementation of all `CDigiDollarOutput` and `CCollateralPosition` methods
-- `DigiDollar::IsDigiDollarEnabled()` → both overloads delegate to `DeploymentActiveAfter` for BIP9 checking
+- `DigiDollar::IsDigiDollarEnabled()` → both overloads reduce to the buried-height predicate (v9.26.5 burial)
 
 ### src/digidollar/health.h
 - `DigiDollar::SystemMetrics` (struct) → aggregates all system-wide DD health data: supply, collateral, per-tier breakdown, DCA/ERR/volatility status, oracle status
@@ -764,10 +764,10 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - `EncodeDigiDollarAddress(dest)` / `DecodeDigiDollarAddress(str)` → free functions for DD address conversion
 
 ### src/chainparams.cpp
-- ⚠️ Handles `-digidollaractivationheight` CLI arg for regtest, sets BIP9 DEPLOYMENT_DIGIDOLLAR parameters
+- ⚠️ Handles `-digidollaractivationheight` CLI arg for regtest; since the v9.26.5 burial it sets the buried `DigiDollarHeight` plus the static DD/oracle/MuSig2 gates (DD activates at exactly N)
 
 ### src/validation.cpp / src/validation.h
-- ⚠️ `MemPoolAccept::PreChecks` → checks `DigiDollar::HasDigiDollarMarker()`, verifies BIP9 activation via `IsDigiDollarEnabled()`, creates `ValidationContext` with oracle price from `GetOraclePriceForTransaction()`, calls `ValidateDigiDollarTransaction()`
+- ⚠️ `MemPoolAccept::PreChecks` → checks `DigiDollar::HasDigiDollarMarker()`, verifies buried-deployment activation via `IsDigiDollarEnabled()`, creates `ValidationContext` with oracle price from `GetOraclePriceForTransaction()`, calls `ValidateDigiDollarTransaction()`
 - ⚠️ `ConnectBlock` → same DD validation during block connection with `skipOracleValidation` for historical blocks, includes `txLookup` callback for block-db DD amount extraction
 - ⚠️ `GetBlockScriptFlags` → sets `SCRIPT_VERIFY_DIGIDOLLAR` flag when DEPLOYMENT_DIGIDOLLAR is active
 - ⚠️ `DisconnectBlock` → calls `RemovePriceCache()` to revert oracle price data
@@ -801,13 +801,13 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ Calls `OracleBundleManager::AddOracleBundleToBlock()` to embed oracle data in coinbase during block assembly
 
 ### src/consensus/tx_check.cpp
-- ⚠️ `CheckTransaction` → defers DD validation to ConnectBlock (context-free, cannot check BIP9 activation); 0-value P2TR outputs pass the `nValue >= 0` consensus check
+- ⚠️ `CheckTransaction` → defers DD validation to ConnectBlock (context-free, cannot check deployment activation); 0-value P2TR outputs pass the `nValue >= 0` consensus check
 
 ### src/consensus/tx_verify.cpp
 - ⚠️ Skips DD-specific validation that requires chain state (deferred to ConnectBlock)
 
 ### src/consensus/params.h
-- ⚠️ `Consensus::DEPLOYMENT_DIGIDOLLAR` BIP9 deployment definition
+- ⚠️ `Consensus::DEPLOYMENT_DIGIDOLLAR` buried deployment (BIP90 since v9.26.5): `BuriedDeployment` enumerator + `DigiDollarHeight` via `DeploymentHeight()`; formerly a BIP9 `vDeployments` entry
 
 ### src/policy/policy.cpp
 - ⚠️ `IsStandardTx` → exempts DD transactions from standard dust/size checks via version marker detection
@@ -820,7 +820,7 @@ Files outside the DigiDollar/Oracle directories that contain DD integration code
 - ⚠️ `OracleVersionHeartbeatMsg` (class) → signed oracle software/protocol heartbeat: version fields, timestamp, nonce, software/subversion strings, chain-bound signature hash
 
 ### src/deploymentinfo.cpp
-- ⚠️ `DEPLOYMENT_DIGIDOLLAR` name and GBT name registration
+- ⚠️ `DEPLOYMENT_DIGIDOLLAR` buried-deployment name registration (`DeploymentName(BuriedDeployment)` + `GetBuriedDeployment()` for `-testactivationheight`); removed from `VersionBitsDeploymentInfo[]` in the v9.26.5 burial
 
 ### src/core_write.cpp
 - ⚠️ DD-aware transaction serialization for `decoderawtransaction` RPC output
@@ -934,7 +934,7 @@ present in the tree but not compiled into the current unit-test binary.
 
 | File | Coverage Area |
 |------|--------------|
-| `digidollar_activation_tests.cpp` | BIP9 activation logic, height-based feature gating, deployment status checks |
+| `digidollar_activation_tests.cpp` | Buried-height activation gating and deployment status checks (BIP9 state-machine cases removed in the v9.26.5 burial) |
 | `digidollar_activation_wave12_tests.cpp` | Wave 12 activation boundary and deployment predicate regressions |
 | `digidollar_address_tests.cpp` | DD address encoding/decoding, version bytes, network-specific prefixes, validation |
 | `digidollar_burn_enforcement_tests.cpp` | Collateral-vault burn enforcement and non-DD spend guard coverage |
@@ -1103,7 +1103,7 @@ compatibility but is a legacy/superseded scaffold; the live oracle P2P proof is
 
 | File | Coverage Area |
 |------|--------------|
-| `digidollar_activation.py` | Basic BIP9 activation of DD features on regtest |
+| `digidollar_activation.py` | Basic activation of DD features at the buried height on regtest (BIP9 signaling lifecycle removed in the v9.26.5 burial) |
 | `digidollar_activation_boundary.py` | Activation edge cases: exact height, off-by-one, pre/post activation behavior |
 | `digidollar_activation_multinode.py` | Multi-node activation state and deployment synchronization |
 | `digidollar_basic.py` | End-to-end DD workflow: mint → transfer → redeem on regtest |

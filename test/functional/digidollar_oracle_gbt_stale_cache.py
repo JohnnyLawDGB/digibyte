@@ -40,8 +40,7 @@ class DigiDollarOracleGBTStaleCacheTest(DigiByteTestFramework):
         node = self.nodes[0]
         while True:
             info = node.getdeploymentinfo()
-            status = info["deployments"]["digidollar"]["bip9"]["status"]
-            if status == "active":
+            if info["deployments"]["digidollar"]["active"]:
                 return
             current = node.getblockcount()
             remaining = REGTEST_CONFIRMATION_WINDOW - (current % REGTEST_CONFIRMATION_WINDOW)

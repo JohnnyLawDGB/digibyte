@@ -79,8 +79,7 @@ class DigiDollarOracleBlockRulesRelayTest(DigiByteTestFramework):
         for node in self.nodes:
             while True:
                 info = node.getdeploymentinfo()
-                status = info["deployments"]["digidollar"]["bip9"]["status"]
-                if status == "active":
+                if info["deployments"]["digidollar"]["active"]:
                     break
                 current = node.getblockcount()
                 remaining = REGTEST_CONFIRMATION_WINDOW - (current % REGTEST_CONFIRMATION_WINDOW)

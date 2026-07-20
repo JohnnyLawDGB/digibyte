@@ -34,14 +34,14 @@ enum BuriedDeployment : int16_t {
     DEPLOYMENT_ODO, // Odo hard fork
     //DEPLOYMENT_EQUIHASH, // Equihash algo swap
     //DEPLOYMENT_ETHASH, // Ethash algo swap
+    DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342); buried after BIP9 bit-2 activation
+    DEPLOYMENT_DIGIDOLLAR, // Deployment of DigiDollar stablecoin features; buried after BIP9 bit-23 activation
+    DEPLOYMENT_ALGOLOCK, // Reject deactivated (e.g. retired Groestl) or unknown-algo blocks; buried after BIP9 bit-0 activation
 };
-constexpr bool ValidDeployment(BuriedDeployment dep) { return dep <= DEPLOYMENT_ODO; }
+constexpr bool ValidDeployment(BuriedDeployment dep) { return dep <= DEPLOYMENT_ALGOLOCK; }
 
 enum DeploymentPos : uint16_t {
     DEPLOYMENT_TESTDUMMY,
-    DEPLOYMENT_TAPROOT, // Deployment of Schnorr/Taproot (BIPs 340-342)
-    DEPLOYMENT_DIGIDOLLAR, // Deployment of DigiDollar stablecoin features
-    DEPLOYMENT_ALGOLOCK, // Reject blocks mined with a deactivated (e.g. retired Groestl) or unknown algorithm
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in deploymentinfo.cpp
     MAX_VERSION_BITS_DEPLOYMENTS
 };
@@ -115,6 +115,19 @@ struct Params {
      * Block height at which blocks using a deactivated mining algorithm
      * (e.g. the retired Groestl) or an unknown algorithm are rejected. */
     int nGroestlDeactivationHeight{std::numeric_limits<int>::max()};
+    /** Block height at which Taproot (BIPs 340-342) becomes active.
+     * Buried BIP9 deployment (bit 2); mainnet activated at the 'since'
+     * height reported by getdeploymentinfo before burial. */
+    int TaprootHeight{std::numeric_limits<int>::max()};
+    /** Block height at which DigiDollar becomes active. Buried BIP9
+     * deployment (bit 23). NOTE: distinct from the static
+     * nDDActivationHeight/nOracleActivationHeight floor gates below, which
+     * remain at the pre-burial min_activation_height floor. */
+    int DigiDollarHeight{std::numeric_limits<int>::max()};
+    /** Block height at which AlgoLock (reject retired-Groestl/unknown-algo
+     * blocks) becomes active. Buried BIP9 deployment (bit 0); enforcement is
+     * OR'd with the static nGroestlDeactivationHeight backstop. */
+    int AlgoLockHeight{std::numeric_limits<int>::max()};
     /** Don't warn about unknown BIP 9 activations below this height.
      * This prevents us from warning about the CSV and segwit activations. */
     int MinBIP9WarningHeight;
@@ -237,6 +250,12 @@ struct Params {
             return ReserveAlgoBitsHeight;
         case DEPLOYMENT_ODO:
             return OdoHeight;
+        case DEPLOYMENT_TAPROOT:
+            return TaprootHeight;
+        case DEPLOYMENT_DIGIDOLLAR:
+            return DigiDollarHeight;
+        case DEPLOYMENT_ALGOLOCK:
+            return AlgoLockHeight;
         } // no default case, so the compiler can warn about missing cases
         return std::numeric_limits<int>::max();
     }

@@ -9,15 +9,19 @@ Verifies that:
   - createoraclekey works pre-activation as local wallet key management
   - The remaining 30 gated DD/Oracle operation RPCs return "DigiDollar is not yet active"
   - getdigidollardeploymentinfo (ungated) works at any time
-  - After BIP9 activation, key RPCs become functional
+  - After the buried activation height is reached, key RPCs become functional
 
-Uses -digidollaractivationheight=200 for real BIP9 signaling on regtest.
+DigiDollar is a buried deployment (BIP90): -digidollaractivationheight=200
+hardcodes activation at exactly height 200 on regtest (no BIP9 signaling).
+The RPCs report enabled=True once the tip reaches 199 because the *next*
+block is the first DD-active block.
 """
 
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
-REGTEST_CONFIRMATION_WINDOW = 144
+# Buried activation height used by this test (-digidollaractivationheight).
+ACTIVATION_HEIGHT = 200
 
 
 class DigiDollarRPCGatingTest(DigiByteTestFramework):
@@ -92,40 +96,38 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
             self.log.info(f"  ✓ {name} — correctly gated")
 
     def activate_digidollar(self, node):
-        """Mine through BIP9 DEFINED → STARTED → LOCKED_IN → ACTIVE."""
-        seen_states = set()
+        """Mine straight through the buried activation boundary (no signaling)."""
+        # Stop at tip N-2 first: the last height where DigiDollar is disabled
+        # (the RPCs report whether the *next* block is DD-active).
+        node.generate(ACTIVATION_HEIGHT - 2 - node.getblockcount())
+        assert_equal(node.getblockcount(), ACTIVATION_HEIGHT - 2)
         info = node.getdeploymentinfo()
-        seen_states.add(info["deployments"]["digidollar"]["bip9"]["status"])
+        assert_equal(info["deployments"]["digidollar"]["active"], False)
+        # A representative gated RPC must still refuse just below the boundary.
+        self.test_rpc_gated(node, "mintdigidollar (tip N-2)",
+                            lambda: node.mintdigidollar(10000, 0))
 
-        for _ in range(10):
-            current = node.getblockcount()
-            remaining = REGTEST_CONFIRMATION_WINDOW - (current % REGTEST_CONFIRMATION_WINDOW)
-            if remaining == 0:
-                remaining = REGTEST_CONFIRMATION_WINDOW
-            node.generate(remaining)
-
-            height = node.getblockcount()
-            info = node.getdeploymentinfo()
-            status = info["deployments"]["digidollar"]["bip9"]["status"]
-            seen_states.add(status)
-            self.log.info(f"  Height {height}: {status}")
-
-            if status == 'active':
-                break
-        else:
-            assert False, f"Failed to reach ACTIVE after height {node.getblockcount()}"
-
-        assert "started" in seen_states, "Should have been STARTED"
-        assert "locked_in" in seen_states, "Should have been LOCKED_IN"
-        assert "active" in seen_states, "Should have reached ACTIVE"
+        # Mine to the activation height; the deployment is now active.
+        node.generate(2)
+        assert_equal(node.getblockcount(), ACTIVATION_HEIGHT)
+        info = node.getdeploymentinfo()
+        dd_dep = info["deployments"]["digidollar"]
+        assert_equal(dd_dep["type"], "buried")
+        assert_equal(dd_dep["active"], True)
+        assert_equal(dd_dep["height"], ACTIVATION_HEIGHT)
+        self.log.info(f"  Height {node.getblockcount()}: active")
 
     def run_test(self):
         node = self.nodes[0]
 
         # ── Phase 1: Verify local oracle identity setup is allowed pre-activation ──
-        self.log.info("Phase 1: createoraclekey works at DEFINED state (height 0)...")
+        self.log.info("Phase 1: createoraclekey works pre-activation (height 0)...")
         info = node.getdeploymentinfo()
-        assert_equal(info["deployments"]["digidollar"]["bip9"]["status"], "defined")
+        dd_dep = info["deployments"]["digidollar"]
+        assert_equal(dd_dep["type"], "buried")
+        assert_equal(dd_dep["active"], False)
+        assert_equal(dd_dep["height"], ACTIVATION_HEIGHT)
+        assert "bip9" not in dd_dep, "buried deployment must not carry a bip9 sub-object"
 
         key_result = node.createoraclekey(0)
         assert_equal(key_result["oracle_id"], 0)
@@ -136,8 +138,8 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
         assert "startoracle" in key_result["message"]
         self.log.info("  ✓ createoraclekey — allowed before activation")
 
-        # ── Phase 2: Verify all protocol/action RPCs are blocked at DEFINED state ──
-        self.log.info("Phase 2: Testing all 30 gated RPCs at DEFINED state (height 0)...")
+        # ── Phase 2: Verify all protocol/action RPCs are blocked pre-activation ──
+        self.log.info("Phase 2: Testing all 30 gated RPCs pre-activation (height 0)...")
 
         gated_rpcs = self.get_gated_rpc_calls(node)
         assert_equal(len(gated_rpcs), 30)
@@ -153,11 +155,14 @@ class DigiDollarRPCGatingTest(DigiByteTestFramework):
         self.log.info("Phase 3: Verifying getdigidollardeploymentinfo works without activation...")
         dep = node.getdigidollardeploymentinfo()
         self.log.info(f"  ✓ getdigidollardeploymentinfo — status={dep['status']}, enabled={dep['enabled']}")
-        assert dep['status'] != 'active'
+        assert_equal(dep['status'], 'defined')
         assert_equal(dep['enabled'], False)
+        assert_equal(dep['type'], 'buried')
+        # The buried activation height is reported even before activation.
+        assert_equal(dep['activation_height'], ACTIVATION_HEIGHT)
 
-        # ── Phase 4: Mine through BIP9 to ACTIVE ──
-        self.log.info("Phase 4: Activating DigiDollar via BIP9...")
+        # ── Phase 4: Mine to the buried activation height ──
+        self.log.info("Phase 4: Activating DigiDollar at the buried height...")
         self.activate_digidollar(node)
 
         dep = node.getdigidollardeploymentinfo()

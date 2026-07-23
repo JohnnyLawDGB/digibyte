@@ -26,8 +26,8 @@ This test proves a pruned node (node 1) can do everything a full node (node 0)
 can with DigiDollar:
 
   * F1  - the pruned + DigiDollar-configured node boots with no txindex.
-  * F0  - DigiDollar activates through the real BIP9 state machine on both nodes
-          at the same height.
+  * F0  - DigiDollar activates at the buried deployment height on both nodes
+          simultaneously.
   * F4  - the PRUNED node mints a DigiDollar position, mines the block itself,
           and the full node accepts it (tips + consensus DD state agree).
   * a full user lifecycle (mint -> send -> redeem) runs on the pruned node.
@@ -59,10 +59,10 @@ can with DigiDollar:
           error's prescribed recovery — restart with ``-reindex`` — rebuilds the
           DD-era window from the network and restores full parity.
 
-The fixture uses ``-digidollaractivationheight=432`` so DigiDollar goes through
-the real BIP9 DEFINED -> STARTED -> LOCKED_IN -> ACTIVE progression (with
-min_activation_height=432 and the 144-block regtest period, ACTIVE lands at
-height 432). ``setmockoracleprice`` supplies the regtest oracle quote that lets
+The fixture uses ``-digidollaractivationheight=432``: DigiDollar is a buried
+deployment (BIP90), so the knob retargets the hardcoded activation height and
+the static DD/oracle gates to 432 — block 432 is the first block under DD
+rules. ``setmockoracleprice`` supplies the regtest oracle quote that lets
 DD mint/redeem blocks be built. The pruned node mines every block so its wallet
 stays funded (regtest coinbase maturity is 100 blocks for coins at height >= 100,
 so seeding funds by mining from genesis is the simplest robust approach).
@@ -81,10 +81,10 @@ from test_framework.util import (
     assert_raises_rpc_error,
 )
 
-# BIP9: -digidollaractivationheight sets min_activation_height=432. The state
-# machine still walks DEFINED -> STARTED -> LOCKED_IN -> ACTIVE in 144-block
-# periods, so ACTIVE first appears at height 432. Mining a few extra blocks past
-# that lands us safely inside ACTIVE with mature coinbases to spend.
+# Buried deployment (BIP90): -digidollaractivationheight sets the hardcoded
+# activation height, so block 432 is the first block under DD rules (tip 431 is
+# the last pre-activation tip). Mining a few extra blocks past that lands us
+# safely inside the active range with mature coinbases to spend.
 ACTIVATION_HEIGHT = 432
 FIRST_ACTIVE_TIP = 431
 
@@ -241,7 +241,7 @@ class DigiDollarPruningTest(DigiByteTestFramework):
     # ================================================================== F0
     def test_f0_activation(self):
         node0, node1 = self.nodes[0], self.nodes[1]
-        self.log.info("F0: activating DigiDollar through real BIP9 (pruned node follows)")
+        self.log.info("F0: crossing the buried DigiDollar activation height (pruned node follows)")
 
         # Build the activation chain on the FULL node: a pruned node advertises
         # NODE_NETWORK_LIMITED and does not serve deep history, so it cannot bootstrap a
@@ -262,6 +262,9 @@ class DigiDollarPruningTest(DigiByteTestFramework):
         for dep in (dep0, dep1):
             assert_equal(dep["status"], "active")
             assert_equal(dep["enabled"], True)
+            # Buried deployment: the reported activation height is exactly
+            # the -digidollaractivationheight knob value.
+            assert_equal(dep["activation_height"], ACTIVATION_HEIGHT)
         # Both nodes must agree on where DigiDollar activated.
         assert_equal(dep0["activation_height"], dep1["activation_height"])
         assert_equal(node0.getbestblockhash(), node1.getbestblockhash())
@@ -628,7 +631,7 @@ class DigiDollarPruningTest(DigiByteTestFramework):
     def test_f9_incomplete_dd_window_guard(self):
         """A pruned datadir missing DD-era blocks refuses to start.
 
-        Under DEFAULT regtest rules DigiDollar is always-active with an
+        Under DEFAULT regtest rules DigiDollar is buried at height 0 with an
         activation floor of 0, so no prune lock is registered and DD-era blocks
         CAN be pruned away (a regtest-only property; mainnet/testnet floors are
         23,627,520 / 600). We use that to fabricate exactly the damaged state

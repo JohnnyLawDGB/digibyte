@@ -6,13 +6,16 @@
 Test DigiDollar activation boundary — pre-activation rejection & post-activation acceptance.
 
 Verifies that:
-  - DD transactions are rejected from mempool before BIP9 activation
-  - DD transactions are accepted into mempool after BIP9 activation
+  - DD transactions are rejected from mempool before the buried activation height
+  - DD transactions are accepted into mempool at/after the buried activation height
   - getdigidollardeploymentinfo reflects correct state throughout
-  - BIP9 state machine transitions correctly (DEFINED → STARTED → LOCKED_IN → ACTIVE)
+  - A reorg below the activation height flips DigiDollar back off and purges
+    stale DD mempool entries
 
-Uses -digidollaractivationheight=200 to enable real BIP9 signaling with
-min_activation_height=200 on regtest.
+DigiDollar is a buried deployment (BIP90): -digidollaractivationheight=200
+hardcodes activation at exactly height 200 on regtest (no BIP9 signaling).
+The first DD-active block is block 200, so the RPCs report enabled=True once
+the tip reaches height 199 (the *next* block is DD-active).
 """
 
 from decimal import Decimal
@@ -23,8 +26,8 @@ from test_framework.messages import COutPoint, CTransaction, CTxIn, CTxOut, tx_f
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
-# Regtest BIP9 parameters
-REGTEST_CONFIRMATION_WINDOW = 144
+# Buried activation height used by this test (-digidollaractivationheight).
+ACTIVATION_HEIGHT = 200
 DD_TX_MINT_VERSION = (1 << 24) | 0x0770
 DD_TX_TRANSFER_VERSION = (2 << 24) | 0x0770
 
@@ -48,30 +51,33 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
-        # ── Phase 1: Verify initial DEFINED state at genesis ──
-        self.log.info("Phase 1: Checking initial BIP9 state...")
+        # ── Phase 1: Verify buried deployment reporting at genesis ──
+        self.log.info("Phase 1: Checking buried deployment state at genesis...")
         info = node.getdeploymentinfo()
-        dd_dep = info["deployments"]["digidollar"]["bip9"]
-        self.log.info(f"  Genesis state: {dd_dep['status']}")
-        assert_equal(dd_dep["status"], "defined")
+        dd_dep = info["deployments"]["digidollar"]
+        self.log.info(f"  Genesis entry: {dd_dep}")
+        assert_equal(dd_dep["type"], "buried")
+        assert_equal(dd_dep["active"], False)
+        assert_equal(dd_dep["height"], ACTIVATION_HEIGHT)
+        assert "bip9" not in dd_dep, "buried deployment must not carry a bip9 sub-object"
 
-        # ── Phase 2: Mine to height 150 and verify STARTED state ──
+        # ── Phase 2: Mine to height 150 and verify still pre-activation ──
         self.log.info("Phase 2: Mining to height 150 (pre-activation)...")
         node.generate(150)
         height = node.getblockcount()
         assert_equal(height, 150)
 
-        # After first period boundary (144), state transitions to STARTED
         info = node.getdeploymentinfo()
-        dd_dep = info["deployments"]["digidollar"]["bip9"]
-        self.log.info(f"  State at height {height}: {dd_dep['status']}")
-        assert_equal(dd_dep["status"], "started")
+        dd_dep = info["deployments"]["digidollar"]
+        assert_equal(dd_dep["active"], False)
 
         # Verify getdigidollardeploymentinfo also shows correct state
         dep = node.getdigidollardeploymentinfo()
         self.log.info(f"  Deployment info: status={dep['status']}, enabled={dep['enabled']}")
-        assert dep['status'] != 'active', f"Should not be active at height {height}"
+        assert_equal(dep['status'], 'defined')
         assert_equal(dep['enabled'], False)
+        # The buried activation height is reported even before activation.
+        assert_equal(dep['activation_height'], ACTIVATION_HEIGHT)
 
         # ── Phase 3: Test pre-activation RPC rejection ──
         self.log.info("Phase 3: Testing pre-activation RPC rejection...")
@@ -87,9 +93,9 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
                 f"Expected 'not yet active' error, got: {error_msg}"
 
         # A DD-looking coinbase must not change base-chain validity before the
-        # BIP9 deployment is active. Before DD-FA-SEC-022, ConnectBlock rejected
-        # this block with bad-cb-dd-marker even though the deployment was only
-        # STARTED.
+        # deployment is active. Before DD-FA-SEC-022, ConnectBlock rejected
+        # this block with bad-cb-dd-marker even though the deployment was not
+        # yet active.
         self.log.info("Phase 3b: Pre-activation DD-marker coinbase remains a valid DGB block...")
         pre_marker_hash = self.submit_coinbase_marker_block(node, expected_result=None)
         self.log.info(f"  Accepted pre-activation DD-marker coinbase block {pre_marker_hash}")
@@ -97,57 +103,60 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         # A signed, otherwise ordinary body transaction with DD marker bits must
         # also remain a valid pre-activation DGB transaction when mined directly.
         # Before DD-FA-SEC-023, ConnectBlock rejected this block with
-        # digidollar-not-active even though the deployment was only STARTED.
+        # digidollar-not-active even though the deployment was not yet active.
         self.log.info("Phase 3c: Pre-activation DD-marker body tx remains a valid DGB block...")
         pre_body_hash = self.submit_body_marker_block(node, expected_result=None)
         self.log.info(f"  Accepted pre-activation DD-marker body block {pre_body_hash}")
 
-        # ── Phase 4: Verify block version bit 23 signaling ──
-        self.log.info("Phase 4: Verifying block version bit signaling...")
+        # ── Phase 4: Verify no versionbits signaling for the buried deployment ──
+        self.log.info("Phase 4: Verifying block template does not signal bit 23...")
         template = node.getblocktemplate({"rules": ["segwit"]})
         version = template["version"]
-        bit_23_set = (version & (1 << 23)) != 0
-        self.log.info(f"  Block template version: 0x{version:08x}, bit 23: {bit_23_set}")
-        assert bit_23_set, "Bit 23 should be set when STARTED"
+        self.log.info(f"  Block template version: 0x{version:08x}")
+        assert (version & (1 << 23)) == 0, \
+            "Bit 23 must not be signaled for the buried deployment"
+        assert "digidollar" not in template["rules"], \
+            "digidollar rule must not be advertised pre-activation"
+        assert "digidollar" not in template["vbavailable"], \
+            "digidollar must not appear in vbavailable post-burial"
 
-        # ── Phase 5: Mine through BIP9 state machine to ACTIVE ──
-        self.log.info("Phase 5: Progressing BIP9 state machine...")
+        # ── Phase 5: Mine across the buried activation boundary ──
+        self.log.info("Phase 5: Mining across the activation boundary...")
 
-        # Track state transitions
-        seen_states = set()
-        seen_states.add("started")
+        # Tip N-2 is the last height with DigiDollar disabled: the RPCs report
+        # whether the *next* block is DD-active, and block N-1 is not.
+        node.generate(ACTIVATION_HEIGHT - 2 - node.getblockcount())
+        assert_equal(node.getblockcount(), ACTIVATION_HEIGHT - 2)
+        dep = node.getdigidollardeploymentinfo()
+        assert_equal(dep['status'], 'defined')
+        assert_equal(dep['enabled'], False)
+        self.log.info(f"  Height {ACTIVATION_HEIGHT - 2}: still disabled")
 
-        for i in range(10):  # Safety limit
-            # Mine to next period boundary
-            current = node.getblockcount()
-            remaining = REGTEST_CONFIRMATION_WINDOW - (current % REGTEST_CONFIRMATION_WINDOW)
-            if remaining == 0:
-                remaining = REGTEST_CONFIRMATION_WINDOW
-            node.generate(remaining)
+        # Tip N-1: the next block is block N, the first DD-active block, so
+        # the deployment now reports enabled/active.
+        node.generate(1)
+        assert_equal(node.getblockcount(), ACTIVATION_HEIGHT - 1)
+        dep = node.getdigidollardeploymentinfo()
+        assert_equal(dep['status'], 'active')
+        assert_equal(dep['enabled'], True)
+        self.log.info(f"  Height {ACTIVATION_HEIGHT - 1}: enabled (next block is DD-active)")
 
-            height = node.getblockcount()
-            info = node.getdeploymentinfo()
-            status = info["deployments"]["digidollar"]["bip9"]["status"]
-            seen_states.add(status)
-            self.log.info(f"  Height {height}: {status}")
+        # The template for block N advertises the digidollar rule without
+        # signaling bit 23 (buried deployments never set version bits).
+        template = node.getblocktemplate({"rules": ["segwit"]})
+        assert (template["version"] & (1 << 23)) == 0
+        assert "digidollar" in template["rules"], \
+            "digidollar rule must be advertised once active"
 
-            if status == 'active':
-                break
-        else:
-            assert False, f"Failed to activate after height {height}"
-
-        # Verify we went through expected transitions
-        assert "started" in seen_states, "Should have been STARTED"
-        assert "locked_in" in seen_states, "Should have been LOCKED_IN"
-        assert "active" in seen_states, "Should have reached ACTIVE"
-        self.log.info(f"  State transitions observed: {seen_states}")
-
-        # Verify activation height respects min_activation_height
-        dep_info = info["deployments"]["digidollar"]
-        active_since = dep_info["bip9"]["since"]
-        self.log.info(f"  Active since height: {active_since}")
-        assert active_since >= 200, \
-            f"Activation height {active_since} should be >= min_activation_height 200"
+        # Mine the first DD-active block; getdeploymentinfo reports the exact
+        # buried height (the pre-burial back-scan reported first-active-tip).
+        node.generate(1)
+        assert_equal(node.getblockcount(), ACTIVATION_HEIGHT)
+        info = node.getdeploymentinfo()
+        dd_dep = info["deployments"]["digidollar"]
+        assert_equal(dd_dep["type"], "buried")
+        assert_equal(dd_dep["active"], True)
+        assert_equal(dd_dep["height"], ACTIVATION_HEIGHT)
 
         # ── Phase 6: Verify getdigidollardeploymentinfo shows ACTIVE ──
         self.log.info("Phase 6: Verifying deployment info post-activation...")
@@ -217,8 +226,10 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
 
         # ── Phase 8: Reorg below activation purges stale DD mempool txs ──
         self.log.info("Phase 8: Verifying reorg below activation purges DD mempool entries...")
-        locked_in_since = active_since - REGTEST_CONFIRMATION_WINDOW
-        rollback_tip = locked_in_since - 1
+        # Invalidate block N-1 so the tip rolls back to N-2, the last height
+        # where the buried deployment is disabled (the next block, N-1, is
+        # below the activation height).
+        rollback_tip = ACTIVATION_HEIGHT - 2
         mature_at_rollback_height = rollback_tip - 100
         current_height = node.getblockcount()
         transient_utxos = []
@@ -234,11 +245,13 @@ class DigiDollarActivationBoundaryTest(DigiByteTestFramework):
         assert pending_txid in node.getrawmempool(), \
             f"Pending DD tx {pending_txid} should be in mempool before reorg"
 
-        rollback_hash = node.getblockhash(locked_in_since)
+        rollback_hash = node.getblockhash(rollback_tip + 1)
         node.invalidateblock(rollback_hash)
+        assert_equal(node.getblockcount(), rollback_tip)
 
         dep = node.getdigidollardeploymentinfo()
         self.log.info(f"  Deployment after reorg: status={dep['status']}, enabled={dep['enabled']}")
+        assert_equal(dep['status'], 'defined')
         assert_equal(dep['enabled'], False)
         assert pending_txid not in node.getrawmempool(), \
             f"DD tx {pending_txid} must be removed from mempool after reorg below activation"

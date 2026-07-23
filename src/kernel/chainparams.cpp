@@ -115,8 +115,11 @@ public:
         consensus.nRuleChangeActivationThreshold = 28224; // 28224 - 70% of 40320 blocks
         consensus.nMinerConfirmationWindow = 40320; // nPowTargetTimespan / nPowTargetSpacing 40320 blocks main net - 1 week
 
-        // Need to make sure we ignore activation warnings below Odo activation height, also ignores Segwit activation
-        consensus.MinBIP9WarningHeight = 9152640; // Odo height + miner confirmation window
+        // Ignore versionbits warnings below the most recent buried activation
+        // (DigiDollar/AlgoLock at 23,869,440): the historical bit-2/23/0
+        // signaling periods must not trigger "unknown new rules" warnings now
+        // that those deployments are buried. Also covers Odo and Segwit.
+        consensus.MinBIP9WarningHeight = 23909760; // DigiDollar/AlgoLock activation height + miner confirmation window
 
         // DigiByte Hard Fork Block Heights
         consensus.multiAlgoDiffChangeTarget = 145000; // Block 145,000 MultiAlgo Hard Fork
@@ -168,24 +171,21 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
 
-        // Deployment of Taproot (BIPs 340-342)
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1736510438; // 10th January 2025
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1799582438; // 10th January 2027
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
-
-        // Deployment of DigiDollar stablecoin features
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1780272000; // June 1, 2026
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1811808000; // June 1, 2027
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 23627520; // Aligned to confirmation window (586 * 40320)
-        // ALGOLOCK: reject reactivated Groestl / unknown-algo blocks. BIP9 bit 0, signalling
-        // starts immediately so miners can lock in early; nGroestlDeactivationHeight is the
-        // mandatory unconditional backstop so activation cannot be vetoed or stalled.
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = 1782691200; // June 29, 2026 (signalling open)
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = 1814227200; // June 29, 2027
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0; // may activate as soon as it locks in
+        // Buried deployments (BIP90). All three activated via BIP9 and are now
+        // hardcoded at their actual on-chain activation ('since') heights:
+        // - Taproot (BIPs 340-342): BIP9 bit 2, start 2025-01-10, activated at
+        //   21,168,000 (= 525 * 40320).
+        // - DigiDollar: BIP9 bit 23, start 2026-06-01, min_activation_height
+        //   floor 23,627,520; locked in and activated at 23,869,440
+        //   (= 592 * 40320). The static nDDActivationHeight/
+        //   nOracleActivationHeight gates below stay at the 23,627,520 floor.
+        // - AlgoLock (reject reactivated Groestl / unknown-algo blocks): BIP9
+        //   bit 0, start 2026-06-29, activated at 23,869,440 alongside
+        //   DigiDollar; nGroestlDeactivationHeight (23,808,000) remains the
+        //   unconditional static backstop.
+        consensus.TaprootHeight = 21168000;
+        consensus.DigiDollarHeight = 23869440;
+        consensus.AlgoLockHeight = 23869440;
 
         // The best chain should have at least this much work.
         // NOTE: must stay reachable by the headers pre-sync, which measures *contextless*
@@ -459,7 +459,10 @@ public:
         consensus.BIP66Height = 1; // BIP66 activated on testnet (Testnet reset 2025)
         consensus.CSVHeight = 1; // CSV activated on testnet (Used in rpc activation tests)
         consensus.SegwitHeight = 0; // SEGWIT is always activated on testnet unless overridden
-        consensus.MinBIP9WarningHeight = 0;
+        // Ignore versionbits warnings below the buried DigiDollar activation
+        // (600) + one confirmation window (200): bit 23 was really signaled in
+        // blocks ~200-599 on testnet26 and must not warn post-burial.
+        consensus.MinBIP9WarningHeight = 800;
         consensus.powLimit = ArithToUint256(~arith_uint256(0) >> 20);
 
         consensus.initialTarget[ALGO_SHA256D] = ArithToUint256(~arith_uint256(0) >> 31); // production testnet (2048x powLimit)
@@ -520,28 +523,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
 
-        // Deployment of Taproot (BIPs 340-342) - Always active for testnet
-        // DigiDollar requires P2TR (Taproot) scripts, so Taproot must be active
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
-
-        // Deployment of DigiDollar stablecoin features (testnet - real BIP9 signaling)
-        // Miners signal bit 23, 70% threshold (140/200 blocks)
-        // BIP9 activation sequence with nMinerConfirmationWindow=200:
-        //   Window 0 (blocks 0-199):   DEFINED
-        //   Window 1 (blocks 200-399): STARTED  — miners begin signaling bit 23
-        //   Window 2 (blocks 400-599): LOCKED_IN — if 140/200 blocks signaled
-        //   Window 3 (blocks 600+):    ACTIVE   — min_activation_height=600 satisfied
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1780156800; // testnet26 genesis timestamp
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 1830297600; // Jan 1, 2028
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 600; // Activation delayed until block 600
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0;
+        // Buried deployments (BIP90). Taproot and AlgoLock were BIP9
+        // ALWAYS_ACTIVE on testnet26 (buried height 0). DigiDollar ran real
+        // BIP9 signaling on bit 23 (DEFINED 0-199, STARTED 200-399, LOCKED_IN
+        // 400-599) and activated at block 600 — verified against the live
+        // testnet26 chain via getdeploymentinfo (bip9.since = 600).
+        consensus.TaprootHeight = 0;
+        consensus.DigiDollarHeight = 600;
+        consensus.AlgoLockHeight = 0;
 
         consensus.nMinimumChainWork = uint256S("0x00");
         consensus.defaultAssumeValid = uint256S("0x00"); //1079274
@@ -983,21 +972,11 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
 
-        // Activation of Taproot (BIPs 340-342)
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
-
-        // Activation of DigiDollar stablecoin features (signet - always active)
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // No activation delay for ALWAYS_ACTIVE
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0;
+        // Buried deployments (BIP90): all were BIP9 ALWAYS_ACTIVE on signet,
+        // equivalent to a buried height of 0.
+        consensus.TaprootHeight = 0;
+        consensus.DigiDollarHeight = 0;
+        consensus.AlgoLockHeight = 0;
 
         // message start is defined as the first 4 bytes of the sha256d of the block script
         HashWriter h{};
@@ -1120,19 +1099,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].min_activation_height = 0; // No activation delay
 
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // No activation delay
-
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit = 23;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0; // No activation delay for ALWAYS_ACTIVE
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].bit = 0;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-        consensus.vDeployments[Consensus::DEPLOYMENT_ALGOLOCK].min_activation_height = 0;
+        // Buried deployments (BIP90): all were BIP9 ALWAYS_ACTIVE on regtest,
+        // equivalent to a buried height of 0. Overridable via
+        // -testactivationheight=taproot|digidollar|algolock@HEIGHT below;
+        // -digidollaractivationheight=N additionally retargets the static
+        // DD/oracle/MuSig2 height gates and takes precedence for DigiDollar.
+        consensus.TaprootHeight = 0;
+        consensus.DigiDollarHeight = 0;
+        consensus.AlgoLockHeight = 0;
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
@@ -1171,6 +1145,20 @@ public:
                 break;
             case Consensus::BuriedDeployment::DEPLOYMENT_ODO:
                 // Handle Odo deployment
+                break;
+            case Consensus::BuriedDeployment::DEPLOYMENT_TAPROOT:
+                consensus.TaprootHeight = int{height};
+                break;
+            case Consensus::BuriedDeployment::DEPLOYMENT_DIGIDOLLAR:
+                // Moves the buried deployment height; the static DD/oracle
+                // gates keep their defaults, but nDigiDollarMuSig2Height is
+                // derived below as min(nDDActivationHeight, DigiDollarHeight)
+                // and so follows this override. Use -digidollaractivationheight
+                // to move everything together (applied later, takes precedence).
+                consensus.DigiDollarHeight = int{height};
+                break;
+            case Consensus::BuriedDeployment::DEPLOYMENT_ALGOLOCK:
+                consensus.AlgoLockHeight = int{height};
                 break;
             }
         }
@@ -1255,18 +1243,23 @@ public:
         if (opts.digidollar_activation_height) {
             consensus.nDDActivationHeight = *opts.digidollar_activation_height;
             consensus.nOracleActivationHeight = *opts.digidollar_activation_height;
+            // The knob retargets the buried deployment height too, so BIP9-era
+            // semantics ("everything activates together at N") are preserved.
+            // Takes precedence over -testactivationheight=digidollar@H.
+            consensus.DigiDollarHeight = *opts.digidollar_activation_height;
         }
         consensus.nOracleEpochLength = 40;         // 10 minutes (40 blocks * 15 seconds)
         consensus.nOracleRequiredMessages = 4;     // 4-of-7 off-chain price quorum (matches testnet)
         consensus.nOracleTotalOracles = 7;         // 7 active oracles (matches testnet)
         // MuSig2 must follow the effective DigiDollar activation boundary.
-        // Default regtest is BIP9 ALWAYS_ACTIVE with min_activation_height=0,
-        // while nDDActivationHeight remains 650 for height-gated P2P/oracle
-        // tests. Using the raw height here leaves DD active before v0x03
-        // quotes validate, breaking every regtest DD mint path.
+        // Default regtest has the buried DigiDollar deployment active from
+        // genesis (DigiDollarHeight=0), while nDDActivationHeight remains 650
+        // for height-gated P2P/oracle tests. Using the raw height here leaves
+        // DD active before v0x03 quotes validate, breaking every regtest DD
+        // mint path.
         consensus.nDigiDollarMuSig2Height = std::min(
             consensus.nDDActivationHeight,
-            consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height);
+            consensus.DigiDollarHeight);
 
         // MuSig2 oracle configuration — 4-of-7 quorum (lower for testing)
         consensus.nOraclePubkeyCount = 7;

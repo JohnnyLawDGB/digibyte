@@ -2652,18 +2652,18 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06g_activation_function_consistency)
 {
     // ATTACK: Can the two IsDigiDollarEnabled overloads (chainman vs params-only)
     // return different results for the same chain state?
-    // The params-only overload creates a temporary VersionBitsCache, which should
-    // compute the same state as the shared cache.
+    // Post-burial both overloads reduce to the same buried-height compare,
+    // so no cache state can make them diverge.
 
-    // On regtest, DD is ALWAYS_ACTIVE — both overloads should agree
+    // On regtest, DD is buried at height 0 — both overloads should agree
     const auto params = CChainParams::RegTest({});
 
-    // With nullptr (genesis): DD should be active on regtest (ALWAYS_ACTIVE)
+    // With nullptr (genesis): DD should be active on regtest (buried height 0)
     bool result1 = DigiDollar::IsDigiDollarEnabled(nullptr, params->GetConsensus());
 
-    // ALWAYS_ACTIVE means active even at genesis (nullptr prev)
+    // A burial height of 0 means active even at genesis (nullptr prev)
     BOOST_CHECK_MESSAGE(result1,
-        "DEFENSE HOLDS: IsDigiDollarEnabled(nullptr, params) returns true on regtest (ALWAYS_ACTIVE)");
+        "DEFENSE HOLDS: IsDigiDollarEnabled(nullptr, params) returns true on regtest (buried height 0)");
 }
 
 // T1-06h: SCRIPT_VERIFY_DIGIDOLLAR flag value doesn't collide with other flags
@@ -2704,28 +2704,28 @@ BOOST_AUTO_TEST_CASE(redteam_T1_06i_oracle_vs_dd_activation_sync)
         const auto testnet_params = CChainParams::TestNet();
         const auto& consensus = testnet_params->GetConsensus();
 
-        // Testnet BIP9 DD: min_activation_height = 600
-        int dd_min_height = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height;
+        // Testnet buried DD activation height = 600
+        int dd_height = consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 
         // Oracle activation height
         int oracle_height = consensus.nOracleActivationHeight;
 
-        BOOST_CHECK_MESSAGE(dd_min_height == oracle_height,
-            "DEFENSE HOLDS: Testnet DD min_activation_height (" +
-            std::to_string(dd_min_height) + ") matches oracle activation height (" +
+        BOOST_CHECK_EQUAL(dd_height, 600);
+        BOOST_CHECK_MESSAGE(dd_height == oracle_height,
+            "DEFENSE HOLDS: Testnet DD burial height (" +
+            std::to_string(dd_height) + ") matches oracle activation height (" +
             std::to_string(oracle_height) + ")");
     }
 
-    // Check regtest: DD is ALWAYS_ACTIVE
+    // Check regtest: DD is buried at genesis
     {
         const auto regtest_params = CChainParams::RegTest({});  // RegTest takes optional args
         const auto& consensus = regtest_params->GetConsensus();
 
-        // Regtest: ALWAYS_ACTIVE with min_activation_height = 0
+        // Regtest: buried height 0 (the old BIP9 ALWAYS_ACTIVE equivalent)
         BOOST_CHECK_MESSAGE(
-            consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime ==
-                Consensus::BIP9Deployment::ALWAYS_ACTIVE,
-            "Regtest DD should be ALWAYS_ACTIVE");
+            consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR) == 0,
+            "Regtest DD should be buried at height 0 (active from genesis)");
     }
 
     // Check mainnet: oracle activation should be set (RC30: 9-of-17 active)
@@ -5266,14 +5266,11 @@ BOOST_AUTO_TEST_CASE(redteam_t2_06b_fee_input_collateral_masquerade)
 // regardless of whether the creating block is readable.
 BOOST_AUTO_TEST_CASE(redteam_t2_06d_prefloor_collateral_gate_parity)
 {
-    // Regtest params with a real activation floor of 650 (default regtest is
-    // ALWAYS_ACTIVE with min_activation_height 0, which disables the gate).
+    // Regtest params with a real activation floor of 650 (default regtest
+    // buries the DigiDollar deployment at height 0, which disables the gate:
+    // EarliestActivationFloor = min(nDDActivationHeight 650, burial height)).
     CChainParams::RegTestOptions opts;
-    CChainParams::VersionBitsParameters vb{};
-    vb.start_time = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
-    vb.timeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-    vb.min_activation_height = 650;  // EarliestDigiDollarActivationHeight -> 650
-    opts.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = vb;
+    opts.activation_heights[Consensus::BuriedDeployment::DEPLOYMENT_DIGIDOLLAR] = 650;  // EarliestDigiDollarActivationHeight -> 650
     const auto params = CChainParams::RegTest(opts);
 
     // A DD-mint-structured transaction whose collateral output sits BELOW the floor.
@@ -13989,26 +13986,27 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04a_bip9_signaling_bit_no_algo_interference)
 
 BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
 {
-    // ATTACK: Are the mainnet BIP9 parameters set safely?
-    // Check: threshold/window ratio, timeout duration, min_activation_height alignment.
+    // POST-BURIAL VERIFICATION: The mainnet BIP9 bit-23 deployment ran to
+    // completion on-chain and is now buried (BIP90) at its actual activation
+    // height. Check: burial height pin, window alignment, and ordering
+    // against the static DD/oracle floor gates.
 
     const auto mainParams = CChainParams::Main();
     const Consensus::Params& mainnet = mainParams->GetConsensus();
-    const auto& deployment = mainnet.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
 
     int mainnet_window = mainnet.nMinerConfirmationWindow;
     int mainnet_threshold = mainnet.nRuleChangeActivationThreshold;
-    int64_t mainnet_start = deployment.nStartTime;
-    int64_t mainnet_timeout = deployment.nTimeout;
-    int mainnet_min_activation = deployment.min_activation_height;
+    int mainnet_burial = mainnet.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 
-    BOOST_CHECK_EQUAL(mainnet_start, 1780272000);   // June 1, 2026
-    BOOST_CHECK_EQUAL(mainnet_timeout, 1811808000); // June 1, 2027
-    BOOST_CHECK_EQUAL(mainnet_min_activation, 23627520);
-    BOOST_CHECK_EQUAL(mainnet_min_activation, mainnet.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(mainnet_burial, 23869440); // historical BIP9 'since' height
+
+    // The static DD/oracle floor gates retain the historical
+    // min_activation_height floor, at or below the burial height.
+    BOOST_CHECK_EQUAL(mainnet.nDDActivationHeight, 23627520);
     BOOST_CHECK_EQUAL(mainnet.nOracleActivationHeight, mainnet.nDDActivationHeight);
+    BOOST_CHECK(mainnet.nDDActivationHeight <= mainnet_burial);
 
-    // Verify threshold is 70% of window
+    // Verify the (still-configured) versionbits threshold is 70% of window
     double threshold_pct = (double)mainnet_threshold / mainnet_window * 100.0;
     BOOST_CHECK_CLOSE(threshold_pct, 70.0, 0.01);
 
@@ -14016,36 +14014,19 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04b_bip9_mainnet_parameters_safety)
     int expected_blocks_per_week = 7 * 24 * 60 * 60 / 15;
     BOOST_CHECK_EQUAL(mainnet_window, expected_blocks_per_week);
 
-    // Verify 1-year timeout window (adequate time for ecosystem adoption)
-    int64_t timeout_duration_days = (mainnet_timeout - mainnet_start) / (24 * 60 * 60);
-    BOOST_CHECK(timeout_duration_days >= 365); // At least 1 year
+    // Verify the burial height is aligned to the confirmation window
+    // (BIP9 ACTIVE always began at a period boundary: 23869440 = 592 * 40320)
+    BOOST_CHECK_EQUAL(mainnet_burial % mainnet_window, 0);
 
-    // Verify min_activation_height is aligned to confirmation window
-    BOOST_CHECK_EQUAL(mainnet_min_activation % mainnet_window, 0);
+    // Verify the burial height is not below the historical activation floor
+    BOOST_CHECK(mainnet_burial >= 23627520);
 
-    // Verify min_activation_height gives adequate lead time
-    // Mainnet start is pinned to the first BIP9 period boundary after the
-    // June 1, 2026 deployment start estimate.
-    BOOST_CHECK(mainnet_min_activation >= 23627520);
-
-    // Multi-algo hashrate analysis:
-    // 5 algorithms → each algo gets ~20% of blocks (8064 per window)
-    // To prevent 70% signaling, attacker needs >30% non-signaling blocks
-    // = >12096 blocks per window
-    // Controlling 100% of 1 algo = 8064 blocks = 20% → NOT enough
-    // Need >1.5 algorithms fully controlled or >30% across multiple algos
-    int blocks_per_algo = mainnet_window / 5;
-    int non_signal_needed = mainnet_window - mainnet_threshold; // 12096
-    double algos_needed = (double)non_signal_needed / blocks_per_algo;
-    BOOST_CHECK(algos_needed > 1.0); // Can't block with just 1 algo
-
-    BOOST_TEST_MESSAGE("T7-04b: Mainnet BIP9 parameters are safely configured ✅ — "
-        "70% threshold in 40320-block (1-week) windows. "
-        "1-year timeout (June 2026 → June 2027) gives adequate adoption time. "
-        "min_activation_height 23,627,520 properly aligned to window boundary. "
-        "Multi-algo defense: controlling 100% of 1 algorithm (20% of blocks) is "
-        "insufficient to prevent activation — need >30% combined hashrate across "
-        "multiple algorithms.");
+    BOOST_TEST_MESSAGE("T7-04b: Mainnet burial parameters are safely configured ✅ — "
+        "DigiDollar buried at 23,869,440 (= 592 × 40320, window-aligned), "
+        "at/above the historical min_activation_height floor 23,627,520 that the "
+        "static nDDActivationHeight/nOracleActivationHeight gates retain. "
+        "No live signaling remains — activation can no longer be vetoed, "
+        "stalled, or moved by miners.");
 }
 
 BOOST_AUTO_TEST_CASE(redteam_t7_04c_bip9_locked_in_irreversible)
@@ -14237,43 +14218,39 @@ BOOST_AUTO_TEST_CASE(redteam_t7_04f_dd_marker_version_vs_block_version)
 
 BOOST_AUTO_TEST_CASE(redteam_t7_04g_testnet_bip9_parameters_consistency)
 {
-    // VERIFICATION: Check testnet BIP9 parameters are consistent and reasonable
-    // for testing activation flow without selfish mining concerns.
+    // VERIFICATION: The testnet26 BIP9 run completed on-chain
+    // (DEFINED 0-199 → STARTED 200-399 → LOCKED_IN 400-599 → ACTIVE 600)
+    // and the deployment is now buried at that historical activation height.
 
-    // Testnet parameters from chainparams.cpp
-    int testnet_window = 200;
-    int testnet_threshold = 140;     // 70%
-    int testnet_min_activation = 600;
-    int64_t testnet_timeout = 1830297600; // Jan 1, 2028
+    const auto testnet_params = CChainParams::TestNet();
+    const auto& testnet_consensus = testnet_params->GetConsensus();
 
-    // Verify threshold is 70%
-    double threshold_pct = (double)testnet_threshold / testnet_window * 100.0;
-    BOOST_CHECK_CLOSE(threshold_pct, 70.0, 0.01);
+    int testnet_window = testnet_consensus.nMinerConfirmationWindow;
+    int testnet_burial = testnet_consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 
-    // Verify activation sequence:
-    // DEFINED(0-199) → STARTED(200-399) → LOCKED_IN(400-599) → ACTIVE(600+)
-    int active_at = 3 * testnet_window;                       // Block 600
+    BOOST_CHECK_EQUAL(testnet_window, 200);
+    BOOST_CHECK_EQUAL(testnet_burial, 600);
 
-    BOOST_CHECK_EQUAL(active_at, testnet_min_activation);
+    // Activation landed on the 3rd period boundary (window-aligned)
+    BOOST_CHECK_EQUAL(testnet_burial % testnet_window, 0);
+    BOOST_CHECK_EQUAL(testnet_burial, 3 * testnet_window);
 
-    // Verify min_activation_height aligns with window boundary
-    BOOST_CHECK_EQUAL(testnet_min_activation % testnet_window, 0);
+    // Burial height matches the static DD/oracle gates on testnet
+    BOOST_CHECK_EQUAL(testnet_consensus.nDDActivationHeight, 600);
+    BOOST_CHECK_EQUAL(testnet_consensus.nOracleActivationHeight, 600);
 
-    // Verify regtest uses ALWAYS_ACTIVE (no signaling needed for unit tests)
+    // Verify regtest buries the deployment at genesis (height 0, the old
+    // ALWAYS_ACTIVE equivalent — no signaling needed for unit tests)
     const auto& regtest_params = CreateChainParams(*m_node.args, ChainType::REGTEST);
     const auto& regtest_consensus = regtest_params->GetConsensus();
     BOOST_CHECK_EQUAL(
-        regtest_consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
-        Consensus::BIP9Deployment::ALWAYS_ACTIVE
-    );
+        regtest_consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), 0);
 
-    BOOST_TEST_MESSAGE("T7-04g: Testnet BIP9 parameters consistent ✅ — "
-        "200-block windows, 70% threshold (140/200). "
-        "Activation at block 600 (3rd period boundary). "
-        "Regtest uses ALWAYS_ACTIVE for unit test compatibility. "
-        "Testnet activation sequence: DEFINED(0-199) → STARTED(200-399) → "
-        "LOCKED_IN(400-599) → ACTIVE(600+). "
-        "min_activation_height (600) properly aligned to window boundary.");
+    BOOST_TEST_MESSAGE("T7-04g: Testnet burial parameters consistent ✅ — "
+        "DigiDollar buried at 600 (= 3 × 200-block windows; historical BIP9 "
+        "sequence DEFINED(0-199) → STARTED(200-399) → LOCKED_IN(400-599) → "
+        "ACTIVE(600+)). Burial height matches the static DD/oracle gates. "
+        "Regtest buries at height 0 for unit test compatibility.");
 }
 
 // ============================================================================
@@ -18793,29 +18770,26 @@ BOOST_AUTO_TEST_CASE(redteam_t10_04i_structural_validation_softfail_analysis)
 
 BOOST_AUTO_TEST_CASE(redteam_t10_05a_bip9_state_at_activation_boundary)
 {
-    // Verify BIP9 state transitions at exact activation boundary
-    // Testnet: Window=200, min_activation_height=600
-    // Period boundaries: 199, 399, 599, 799...
-    // DEFINED(0-199) → STARTED(200-399) → LOCKED_IN(400-599) → ACTIVE(600+)
-    BOOST_TEST_MESSAGE("=== T10-05a: BIP9 state at activation boundary ===");
+    // Verify the buried activation boundary (historically the BIP9 sequence
+    // on testnet: window=200, DEFINED(0-199) → STARTED(200-399) →
+    // LOCKED_IN(400-599) → ACTIVE(600+); now a fixed burial height)
+    BOOST_TEST_MESSAGE("=== T10-05a: buried activation state at boundary ===");
 
     const auto& params = Params().GetConsensus();
     const int window = params.nMinerConfirmationWindow;
 
-    // Testnet has window=200, min_activation_height=600
-    // Regtest has ALWAYS_ACTIVE
-    const auto& dd_deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    // Testnet buries at 600, mainnet at 23869440; regtest at 0 (genesis)
+    const int dd_height = params.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 
-    if (dd_deployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE) {
-        BOOST_TEST_MESSAGE("  Regtest: ALWAYS_ACTIVE — state machine skipped entirely");
-        BOOST_TEST_MESSAGE("  min_activation_height: " << dd_deployment.min_activation_height);
-        BOOST_CHECK_EQUAL(dd_deployment.min_activation_height, 0);
-        // ALWAYS_ACTIVE returns ACTIVE immediately for ANY pindexPrev
-        // No boundary to test — DD is active from genesis
+    if (dd_height == 0) {
+        BOOST_TEST_MESSAGE("  Regtest: buried at height 0 — active from genesis");
+        // Active immediately for ANY pindexPrev — no boundary to test
     } else {
-        // Testnet path (nMinerConfirmationWindow=200, min_activation_height=600)
+        // Mainnet/testnet path: the burial height is window-aligned because
+        // BIP9 ACTIVE always began at a period boundary
         BOOST_TEST_MESSAGE("  Window: " << window);
-        BOOST_TEST_MESSAGE("  min_activation_height: " << dd_deployment.min_activation_height);
+        BOOST_TEST_MESSAGE("  burial height: " << dd_height);
+        BOOST_CHECK_EQUAL(dd_height % window, 0);
     }
 
     // Verify DeploymentActiveAfter semantics:

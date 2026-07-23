@@ -7,7 +7,7 @@
  *
  * Pins the exact pre/post-activation contract enforced by the DigiDollar
  * runtime gates:
- *   - DigiDollar::IsDigiDollarEnabled(pindexPrev, ...)         (BIP9 ACTIVE-after gate)
+ *   - DigiDollar::IsDigiDollarEnabled(pindexPrev, ...)         (buried-height gate, BIP90)
  *   - Consensus::IsOracleActive(params, height)                (height gate)
  *   - Consensus::IsMuSig2Active(params, height)                (height gate)
  *   - OracleDataValidator::ValidateBlockOracleData             (block-level gate)
@@ -28,9 +28,10 @@
  *   4. Pre-activation OP_ORACLE-looking outputs are ignored (no DD reject
  *      reason); post-activation the same script shape is enforced under V1
  *      MuSig2-only rules.
- *   5. Deployment-state predicates flow DEFINED → STARTED → LOCKED_IN →
- *      ACTIVE; IsDigiDollarEnabled is false in DEFINED/STARTED/LOCKED_IN and
- *      true in ACTIVE, gated by the BIP9 versionbits cache.
+ *   5. DigiDollar is a buried deployment (BIP90): IsDigiDollarEnabled is a
+ *      pure height comparison against
+ *      DeploymentHeight(DEPLOYMENT_DIGIDOLLAR) — false for every block below
+ *      the buried height, true at/after it, monotone along any chain.
  *
  * Coordinated with Agent A (security/exploit) and Agent C
  * (multi-node functional `digidollar_activation_multinode.py`). This suite
@@ -105,7 +106,7 @@ CBlockIndex* MakeIndex(CBlockIndex* prev, int height, uint32_t nTime, int32_t nV
 
 // Builds a chain of `count` synthetic CBlockIndex starting at `start_height`
 // with monotonically increasing timestamps. Each block carries the supplied
-// nVersion so signaling vs non-signaling can be controlled per slot.
+// nVersion (activation is buried, so nVersion no longer influences it).
 CBlockIndex* MakeChain(int start_height, int count, int64_t base_time, int32_t nVersion)
 {
     CBlockIndex* tip = nullptr;
@@ -286,123 +287,57 @@ OracleResult RunValidator(const CBlock& block, const Consensus::Params& params, 
     return {ok, state.GetRejectReason()};
 }
 
-// Drives BIP9 from DEFINED through ACTIVE on a synthetic chain, returning a
-// reference (params, end-of-ACTIVE-tip) so callers can probe IsDigiDollarEnabled
-// at boundary heights. Threshold/window are intentionally tiny to keep tests
-// deterministic and fast.
-struct StateMachineFixture {
-    Consensus::Params params;
-    CBlockIndex* tip_defined{nullptr};
-    CBlockIndex* tip_started{nullptr};
-    CBlockIndex* tip_locked_in{nullptr};
-    CBlockIndex* tip_active{nullptr};
-};
-
-StateMachineFixture BuildStateMachine()
-{
-    StateMachineFixture fx;
-    fx.params = Params().GetConsensus();
-    fx.params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime = 1'000'000'000;
-    fx.params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nTimeout = 3'000'000'000;
-    fx.params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height = 0;
-    fx.params.nRuleChangeActivationThreshold = 3;
-    fx.params.nMinerConfirmationWindow = 4;
-
-    const uint32_t signal_bit = 1U << fx.params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit;
-    const int32_t signaling_version = VERSIONBITS_TOP_BITS | static_cast<int32_t>(signal_bit);
-
-    // Phase 1: 11 blocks before nStartTime → DEFINED at the next period boundary.
-    CBlockIndex* tip = nullptr;
-    for (int i = 0; i < 11; ++i) {
-        tip = MakeIndex(tip, i, static_cast<uint32_t>(999'999'900 + i * 10));
-    }
-    fx.tip_defined = tip;
-
-    // Phase 2: 10 blocks past nStartTime → STARTED at next period boundary.
-    for (int i = 0; i < 10; ++i) {
-        tip = MakeIndex(tip, tip->nHeight + 1, static_cast<uint32_t>(1'000'000'100 + i * 10));
-    }
-    fx.tip_started = tip;
-
-    // Phase 3: signal in 3 of 4 slots in the next period → LOCKED_IN.
-    for (int i = 0; i < 3; ++i) {
-        tip = MakeIndex(tip, tip->nHeight + 1, static_cast<uint32_t>(1'500'000'001 + i * 10), signaling_version);
-    }
-    tip = MakeIndex(tip, tip->nHeight + 1, 1'500'000'031);
-    fx.tip_locked_in = tip;
-
-    // Phase 4: another full period → ACTIVE.
-    for (int i = 0; i < 4; ++i) {
-        tip = MakeIndex(tip, tip->nHeight + 1, static_cast<uint32_t>(1'500'000'100 + i * 10));
-    }
-    fx.tip_active = tip;
-    return fx;
-}
-
 } // namespace wave12
 
 BOOST_FIXTURE_TEST_SUITE(digidollar_activation_wave12_tests, RegTestingSetup)
 
 // =============================================================================
-// PART 1 — Activation predicate boundary (BIP9-driven)
+// PART 1 — Activation predicate boundary (buried height, BIP90)
 // =============================================================================
 
-// State predicate flow: every transition is exact and IsDigiDollarEnabled is
-// false until ACTIVE, true on ACTIVE.
-BOOST_AUTO_TEST_CASE(wave12_state_machine_predicates_match_bip9_states)
+// DigiDollar is a buried deployment: IsDigiDollarEnabled is a pure height
+// comparison against DeploymentHeight(DEPLOYMENT_DIGIDOLLAR). Off-by-one on
+// the boundary: the tip at height N-1 judges block N (the first active
+// block) → true; the tip at N-2 judges block N-1 → false. The predicate is
+// trivially monotone along any chain — pinned here so a future refactor that
+// reintroduces state-dependent activation trips this walk.
+BOOST_AUTO_TEST_CASE(wave12_buried_height_off_by_one_boundary)
 {
-    wave12::StateMachineFixture fx = wave12::BuildStateMachine();
-    VersionBitsCache cache;
+    constexpr int BOUNDARY = 100;
+    CChainParams::RegTestOptions opts;
+    opts.digidollar_activation_height = BOUNDARY;
+    const auto chainparams = CChainParams::RegTest(opts);
+    const Consensus::Params& params = chainparams->GetConsensus();
+    BOOST_REQUIRE_EQUAL(params.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), BOUNDARY);
 
-    BOOST_CHECK_EQUAL(cache.State(fx.tip_defined, fx.params, Consensus::DEPLOYMENT_DIGIDOLLAR), ThresholdState::DEFINED);
-    BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(fx.tip_defined, fx.params));
+    const uint32_t t = static_cast<uint32_t>(GetTime());
+    CBlockIndex* tip = wave12::MakeChain(0, BOUNDARY + 4, t - 600 * (BOUNDARY + 4), VERSIONBITS_TOP_BITS);
 
-    BOOST_CHECK_EQUAL(cache.State(fx.tip_started, fx.params, Consensus::DEPLOYMENT_DIGIDOLLAR), ThresholdState::STARTED);
-    BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(fx.tip_started, fx.params));
-
-    BOOST_CHECK_EQUAL(cache.State(fx.tip_locked_in, fx.params, Consensus::DEPLOYMENT_DIGIDOLLAR), ThresholdState::LOCKED_IN);
-    BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(fx.tip_locked_in, fx.params));
-
-    BOOST_CHECK_EQUAL(cache.State(fx.tip_active, fx.params, Consensus::DEPLOYMENT_DIGIDOLLAR), ThresholdState::ACTIVE);
-    BOOST_CHECK(DigiDollar::IsDigiDollarEnabled(fx.tip_active, fx.params));
-}
-
-// Off-by-one boundary on the BIP9-active side: the very first block AFTER the
-// transition has IsDigiDollarEnabled=true; the last block before has false.
-BOOST_AUTO_TEST_CASE(wave12_bip9_off_by_one_boundary)
-{
-    wave12::StateMachineFixture fx = wave12::BuildStateMachine();
-
-    // tip_locked_in is height 24, the period boundary that flipped to ACTIVE
-    // at height 27 in BuildStateMachine. DigiDollar enforces activation
-    // *after* ACTIVE — so:
-    //   prev=tip_locked_in     -> still LOCKED_IN  -> false
-    //   prev=tip_active        -> ACTIVE           -> true
-    BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(fx.tip_locked_in, fx.params));
-    BOOST_CHECK(DigiDollar::IsDigiDollarEnabled(fx.tip_active, fx.params));
-
-    // Walk every height from tip_locked_in up to tip_active and confirm that
-    // IsDigiDollarEnabled is monotone — at most one transition false→true
-    // and never true→false. CBlockIndex does not maintain a forward pointer
-    // in this test fixture, so we collect the chain by walking pprev from
-    // tip_active and reversing. (synthetic chains do not have pnext set.)
+    // Collect the chain root..tip by walking pprev and reversing (synthetic
+    // chains do not have pnext set).
     std::vector<CBlockIndex*> chain;
-    for (CBlockIndex* p = fx.tip_active; p != nullptr; p = p->pprev) chain.push_back(p);
+    for (CBlockIndex* p = tip; p != nullptr; p = p->pprev) chain.push_back(p);
     std::reverse(chain.begin(), chain.end());
 
     bool prev_state = false;
     int transitions = 0;
     bool seen_true = false;
     for (CBlockIndex* idx : chain) {
-        const bool now = DigiDollar::IsDigiDollarEnabled(idx, fx.params);
+        const bool now = DigiDollar::IsDigiDollarEnabled(idx, params);
+        BOOST_CHECK_EQUAL(now, idx->nHeight + 1 >= BOUNDARY);
         if (idx != chain.front() && now != prev_state) ++transitions;
         BOOST_CHECK_MESSAGE(!(seen_true && !now),
             "IsDigiDollarEnabled must be monotone — observed true→false at h=" << idx->nHeight);
         if (now) seen_true = true;
         prev_state = now;
     }
-    BOOST_CHECK_LE(transitions, 1);
-    BOOST_CHECK(DigiDollar::IsDigiDollarEnabled(fx.tip_active, fx.params));
+    BOOST_CHECK_EQUAL(transitions, 1);
+
+    // Explicit boundary pins.
+    BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(nullptr, params));                // judges block 0
+    BOOST_CHECK(!DigiDollar::IsDigiDollarEnabled(chain[BOUNDARY - 2], params));    // judges block N-1
+    BOOST_CHECK(DigiDollar::IsDigiDollarEnabled(chain[BOUNDARY - 1], params));     // judges block N
+    BOOST_CHECK(DigiDollar::IsDigiDollarEnabled(tip, params));
 }
 
 // =============================================================================
@@ -411,17 +346,15 @@ BOOST_AUTO_TEST_CASE(wave12_bip9_off_by_one_boundary)
 
 // Regtest intentionally has two activation surfaces:
 //   - oracle P2P/height gate remains at nDDActivationHeight=650
-//   - MuSig2 follows the effective DigiDollar BIP9 boundary, which is 0 for
-//     default ALWAYS_ACTIVE regtest
+//   - MuSig2 follows the effective DigiDollar activation boundary, which is
+//     the buried DigiDollarHeight=0 on default regtest
 // Off-by-one in either direction is asserted explicitly.
 BOOST_AUTO_TEST_CASE(wave12_height_gates_off_by_one_regtest)
 {
     const Consensus::Params& params = Params().GetConsensus();
     BOOST_REQUIRE_EQUAL(params.nDDActivationHeight, 650);
     BOOST_REQUIRE_EQUAL(params.nOracleActivationHeight, params.nDDActivationHeight);
-    BOOST_REQUIRE_EQUAL(
-        params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
-        Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    BOOST_REQUIRE_EQUAL(params.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), 0);
     BOOST_REQUIRE_EQUAL(params.nDigiDollarMuSig2Height, 0);
 
     BOOST_CHECK(!Consensus::IsOracleActive(params, params.nDDActivationHeight - 1));
@@ -540,23 +473,24 @@ BOOST_AUTO_TEST_CASE(wave12_pre_activation_dd_marker_block_not_rejected_for_dd)
 }
 
 // =============================================================================
-// PART 4 — ValidateBlockOracleData via pindex_prev (BIP9 path)
+// PART 4 — ValidateBlockOracleData via pindex_prev (deployment path)
 // =============================================================================
 
 // When the validator is given pindex_prev, it consults
 // IsDigiDollarEnabled(pindex_prev, params) instead of the BIP34 height fall-
-// back. On regtest BIP9 is ALWAYS_ACTIVE, so even at heights below
-// nDDActivationHeight the BIP9 gate fires — and a DD-touching block without a
-// bundle is rejected. This documents the rh51 split: the nullptr-path uses
-// nDDActivationHeight as the height gate but the pindex_prev-path uses BIP9
-// directly, so the two paths diverge on regtest for blocks 0..649.
+// back. On default regtest the buried DigiDollarHeight is 0, so even at
+// heights below nDDActivationHeight the deployment gate fires — and a
+// DD-touching block without a bundle is rejected. This documents the rh51
+// split: the nullptr-path uses nDDActivationHeight as the height gate but the
+// pindex_prev-path uses the buried deployment height directly, so the two
+// paths diverge on regtest for blocks 0..649.
 //
 // The expected behaviour is therefore intentionally asymmetric: the
 // nullptr-path test (PART 3) accepts pre-activation DD blocks; the prev-path
-// test rejects them when BIP9 already considers DD enabled. Pinning both
-// halves prevents accidental refactors that flatten the split into one
-// behaviour.
-BOOST_AUTO_TEST_CASE(wave12_validator_prev_path_uses_bip9_not_height_gate)
+// test rejects them when the buried deployment already considers DD enabled.
+// Pinning both halves prevents accidental refactors that flatten the split
+// into one behaviour.
+BOOST_AUTO_TEST_CASE(wave12_validator_prev_path_uses_deployment_not_height_gate)
 {
     OracleBundleManager::GetInstance().Clear();
     const Consensus::Params& params = Params().GetConsensus();
@@ -570,12 +504,12 @@ BOOST_AUTO_TEST_CASE(wave12_validator_prev_path_uses_bip9_not_height_gate)
     CBlock block = wave12::MakeBlock(h_pre, t, {}, {wave12::MakeDDTransaction(DD_TX_MINT)});
     wave12::OracleResult r = wave12::RunValidator(block, params, prev);
 
-    // On regtest with BIP9 ALWAYS_ACTIVE, the prev-path validator considers
-    // DD enabled and enforces the bundle requirement. This is the rh51-
-    // documented asymmetry vs the nullptr-path height short-circuit at
-    // h < 650 that PART 3 exercises.
+    // On default regtest the buried deployment is active from height 0, so
+    // the prev-path validator considers DD enabled and enforces the bundle
+    // requirement. This is the rh51-documented asymmetry vs the nullptr-path
+    // height short-circuit at h < 650 that PART 3 exercises.
     BOOST_TEST_MESSAGE("  regtest prev-path @ h=" << h_pre
-                       << " (BIP9 active): ok=" << r.ok
+                       << " (buried active): ok=" << r.ok
                        << " reject='" << r.reject_reason << "'");
     BOOST_CHECK(!r.ok);
     BOOST_CHECK_EQUAL(r.reject_reason, "bad-oracle-missing");
@@ -583,7 +517,7 @@ BOOST_AUTO_TEST_CASE(wave12_validator_prev_path_uses_bip9_not_height_gate)
 
 // The mirror of the prev-path test at exactly the boundary: prev->nHeight =
 // nDDActivationHeight - 1, building block at nDDActivationHeight. Whether the
-// height-gate or the BIP9-gate fires, the FIRST DD-touching block at the
+// height-gate or the buried deployment-gate fires, the FIRST DD-touching block at the
 // activation height MUST be enforced. This is the canonical "first DD block"
 // boundary check on the prev path.
 BOOST_AUTO_TEST_CASE(wave12_validator_with_pindex_prev_at_activation_enforces)
@@ -635,7 +569,7 @@ BOOST_AUTO_TEST_CASE(wave12_non_dd_blocks_accepted_across_boundary)
 // translation unit; we reach it via a thin wrapper rather than re-implementing
 // it. Direct call isn't visible at link time because it's static, so we
 // exercise its branch through ValidateBlockOracleData (which shares the
-// nullptr/pindex_prev dispatch and BIP9/height gate). Track DD-FA-TEST-014 for
+// nullptr/pindex_prev dispatch and deployment/height gate). Track DD-FA-TEST-014 for
 // a future direct probe if we ever export the helper.
 
 // Pre-activation, a coinbase that already carries an OP_ORACLE bundle of any
@@ -677,8 +611,8 @@ BOOST_AUTO_TEST_CASE(wave12_preactivation_dd_marker_only_not_rejected_for_dd)
 
     // DD-marker tx with absolutely no DD OP_RETURN. Pre-activation, the
     // ValidateBlockOracleData hook should never reach the
-    // BlockTouchesDigiDollar branch. This pins the contract that the BIP9
-    // gate is the ONLY boundary, not the marker.
+    // BlockTouchesDigiDollar branch. This pins the contract that the
+    // activation gate is the ONLY boundary, not the marker.
     CBlock block = wave12::MakeBlock(h_pre, t, {}, {wave12::MakeDDTransaction(DD_TX_REDEEM)});
     wave12::OracleResult r = wave12::RunValidator(block, params);
     BOOST_CHECK(r.ok);
@@ -711,8 +645,8 @@ BOOST_AUTO_TEST_CASE(wave12_postactivation_dd_marker_no_bundle_rejected_for_orac
 // Pin the chainparams so that MuSig2 follows the effective DigiDollar
 // activation boundary on every network. On mainnet/testnet that is the same
 // numeric height as nDDActivationHeight; default regtest is special because
-// DigiDollar BIP9 is ALWAYS_ACTIVE at height 0 while the oracle P2P height gate
-// remains at 650 for local testing.
+// the buried DigiDollarHeight is 0 while the oracle P2P height gate remains
+// at 650 for local testing.
 BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
 {
     struct Expected {
@@ -720,10 +654,11 @@ BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
         int dd_height;
         int oracle_height;
         int musig2_height;
+        int buried_height;
     } cases[] = {
-        {ChainType::REGTEST, 650, 650, 0},
-        {ChainType::TESTNET, 600, 600, 600},
-        {ChainType::MAIN, 23627520, 23627520, 23627520},
+        {ChainType::REGTEST, 650, 650, 0, 0},
+        {ChainType::TESTNET, 600, 600, 600, 600},
+        {ChainType::MAIN, 23627520, 23627520, 23627520, 23869440},
     };
 
     for (const auto& c : cases) {
@@ -732,20 +667,18 @@ BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
         BOOST_TEST_MESSAGE("  chain=" << static_cast<int>(c.chain)
                            << " dd=" << p.nDDActivationHeight
                            << " oracle=" << p.nOracleActivationHeight
-                           << " musig2=" << p.nDigiDollarMuSig2Height);
+                           << " musig2=" << p.nDigiDollarMuSig2Height
+                           << " buried=" << p.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR));
         BOOST_CHECK_EQUAL(p.nDDActivationHeight, c.dd_height);
         BOOST_CHECK_EQUAL(p.nOracleActivationHeight, c.oracle_height);
         BOOST_CHECK_EQUAL(p.nDigiDollarMuSig2Height, c.musig2_height);
+        BOOST_CHECK_EQUAL(p.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), c.buried_height);
         // Oracle P2P height never lives below the DD height gate; otherwise
         // the oracle message surface could open before the static DD gate.
         BOOST_CHECK_GE(p.nOracleActivationHeight, p.nDDActivationHeight);
         if (c.chain == ChainType::REGTEST) {
-            BOOST_CHECK_EQUAL(
-                p.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
-                Consensus::BIP9Deployment::ALWAYS_ACTIVE);
-            BOOST_CHECK_EQUAL(
-                p.nDigiDollarMuSig2Height,
-                p.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height);
+            BOOST_CHECK_EQUAL(p.nDigiDollarMuSig2Height,
+                              p.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR));
         } else {
             BOOST_CHECK_EQUAL(p.nDigiDollarMuSig2Height, p.nDDActivationHeight);
         }
@@ -756,35 +689,43 @@ BOOST_AUTO_TEST_CASE(wave12_chainparams_collapsed_activation_triggers)
     SelectParams(ChainType::REGTEST);
 }
 
-// On mainnet, BIP9 min_activation_height MUST equal nDDActivationHeight
-// because the runtime checks both predicates and a mismatch creates a
-// pre-/post-activation window where the two disagree. Regression-pin this
-// invariant so tunings keep them aligned.
-BOOST_AUTO_TEST_CASE(wave12_mainnet_bip9_minheight_matches_nDDActivationHeight)
+// On mainnet the buried DigiDollar activation height (BIP9 'since' =
+// 23,869,440) sits ABOVE the static nDDActivationHeight floor (23,627,520 —
+// the historical BIP9 min_activation_height): signaling locked in later than
+// the earliest allowed window, so post-burial the two values are no longer
+// equal. The floor must stay at its historical value (it drives
+// EarliestActivationFloor and the prune-lock/coin-gate contract) and must
+// never exceed the buried activation height on mainnet.
+BOOST_AUTO_TEST_CASE(wave12_mainnet_buried_height_vs_static_floor)
 {
     SelectParams(ChainType::MAIN);
     const auto& p = Params().GetConsensus();
-    const int min_height = p.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height;
-    BOOST_CHECK_EQUAL(min_height, p.nDDActivationHeight);
+    const int buried_height = p.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
+    BOOST_CHECK_EQUAL(buried_height, 23869440);
+    BOOST_CHECK_EQUAL(p.nDDActivationHeight, 23627520);
+    BOOST_CHECK_LE(p.nDDActivationHeight, buried_height);
+    BOOST_CHECK_EQUAL(DigiDollar::EarliestActivationFloor(p), p.nDDActivationHeight);
     SelectParams(ChainType::REGTEST);
 }
 
-// On testnet, same invariant: the BIP9 min activation height matches
-// nDDActivationHeight so a node that boots with stale chainparams cannot
-// straddle the boundary.
-BOOST_AUTO_TEST_CASE(wave12_testnet_bip9_minheight_matches_nDDActivationHeight)
+// On testnet the buried activation height and the static gates collapse to
+// the same block (600): DigiDollar locked in at exactly the
+// min_activation_height floor, so a node that boots with stale chainparams
+// cannot straddle the boundary.
+BOOST_AUTO_TEST_CASE(wave12_testnet_buried_height_matches_nDDActivationHeight)
 {
     SelectParams(ChainType::TESTNET);
     const auto& p = Params().GetConsensus();
-    const int min_height = p.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].min_activation_height;
-    BOOST_CHECK_EQUAL(min_height, p.nDDActivationHeight);
+    BOOST_CHECK_EQUAL(p.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), 600);
+    BOOST_CHECK_EQUAL(p.nDDActivationHeight, 600);
+    BOOST_CHECK_EQUAL(DigiDollar::EarliestActivationFloor(p), 600);
     SelectParams(ChainType::REGTEST);
 }
 
 // =============================================================================
 // PART 9 — DD-FA-SEC-010: SpendsDigiDollarCollateralVault activation-height
-// optimization must not falsely skip vaults that BIP9 already considers
-// post-activation.
+// optimization must not falsely skip vaults that the buried deployment
+// already considers post-activation.
 // =============================================================================
 //
 // `SpendsDigiDollarCollateralVault` short-circuits when `coin.nHeight <
@@ -792,31 +733,30 @@ BOOST_AUTO_TEST_CASE(wave12_testnet_bip9_minheight_matches_nDDActivationHeight)
 // `IsMintCollateralOutput` tx-db lookup for coins minted before DigiDollar
 // could possibly exist).
 //
-// On mainnet/testnet `nDDActivationHeight == BIP9 min_activation_height`, so
-// the optimization is equivalent to "BIP9 was not yet ACTIVE for this coin"
-// and is safe.
+// On mainnet/testnet the static floor never exceeds the buried
+// DigiDollarHeight, so the optimization is equivalent to "the deployment was
+// not yet active for this coin" and is safe.
 //
-// On regtest with default settings BIP9 is ALWAYS_ACTIVE
-// (min_activation_height=0) but `nDDActivationHeight=650`. A vault minted
-// during the IBD/catch-up window where ConnectBlock skips oracle validation
-// could land at coin.nHeight < 650. The optimization then *skips* the vault
-// detection for that coin, and a later non-DD spend bypasses the
-// `bad-collateral-spend-missing-dd-burn` consensus check.
+// On regtest with default settings the buried DigiDollarHeight is 0 but
+// `nDDActivationHeight=650`. A vault minted during the IBD/catch-up window
+// where ConnectBlock skips oracle validation could land at coin.nHeight <
+// 650. The optimization then *skips* the vault detection for that coin, and
+// a later non-DD spend bypasses the `bad-collateral-spend-missing-dd-burn`
+// consensus check.
 //
-// The fix uses BIP9's min_activation_height when the deployment is
-// ALWAYS_ACTIVE, so the optimization never crosses the BIP9 boundary.
-// This test pins the post-fix behaviour: a registered vault at coin.nHeight
-// = 100 (well below nDDActivationHeight=650, but BIP9-active on regtest)
-// MUST be detected as a vault by SpendsDigiDollarCollateralVault.
-BOOST_AUTO_TEST_CASE(wave12_regtest_low_height_vault_detection_consistent_with_bip9)
+// The fix floors the optimization at EarliestActivationFloor (min of the
+// static gate and the buried height), so it never crosses the deployment
+// boundary. This test pins the post-fix behaviour: a registered vault at
+// coin.nHeight = 100 (well below nDDActivationHeight=650, but
+// deployment-active on regtest) MUST be detected as a vault by
+// SpendsDigiDollarCollateralVault.
+BOOST_AUTO_TEST_CASE(wave12_regtest_low_height_vault_detection_consistent_with_burial)
 {
     SelectParams(ChainType::REGTEST);
     const CChainParams& chainparams = Params();
     const Consensus::Params& consensus = chainparams.GetConsensus();
     BOOST_REQUIRE_EQUAL(consensus.nDDActivationHeight, 650);
-    BOOST_REQUIRE_EQUAL(
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
-        Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    BOOST_REQUIRE_EQUAL(consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), 0);
     BOOST_REQUIRE(DigiDollar::IsDigiDollarEnabled(/*pindexPrev=*/nullptr, consensus));
 
     // Forge a vault script and register it. Real mints would set this in
@@ -855,12 +795,12 @@ BOOST_AUTO_TEST_CASE(wave12_regtest_low_height_vault_detection_consistent_with_b
         /*skipOracle=*/true);
 
     const bool spends_vault = DigiDollar::SpendsDigiDollarCollateralVault(*ref, ctx);
-    BOOST_TEST_MESSAGE("  regtest BIP9-active vault @ coin.nHeight=" << COIN_HEIGHT
+    BOOST_TEST_MESSAGE("  regtest deployment-active vault @ coin.nHeight=" << COIN_HEIGHT
                        << " (nDDActivationHeight=" << consensus.nDDActivationHeight
                        << ") detected_as_vault=" << spends_vault);
 
     BOOST_CHECK_MESSAGE(spends_vault,
-        "DD-FA-SEC-010: registered collateral vault at BIP9-active height "
+        "DD-FA-SEC-010: registered collateral vault at deployment-active height "
         << COIN_HEIGHT << " must be detected as a vault even when "
            "coin.nHeight < nDDActivationHeight; got false (production gates "
            "would let a non-DD tx spend the vault without burning DD).");
@@ -872,14 +812,12 @@ BOOST_AUTO_TEST_CASE(wave12_regtest_low_height_vault_detection_consistent_with_b
         "ConnectBlock skip the vault burn-enforcement gate.");
 }
 
-BOOST_AUTO_TEST_CASE(wave26_regtest_startup_oracle_cache_uses_bip9_boundary)
+BOOST_AUTO_TEST_CASE(wave26_regtest_startup_oracle_cache_uses_activation_boundary)
 {
     SelectParams(ChainType::REGTEST);
     const Consensus::Params& consensus = Params().GetConsensus();
     BOOST_REQUIRE_EQUAL(consensus.nDDActivationHeight, 650);
-    BOOST_REQUIRE_EQUAL(
-        consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
-        Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    BOOST_REQUIRE_EQUAL(consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), 0);
 
     const uint32_t t = static_cast<uint32_t>(GetTime());
     CBlockIndex* block = wave12::MakeChain(0, 101, t - 600 * 100, VERSIONBITS_TOP_BITS);
@@ -889,10 +827,10 @@ BOOST_AUTO_TEST_CASE(wave26_regtest_startup_oracle_cache_uses_bip9_boundary)
 
     BOOST_CHECK_MESSAGE(
         OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(block->nHeight, block, consensus),
-        "Wave 26: startup oracle cache reconstruction must follow the BIP9 "
+        "Wave 26: startup oracle cache reconstruction must follow the buried "
         "activation predicate used by ConnectBlock, not raw nDDActivationHeight; "
-        "otherwise default-regtest blocks accepted while BIP9 is ALWAYS_ACTIVE "
-        "are skipped on restart/reindex.");
+        "otherwise default-regtest blocks accepted while the buried deployment "
+        "is active from genesis are skipped on restart/reindex.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

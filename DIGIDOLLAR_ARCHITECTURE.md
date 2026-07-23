@@ -1158,7 +1158,7 @@ size_t LoadFromDatabase();  // ✅ Working - loads all DD data including UTXOs
 |----------|---------|--------|-------|
 | **System Health** | `getdigidollarstats` | ✅ Complete | Network-wide UTXO scanning + system health |
 | | `getdcamultiplier` | ✅ Complete | DCA multiplier calculations |
-| | `getdigidollardeploymentinfo` | ✅ Complete | BIP9 deployment activation info |
+| | `getdigidollardeploymentinfo` | ✅ Complete | Buried deployment activation info (v9.26.5: `type`/`status`/`activation_height`; BIP9 signaling fields removed) |
 | | `getprotectionstatus` | ✅ Complete | DCA/ERR/volatility status |
 | **Collateral** | `calculatecollateralrequirement` | ✅ Complete | Real-time collateral calculation |
 | | `estimatecollateral` | ✅ Complete | Quick collateral estimation |

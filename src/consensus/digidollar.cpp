@@ -9,21 +9,24 @@
 #include <script/script.h>
 
 #include <algorithm>
+#include <limits>
 #include <sstream>
 
 namespace DigiDollar {
 
 int EarliestActivationFloor(const Consensus::Params& params)
 {
-    const auto& deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    if (deployment.nStartTime == Consensus::BIP9Deployment::NEVER_ACTIVE ||
-        deployment.nTimeout == Consensus::BIP9Deployment::NEVER_ACTIVE) {
-        return 0;
+    // DigiDollar is a buried deployment (BIP90). The floor is the lower of the
+    // static nDDActivationHeight gate and the buried activation height —
+    // value-preserving vs the pre-burial BIP9 formula on every network:
+    // mainnet min(23627520, 23869440) = 23627520 (the historical floor),
+    // testnet min(600, 600) = 600, default regtest min(650, 0) = 0, and the
+    // -digidollaractivationheight=N knob gives min(N, N) = N.
+    const int dep_height = params.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
+    if (dep_height == std::numeric_limits<int>::max()) {
+        return 0; // deployment disabled — no floor, matching the old NEVER_ACTIVE contract
     }
-    if (deployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE) {
-        return deployment.min_activation_height;
-    }
-    return std::min(params.nDDActivationHeight, deployment.min_activation_height);
+    return std::min(params.nDDActivationHeight, dep_height);
 }
 
 int GetCollateralRatioForLockTime(int64_t lockBlocks, const ConsensusParams& params)

@@ -2,78 +2,73 @@
 # Copyright (c) 2026 The DigiByte Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Multi-node DigiDollar BIP9 activation, reorg, IBD, and reindex coverage.
+"""Multi-node DigiDollar activation, reorg, IBD, and reindex coverage.
 
 Wave 12 functional auditor scenarios for activation gates and consensus-split
-risk. The test runs against `-digidollaractivationheight` on regtest so the
-BIP9 state machine progresses (DEFINED -> STARTED -> LOCKED_IN -> ACTIVE)
-instead of using the regtest ALWAYS_ACTIVE shortcut.
+risk. DigiDollar is a buried deployment (BIP90): the test runs against
+`-digidollaractivationheight` on regtest, which hardcodes the buried
+activation height (together with the static DD/oracle/MuSig2 gates) instead
+of the default height-0 (always active) regtest burial.
 
-Activation arithmetic (regtest, period = 144 blocks):
-  -digidollaractivationheight=432 sets min_activation_height to 432. State
-  transitions at period boundaries (blocks 143, 287, 431, ...). Concretely:
-    * tip in [0, 142]:   status = defined
-    * tip in [143, 286]: status = started
-    * tip in [287, 430]: status = locked_in
-    * tip in [431, ...]: status = active
+Activation arithmetic (regtest):
+  -digidollaractivationheight=432 buries activation at exactly height 432.
+    * tip in [0, 430]: status = defined, enabled = False
+    * tip in [431, ...]: status = active, enabled = True
 
-  `enabled` from `getdigidollardeploymentinfo` mirrors the BIP9 status
-  because it asks `DeploymentActiveAfter(tip)` for a versionbits deployment,
-  which is true exactly when `State(tip) == ACTIVE`. The first block actually
-  validated under DD-active rules is therefore the block mined on top of an
-  ACTIVE tip (i.e. heights >= 432 in the test config).
+  `enabled` from `getdigidollardeploymentinfo` asks
+  `DeploymentActiveAfter(tip)`, i.e. whether the *next* block is DD-active.
+  The first block validated under DD-active rules is block 432, so the flip
+  happens once the tip reaches height 431.
 
 Scenarios covered:
   1. Two nodes start at height < activation; both reach activation; verify
      deployment state flips simultaneously and `getdigidollardeploymentinfo`
      reports the same activation height on both nodes.
-  2. Reorg across activation: invalidate the activation block and watch DD
-     turn off; reconsider the longer chain and watch DD restore correctly.
+  2. Reorg across activation: invalidate the activation-boundary block and
+     watch DD turn off; reconsider the longer chain and watch DD restore
+     correctly.
   3. Mempool relay: pre-activation, a DD-marker tx submitted via the wallet
      RPC is rejected with "not yet active"; post-activation it is accepted
      and relayed across the link.
   4. Mining template: pre-activation, mined blocks have no OP_ORACLE coinbase
      output; post-activation, only DD-touching blocks carry the v0x03 MuSig2
      bundle in coinbase, while plain (non-DD) blocks still omit it. Bit 23 is
-     signaled in `getblocktemplate.version` for both LOCKED_IN and ACTIVE
-     periods.
+     never signaled in `getblocktemplate.version` (buried deployments do not
+     set version bits); the "digidollar" rule name appears in the template
+     `rules` list once active.
   5. IBD across activation: cold sync a fresh node from genesis through
      activation; verify the gate fires at the right block.
   6. Reindex across activation: restart with `-reindex` and verify the
      deployment state and activation height are both restored.
-  7. RPC `getdigidollardeploymentinfo` reports the correct state at every
-     transition: DEFINED, STARTED, LOCKED_IN, ACTIVE.
+  7. RPC `getdigidollardeploymentinfo` reports the correct state on both
+     sides of the buried boundary: "defined" below, "active" at/after.
 """
 
 from test_framework.test_framework import DigiByteTestFramework
 from test_framework.util import assert_equal
 
 
-REGTEST_PERIOD = 144                 # BIP9 confirmation window on regtest
-BIP9_MIN_ACTIVATION = 432            # min_activation_height used in this test
-# BIP9 transitions at period boundaries (block heights k*144 - 1 = 143, 287, 431).
-# `min_activation_height = 432` means the LOCKED_IN -> ACTIVE flip happens at the
-# block whose `nHeight + 1 >= min_activation_height`, i.e. the period boundary
-# block at height 431. From that tip onward `State(tip) == ACTIVE` and
-# `IsDigiDollarEnabled(tip)` is true, so the first DD-validated block is the
-# block at height 432 (mined on top of the activation tip).
-FIRST_ACTIVE_TIP = 431               # first tip height where State(tip) == ACTIVE
-# `getdigidollardeploymentinfo.activation_height` walks back to the lowest tip
-# height where State(pprev) != ACTIVE. With FIRST_ACTIVE_TIP=431 that walks all
-# the way down to height 431 itself, so the RPC reports 431.
-RPC_ACTIVATION_HEIGHT = FIRST_ACTIVE_TIP
+ACTIVATION_HEIGHT = 432              # buried activation height used in this test
+# The first DD-validated block is block 432, so `IsDigiDollarEnabled(tip)`
+# (and thus `enabled`/`status` from getdigidollardeploymentinfo) flips once
+# the tip reaches height 431 — the next block mined on top of it is DD-active.
+FIRST_ACTIVE_TIP = ACTIVATION_HEIGHT - 1  # first tip height where enabled=True
+# `getdigidollardeploymentinfo.activation_height` reports the buried
+# deployment height exactly (the pre-burial back-scan reported the
+# first-active tip, 431).
+RPC_ACTIVATION_HEIGHT = ACTIVATION_HEIGHT
 
 
 class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
     def set_test_params(self):
         # Three nodes total: 0 and 1 form the always-running pair used for
         # simultaneous-activation, reorg, and mempool relay phases. Node 2 is
-        # a scratch node used for the LOCKED_IN mining template, IBD, and
+        # a scratch node used for the pre-activation mining template, IBD, and
         # reindex phases — we stop and wipe it between sub-tests.
         self.num_nodes = 3
         self.setup_clean_chain = True
         common = [
-            "-digidollaractivationheight={}".format(BIP9_MIN_ACTIVATION),
+            "-digidollaractivationheight={}".format(ACTIVATION_HEIGHT),
             "-dandelion=0",
             "-txindex=1",
         ]
@@ -100,13 +95,17 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
 
     def assert_activation_metadata(self, node, label):
         info = node.getdigidollardeploymentinfo()
-        assert_equal(info["min_activation_height"], BIP9_MIN_ACTIVATION)
-        assert_equal(info["oracle_activation_height"], BIP9_MIN_ACTIVATION)
-        assert_equal(info["musig2_format_activation_height"], BIP9_MIN_ACTIVATION)
+        # The knob retargets the buried deployment height together with the
+        # static oracle/MuSig2 gates; activation_height is always present for
+        # an enabled deployment (even before the chain reaches it).
+        assert_equal(info["type"], "buried")
+        assert_equal(info["activation_height"], ACTIVATION_HEIGHT)
+        assert_equal(info["oracle_activation_height"], ACTIVATION_HEIGHT)
+        assert_equal(info["musig2_format_activation_height"], ACTIVATION_HEIGHT)
         self.log.info(
-            "  %s: min_activation_height=%d oracle_activation_height=%d musig2_height=%d",
+            "  %s: activation_height=%d oracle_activation_height=%d musig2_height=%d",
             label,
-            info["min_activation_height"],
+            info["activation_height"],
             info["oracle_activation_height"],
             info["musig2_format_activation_height"],
         )
@@ -165,27 +164,28 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
     # ============================================================== Phase 1
     def test_simultaneous_activation(self):
         """Both nodes mine to the same heights; deployment state must agree."""
-        # Position both nodes at height = FIRST_ACTIVE_TIP - 5 (still LOCKED_IN).
+        # Position both nodes at height = FIRST_ACTIVE_TIP - 5 (pre-activation).
         target = FIRST_ACTIVE_TIP - 5
         self.nodes[0].generate(target)
         self.sync_blocks(self.core_nodes)
 
         for i in range(2):
             assert_equal(self.nodes[i].getblockcount(), target)
-            self.assert_state(self.nodes[i], "locked_in", enabled=False,
+            self.assert_state(self.nodes[i], "defined", enabled=False,
                               label=f"node{i} h={target}")
 
-        # Mine to one block before activation: still LOCKED_IN because the
-        # period boundary (block FIRST_ACTIVE_TIP) has not yet been reached.
+        # Mine to one block before the flip tip: still disabled because the
+        # next block (FIRST_ACTIVE_TIP) is below the buried activation height.
         self.nodes[0].generate(FIRST_ACTIVE_TIP - 1 - target)
         self.sync_blocks(self.core_nodes)
         for i in range(2):
             assert_equal(self.nodes[i].getblockcount(), FIRST_ACTIVE_TIP - 1)
-            self.assert_state(self.nodes[i], "locked_in", enabled=False,
+            self.assert_state(self.nodes[i], "defined", enabled=False,
                               label=f"node{i} pre-activation tip")
 
-        # Mine the activation period boundary: status flips to ACTIVE on both
-        # nodes simultaneously after the next sync.
+        # Mine the activation-boundary block: the next block on top of it is
+        # block ACTIVATION_HEIGHT, so status flips to ACTIVE on both nodes
+        # simultaneously after the next sync.
         self.nodes[0].generate(1)
         self.sync_blocks(self.core_nodes)
         for i in range(2):
@@ -203,7 +203,7 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         activation_hash = self.nodes[1].getblockhash(FIRST_ACTIVE_TIP)
         self.nodes[1].invalidateblock(activation_hash)
         assert_equal(self.nodes[1].getblockcount(), FIRST_ACTIVE_TIP - 1)
-        self.assert_state(self.nodes[1], "locked_in", enabled=False,
+        self.assert_state(self.nodes[1], "defined", enabled=False,
                           label="node1 after invalidate")
 
         # Node 0 keeps the original chain; mines two more blocks past activation.
@@ -228,7 +228,8 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         """Pre-activation DD txs are rejected; post-activation are accepted/relayed.
 
         The mempool acceptance gate has two layers for DD txs:
-          (a) `digidollar-not-active` if the BIP9 deployment is not active.
+          (a) `digidollar-not-active` if the buried deployment is not active
+              for the next block.
           (b) `digidollar-missing-oracle-quote` even when active, if no recent
               v0x03 MuSig2 oracle bundle is available locally.
 
@@ -242,7 +243,7 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         self.disconnect_nodes(0, 1)
         activation_hash = self.nodes[1].getblockhash(FIRST_ACTIVE_TIP)
         self.nodes[1].invalidateblock(activation_hash)
-        self.assert_state(self.nodes[1], "locked_in", enabled=False,
+        self.assert_state(self.nodes[1], "defined", enabled=False,
                           label="node1 rolled back")
 
         # Bring node 0 to a state where it has mature coinbases for minting.
@@ -262,7 +263,7 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         except Exception as exc:
             err = str(exc).lower()
             assert "not yet active" in err, f"unexpected error: {exc}"
-            self.log.info("  node1 (locked_in) rejected mint with: %s", exc)
+            self.log.info("  node1 (pre-activation) rejected mint with: %s", exc)
 
         # Mine the DD tx into a block on node 0 (the miner stamps the bundle
         # into the coinbase, so node 1 ends up with a recent valid quote once
@@ -325,32 +326,38 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         self.sync_blocks(self.core_nodes)
 
         # Now check a clean pre-activation chain by booting node 2 from a
-        # wiped datadir and mining only into the LOCKED_IN window (below
-        # FIRST_ACTIVE_TIP). The template produced there must NOT need an
-        # oracle bundle to be a valid block.
+        # wiped datadir and mining only below FIRST_ACTIVE_TIP. The template
+        # produced there must NOT need an oracle bundle to be a valid block.
         self.wipe_and_start_node(2)
-        # Mine a single block - state should be DEFINED here.
+        # Mine a single block - state should be pre-activation here.
         self.nodes[2].generate(1)
         self.assert_state(self.nodes[2], "defined", enabled=False,
                           label="node2 first block")
-        # Mine into LOCKED_IN window.
+        # Mine up to one block before the flip tip.
         self.nodes[2].generate(FIRST_ACTIVE_TIP - 2)
         assert_equal(self.nodes[2].getblockcount(), FIRST_ACTIVE_TIP - 1)
-        self.assert_state(self.nodes[2], "locked_in", enabled=False,
-                          label="node2 LOCKED_IN tip")
+        self.assert_state(self.nodes[2], "defined", enabled=False,
+                          label="node2 pre-activation tip")
 
-        tmpl_locked = self.nodes[2].getblocktemplate({"rules": ["segwit"]})
-        version_locked = tmpl_locked["version"]
-        bit23_locked = (version_locked & (1 << 23)) != 0
-        self.log.info("  pre-activation template version=0x%08x bit23=%s",
-                      version_locked, bit23_locked)
-        assert bit23_locked, "Bit 23 should still be signaled during LOCKED_IN"
+        # Buried deployments never signal version bits, and the "digidollar"
+        # rule name only appears in the template once the next block is
+        # DD-active.
+        tmpl_pre = self.nodes[2].getblocktemplate({"rules": ["segwit"]})
+        version_pre = tmpl_pre["version"]
+        self.log.info("  pre-activation template version=0x%08x rules=%s",
+                      version_pre, tmpl_pre["rules"])
+        assert (version_pre & (1 << 23)) == 0, \
+            "Bit 23 must not be signaled for the buried deployment"
+        assert "digidollar" not in tmpl_pre["rules"], \
+            "digidollar rule must not be advertised pre-activation"
+        assert "digidollar" not in tmpl_pre["vbavailable"], \
+            "digidollar must not appear in vbavailable post-burial"
 
         # Mine a pre-activation block; coinbase must NOT carry an oracle
         # bundle. The block at FIRST_ACTIVE_TIP is itself validated under
-        # non-DD-active rules (DeploymentActiveAt(block 431) checks State on
-        # block 430, which is LOCKED_IN — not ACTIVE). After this block lands
-        # the chain reports status=ACTIVE for the next block.
+        # non-DD-active rules (DeploymentActiveAt(block 431) compares 431
+        # against the buried height 432). After this block lands the chain
+        # reports status=ACTIVE because the next block is block 432.
         pre_block_hash = self.nodes[2].generate(1)[0]
         assert not coinbase_has_oracle(self.nodes[2], pre_block_hash), \
             "pre-activation coinbase unexpectedly carries OP_ORACLE bundle"
@@ -359,6 +366,13 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
         # Subsequent blocks are mined under DD-active rules — we stop here.
         self.assert_state(self.nodes[2], "active", enabled=True,
                           label="node2 just-activated tip")
+
+        # The template for block 432 now advertises the digidollar rule while
+        # still not signaling bit 23.
+        tmpl_active = self.nodes[2].getblocktemplate({"rules": ["segwit"]})
+        assert (tmpl_active["version"] & (1 << 23)) == 0
+        assert "digidollar" in tmpl_active["rules"], \
+            "digidollar rule must be advertised once active"
 
         self.stop_node(2)
 
@@ -395,7 +409,7 @@ class DigiDollarActivationMultinodeTest(DigiByteTestFramework):
                           label="node0 pre-reindex")
 
         self.restart_node(0, extra_args=[
-            "-digidollaractivationheight={}".format(BIP9_MIN_ACTIVATION),
+            "-digidollaractivationheight={}".format(ACTIVATION_HEIGHT),
             "-dandelion=0",
             "-txindex=1",
             "-reindex",

@@ -176,6 +176,24 @@ class BlockchainTest(DigiByteTestFramework):
             extra_args=['-testactivationheight='],
             expected_msg='Error: Invalid format () for -testactivationheight=name@height.',
         )
+        # The buried deployments (v9.26.5 BIP90 burial) are no longer valid
+        # -vbparams names; the documented contract is a startup error.
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-vbparams=digidollar:0:1'],
+            expected_msg='Error: Invalid deployment (digidollar)',
+        )
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-vbparams=taproot:0:1'],
+            expected_msg='Error: Invalid deployment (taproot)',
+        )
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-vbparams=algolock:0:1'],
+            expected_msg='Error: Invalid deployment (algolock)',
+        )
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-digidollaractivationheight=-1'],
+            expected_msg='Error: Invalid height value (-1) for -digidollaractivationheight.',
+        )
         self.start_node(0, extra_args=[
             '-stopatheight=207',
             '-prune=550',
@@ -225,45 +243,9 @@ class BlockchainTest(DigiByteTestFramework):
                 },
                 'active': False
             },
-            'taproot': {
-                'type': 'bip9',
-                'bip9': {
-                    'start_time': -1,
-                    'timeout': 9223372036854775807,
-                    'min_activation_height': 0,
-                    'status': 'active',
-                    'status_next': 'active',
-                    'since': 0,
-                },
-                'height': 0,
-                'active': True
-            },
-            'digidollar': {
-                'type': 'bip9',
-                'bip9': {
-                    'start_time': -1,
-                    'timeout': 9223372036854775807,
-                    'min_activation_height': 0,
-                    'status': 'active',
-                    'status_next': 'active',
-                    'since': 0,
-                },
-                'height': 0,
-                'active': True
-            },
-            'algolock': {
-                'type': 'bip9',
-                'bip9': {
-                    'start_time': -1,
-                    'timeout': 9223372036854775807,
-                    'min_activation_height': 0,
-                    'status': 'active',
-                    'status_next': 'active',
-                    'since': 0,
-                },
-                'height': 0,
-                'active': True
-            }
+            'taproot': {'type': 'buried', 'active': True, 'height': 0},
+            'digidollar': {'type': 'buried', 'active': True, 'height': 0},
+            'algolock': {'type': 'buried', 'active': True, 'height': 0}
           }
         })
 

@@ -129,7 +129,7 @@ class DigiDollarWave18RpcMatrixTest(DigiByteTestFramework):
         info = node.getdigidollardeploymentinfo()
         assert "enabled" in info
         assert "status" in info
-        assert "bit" in info
+        assert "type" in info
         # Same for the oracle commands.
         price = node.getoracleprice()
         assert "price_micro_usd" in price
@@ -251,8 +251,11 @@ class DigiDollarWave18RpcMatrixTest(DigiByteTestFramework):
             "Wave 18 matrix: getdigidollardeploymentinfo always queryable"
         )
         info = self.nodes[0].getdigidollardeploymentinfo()
-        for required_field in ("enabled", "status", "bit", "start_time",
-                               "timeout", "min_activation_height",
+        # DigiDollar is a buried deployment (BIP90): the BIP9 signaling
+        # fields (bit/start_time/timeout/min_activation_height) are gone;
+        # type/activation_height report the hardcoded burial instead.
+        for required_field in ("enabled", "type", "status",
+                               "activation_height",
                                "oracle_activation_height",
                                "musig2_format_activation_height",
                                "oracle_pubkey_count",

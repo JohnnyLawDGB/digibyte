@@ -1820,6 +1820,7 @@ bool OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
     int scan_depth = std::min(std::max(ORACLE_VALIDITY_BLOCKS, VOLATILITY_HISTORY_BLOCKS), tip_height);
     const int price_cache_start_height = std::max(0, tip_height - ORACLE_VALIDITY_BLOCKS + 1);
     int prices_found = 0;
+    int skipped_pre_activation = 0;
     std::vector<DigiDollar::Volatility::PricePoint> volatility_prices;
 
     LogPrintf("Oracle: Scanning last %d blocks for oracle prices (height %d to %d)...\n",
@@ -1830,10 +1831,15 @@ bool OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
         CBlockIndex* block_index = chainman.ActiveChain()[height];
         if (!block_index) continue;
 
-        if (!ShouldLoadStartupOraclePriceForBlock(height, block_index, consensus)) {
-            LogPrint(BCLog::DIGIDOLLAR,
-                     "Oracle: Skipping pre-activation price cache load at height %d\n",
-                     height);
+        // L1 (startup-hang fix): evaluate the BIP9 DigiDollar-activation gate through
+        // the SHARED, memoized versionbits cache (via chainman) instead of allocating a
+        // throwaway VersionBitsCache on every one of the up-to ~172,800 iterations. It
+        // computes the IDENTICAL activation boolean ConnectBlock uses — a pure,
+        // O(1)-amortized performance change with no consensus effect (pinned by
+        // digidollar_oracle_startup_tests.cpp). Pre-activation blocks are counted and
+        // reported once after the loop instead of logged per block.
+        if (!ShouldLoadStartupOraclePriceForBlock(height, block_index, chainman)) {
+            ++skipped_pre_activation;
             continue;
         }
 
@@ -1891,6 +1897,12 @@ bool OracleBundleManager::LoadPricesFromChain(ChainstateManager& chainman)
         }
     }
 
+    if (skipped_pre_activation > 0) {
+        LogPrint(BCLog::DIGIDOLLAR,
+                 "Oracle: skipped %d pre-activation blocks during startup price load\n",
+                 skipped_pre_activation);
+    }
+
     DigiDollar::Volatility::VolatilityMonitor::ReconstructFromBlockData(
         volatility_prices, static_cast<uint32_t>(tip_height));
 
@@ -1909,16 +1921,29 @@ bool OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(int height, const
         return DigiDollar::IsDigiDollarEnabled(block_index->pprev, params);
     }
 
-    const auto& deployment = params.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    const int activation_height = deployment.nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE
-        ? deployment.min_activation_height
-        : std::min(params.nDDActivationHeight, deployment.min_activation_height);
-
-    if (activation_height <= 0) {
+    // DigiDollar is a buried deployment (BIP90): the genesis/null-pprev
+    // fallback reduces to the shared activation-floor helper.
+    const int activation_floor = DigiDollar::EarliestActivationFloor(params);
+    if (activation_floor <= 0) {
         return true;
     }
 
-    return height >= activation_height;
+    return height >= activation_floor;
+}
+
+bool OracleBundleManager::ShouldLoadStartupOraclePriceForBlock(int height, const CBlockIndex* block_index, const ChainstateManager& chainman)
+{
+    if (block_index && block_index->pprev) {
+        // L1: shared, memoized versionbits cache (via chainman). Computes the
+        // IDENTICAL BIP9 activation predicate as the const-Params& overload — exactly
+        // what ConnectBlock uses — but without rebuilding a throwaway VersionBitsCache
+        // (an O(nPeriod) walk) on each of the up-to ~172,800 startup-scan iterations.
+        return DigiDollar::IsDigiDollarEnabled(block_index->pprev, chainman);
+    }
+
+    // Genesis / null-pprev fallback (never hit for real in-chain blocks): reuse the
+    // const-Params& height logic via the chain's consensus params.
+    return ShouldLoadStartupOraclePriceForBlock(height, block_index, chainman.GetConsensus());
 }
 
 void OracleBundleManager::Clear()

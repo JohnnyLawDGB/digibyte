@@ -12,8 +12,9 @@ reindex tests (`digidollar_oracle_reorg_cache.py`,
 prove on their own:
 
   Phase 1 - cold IBD past activation:
-    - Node 0 mints a tier-0 DD position past the BIP9 activation height,
-      mines several DD-touching blocks and one non-DD block.
+    - Node 0 mints a tier-0 DD position past the buried DigiDollar
+      activation height, mines several DD-touching blocks and one
+      non-DD block.
     - Node 1 (fresh clean datadir, no wallet activity) cold-syncs from
       node 0 over P2P and must reach the same tip, the same
       `getdigidollarstats` (supply, vault count, collateral), and the
@@ -48,7 +49,7 @@ prove on their own:
       mempool, and returns to the active-chain view after the pending
       redeem is dropped during the reindex restart.
 
-The fixture uses `-digidollaractivationheight=200` plus
+The fixture uses `-digidollaractivationheight=432` plus
 `-digidollarstatsindex=1` so `getdigidollarstats` is consensus-derived
 from the index and comparable across nodes regardless of which wallet
 loaded which positions.
@@ -59,12 +60,11 @@ from test_framework.util import assert_equal
 
 
 REGTEST_PERIOD = 144
-# `-digidollaractivationheight=N` only sets BIP9 `min_activation_height`. The
-# state machine still has to walk DEFINED -> STARTED -> LOCKED_IN -> ACTIVE in
-# period (144 block) steps. With min_activation_height <= 432 the first ACTIVE
-# tip is height 431 (period boundary at the 3rd period). Mining 5 more blocks
-# past 431 lands us comfortably inside ACTIVE territory and gives the wallet
-# enough mature coinbases to mint.
+# DigiDollar is a buried deployment (BIP90): `-digidollaractivationheight=N`
+# retargets the hardcoded activation height (and the static DD/oracle gates)
+# to N, so block 432 is the first block under DD rules and tip 431 is the last
+# pre-activation tip. Mining 5 more blocks past 431 lands us comfortably inside
+# the active range and gives the wallet enough mature coinbases to mint.
 ACTIVATION_HEIGHT = 432
 FIRST_ACTIVE_TIP = 431
 ORACLE_PRICE_MICRO_USD = 500000  # $0.50/DGB
@@ -179,15 +179,18 @@ class DigiDollarWave14MultinodeIbdReorgTest(DigiByteTestFramework):
         # transfer, and a plain non-DD block.
         node0 = self.nodes[0]
 
-        # Mature funds + cross BIP9 activation. With min_activation_height=432
-        # and period=144, ACTIVE flips at FIRST_ACTIVE_TIP=431. We mine
-        # FIRST_ACTIVE_TIP + 5 blocks to land safely inside ACTIVE with mature
-        # coinbase funds available for minting.
+        # Mature funds + cross the buried activation height. Block 432 is the
+        # first block under DD rules; we mine FIRST_ACTIVE_TIP + 5 blocks to
+        # land safely inside the active range with mature coinbase funds
+        # available for minting.
         self.log.info("  building chain to activation on node 0 alone")
         node0.generate(FIRST_ACTIVE_TIP + 5)
         info = node0.getdigidollardeploymentinfo()
         assert_equal(info["status"], "active")
         assert_equal(info["enabled"], True)
+        # Buried deployment: the reported activation height is exactly the
+        # -digidollaractivationheight knob value.
+        assert_equal(info["activation_height"], ACTIVATION_HEIGHT)
 
         node0.setmockoracleprice(ORACLE_PRICE_MICRO_USD)
 

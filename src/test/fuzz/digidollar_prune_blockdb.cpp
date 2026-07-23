@@ -60,8 +60,8 @@ constexpr uint32_t FUZZ_MEMPOOL_HEIGHT{0x7FFFFFFF};
 //! Mirrors PRUNE_LOCK_BUFFER from src/validation.cpp.
 constexpr int FUZZ_PRUNE_LOCK_BUFFER{10};
 
-constexpr int64_t NEVER = Consensus::BIP9Deployment::NEVER_ACTIVE;
-constexpr int64_t ALWAYS = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+//! Buried "deployment disabled" sentinel (the old NEVER_ACTIVE equivalent).
+constexpr int DISABLED_HEIGHT = std::numeric_limits<int>::max();
 
 /** Build a DD-versioned mutable transaction with the given tx type byte. */
 CMutableTransaction MakeDDTx(uint8_t txTypeByte)
@@ -206,13 +206,10 @@ DigiDollar::TxLookupFn MakeFuzzedLookup(uint8_t mode, const CTransactionRef& pre
 }
 
 /** Build a Consensus::Params carrying only the fields EarliestActivationFloor reads. */
-Consensus::Params MakeFloorParams(int64_t nStartTime, int64_t nTimeout, int min_activation_height, int nDDActivationHeight)
+Consensus::Params MakeFloorParams(int DigiDollarHeight, int nDDActivationHeight)
 {
     Consensus::Params cp{};
-    auto& dep = cp.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    dep.nStartTime = nStartTime;
-    dep.nTimeout = nTimeout;
-    dep.min_activation_height = min_activation_height;
+    cp.DigiDollarHeight = DigiDollarHeight;
     cp.nDDActivationHeight = nDDActivationHeight;
     return cp;
 }
@@ -302,47 +299,41 @@ FUZZ_TARGET(dd_prune_activation_floor, .init = initialize_dd_prune_blockdb)
 {
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
 
-    const int64_t time_values[] = {
-        NEVER, ALWAYS, 0, 1,
-        1780156800, // testnet26 BIP9 genesis
-        1780272000, // mainnet DD start epoch
-        std::numeric_limits<int64_t>::max(),
-    };
     const int height_values[] = {
         std::numeric_limits<int>::min(), -1, 0, 1,
-        600, 650, 23'627'520,
-        std::numeric_limits<int>::max() - 1, std::numeric_limits<int>::max(),
+        600, 650, 23'627'520, 23'869'440,
+        DISABLED_HEIGHT - 1, DISABLED_HEIGHT,
     };
 
-    const int64_t start = fdp.ConsumeBool() ? fdp.PickValueInArray(time_values) : fdp.ConsumeIntegral<int64_t>();
-    const int64_t timeout = fdp.ConsumeBool() ? fdp.PickValueInArray(time_values) : fdp.ConsumeIntegral<int64_t>();
-    const int min_act = fdp.ConsumeBool() ? fdp.PickValueInArray(height_values) : fdp.ConsumeIntegral<int>();
+    const int dd_height = fdp.ConsumeBool() ? fdp.PickValueInArray(height_values) : fdp.ConsumeIntegral<int>();
     const int dd_act = fdp.ConsumeBool() ? fdp.PickValueInArray(height_values) : fdp.ConsumeIntegral<int>();
 
-    const Consensus::Params cp = MakeFloorParams(start, timeout, min_act, dd_act);
+    const Consensus::Params cp = MakeFloorParams(dd_height, dd_act);
     const int dd_floor = DigiDollar::EarliestActivationFloor(cp);
 
     // Deterministic.
     assert(dd_floor == DigiDollar::EarliestActivationFloor(cp));
 
-    if (start == NEVER || timeout == NEVER) {
-        // DD can never activate: no block retention needed, no prune lock.
+    if (dd_height == DISABLED_HEIGHT) {
+        // Deployment disabled (buried int-max sentinel): DD can never
+        // activate — no block retention needed, no prune lock. Matches the
+        // old NEVER_ACTIVE contract.
         assert(dd_floor == 0);
     } else {
         // Spec check: the floor is the earliest DD-creating height, so the
         // retained window [dd_floor, tip] covers every block a DD spend can
         // ever need to read. A higher floor would let pruning delete a
-        // needed block.
-        assert(dd_floor == ((start == ALWAYS) ? min_act : std::min(dd_act, min_act)));
+        // needed block. Buried formula: min(static gate, buried height).
+        assert(dd_floor == std::min(dd_act, dd_height));
 
-        // The floor never exceeds the BIP9 minimum activation height.
-        assert(dd_floor <= min_act);
+        // The floor never exceeds the buried activation height.
+        assert(dd_floor <= dd_height);
 
         // Sane params (non-negative heights) yield a non-negative floor, and
         // strictly positive mainnet/testnet-style params always register the
         // lock on a pruned node (dd_floor > 0 gate in chainstate.cpp).
-        if (min_act >= 0 && dd_act >= 0) assert(dd_floor >= 0);
-        if (min_act > 0 && dd_act > 0) assert(dd_floor > 0);
+        if (dd_height >= 0 && dd_act >= 0) assert(dd_floor >= 0);
+        if (dd_height > 0 && dd_act > 0) assert(dd_floor > 0);
     }
 
     // Live-params sanity for the selected chain (regtest here): the shared
@@ -402,8 +393,10 @@ FUZZ_TARGET(dd_prune_coin_gating, .init = initialize_dd_prune_gating_main)
     const CChainParams& chainparams = Params();
     const Consensus::Params& cp = chainparams.GetConsensus();
 
-    // The production pre-floor skip boundary. On mainnet v9.26.4 this is the
-    // DigiDollar activation floor used for the prune lock.
+    // The production pre-floor skip boundary. On mainnet this is the
+    // DigiDollar activation floor used for the prune lock — still the static
+    // 23,627,520 gate post-burial: min(nDDActivationHeight 23,627,520,
+    // buried DigiDollarHeight 23,869,440).
     const int dd_floor = DigiDollar::EarliestActivationFloor(cp);
     assert(dd_floor == 23'627'520);
 

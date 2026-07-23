@@ -34,8 +34,7 @@ class DigiDollarGBTOptInTest(DigiByteTestFramework):
     def activate_digidollar(self):
         node = self.nodes[0]
         while True:
-            status = node.getdeploymentinfo()["deployments"]["digidollar"]["bip9"]["status"]
-            if status == "active":
+            if node.getdeploymentinfo()["deployments"]["digidollar"]["active"]:
                 return
             current = node.getblockcount()
             remaining = REGTEST_CONFIRMATION_WINDOW - (current % REGTEST_CONFIRMATION_WINDOW)

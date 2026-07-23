@@ -58,7 +58,7 @@ class DigiDollarCollateralSpendGuardsTest(DigiByteTestFramework):
     def activate_digidollar(self, node):
         while True:
             info = node.getdeploymentinfo()
-            if info["deployments"]["digidollar"]["bip9"]["status"] == "active":
+            if info["deployments"]["digidollar"]["active"]:
                 return
             current = node.getblockcount()
             remaining = REGTEST_CONFIRMATION_WINDOW - (current % REGTEST_CONFIRMATION_WINDOW)

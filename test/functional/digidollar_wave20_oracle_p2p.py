@@ -28,7 +28,8 @@ referenced RPCs do not even exist). Wave 20 needs a real exercise of:
 6.  Pre-activation peer connecting to an active node — the malformed
     `oracleprice` is *ignored* before `nOracleActivationHeight` (the gate
     `Consensus::IsOracleActive` short-circuits before `Misbehaving`).
-7.  BIP9-inactive peer above the oracle height still ignores oracle P2P frames.
+7.  Deployment-inactive peer above the oracle height still ignores oracle
+    P2P frames (buried DigiDollar height far above the tip).
 8.  Heartbeat telemetry uses the same activation gate as oracle data-path
     messages and is ignored before DigiDollar is active.
 9.  Peer recovery after disconnect — a second honest peer can reconnect
@@ -177,7 +178,8 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
         self.setup_clean_chain = True
         # Node 0/1: post-activation oracle nodes, linearly connected.
         # Node 2: pre-activation node — used to prove activation gating.
-        # Node 3: height is above nOracleActivationHeight, but BIP9 is inactive.
+        # Node 3: height is above nOracleActivationHeight, but the buried
+        #         DigiDollar deployment height is far above it.
         self.extra_args = [
             ["-digidollar=1", "-txindex=1", "-dandelion=0", "-debug=net"],
             ["-digidollar=1", "-txindex=1", "-dandelion=0", "-debug=net"],
@@ -195,8 +197,10 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
                 "-dandelion=0",
                 "-debug=net",
                 # Keep the DigiDollar deployment inactive while leaving
-                # nOracleActivationHeight at the regtest default 650.
-                "-vbparams=digidollar:4102444800:4102531200",
+                # nOracleActivationHeight at the regtest default 650:
+                # -testactivationheight moves ONLY the buried deployment
+                # height, not the static DD/oracle gates.
+                "-testactivationheight=digidollar@99999",
             ],
         ]
 
@@ -224,11 +228,12 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
                             REGTEST_ORACLE_ACTIVATION)
         assert_greater_than(REGTEST_ORACLE_ACTIVATION,
                             self.nodes[2].getblockcount())
-        self.log.info("Mine node 3 above oracle height with DigiDollar BIP9 inactive")
+        self.log.info("Mine node 3 above oracle height with the DigiDollar deployment inactive")
         self.generate(self.nodes[3], REGTEST_ORACLE_ACTIVATION + 5,
                       sync_fun=lambda: None)
-        failed_info = self.nodes[3].getdeploymentinfo()["deployments"]["digidollar"]["bip9"]
-        assert failed_info["status"] != "active"
+        inactive_info = self.nodes[3].getdeploymentinfo()["deployments"]["digidollar"]
+        assert_equal(inactive_info["type"], "buried")
+        assert_equal(inactive_info["active"], False)
         failed_dep = self.nodes[3].getdigidollardeploymentinfo()
         assert_equal(failed_dep["enabled"], False)
         assert_greater_than(self.nodes[3].getblockcount(),
@@ -545,14 +550,14 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
         self.nodes[2].disconnect_p2ps()
 
     # ------------------------------------------------------------------
-    # 8. BIP9-inactive peer ignores oracleprice/getoracles even above height gate
+    # 8. Deployment-inactive peer ignores oracleprice/getoracles even above height gate
     # ------------------------------------------------------------------
     def test_inactive_bip9_peer_ignores_oracleprice(self):
-        self.log.info("Test 8: BIP9-inactive node ignores oracleprice + getoracles")
-        # Node 3 is above nOracleActivationHeight, but its DigiDollar BIP9
-        # deployment is not ACTIVE. Oracle P2P must follow the BIP9 active gate,
-        # not only the legacy height field, or inactive deployments can still
-        # ingest/relay oracle state.
+        self.log.info("Test 8: deployment-inactive node ignores oracleprice + getoracles")
+        # Node 3 is above nOracleActivationHeight, but its buried DigiDollar
+        # deployment height (99999) is far above the tip. Oracle P2P must
+        # follow the deployment-active gate, not only the legacy height field,
+        # or inactive deployments can still ingest/relay oracle state.
         peer = self.nodes[3].add_p2p_connection(P2PInterface())
 
         now = int(time.time())
@@ -561,7 +566,7 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
             peer.send_message(msg)
         peer.sync_with_ping(timeout=15)
         assert peer.is_connected, (
-            "BIP9-inactive peer disconnected attacker above oracle height — "
+            "Deployment-inactive peer disconnected attacker above oracle height — "
             "oracle P2P gate used height without requiring active deployment")
 
         baseline = peer.message_count.get("oracleprice", 0)
@@ -575,17 +580,17 @@ class DigiDollarWave20OracleP2PTest(DigiByteTestFramework):
         self.nodes[3].disconnect_p2ps()
 
     # ------------------------------------------------------------------
-    # 8b. BIP9-inactive peer ignores heartbeat telemetry
+    # 8b. Deployment-inactive peer ignores heartbeat telemetry
     # ------------------------------------------------------------------
     def test_inactive_bip9_peer_ignores_oracleheartbeat(self):
-        self.log.info("Test 8b: BIP9-inactive node ignores oracle heartbeat telemetry")
+        self.log.info("Test 8b: deployment-inactive node ignores oracle heartbeat telemetry")
         peer = self.nodes[3].add_p2p_connection(P2PInterface())
 
         for _ in range(10):
             peer.send_message(msg_oracleheartbeat(oracle_id=0, timestamp=int(time.time())))
         peer.sync_with_ping(timeout=15)
         assert peer.is_connected, (
-            "BIP9-inactive peer disconnected attacker on oracle heartbeat — "
+            "Deployment-inactive peer disconnected attacker on oracle heartbeat — "
             "heartbeat P2P gate did not require active DigiDollar deployment")
         self.nodes[3].disconnect_p2ps()
 

@@ -190,43 +190,46 @@ BOOST_AUTO_TEST_CASE(rh31_01c_dd_version_v2_forward_compatibility)
 BOOST_AUTO_TEST_CASE(rh31_02a_dual_activation_paths)
 {
     // FINDING: There are TWO activation mechanisms:
-    // 1. BIP9 deployment (IsDigiDollarEnabled) — uses DEPLOYMENT_DIGIDOLLAR
+    // 1. Buried deployment (IsDigiDollarEnabled) — uses DeploymentHeight(DEPLOYMENT_DIGIDOLLAR)
     // 2. Legacy height check (IsDigiDollarActive) — uses nDDActivationHeight
     //
-    // ConnectBlock uses IsDigiDollarEnabled (BIP9).
+    // ConnectBlock uses IsDigiDollarEnabled (buried height, BIP90).
     // But IsDigiDollarActive still exists and could be called from other paths.
     //
-    // RISK: If any code path uses the legacy height check instead of BIP9,
-    // nodes with different nDDActivationHeight could disagree.
+    // RISK: If any code path uses the legacy height check instead of the
+    // buried predicate, nodes with different nDDActivationHeight could disagree.
 
     const auto& consensus = Params().GetConsensus();
 
-    // Check BIP9 deployment parameters
-    const auto& dd_deploy = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    // Check the buried deployment height (BIP90 — the historical BIP9 bit-23
+    // deployment ran to completion and is now hardcoded)
+    const int dd_burial_height = consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 
-    // Verify BIP9 uses bit 23
-    BOOST_CHECK_EQUAL(dd_deploy.bit, 23);
+    // On regtest the deployment is buried at genesis (old ALWAYS_ACTIVE)
+    BOOST_CHECK_EQUAL(dd_burial_height, 0);
 
     // Check legacy activation height
     BOOST_TEST_MESSAGE("nDDActivationHeight: " + std::to_string(consensus.nDDActivationHeight));
-    BOOST_TEST_MESSAGE("BIP9 bit: " + std::to_string(dd_deploy.bit));
-    BOOST_TEST_MESSAGE("BIP9 nStartTime: " + std::to_string(dd_deploy.nStartTime));
+    BOOST_TEST_MESSAGE("Buried DigiDollarHeight: " + std::to_string(dd_burial_height));
 
     // FINDING: Both activation paths exist. The legacy path (IsDigiDollarActive)
     // is marked @deprecated but still callable. If anyone uses it, they get
-    // height-based activation instead of BIP9 miner signaling.
+    // the static nDDActivationHeight gate instead of the buried deployment height.
     //
-    // On regtest: nStartTime = ALWAYS_ACTIVE, so BIP9 always returns true.
-    // nDDActivationHeight = 0, so legacy also always returns true.
-    // These agree on regtest but could DISAGREE on testnet/mainnet.
+    // On regtest: buried height 0, so the deployment predicate always returns
+    // true, while nDDActivationHeight = 650 gates the legacy path. These
+    // intentionally DISAGREE on regtest (heights 0..649) and agree on
+    // testnet (600/600); on mainnet the static gate (23,627,520) is a floor
+    // below the burial height (23,869,440).
 
     BOOST_TEST_MESSAGE("RECOMMENDATION: Remove IsDigiDollarActive or make it call IsDigiDollarEnabled");
 }
 
 BOOST_AUTO_TEST_CASE(rh31_02b_bip9_activation_race_window)
 {
-    // ATTACK: During the BIP9 LOCKED_IN → ACTIVE transition window,
-    // is there a height where mempool and ConnectBlock disagree?
+    // ATTACK: At the buried activation boundary (formerly the BIP9
+    // LOCKED_IN → ACTIVE transition), is there a height where mempool and
+    // ConnectBlock disagree?
     //
     // Mempool: IsDigiDollarEnabled(chain.Tip(), chainman)
     // ConnectBlock: IsDigiDollarEnabled(pindex->pprev, chainman)
@@ -245,7 +248,7 @@ BOOST_AUTO_TEST_CASE(rh31_02b_bip9_activation_race_window)
     // rejected by ConnectBlock if the block is at height H-1 (tip was H-2 when
     // the tx entered mempool, but a new block arrived).
     //
-    // However, this is standard BIP9 behavior and not a consensus fork.
+    // However, this is standard activation-boundary behavior and not a consensus fork.
 
     BOOST_TEST_MESSAGE("ANALYSIS: Mempool and ConnectBlock use consistent activation checks");
     BOOST_TEST_MESSAGE("  DeploymentActiveAfter(pindexPrev) semantics are identical in both paths");
@@ -258,27 +261,28 @@ BOOST_AUTO_TEST_CASE(rh31_02b_bip9_activation_race_window)
 
 BOOST_AUTO_TEST_CASE(rh31_02c_min_activation_height_enforcement)
 {
-    // ATTACK: BIP9 specifies min_activation_height. On mainnet it's 23627520.
-    // What if a node has a different min_activation_height due to a bug or
+    // ATTACK: The deployment is buried (BIP90) at a fixed height — on mainnet
+    // 23869440. What if a node has a different burial height due to a bug or
     // configuration? They'd activate at different heights.
 
     // Mainnet params
     // Note: We can only check regtest params in unit tests
     const auto& consensus = Params().GetConsensus();
-    const auto& dd_deploy = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
+    const int dd_burial_height = consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR);
 
-    // On regtest, min_activation_height should be 0
-    BOOST_CHECK_EQUAL(dd_deploy.min_activation_height, 0);
+    // On regtest, the buried activation height should be 0
+    BOOST_CHECK_EQUAL(dd_burial_height, 0);
 
-    // Verify min_activation_height is aligned to confirmation window
-    // On mainnet: 23627520 = 586 * 40320 — aligned to nMinerConfirmationWindow
-    // This prevents activation mid-window which could cause disagreement
-    if (dd_deploy.min_activation_height > 0 && consensus.nMinerConfirmationWindow > 0) {
-        BOOST_CHECK_EQUAL(dd_deploy.min_activation_height % consensus.nMinerConfirmationWindow, 0);
-        BOOST_TEST_MESSAGE("min_activation_height is aligned to confirmation window ✅");
+    // Verify the burial height is aligned to the confirmation window
+    // On mainnet: 23869440 = 592 * 40320 — aligned to nMinerConfirmationWindow.
+    // BIP9 ACTIVE always began at a period boundary, so the buried height
+    // inherits that alignment and cannot cause mid-window disagreement.
+    if (dd_burial_height > 0 && consensus.nMinerConfirmationWindow > 0) {
+        BOOST_CHECK_EQUAL(dd_burial_height % consensus.nMinerConfirmationWindow, 0);
+        BOOST_TEST_MESSAGE("burial height is aligned to confirmation window ✅");
     }
 
-    BOOST_TEST_MESSAGE("DEFENSE: min_activation_height is a consensus parameter, identical on all nodes");
+    BOOST_TEST_MESSAGE("DEFENSE: the buried activation height is a consensus parameter, identical on all nodes");
 }
 
 // ============================================================================
@@ -496,27 +500,24 @@ BOOST_AUTO_TEST_CASE(rh31_05b_oracle_staleness_consensus_impact)
 
 BOOST_AUTO_TEST_CASE(rh31_06a_bit_23_no_conflict)
 {
-    // ATTACK: Does DD's BIP9 bit 23 conflict with any other deployment?
-    // Check all deployments across all network types.
+    // POST-BURIAL: DigiDollar no longer occupies a versionbits slot at all —
+    // it is a buried deployment (BIP90) with a fixed activation height, so
+    // bit 23 is permanently retired from signaling (as are Taproot's bit 2
+    // and AlgoLock's bit 0). Verify no remaining versionbits deployment
+    // reuses a retired signaling bit.
 
     const auto& consensus = Params().GetConsensus();
 
-    int dd_bit = consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].bit;
-    BOOST_CHECK_EQUAL(dd_bit, 23);
-
-    // Check for conflicts with other deployments
     for (int i = 0; i < Consensus::MAX_VERSION_BITS_DEPLOYMENTS; ++i) {
-        if (i == Consensus::DEPLOYMENT_DIGIDOLLAR) continue;
         int other_bit = consensus.vDeployments[i].bit;
-        BOOST_CHECK_MESSAGE(other_bit != dd_bit,
-            "BIT CONFLICT: Deployment " + std::to_string(i) + " uses same bit " +
-            std::to_string(dd_bit) + " as DIGIDOLLAR");
+        BOOST_CHECK_MESSAGE(other_bit != 23 && other_bit != 2 && other_bit != 0,
+            "BIT CONFLICT: Deployment " + std::to_string(i) + " reuses retired buried-deployment bit " +
+            std::to_string(other_bit));
     }
 
-    BOOST_TEST_MESSAGE("BIP9 bit 23 does not conflict with other deployments ✅");
+    BOOST_TEST_MESSAGE("Retired signaling bits 2/23/0 are not reused by any versionbits deployment ✅");
 
-    // Also check: TAPROOT uses bit 2, TESTDUMMY uses bit 27
-    BOOST_CHECK_EQUAL(consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit, 2);
+    // The only remaining versionbits deployment is TESTDUMMY on bit 27
     BOOST_CHECK_EQUAL(consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit, 27);
 }
 
@@ -554,10 +555,10 @@ BOOST_AUTO_TEST_CASE(rh31_07a_network_separation)
 {
     // ATTACK: Could testnet DD parameters accidentally be used on mainnet?
     //
-    // Key differences between networks:
-    // - Mainnet: min_activation_height = 23627520, nStartTime = June 1, 2026
-    // - Testnet: min_activation_height = 600, nStartTime = genesis
-    // - Regtest: ALWAYS_ACTIVE
+    // Key differences between networks (buried activation heights):
+    // - Mainnet: DigiDollarHeight = 23869440 (static floor gates at 23627520)
+    // - Testnet: DigiDollarHeight = 600
+    // - Regtest: DigiDollarHeight = 0 (active from genesis)
     //
     // These are set in chainparams.cpp and selected by network type.
     // They CANNOT be confused because CChainParams is instantiated once
@@ -567,10 +568,10 @@ BOOST_AUTO_TEST_CASE(rh31_07a_network_separation)
     const auto& params = Params();
     BOOST_CHECK_EQUAL(params.GetChainTypeString(), "regtest");
 
-    // Verify regtest-specific values
+    // Verify regtest-specific values: buried at height 0 (the old BIP9
+    // ALWAYS_ACTIVE equivalent — active from genesis)
     const auto& consensus = params.GetConsensus();
-    BOOST_CHECK_EQUAL(consensus.vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR].nStartTime,
-                      Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+    BOOST_CHECK_EQUAL(consensus.DeploymentHeight(Consensus::DEPLOYMENT_DIGIDOLLAR), 0);
 
     // Check DD consensus params are consistent
     const auto& ddParams = params.GetDigiDollarParams();
@@ -583,13 +584,14 @@ BOOST_AUTO_TEST_CASE(rh31_07a_network_separation)
 
 BOOST_AUTO_TEST_CASE(rh31_07b_testnet_activation_height_is_low)
 {
-    // FINDING: Testnet min_activation_height = 600. This is very low.
+    // FINDING: Testnet buried activation height = 600. This is very low.
     // If a testnet node has chaindata from before DD activation, the
     // transition happens quickly. But this is intentional for testing.
     //
     // nDDActivationHeight varies by network:
     //   mainnet: 23627520, testnet: 600, regtest: 650
-    // The legacy height check is @deprecated — prefer IsDigiDollarEnabled (BIP9).
+    // The legacy height check is @deprecated — prefer IsDigiDollarEnabled
+    // (buried deployment height).
 
     const auto& consensus = Params().GetConsensus();
     BOOST_CHECK_EQUAL(consensus.nDDActivationHeight, 650); // regtest activation height
@@ -601,8 +603,8 @@ BOOST_AUTO_TEST_CASE(rh31_07b_testnet_activation_height_is_low)
     BOOST_CHECK(DigiDollar::IsDigiDollarActive(1000, consensus));
 
     BOOST_TEST_MESSAGE("nDDActivationHeight=650 on regtest — legacy check gates on height");
-    BOOST_TEST_MESSAGE("  Only BIP9 check (IsDigiDollarEnabled) provides real activation gating");
-    BOOST_TEST_MESSAGE("  RECOMMENDATION: Remove IsDigiDollarActive or align with BIP9 activation");
+    BOOST_TEST_MESSAGE("  Only the buried check (IsDigiDollarEnabled) provides real activation gating");
+    BOOST_TEST_MESSAGE("  RECOMMENDATION: Remove IsDigiDollarActive or align with the buried height");
 }
 
 // ============================================================================
@@ -825,9 +827,9 @@ BOOST_AUTO_TEST_CASE(rh31_summary_findings)
     BOOST_TEST_MESSAGE("");
     BOOST_TEST_MESSAGE("DEFENSES VERIFIED:");
     BOOST_TEST_MESSAGE("  [D1] Unknown DD types are REJECTED (hard fork boundary correct) (Vector 1c)");
-    BOOST_TEST_MESSAGE("  [D2] BIP9 activation is consistent between mempool and ConnectBlock (Vector 2b)");
+    BOOST_TEST_MESSAGE("  [D2] Buried activation is consistent between mempool and ConnectBlock (Vector 2b)");
     BOOST_TEST_MESSAGE("  [D3] Oracle staleness blocks minting but allows exits (Vector 5)");
-    BOOST_TEST_MESSAGE("  [D4] Bit 23 has no conflicts with other deployments (Vector 6a)");
+    BOOST_TEST_MESSAGE("  [D4] Retired signaling bits 2/23/0 are not reused post-burial (Vector 6a)");
     BOOST_TEST_MESSAGE("  [D5] Network parameters are compile-time, no cross-network confusion (Vector 7a)");
     BOOST_TEST_MESSAGE("  [D6] Coinbase DD marker rejection prevents miner supply creation (Vector 10a)");
     BOOST_TEST_MESSAGE("  [D7] DD version marker cannot collide with standard transactions (Vector 9a)");

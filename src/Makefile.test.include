@@ -75,6 +75,7 @@ DIGIBYTE_TESTS =\
   test/base64_tests.cpp \
   test/digidollar_activation_tests.cpp \
   test/digidollar_activation_wave12_tests.cpp \
+  test/digidollar_oracle_startup_tests.cpp \
   test/digidollar_wave26_compat_tests.cpp \
   test/digidollar_wave13_parity_tests.cpp \
   test/digidollar_wave14_reorg_replay_tests.cpp \
@@ -233,6 +234,7 @@ DIGIBYTE_TESTS =\
   test/dbwrapper_tests.cpp \
   test/dandelion_tests.cpp \
   test/denialofservice_tests.cpp \
+  test/deployment_burial_tests.cpp \
   test/descriptor_tests.cpp \
   test/flatfile_tests.cpp \
   test/fs_tests.cpp \

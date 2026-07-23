@@ -81,7 +81,7 @@ V1 ships with:
 - ✅ Single validator path on mainnet and testnet (`OracleDataValidator::ValidateBlockOracleData`, `src/oracle/bundle_manager.cpp:2151`) — the prior mainnet short-circuit is gone
 - ✅ P2P message surface: `oracleprice`, `oraclebundle` (received-and-dropped), `oracleconsns`, `oracleattest`, `oramusnonce`, `oramusigctx`, `oramusigpsig`, `oraclehb`, `getoracles` (`src/protocol.cpp:53-62`, handlers in `src/net_processing.cpp` 5440–6340). All oracle P2P handlers, including `oraclehb`, share the `IsOracleP2PActive` gate.
 - ✅ Six initialized exchange fetchers (`src/oracle/exchange.cpp:1092-1097`)
-- ✅ Block-validated price cache, gated by BIP9 `DEPLOYMENT_DIGIDOLLAR` (`src/validation.cpp:3064-3094, 3365-3372`)
+- ✅ Block-validated price cache, gated by the buried `DEPLOYMENT_DIGIDOLLAR` deployment (BIP90 since v9.26.5) (`src/validation.cpp:3064-3094, 3365-3372`)
 - ✅ BIP-340 Schnorr verification at every relay hop, with bound-from-chainparams pubkey replacement before verification (`src/net_processing.cpp:5462-5491`) so an attacker cannot ship their own pubkey alongside a forged signature
 
 **Removed / never-shipped:**
@@ -110,7 +110,7 @@ V1 ships with:
 - Oracle operators fetch and broadcast fresh exchange prices every 60 seconds; chainparams separately control how often block-level oracle prices are accepted per network
 
 **If you're running a node:**
-- Your node validates the MuSig2 aggregate signature in every DD mint/redeem block once `DEPLOYMENT_DIGIDOLLAR` is BIP9-active and `nHeight >= nOracleActivationHeight`; DD transfer-only and ordinary DGB blocks can omit a coinbase oracle bundle
+- Your node validates the MuSig2 aggregate signature in every DD mint/redeem block once `DEPLOYMENT_DIGIDOLLAR` is active (buried height since v9.26.5) and `nHeight >= nOracleActivationHeight`; DD transfer-only and ordinary DGB blocks can omit a coinbase oracle bundle
 - No setup needed — validation happens automatically; the trust anchor is `consensus.vOraclePublicKeys` in chainparams
 - Enable `-debug=digidollar` to see oracle activity
 
@@ -155,7 +155,7 @@ Core implementation:
 ├── src/script/interpreter.{h,cpp}         Reserved/disabled OP_CHECKPRICE behavior
 ├── src/validation.cpp                     ConnectBlock → ValidateBlockOracleData (right after
 │                                          CheckBlock); ConnectBlock price cache; UpdatePriceCache
-│                                          gated on BIP9 DEPLOYMENT_DIGIDOLLAR
+│                                          gated on buried DEPLOYMENT_DIGIDOLLAR (v9.26.5)
 ├── src/net_processing.cpp                 P2P handlers (~5440–6340), including heartbeat, are gated
 │                                          by IsOracleP2PActive, rate-limited, roster-limited, and
 │                                          verified with chainparams pubkey replacement before
@@ -167,7 +167,8 @@ Core implementation:
 └── src/kernel/chainparams.cpp             vOracleNodes (35 mainnet/testnet active slots,
                                            7 regtest), vOraclePublicKeys
                                            (35 active mainnet/testnet, 7 regtest), nDDActivationHeight,
-                                           nOracleActivationHeight, nDigiDollarMuSig2Height, BIP9 params
+                                           nOracleActivationHeight, nDigiDollarMuSig2Height, buried
+                                           DigiDollarHeight (v9.26.5)
 
 Tests (current; counts in REPO_MAP_DIGIDOLLAR.md):
 ├── src/test/digidollar_*_tests.cpp        DD validation, mint, redeem, transfer, P2P, persistence,…
@@ -1429,7 +1430,7 @@ bool OracleDataValidator::ValidateBlockOracleData(
     // 1. Determine height (pindex_prev->nHeight+1, or BIP34 from coinbase scriptSig).
     int32_t block_height = /* ... */;
 
-    // 2. BIP9 / height gate. Pre-activation: skip oracle validation entirely.
+    // 2. Activation / height gate (buried deployment since v9.26.5). Pre-activation: skip oracle validation entirely.
     if (pindex_prev) {
         if (!DigiDollar::IsDigiDollarEnabled(pindex_prev, params)) return true;
     } else if (block_height < params.nDDActivationHeight) {
@@ -1518,13 +1519,13 @@ bool OracleDataValidator::ValidateBlockOracleData(
     }
 
     //═══════════════════════════════════════════════════════════════════
-    // STEP 3: BIP9 ACTIVATION CHECK (lines 1590-1599)
+    // STEP 3: ACTIVATION CHECK (buried deployment since v9.26.5)
     //═══════════════════════════════════════════════════════════════════
-    // Primary: BIP9 deployment check (when pindex_prev available)
+    // Primary: buried deployment check (when pindex_prev available)
     // Fallback: Height-based check (when no chain context)
     if (pindex_prev) {
         if (!DigiDollar::IsDigiDollarEnabled(pindex_prev, params)) {
-            return true; // Oracle validation not required before BIP9 activation
+            return true; // Oracle validation not required before activation
         }
     } else {
         if (block_height < params.nDDActivationHeight) {
@@ -1821,7 +1822,7 @@ void OracleBundleManager::RemovePriceCache(int height)
 
 ### 14.1 V1 Activation & Quorum Reality (replaces the old Phase Two roadmap)
 
-The "Phase Two roadmap" section that previously occupied this slot is obsolete. Phase 3 / MuSig2 is the only on-chain oracle format in V1, available everywhere from the moment DigiDollar is BIP9-active. The roadmap below has been replaced with the actual configuration the validator uses today.
+The "Phase Two roadmap" section that previously occupied this slot is obsolete. Phase 3 / MuSig2 is the only on-chain oracle format in V1, available everywhere from the moment DigiDollar is active (buried deployment since v9.26.5; historically BIP9). The roadmap below has been replaced with the actual configuration the validator uses today.
 
 **Code-validated configuration** (`src/kernel/chainparams.cpp`, `src/consensus/params.h`):
 
@@ -1832,7 +1833,7 @@ int nOracleActivationHeight{std::numeric_limits<int>::max()};
 int nDigiDollarMuSig2Height{std::numeric_limits<int>::max()};
 
 // Mainnet override (src/kernel/chainparams.cpp):
-consensus.nDDActivationHeight        = 23627520;                       // BIP9 min_activation_height
+consensus.nDDActivationHeight        = 23627520;                       // historical BIP9 floor; buried DigiDollarHeight = 23869440 (v9.26.5)
 consensus.nOracleActivationHeight    = consensus.nDDActivationHeight;  // 23627520
 consensus.nDigiDollarMuSig2Height    = consensus.nDDActivationHeight;
 consensus.nOracleRequiredMessages    = 7;     // off-chain quorum input to MuSig2
@@ -1851,7 +1852,7 @@ consensus.nOracleConsensusRequired   = 7;
 // Regtest override (chainparams.cpp:1112-1119):
 consensus.nDDActivationHeight        = 650;
 consensus.nOracleActivationHeight    = 650;
-consensus.nDigiDollarMuSig2Height    = 0; // BIP9 ALWAYS_ACTIVE boundary
+consensus.nDigiDollarMuSig2Height    = 0; // min(650, buried DigiDollarHeight=0) — v9.26.5 burial
 consensus.nOraclePubkeyCount         = 7;
 consensus.nOracleConsensusRequired   = 4;
 ```
@@ -1950,7 +1951,7 @@ There is no longer a separate "activate Phase Two on testnet" step — testnet/r
 - v0x03 on-chain payload: `version + bitmap_len + bitmap + epoch + price + timestamp + 64-byte aggregate sig` (`COracleBundle::SerializeV03Data`, `OracleBundleManager::CreateOracleScript`)
 - Validator: single code path for mainnet/testnet/regtest in `OracleDataValidator::ValidateBlockOracleData` (`src/oracle/bundle_manager.cpp:2151`)
 - P2P handlers: 9 message types in `src/protocol.cpp:53-62`; price/consensus/MuSig2/getoracles handlers, including `oraclehb`, share the `IsOracleP2PActive` gate in `src/net_processing.cpp` ~5440–6340, and `oraclebundle` is accepted-and-dropped.
-- BIP9: bit 23, mainnet start `2026-06-01`, mainnet timeout `2027-06-01`, mainnet `min_activation_height=23627520`, mainnet window 40320 / threshold 28224 (70%); testnet26 start at genesis, `min_activation_height=600`, window 200, threshold 140 (70%); regtest `ALWAYS_ACTIVE`
+- Historical BIP9 (deployment buried in v9.26.5 — mainnet activated at 23,869,440, testnet26 at 600, regtest buried height 0): bit 23, mainnet start `2026-06-01`, mainnet timeout `2027-06-01`, mainnet `min_activation_height=23627520`, mainnet window 40320 / threshold 28224 (70%); testnet26 start at genesis, `min_activation_height=600`, window 200, threshold 140 (70%); regtest `ALWAYS_ACTIVE`
 - `OP_CHECKPRICE` is reserved and deterministically disabled (`src/script/interpreter.cpp:708-735`); it consumes one operand and pushes false without reading oracle state
 - 6 active exchange fetchers initialized in `MultiExchangeAggregator::InitializeFetchers` (`src/oracle/exchange.cpp:1092-1097`); 5 fetcher classes still compile but are NOT initialized (Coinbase, Kraken, Messari, Bittrex, Poloniex); CoinMarketCap removed entirely. `FetchAllPrices()` iterates the initialized fetchers sequentially.
 - `min_required_sources = 2` is the `MultiExchangeAggregator` header default (`src/oracle/exchange.h:235`); the production caller `OracleNode::FetchMedianPrice` raises the floor to 3 via `SetMinRequiredSources(3)` (`src/oracle/node.cpp:450`), so the live oracle daemon publishes only when >=3 of the 6 fetchers respond. Outlier filtering removes prices more than 10% from the median and aggregation requires the source floor before and after filtering.
@@ -1962,19 +1963,20 @@ Validation range:      100 - 100,000,000 micro-USD ($0.0001 - $100.00)
 On-chain bundle size:  86-byte minimum v0x03 data; 90 bytes on the 35-slot mainnet/testnet bitmap
 Off-chain attestation: 128-byte COraclePriceMessage (32-byte XOnly pubkey + 64-byte Schnorr)
 Quorum:                7 signatures from the configured active mainnet/testnet keyset, 4-of-7 regtest
-Activation heights:    Mainnet 23627520, testnet26 600, regtest DD/oracle height gates 650 with MuSig2 at BIP9 boundary 0 by default
+Activation heights:    Buried DigiDollarHeight mainnet 23869440 (static DD/oracle gates at the 23627520 floor), testnet26 600, regtest buried 0 with DD/oracle height gates 650 and MuSig2 0 by default (v9.26.5 burial)
 ```
 
-Regtest note: the default BIP9 deployment is `ALWAYS_ACTIVE` with
-`min_activation_height=0`, while the DD/oracle P2P height gates default to
-650. `nDigiDollarMuSig2Height` follows the BIP9 boundary so v0x03 quotes are
-valid whenever DigiDollar is active. The direct `-digidollaractivationheight=N`
-knob retargets BIP9 and the DD/oracle/MuSig2 gates; generic
-`-vbparams=digidollar:...` remains a BIP9-only override, but MuSig2 validation
-follows that effective DigiDollar BIP9 boundary while the static DD/oracle P2P
-gates remain unchanged. Startup oracle-price cache reconstruction follows the
-BIP9 predicate used by block connection, so default-regtest BIP9-active oracle
-bundles below 650 are not skipped on restart/reindex.
+Regtest note (v9.26.5 burial): the default buried `DigiDollarHeight` is `0`,
+while the DD/oracle P2P height gates default to 650.
+`nDigiDollarMuSig2Height = min(nDDActivationHeight, DigiDollarHeight) = 0` so
+v0x03 quotes are valid whenever DigiDollar is active. The direct
+`-digidollaractivationheight=N` knob retargets the buried height and the
+DD/oracle/MuSig2 gates together (DD activates at exactly N);
+`-testactivationheight=digidollar@H` moves only the buried deployment height,
+and `-vbparams=digidollar:...` is now a startup error. Startup oracle-price
+cache reconstruction follows the same buried predicate used by block
+connection, so default-regtest DD-active oracle bundles below 650 are not
+skipped on restart/reindex.
 
 ## Historical Issue Tracker (resolved in V1)
 

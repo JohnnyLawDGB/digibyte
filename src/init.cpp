@@ -682,7 +682,7 @@ void SetupServerArgs(ArgsManager& argsman)
     // DigiDollar stablecoin options
     // DigiDollar startup options
     argsman.AddArg("-digidollar", "Enable DigiDollar stablecoin features (follows BIP9 activation by default)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
-    argsman.AddArg("-digidollaractivationheight=<n>", "Set DigiDollar activation height for regtest (overrides BIP9 activation, regtest only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DIGIDOLLAR);
+    argsman.AddArg("-digidollaractivationheight=<n>", "Set the buried DigiDollar deployment height together with the static DD/oracle/MuSig2 height gates, so DigiDollar activates at exactly this height (regtest only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DIGIDOLLAR);
 
     // DigiDollar RPC commands (use 'help <command>' in console for details)
     argsman.AddArg("mintdigidollar", "Mint DigiDollars by locking DGB as collateral (RPC/console)", ArgsManager::ALLOW_ANY, OptionsCategory::DIGIDOLLAR);
@@ -900,9 +900,9 @@ std::set<BlockFilterType> g_enabled_filter_types;
 
 bool HasDigiDollarDeployment(const CChainParams& chainparams)
 {
-    const auto& dd_deployment = chainparams.GetConsensus().vDeployments[Consensus::DEPLOYMENT_DIGIDOLLAR];
-    return dd_deployment.nStartTime != Consensus::BIP9Deployment::NEVER_ACTIVE &&
-           dd_deployment.nTimeout != Consensus::BIP9Deployment::NEVER_ACTIVE;
+    // DigiDollar is a buried deployment (BIP90); "disabled" is represented by
+    // an activation height of int max (DeploymentEnabled == false).
+    return DeploymentEnabled(chainparams.GetConsensus(), Consensus::DEPLOYMENT_DIGIDOLLAR);
 }
 
 bool IsRegtestDigiDollarExplicitlyRequested(const ArgsManager& args)

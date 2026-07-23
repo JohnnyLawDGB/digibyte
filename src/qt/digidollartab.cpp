@@ -410,9 +410,9 @@ void DigiDollarTab::checkActivationStatus()
         "<p style='font-size: 16px; margin: 20px 0;'>"
         "DigiDollar is not yet active on this blockchain.</p>"
         "<p style='font-size: 13px; color: #999999;'>"
-        "BIP9 Deployment Status: <b>%1</b></p>"
+        "Deployment Status: <b>%1</b></p>"
         "<p style='font-size: 12px; color: #777777; margin-top: 20px;'>"
-        "DigiDollar will activate after miners signal support.<br>"
+        "DigiDollar activates at a fixed block height on this network.<br>"
         "Use <code>getdigidollardeploymentinfo</code> for details.</p>"
         "</div>"
     ).arg(status.toUpper());
@@ -431,24 +431,13 @@ QString DigiDollarTab::getDeploymentStatus() const
         if (!ctx || !ctx->chainman) return "unknown";
 
         ChainstateManager& chainman = *ctx->chainman;
-        const ThresholdState state = WITH_LOCK(cs_main, {
-            const CBlockIndex* tip = chainman.ActiveChain().Tip();
-            return chainman.m_versionbitscache.State(tip, chainman.GetConsensus(),
-                                                     Consensus::DEPLOYMENT_DIGIDOLLAR);
-        });
-
-        switch (state) {
-        case ThresholdState::DEFINED: return "defined";
-        case ThresholdState::STARTED: return "started";
-        case ThresholdState::LOCKED_IN: return "locked_in";
-        case ThresholdState::ACTIVE: return "active";
-        case ThresholdState::FAILED: return "failed";
-        }
+        // DigiDollar is a buried deployment (BIP90): status is a pure height
+        // comparison against the hardcoded activation height.
+        const CBlockIndex* tip = WITH_LOCK(cs_main, return chainman.ActiveChain().Tip());
+        return DigiDollar::IsDigiDollarEnabled(tip, chainman) ? "active" : "defined";
     } catch (...) {
         return "unknown";
     }
-
-    return "unknown";
 }
 
 bool DigiDollarTab::isDigiDollarActive() const

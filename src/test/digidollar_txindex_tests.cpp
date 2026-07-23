@@ -14,6 +14,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -74,11 +75,11 @@ BOOST_AUTO_TEST_CASE(dd_chain_with_txindex_ok)
 BOOST_AUTO_TEST_CASE(non_dd_chain_no_txindex_ok)
 {
     CChainParams::RegTestOptions opts;
-    CChainParams::VersionBitsParameters dd_vb_params{};
-    dd_vb_params.start_time = Consensus::BIP9Deployment::NEVER_ACTIVE;
-    dd_vb_params.timeout = Consensus::BIP9Deployment::NO_TIMEOUT;
-    dd_vb_params.min_activation_height = 0;
-    opts.version_bits_parameters[Consensus::DEPLOYMENT_DIGIDOLLAR] = dd_vb_params;
+    // Buried "disabled" representation (the old NEVER_ACTIVE equivalent): an
+    // activation height of int max makes DeploymentEnabled — and therefore
+    // HasDigiDollarDeployment — false.
+    opts.activation_heights[Consensus::BuriedDeployment::DEPLOYMENT_DIGIDOLLAR] =
+        std::numeric_limits<int>::max();
 
     const auto chainparams = CChainParams::RegTest(opts);
 

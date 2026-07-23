@@ -17,7 +17,7 @@ Working directory: `/home/jared/Code/digibyte`. Current DigiDollar v1 campaign b
 7. `REPO_MAP_DIGIDOLLAR.md` — DigiDollar/oracle file index (production, wallet, RPC, Qt, tests, fuzz)
 8. `DIGIDOLLAR_EXPLAINER.md` — User-facing DigiDollar V1 protocol summary
 9. `DIGIDOLLAR_ORACLE_EXPLAINER.md` — User-facing oracle/MuSig2 summary
-10. `DIGIDOLLAR_ACTIVATION_EXPLAINER.md` — BIP9 gating of DD/oracle surface
+10. `DIGIDOLLAR_ACTIVATION_EXPLAINER.md` — Activation gating of DD/oracle surface (v9.26.5 BIP90 burial + BIP9 history)
 11. `DIGIDOLLAR_WALLET_INTEGRATION.md` — Wallet/RPC integration guide
 12. `DIGIDOLLAR_EXCHANGE_INTEGRATION.md` — Exchange/custody integration guide
 13. `ORACLE_DISCOVERY_ARCHITECTURE.md` — Oracle endpoint discovery design
@@ -62,17 +62,23 @@ Defined in `src/script/script.h:209-220`:
 - `OP_CHECKCOLLATERAL = 0xbe` — compares stack ratio to threshold; consumes `<ratio> <threshold>` and pushes `ratio>=threshold`
 - `OP_ORACLE        = 0xbf` — coinbase oracle bundle marker
 
-These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VERIFY_DIGIDOLLAR` is set, which only happens when BIP9 `DEPLOYMENT_DIGIDOLLAR` is ACTIVE (bit 23). See `IsDigiDollarOpcode` / `IsOpSuccessForFlags` at `src/script/interpreter.cpp:439-453`.
+These are OP_SUCCESSx-class opcodes that become functional only when `SCRIPT_VERIFY_DIGIDOLLAR` is set, which only happens when the buried `DEPLOYMENT_DIGIDOLLAR` deployment is active (BIP90 as of v9.26.5; historically BIP9 bit 23). See `IsDigiDollarOpcode` / `IsOpSuccessForFlags` at `src/script/interpreter.cpp:439-453`.
 
-## Activation summary (BIP9 bit 23)
+## Activation summary (buried deployment — BIP90, v9.26.5)
 
-| Network | Start | Min activation height | Window | Threshold | Status |
-|---------|-------|----------------------|--------|-----------|--------|
-| Mainnet | 2026-06-01 (epoch 1780272000) | 23,627,520 | 40,320 blocks (~1 week) | 70% (28,224 of 40,320) | Pending |
-| Testnet (testnet26) | BIP9 start/reset genesis 1780156800 | 600 | 200 blocks | 70% (140 of 200) | Check `getdigidollardeploymentinfo` |
-| Regtest | ALWAYS_ACTIVE | 0 | 144 blocks (BIP9 default) | 75% (108 of 144) | Active |
+As of v9.26.5 the Taproot, DigiDollar, and AlgoLock deployments are **buried** (BIP90): all three are ACTIVE on mainnet, activation is a hardcoded per-network height returned by `Consensus::Params::DeploymentHeight()` (fields `TaprootHeight` / `DigiDollarHeight` / `AlgoLockHeight`), the BIP9 state machine no longer runs for them, and blocks no longer signal bits 2/23/0. `DeploymentPos` retains only `DEPLOYMENT_TESTDUMMY`. The burial heights are the empirically verified BIP9 `since` heights (live mainnet `getdeploymentinfo`; testnet26 verified block-by-block). The historical BIP9 parameters (bit 23, mainnet start 2026-06-01, 70% of a 40,320-block window, `min_activation_height` floor 23,627,520) are preserved in `DIGIDOLLAR_ACTIVATION_EXPLAINER.md`.
 
-`nDDActivationHeight`, `nOracleActivationHeight`, and `nDigiDollarMuSig2Height` collapse to the same height trigger on mainnet (23,627,520 / 23,627,520 / 23,627,520) and testnet (600 / 600 / 600). Default regtest keeps DD/oracle height gates at 650 / 650 while the BIP9 deployment is `ALWAYS_ACTIVE` with `min_activation_height=0`; `nDigiDollarMuSig2Height` follows that effective BIP9 boundary and is `0`, so v0x03 quotes are valid whenever DigiDollar is active. The direct `-digidollaractivationheight=N` regtest knob retargets both the BIP9 minimum and the static DD/oracle/MuSig2 height gates. Generic `-vbparams=digidollar:...` still overrides BIP9 only; because MuSig2 follows the effective DigiDollar BIP9 boundary, a BIP9-only test override can move MuSig2 validation without moving the static DD/oracle P2P gates. Startup oracle-price reconstruction follows the same BIP9 predicate as block connection, so default-regtest BIP9-active blocks below 650 are not dropped during restart/reindex cache rebuilds. The variable in code is `nDigiDollarMuSig2Height`, not the older `nDigiDollarPhase3Height` (`src/consensus/params.h:195`). Once DigiDollar is active, v0x03 MuSig2 is the only on-chain bundle format ever accepted.
+| Network | `TaprootHeight` | `DigiDollarHeight` | `AlgoLockHeight` |
+|---------|-----------------|--------------------|------------------|
+| Mainnet | 21,168,000 | 23,869,440 | 23,869,440 |
+| Testnet (testnet26) | 0 | 600 | 0 |
+| Signet / Regtest | 0 | 0 | 0 |
+
+Static gates are unchanged: mainnet `nDDActivationHeight = nOracleActivationHeight = nDigiDollarMuSig2Height = 23,627,520` (the historical BIP9 floor, deliberately below the 23,869,440 burial height); testnet 600 / 600 / 600. Default regtest keeps the DD/oracle height gates at 650 / 650 while `nDigiDollarMuSig2Height = min(650, DigiDollarHeight) = 0`, so v0x03 quotes are valid whenever DigiDollar is active. `EarliestActivationFloor(params) = min(nDDActivationHeight, DigiDollarHeight)` (0 if the deployment is disabled) — value-preserving vs the pre-burial formula on every network. `IsDigiDollarEnabled` is a pure height compare against `DigiDollarHeight` (no `VersionBitsCache` anywhere in the DD path), and startup oracle-price reconstruction uses the same buried predicate as block connection, so DD-active blocks below the regtest 650 gate are still not dropped during restart/reindex cache rebuilds.
+
+Regtest knobs: `-digidollaractivationheight=N` sets `DigiDollarHeight` AND `nDDActivationHeight`/`nOracleActivationHeight`/`nDigiDollarMuSig2Height` to N, so DigiDollar activates at exactly height N (pre-burial the knob ran real BIP9 signaling and activated at the first 144-block window boundary >= max(432, N)). `-testactivationheight=taproot@H` / `digidollar@H` / `algolock@H` moves only the buried deployment height — the static DD/oracle gates keep their defaults, but `nDigiDollarMuSig2Height` is derived as `min(nDDActivationHeight, DigiDollarHeight)` and so follows `digidollar@H` below 650; `-digidollaractivationheight` takes precedence for DigiDollar. `-vbparams=digidollar/taproot/algolock` is now a startup error ("Invalid deployment") — only `testdummy` remains.
+
+RPC/GBT surface: `getdeploymentinfo`/`getblockchaininfo` render the three deployments as `{"type":"buried","active":…,"height":…}` with no `bip9` sub-object. `getdigidollardeploymentinfo` now returns `{enabled, type:"buried", status:"active"|"defined", activation_height (omitted if the deployment is disabled), oracle_activation_height, musig2_format_activation_height, oracle_pubkey_count, oracle_consensus_required, oracle_total_slots, oracle_seed_peers, musig2_session{...}}`; the BIP9 fields (`bit`, `start_time`, `timeout`, `min_activation_height`, `blocks_until_timeout`, `signaling_blocks`, `threshold`, `period_blocks`, `progress_percent`) were removed, and `activation_height` is now always the burial height (the old back-scan reported the first-active/last-LOCKED_IN block instead). `getblocktemplate` always lists `taproot`/`digidollar`/`algolock` in `rules` once active (hardcoded like `csv`); `vbavailable` no longer mentions them and the template `version` never sets bits 2/23/0. `MinBIP9WarningHeight` is 23,909,760 on mainnet and 800 on testnet. The variable in code is `nDigiDollarMuSig2Height`, not the older `nDigiDollarPhase3Height`. Once DigiDollar is active, v0x03 MuSig2 is the only on-chain bundle format ever accepted.
 
 ## Oracle roster
 

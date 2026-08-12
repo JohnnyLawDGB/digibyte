@@ -128,7 +128,8 @@ One genuine blocker was found and reproduced. DigiDollar rebuilds its price and 
 
 Supporting documents:
 
-- `doc/design/2026-08-11-assumeutxo-capability-audit.md` — the evidence base, with file and line citations throughout
-- `doc/design/2026-08-12-attested-snapshot-threat-model.md` — the adversarial review
+- [**Capability audit**](doc/design/2026-08-11-assumeutxo-capability-audit.md) — the evidence base. What exists in this tree, verified against Bitcoin Core v26.2 and against live mainnet nodes, with file and line citations throughout. Also contains the design decisions and the two claims I got wrong and retracted.
+- [**Adversarial review**](doc/design/2026-08-12-attested-snapshot-threat-model.md) — eleven findings on how this could be attacked, with the mitigations each one implies.
+- [**Regression test**](test/functional/feature_digidollar_snapshot_startup.py) — reproduces the startup blocker described above. It **fails on current `develop` by design**, asserting the behaviour we want rather than the behaviour we have.
 
 Feedback on the trust model and the oracle workload is especially welcome — those are the two places where this design most depends on being wrong in a way we have not yet spotted.
